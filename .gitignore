@@ -1,0 +1,64 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files
+.env
+.env*.local
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# referencias
+_referencias/
+
+.vercel
+.mcp.json
+
+# Office / OS lock files y temporales
+.~lock.*
+*.tmp
+~$*
+
+# QA / debug outputs
+qa-*.png
+qa-report.md
+
+# Claude session local state
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+.claude/worktrees/
+
+# Outputs temporales de scripts
+scripts/matches-output.json
+scripts/update-ingredientes.sql

@@ -1,0 +1,193 @@
+INFORME TÉCNICO-FUNCIONAL — KitchenOS
+Fecha: 21 de abril de 2026
+Versión analizada: branch auditoria-antigravity
+URL producción: https://kitchenos-three.vercel.app
+
+================================================================================
+1. PANTALLAS Y MÓDULOS
+================================================================================
+
+Módulo              | Estado      | Notas
+--------------------|-------------|------------------------------------------------------
+Home / Dashboard    | FUNCIONAL   | Cards de acceso rápido, stock crítico, tareas pendientes
+Pase                | PARCIAL     | Usuario hardcodeado (USUARIO_MOCK = { id: 'user-1', nombre: 'Facundo A.' }). No refleja el usuario real autenticado
+Recetario           | FUNCIONAL   | CRUD completo, importación por IA (texto/foto/PDF), cálculo de food cost, peso/porción
+Stock               | FUNCIONAL   | CRUD, alertas críticas, filtros por categoría
+Pedidos             | FUNCIONAL   | Creación y seguimiento de pedidos a proveedores
+Proveedores         | FUNCIONAL   | CRUD completo
+Facturas            | FUNCIONAL   | Import por IA (foto/PDF/texto), carga manual, conversión a kg/l, normalización de stock
+Tareas              | FUNCIONAL   | CRUD, prioridades, plazas, estados (pendiente/en_proceso/completada)
+HACCP               | FUNCIONAL   | Registros de temperatura, alertas
+Turnos              | FUNCIONAL   | Calendario, upsert por (miembro_id, fecha)
+Operaciones         | FUNCIONAL   | Tabs: Mise en place / Tareas / Producción unificadas
+Merma               | PARCIAL     | Módulo creado, integración con stock pendiente de validar
+Ventas              | PARCIAL     | Página existe, import por IA, sin dashboard de análisis
+Configuración       | PARCIAL     | Permisos por rol implementados, perfil básico
+Perfil              | FUNCIONAL   | Edición de nombre y datos básicos
+Login / Register    | FUNCIONAL   | Supabase Auth, manejo de sesión
+
+================================================================================
+2. FUNCIONES DE INTELIGENCIA ARTIFICIAL
+================================================================================
+
+Rutas disponibles:
+
+Ruta                    | Modelo       | Función                                    | Auth | Rate limit
+------------------------|-------------|---------------------------------------------|------|------------
+POST /api/recetas/import | Sonnet 4.6  | Extrae receta desde foto/PDF/texto          | NO   | NO
+POST /api/facturas       | Haiku 4.5   | Extrae ítems de factura desde imagen/PDF    | NO   | NO
+POST /api/ventas/import  | Haiku 4.5   | Extrae ventas desde imágenes/tickets        | NO   | NO
+POST /api/listas-precios | Haiku 4.5   | Parsea lista de precios de proveedor        | NO   | NO
+POST /api/coach          | Sonnet 4.6  | Responde consultas del KitchenCoach         | NO   | NO
+
+ATENCIÓN: Las 5 rutas de IA son públicas. Cualquier persona con la URL puede
+consumir tokens de Anthropic sin autenticarse. En producción esto representa
+un riesgo económico directo.
+
+Calidad de las extracciones:
+- Recetas: Alta precisión para recetas bien estructuradas. Acepta fotos de libro/pizarrón.
+- Facturas: Buena extracción de ítems, cantidades y precios. La normalización a kg/l funciona correctamente.
+- Ventas: Funcional pero sin validación contra carta existente.
+
+================================================================================
+3. BASE DE DATOS (Supabase)
+================================================================================
+
+Esquema — 28 tablas principales:
+
+  restaurantes, equipo_miembros, user_restaurantes
+  productos, categorias_producto
+  recetas, ingredientes_receta
+  facturas, items_factura, historial_precios_proveedor
+  pedidos, items_pedido
+  proveedores
+  tareas
+  turnos
+  haccp_registros, haccp_alertas
+  ventas, items_venta
+  mise_en_place, produccion_items
+  checklists, checklist_items, checklist_registros
+  merma_registros
+  pases, pase_items
+  notificaciones
+
+Row Level Security — estado real:
+
+Todas las tablas tienen USING (true) — política permisiva sin filtro de restaurante_id.
+Esto significa:
+
+  [X] Un usuario de Restaurante A puede leer datos del Restaurante B via API directa a Supabase
+  [X] No hay aislamiento multi-tenant real a nivel de base de datos
+  [OK] La UI solo muestra datos del restaurante correcto (filtrado en el cliente),
+       pero no es una garantía de seguridad
+
+Excepción: /api/recetas/save usa createAdminClient() (service role) por una
+limitación en las políticas de INSERT que no fue resuelta en RLS.
+
+Migraciones:
+Scripts en /scripts/ para seeding y migraciones manuales.
+No hay sistema de migraciones automatizado.
+
+================================================================================
+4. AUTENTICACIÓN Y SEGURIDAD
+================================================================================
+
+Flujo de auth:
+- Supabase Auth con proxy.ts (no middleware.ts — decisión consciente por breaking change en Next.js 16)
+- AuthProvider con dos useEffect separados para evitar deadlock
+- useRestauranteId() devuelve '' durante loading — todos los hooks tienen guard contra esto
+
+Vulnerabilidades identificadas:
+
+Severidad | Descripción
+----------|-------------
+ALTA      | RLS USING(true) en todas las tablas — sin aislamiento real entre restaurantes
+ALTA      | Las 5 rutas de IA son públicas y no requieren autenticación
+MEDIA     | /api/migrate expuesto sin auth (si existe en producción)
+MEDIA     | SUPABASE_SERVICE_ROLE_KEY solo en /api/recetas/save — correcto, pero verificar no filtrarlo
+MEDIA     | usePase tiene USUARIO_MOCK hardcodeado — datos de pase no corresponden al usuario real
+BAJA      | Sin rate limiting en ningún endpoint
+
+================================================================================
+5. PAGOS Y MONETIZACIÓN
+================================================================================
+
+Estado: NO IMPLEMENTADO
+
+- No hay integración con ningún procesador de pagos (Stripe, Mercado Pago, etc.)
+- No existe tabla de suscripciones, planes, ni pagos en el schema
+- No hay lógica de trial, freemium, ni feature flags por plan
+- No hay webhook de pagos ni lógica de activación/bloqueo de cuenta
+
+================================================================================
+6. BLOQUEADORES PARA PRIMER CLIENTE PAGO
+================================================================================
+
+Para poder cobrar a un primer cliente real hoy, hay 5 bloqueadores críticos:
+
+[BLOQUEADOR 1 - CRÍTICO] RLS sin implementar
+Un cliente podría (accidentalmente o no) ver datos de otro restaurante consultando
+Supabase directamente.
+Solución: implementar USING (restaurante_id = auth.jwt() ->> 'restaurante_id')
+en todas las tablas.
+
+[BLOQUEADOR 2 - CRÍTICO] Rutas de IA públicas
+Cualquiera puede usar las funciones de IA sin registrarse, generando costos
+en la cuenta de Anthropic del propietario.
+Solución: agregar getSession() al inicio de cada API route y devolver 401
+si no está autenticado.
+
+[BLOQUEADOR 3 - CRÍTICO] Sin sistema de pagos
+No se puede cobrar.
+Solución mínima: integrar Stripe o Mercado Pago con un plan simple.
+Mínimo viable: una sola URL de pago por suscripción mensual.
+
+[BLOQUEADOR 4 - IMPORTANTE] Pase con usuario mock
+El módulo de pase muestra 'Facundo A.' para todos los usuarios. En un restaurante
+real con múltiples empleados esto rompe la trazabilidad.
+Solución: reemplazar USUARIO_MOCK por useAuth().perfil.
+
+[BLOQUEADOR 5 - IMPORTANTE] Sin onboarding de restaurante
+No existe flujo para que un cliente nuevo cree su restaurante, cargue su menú
+inicial y configure su equipo. El proceso actual requiere intervención manual
+(seed script).
+Solución: wizard de onboarding de 3-4 pasos.
+
+================================================================================
+7. DEUDA TÉCNICA RELEVANTE
+================================================================================
+
+Área        | Deuda                                  | Impacto
+------------|----------------------------------------|---------------------------
+DB          | Sin migraciones automatizadas          | Riesgo en actualizaciones de schema
+Tests       | Sin tests unitarios ni de integración  | Regresiones difíciles de detectar
+Error track | Sin Sentry ni error tracking           | Bugs en producción invisibles
+Performance | Sin caché de queries, sin React Query  | Re-fetches innecesarios
+Tipos       | Algunos 'any' en hooks de IA           | Errores TypeScript silenciosos
+
+================================================================================
+8. RESUMEN EJECUTIVO
+================================================================================
+
+KitchenOS tiene una base técnica sólida. El 80% de las funcionalidades core de
+un sistema de gestión de cocina están implementadas y funcionando: recetario con
+food cost, stock, pedidos, facturas con IA, HACCP, turnos y tareas. La
+arquitectura Next.js 16 + Supabase es correcta para el caso de uso.
+
+Los problemas no son de features, son de infraestructura de producción. El
+sistema fue construido para demostrar funcionalidad, no para aislar datos entre
+clientes pagos. Los 5 bloqueadores identificados son todos solucionables en
+2-4 semanas de trabajo enfocado.
+
+Prioridad recomendada:
+  1. RLS real (2-3 días) — elimina el riesgo de fuga de datos
+  2. Auth en rutas de IA (1 día) — elimina el riesgo económico
+  3. Pase mock user (2 horas) — necesario para operar en un restaurante real
+  4. Integración de pagos básica (3-5 días) — habilita el cobro
+  5. Onboarding wizard (3-4 días) — escala el alta de clientes
+
+Con estos 5 ítems resueltos, KitchenOS está listo para su primer cliente pago.
+
+================================================================================
+Generado el 21/04/2026 — KitchenOS v0.9 (pre-launch)
+================================================================================
