@@ -26,6 +26,14 @@ const ESTADO_STYLE: Record<OpsEstado, { bg: string; border: string; icon?: strin
 
 interface StockAlert { nombre: string; stock_actual: number; stock_minimo: number; unidad: string }
 
+// Mapa de seccion id → label para el chip de plaza
+const SECCION_LABELS: Record<string, string> = {
+  apetizer: 'Apetizer', entrada: 'Entrada', proteina: 'Proteína',
+  pasta: 'Pasta', veggie: 'Veggie', postre: 'Postre',
+  caliente: 'Cocina Caliente', fria: 'Cocina Fría',
+  pasteleria: 'Pastelería', salon: 'Salón',
+}
+
 interface ItemOpsProps {
   item: Tarea
   subtareas: Tarea[]
@@ -33,9 +41,10 @@ interface ItemOpsProps {
   onAddSubtarea: (parentId: string, titulo: string) => Promise<void>
   depth?: number
   modo?: OpsModo
+  showSeccionChip?: boolean
 }
 
-export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, depth = 0, modo }: ItemOpsProps) {
+export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, depth = 0, modo, showSeccionChip }: ItemOpsProps) {
   const [expanded, setExpanded] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [prodSheetOpen, setProdSheetOpen] = useState(false)
@@ -204,6 +213,15 @@ export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, depth 
               borderRadius: 4, marginTop: 1, background: 'rgba(245,158,11,.15)', color: '#d97706',
             }}>
               turno ant.
+            </span>
+          )}
+          {showSeccionChip && depth === 0 && item.seccion && SECCION_LABELS[item.seccion] && (
+            <span style={{
+              display: 'inline-block', fontSize: 9, fontWeight: 600, padding: '1px 6px',
+              borderRadius: 4, marginTop: 2, marginLeft: item.turno_fecha && item.turno_fecha < new Date().toISOString().split('T')[0] ? 4 : 0,
+              background: 'rgba(67,97,160,.1)', color: 'var(--accent)',
+            }}>
+              {SECCION_LABELS[item.seccion]}
             </span>
           )}
           {item.cantidad != null && (

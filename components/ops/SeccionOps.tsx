@@ -14,11 +14,12 @@ interface SeccionOpsProps {
   onEstadoChange: (id: string, estado: OpsEstado) => void
   onAddSubtarea: (parentId: string, titulo: string) => Promise<void>
   modo?: OpsModo
+  showSeccionChip?: boolean
 }
 
 export function SeccionOps({
   titulo, color, items, subtareasByParent,
-  onAddItem, onEstadoChange, onAddSubtarea, modo,
+  onAddItem, onEstadoChange, onAddSubtarea, modo, showSeccionChip,
 }: SeccionOpsProps) {
   const [collapsed, setCollapsed] = useState(false)
 
@@ -91,6 +92,7 @@ export function SeccionOps({
               onEstadoChange={onEstadoChange}
               onAddSubtarea={onAddSubtarea}
               modo={modo}
+              showSeccionChip={showSeccionChip}
             />
           ))}
           {items.length === 0 && (

@@ -7,35 +7,37 @@ import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { OpsToggle } from '@/components/ops/OpsToggle'
 import { SeccionOps } from '@/components/ops/SeccionOps'
 import { EventoBanner } from '@/components/ops/EventoBanner'
-import type { Tarea, OpsModo, OpsEstado } from '@/types'
+import type { Tarea, OpsModo, OpsEstado, TareaPrioridad } from '@/types'
 
 function getToday() { return new Date().toISOString().split('T')[0] }
 function fmtFecha(d: string) {
   return new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
-// ── Secciones por modo ────────────────────────────────────────
-const SECCIONES_MENU = [
-  { id: 'apetizer',  label: 'Apetizer',  color: '#0ea5e9' },
-  { id: 'entrada',   label: 'Entrada',   color: '#8b5cf6' },
-  { id: 'proteina',  label: 'Proteína',  color: '#ef4444' },
-  { id: 'pasta',     label: 'Pasta',     color: '#f97316' },
-  { id: 'veggie',    label: 'Veggie',    color: '#22c55e' },
-  { id: 'postre',    label: 'Postre',    color: '#ec4899' },
+// ── Prioridades (orden de display) ───────────────────────────
+const PRIORIDADES = [
+  { id: 'critica',  label: 'Crítica', color: '#ef4444' },
+  { id: 'alta',     label: 'Alta',    color: '#f97316' },
+  { id: 'media',    label: 'Media',   color: '#3b82f6' },
+  { id: 'baja',     label: 'Baja',    color: '#64748b' },
 ] as const
 
+// Secciones usadas solo para EventoBanner y handleGenerarLista
 const SECCIONES_CARTA = [
-  { id: 'caliente',    label: 'Cocina Caliente', color: '#ef4444' },
-  { id: 'fria',        label: 'Cocina Fría',     color: '#0ea5e9' },
-  { id: 'pasteleria',  label: 'Pastelería',      color: '#ec4899' },
-  { id: 'salon',       label: 'Salón',           color: '#8b5cf6' },
-  { id: 'general',     label: 'General',         color: '#64748b' },
+  { id: 'caliente', label: 'Cocina Caliente', color: '#ef4444' },
+  { id: 'fria',     label: 'Cocina Fría',     color: '#0ea5e9' },
+  { id: 'pasteleria', label: 'Pastelería',    color: '#ec4899' },
+  { id: 'salon',    label: 'Salón',           color: '#8b5cf6' },
+  { id: 'general',  label: 'General',         color: '#64748b' },
 ] as const
-
-const btnReset: React.CSSProperties = {
-  background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-  display: 'flex', alignItems: 'center', fontFamily: 'inherit',
-}
+const SECCIONES_MENU = [
+  { id: 'apetizer', label: 'Apetizer', color: '#0ea5e9' },
+  { id: 'entrada',  label: 'Entrada',  color: '#8b5cf6' },
+  { id: 'proteina', label: 'Proteína', color: '#ef4444' },
+  { id: 'pasta',    label: 'Pasta',    color: '#f97316' },
+  { id: 'veggie',   label: 'Veggie',   color: '#22c55e' },
+  { id: 'postre',   label: 'Postre',   color: '#ec4899' },
+] as const
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
@@ -50,22 +52,20 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     if (typeof window === 'undefined') return 'carta'
     return (localStorage.getItem('ops_modo') as OpsModo) ?? 'carta'
   })
-  const [seccionesExtra, setSeccionesExtra] = useState<string[]>([])
-  const [addingSeccion, setAddingSeccion] = useState(false)
-  const [nuevaSeccion, setNuevaSeccion] = useState('')
 
   function handleModoChange(m: OpsModo) {
     setModo(m)
     localStorage.setItem('ops_modo', m)
   }
 
-  // ── Filtrar y agrupar tareas ──────────────────────────────────
+  // ── Filtrar tareas del turno ──────────────────────────────────
   const { topLevel, subtareasByParent, statsHoy } = useMemo(() => {
     const hoyCandidates = tareas.filter((t) =>
       t.modo === modo && !t.parent_id &&
       (!t.turno_fecha || t.turno_fecha === today ||
         (t.turno_fecha < today && t.estado !== 'listo'))
     ).sort((a, b) => {
+      // Turno actual primero
       const aHoy = !a.turno_fecha || a.turno_fecha === today
       const bHoy = !b.turno_fecha || b.turno_fecha === today
       if (aHoy && !bHoy) return -1
@@ -88,21 +88,16 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     }
   }, [tareas, modo, today])
 
-  const secciones = modo === 'menu' ? [...SECCIONES_MENU] : [
-    ...SECCIONES_CARTA,
-    ...seccionesExtra.map((s) => ({ id: s, label: s, color: '#94a3b8' })),
-  ]
-
-  // ── Agregar item a sección ────────────────────────────────────
-  const handleAddItem = useCallback(async (seccion: string, titulo: string) => {
+  // ── Agregar item a sección de prioridad ───────────────────────
+  const handleAddItem = useCallback(async (prioridad: string, titulo: string) => {
     await agregarTarea({
       titulo,
       modo,
-      seccion,
+      seccion: 'general',
       turno_fecha: today,
       estado: 'pendiente',
       status: 'pendiente',
-      prioridad: 'baja',
+      prioridad: prioridad as TareaPrioridad,
       categoria: 'produccion',
       asignado_a: null,
       creado_por: perfil?.miembro_id ?? null,
@@ -141,6 +136,8 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   }, [agregarTarea, tareas, modo, today, perfil])
 
   // ── Generar lista desde evento ────────────────────────────────
+  const secciones = modo === 'menu' ? [...SECCIONES_MENU] : [...SECCIONES_CARTA]
+
   const handleGenerarLista = useCallback(async (seccionIds: string[], eventoTitulo: string) => {
     for (const seccionId of seccionIds) {
       const secLabel = secciones.find(s => s.id === seccionId)?.label ?? seccionId
@@ -164,17 +161,6 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
       })
     }
   }, [agregarTarea, modo, today, perfil, secciones])
-
-  // ── Agregar sección custom (CARTA) ────────────────────────────
-  function commitNuevaSeccion() {
-    const name = nuevaSeccion.trim()
-    if (!name) return
-    setSeccionesExtra((prev) => prev.includes(name) ? prev : [...prev, name])
-    setNuevaSeccion('')
-    setAddingSeccion(false)
-  }
-
-  const isAdmin = perfil?.rol === 'admin' || perfil?.rol === 'chef'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -217,7 +203,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
         )}
       </div>
 
-      {/* ── Secciones ── */}
+      {/* ── Lista agrupada por prioridad ── */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px 120px' }}>
         {restauranteId && (
           <EventoBanner
@@ -231,68 +217,25 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
             Cargando...
           </div>
         ) : (
-          secciones.map((sec) => (
-            <SeccionOps
-              key={sec.id}
-              titulo={sec.label}
-              color={sec.color}
-              items={topLevel.filter((t) => t.seccion === sec.id)}
-              subtareasByParent={subtareasByParent}
-              onAddItem={(titulo) => handleAddItem(sec.id, titulo)}
-              onEstadoChange={(id, estado) => cambiarEstado(id, estado as OpsEstado)}
-              onAddSubtarea={handleAddSubtarea}
-              modo={modo}
-            />
-          ))
-        )}
-
-        {/* Input nueva sección */}
-        {addingSeccion && (
-          <div style={{ display: 'flex', gap: 6, marginTop: 4, marginBottom: 8 }}>
-            <input
-              autoFocus
-              value={nuevaSeccion}
-              onChange={(e) => setNuevaSeccion(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') commitNuevaSeccion(); if (e.key === 'Escape') setAddingSeccion(false) }}
-              placeholder="Nombre de la sección..."
-              style={{
-                flex: 1, background: 'var(--surface)', border: '1px solid var(--accent)',
-                borderRadius: 12, padding: '9px 12px', fontSize: 13,
-                color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none',
-              }}
-            />
-            <button onClick={commitNuevaSeccion} style={{
-              ...btnReset, padding: '0 16px', background: 'var(--navy)', borderRadius: 12,
-              color: '#fff', fontSize: 13, fontWeight: 700,
-            }}>
-              Agregar
-            </button>
-            <button onClick={() => setAddingSeccion(false)} style={{
-              ...btnReset, padding: '0 12px', background: 'var(--surface)',
-              border: '1px solid var(--border)', borderRadius: 12, color: 'var(--text-3)', fontSize: 13,
-            }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
-            </button>
-          </div>
+          PRIORIDADES.map((prio) => {
+            const items = topLevel.filter((t) => (t.prioridad ?? 'baja') === prio.id)
+            return (
+              <SeccionOps
+                key={prio.id}
+                titulo={prio.label}
+                color={prio.color}
+                items={items}
+                subtareasByParent={subtareasByParent}
+                onAddItem={(titulo) => handleAddItem(prio.id, titulo)}
+                onEstadoChange={(id, estado) => cambiarEstado(id, estado as OpsEstado)}
+                onAddSubtarea={handleAddSubtarea}
+                modo={modo}
+                showSeccionChip
+              />
+            )
+          })
         )}
       </div>
-
-      {/* ── FAB nueva sección (solo modo CARTA, admin/chef) ── */}
-      {modo === 'carta' && isAdmin && !addingSeccion && (
-        <button
-          onClick={() => setAddingSeccion(true)}
-          style={{
-            position: 'absolute', bottom: 100, right: 16,
-            width: 48, height: 48, borderRadius: '50%',
-            background: 'var(--navy)', border: 'none', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 16px rgba(28,45,74,.35)',
-            zIndex: 10,
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#fff' }}>add</span>
-        </button>
-      )}
     </div>
   )
 }
