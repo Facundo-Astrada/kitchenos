@@ -198,6 +198,53 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     if (toast) { const t = setTimeout(() => setToast(null), 2500); return () => clearTimeout(t) }
   }, [toast])
 
+  // ── Drag-to-move between sections ───────────────────────────
+  const [dragging, setDragging] = useState<{ item: MisePlaceItem; y: number; overSecId: string | null } | null>(null)
+  const draggingRef = useRef<typeof dragging>(null)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const secElRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const actualizarItemRef = useRef(actualizarItem)
+  useEffect(() => { draggingRef.current = dragging }, [dragging])
+  useEffect(() => { actualizarItemRef.current = actualizarItem }, [actualizarItem])
+
+  useEffect(() => {
+    if (!dragging) return
+    const onMove = (e: TouchEvent) => {
+      e.preventDefault()
+      const t = e.touches[0]
+      let overSecId: string | null = null
+      secElRefs.current.forEach((el, secId) => {
+        const r = el.getBoundingClientRect()
+        if (t.clientY >= r.top && t.clientY <= r.bottom) overSecId = secId
+      })
+      setDragging(prev => prev ? { ...prev, y: t.clientY, overSecId } : null)
+    }
+    const onEnd = () => {
+      const d = draggingRef.current
+      if (d?.overSecId && d.overSecId !== d.item.seccion_id) {
+        actualizarItemRef.current(d.item.id, { seccion_id: d.overSecId })
+      }
+      setDragging(null)
+    }
+    document.addEventListener('touchmove', onMove, { passive: false })
+    document.addEventListener('touchend', onEnd)
+    return () => {
+      document.removeEventListener('touchmove', onMove)
+      document.removeEventListener('touchend', onEnd)
+    }
+  }, [!!dragging]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const startLongPress = useCallback((item: MisePlaceItem, y: number) => {
+    longPressTimer.current = setTimeout(() => {
+      navigator.vibrate?.(30)
+      setDragging({ item, y, overSecId: item.seccion_id ?? null })
+    }, 400)
+  }, [])
+
+  const cancelLongPress = useCallback(() => {
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
+  }, [])
+
   const today = new Date().toISOString().split('T')[0]
 
   const handleCrearTarea = useCallback(async (params: CrearTareaParams) => {
@@ -340,8 +387,18 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           const secColor = getSeccionColor(sec.nombre)
           const secPct = secItems.length > 0 ? secDone / secItems.length : 0
 
+          const isDragTarget = dragging !== null && dragging.overSecId === sec.id && dragging.item.seccion_id !== sec.id
           return (
-            <div key={sec.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden', marginBottom: 8 }}>
+            <div
+              key={sec.id}
+              ref={el => { if (el) secElRefs.current.set(sec.id, el as HTMLDivElement); else secElRefs.current.delete(sec.id) }}
+              style={{
+                background: 'var(--surface)',
+                border: isDragTarget ? '2px solid var(--accent)' : '1px solid var(--border)',
+                borderRadius: 14, overflow: 'hidden', marginBottom: 8,
+                transition: 'border-color .1s',
+              }}
+            >
               {/* Section header */}
               <button
                 onClick={() => setCollapsed(prev => ({ ...prev, [sec.id]: !prev[sec.id] }))}
@@ -378,36 +435,47 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                     </div>
                   )}
                   {secItems.map(item => (
-                    <ProductoMiseCard
+                    <div
                       key={item.id}
-                      item={item}
-                      reg={regMap[item.id]}
-                      fecha={fecha}
-                      turno={turno}
-                      recetaInfo={item.receta_id ? recetaInfoMap[item.receta_id] : undefined}
-                      platoPlazo={item.receta_id ? (platoPlazoMap[item.receta_id] ?? []) : []}
-                      hasTareaPendiente={tareasHoySet.has(item.nombre.toLowerCase())}
-                      rendimientoPromedio={item.receta_id ? rendimientoMap[item.receta_id] : null}
-                      onUpsert={upsertRegistro}
-                      onCrearTarea={handleCrearTarea}
-                      onPrioChange={async (i, prio) => {
-                        await actualizarItem(i.id, { prioridad: prio })
-                        if ((prio === 'sp' || prio === 'p') && !tareasHoySet.has(i.nombre.toLowerCase())) {
-                          const plazoPlazas = i.receta_id ? (platoPlazoMap[i.receta_id] ?? []) : []
-                          const primaryPlaza = plazoPlazas.length > 0 ? plazoPlazas[0].plaza : i.plaza
-                          await handleCrearTarea({
-                            titulo: i.nombre,
-                            seccion: PLAZA_TO_SECCION[primaryPlaza] ?? 'general',
-                            prioridad: prio,
-                            cantidad: i.cantidad > 0 ? i.cantidad : null,
-                            receta_id: i.receta_id ?? null,
-                            plaza: primaryPlaza,
-                            plazas: plazoPlazas,
-                          })
-                        }
+                      onTouchStart={e => startLongPress(item, e.touches[0].clientY)}
+                      onTouchMove={cancelLongPress}
+                      onTouchEnd={cancelLongPress}
+                      style={{
+                        opacity: dragging?.item.id === item.id ? 0.35 : 1,
+                        transition: 'opacity .15s',
+                        touchAction: dragging ? 'none' : 'auto',
                       }}
-                      onDelete={eliminarItem}
-                    />
+                    >
+                      <ProductoMiseCard
+                        item={item}
+                        reg={regMap[item.id]}
+                        fecha={fecha}
+                        turno={turno}
+                        recetaInfo={item.receta_id ? recetaInfoMap[item.receta_id] : undefined}
+                        platoPlazo={item.receta_id ? (platoPlazoMap[item.receta_id] ?? []) : []}
+                        hasTareaPendiente={tareasHoySet.has(item.nombre.toLowerCase())}
+                        rendimientoPromedio={item.receta_id ? rendimientoMap[item.receta_id] : null}
+                        onUpsert={upsertRegistro}
+                        onCrearTarea={handleCrearTarea}
+                        onPrioChange={async (i, prio) => {
+                          await actualizarItem(i.id, { prioridad: prio })
+                          if ((prio === 'sp' || prio === 'p') && !tareasHoySet.has(i.nombre.toLowerCase())) {
+                            const plazoPlazas = i.receta_id ? (platoPlazoMap[i.receta_id] ?? []) : []
+                            const primaryPlaza = plazoPlazas.length > 0 ? plazoPlazas[0].plaza : i.plaza
+                            await handleCrearTarea({
+                              titulo: i.nombre,
+                              seccion: PLAZA_TO_SECCION[primaryPlaza] ?? 'general',
+                              prioridad: prio,
+                              cantidad: i.cantidad > 0 ? i.cantidad : null,
+                              receta_id: i.receta_id ?? null,
+                              plaza: primaryPlaza,
+                              plazas: plazoPlazas,
+                            })
+                          }
+                        }}
+                        onDelete={eliminarItem}
+                      />
+                    </div>
                   ))}
                   <button
                     onClick={() => setShowAddSheet(sec.id)}
@@ -477,6 +545,31 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           </div>
         )}
       </div>
+
+      {/* Drag ghost */}
+      {dragging && (
+        <div style={{
+          position: 'fixed',
+          top: dragging.y - 28,
+          left: 16, right: 16,
+          zIndex: 500,
+          pointerEvents: 'none',
+          background: 'var(--navy)',
+          borderRadius: 12,
+          padding: '10px 14px',
+          display: 'flex', alignItems: 'center', gap: 8,
+          boxShadow: '0 12px 32px rgba(0,0,0,.4)',
+          transform: 'scale(1.03)',
+        }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'rgba(255,255,255,.5)' }}>drag_indicator</span>
+          <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: '#fff' }}>{dragging.item.nombre}</span>
+          {dragging.overSecId && dragging.overSecId !== dragging.item.seccion_id && (
+            <span style={{ fontSize: 10, color: 'rgba(255,255,255,.6)', fontWeight: 600 }}>
+              → {plazaSecciones.find(s => s.id === dragging.overSecId)?.nombre}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Sheets */}
       {showAddSheet && (
