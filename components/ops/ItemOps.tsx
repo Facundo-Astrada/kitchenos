@@ -34,6 +34,14 @@ const SECCION_LABELS: Record<string, string> = {
   pasteleria: 'Pastelería', salon: 'Salón',
 }
 
+// Chip de prioridad para modo menú (agrupado por sección)
+const PRIO_CHIP: Record<string, { label: string; color: string; bg: string }> = {
+  critica: { label: 'SP',  color: '#ef4444', bg: 'rgba(239,68,68,.13)' },
+  alta:    { label: 'P',   color: '#f97316', bg: 'rgba(249,115,22,.13)' },
+  media:   { label: 'REF', color: '#3b82f6', bg: 'rgba(59,130,246,.13)' },
+  baja:    { label: 'Baja',color: '#64748b', bg: 'rgba(100,116,139,.1)' },
+}
+
 interface ItemOpsProps {
   item: Tarea
   subtareas: Tarea[]
@@ -42,9 +50,10 @@ interface ItemOpsProps {
   depth?: number
   modo?: OpsModo
   showSeccionChip?: boolean
+  showPrioChip?: boolean
 }
 
-export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, depth = 0, modo, showSeccionChip }: ItemOpsProps) {
+export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, depth = 0, modo, showSeccionChip, showPrioChip }: ItemOpsProps) {
   const [expanded, setExpanded] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [prodSheetOpen, setProdSheetOpen] = useState(false)
@@ -224,6 +233,18 @@ export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, depth 
               {SECCION_LABELS[item.seccion]}
             </span>
           )}
+          {showPrioChip && depth === 0 && (() => {
+            const chip = PRIO_CHIP[item.prioridad ?? 'baja']
+            return chip ? (
+              <span style={{
+                display: 'inline-block', fontSize: 9, fontWeight: 800, padding: '1px 6px',
+                borderRadius: 4, marginTop: 2, marginLeft: 3,
+                background: chip.bg, color: chip.color,
+              }}>
+                {chip.label}
+              </span>
+            ) : null
+          })()}
           {item.cantidad != null && (
             <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace" }}>
               {item.cantidad} ×

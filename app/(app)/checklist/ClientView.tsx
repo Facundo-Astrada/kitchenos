@@ -30,7 +30,7 @@ const PRIO_CFG: Record<string, { label: string; color: string; bg: string }> = {
   sp:  { label: 'SP',  color: '#ef4444', bg: 'rgba(239,68,68,.13)' },
   p:   { label: 'P',   color: '#f97316', bg: 'rgba(249,115,22,.13)' },
   ref: { label: 'REF', color: '#3b82f6', bg: 'rgba(59,130,246,.13)' },
-  chk: { label: 'REF', color: '#3b82f6', bg: 'rgba(59,130,246,.13)' }, // legacy fallback
+  chk: { label: 'OK',  color: '#22c55e', bg: 'rgba(34,197,94,.13)' },
 }
 const PRIO_SORT: Record<string, number> = { sp: 0, p: 1, ref: 2, chk: 3 }
 const FREQ_LABELS: Record<RutinaFrecuencia, string> = {
@@ -620,8 +620,8 @@ function AddItemSheet({ seccionId, seccionNombre, plaza, recetas, onSave, onClos
           {/* Priority */}
           <div style={{ marginBottom: 14 }}>
             <label style={lbl}>Prioridad</label>
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              {(['sp', 'p', 'ref'] as MisePrioridad[]).map(pr => {
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              {(['sp', 'p', 'ref', 'chk'] as MisePrioridad[]).map(pr => {
                 const cfg = PRIO_CFG[pr]
                 return (
                   <button key={pr} onClick={() => setPrioridad(pr)} style={{
@@ -636,7 +636,7 @@ function AddItemSheet({ seccionId, seccionNombre, plaza, recetas, onSave, onClos
               })}
             </div>
             <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 5 }}>
-              {prioridad === 'sp' ? 'Sin Preparar — urgente, irá a tareas' : prioridad === 'p' ? 'Preparar — irá a tareas' : 'Refrigerar/Controlar'}
+              {prioridad === 'sp' ? 'Sin Preparar — urgente, irá a tareas' : prioridad === 'p' ? 'Preparar — irá a tareas' : prioridad === 'ref' ? 'Refrigerar/Controlar' : 'Todo bien — sin acción requerida'}
             </div>
           </div>
 

@@ -9,6 +9,8 @@ import { SeccionOps } from '@/components/ops/SeccionOps'
 import { EventoBanner } from '@/components/ops/EventoBanner'
 import type { Tarea, OpsModo, OpsEstado, TareaPrioridad } from '@/types'
 
+const PRIO_SORT: Record<string, number> = { critica: 0, alta: 1, media: 2, baja: 3 }
+
 function getToday() { return new Date().toISOString().split('T')[0] }
 function fmtFecha(d: string) {
   return new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -16,10 +18,10 @@ function fmtFecha(d: string) {
 
 // ── Prioridades (orden de display) ───────────────────────────
 const PRIORIDADES = [
-  { id: 'critica',  label: 'Crítica', color: '#ef4444' },
-  { id: 'alta',     label: 'Alta',    color: '#f97316' },
-  { id: 'media',    label: 'Media',   color: '#3b82f6' },
-  { id: 'baja',     label: 'Baja',    color: '#64748b' },
+  { id: 'critica',  label: 'SP',  sublabel: 'Super Prioridad', color: '#ef4444' },
+  { id: 'alta',     label: 'P',   sublabel: 'Prioridad',       color: '#f97316' },
+  { id: 'media',    label: 'REF', sublabel: 'Refuerzo',        color: '#3b82f6' },
+  { id: 'baja',     label: 'Baja',sublabel: 'Baja',            color: '#64748b' },
 ] as const
 
 // Secciones usadas solo para EventoBanner y handleGenerarLista
@@ -216,7 +218,29 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
             Cargando...
           </div>
+        ) : modo === 'menu' ? (
+          // Modo menú: agrupar por sección de plato, ordenar por prioridad dentro de cada una
+          SECCIONES_MENU.map((sec) => {
+            const items = topLevel
+              .filter((t) => t.seccion === sec.id)
+              .sort((a, b) => (PRIO_SORT[a.prioridad ?? 'baja'] ?? 3) - (PRIO_SORT[b.prioridad ?? 'baja'] ?? 3))
+            return (
+              <SeccionOps
+                key={sec.id}
+                titulo={sec.label}
+                color={sec.color}
+                items={items}
+                subtareasByParent={subtareasByParent}
+                onAddItem={(titulo) => handleAddItem('media', titulo)}
+                onEstadoChange={(id, estado) => cambiarEstado(id, estado as OpsEstado)}
+                onAddSubtarea={handleAddSubtarea}
+                modo={modo}
+                showPrioChip
+              />
+            )
+          })
         ) : (
+          // Modo carta: agrupar por prioridad
           PRIORIDADES.map((prio) => {
             const items = topLevel.filter((t) => (t.prioridad ?? 'baja') === prio.id)
             return (

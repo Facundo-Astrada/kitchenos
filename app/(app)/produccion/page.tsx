@@ -55,6 +55,29 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
   const [toast, setToast] = useState('')
   const [mermaOpen, setMermaOpen] = useState(false)
   const [mermaPrefill, setMermaPrefill] = useState<{ producto_nombre?: string } | undefined>()
+  const [activatingDay, setActivatingDay] = useState(false)
+
+  // Días activos de la semana actual (tienen registros en produccion_diaria)
+  const [activeDates, setActiveDates] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    if (!RESTAURANTE_ID) return
+    const supabase = createClient()
+    // Calcular lunes y domingo de la semana actual
+    const d = new Date(fecha + 'T12:00:00')
+    const dow = d.getDay()
+    const monday = new Date(d); monday.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1))
+    const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6)
+    supabase
+      .from('produccion_diaria')
+      .select('fecha')
+      .eq('restaurante_id', RESTAURANTE_ID)
+      .gte('fecha', fmtDate(monday))
+      .lte('fecha', fmtDate(sunday))
+      .then(({ data }) => {
+        const dates = new Set((data ?? []).map((r: { fecha: string }) => r.fecha))
+        setActiveDates(dates)
+      })
+  }, [RESTAURANTE_ID, fecha])
 
   // ── Load produccion when fecha or platos change ───────────
   useEffect(() => {
@@ -172,66 +195,125 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
     <div style={{ background: 'var(--bg)', height: embedded ? '100%' : undefined, overflowY: embedded ? 'auto' : undefined }}>
       {/* Header */}
       <div style={{ background: 'var(--navy)', padding: `${embedded ? 0 : 46}px 16px 14px` }}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {!embedded && (
-              <button onClick={() => router.back()} className="bg-transparent border-none cursor-pointer">
-                <span className="material-symbols-outlined text-white" style={{ fontSize: 22 }}>arrow_back</span>
+              <button onClick={() => router.back()} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                <span className="material-symbols-outlined" style={{ color: '#fff', fontSize: 22 }}>arrow_back</span>
               </button>
             )}
-            <h1 className="text-lg font-bold text-white">Producción</h1>
+            <h1 style={{ fontSize: 17, fontWeight: 700, color: '#fff', margin: 0 }}>Planificación</h1>
           </div>
-          <div className="flex gap-2">
-            <button onClick={() => setView('crear')} className="bg-white/10 border-none rounded-lg px-3 py-1 text-xs font-semibold text-white cursor-pointer">
-              + Plato
-            </button>
-            <button onClick={() => initProduccion(fecha).then(() => showToast('Producción iniciada'))} className="bg-white/10 border-none rounded-lg px-3 py-1 text-xs font-semibold text-white cursor-pointer">
-              Iniciar dia
-            </button>
-          </div>
+          <button onClick={() => setView('crear')} style={{ background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer' }}>
+            + Plato
+          </button>
         </div>
 
         {/* Date selector */}
-        <div className="flex items-center gap-3 mt-3">
-          <button onClick={() => shiftDate(-1)} className="bg-transparent border-none cursor-pointer">
-            <span className="material-symbols-outlined text-white/60" style={{ fontSize: 20 }}>chevron_left</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+          <button onClick={() => shiftDate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+            <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 20 }}>chevron_left</span>
           </button>
-          <span className="text-sm font-semibold text-white">{fmtDateLabel(new Date(fecha + 'T12:00:00'))}</span>
-          <button onClick={() => shiftDate(1)} className="bg-transparent border-none cursor-pointer">
-            <span className="material-symbols-outlined text-white/60" style={{ fontSize: 20 }}>chevron_right</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#fff', flex: 1 }}>{fmtDateLabel(new Date(fecha + 'T12:00:00'))}</span>
+          <button onClick={() => shiftDate(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+            <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 20 }}>chevron_right</span>
           </button>
           <input
             type="date"
             value={fecha}
             onChange={e => setFecha(e.target.value)}
-            className="ml-auto text-xs rounded px-2 py-1"
-            style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none' }}
+            style={{ background: 'rgba(255,255,255,.1)', color: '#fff', border: 'none', borderRadius: 6, padding: '3px 8px', fontSize: 11 }}
           />
         </div>
+
+        {/* Días de la semana — toca para activar/desactivar menú */}
+        {platos.length > 0 && (() => {
+          const d = new Date(fecha + 'T12:00:00')
+          const dow = d.getDay()
+          const monday = new Date(d); monday.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1))
+          const DIAS = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
+          return (
+            <div style={{ display: 'flex', gap: 4, marginTop: 10, justifyContent: 'center' }}>
+              {DIAS.map((dia, i) => {
+                const dayDate = new Date(monday); dayDate.setDate(monday.getDate() + i)
+                const dayStr = fmtDate(dayDate)
+                const isActive = activeDates.has(dayStr)
+                const isSelected = dayStr === fecha
+                return (
+                  <button
+                    key={dayStr}
+                    onClick={async () => {
+                      setFecha(dayStr)
+                      if (!isActive) {
+                        setActivatingDay(true)
+                        try { await initProduccion(dayStr); setActiveDates(prev => new Set([...prev, dayStr])) }
+                        finally { setActivatingDay(false) }
+                      }
+                    }}
+                    style={{
+                      flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                      background: isSelected ? '#fff' : 'rgba(255,255,255,.1)',
+                      border: 'none', borderRadius: 8, padding: '5px 2px', cursor: 'pointer',
+                      transition: 'all .15s',
+                    }}
+                  >
+                    <span style={{ fontSize: 10, fontWeight: 700, color: isSelected ? 'var(--navy)' : 'rgba(255,255,255,.7)' }}>{dia}</span>
+                    <span style={{
+                      width: 5, height: 5, borderRadius: '50%',
+                      background: isActive ? '#22c55e' : 'rgba(255,255,255,.2)',
+                    }} />
+                  </button>
+                )
+              })}
+            </div>
+          )
+        })()}
       </div>
 
       {/* Content */}
       <div>
         {view === 'planilla' && (
-          <PlanillaView
-            grouped={grouped}
-            statusMap={statusMap}
-            produccion={produccion}
-            miembros={miembros}
-            puedeDelegar={puedeDelegar}
-            stats={stats}
-            componentNameCount={componentNameCount}
-            cycleStatus={cycleStatus}
-            onEdit={(p) => { setEditingPlato(p); setView('editar') }}
-            onIngredientes={() => setView('ingredientes')}
-            onDuplicar={() => setView('duplicar')}
-            openMerma={openMerma}
-            router={router}
-          />
+          produccion.length === 0 && platos.length > 0 ? (
+            /* Sin producción para este día — mostrar CTA para activar */
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 24px', gap: 12 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'var(--text-3)' }}>calendar_today</span>
+              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-2)', margin: 0, textAlign: 'center' }}>
+                Sin menú para este día
+              </p>
+              <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0, textAlign: 'center' }}>
+                Tocá el día en el calendario de arriba para activar el menú, o usá el botón de abajo.
+              </p>
+              <button
+                onClick={async () => { setActivatingDay(true); try { await initProduccion(fecha); setActiveDates(prev => new Set([...prev, fecha])) } finally { setActivatingDay(false) } }}
+                disabled={activatingDay}
+                style={{ marginTop: 8, padding: '12px 24px', borderRadius: 12, border: 'none', background: 'var(--navy)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: activatingDay ? 0.6 : 1 }}
+              >
+                {activatingDay ? 'Activando...' : 'Activar menú para este día'}
+              </button>
+            </div>
+          ) : (
+            <PlanillaView
+              grouped={grouped}
+              statusMap={statusMap}
+              produccion={produccion}
+              miembros={miembros}
+              puedeDelegar={puedeDelegar}
+              stats={stats}
+              componentNameCount={componentNameCount}
+              cycleStatus={cycleStatus}
+              onEdit={(p) => { setEditingPlato(p); setView('editar') }}
+              onCrear={(cat) => { setView('crear'); setEditingPlato({ id: '', nombre: '', categoria: cat, activo: true, restaurante_id: '', orden: 0, componentes: [], created_at: '' } as unknown as PlatoConComponentes) }}
+              onIngredientes={() => setView('ingredientes')}
+              onDuplicar={() => setView('duplicar')}
+              openMerma={openMerma}
+              router={router}
+            />
+          )
         )}
         {(view === 'crear' || view === 'editar') && (
           <PlatoForm
             plato={view === 'editar' ? editingPlato : null}
+            categoriaInicial={view === 'crear' && editingPlato?.categoria ? editingPlato.categoria : undefined}
             restauranteId={RESTAURANTE_ID}
             onSave={async (data, comps) => {
               try {
@@ -255,14 +337,14 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
                 setView('planilla')
               } catch (e: any) { showToast('Error: ' + e.message) }
             }}
-            onDelete={editingPlato ? async () => {
+            onDelete={view === 'editar' && editingPlato?.id ? async () => {
               try {
-                await eliminarPlato(editingPlato.id)
+                await eliminarPlato(editingPlato!.id)
                 showToast('Eliminado')
                 setView('planilla')
               } catch (e: any) { showToast('Error: ' + e.message) }
             } : undefined}
-            onCancel={() => setView('planilla')}
+            onCancel={() => { setEditingPlato(null); setView('planilla') }}
           />
         )}
         {view === 'ingredientes' && (
@@ -329,7 +411,7 @@ const CAT_COLORS: Record<string, string> = {
 }
 
 function PlanillaView({
-  grouped, statusMap, produccion, miembros, puedeDelegar, stats, componentNameCount, cycleStatus, onEdit, onIngredientes, onDuplicar, openMerma, router,
+  grouped, statusMap, produccion, miembros, puedeDelegar, stats, componentNameCount, cycleStatus, onEdit, onCrear, onIngredientes, onDuplicar, openMerma, router,
 }: {
   grouped: [string, PlatoConComponentes[]][]
   statusMap: Map<string, { id: string; status: StatusProduccion }>
@@ -340,6 +422,7 @@ function PlanillaView({
   componentNameCount: Map<string, number>
   cycleStatus: (compId: string) => void
   onEdit: (p: PlatoConComponentes) => void
+  onCrear: (categoria: string) => void
   onIngredientes: () => void
   onDuplicar: () => void
   openMerma: (nombre: string) => void
@@ -429,15 +512,15 @@ function PlanillaView({
             <div style={{ width: `${catPct * 100}%`, height: '100%', background: catColor, transition: 'width .3s' }} />
           </div>
 
-          {!isCollapsed && <div style={{ padding: '4px 8px 8px' }}>{platosInCat.map(plato => (
+          {!isCollapsed && <div style={{ padding: '4px 8px 8px' }}>
+            {platosInCat.map((plato) => (
             <div key={plato.id} style={{ marginBottom: 6, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
               {/* Plato header */}
               <div
-                className="flex items-center justify-between px-3 py-2 cursor-pointer"
-                style={{ background: 'var(--surface)' }}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--surface)', cursor: 'pointer' }}
                 onClick={() => onEdit(plato)}
               >
-                <span className="text-sm font-bold" style={{ color: 'var(--navy)' }}>{plato.nombre}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy)' }}>{plato.nombre}</span>
                 <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)' }}>edit</span>
               </div>
 
@@ -528,12 +611,24 @@ function PlanillaView({
               })}
 
               {plato.componentes.length === 0 && (
-                <div className="px-3 py-3 text-xs italic" style={{ color: 'var(--text-3)' }}>
+                <div style={{ padding: '10px 12px', fontSize: 12, fontStyle: 'italic', color: 'var(--text-3)' }}>
                   Sin componentes — toca para agregar
                 </div>
               )}
             </div>
-          ))}</div>}
+          ))}
+            {/* Botón + para agregar plato a esta sección */}
+            <button
+              onClick={() => onCrear(cat)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 4px',
+                background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', marginTop: 4,
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>add</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)' }}>Agregar a {cat}</span>
+            </button>
+          </div>}
         </div>
       )
       })}
@@ -547,16 +642,17 @@ function PlanillaView({
 interface CompForm { nombre: string; receta_id: string | null; notas_produccion: string; orden: number }
 
 function PlatoForm({
-  plato, restauranteId, onSave, onDelete, onCancel,
+  plato, restauranteId, categoriaInicial, onSave, onDelete, onCancel,
 }: {
   plato: PlatoConComponentes | null
   restauranteId: string
+  categoriaInicial?: string
   onSave: (data: { nombre: string; categoria: CategoriaPlato; descripcion?: string }, comps: CompForm[]) => void
   onDelete?: () => void
   onCancel: () => void
 }) {
   const [nombre, setNombre] = useState(plato?.nombre ?? '')
-  const [categoria, setCategoria] = useState<CategoriaPlato>((plato?.categoria as CategoriaPlato) ?? 'Principal')
+  const [categoria, setCategoria] = useState<CategoriaPlato>((plato?.categoria as CategoriaPlato) ?? (categoriaInicial as CategoriaPlato) ?? 'Principal')
   const [descripcion, setDescripcion] = useState(plato?.descripcion ?? '')
   const [comps, setComps] = useState<CompForm[]>(
     plato?.componentes.map((c, i) => ({
