@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { useRecetas } from '@/lib/hooks/useRecetas'
@@ -30,6 +31,11 @@ const CAT_COLORS: Record<string, string> = {
 }
 
 // ── Types ──────────────────────────────────────────────────────
+interface IngredientePlazaConfig {
+  nombre: string
+  plaza_produccion: string
+}
+
 interface Plato {
   id: string
   nombre: string
@@ -47,6 +53,14 @@ interface ComponenteConfig {
   cantidad_diaria: number | null
   unidad: string
   orden: number
+  ingrediente_plazas: IngredientePlazaConfig[]
+}
+
+type RecetaMinima = {
+  id: string
+  nombre: string
+  porciones?: number | null
+  ingredientes?: { nombre: string }[]
 }
 
 // ── Main ──────────────────────────────────────────────────────
@@ -81,6 +95,22 @@ export default function IngenieriaMenuView({ embedded }: { embedded?: boolean } 
         .in('plato_compuesto_id', ids)
         .order('orden')
 
+      // Load ingredient-plaza assignments from plato_plazas
+      const recetaIds = (compsData ?? []).map(c => (c as PlatoComponente).receta_id).filter(Boolean) as string[]
+      const ppMap: Record<string, IngredientePlazaConfig[]> = {}
+      if (recetaIds.length > 0) {
+        const { data: ppData } = await supabase
+          .from('plato_plazas')
+          .select('plato_id, plaza, ingredientes')
+          .in('plato_id', recetaIds)
+        for (const pp of (ppData ?? [])) {
+          if (!ppMap[pp.plato_id]) ppMap[pp.plato_id] = []
+          for (const ingNombre of (pp.ingredientes ?? [])) {
+            ppMap[pp.plato_id].push({ nombre: ingNombre, plaza_produccion: pp.plaza })
+          }
+        }
+      }
+
       const compsMap: Record<string, ComponenteConfig[]> = {}
       for (const c of (compsData ?? []) as PlatoComponente[]) {
         if (!compsMap[c.plato_compuesto_id]) compsMap[c.plato_compuesto_id] = []
@@ -93,6 +123,7 @@ export default function IngenieriaMenuView({ embedded }: { embedded?: boolean } 
           cantidad_diaria: c.cantidad_diaria ?? null,
           unidad: c.unidad ?? 'u',
           orden: c.orden,
+          ingrediente_plazas: c.receta_id ? (ppMap[c.receta_id] ?? []) : [],
         })
       }
 
@@ -120,7 +151,7 @@ export default function IngenieriaMenuView({ embedded }: { embedded?: boolean } 
     return (
       <PlatoWizard
         plato={editingPlato}
-        recetas={recetas}
+        recetas={recetas as RecetaMinima[]}
         restauranteId={RESTAURANTE_ID}
         supabase={supabase}
         onSave={async () => {
@@ -175,7 +206,6 @@ export default function IngenieriaMenuView({ embedded }: { embedded?: boolean } 
             }
             return [...grouped.entries()].map(([cat, items]) => (
               <div key={cat} style={{ marginBottom: 16 }}>
-                {/* Categoria header */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, padding: '0 2px' }}>
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: CAT_COLORS[cat] ?? '#94a3b8', flexShrink: 0 }} />
                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em' }}>{cat}</span>
@@ -215,7 +245,6 @@ function PlatoCard({ plato, onEdit }: { plato: Plato; onEdit: () => void }) {
       background: 'var(--surface)', border: '1px solid var(--border)',
       borderRadius: 14, overflow: 'hidden', marginBottom: 8,
     }}>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px' }}>
         <button
           onClick={() => setOpen(v => !v)}
@@ -227,7 +256,7 @@ function PlatoCard({ plato, onEdit }: { plato: Plato; onEdit: () => void }) {
               {total} componente{total !== 1 ? 's' : ''}
               {withPlaza.length > 0 && (
                 <span style={{ marginLeft: 6, color: '#22c55e', fontWeight: 600 }}>
-                  · {withPlaza.length} con plaza asignada
+                  · {withPlaza.length} con plaza
                 </span>
               )}
               {total > 0 && withPlaza.length < total && (
@@ -250,49 +279,60 @@ function PlatoCard({ plato, onEdit }: { plato: Plato; onEdit: () => void }) {
         </button>
       </div>
 
-      {/* Components list */}
       {open && plato.componentes.length > 0 && (
         <div style={{ borderTop: '1px solid var(--border)' }}>
           {plato.componentes.map((comp, i) => {
             const plazaCfg = PLAZAS_MAP[comp.plaza]
+            const prodPlazas = [...new Set(comp.ingrediente_plazas.map(ip => ip.plaza_produccion).filter(Boolean))]
             return (
               <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 10,
                 padding: '9px 14px',
                 borderBottom: i < plato.componentes.length - 1 ? '1px solid var(--border)' : 'none',
               }}>
-                {/* Receta icon */}
-                <span className="material-symbols-outlined" style={{
-                  fontSize: 14, color: comp.receta_id ? 'var(--accent)' : 'var(--text-3)', flexShrink: 0,
-                }}>
-                  {comp.receta_id ? 'menu_book' : 'inventory_2'}
-                </span>
-                {/* Nombre */}
-                <span style={{ flex: 1, fontSize: 13, color: 'var(--text-1)', fontWeight: 500 }}>{comp.nombre}</span>
-                {/* Cantidad */}
-                {comp.cantidad_diaria != null && (
-                  <span style={{
-                    fontSize: 11, fontWeight: 700, color: 'var(--text-2)',
-                    fontFamily: "'DM Mono', monospace",
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className="material-symbols-outlined" style={{
+                    fontSize: 14, color: comp.receta_id ? 'var(--accent)' : 'var(--text-3)', flexShrink: 0,
                   }}>
-                    {comp.cantidad_diaria} {comp.unidad}
+                    {comp.receta_id ? 'menu_book' : 'inventory_2'}
                   </span>
-                )}
-                {/* Plaza chip */}
-                {plazaCfg ? (
-                  <span style={{
-                    fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
-                    background: `${plazaCfg.color}18`, color: plazaCfg.color, flexShrink: 0,
-                  }}>
-                    {plazaCfg.label}
-                  </span>
-                ) : (
-                  <span style={{
-                    fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
-                    background: 'rgba(245,158,11,.12)', color: '#d97706', flexShrink: 0,
-                  }}>
-                    sin plaza
-                  </span>
+                  <span style={{ flex: 1, fontSize: 13, color: 'var(--text-1)', fontWeight: 500 }}>{comp.nombre}</span>
+                  {comp.cantidad_diaria != null && (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)', fontFamily: "'DM Mono', monospace" }}>
+                      {comp.cantidad_diaria} {comp.unidad}
+                    </span>
+                  )}
+                  {plazaCfg ? (
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
+                      background: `${plazaCfg.color}18`, color: plazaCfg.color, flexShrink: 0,
+                    }}>
+                      {plazaCfg.label}
+                    </span>
+                  ) : (
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
+                      background: 'rgba(245,158,11,.12)', color: '#d97706', flexShrink: 0,
+                    }}>
+                      sin plaza
+                    </span>
+                  )}
+                </div>
+                {/* Production plazas per ingredient */}
+                {prodPlazas.length > 0 && (
+                  <div style={{ marginTop: 5, marginLeft: 24, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {prodPlazas.map(pz => {
+                      const pc = PLAZAS_MAP[pz]
+                      const ings = comp.ingrediente_plazas.filter(ip => ip.plaza_produccion === pz).map(ip => ip.nombre)
+                      return pc ? (
+                        <span key={pz} style={{
+                          fontSize: 9, padding: '2px 6px', borderRadius: 5,
+                          background: `${pc.color}10`, color: pc.color, fontWeight: 600,
+                        }}>
+                          {pc.label}: {ings.join(', ')}
+                        </span>
+                      ) : null
+                    })}
+                  </div>
                 )}
               </div>
             )
@@ -335,7 +375,7 @@ function EmptyState({ onNew }: { onNew: () => void }) {
 // ══════════════════════════════════════════════════════════════
 interface WizardProps {
   plato: Plato | null
-  recetas: { id: string; nombre: string; porciones?: number | null }[]
+  recetas: RecetaMinima[]
   restauranteId: string
   supabase: ReturnType<typeof createClient>
   onSave: () => Promise<void>
@@ -356,7 +396,7 @@ function PlatoWizard({ plato, recetas, restauranteId, supabase, onSave, onCancel
   const [saveError, setSaveError] = useState('')
 
   function emptyComp(orden: number): ComponenteConfig {
-    return { nombre: '', receta_id: null, notas_produccion: '', plaza: '', cantidad_diaria: null, unidad: 'u', orden }
+    return { nombre: '', receta_id: null, notas_produccion: '', plaza: '', cantidad_diaria: null, unidad: 'u', orden, ingrediente_plazas: [] }
   }
 
   function addComp() {
@@ -371,11 +411,29 @@ function PlatoWizard({ plato, recetas, restauranteId, supabase, onSave, onCancel
     setComponentes(prev => prev.map((c, i) => i === idx ? { ...c, [field]: value } : c))
   }
 
-  function selectReceta(idx: number, receta: { id: string; nombre: string; porciones?: number | null }) {
-    setComponentes(prev => prev.map((c, i) => i === idx
-      ? { ...c, nombre: receta.nombre, receta_id: receta.id, cantidad_diaria: receta.porciones ?? c.cantidad_diaria }
-      : c
-    ))
+  function updateIngredientePlaza(compIdx: number, ingNombre: string, plaza: string) {
+    setComponentes(prev => prev.map((c, i) => i !== compIdx ? c : {
+      ...c,
+      ingrediente_plazas: c.ingrediente_plazas.map(ip =>
+        ip.nombre === ingNombre ? { ...ip, plaza_produccion: plaza } : ip
+      ),
+    }))
+  }
+
+  function selectReceta(idx: number, receta: RecetaMinima) {
+    setComponentes(prev => prev.map((c, i) => {
+      if (i !== idx) return c
+      return {
+        ...c,
+        nombre: receta.nombre,
+        receta_id: receta.id,
+        cantidad_diaria: receta.porciones ?? c.cantidad_diaria,
+        ingrediente_plazas: (receta.ingredientes ?? []).map(ing => ({
+          nombre: ing.nombre,
+          plaza_produccion: c.plaza,
+        })),
+      }
+    }))
   }
 
   // ── Save + sync ──────────────────────────────────────────
@@ -417,19 +475,22 @@ function PlatoWizard({ plato, recetas, restauranteId, supabase, onSave, onCancel
         if (error) throw error
       }
 
-      // 3. Sync checklist_items + plato_plazas para componentes con plaza
+      // 3. Sync checklist_items + plato_plazas
       const compsConPlaza = validComps.filter(c => c.plaza)
       if (compsConPlaza.length > 0) {
-        // Obtener secciones por plaza (para seccion_id default)
-        const plazasUnicas = [...new Set(compsConPlaza.map(c => c.plaza))]
+        // Collect all plazas needed (component + ingredient production plazas)
+        const allPlazas = [...new Set([
+          ...compsConPlaza.map(c => c.plaza).filter(Boolean),
+          ...compsConPlaza.flatMap(c => c.ingrediente_plazas.map(ip => ip.plaza_produccion)).filter(Boolean),
+        ])]
+
         const { data: secData } = await supabase
           .from('checklist_secciones')
           .select('id, plaza, orden')
           .eq('restaurante_id', restauranteId)
-          .in('plaza', plazasUnicas)
+          .in('plaza', allPlazas)
           .order('orden', { ascending: true })
 
-        // mapa plaza → primer seccion_id
         const plazaSeccionMap: Record<string, string> = {}
         for (const sec of (secData ?? [])) {
           if (!plazaSeccionMap[sec.plaza]) plazaSeccionMap[sec.plaza] = sec.id
@@ -437,8 +498,9 @@ function PlatoWizard({ plato, recetas, restauranteId, supabase, onSave, onCancel
 
         for (const comp of compsConPlaza) {
           const seccionId = plazaSeccionMap[comp.plaza] ?? null
+          const hasIngPlazas = comp.receta_id && comp.ingrediente_plazas.some(ip => ip.plaza_produccion)
 
-          // Buscar checklist_item existente
+          // Component-level checklist item (the finished component at the service plaza)
           let existingId: string | null = null
           if (comp.receta_id) {
             const { data } = await supabase.from('checklist_items')
@@ -454,15 +516,10 @@ function PlatoWizard({ plato, recetas, restauranteId, supabase, onSave, onCancel
           }
 
           if (existingId) {
-            // Actualizar cantidad + unidad (y seccion si se tiene)
-            const upd: Record<string, unknown> = {
-              cantidad: comp.cantidad_diaria ?? 0,
-              unidad: comp.unidad,
-            }
+            const upd: Record<string, unknown> = { cantidad: comp.cantidad_diaria ?? 0, unidad: comp.unidad }
             if (seccionId) upd.seccion_id = seccionId
             await supabase.from('checklist_items').update(upd).eq('id', existingId)
           } else {
-            // Crear nuevo
             await supabase.from('checklist_items').insert({
               restaurante_id: restauranteId,
               plaza: comp.plaza,
@@ -477,19 +534,68 @@ function PlatoWizard({ plato, recetas, restauranteId, supabase, onSave, onCancel
             })
           }
 
-          // 4. plato_plazas: solo para componentes con receta
+          // 4. plato_plazas + ingredient-level checklist items
           if (comp.receta_id) {
-            const { data: ppExist } = await supabase.from('plato_plazas')
-              .select('id').eq('plato_id', comp.receta_id).eq('plaza', comp.plaza).maybeSingle()
-            if (!ppExist) {
+            // Delete and rebuild all plato_plazas entries for this recipe
+            await supabase.from('plato_plazas').delete().eq('plato_id', comp.receta_id)
+
+            if (hasIngPlazas) {
+              // Group ingredients by production plaza
+              const byPlaza = new Map<string, string[]>()
+              for (const ip of comp.ingrediente_plazas) {
+                if (!ip.plaza_produccion) continue
+                if (!byPlaza.has(ip.plaza_produccion)) byPlaza.set(ip.plaza_produccion, [])
+                byPlaza.get(ip.plaza_produccion)!.push(ip.nombre)
+              }
+
+              for (const [plazaProd, ingNombres] of byPlaza.entries()) {
+                // Insert plato_plazas row for this production plaza
+                await supabase.from('plato_plazas').insert({
+                  plato_id: comp.receta_id,
+                  plaza: plazaProd,
+                  ingredientes: ingNombres,
+                  instruccion: comp.notas_produccion || null,
+                  orden: 0,
+                })
+
+                const prodSeccionId = plazaSeccionMap[plazaProd] ?? null
+
+                // Create/update one checklist item per ingredient at the production plaza
+                for (const ingNombre of ingNombres) {
+                  const { data: existIng } = await supabase.from('checklist_items')
+                    .select('id').eq('restaurante_id', restauranteId)
+                    .eq('plaza', plazaProd).eq('nombre', ingNombre).maybeSingle()
+
+                  if (existIng) {
+                    await supabase.from('checklist_items').update({
+                      cantidad: comp.cantidad_diaria ?? 0,
+                      unidad: comp.unidad,
+                      ...(prodSeccionId ? { seccion_id: prodSeccionId } : {}),
+                    }).eq('id', existIng.id)
+                  } else {
+                    await supabase.from('checklist_items').insert({
+                      restaurante_id: restauranteId,
+                      plaza: plazaProd,
+                      seccion_id: prodSeccionId,
+                      seccion: plazaProd,
+                      nombre: ingNombre,
+                      cantidad: comp.cantidad_diaria ?? 0,
+                      unidad: comp.unidad,
+                      prioridad: 'p',
+                      receta_id: comp.receta_id,
+                      orden: 0,
+                    })
+                  }
+                }
+              }
+            } else {
+              // No ingredient-level plazas — just record component plaza
               await supabase.from('plato_plazas').insert({
                 plato_id: comp.receta_id,
                 plaza: comp.plaza,
                 instruccion: comp.notas_produccion || null,
                 orden: 0,
               })
-            } else {
-              await supabase.from('plato_plazas').update({ instruccion: comp.notas_produccion || null }).eq('id', ppExist.id)
             }
           }
         }
@@ -519,7 +625,6 @@ function PlatoWizard({ plato, recetas, restauranteId, supabase, onSave, onCancel
           </span>
         </div>
 
-        {/* Step indicator */}
         <div style={{ display: 'flex', gap: 6 }}>
           {STEPS.map((s, i) => (
             <div
@@ -590,7 +695,7 @@ function PlatoWizard({ plato, recetas, restauranteId, supabase, onSave, onCancel
         {step === 1 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 6px' }}>
-              Para cada componente, indicá a qué plaza corresponde y la cantidad diaria ideal.
+              Indicá la plaza que recibe cada componente y la cantidad diaria. Si tiene receta vinculada, podés asignar la producción de cada ingrediente a la plaza correspondiente.
             </p>
             {componentes.map((comp, idx) => (
               <ComponenteRow
@@ -600,6 +705,7 @@ function PlatoWizard({ plato, recetas, restauranteId, supabase, onSave, onCancel
                 recetas={recetas}
                 onUpdate={(field, val) => updateComp(idx, field, val)}
                 onSelectReceta={(r) => selectReceta(idx, r)}
+                onUpdateIngredientePlaza={(ingNombre, plaza) => updateIngredientePlaza(idx, ingNombre, plaza)}
                 onRemove={() => removeComp(idx)}
               />
             ))}
@@ -628,35 +734,55 @@ function PlatoWizard({ plato, recetas, restauranteId, supabase, onSave, onCancel
               </div>
               {componentes.filter(c => c.nombre.trim()).map((comp, i) => {
                 const plazaCfg = PLAZAS_MAP[comp.plaza]
+                const prodPlazas = [...new Set(comp.ingrediente_plazas.map(ip => ip.plaza_produccion).filter(Boolean))]
                 return (
                   <div key={i} style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px',
-                    background: 'var(--surface)', border: '1px solid var(--border)',
+                    padding: '9px 12px', background: 'var(--surface)', border: '1px solid var(--border)',
                     borderRadius: 10, marginBottom: 6,
                   }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 14, color: comp.receta_id ? 'var(--accent)' : 'var(--text-3)' }}>
-                      {comp.receta_id ? 'menu_book' : 'inventory_2'}
-                    </span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{comp.nombre}</div>
-                      {comp.cantidad_diaria != null && (
-                        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>
-                          Stock diario: {comp.cantidad_diaria} {comp.unidad}
-                        </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 14, color: comp.receta_id ? 'var(--accent)' : 'var(--text-3)' }}>
+                        {comp.receta_id ? 'menu_book' : 'inventory_2'}
+                      </span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{comp.nombre}</div>
+                        {comp.cantidad_diaria != null && (
+                          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>
+                            Stock diario: {comp.cantidad_diaria} {comp.unidad}
+                          </div>
+                        )}
+                      </div>
+                      {plazaCfg ? (
+                        <span style={{
+                          fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
+                          background: `${plazaCfg.color}18`, color: plazaCfg.color,
+                        }}>
+                          {plazaCfg.label}
+                        </span>
+                      ) : (
+                        <span style={{
+                          fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 6,
+                          background: 'rgba(245,158,11,.12)', color: '#d97706',
+                        }}>sin plaza</span>
                       )}
                     </div>
-                    {plazaCfg ? (
-                      <span style={{
-                        fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
-                        background: `${plazaCfg.color}18`, color: plazaCfg.color,
-                      }}>
-                        {plazaCfg.label}
-                      </span>
-                    ) : (
-                      <span style={{
-                        fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 6,
-                        background: 'rgba(245,158,11,.12)', color: '#d97706',
-                      }}>sin plaza</span>
+                    {/* Production plazas summary */}
+                    {prodPlazas.length > 0 && (
+                      <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border)', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        <span style={{ fontSize: 10, color: 'var(--text-3)', alignSelf: 'center', marginRight: 2 }}>Produce:</span>
+                        {prodPlazas.map(pz => {
+                          const pc = PLAZAS_MAP[pz]
+                          const ings = comp.ingrediente_plazas.filter(ip => ip.plaza_produccion === pz).map(ip => ip.nombre)
+                          return pc ? (
+                            <span key={pz} style={{
+                              fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 5,
+                              background: `${pc.color}15`, color: pc.color,
+                            }}>
+                              {pc.label}: {ings.join(', ')}
+                            </span>
+                          ) : null
+                        })}
+                      </div>
                     )}
                   </div>
                 )
@@ -667,7 +793,7 @@ function PlatoWizard({ plato, recetas, restauranteId, supabase, onSave, onCancel
                   background: 'rgba(34,197,94,.06)', border: '1px solid rgba(34,197,94,.2)',
                 }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: '#16a34a' }}>
-                    ✓ {componentes.filter(c => c.plaza).length} componente{componentes.filter(c => c.plaza).length !== 1 ? 's' : ''} se sincronizarán con el checklist de su plaza
+                    ✓ Se sincronizarán checklist items por componente y por ingrediente según la plaza asignada
                   </div>
                 </div>
               )}
@@ -738,15 +864,17 @@ function PlatoWizard({ plato, recetas, restauranteId, supabase, onSave, onCancel
 
 // ── Componente Row ────────────────────────────────────────────
 function ComponenteRow({
-  comp, idx, recetas, onUpdate, onSelectReceta, onRemove,
+  comp, idx, recetas, onUpdate, onSelectReceta, onUpdateIngredientePlaza, onRemove,
 }: {
   comp: ComponenteConfig
   idx: number
-  recetas: { id: string; nombre: string; porciones?: number | null }[]
+  recetas: RecetaMinima[]
   onUpdate: (field: keyof ComponenteConfig, val: string | number | null) => void
-  onSelectReceta: (r: { id: string; nombre: string; porciones?: number | null }) => void
+  onSelectReceta: (r: RecetaMinima) => void
+  onUpdateIngredientePlaza: (ingNombre: string, plaza: string) => void
   onRemove: () => void
 }) {
+  const router = useRouter()
   const [expanded, setExpanded] = useState(idx === 0 || !comp.nombre)
   const [showSug, setShowSug] = useState(false)
 
@@ -755,6 +883,12 @@ function ComponenteRow({
     const q = comp.nombre.toLowerCase()
     return recetas.filter(r => r.nombre.toLowerCase().includes(q)).slice(0, 5)
   }, [comp.nombre, comp.receta_id, recetas])
+
+  const recetaIngredientes = useMemo(() => {
+    if (!comp.receta_id) return []
+    const r = recetas.find(r => r.id === comp.receta_id)
+    return r?.ingredientes ?? []
+  }, [comp.receta_id, recetas])
 
   const plazaCfg = PLAZAS_MAP[comp.plaza]
 
@@ -792,6 +926,9 @@ function ComponenteRow({
             )}
             {!comp.plaza && (
               <span style={{ fontSize: 10, color: '#d97706' }}>sin plaza</span>
+            )}
+            {recetaIngredientes.length > 0 && comp.ingrediente_plazas.some(ip => ip.plaza_produccion) && (
+              <span style={{ fontSize: 9, color: '#22c55e', fontWeight: 600 }}>· ing. asignados</span>
             )}
           </div>
         </div>
@@ -854,13 +991,30 @@ function ComponenteRow({
                     ))}
                   </div>
                 )}
+                {/* Crear receta button */}
+                {!comp.receta_id && comp.nombre.trim().length > 2 && (
+                  <button
+                    onClick={() => router.push(`/recetario`)}
+                    style={{
+                      marginTop: 6, display: 'flex', alignItems: 'center', gap: 6,
+                      width: '100%', padding: '8px 12px', borderRadius: 9,
+                      background: 'rgba(67,97,160,.06)', border: '1px solid rgba(67,97,160,.18)',
+                      cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent)' }}>add_circle</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)' }}>
+                      Crear receta para este componente
+                    </span>
+                  </button>
+                )}
               </div>
             )}
           </div>
 
-          {/* Plaza */}
+          {/* Plaza de servicio (quien recibe el componente terminado) */}
           <div>
-            <LabelSmall>Plaza de producción</LabelSmall>
+            <LabelSmall>Plaza que recibe el componente</LabelSmall>
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
               {PLAZAS.map(p => (
                 <button
@@ -913,6 +1067,56 @@ function ComponenteRow({
               style={{ ...inp, marginTop: 5 }}
             />
           </div>
+
+          {/* ── Ingredient-level production plaza assignment ── */}
+          {recetaIngredientes.length > 0 && (
+            <div style={{
+              marginTop: 4, padding: '10px 12px', borderRadius: 10,
+              background: 'var(--bg)', border: '1px solid var(--border)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent)' }}>grain</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '.07em' }}>
+                  Plaza de producción por ingrediente
+                </span>
+              </div>
+              <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 10px' }}>
+                ¿Qué plaza produce cada ingrediente? (puede diferir de la plaza que lo recibe)
+              </p>
+              {recetaIngredientes.map(ing => {
+                const currentPlaza = comp.ingrediente_plazas.find(ip => ip.nombre === ing.nombre)?.plaza_produccion ?? ''
+                const pc = PLAZAS_MAP[currentPlaza]
+                return (
+                  <div key={ing.nombre} style={{ marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)', flex: 1 }}>{ing.nombre}</span>
+                      {pc && (
+                        <span style={{
+                          fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
+                          background: `${pc.color}18`, color: pc.color,
+                        }}>{pc.label}</span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {PLAZAS.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => onUpdateIngredientePlaza(ing.nombre, currentPlaza === p.id ? '' : p.id)}
+                          style={{
+                            padding: '4px 9px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                            fontSize: 10, fontWeight: 700, fontFamily: 'inherit', transition: 'all .1s',
+                            background: currentPlaza === p.id ? `${p.color}18` : 'var(--surface)',
+                            color: currentPlaza === p.id ? p.color : 'var(--text-3)',
+                            outline: currentPlaza === p.id ? `1.5px solid ${p.color}50` : 'none',
+                          }}
+                        >{p.label}</button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

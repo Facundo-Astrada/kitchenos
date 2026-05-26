@@ -70,7 +70,7 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 ### Merma (1)
 `merma`
 
-**Total: 28 tablas** con RLS habilitado. Políticas actuales permisivas (`USING (true)`) — hay que restringir por `restaurante_id` antes de producción real multi-tenant (ver PENDIENTES.md §Crítico).
+**Total: 28 tablas** con RLS habilitado. Aislamiento multi-tenant real via `mi_restaurante_id()`. Todas las políticas UPDATE tienen `WITH CHECK` explícito. Listo para multi-tenant.
 
 ---
 
@@ -87,7 +87,7 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 ### Deuda técnica
 | # | Severidad | Descripción | Archivo |
 |---|-----------|-------------|---------|
-| 5 | Alta | RLS permisivo: todas las tablas tienen `USING (true)`. Multi-tenant no es seguro aún. | Todas las tablas |
+| 5 | ✅ Resuelto | RLS multi-tenant real: 44 políticas UPDATE con `WITH CHECK`, 0 `USING(true)` ilegítimos. | Todas las tablas |
 | 6 | Media | `useCallback` deps vacías en varios hooks que usan `RESTAURANTE_ID` — posible stale closure si cambia restaurante. | `lib/hooks/*.ts` |
 | 7 | Media | Tipos desactualizados: `Evento`, `Turno`, `Puesto` en `types/index.ts` tienen campos legacy que no matchean el schema DB actual. | `types/index.ts` |
 | 8 | Baja | Modo Servicio no conectado (ver DECISIONES.md — probablemente se descarta). | `components/dashboard/ModoServicio.tsx` |
@@ -126,6 +126,11 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
    - Recetario `bottom: 90 → 110`.
    - Tareas `bottom: 72 → 100`.
 3. Verificado end-to-end en preview server: creación manual de receta con ingrediente guarda sin error y redirige al detalle.
+
+### Sesión 2026-05-23 — RLS hardening + GitHub MCP
+1. **RLS audit completo** via agente `rls-enforcer`: 0 políticas con `USING(true)` ilegítimas encontradas (ya estaban bien). Se detectaron 34 políticas UPDATE sin `WITH CHECK` — vector de modificación cross-tenant.
+2. **44 políticas UPDATE corregidas** con `WITH CHECK (restaurante_id = mi_restaurante_id())` explícito en todas las tablas. Aplicado via Management API sin errores.
+3. **GitHub MCP** agregado a `.mcp.json` (`@modelcontextprotocol/server-github`). Disponible desde la próxima sesión.
 
 ---
 
