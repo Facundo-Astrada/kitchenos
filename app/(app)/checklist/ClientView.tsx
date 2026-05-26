@@ -203,15 +203,40 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const draggingRef = useRef<typeof dragging>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const secElRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const actualizarItemRef = useRef(actualizarItem)
   useEffect(() => { draggingRef.current = dragging }, [dragging])
   useEffect(() => { actualizarItemRef.current = actualizarItem }, [actualizarItem])
 
   useEffect(() => {
     if (!dragging) return
+    // Mutable current-Y so the RAF loop always reads the latest value
+    const currentY = { value: dragging.y }
+    let rafId: number
+
+    // Continuous scroll loop — runs every frame while dragging
+    const scrollLoop = () => {
+      const sc = scrollContainerRef.current
+      if (sc) {
+        const r = sc.getBoundingClientRect()
+        const ZONE = 90  // px from edge that triggers auto-scroll
+        const y = currentY.value
+        if (y < r.top + ZONE && y > r.top) {
+          const intensity = 1 - (y - r.top) / ZONE
+          sc.scrollTop -= 3 + intensity * 10
+        } else if (y > r.bottom - ZONE && y < r.bottom) {
+          const intensity = 1 - (r.bottom - y) / ZONE
+          sc.scrollTop += 3 + intensity * 10
+        }
+      }
+      rafId = requestAnimationFrame(scrollLoop)
+    }
+    rafId = requestAnimationFrame(scrollLoop)
+
     const onMove = (e: TouchEvent) => {
       e.preventDefault()
       const t = e.touches[0]
+      currentY.value = t.clientY
       let overSecId: string | null = null
       secElRefs.current.forEach((el, secId) => {
         const r = el.getBoundingClientRect()
@@ -220,6 +245,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       setDragging(prev => prev ? { ...prev, y: t.clientY, overSecId } : null)
     }
     const onEnd = () => {
+      cancelAnimationFrame(rafId)
       const d = draggingRef.current
       if (d?.overSecId && d.overSecId !== d.item.seccion_id) {
         actualizarItemRef.current(d.item.id, { seccion_id: d.overSecId })
@@ -229,6 +255,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     document.addEventListener('touchmove', onMove, { passive: false })
     document.addEventListener('touchend', onEnd)
     return () => {
+      cancelAnimationFrame(rafId)
       document.removeEventListener('touchmove', onMove)
       document.removeEventListener('touchend', onEnd)
     }
@@ -374,7 +401,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       </div>
 
       {/* Body */}
-      <div style={{ flex: 1, overflow: 'auto', padding: '10px 12px', paddingBottom: 120 }}>
+      <div ref={scrollContainerRef} style={{ flex: 1, overflow: 'auto', padding: '10px 12px', paddingBottom: 120 }}>
         {loading && (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>Cargando...</div>
         )}
