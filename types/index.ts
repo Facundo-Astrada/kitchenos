@@ -608,7 +608,7 @@ export interface PlatoCompuesto {
   updated_at?: string | null
 }
 
-// DB: plato_componentes (id, plato_compuesto_id, nombre, receta_id, notas_produccion, orden, created_at)
+// DB: plato_componentes (id, plato_compuesto_id, nombre, receta_id, notas_produccion, orden, plaza, cantidad_diaria, unidad, created_at)
 export interface PlatoComponente {
   id: string
   plato_compuesto_id: string
@@ -616,6 +616,9 @@ export interface PlatoComponente {
   receta_id?: string | null
   notas_produccion?: string | null
   orden: number
+  plaza?: string | null
+  cantidad_diaria?: number | null
+  unidad?: string | null
   created_at: string
 }
 
