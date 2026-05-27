@@ -47,6 +47,7 @@ export type ModuloId =
   | 'equipo'
   | 'configuracion'
   | 'ventas'
+  | 'ingenieria-menu'
 
 export const MODULO_CONFIG: Record<
   ModuloId,
@@ -72,6 +73,7 @@ export const MODULO_CONFIG: Record<
   equipo: { label: 'Equipo', icon: 'groups', href: '/turnos' },
   configuracion: { label: 'Config', icon: 'settings', href: '/configuracion' },
   ventas: { label: 'Ventas', icon: 'bar_chart', href: '/ventas' },
+  'ingenieria-menu': { label: 'Ingeniería', icon: 'engineering', href: '/ingenieria-menu' },
 }
 
 // Módulos accesibles por rol
@@ -79,12 +81,12 @@ export const MODULOS_POR_ROL: Record<Rol, ModuloId[]> = {
   admin: [
     'home', 'operaciones', 'recetario', 'stock', 'pedidos',
     'haccp', 'reportes', 'calendario',
-    'carta', 'pase', 'facturas', 'merma', 'equipo', 'configuracion', 'ventas',
+    'carta', 'pase', 'facturas', 'merma', 'equipo', 'configuracion', 'ventas', 'ingenieria-menu',
   ],
   chef: [
     'home', 'operaciones', 'recetario', 'stock', 'pedidos',
     'haccp', 'reportes', 'calendario',
-    'carta', 'pase', 'facturas', 'merma', 'equipo', 'ventas',
+    'carta', 'pase', 'facturas', 'merma', 'equipo', 'ventas', 'ingenieria-menu',
   ],
   parrilla: ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta'],
   frios: ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta'],
@@ -117,6 +119,7 @@ export const RUTA_A_MODULO: Record<string, string> = {
   '/configuracion': 'configuracion',
   '/merma': 'merma',
   '/ventas': 'ventas',
+  '/ingenieria-menu': 'ingenieria-menu',
   // /perfil — not listed: modulo = undefined → always accessible
   // /tareas, /checklist, /produccion — sub-routes, no individual protection
 }

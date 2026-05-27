@@ -7,20 +7,22 @@ import type { Tarea, OpsEstado, OpsModo } from '@/types'
 
 interface SeccionOpsProps {
   titulo: string
+  sublabel?: string
   color: string
   items: Tarea[]
   subtareasByParent: Record<string, Tarea[]>
-  onAddItem: (titulo: string) => Promise<void>
+  onAddItem: (titulo: string, recetaId?: string) => Promise<void>
   onEstadoChange: (id: string, estado: OpsEstado) => void
   onAddSubtarea: (parentId: string, titulo: string) => Promise<void>
   modo?: OpsModo
   showSeccionChip?: boolean
   showPrioChip?: boolean
+  recetas?: { id: string; nombre: string }[]
 }
 
 export function SeccionOps({
-  titulo, color, items, subtareasByParent,
-  onAddItem, onEstadoChange, onAddSubtarea, modo, showSeccionChip, showPrioChip,
+  titulo, sublabel, color, items, subtareasByParent,
+  onAddItem, onEstadoChange, onAddSubtarea, modo, showSeccionChip, showPrioChip, recetas,
 }: SeccionOpsProps) {
   const [collapsed, setCollapsed] = useState(false)
 
@@ -50,13 +52,22 @@ export function SeccionOps({
           width: 8, height: 8, borderRadius: '50%',
           background: color, flexShrink: 0,
         }} />
-        <span style={{
-          flex: 1, textAlign: 'left',
-          fontSize: 12, fontWeight: 700,
-          color: 'var(--text-1)',
-          textTransform: 'uppercase', letterSpacing: '.06em',
-        }}>
-          {titulo}
+        <span style={{ flex: 1, textAlign: 'left' }}>
+          <span style={{
+            fontSize: 12, fontWeight: 700,
+            color: 'var(--text-1)',
+            textTransform: 'uppercase', letterSpacing: '.06em',
+          }}>
+            {titulo}
+          </span>
+          {sublabel && (
+            <span style={{
+              fontSize: 10, fontWeight: 500, color: 'var(--text-3)',
+              marginLeft: 5, textTransform: 'none', letterSpacing: 0,
+            }}>
+              · {sublabel}
+            </span>
+          )}
         </span>
         <span style={{
           fontSize: 11, fontFamily: "'DM Mono', monospace",
@@ -103,7 +114,7 @@ export function SeccionOps({
             </div>
           )}
           <div style={{ marginTop: 4 }}>
-            <QuickAdd onSave={onAddItem} />
+            <QuickAdd onSave={onAddItem} recetas={recetas} />
           </div>
         </div>
       )}

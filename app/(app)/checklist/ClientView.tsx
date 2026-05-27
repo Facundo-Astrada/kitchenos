@@ -126,6 +126,13 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
 
   const autoPlaza = (PLAZAS as readonly string[]).includes(authPerfil?.rol ?? '') ? (authPerfil!.rol as Plaza) : null
   const [plaza, setPlaza] = useState<Plaza | null>(autoPlaza)
+
+  // Auto-select cuando auth carga después del mount (authPerfil null al inicio)
+  useEffect(() => {
+    if (plaza === null && authPerfil?.rol && (PLAZAS as readonly string[]).includes(authPerfil.rol)) {
+      setPlaza(authPerfil.rol as Plaza)
+    }
+  }, [authPerfil, plaza])
   const [tab, setTab] = useState<Tab>('apertura')
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [showAddSheet, setShowAddSheet] = useState<string | null>(null)
@@ -136,7 +143,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const fecha = getToday()
   const turno = tab === 'rutina' ? 'apertura' : tab
 
-  useEffect(() => { if (plaza) fetchAll(fecha, turno) }, [plaza, tab, fecha, fetchAll, turno])
+  // Cuando plaza está seleccionada carga su turno; cuando muestra el grid carga apertura para mostrar progreso
+  useEffect(() => { fetchAll(fecha, plaza ? turno : 'apertura') }, [plaza, tab, fecha, fetchAll, turno])
 
   const plazaSecciones = useMemo(() =>
     secciones.filter(s => s.plaza === plaza).sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0)), [secciones, plaza])
@@ -179,6 +187,23 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const total = plazaItems.length
   const done = plazaItems.filter(i => regMap[i.id]?.completado).length
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
+
+  // Progreso por plaza para el grid selector
+  const gridProgress = useMemo(() => {
+    const totals: Record<string, number> = {}
+    const completos: Record<string, number> = {}
+    items.forEach(i => { totals[i.plaza] = (totals[i.plaza] ?? 0) + 1 })
+    registros.forEach(r => {
+      if (r.completado) {
+        const item = items.find(it => it.id === r.checklist_item_id)
+        if (item) completos[item.plaza] = (completos[item.plaza] ?? 0) + 1
+      }
+    })
+    return PLAZAS.reduce((acc, p) => {
+      acc[p] = { total: totals[p] ?? 0, done: completos[p] ?? 0 }
+      return acc
+    }, {} as Record<string, { total: number; done: number }>)
+  }, [items, registros])
 
   // Set of item names that already have a pending/in-progress tarea today
   const tareasHoySet = useMemo(() => {
@@ -333,17 +358,34 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         </div>
         <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {PLAZAS.map(p => (
-              <button key={p} onClick={() => setPlaza(p)} style={{
-                background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '20px 14px',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-                cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s',
-              }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 32, color: '#4361a0' }}>{PLAZA_ICONS[p]}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{PLAZA_LABELS[p]}</span>
-                <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{items.filter(i => i.plaza === p).length} items</span>
-              </button>
-            ))}
+            {PLAZAS.map(p => {
+              const gp = gridProgress[p]
+              const gpPct = gp.total > 0 ? Math.round((gp.done / gp.total) * 100) : 0
+              const isCompleto = gp.total > 0 && gp.done === gp.total
+              return (
+                <button key={p} onClick={() => setPlaza(p)} style={{
+                  background: 'var(--surface)', border: `1px solid ${isCompleto ? '#22c55e' : 'var(--border)'}`,
+                  borderRadius: 16, padding: '18px 14px',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+                  cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s',
+                }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 32, color: isCompleto ? '#22c55e' : '#4361a0' }}>{PLAZA_ICONS[p]}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{PLAZA_LABELS[p]}</span>
+                  {gp.total > 0 ? (
+                    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <span style={{ fontSize: 10, color: isCompleto ? '#22c55e' : 'var(--text-3)', fontWeight: 600 }}>
+                        {gp.done}/{gp.total} completados
+                      </span>
+                      <div style={{ height: 3, background: 'var(--border)', borderRadius: 99, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${gpPct}%`, background: isCompleto ? '#22c55e' : '#4361a0', borderRadius: 99, transition: 'width .3s' }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: 10, color: 'var(--text-3)' }}>Sin ítems</span>
+                  )}
+                </button>
+              )
+            })}
           </div>
         </div>
       </div>

@@ -93,12 +93,11 @@ export function useProduccion() {
   }, [supabase])
 
   // ── Init produccion for a date (create entries for all componentes) ──
-  const initProduccion = useCallback(async (fecha: string) => {
+  const initProduccion = useCallback(async (fecha: string, menuTag?: string | null) => {
     const rid = ridRef.current
     if (!rid) return
 
     try {
-      // Get all active platos and their componentes
       const allComps: { plato_id: string; comp_id: string }[] = []
       for (const p of platos) {
         for (const c of p.componentes) {
@@ -107,13 +106,16 @@ export function useProduccion() {
       }
       if (allComps.length === 0) return
 
-      // Check which already exist
-      const { data: existing, error: exErr } = await supabase
+      // Check which already exist for this fecha + menu_tag combo
+      const existingQuery = supabase
         .from('produccion_diaria')
         .select('componente_id')
         .eq('restaurante_id', rid)
         .eq('fecha', fecha)
+      if (menuTag) existingQuery.eq('menu_tag', menuTag)
+      else existingQuery.is('menu_tag', null)
 
+      const { data: existing, error: exErr } = await existingQuery
       if (exErr) throw exErr
 
       const existingIds = new Set((existing ?? []).map(e => e.componente_id))
@@ -124,6 +126,7 @@ export function useProduccion() {
           plato_compuesto_id: c.plato_id,
           componente_id: c.comp_id,
           status: 'pendiente' as StatusProduccion,
+          menu_tag: menuTag ?? null,
           restaurante_id: rid,
         }))
 
@@ -139,6 +142,40 @@ export function useProduccion() {
       throw new Error(msg)
     }
   }, [supabase, platos, fetchProduccion])
+
+  // ── Fetch dates that have production entries in a given month ──
+  const fetchFechasMes = useCallback(async (mes: string): Promise<Record<string, string[]>> => {
+    const rid = ridRef.current
+    if (!rid) return {}
+
+    const [year, month] = mes.split('-')
+    const from = `${year}-${month}-01`
+    const lastDay = new Date(Number(year), Number(month), 0).getDate()
+    const to = `${year}-${month}-${String(lastDay).padStart(2, '0')}`
+
+    try {
+      const { data, error: err } = await supabase
+        .from('produccion_diaria')
+        .select('fecha, menu_tag')
+        .eq('restaurante_id', rid)
+        .gte('fecha', from)
+        .lte('fecha', to)
+
+      if (err) throw err
+
+      // Return map of fecha → unique menu_tags[]
+      const result: Record<string, string[]> = {}
+      for (const row of data ?? []) {
+        if (!result[row.fecha]) result[row.fecha] = []
+        const tag = row.menu_tag ?? ''
+        if (!result[row.fecha].includes(tag)) result[row.fecha].push(tag)
+      }
+      return result
+    } catch (e: unknown) {
+      console.error('[useProduccion] fetchFechasMes Error:', e)
+      return {}
+    }
+  }, [supabase])
 
   // ── Update status ─────────────────────────────────────────
   const updateStatus = useCallback(async (id: string, status: StatusProduccion) => {
@@ -333,6 +370,7 @@ export function useProduccion() {
     fetchPlatos,
     fetchProduccion,
     initProduccion,
+    fetchFechasMes,
     updateStatus,
     crearPlato,
     actualizarPlato,

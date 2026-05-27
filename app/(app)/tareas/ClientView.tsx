@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useAuth } from '@/lib/auth/context'
 import { useTareas } from '@/lib/hooks/useTareas'
+import { useRecetas } from '@/lib/hooks/useRecetas'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { OpsToggle } from '@/components/ops/OpsToggle'
 import { SeccionOps } from '@/components/ops/SeccionOps'
@@ -46,6 +47,8 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   const { perfil } = useAuth()
   const restauranteId = useRestauranteId()
   const { tareas, loading, agregarTarea, cambiarEstado } = useTareas()
+  const { recetas } = useRecetas()
+  const recetasSimple = useMemo(() => recetas.map(r => ({ id: r.id, nombre: r.nombre })), [recetas])
 
   const today = getToday()
 
@@ -91,7 +94,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   }, [tareas, modo, today])
 
   // ── Agregar item a sección de prioridad ───────────────────────
-  const handleAddItem = useCallback(async (prioridad: string, titulo: string) => {
+  const handleAddItem = useCallback(async (prioridad: string, titulo: string, recetaId?: string) => {
     await agregarTarea({
       titulo,
       modo,
@@ -107,7 +110,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
       plaza: null,
       fecha_limite: null,
       tiempo_estimado_min: null,
-      receta_id: null,
+      receta_id: recetaId ?? null,
       checklist: [],
     })
   }, [agregarTarea, modo, today, perfil])
@@ -173,14 +176,19 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
         padding: `${embedded ? 0 : 46}px 16px 12px`,
         flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
           <div>
             <div style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>Producción</div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', marginTop: 1 }}>
               {fmtFecha(today)}
             </div>
           </div>
-          <OpsToggle value={modo} onChange={handleModoChange} />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+            <OpsToggle value={modo} onChange={handleModoChange} />
+            <span style={{ fontSize: 9, color: 'rgba(255,255,255,.35)', textAlign: 'right', lineHeight: 1.3 }}>
+              {modo === 'carta' ? 'Por prioridad' : 'Por categoría de plato'}
+            </span>
+          </div>
         </div>
 
         {/* Stats turno */}
@@ -231,11 +239,12 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
                 color={sec.color}
                 items={items}
                 subtareasByParent={subtareasByParent}
-                onAddItem={(titulo) => handleAddItem('media', titulo)}
+                onAddItem={(titulo, recetaId) => handleAddItem('media', titulo, recetaId)}
                 onEstadoChange={(id, estado) => cambiarEstado(id, estado as OpsEstado)}
                 onAddSubtarea={handleAddSubtarea}
                 modo={modo}
                 showPrioChip
+                recetas={recetasSimple}
               />
             )
           })
@@ -247,14 +256,16 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
               <SeccionOps
                 key={prio.id}
                 titulo={prio.label}
+                sublabel={prio.sublabel}
                 color={prio.color}
                 items={items}
                 subtareasByParent={subtareasByParent}
-                onAddItem={(titulo) => handleAddItem(prio.id, titulo)}
+                onAddItem={(titulo, recetaId) => handleAddItem(prio.id, titulo, recetaId)}
                 onEstadoChange={(id, estado) => cambiarEstado(id, estado as OpsEstado)}
                 onAddSubtarea={handleAddSubtarea}
                 modo={modo}
                 showSeccionChip
+                recetas={recetasSimple}
               />
             )
           })

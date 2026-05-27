@@ -622,7 +622,7 @@ export interface PlatoComponente {
   created_at: string
 }
 
-// DB: produccion_diaria (id, fecha, plato_compuesto_id, componente_id, status, cantidad, usuario_asignado, notas, restaurante_id, created_at, updated_at)
+// DB: produccion_diaria (id, fecha, plato_compuesto_id, componente_id, status, cantidad, usuario_asignado, notas, menu_tag, restaurante_id, created_at, updated_at)
 export interface ProduccionDiaria {
   id: string
   fecha: string
@@ -632,6 +632,7 @@ export interface ProduccionDiaria {
   cantidad?: string | null
   usuario_asignado?: string | null
   notas?: string | null
+  menu_tag?: string | null
   restaurante_id: string
   created_at: string
   updated_at?: string | null
