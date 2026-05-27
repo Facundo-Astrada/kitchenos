@@ -24,8 +24,7 @@ const PLAZA_ICONS: Record<Plaza, string> = {
 }
 const UNIDADES = ['u', 'kg', 'g', 'l', 'ml', 'pax', 'porc', 'bandeja', 'gastro', 'tupper']
 
-// SP → P → REF (no CHK) — cycling
-const PRIO_CYCLE: MisePrioridad[] = ['sp', 'p', 'ref']
+const PRIO_CYCLE: MisePrioridad[] = ['sp', 'p', 'ref', 'chk']
 const PRIO_CFG: Record<string, { label: string; color: string; bg: string }> = {
   sp:  { label: 'SP',  color: '#ef4444', bg: 'rgba(239,68,68,.13)' },
   p:   { label: 'P',   color: '#f97316', bg: 'rgba(249,115,22,.13)' },
