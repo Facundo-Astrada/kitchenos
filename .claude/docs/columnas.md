@@ -15,6 +15,7 @@
 | `plato_componentes` | `plaza`, `cantidad_diaria`, `unidad` (agregados mayo 2026) | (no existían antes de la migración) |
 | `plato_plazas` | `plato_id` = `receta_id` (no es `plato_compuesto_id`), `ingredientes text[]` | `receta_id` (la columna se llama `plato_id`) |
 | `checklist_items` | `seccion_id` (FK a `checklist_secciones`), `seccion` (texto legacy) | usar `seccion_id` para lookups |
+| `produccion_diaria` | `menu_tag TEXT NULL` — null = menú base del día, string = nombre de evento/menú específico | (no existía antes de mayo 2026) |
 
 ## Cómo verificar columnas reales
 

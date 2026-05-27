@@ -26,8 +26,9 @@
 | 12 | **Reportes / CMV** | `/reportes` | Funcional | 5 tabs: Resumen KPIs, Food Cost por plato, Compras por proveedor, Precios/inflación, Producción. Selector de periodo, gráficos CSS (sin Chart.js). |
 | 13 | **Calendario** | `/calendario` | Funcional | Vista mensual + semanal por horas, eventos con iconos/colores, entregas de pedidos auto-integradas, CRUD eventos, recurrencia. |
 | 14 | **Turnos / Equipo** | `/turnos` | Funcional | 3 tabs: Equipo (lista + ficha + CRUD), Turnos (grilla semanal M/T/N/F/V, asignación inline al tap, columna Hs calculada), Puestos (CRUD, tareas, permisos). Select único Rol+Puesto+Plaza con optgroup. |
-| 15 | **Producción / Planificación** | `/produccion` | Funcional | Planilla de producción del día, asignación a miembros, badges P1/P2/P3, integrado con tareas. Selector semanal L-D con días activos, "+" por categoría para agregar platos directamente. |
-| 23 | **OPS — Ingeniería de Menú** | `/operaciones` tab Ingeniería | Funcional | Wizard 3 pasos: info del plato → componentes (receta vinculada, plaza, cantidad diaria) → revisar. Asignación de plaza de producción por ingrediente. Sync automático a `plato_plazas`, `plato_componentes`, `checklist_items`. Botón "Crear receta" para componentes sin receta. |
+| 15 | **Producción / Planificación** | `/produccion` | Funcional | Planilla de producción del día. **Calendario mensual** con dots indicadores (verde = activo, naranja = evento/tag). **Multi-select** para activar N días con nombre de menú opcional (`menu_tag`). Soporte multi-menú en mismo día con filtro chips. Asignación a miembros, badges P1/P2/P3. |
+| 23 | **OPS — Ingeniería de Menú** | `/ingenieria-menu` (standalone) | Funcional | Wizard 3 pasos: info del plato → componentes (receta vinculada, plaza, cantidad diaria) → revisar. Asignación de plaza de producción por ingrediente. Sync automático a `plato_plazas`, `plato_componentes`, `checklist_items`. Accesible desde "Más" para admin/chef. |
+| 24 | **OPS — Workspace diario** | `/operaciones` | Funcional | **3 tabs**: Producción · Mise · Planificación. Producción: secciones con sublabels (SP·Super Prioridad, P·Prioridad, REF·Refuerzo), toggle Carta/Menú con subtítulo, QuickAdd con sugerencias de receta (≥3 chars). Checklist: auto-select plaza por rol, progreso por plaza en grid. |
 | 16 | **Merma** | `/merma` | Funcional | Bottom sheet desde dashboard y módulo propio, 8 motivos con iconos, turno, plaza, costo estimado. |
 | 17 | **Configuración** | `/configuracion` | Funcional | Tabs: restaurante, plazas, rutinas, permisos por rol. Link a `/turnos` para gestión de equipo (sin tab de invitación). |
 | 18 | **Auth** | `/login`, `/register` | Funcional | Login email+password, registro (crea restaurante + user_restaurantes + equipo_miembros + rol_permisos seed), reset password por email, proxy.ts protege rutas. |
@@ -36,7 +37,7 @@
 | 21 | **Modo Servicio** | En dashboard | Parcial | UI existe (`components/dashboard/ModoServicio.tsx`) pero **sin conectar a datos reales** — ver DECISIONES.md, se decidió diferir / descartar. |
 | 22 | **Ventas** | `/ventas` | Funcional | Importación desde Excel/CSV (xlsx) y texto libre con IA (Haiku). Pantalla de revisión editable antes de guardar. Tab Resumen con KPIs y lista de ventas con detalle de items. Requiere migración SQL (`ventas` + `ventas_items`). |
 
-**Resumen:** 22 módulos funcionales + Ingeniería de Menú (nuevo), 1 parcial (modo servicio), 0 críticos pendientes.
+**Resumen:** 24 módulos funcionales, 1 parcial (modo servicio), 0 críticos pendientes.
 
 ---
 
@@ -127,6 +128,14 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
    - Recetario `bottom: 90 → 110`.
    - Tareas `bottom: 72 → 100`.
 3. Verificado end-to-end en preview server: creación manual de receta con ingrediente guarda sin error y redirige al detalle.
+
+### Sesión 2026-05-27 (tarde) — OPS: Rediseño UX completo del workspace diario
+1. **OPS — 3 tabs**: Producción / Mise / Planificación. Ingeniería removida del tab bar.
+2. **Ingeniería de Menú**: página standalone `/ingenieria-menu`, accesible desde "Más" (admin/chef). Registrada en `lib/constants.ts` con módulo `ingenieria-menu`.
+3. **Producción (ex-Tareas)**: secciones con sublabels SP·Super Prioridad, P·Prioridad, REF·Refuerzo. Toggle Carta/Menú con subtítulo explicativo debajo.
+4. **QuickAdd**: sugerencias de recetas en tiempo real (≥3 chars, hasta 3 chips, filtrado en memoria via `useRecetas`). `recetaId` propagado al crear tarea.
+5. **Checklist**: auto-select plaza por rol al montar (via `useEffect` post-auth). Grid de plazas muestra progreso X/Y completados con barra y color verde si 100%.
+6. **Planificación**: calendario mensual reemplaza strip semanal. Dots verde (menú activo) / naranja (evento con tag). Botón "Días" activa multi-select. CTA "Activar N días" → modal con nombre de menú opcional → `initProduccion(fecha, menuTag)` por cada día. Soporte multi-tag en mismo día con filtro chips. `produccion_diaria` → columna `menu_tag TEXT`.
 
 ### Sesión 2026-05-27 — OPS: Ingeniería de Menú + Checklist drag
 1. **OPS/Tareas**: prioridades renombradas SP/P/REF/Baja. Modo menú agrupa por sección de carta ordenado por prioridad.
