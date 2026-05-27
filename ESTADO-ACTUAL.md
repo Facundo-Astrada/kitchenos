@@ -1,7 +1,7 @@
 # KitchenOS — Estado Actual del Proyecto
 
-**Fecha:** 18 de abril de 2026
-**URL Producción:** https://kitchenos-three.vercel.app
+**Fecha:** 27 de mayo de 2026
+**URL Producción:** https://kos-app-one.vercel.app
 **Credenciales test:** admin@elrescoldo.com / kitchenos2026
 **Supabase:** https://clipcxcbtlibswfzsgzk.supabase.co
 **Restaurante:** El Rescoldo (Córdoba, Argentina)
@@ -20,13 +20,14 @@
 | 6 | **Proveedores** | `/proveedores` | Funcional | CRUD, CUIT, teléfono, días entrega, rubro, historial facturas por proveedor, **auto-creación** desde facturas con IA. |
 | 7 | **Facturas** | `/facturas` | Funcional | Carga con items, tipos A/B/C/X/remito/ticket, **OCR con IA** (Claude Sonnet 4.6) que detecta proveedor/items/total, detección de variaciones de precio, historial, condición de pago. |
 | 8 | **Carta** | `/carta` | Funcional | Items vinculados a recetas, auto-fill desde receta, food cost preview con colores, 86 (no disponible), categorías, vincular/cambiar receta con tap-through, export PDF. |
-| 9 | **Checklist / Mise en Place** | `/checklist` | Funcional | Mise en place por plaza, items con prioridad SP/P/R/CK, cantidades "10/25 pax" color-coded, registros diarios, rutinas con frecuencia diaria/semanal/quincenal/mensual, auto-selección de plaza según rol del usuario. |
+| 9 | **Checklist / Mise en Place** | `/checklist` | Funcional | Mise en place por plaza, items con prioridad SP/P/REF/OK, cantidades "10/25 pax" color-coded, registros diarios, rutinas con frecuencia diaria/semanal/quincenal/mensual, auto-selección de plaza según rol del usuario. **Drag long-press para mover items entre secciones con auto-scroll.** |
 | 10 | **Pase de Turno** | `/pase` | Funcional | Chat continuo entre turnos, grouping por emisor (sin avatar repetido), prioridades, crear tarea desde mensaje, realtime. |
 | 11 | **HACCP** | `/haccp` | Funcional | 3 tabs: Temperaturas, Vencimientos (color coding por días), Limpieza. Export PDF para Bromatología. |
 | 12 | **Reportes / CMV** | `/reportes` | Funcional | 5 tabs: Resumen KPIs, Food Cost por plato, Compras por proveedor, Precios/inflación, Producción. Selector de periodo, gráficos CSS (sin Chart.js). |
 | 13 | **Calendario** | `/calendario` | Funcional | Vista mensual + semanal por horas, eventos con iconos/colores, entregas de pedidos auto-integradas, CRUD eventos, recurrencia. |
 | 14 | **Turnos / Equipo** | `/turnos` | Funcional | 3 tabs: Equipo (lista + ficha + CRUD), Turnos (grilla semanal M/T/N/F/V, asignación inline al tap, columna Hs calculada), Puestos (CRUD, tareas, permisos). Select único Rol+Puesto+Plaza con optgroup. |
-| 15 | **Producción** | `/produccion` | Funcional | Planilla de producción del día, asignación a miembros, badges P1/P2/P3, integrado con tareas (tab Producción). |
+| 15 | **Producción / Planificación** | `/produccion` | Funcional | Planilla de producción del día, asignación a miembros, badges P1/P2/P3, integrado con tareas. Selector semanal L-D con días activos, "+" por categoría para agregar platos directamente. |
+| 23 | **OPS — Ingeniería de Menú** | `/operaciones` tab Ingeniería | Funcional | Wizard 3 pasos: info del plato → componentes (receta vinculada, plaza, cantidad diaria) → revisar. Asignación de plaza de producción por ingrediente. Sync automático a `plato_plazas`, `plato_componentes`, `checklist_items`. Botón "Crear receta" para componentes sin receta. |
 | 16 | **Merma** | `/merma` | Funcional | Bottom sheet desde dashboard y módulo propio, 8 motivos con iconos, turno, plaza, costo estimado. |
 | 17 | **Configuración** | `/configuracion` | Funcional | Tabs: restaurante, plazas, rutinas, permisos por rol. Link a `/turnos` para gestión de equipo (sin tab de invitación). |
 | 18 | **Auth** | `/login`, `/register` | Funcional | Login email+password, registro (crea restaurante + user_restaurantes + equipo_miembros + rol_permisos seed), reset password por email, proxy.ts protege rutas. |
@@ -35,7 +36,7 @@
 | 21 | **Modo Servicio** | En dashboard | Parcial | UI existe (`components/dashboard/ModoServicio.tsx`) pero **sin conectar a datos reales** — ver DECISIONES.md, se decidió diferir / descartar. |
 | 22 | **Ventas** | `/ventas` | Funcional | Importación desde Excel/CSV (xlsx) y texto libre con IA (Haiku). Pantalla de revisión editable antes de guardar. Tab Resumen con KPIs y lista de ventas con detalle de items. Requiere migración SQL (`ventas` + `ventas_items`). |
 
-**Resumen:** 21 módulos funcionales, 1 parcial (modo servicio), 0 críticos pendientes.
+**Resumen:** 22 módulos funcionales + Ingeniería de Menú (nuevo), 1 parcial (modo servicio), 0 críticos pendientes.
 
 ---
 
@@ -64,13 +65,13 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 ### Calendario y Equipo (4)
 `eventos`, `equipo_miembros`, `turnos`, `puestos`
 
-### Producción (3)
-`platos_compuestos`, `plato_componentes`, `produccion_diaria`
+### Producción (4)
+`platos_compuestos`, `plato_componentes` (+ `plaza`, `cantidad_diaria`, `unidad`), `plato_plazas` (ingredientes[] por plaza), `produccion_diaria`
 
 ### Merma (1)
 `merma`
 
-**Total: 28 tablas** con RLS habilitado. Aislamiento multi-tenant real via `mi_restaurante_id()`. Todas las políticas UPDATE tienen `WITH CHECK` explícito. Listo para multi-tenant.
+**Total: 29 tablas** con RLS habilitado. Aislamiento multi-tenant real via `mi_restaurante_id()`. Todas las políticas UPDATE tienen `WITH CHECK` explícito. Listo para multi-tenant.
 
 ---
 
@@ -126,6 +127,15 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
    - Recetario `bottom: 90 → 110`.
    - Tareas `bottom: 72 → 100`.
 3. Verificado end-to-end en preview server: creación manual de receta con ingrediente guarda sin error y redirige al detalle.
+
+### Sesión 2026-05-27 — OPS: Ingeniería de Menú + Checklist drag
+1. **OPS/Tareas**: prioridades renombradas SP/P/REF/Baja. Modo menú agrupa por sección de carta ordenado por prioridad.
+2. **OPS/Planificación**: selector semanal L-D con días activos (verde), botón "+" por categoría para agregar platos, sin botón "Iniciar día".
+3. **OPS/Checklist AddItemSheet**: prioridad OK (chk) como 4ª opción, sin generar tarea.
+4. **OPS/Ingeniería de Menú**: tab nuevo (4º). Wizard 3 pasos (plato → componentes → revisar). Cada componente: receta vinculada con autocomplete, plaza de servicio, cantidad diaria, unidad, notas. Sync a `platos_compuestos`, `plato_componentes`, `checklist_items`, `plato_plazas`.
+5. **Ingeniería de Menú — ingredientes por plaza**: para componentes con receta vinculada, asignación de plaza de producción por ingrediente individual. Sync a `plato_plazas.ingredientes[]` y `checklist_items` por ingrediente/plaza de producción. Botón "Crear receta" para componentes sin receta.
+6. **Checklist drag-to-move**: long-press 400ms activa drag de items entre secciones. Ghost flotante con nombre + sección destino. Auto-scroll continuo con RAF cuando el dedo alcanza el borde. Vibración háptica al activar.
+7. **Ciclo de prioridad checklist**: SP→P→REF→OK (antes solo SP→P→REF).
 
 ### Sesión 2026-05-23 — RLS hardening + GitHub MCP
 1. **RLS audit completo** via agente `rls-enforcer`: 0 políticas con `USING(true)` ilegítimas encontradas (ya estaban bien). Se detectaron 34 políticas UPDATE sin `WITH CHECK` — vector de modificación cross-tenant.
