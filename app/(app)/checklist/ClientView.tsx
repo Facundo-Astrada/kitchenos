@@ -140,12 +140,37 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const [showAddRutina, setShowAddRutina] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [pendientesApertura, setPendientesApertura] = useState<MisePlaceItem[]>([])
+  const [regCierreAnteriorMap, setRegCierreAnteriorMap] = useState<Record<string, number | null>>({})
 
   const fecha = getToday()
   const turno = tab === 'rutina' ? 'apertura' : tab
 
   // Cuando plaza está seleccionada carga su turno; cuando muestra el grid carga apertura para mostrar progreso
   useEffect(() => { fetchAll(fecha, plaza ? turno : 'apertura') }, [plaza, tab, fecha, fetchAll, turno])
+
+  // Fetch stock del cierre anterior para mostrar en apertura (read-only)
+  useEffect(() => {
+    if (!plaza || items.length === 0) return
+    const supabase = createClient()
+    const plazaItemIds = items.filter(i => i.plaza === plaza).map(i => i.id)
+    if (plazaItemIds.length === 0) return
+    const d = new Date(fecha + 'T12:00:00')
+    d.setDate(d.getDate() - 1)
+    const ayer = d.toISOString().split('T')[0]
+    supabase
+      .from('checklist_registros')
+      .select('checklist_item_id, cantidad_actual')
+      .eq('fecha', ayer)
+      .eq('turno', 'cierre')
+      .in('checklist_item_id', plazaItemIds)
+      .then(({ data }) => {
+        const map: Record<string, number | null> = {}
+        for (const r of (data ?? []) as { checklist_item_id: string; cantidad_actual: number | null }[]) {
+          map[r.checklist_item_id] = r.cantidad_actual ?? null
+        }
+        setRegCierreAnteriorMap(map)
+      })
+  }, [plaza, items, fecha]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cargar pendientes de apertura al entrar al tab cierre
   useEffect(() => {
@@ -589,6 +614,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                         platoPlazo={item.receta_id ? (platoPlazoMap[item.receta_id] ?? []) : []}
                         hasTareaPendiente={tareasHoySet.has(item.nombre.toLowerCase())}
                         rendimientoPromedio={item.receta_id ? rendimientoMap[item.receta_id] : null}
+                        regCierreAnterior={regCierreAnteriorMap[item.id] ?? null}
                         onUpsert={upsertRegistro}
                         onCrearTarea={handleCrearTarea}
                         onPrioChange={async (i, prio) => {

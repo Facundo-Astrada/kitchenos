@@ -51,7 +51,7 @@ function nextPrio(current: string): MisePrioridad {
 
 function capPlaza(p: string) { return p.charAt(0).toUpperCase() + p.slice(1) }
 
-// ── Stock dots (5) ────────────────────────────────────────────
+// ── Stock dots (5) — used in cierre ──────────────────────────
 function StockDots({ cantActual, target }: { cantActual: number | null; target: number }) {
   if (cantActual === null || target <= 0) {
     return (
@@ -77,6 +77,50 @@ function StockDots({ cantActual, target }: { cantActual: number | null; target: 
   )
 }
 
+// ── Stock box — apertura: muestra cierre anterior (read-only) ─
+function StockBox({ stockCierre, target, unidad }: {
+  stockCierre: number | null
+  target: number
+  unidad: string
+}) {
+  const ratio = stockCierre !== null && target > 0 ? stockCierre / target : null
+  let color = '#94a3b8', bg = 'rgba(148,163,184,.08)', border = 'var(--border)'
+  if (ratio !== null) {
+    if (ratio >= 1)       { color = '#22c55e'; bg = 'rgba(34,197,94,.12)';   border = 'rgba(34,197,94,.3)' }
+    else if (ratio >= 0.3){ color = '#f59e0b'; bg = 'rgba(245,158,11,.12)'; border = 'rgba(245,158,11,.3)' }
+    else                  { color = '#ef4444'; bg = 'rgba(239,68,68,.12)';   border = 'rgba(239,68,68,.3)' }
+  }
+  return (
+    <div style={{ flex: 1, padding: '6px 10px', borderRadius: 10, background: bg, border: `1px solid ${border}` }}>
+      <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 2 }}>
+        stock
+      </div>
+      <div style={{ fontSize: 14, fontWeight: 800, color, fontFamily: "'DM Mono', monospace" }}>
+        {stockCierre !== null ? stockCierre : '—'}
+        {stockCierre !== null && <span style={{ fontSize: 10, fontWeight: 600, marginLeft: 3 }}>{unidad}</span>}
+      </div>
+      {ratio !== null && ratio >= 1 && (
+        <div style={{ fontSize: 9, color: '#22c55e', fontWeight: 600, marginTop: 1 }}>suficiente</div>
+      )}
+    </div>
+  )
+}
+
+// ── Producir box — apertura: muestra target fijo ──────────────
+function ProducirBox({ cantidad, unidad }: { cantidad: number; unidad: string }) {
+  return (
+    <div style={{ flex: 1, padding: '6px 10px', borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--border)' }}>
+      <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 2 }}>
+        a producir
+      </div>
+      <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-1)', fontFamily: "'DM Mono', monospace" }}>
+        {cantidad}
+        <span style={{ fontSize: 10, fontWeight: 600, marginLeft: 3 }}>{unidad}</span>
+      </div>
+    </div>
+  )
+}
+
 // ── Main component ────────────────────────────────────────────
 interface ProductoMiseCardProps {
   item: MisePlaceItem
@@ -87,6 +131,7 @@ interface ProductoMiseCardProps {
   platoPlazo: PlatoPlaza[]
   hasTareaPendiente: boolean
   rendimientoPromedio?: number | null
+  regCierreAnterior?: number | null
   onUpsert: (id: string, fecha: string, turno: string, d: { completado?: boolean; cantidad_actual?: number | null }) => Promise<void>
   onCrearTarea: (params: CrearTareaParams) => Promise<void>
   onPrioChange: (item: MisePlaceItem, prio: MisePrioridad) => void
@@ -95,9 +140,10 @@ interface ProductoMiseCardProps {
 
 export function ProductoMiseCard({
   item, reg, fecha, turno, recetaInfo, platoPlazo, hasTareaPendiente,
-  rendimientoPromedio,
+  rendimientoPromedio, regCierreAnterior,
   onUpsert, onCrearTarea, onPrioChange, onDelete,
 }: ProductoMiseCardProps) {
+  const esCierre = turno === 'cierre'
   const [cantInput, setCantInput] = useState(reg?.cantidad_actual?.toString() ?? '')
   const [prodOpen, setProdOpen] = useState(false)
   const [selectedPrio, setSelectedPrio] = useState<MisePrioridad>((item.prioridad as MisePrioridad) ?? 'p')
@@ -151,7 +197,7 @@ export function ProductoMiseCard({
     }}>
 
       {/* ── Main row ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', paddingBottom: esCierre ? 10 : 6 }}>
 
         {/* Checkbox */}
         <button
@@ -181,31 +227,33 @@ export function ProductoMiseCard({
           )}
         </div>
 
-        {/* Stock dots */}
-        <StockDots cantActual={cantActual} target={item.cantidad} />
-
-        {/* Qty input */}
-        <input
-          type="number"
-          value={cantInput}
-          onChange={e => setCantInput(e.target.value)}
-          onBlur={() => {
-            const v = cantInput === '' ? null : parseFloat(cantInput)
-            onUpsert(item.id, fecha, turno, { cantidad_actual: isNaN(v as number) ? null : v })
-          }}
-          inputMode="decimal"
-          placeholder="—"
-          style={{
-            width: 40, padding: '3px 4px', borderRadius: 7, flexShrink: 0,
-            border: `1.5px solid ${isBajo ? '#f97316' : cantActual !== null ? '#22c55e' : 'var(--border)'}`,
-            background: isBajo ? 'rgba(249,115,22,.07)' : cantActual !== null ? 'rgba(34,197,94,.07)' : 'var(--bg)',
-            fontSize: 12, fontWeight: 700, fontFamily: "'DM Mono', monospace",
-            color: 'var(--text-1)', textAlign: 'center', outline: 'none',
-          }}
-        />
-        <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 700, flexShrink: 0 }}>
-          {item.unidad}
-        </span>
+        {/* En cierre: stock dots + input editable */}
+        {esCierre && (
+          <>
+            <StockDots cantActual={cantActual} target={item.cantidad} />
+            <input
+              type="number"
+              value={cantInput}
+              onChange={e => setCantInput(e.target.value)}
+              onBlur={() => {
+                const v = cantInput === '' ? null : parseFloat(cantInput)
+                onUpsert(item.id, fecha, turno, { cantidad_actual: isNaN(v as number) ? null : v })
+              }}
+              inputMode="decimal"
+              placeholder="—"
+              style={{
+                width: 40, padding: '3px 4px', borderRadius: 7, flexShrink: 0,
+                border: `1.5px solid ${isBajo ? '#f97316' : cantActual !== null ? '#22c55e' : 'var(--border)'}`,
+                background: isBajo ? 'rgba(249,115,22,.07)' : cantActual !== null ? 'rgba(34,197,94,.07)' : 'var(--bg)',
+                fontSize: 12, fontWeight: 700, fontFamily: "'DM Mono', monospace",
+                color: 'var(--text-1)', textAlign: 'center', outline: 'none',
+              }}
+            />
+            <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 700, flexShrink: 0 }}>
+              {item.unidad}
+            </span>
+          </>
+        )}
 
         {/* Prio badge */}
         <button
@@ -236,6 +284,14 @@ export function ProductoMiseCard({
           </button>
         )}
       </div>
+
+      {/* ── Info row — solo apertura: stock del cierre anterior + target ── */}
+      {!esCierre && !checked && (
+        <div style={{ display: 'flex', gap: 6, padding: '0 12px 10px', paddingLeft: 44 }}>
+          <StockBox stockCierre={regCierreAnterior ?? null} target={item.cantidad} unidad={item.unidad} />
+          <ProducirBox cantidad={item.cantidad} unidad={item.unidad} />
+        </div>
+      )}
 
       {/* ── Production panel ── */}
       <AnimatePresence>
