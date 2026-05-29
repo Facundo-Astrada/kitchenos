@@ -22,7 +22,7 @@ const PRIORIDADES = [
   { id: 'critica',  label: 'SP',  sublabel: 'Super Prioridad', color: '#ef4444' },
   { id: 'alta',     label: 'P',   sublabel: 'Prioridad',       color: '#f97316' },
   { id: 'media',    label: 'REF', sublabel: 'Refuerzo',        color: '#3b82f6' },
-  { id: 'baja',     label: 'Baja',sublabel: 'Baja',            color: '#64748b' },
+  { id: 'baja',     label: 'Check',sublabel: 'Check',           color: '#64748b' },
 ] as const
 
 // Secciones usadas solo para EventoBanner y handleGenerarLista

@@ -398,6 +398,8 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
               onDuplicar={() => setView('duplicar')}
               openMerma={openMerma}
               router={router}
+              restauranteId={RESTAURANTE_ID}
+              fecha={fecha}
             />
           )
         )}
@@ -491,6 +493,20 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
               placeholder="Menú ejecutivo semana 22"
               style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, color: 'var(--text-1)', fontFamily: 'inherit', boxSizing: 'border-box' }}
             />
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <button
+                onClick={() => setMenuTagInput('Menú ejecutivo')}
+                style={{ padding: '4px 10px', borderRadius: 99, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 11, fontWeight: 600, color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                Menu ejecutivo
+              </button>
+              <button
+                onClick={() => setMenuTagInput('Evento')}
+                style={{ padding: '4px 10px', borderRadius: 99, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 11, fontWeight: 600, color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                Evento
+              </button>
+            </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               <button
                 onClick={() => setMenuTagModal(false)}
@@ -610,6 +626,150 @@ function MesCalendar({
 }
 
 // ══════════════════════════════════════════════════════════════
+// RUTINAS DEL DÍA — sección colapsable para ProduccionPage
+// ══════════════════════════════════════════════════════════════
+function RutinasDia({ restauranteId, fecha }: { restauranteId: string; fecha: string }) {
+  const [rutinas, setRutinas] = useState<{ id: string; nombre: string; plaza: string; dias_semana: number[] | null }[]>([])
+  const [registros, setRegistros] = useState<Set<string>>(new Set())
+  const [loadingRutinas, setLoadingRutinas] = useState(true)
+  const [collapsed, setCollapsed] = useState(false)
+  const [supabase] = useState(() => createClient())
+
+  useEffect(() => {
+    if (!restauranteId) return
+    async function load() {
+      setLoadingRutinas(true)
+      const { data: rutData } = await supabase
+        .from('checklist_rutina')
+        .select('id, nombre, plaza, dias_semana')
+        .eq('restaurante_id', restauranteId)
+        .order('orden', { ascending: true })
+      const { data: regData } = await supabase
+        .from('checklist_rutina_registros')
+        .select('rutina_id, completado')
+        .eq('fecha', fecha)
+        .in('rutina_id', (rutData ?? []).map((r: { id: string }) => r.id).length > 0
+          ? (rutData ?? []).map((r: { id: string }) => r.id)
+          : ['00000000-0000-0000-0000-000000000000'])
+      const completados = new Set<string>()
+      for (const r of (regData ?? []) as { rutina_id: string; completado: boolean }[]) {
+        if (r.completado) completados.add(r.rutina_id)
+      }
+      setRutinas((rutData ?? []) as { id: string; nombre: string; plaza: string; dias_semana: number[] | null }[])
+      setRegistros(completados)
+      setLoadingRutinas(false)
+    }
+    load()
+  }, [restauranteId, fecha, supabase])
+
+  // Filtrar las que aplican hoy
+  const hoyIso = (() => {
+    const d = new Date(fecha + 'T12:00:00')
+    // getDay() → 0=domingo, ajustar a ISO: 1=lunes..7=domingo
+    const dow = d.getDay()
+    return dow === 0 ? 7 : dow
+  })()
+
+  const rutinasHoy = rutinas.filter(r =>
+    r.dias_semana === null || r.dias_semana.includes(hoyIso)
+  )
+
+  if (loadingRutinas) return null
+  if (rutinasHoy.length === 0) return null
+
+  const completadas = rutinasHoy.filter(r => registros.has(r.id)).length
+  const total = rutinasHoy.length
+
+  async function handleToggle(rutinaId: string, currentDone: boolean) {
+    const nuevoEstado = !currentDone
+    if (nuevoEstado) {
+      await supabase.from('checklist_rutina_registros').upsert(
+        { rutina_id: rutinaId, fecha, completado: true },
+        { onConflict: 'rutina_id,fecha' }
+      )
+      await supabase.from('checklist_rutina').update({ ultima_vez: new Date().toISOString() }).eq('id', rutinaId)
+      setRegistros(prev => new Set([...prev, rutinaId]))
+    } else {
+      await supabase.from('checklist_rutina_registros').delete()
+        .eq('rutina_id', rutinaId).eq('fecha', fecha)
+      setRegistros(prev => { const s = new Set(prev); s.delete(rutinaId); return s })
+    }
+  }
+
+  return (
+    <div style={{ margin: '0 12px 16px', borderRadius: 14, overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--surface)' }}>
+      {/* Header colapsable */}
+      <button
+        onClick={() => setCollapsed(c => !c)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+          padding: '10px 14px', background: 'none', border: 'none',
+          cursor: 'pointer', fontFamily: 'inherit',
+          WebkitTapHighlightColor: 'transparent',
+        }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 18, color: completadas === total ? '#22c55e' : 'var(--accent)', flexShrink: 0 }}>checklist</span>
+        <span style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 700, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+          Rutinas del día
+        </span>
+        <span style={{
+          fontSize: 11, fontWeight: 700, fontFamily: "'DM Mono', monospace",
+          color: completadas === total ? '#22c55e' : 'var(--text-3)',
+        }}>{completadas}/{total}</span>
+        <span className="material-symbols-outlined" style={{
+          fontSize: 18, color: 'var(--text-3)', transition: 'transform .15s',
+          transform: collapsed ? 'rotate(-90deg)' : 'none',
+        }}>expand_more</span>
+      </button>
+
+      {/* Barra de progreso */}
+      <div style={{ height: 2, background: 'var(--border)' }}>
+        <div style={{ width: `${total > 0 ? (completadas / total) * 100 : 0}%`, height: '100%', background: '#22c55e', transition: 'width .3s' }} />
+      </div>
+
+      {!collapsed && (
+        <div style={{ padding: '4px 10px 10px' }}>
+          {rutinasHoy.map(r => {
+            const done = registros.has(r.id)
+            return (
+              <div
+                key={r.id}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '9px 4px',
+                  borderBottom: '1px solid var(--border)',
+                  opacity: done ? 0.65 : 1,
+                  transition: 'opacity .2s',
+                }}
+              >
+                <button
+                  onClick={() => handleToggle(r.id, done)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0, display: 'flex', alignItems: 'center' }}
+                >
+                  <span className="material-symbols-outlined" style={{
+                    fontSize: 22, color: done ? '#22c55e' : 'var(--border)', transition: 'color .15s',
+                  }}>{done ? 'check_circle' : 'radio_button_unchecked'}</span>
+                </button>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', textDecoration: done ? 'line-through' : 'none' }}>
+                    {r.nombre}
+                  </span>
+                  {r.plaza && (
+                    <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--text-3)', fontWeight: 500 }}>
+                      {r.plaza}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════
 // PLANILLA VIEW
 // ══════════════════════════════════════════════════════════════
 const CAT_COLORS: Record<string, string> = {
@@ -622,7 +782,7 @@ const CAT_COLORS: Record<string, string> = {
 }
 
 function PlanillaView({
-  grouped, statusMap, produccion, miembros, puedeDelegar, stats, componentNameCount, cycleStatus, onEdit, onCrear, onIngredientes, onDuplicar, openMerma, router,
+  grouped, statusMap, produccion, miembros, puedeDelegar, stats, componentNameCount, cycleStatus, onEdit, onCrear, onIngredientes, onDuplicar, openMerma, router, restauranteId, fecha,
 }: {
   grouped: [string, PlatoConComponentes[]][]
   statusMap: Map<string, { id: string; status: StatusProduccion }>
@@ -638,6 +798,8 @@ function PlanillaView({
   onDuplicar: () => void
   openMerma: (nombre: string) => void
   router: ReturnType<typeof useRouter>
+  restauranteId: string
+  fecha: string
 }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const toggleCollapse = (key: string) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }))
@@ -691,6 +853,9 @@ function PlanillaView({
       </div>
 
       {/* Planilla */}
+      {/* Rutinas del día */}
+      {restauranteId && <RutinasDia restauranteId={restauranteId} fecha={fecha} />}
+
       {grouped.map(([cat, platosInCat]) => {
         const totalCompsInCat = platosInCat.reduce((s, p) => s + p.componentes.length, 0)
         const listosInCat = platosInCat.reduce((s, p) => s + p.componentes.filter(c => statusMap.get(c.id)?.status === 'listo').length, 0)

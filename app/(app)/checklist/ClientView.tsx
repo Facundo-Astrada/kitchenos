@@ -139,12 +139,42 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const [showSectionEditor, setShowSectionEditor] = useState(false)
   const [showAddRutina, setShowAddRutina] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  const [pendientesApertura, setPendientesApertura] = useState<MisePlaceItem[]>([])
 
   const fecha = getToday()
   const turno = tab === 'rutina' ? 'apertura' : tab
 
   // Cuando plaza está seleccionada carga su turno; cuando muestra el grid carga apertura para mostrar progreso
   useEffect(() => { fetchAll(fecha, plaza ? turno : 'apertura') }, [plaza, tab, fecha, fetchAll, turno])
+
+  // Cargar pendientes de apertura al entrar al tab cierre
+  useEffect(() => {
+    if (tab !== 'cierre' || !plaza) { setPendientesApertura([]); return }
+    const supabase = createClient()
+    async function loadPendientes() {
+      // Traer los item_ids de la plaza
+      const plazaItemIds = items.filter(i => i.plaza === plaza).map(i => i.id)
+      if (plazaItemIds.length === 0) { setPendientesApertura([]); return }
+      // Traer registros de apertura del día para esos items
+      const { data: regs } = await supabase
+        .from('checklist_registros')
+        .select('checklist_item_id, completado')
+        .eq('fecha', fecha)
+        .eq('turno', 'apertura')
+        .in('checklist_item_id', plazaItemIds)
+      const completadosSet = new Set<string>()
+      for (const r of (regs ?? []) as { checklist_item_id: string; completado: boolean }[]) {
+        if (r.completado) completadosSet.add(r.checklist_item_id)
+      }
+      // Los pendientes son: items que tienen registro con completado=false, o que directamente no tienen registro
+      const registradosIds = new Set((regs ?? []).map((r: { checklist_item_id: string }) => r.checklist_item_id))
+      const pendientes = items.filter(i =>
+        i.plaza === plaza && (!registradosIds.has(i.id) || !completadosSet.has(i.id))
+      )
+      setPendientesApertura(pendientes)
+    }
+    loadPendientes()
+  }, [tab, plaza, fecha, items]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const plazaSecciones = useMemo(() =>
     secciones.filter(s => s.plaza === plaza).sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0)), [secciones, plaza])
@@ -445,6 +475,42 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       <div ref={scrollContainerRef} style={{ flex: 1, overflow: 'auto', padding: '10px 12px', paddingBottom: 120 }}>
         {loading && (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>Cargando...</div>
+        )}
+
+        {/* ── Pendientes del turno (solo en cierre) ── */}
+        {!loading && tab === 'cierre' && pendientesApertura.length > 0 && (
+          <div style={{
+            background: 'rgba(250, 204, 21, 0.15)',
+            borderLeft: '3px solid #facc15',
+            borderRadius: 12,
+            marginBottom: 10,
+            overflow: 'hidden',
+          }}>
+            <div style={{ padding: '10px 14px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#ca8a04', flexShrink: 0 }}>warning</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#78350f', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                Pendiente del turno
+              </span>
+              <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: '#92400e' }}>
+                {pendientesApertura.length} sin completar
+              </span>
+            </div>
+            <div style={{ padding: '0 14px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {pendientesApertura.map(item => (
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid rgba(250,204,21,0.2)' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#ca8a04', flexShrink: 0 }}>radio_button_unchecked</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#78350f' }}>{item.nombre}</span>
+                    {item.cantidad > 0 && (
+                      <span style={{ marginLeft: 6, fontSize: 11, color: '#92400e' }}>
+                        {item.cantidad} {item.unidad}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* ── APERTURA / CIERRE ── */}

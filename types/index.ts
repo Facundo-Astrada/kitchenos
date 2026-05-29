@@ -699,6 +699,24 @@ export interface VentaItem {
   subtotal?: number | null
 }
 
+// ── Evento Items (planificación de eventos) ──────────────────
+export type EventoItemStatus = 'pendiente' | 'en_proceso' | 'listo'
+
+// DB: evento_items (id, restaurante_id, evento_nombre, fecha, plato_nombre, componente_nombre, cantidad_personas, status, plaza, notas, created_at)
+export interface EventoItem {
+  id: string
+  restaurante_id: string
+  evento_nombre: string
+  fecha: string          // "YYYY-MM-DD"
+  plato_nombre: string
+  componente_nombre: string
+  cantidad_personas?: number | null
+  status: EventoItemStatus
+  plaza?: string | null
+  notas?: string | null
+  created_at: string
+}
+
 export const TODOS_LOS_MODULOS = [
   { key: 'inicio', label: 'Inicio' },
   { key: 'tareas', label: 'Tareas' },
