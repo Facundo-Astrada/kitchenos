@@ -85,7 +85,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     agregarRutina, eliminarRutina, toggleRutina,
   } = useChecklist()
   const { recetas } = useRecetas()
-  const { tareas, agregarTarea } = useTareas()
+  const { tareas, agregarTarea, cambiarEstado: cambiarEstadoTarea } = useTareas()
   const { rendimientoMap } = useProduccionRegistros()
 
   // Build receta info map (id → { porciones, pesoPorcion }) for MiseCard display
@@ -353,6 +353,25 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
 
   const today = new Date().toISOString().split('T')[0]
 
+  // Wrapper de upsertRegistro: al cambiar completado, sincroniza la tarea de producción matching
+  const handleMiseUpsert = useCallback(async (
+    itemId: string, fecha: string, turno: string,
+    d: { completado?: boolean; cantidad_actual?: number | null }
+  ) => {
+    await upsertRegistro(itemId, fecha, turno, d)
+    if (d.completado === undefined) return
+    const item = items.find(i => i.id === itemId)
+    if (!item) return
+    const nombreLower = item.nombre.toLowerCase()
+    const matchingTarea = tareas.find(t =>
+      t.turno_fecha === today &&
+      t.titulo.replace(/^Producción:\s*/, '').toLowerCase() === nombreLower
+    )
+    if (matchingTarea) {
+      await cambiarEstadoTarea(matchingTarea.id, d.completado ? 'listo' : 'pendiente')
+    }
+  }, [upsertRegistro, items, tareas, cambiarEstadoTarea, today])
+
   const handleCrearTarea = useCallback(async (params: CrearTareaParams) => {
     const titulo = `Producción: ${params.titulo}`
     await agregarTarea({
@@ -615,7 +634,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                         hasTareaPendiente={tareasHoySet.has(item.nombre.toLowerCase())}
                         rendimientoPromedio={item.receta_id ? rendimientoMap[item.receta_id] : null}
                         regCierreAnterior={regCierreAnteriorMap[item.id] ?? null}
-                        onUpsert={upsertRegistro}
+                        onUpsert={handleMiseUpsert}
                         onCrearTarea={handleCrearTarea}
                         onPrioChange={async (i, prio) => {
                           await actualizarItem(i.id, { prioridad: prio })
