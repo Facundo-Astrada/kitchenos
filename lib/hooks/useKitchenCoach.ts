@@ -8,6 +8,7 @@ export interface CoachMessage {
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
+  options?: string[]
 }
 
 interface CoachContext {
@@ -29,6 +30,7 @@ export function useKitchenCoach() {
   const [error, setError] = useState<string | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [highlight, setHighlight] = useState<string | null>(null)
+  const [overlayText, setOverlayText] = useState<string | null>(null)
   const restauranteId = useRestauranteId()
   const abortRef = useRef<AbortController | null>(null)
 
@@ -37,11 +39,12 @@ export function useKitchenCoach() {
   const toggle = useCallback(() => setIsOpen(v => !v), [])
   const clearMessages = useCallback(() => setMessages([]), [])
   const clearHighlight = useCallback(() => setHighlight(null), [])
+  const clearOverlayText = useCallback(() => setOverlayText(null), [])
 
-  // Auto-clear highlight after 3.5s
+  // Auto-clear highlight + overlayText after 8s (user may need time to read)
   useEffect(() => {
     if (!highlight) return
-    const t = setTimeout(() => setHighlight(null), 3500)
+    const t = setTimeout(() => { setHighlight(null); setOverlayText(null) }, 8000)
     return () => clearTimeout(t)
   }, [highlight])
 
@@ -70,11 +73,13 @@ export function useKitchenCoach() {
     setLoading(true)
     setError(null)
     setHighlight(null)
+    setOverlayText(null)
 
     // Build system prompt
     let systemPrompt = `Sos Kitchen Coach, un asistente especializado en gestión de cocinas profesionales.
 Respondés en español rioplatense, de forma concisa y práctica.
-Conocés de food cost, mise en place, HACCP, gestión de stock y operaciones gastronómicas.`
+Conocés de food cost, mise en place, HACCP, gestión de stock y operaciones gastronómicas.
+IMPORTANTE: No usés asteriscos, markdown, negritas ni ningún símbolo de formato. Solo texto plano.`
 
     if (ctx?.stockCritico?.length) {
       systemPrompt += `\n\n## Stock crítico actual:`
@@ -98,11 +103,19 @@ Conocés de food cost, mise en place, HACCP, gestión de stock y operaciones gas
       }
     } catch { /* ignore */ }
 
-    systemPrompt += `\n\n## UI highlight (módulo Operaciones)
-Cuando tu respuesta menciona dónde está algo en la pantalla, podés incluir un highlight para iluminar ese elemento. Respondé en JSON exacto:
-{"text":"tu respuesta aquí","highlight":"id-del-elemento"}
+    systemPrompt += `\n\n## Formato de respuesta con highlight de UI
+
+Cuando tu respuesta menciona dónde está algo en la pantalla, respondé en JSON exacto (sin markdown):
+{"text":"tu respuesta en el chat (texto plano sin asteriscos)","highlight":"id-del-elemento","overlay_text":"descripción muy breve del elemento (máx 12 palabras)","options":["Opción de seguimiento 1","Opción 2"]}
+
+- overlay_text: texto corto que aparece sobre el elemento destacado en pantalla, muy conciso
+- options: chips de respuesta rápida para guiar al usuario al siguiente paso (máx 3 opciones, omitir si no aplica)
+- En conversaciones generales sin referencia a UI, respondé SOLO texto plano (sin JSON)
+
 IDs disponibles: ${COACH_HIGHLIGHT_IDS.join(', ')}
-En conversaciones generales sin referencia a UI, respondé SOLO texto plano (sin JSON).`
+
+Ejemplo para tour de OPS:
+{"text":"La sección Producción es donde cargás todo lo que hay que cocinar hoy, ordenado por prioridad. El botón + agrega una preparación nueva.","highlight":"ops-tab-produccion","overlay_text":"Producción: tu lista de tareas por prioridad","options":["Contame sobre Mise","Contame sobre Planificación"]}`
 
     systemPrompt += `\n\nUsá el contexto para dar consejos relevantes cuando el usuario lo necesite.`
 
@@ -132,9 +145,11 @@ En conversaciones generales sin referencia a UI, respondé SOLO texto plano (sin
       const data = await res.json()
       const rawText = data.content?.[0]?.text ?? data.message ?? 'Sin respuesta'
 
-      // Try to parse structured response { text, highlight }
+      // Try to parse structured response { text, highlight, overlay_text, options }
       let text = rawText
       let hl: string | null = null
+      let ovText: string | null = null
+      let opts: string[] | null = null
       try {
         const trimmed = rawText.trim()
         if (trimmed.startsWith('{')) {
@@ -142,13 +157,23 @@ En conversaciones generales sin referencia a UI, respondé SOLO texto plano (sin
           if (parsed && typeof parsed.text === 'string') {
             text = parsed.text
             hl = typeof parsed.highlight === 'string' ? parsed.highlight : null
+            ovText = typeof parsed.overlay_text === 'string' ? parsed.overlay_text : null
+            opts = Array.isArray(parsed.options)
+              ? parsed.options.filter((o: unknown) => typeof o === 'string')
+              : null
           }
         }
       } catch { /* plain text response */ }
 
       setHighlight(hl)
+      setOverlayText(ovText)
       setMessages(prev =>
-        prev.map(m => m.id === placeholderId ? { ...m, content: text, timestamp: new Date() } : m)
+        prev.map(m => m.id === placeholderId ? {
+          ...m,
+          content: text,
+          timestamp: new Date(),
+          options: opts && opts.length > 0 ? opts : undefined,
+        } : m)
       )
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'AbortError') return
@@ -162,7 +187,8 @@ En conversaciones generales sin referencia a UI, respondé SOLO texto plano (sin
   }, [messages, restauranteId])
 
   return {
-    messages, loading, error, isOpen, highlight,
-    open, close, toggle, sendMessage, clearMessages, clearHighlight, cancelRequest,
+    messages, loading, error, isOpen, highlight, overlayText,
+    open, close, toggle, sendMessage, clearMessages,
+    clearHighlight, clearOverlayText, cancelRequest,
   }
 }

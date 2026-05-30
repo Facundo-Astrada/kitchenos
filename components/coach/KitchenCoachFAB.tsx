@@ -9,55 +9,148 @@ interface KitchenCoachFABProps {
 }
 
 const QUICK_SUGGESTIONS = [
-  '¿Qué me conviene pedir hoy?',
+  '¿Cómo funciona OPS?',
+  '¿Qué me conviene producir hoy?',
   'Analizá mi food cost',
   '¿Cómo optimizo el mise en place?',
-  'Sugerí recetas con lo que tengo',
 ]
 
 function formatTime(d: Date) {
   return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
 }
 
-// ── Spotlight component — glow naranja sobre el elemento destacado
-function CoachSpotlight({ targetId }: { targetId: string | null }) {
-  const [rect, setRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null)
+// ── Coach Overlay — full-screen dim + SVG hole + tooltip + dismiss
+function CoachOverlay({
+  targetId,
+  text,
+  onDismiss,
+}: {
+  targetId: string | null
+  text: string | null
+  onDismiss: () => void
+}) {
+  const [rect, setRect] = useState<DOMRect | null>(null)
 
   useEffect(() => {
     if (!targetId) { setRect(null); return }
     const el = document.querySelector(`[data-coach-target="${targetId}"]`)
     if (!el) { setRect(null); return }
-    const r = el.getBoundingClientRect()
-    setRect({ top: r.top, left: r.left, width: r.width, height: r.height })
+    // Small delay to let layout settle after panel open/close animations
+    const t = setTimeout(() => setRect(el.getBoundingClientRect()), 80)
+    return () => clearTimeout(t)
   }, [targetId])
 
   if (!rect || !targetId) return null
 
+  const PAD = 12
+  const x = rect.left - PAD
+  const y = rect.top - PAD
+  const w = rect.width + PAD * 2
+  const h = rect.height + PAD * 2
+  const R = 16
+
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 375
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 812
+
+  // Position tooltip above or below based on available space
+  const spaceBelow = vh - (y + h)
+  const tooltipAbove = spaceBelow < 120
+  const tooltipTop = tooltipAbove ? Math.max(8, y - 12 - 80) : y + h + 12
+
+  const tooltipLeft = Math.max(16, Math.min(x, vw - 300 - 16))
+
   return (
     <div
-      onClick={() => setRect(null)}
+      onClick={onDismiss}
       style={{
-        position: 'fixed',
-        top: rect.top - 6,
-        left: rect.left - 6,
-        width: rect.width + 12,
-        height: rect.height + 12,
-        borderRadius: 14,
-        border: '2px solid #f97316',
-        boxShadow: '0 0 0 4px rgba(249,115,22,.2), 0 0 24px rgba(249,115,22,.35)',
-        pointerEvents: 'auto',
-        zIndex: 1200,
-        animation: 'kc-spotlight 1.4s ease-in-out 2',
+        position: 'fixed', inset: 0, zIndex: 1200,
+        cursor: 'pointer',
       }}
-    />
+    >
+      {/* SVG overlay with cutout */}
+      <svg
+        width="100%"
+        height="100%"
+        style={{ position: 'absolute', inset: 0, display: 'block' }}
+      >
+        <defs>
+          <mask id="kc-spotlight-mask">
+            <rect width="100%" height="100%" fill="white" />
+            <rect x={x} y={y} width={w} height={h} rx={R} fill="black" />
+          </mask>
+        </defs>
+        <rect
+          width="100%"
+          height="100%"
+          fill="rgba(0,0,0,0.72)"
+          mask="url(#kc-spotlight-mask)"
+        />
+        {/* Orange glow border around spotlight */}
+        <rect
+          x={x} y={y} width={w} height={h} rx={R}
+          fill="none"
+          stroke="#f97316"
+          strokeWidth="2.5"
+          style={{ filter: 'drop-shadow(0 0 10px rgba(249,115,22,0.8))' }}
+        />
+      </svg>
+
+      {/* Tooltip */}
+      {text && (
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            position: 'fixed',
+            top: tooltipTop,
+            left: tooltipLeft,
+            maxWidth: Math.min(300, vw - 32),
+            background: '#f97316',
+            borderRadius: 14,
+            padding: '11px 15px 9px',
+            boxShadow: '0 6px 24px rgba(249,115,22,.45)',
+            pointerEvents: 'none',
+          }}
+        >
+          {/* Arrow pointing to element */}
+          {!tooltipAbove && (
+            <div style={{
+              position: 'absolute',
+              top: -7,
+              left: Math.min(24, Math.max(8, x + w / 2 - tooltipLeft - 8)),
+              width: 0, height: 0,
+              borderLeft: '7px solid transparent',
+              borderRight: '7px solid transparent',
+              borderBottom: '7px solid #f97316',
+            }} />
+          )}
+          {tooltipAbove && (
+            <div style={{
+              position: 'absolute',
+              bottom: -7,
+              left: Math.min(24, Math.max(8, x + w / 2 - tooltipLeft - 8)),
+              width: 0, height: 0,
+              borderLeft: '7px solid transparent',
+              borderRight: '7px solid transparent',
+              borderTop: '7px solid #f97316',
+            }} />
+          )}
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', lineHeight: 1.45 }}>
+            {text}
+          </div>
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,.75)', marginTop: 5, fontWeight: 500 }}>
+            Tocá para continuar
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
 // ── Main component ─────────────────────────────────────────────
 export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: KitchenCoachFABProps) {
   const {
-    messages, loading, error, isOpen, highlight,
-    toggle, close, sendMessage, clearMessages,
+    messages, loading, error, isOpen, highlight, overlayText,
+    toggle, close, sendMessage, clearMessages, clearHighlight, clearOverlayText,
   } = useKitchenCoach()
 
   const [input, setInput] = useState('')
@@ -89,7 +182,6 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
   // ── Welcome OPS event (first visit) ────────────────────────
   useEffect(() => {
     function handleWelcomeOps() {
-      // Small delay to let the page render
       setTimeout(() => {
         toggle()
         setTimeout(() => {
@@ -141,7 +233,7 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
     const dy = e.clientY - dr.startY
     if (!dr.moved && Math.hypot(dx, dy) < 8) return
     dr.moved = true
-    const BOTTOM_NAV = 84 // BottomNav height + gap
+    const BOTTOM_NAV = 84
     const newBottom = Math.max(BOTTOM_NAV, Math.min(window.innerHeight - 58, dr.startBottom - dy))
     const newRight = Math.max(8, Math.min(window.innerWidth - 58, dr.startRight - dx))
     dr.lastBottom = newBottom
@@ -160,14 +252,26 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
     }
   }
 
+  function dismissOverlay() {
+    clearHighlight()
+    clearOverlayText()
+  }
+
   // Panel position: above FAB on desktop, full-screen bottom on mobile
   const panelBottomDesktop = fabPos.bottom + 60
   const panelRightDesktop = Math.min(fabPos.right, Math.max(8, (typeof window !== 'undefined' ? window.innerWidth : 400) - 396))
 
+  // Last assistant message with options
+  const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && m.content && m.options?.length)
+
   return (
     <>
-      {/* Spotlight overlay */}
-      <CoachSpotlight targetId={highlight} />
+      {/* Tutorial overlay — full-screen dim + spotlight */}
+      <CoachOverlay
+        targetId={highlight}
+        text={overlayText}
+        onDismiss={dismissOverlay}
+      />
 
       {/* Mobile overlay */}
       {isOpen && <div className="kc-overlay" onClick={close} />}
@@ -212,7 +316,7 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
           {messages.length === 0 && (
             <>
               <p style={{ fontSize: 12, color: 'var(--text-3)', textAlign: 'center', margin: '8px 0 12px' }}>
-                ¡Hola! Soy tu Kitchen Coach. ¿En qué te ayudo hoy?
+                Hola! Soy tu Kitchen Coach. ¿En qué te ayudo hoy?
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {QUICK_SUGGESTIONS.map(s => (
@@ -229,46 +333,81 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
             </>
           )}
 
-          {messages.map(m => (
-            <div key={m.id} style={{
-              display: 'flex', flexDirection: 'column',
-              alignItems: m.role === 'user' ? 'flex-end' : 'flex-start', gap: 2,
-            }}>
-              {m.role === 'assistant' && (
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
+          {messages.map((m, idx) => {
+            const isLastAssistant = m.role === 'assistant' && m === lastAssistant
+            return (
+              <div key={m.id} style={{
+                display: 'flex', flexDirection: 'column',
+                alignItems: m.role === 'user' ? 'flex-end' : 'flex-start', gap: 2,
+              }}>
+                {m.role === 'assistant' && (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}>
+                      <div style={{
+                        width: 24, height: 24, borderRadius: '50%', background: '#f97316',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                      }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#fff' }}>restaurant</span>
+                      </div>
+                      <div style={{
+                        background: 'var(--bg)', border: '1px solid var(--border)',
+                        borderRadius: '4px 12px 12px 12px',
+                        padding: '8px 12px', maxWidth: '85%',
+                        fontSize: 13, color: 'var(--text-1)', lineHeight: 1.55,
+                        whiteSpace: 'pre-wrap',
+                      }}>
+                        {m.content === '' ? (
+                          <div className="kc-typing"><span /><span /><span /></div>
+                        ) : m.content}
+                      </div>
+                    </div>
+
+                    {/* Quick-reply options chips */}
+                    {isLastAssistant && m.options && m.options.length > 0 && !loading && (
+                      <div style={{
+                        marginLeft: 30, marginTop: 4,
+                        display: 'flex', flexWrap: 'wrap', gap: 6,
+                      }}>
+                        {m.options.map((opt, oi) => (
+                          <button
+                            key={oi}
+                            onClick={() => doSend(opt)}
+                            style={{
+                              background: 'rgba(249,115,22,.1)',
+                              border: '1px solid rgba(249,115,22,.35)',
+                              borderRadius: 20,
+                              padding: '5px 11px',
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: '#f97316',
+                              cursor: 'pointer',
+                              fontFamily: 'inherit',
+                              transition: 'all .15s',
+                            }}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {m.role === 'user' && (
                   <div style={{
-                    width: 24, height: 24, borderRadius: '50%', background: '#f97316',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                  }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#fff' }}>restaurant</span>
-                  </div>
-                  <div style={{
-                    background: 'var(--bg)', border: '1px solid var(--border)',
-                    borderRadius: '4px 12px 12px 12px',
+                    background: '#f97316', borderRadius: '12px 4px 12px 12px',
                     padding: '8px 12px', maxWidth: '85%',
-                    fontSize: 13, color: 'var(--text-1)', lineHeight: 1.5,
-                    whiteSpace: 'pre-wrap',
+                    fontSize: 13, color: '#fff', lineHeight: 1.5,
                   }}>
-                    {m.content === '' ? (
-                      <div className="kc-typing"><span /><span /><span /></div>
-                    ) : m.content}
+                    {m.content}
                   </div>
+                )}
+                <div style={{ fontSize: 10, color: 'var(--text-3)', paddingLeft: m.role === 'assistant' ? 30 : 0 }}>
+                  {formatTime(m.timestamp)}
                 </div>
-              )}
-              {m.role === 'user' && (
-                <div style={{
-                  background: '#f97316', borderRadius: '12px 4px 12px 12px',
-                  padding: '8px 12px', maxWidth: '85%',
-                  fontSize: 13, color: '#fff', lineHeight: 1.5,
-                }}>
-                  {m.content}
-                </div>
-              )}
-              <div style={{ fontSize: 10, color: 'var(--text-3)', paddingLeft: m.role === 'assistant' ? 30 : 0 }}>
-                {formatTime(m.timestamp)}
               </div>
-            </div>
-          ))}
+            )
+          })}
 
           {error && (
             <div style={{ fontSize: 12, color: '#ef4444', textAlign: 'center', padding: '4px 0' }}>{error}</div>
@@ -399,10 +538,6 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
         @keyframes kc-pulse {
           0%, 80%, 100% { transform: scale(.7); opacity: .5; }
           40% { transform: scale(1); opacity: 1; }
-        }
-        @keyframes kc-spotlight {
-          0%, 100% { box-shadow: 0 0 0 4px rgba(249,115,22,.2), 0 0 24px rgba(249,115,22,.35); }
-          50% { box-shadow: 0 0 0 8px rgba(249,115,22,.12), 0 0 40px rgba(249,115,22,.5); }
         }
         @media (max-width: 479px) {
           .kc-overlay { display: block; }
