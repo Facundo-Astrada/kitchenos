@@ -91,7 +91,7 @@ function StockBox({ stockCierre, target, unidad }: {
     else                  { color = '#ef4444'; bg = 'rgba(239,68,68,.12)';   border = 'rgba(239,68,68,.3)' }
   }
   return (
-    <div style={{ flex: 1, padding: '6px 10px', borderRadius: 10, background: bg, border: `1px solid ${border}` }}>
+    <div data-coach-target="mise-stock-box" style={{ flex: 1, padding: '6px 10px', borderRadius: 10, background: bg, border: `1px solid ${border}` }}>
       <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 2 }}>
         stock
       </div>
@@ -109,7 +109,7 @@ function StockBox({ stockCierre, target, unidad }: {
 // ── Producir box — apertura: muestra target fijo ──────────────
 function ProducirBox({ cantidad, unidad }: { cantidad: number; unidad: string }) {
   return (
-    <div style={{ flex: 1, padding: '6px 10px', borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--border)' }}>
+    <div data-coach-target="mise-producir-box" style={{ flex: 1, padding: '6px 10px', borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--border)' }}>
       <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 2 }}>
         a producir
       </div>

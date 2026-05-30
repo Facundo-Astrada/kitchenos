@@ -657,6 +657,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                     </div>
                   ))}
                   <button
+                    data-coach-target="mise-fab-add"
                     onClick={() => setShowAddSheet(sec.id)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6, padding: '8px 4px',

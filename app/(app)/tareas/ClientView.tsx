@@ -281,20 +281,21 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
           PRIORIDADES.map((prio) => {
             const items = topLevel.filter((t) => (t.prioridad ?? 'baja') === prio.id)
             return (
-              <SeccionOps
-                key={prio.id}
-                titulo={prio.label}
-                sublabel={prio.sublabel}
-                color={prio.color}
-                items={items}
-                subtareasByParent={subtareasByParent}
-                onAddItem={(titulo, recetaId) => handleAddItem(prio.id, titulo, recetaId)}
-                onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
-                onAddSubtarea={handleAddSubtarea}
-                modo={modo}
-                showSeccionChip
-                recetas={recetasSimple}
-              />
+              <div key={prio.id} {...(prio.id === 'critica' ? { 'data-coach-target': 'prod-seccion-sp' } : {})}>
+                <SeccionOps
+                  titulo={prio.label}
+                  sublabel={prio.sublabel}
+                  color={prio.color}
+                  items={items}
+                  subtareasByParent={subtareasByParent}
+                  onAddItem={(titulo, recetaId) => handleAddItem(prio.id, titulo, recetaId)}
+                  onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
+                  onAddSubtarea={handleAddSubtarea}
+                  modo={modo}
+                  showSeccionChip
+                  recetas={recetasSimple}
+                />
+              </div>
             )
           })
         )}

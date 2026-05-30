@@ -19,17 +19,89 @@ function formatTime(d: Date) {
   return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
 }
 
+// ── Spotlight component — glow naranja sobre el elemento destacado
+function CoachSpotlight({ targetId }: { targetId: string | null }) {
+  const [rect, setRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null)
+
+  useEffect(() => {
+    if (!targetId) { setRect(null); return }
+    const el = document.querySelector(`[data-coach-target="${targetId}"]`)
+    if (!el) { setRect(null); return }
+    const r = el.getBoundingClientRect()
+    setRect({ top: r.top, left: r.left, width: r.width, height: r.height })
+  }, [targetId])
+
+  if (!rect || !targetId) return null
+
+  return (
+    <div
+      onClick={() => setRect(null)}
+      style={{
+        position: 'fixed',
+        top: rect.top - 6,
+        left: rect.left - 6,
+        width: rect.width + 12,
+        height: rect.height + 12,
+        borderRadius: 14,
+        border: '2px solid #f97316',
+        boxShadow: '0 0 0 4px rgba(249,115,22,.2), 0 0 24px rgba(249,115,22,.35)',
+        pointerEvents: 'auto',
+        zIndex: 1200,
+        animation: 'kc-spotlight 1.4s ease-in-out 2',
+      }}
+    />
+  )
+}
+
+// ── Main component ─────────────────────────────────────────────
 export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: KitchenCoachFABProps) {
-  const { messages, loading, error, isOpen, toggle, close, sendMessage, clearMessages } = useKitchenCoach()
+  const {
+    messages, loading, error, isOpen, highlight,
+    toggle, close, sendMessage, clearMessages,
+  } = useKitchenCoach()
+
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const hasUnread = messages.length > 0 && !isOpen
 
+  // ── FAB drag state ──────────────────────────────────────────
+  const [fabPos, setFabPos] = useState<{ bottom: number; right: number }>(() => {
+    if (typeof window === 'undefined') return { bottom: 144, right: 16 }
+    try {
+      const s = JSON.parse(localStorage.getItem('kc_fab_pos') ?? 'null')
+      if (s && typeof s.bottom === 'number' && typeof s.right === 'number') return s
+    } catch { /* ignore */ }
+    return { bottom: 144, right: 16 }
+  })
+  const fabDragRef = useRef<{
+    startX: number; startY: number
+    startBottom: number; startRight: number
+    moved: boolean
+    lastBottom: number; lastRight: number
+  } | null>(null)
+
+  // ── Auto-scroll messages ────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // ── Welcome OPS event (first visit) ────────────────────────
+  useEffect(() => {
+    function handleWelcomeOps() {
+      // Small delay to let the page render
+      setTimeout(() => {
+        toggle()
+        setTimeout(() => {
+          sendMessage('Estoy en el módulo Operaciones por primera vez. Hacé un recorrido rápido de las 3 secciones: Producción, Mise y Planificación.', { stockCritico, tareasPendientes })
+        }, 350)
+      }, 800)
+    }
+    window.addEventListener('kc-welcome-ops', handleWelcomeOps)
+    return () => window.removeEventListener('kc-welcome-ops', handleWelcomeOps)
+  }, [toggle, sendMessage, stockCritico, tareasPendientes]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Input handlers ──────────────────────────────────────────
   function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setInput(e.target.value)
     e.target.style.height = 'auto'
@@ -51,13 +123,60 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
     await sendMessage(msg, { stockCritico, tareasPendientes })
   }
 
+  // ── FAB drag handlers (Pointer Events — touch + mouse) ──────
+  function onFabPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    fabDragRef.current = {
+      startX: e.clientX, startY: e.clientY,
+      startBottom: fabPos.bottom, startRight: fabPos.right,
+      moved: false,
+      lastBottom: fabPos.bottom, lastRight: fabPos.right,
+    }
+  }
+
+  function onFabPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
+    const dr = fabDragRef.current
+    if (!dr || !(e.buttons & 1)) return
+    const dx = e.clientX - dr.startX
+    const dy = e.clientY - dr.startY
+    if (!dr.moved && Math.hypot(dx, dy) < 8) return
+    dr.moved = true
+    const BOTTOM_NAV = 84 // BottomNav height + gap
+    const newBottom = Math.max(BOTTOM_NAV, Math.min(window.innerHeight - 58, dr.startBottom - dy))
+    const newRight = Math.max(8, Math.min(window.innerWidth - 58, dr.startRight - dx))
+    dr.lastBottom = newBottom
+    dr.lastRight = newRight
+    setFabPos({ bottom: newBottom, right: newRight })
+  }
+
+  function onFabPointerUp() {
+    const dr = fabDragRef.current
+    fabDragRef.current = null
+    if (dr?.moved) {
+      const pos = { bottom: dr.lastBottom, right: dr.lastRight }
+      localStorage.setItem('kc_fab_pos', JSON.stringify(pos))
+    } else {
+      toggle()
+    }
+  }
+
+  // Panel position: above FAB on desktop, full-screen bottom on mobile
+  const panelBottomDesktop = fabPos.bottom + 60
+  const panelRightDesktop = Math.min(fabPos.right, Math.max(8, (typeof window !== 'undefined' ? window.innerWidth : 400) - 396))
+
   return (
     <>
+      {/* Spotlight overlay */}
+      <CoachSpotlight targetId={highlight} />
+
       {/* Mobile overlay */}
       {isOpen && <div className="kc-overlay" onClick={close} />}
 
       {/* Chat panel */}
-      <div className={`kc-panel${isOpen ? ' kc-panel-open' : ''}`}>
+      <div
+        className={`kc-panel${isOpen ? ' kc-panel-open' : ''}`}
+        style={{ '--kc-panel-bottom': `${panelBottomDesktop}px`, '--kc-panel-right': `${panelRightDesktop}px` } as React.CSSProperties}
+      >
         {/* Header */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10,
@@ -128,6 +247,7 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
                     borderRadius: '4px 12px 12px 12px',
                     padding: '8px 12px', maxWidth: '85%',
                     fontSize: 13, color: 'var(--text-1)', lineHeight: 1.5,
+                    whiteSpace: 'pre-wrap',
                   }}>
                     {m.content === '' ? (
                       <div className="kc-typing"><span /><span /><span /></div>
@@ -195,12 +315,21 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
         </div>
       </div>
 
-      {/* FAB */}
-      <button onClick={toggle} className="kc-fab" title="Kitchen Coach" aria-label="Kitchen Coach">
+      {/* FAB — draggable */}
+      <button
+        className="kc-fab"
+        title="Kitchen Coach"
+        aria-label="Kitchen Coach"
+        style={{ bottom: fabPos.bottom, right: fabPos.right, touchAction: 'none' }}
+        onPointerDown={onFabPointerDown}
+        onPointerMove={onFabPointerMove}
+        onPointerUp={onFabPointerUp}
+      >
         <span className="material-symbols-outlined" style={{
           fontSize: 22, color: '#fff',
           transition: 'transform .2s',
           transform: isOpen ? 'rotate(90deg)' : 'none',
+          pointerEvents: 'none',
         }}>
           {isOpen ? 'close' : 'chef_hat'}
         </span>
@@ -216,17 +345,17 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
         }
         .kc-fab {
           position: fixed;
-          bottom: 9rem; right: 1rem;
           width: 3.25rem; height: 3.25rem;
           border-radius: 50%;
           background: #f97316;
-          border: none; cursor: pointer;
+          border: none; cursor: grab;
           display: flex; align-items: center; justify-content: center;
           box-shadow: 0 4px 16px rgba(249,115,22,.4);
           z-index: 1001;
-          transition: transform .2s;
+          user-select: none;
+          -webkit-user-select: none;
         }
-        .kc-fab:hover { transform: scale(1.05); }
+        .kc-fab:active { cursor: grabbing; }
         .kc-badge {
           position: absolute; top: 6px; right: 6px;
           width: 10px; height: 10px;
@@ -236,7 +365,8 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
         }
         .kc-panel {
           position: fixed;
-          bottom: 5.5rem; right: 1rem;
+          bottom: var(--kc-panel-bottom, 5.5rem);
+          right: var(--kc-panel-right, 1rem);
           width: 380px; height: 520px;
           background: var(--surface);
           border: 1px solid var(--border);
@@ -270,18 +400,19 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
           0%, 80%, 100% { transform: scale(.7); opacity: .5; }
           40% { transform: scale(1); opacity: 1; }
         }
+        @keyframes kc-spotlight {
+          0%, 100% { box-shadow: 0 0 0 4px rgba(249,115,22,.2), 0 0 24px rgba(249,115,22,.35); }
+          50% { box-shadow: 0 0 0 8px rgba(249,115,22,.12), 0 0 40px rgba(249,115,22,.5); }
+        }
         @media (max-width: 479px) {
           .kc-overlay { display: block; }
           .kc-panel {
             width: 100vw; height: 85vh;
-            bottom: 0; right: 0;
+            bottom: 0 !important; right: 0 !important;
             border-radius: 16px 16px 0 0;
             transform: translateY(100%);
           }
           .kc-panel-open { transform: translateY(0); }
-        }
-        @media (min-width: 480px) {
-          .kc-fab { bottom: 1.5rem; }
         }
       `}</style>
     </>

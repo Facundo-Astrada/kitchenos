@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import ChecklistPage from '@/app/(app)/checklist/ClientView'
 import TareasPage from '@/app/(app)/tareas/ClientView'
 import ProduccionPage from '@/app/(app)/produccion/page'
@@ -598,6 +598,25 @@ export default function OperacionesPage() {
   const [tab, setTab] = useState<Tab>('produccion')
   const [subTabPlan, setSubTabPlan] = useState<SubTabPlan>('menu')
 
+  // Write screen context for KitchenCoach on tab change
+  useEffect(() => {
+    try {
+      localStorage.setItem('kc_screen_context', JSON.stringify({
+        screen: 'operaciones',
+        tab,
+        ...(tab === 'planificacion' ? { subTab: subTabPlan } : {}),
+      }))
+    } catch { /* ignore */ }
+  }, [tab, subTabPlan])
+
+  // Dispatch welcome event on first OPS visit
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (localStorage.getItem('kc_ops_welcomed')) return
+    localStorage.setItem('kc_ops_welcomed', '1')
+    setTimeout(() => window.dispatchEvent(new CustomEvent('kc-welcome-ops')), 900)
+  }, [])
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {/* Tab header */}
@@ -606,6 +625,7 @@ export default function OperacionesPage() {
           {TABS.map(t => (
             <button
               key={t.id}
+              data-coach-target={`ops-tab-${t.id}`}
               onClick={() => setTab(t.id)}
               style={{
                 flex: 1,
@@ -633,6 +653,7 @@ export default function OperacionesPage() {
             ]).map(st => (
               <button
                 key={st.id}
+                data-coach-target={`plan-sub-${st.id}`}
                 onClick={() => setSubTabPlan(st.id)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 4,
