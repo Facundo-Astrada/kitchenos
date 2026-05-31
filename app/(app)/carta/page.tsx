@@ -8,6 +8,7 @@ import { useRecetas, type RecetaConCosto } from '@/lib/hooks/useRecetas'
 import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
 import { usePackagingGrupos, type PackagingGrupo } from '@/lib/hooks/usePackagingGrupos'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
+import { createClient } from '@/lib/supabase/client'
 // ── Helpers ─────────────────────────────────────────────
 const fmtMoney = (n: number) =>
   n > 0 ? `$${n.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—'
@@ -1765,11 +1766,18 @@ function RentabilidadView({
 }
 
 // ── Import Carta Modal ──────────────────────────────────
+interface ComponenteImportado {
+  nombre: string
+  tipo: 'receta' | 'producto' | 'plato' | null
+  ref_id: string | null
+  ref_nombre: string | null
+}
+
 interface ItemImportado {
   nombre: string
   categoria: string
   descripcion: string
-  componentes: string[]
+  componentes: ComponenteImportado[]
   precio_venta: number | null
   porciones: number
   tags: string[]
@@ -1779,11 +1787,15 @@ interface ItemImportado {
 function ImportCartaModal({
   categorias,
   restauranteId,
+  recetas,
+  productos,
   onClose,
   onDone,
 }: {
   categorias: CartaCategoria[]
   restauranteId: string
+  recetas: RecetaConCosto[]
+  productos: ProductoConEstado[]
   onClose: () => void
   onDone: (msg: string) => void
 }) {
@@ -1793,6 +1805,19 @@ function ImportCartaModal({
   const [parsing, setParsing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [platos, setPlatos] = useState<{ id: string; nombre: string }[]>([])
+  const [linkSearch, setLinkSearch] = useState<{ key: string; q: string } | null>(null)
+
+  useEffect(() => {
+    if (!restauranteId) return
+    createClient()
+      .from('platos_compuestos')
+      .select('id, nombre')
+      .eq('restaurante_id', restauranteId)
+      .eq('activo', true)
+      .then(({ data }) => setPlatos((data ?? []) as { id: string; nombre: string }[]))
+  }, [restauranteId])
+
   const catNombres = categorias.length > 0
     ? categorias.map(c => c.nombre)
     : ['Entradas', 'Principales', 'Postres', 'Bebidas', 'Guarniciones']
@@ -1804,6 +1829,49 @@ function ImportCartaModal({
     'keto':         { label: 'Keto',           bg: '#ede9fe', color: '#5b21b6' },
     'picante':      { label: '🌶 Picante',     bg: '#fee2e2', color: '#991b1b' },
     'sin lactosa':  { label: 'Sin lactosa',    bg: '#e0f2fe', color: '#075985' },
+  }
+
+  const TIPO_CFG = {
+    receta:   { icon: 'menu_book',    color: '#4361a0', bg: '#eef2ff', label: 'Receta' },
+    producto: { icon: 'inventory_2',  color: '#059669', bg: '#d1fae5', label: 'Producto' },
+    plato:    { icon: 'restaurant',   color: '#f97316', bg: '#ffedd5', label: 'Producción' },
+  }
+
+  // Auto-match: busca el candidato más cercano en las tres fuentes
+  function autoMatch(nombre: string): ComponenteImportado {
+    const q = nombre.toLowerCase().trim()
+    function score(n: string) {
+      n = n.toLowerCase()
+      if (n === q) return 4
+      if (n.startsWith(q) || q.startsWith(n)) return 3
+      if (n.includes(q) || q.includes(n)) return 2
+      // palabras comunes
+      const qw = q.split(/\s+/)
+      const nw = n.split(/\s+/)
+      const shared = qw.filter(w => w.length > 2 && nw.some(v => v.includes(w) || w.includes(v))).length
+      return shared > 0 ? 1 : 0
+    }
+    const best = (arr: { id: string; nombre: string }[], tipo: ComponenteImportado['tipo']) => {
+      const hit = arr.map(x => ({ x, s: score(x.nombre) })).filter(r => r.s > 0).sort((a, b) => b.s - a.s)[0]
+      return hit ? { nombre, tipo, ref_id: hit.x.id, ref_nombre: hit.x.nombre } : null
+    }
+    return (
+      best(recetas, 'receta') ??
+      best(productos, 'producto') ??
+      best(platos, 'plato') ??
+      { nombre, tipo: null, ref_id: null, ref_nombre: null }
+    )
+  }
+
+  function searchResults(q: string) {
+    if (!q.trim()) return []
+    const ql = q.toLowerCase()
+    const results: { tipo: ComponenteImportado['tipo']; id: string; nombre: string }[] = [
+      ...recetas.filter(r => r.nombre.toLowerCase().includes(ql)).slice(0, 5).map(r => ({ tipo: 'receta' as const, id: r.id, nombre: r.nombre })),
+      ...productos.filter(p => p.nombre.toLowerCase().includes(ql)).slice(0, 5).map(p => ({ tipo: 'producto' as const, id: p.id, nombre: p.nombre })),
+      ...platos.filter(p => p.nombre.toLowerCase().includes(ql)).slice(0, 5).map(p => ({ tipo: 'plato' as const, id: p.id, nombre: p.nombre })),
+    ]
+    return results.slice(0, 8)
   }
 
   const handleFile = (f: File) => { setFile(f); setError('') }
@@ -1818,9 +1886,10 @@ function ImportCartaModal({
       const res = await fetch('/api/carta/import', { method: 'POST', body: fd })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al parsear')
-      setItems((data.items as Omit<ItemImportado, '_sel'>[]).map(i => ({
+      type RawItem = { nombre: string; categoria: string; descripcion: string; componentes: string[]; precio_venta: number | null; porciones: number; tags: string[] }
+      setItems((data.items as RawItem[]).map(i => ({
         ...i,
-        componentes: i.componentes ?? [],
+        componentes: (i.componentes ?? []).map((c: string) => autoMatch(c)),
         porciones: i.porciones ?? 1,
         tags: i.tags ?? [],
         _sel: true,
@@ -1853,19 +1922,35 @@ function ImportCartaModal({
   const updateItem = <K extends keyof ItemImportado>(idx: number, key: K, val: ItemImportado[K]) =>
     setItems(prev => prev.map((p, i) => i === idx ? { ...p, [key]: val } : p))
 
+  const updateComp = (itemIdx: number, compIdx: number, patch: Partial<ComponenteImportado>) =>
+    setItems(prev => prev.map((p, i) => {
+      if (i !== itemIdx) return p
+      const comps = p.componentes.map((c, ci) => ci === compIdx ? { ...c, ...patch } : c)
+      return { ...p, componentes: comps }
+    }))
+
+  const linkComp = (itemIdx: number, compIdx: number, tipo: ComponenteImportado['tipo'], id: string, nombre: string) => {
+    updateComp(itemIdx, compIdx, { tipo, ref_id: id, ref_nombre: nombre })
+    setLinkSearch(null)
+  }
+
+  const removeComp = (itemIdx: number, compIdx: number) =>
+    setItems(prev => prev.map((p, i) => i === itemIdx
+      ? { ...p, componentes: p.componentes.filter((_, ci) => ci !== compIdx) }
+      : p
+    ))
+
+  const addComp = (itemIdx: number) =>
+    setItems(prev => prev.map((p, i) => i === itemIdx
+      ? { ...p, componentes: [...p.componentes, { nombre: '', tipo: null, ref_id: null, ref_nombre: null }] }
+      : p
+    ))
+
   const toggleTag = (idx: number, tag: string) =>
     setItems(prev => prev.map((p, i) => {
       if (i !== idx) return p
       const has = p.tags.includes(tag)
       return { ...p, tags: has ? p.tags.filter(t => t !== tag) : [...p.tags, tag] }
-    }))
-
-  const toggleComp = (idx: number, compIdx: number, val: string) =>
-    setItems(prev => prev.map((p, i) => {
-      if (i !== idx) return p
-      const comps = [...p.componentes]
-      comps[compIdx] = val
-      return { ...p, componentes: comps }
     }))
 
   const allSel = items.every(i => i._sel)
@@ -2027,35 +2112,113 @@ function ImportCartaModal({
                   </div>
 
                   {/* Componentes */}
-                  <div style={{ padding: '0 12px 8px 34px' }}>
+                  <div style={{ padding: '0 12px 10px 34px' }}>
                     {item.componentes.length > 0 && (
-                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 5 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
                         Componentes
                       </div>
                     )}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-                      {item.componentes.map((comp, ci) => (
-                        <div key={ci} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                          <input
-                            value={comp}
-                            onChange={e => toggleComp(idx, ci, e.target.value)}
-                            style={{
-                              fontSize: 11, padding: '3px 8px', borderRadius: 20,
-                              border: '1px solid var(--border)', background: 'var(--surface)',
-                              color: 'var(--text-2)', outline: 'none',
-                              maxWidth: 160, minWidth: 40,
-                            }}
-                          />
-                          <button
-                            onClick={() => updateItem(idx, 'componentes', item.componentes.filter((_, i) => i !== ci))}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: 'var(--text-3)', fontSize: 14, lineHeight: 1 }}
-                          >×</button>
-                        </div>
-                      ))}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {item.componentes.map((comp, ci) => {
+                        const key = `${idx}-${ci}`
+                        const isSearching = linkSearch?.key === key
+                        const tipoCfg = comp.tipo ? TIPO_CFG[comp.tipo] : null
+                        const results = isSearching ? searchResults(linkSearch.q) : []
+                        return (
+                          <div key={ci}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                              {/* Nombre editable */}
+                              <input
+                                value={comp.nombre}
+                                onChange={e => updateComp(idx, ci, { nombre: e.target.value })}
+                                placeholder="nombre..."
+                                style={{
+                                  flex: 1, fontSize: 12, padding: '4px 8px', borderRadius: 8,
+                                  border: '1px solid var(--border)', background: 'var(--surface)',
+                                  color: 'var(--text-1)', outline: 'none',
+                                }}
+                              />
+                              {/* Badge de tipo / botón vincular */}
+                              <button
+                                onClick={() => setLinkSearch(isSearching ? null : { key, q: comp.nombre })}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: 3,
+                                  padding: '3px 7px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                                  fontSize: 10, fontWeight: 700,
+                                  background: tipoCfg ? tipoCfg.bg : 'var(--bg)',
+                                  color: tipoCfg ? tipoCfg.color : 'var(--text-3)',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                <span className="material-symbols-outlined" style={{ fontSize: 12 }}>
+                                  {tipoCfg ? tipoCfg.icon : 'link'}
+                                </span>
+                                {tipoCfg ? tipoCfg.label : 'vincular'}
+                              </button>
+                              {/* Desvincular */}
+                              {comp.tipo && (
+                                <button
+                                  onClick={() => updateComp(idx, ci, { tipo: null, ref_id: null, ref_nombre: null })}
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 3px', color: 'var(--text-3)', fontSize: 14, lineHeight: 1 }}
+                                  title="Quitar vínculo"
+                                >×</button>
+                              )}
+                              {/* Eliminar componente */}
+                              <button
+                                onClick={() => removeComp(idx, ci)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 3px', color: '#ef4444', fontSize: 14, lineHeight: 1 }}
+                                title="Eliminar"
+                              >🗑</button>
+                            </div>
+                            {/* Nombre del vinculo */}
+                            {comp.ref_nombre && (
+                              <div style={{ fontSize: 10, color: tipoCfg?.color, marginLeft: 8, marginTop: 1 }}>
+                                → {comp.ref_nombre}
+                              </div>
+                            )}
+                            {/* Dropdown de búsqueda */}
+                            {isSearching && (
+                              <div style={{ marginTop: 3, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,.12)' }}>
+                                <input
+                                  autoFocus
+                                  value={linkSearch.q}
+                                  onChange={e => setLinkSearch({ key, q: e.target.value })}
+                                  placeholder="Buscar receta, producto o producción..."
+                                  style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: '1px solid var(--border)', fontSize: 12, outline: 'none', boxSizing: 'border-box', background: 'var(--bg)' }}
+                                />
+                                {results.length === 0 ? (
+                                  <div style={{ padding: '8px 10px', fontSize: 11, color: 'var(--text-3)' }}>
+                                    {linkSearch.q.length < 1 ? 'Escribí para buscar' : 'Sin resultados'}
+                                  </div>
+                                ) : (
+                                  results.map(r => {
+                                    const tc = TIPO_CFG[r.tipo!]
+                                    return (
+                                      <button
+                                        key={`${r.tipo}-${r.id}`}
+                                        onMouseDown={e => { e.preventDefault(); linkComp(idx, ci, r.tipo, r.id, r.nombre) }}
+                                        style={{
+                                          display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                                          padding: '8px 10px', background: 'none', border: 'none',
+                                          borderBottom: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left',
+                                        }}
+                                      >
+                                        <span className="material-symbols-outlined" style={{ fontSize: 13, color: tc.color }}>{tc.icon}</span>
+                                        <span style={{ flex: 1, fontSize: 12, color: 'var(--text-1)' }}>{r.nombre}</span>
+                                        <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: tc.bg, color: tc.color }}>{tc.label}</span>
+                                      </button>
+                                    )
+                                  })
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
                       <button
-                        onClick={() => updateItem(idx, 'componentes', [...item.componentes, ''])}
+                        onClick={() => addComp(idx)}
                         style={{
-                          fontSize: 11, padding: '3px 10px', borderRadius: 20,
+                          alignSelf: 'flex-start', fontSize: 11, padding: '3px 10px', borderRadius: 8,
                           border: '1px dashed var(--accent)', background: 'transparent',
                           color: 'var(--accent)', cursor: 'pointer', fontWeight: 600,
                         }}
@@ -2503,6 +2666,8 @@ export default function CartaPage() {
         <ImportCartaModal
           categorias={categorias}
           restauranteId={RESTAURANTE_ID}
+          recetas={recetas}
+          productos={productos}
           onClose={() => setShowImport(false)}
           onDone={msg => { setToast(msg); fetchItems() }}
         />

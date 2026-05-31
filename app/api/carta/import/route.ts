@@ -5,14 +5,21 @@ import * as XLSX from 'xlsx'
 export const maxDuration = 60
 
 // ── Types ────────────────────────────────────────────────────────────────
+export interface ComponenteImportado {
+  nombre: string
+  tipo: 'receta' | 'producto' | 'plato' | null
+  ref_id: string | null
+  ref_nombre: string | null
+}
+
 export interface ItemImportado {
-  nombre: string          // título del plato (solo el nombre, sin los componentes)
+  nombre: string
   categoria: string
-  descripcion: string     // descripción libre del plato si existe
-  componentes: string[]   // sub-recetas/preparaciones que componen el plato
+  descripcion: string
+  componentes: ComponenteImportado[]   // sub-recetas/preparaciones vinculadas
   precio_venta: number | null
-  porciones: number       // 1 = individual, 2+ = para compartir
-  tags: string[]          // 's/tacc', 'vegano', 'vegetariano', 'keto'
+  porciones: number
+  tags: string[]
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -69,7 +76,7 @@ function parseSheet(buffer: ArrayBuffer): ItemImportado[] {
 
       items.push({
         nombre, categoria, descripcion: desc,
-        componentes: [],
+        componentes: [] as ComponenteImportado[],
         precio_venta: precio,
         porciones: Math.max(1, Math.round(porciones)),
         tags: detectTags(nombre + ' ' + desc),
@@ -174,14 +181,16 @@ Instrucciones importantes:
   const parsed = JSON.parse(match[0]) as Record<string, unknown>[]
   return parsed.map(p => {
     const nombre = norm(p.nombre)
-    const allText = nombre + ' ' + norm(p.descripcion) + ' ' + (Array.isArray(p.componentes) ? p.componentes.join(' ') : '')
+    const compNombres = Array.isArray(p.componentes)
+      ? (p.componentes as unknown[]).map(c => norm(c)).filter(c => c.length > 1)
+      : []
+    const allText = nombre + ' ' + norm(p.descripcion) + ' ' + compNombres.join(' ')
     return {
       nombre,
       categoria: norm(p.categoria) || inferCategoria(nombre, norm(p.descripcion)),
       descripcion: norm(p.descripcion),
-      componentes: Array.isArray(p.componentes)
-        ? (p.componentes as unknown[]).map(c => norm(c)).filter(c => c.length > 1)
-        : [],
+      // devolvemos strings; el cliente hace el auto-match con su DB local
+      componentes: compNombres.map(n => ({ nombre: n, tipo: null, ref_id: null, ref_nombre: null })) as ComponenteImportado[],
       precio_venta: parsePrice(p.precio_venta),
       porciones: Math.max(1, Math.round(parsePrice(p.porciones) ?? 1)),
       tags: Array.isArray(p.tags)
@@ -236,10 +245,11 @@ export async function POST(req: NextRequest) {
         const cat = catNombres.has(item.categoria) ? item.categoria : 'Principales'
         maxOrden[cat] = (maxOrden[cat] ?? -1) + 1
 
-        // Descripción: componentes + info de porciones + tags
+        // Descripción: nombres de componentes + descripción libre
+        const nombresComp = item.componentes.map(c => c.nombre).filter(Boolean)
         const partes: string[] = []
-        if (item.componentes.length > 0) partes.push(item.componentes.join(', '))
-        if (item.descripcion && !item.componentes.some(c => item.descripcion.includes(c))) partes.push(item.descripcion)
+        if (nombresComp.length > 0) partes.push(nombresComp.join(', '))
+        if (item.descripcion && !nombresComp.some(c => item.descripcion.includes(c))) partes.push(item.descripcion)
         const descripcionFinal = partes.join(' · ') || null
 
         return {
@@ -259,7 +269,22 @@ export async function POST(req: NextRequest) {
         .select('id')
 
       if (insertErr) throw insertErr
-      return NextResponse.json({ insertados: inserted?.length ?? 0 })
+
+      // Crear plato_recetas para componentes vinculados a recetas
+      const recetaLinks: { plato_id: string; receta_id: string; porciones: number; orden: number }[] = []
+      ;(inserted ?? []).forEach((row: { id: string }, i: number) => {
+        const item = items[i]
+        item.componentes
+          .filter(c => c.tipo === 'receta' && c.ref_id)
+          .forEach((c, orden) => {
+            recetaLinks.push({ plato_id: row.id, receta_id: c.ref_id!, porciones: 1, orden })
+          })
+      })
+      if (recetaLinks.length > 0) {
+        await supabase.from('plato_recetas').insert(recetaLinks)
+      }
+
+      return NextResponse.json({ insertados: inserted?.length ?? 0, recetas_vinculadas: recetaLinks.length })
     }
 
     // ── Modo preview ──────────────────────────────────────────────────────
