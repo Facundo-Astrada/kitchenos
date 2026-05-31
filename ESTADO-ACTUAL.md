@@ -1,6 +1,6 @@
 # KitchenOS — Estado Actual del Proyecto
 
-**Fecha:** 27 de mayo de 2026
+**Fecha:** 31 de mayo de 2026
 **URL Producción:** https://kos-app-one.vercel.app
 **Credenciales test:** admin@elrescoldo.com / kitchenos2026
 **Supabase:** https://clipcxcbtlibswfzsgzk.supabase.co
@@ -33,7 +33,7 @@
 | 17 | **Configuración** | `/configuracion` | Funcional | Tabs: restaurante, plazas, rutinas, permisos por rol. Link a `/turnos` para gestión de equipo (sin tab de invitación). |
 | 18 | **Auth** | `/login`, `/register` | Funcional | Login email+password, registro (crea restaurante + user_restaurantes + equipo_miembros + rol_permisos seed), reset password por email, proxy.ts protege rutas. |
 | 19 | **Perfil** | `/perfil` | Funcional | Avatar, datos, cambiar contraseña, cerrar sesión. Linkado desde el header del dashboard. |
-| 20 | **Kitchen Coach (IA)** | API `/api/coach` + FAB | Funcional | Chat UI (`components/coach/KitchenCoachFAB.tsx`) con quick prompts y contexto del restaurante (stock crítico, vencimientos, food cost). |
+| 20 | **Kitchen Coach (IA)** | API `/api/coach` + FAB | Funcional | Chat UI con FAB draggable (Pointer Events + localStorage). Overlay tutorial SVG (dim + agujero + tooltip naranja). Tour guiado OPS de 11 pasos con tab-switching automático, barra de progreso, auto-skip si elemento no visible. Opciones seleccionables (chips) en respuestas IA. Respuestas sin markdown. |
 | 21 | **Modo Servicio** | En dashboard | Parcial | UI existe (`components/dashboard/ModoServicio.tsx`) pero **sin conectar a datos reales** — ver DECISIONES.md, se decidió diferir / descartar. |
 | 22 | **Ventas** | `/ventas` | Funcional | Importación desde Excel/CSV (xlsx) y texto libre con IA (Haiku). Pantalla de revisión editable antes de guardar. Tab Resumen con KPIs y lista de ventas con detalle de items. Requiere migración SQL (`ventas` + `ventas_items`). |
 
@@ -128,6 +128,21 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
    - Recetario `bottom: 90 → 110`.
    - Tareas `bottom: 72 → 100`.
 3. Verificado end-to-end en preview server: creación manual de receta con ingrediente guarda sin error y redirige al detalle.
+
+### Sesión 2026-05-31 — KitchenCoach: Tour guiado OPS + overlay tutorial
+1. **FAB draggable**: Pointer Events (touch + mouse), threshold 8px, posición guardada en localStorage. Panel sigue al FAB via CSS custom properties.
+2. **Overlay tutorial SVG**: reemplaza glow simple. Fondo 72% opaco, agujero exacto sobre el elemento (SVG mask), borde naranja con glow. Toca el fondo para cerrar.
+3. **Respuesta JSON extendida**: `{text, highlight, overlay_text, options}`. overlay_text aparece en tooltip naranja sobre el elemento; options son chips de respuesta rápida bajo el último mensaje.
+4. **Sin markdown**: system prompt instruye texto plano. Se eliminaron asteriscos de las respuestas.
+5. **Tour guiado OPS (11 pasos + card final)**: activado con chip "Ver recorrido de OPS". Cierra el chat y muestra tour standalone con overlay oscuro. Barra de progreso + contador N de 11. Tab-switching automático via evento `kc-set-tab`. Auto-skip si el elemento no está visible (ej: mise sin plaza seleccionada). Card final celebratoria invita al usuario a usar el Coach para dudas.
+6. **data-coach-target** en todos los elementos de OPS: 3 tabs principales, sección SP, sub-tabs Planificación, boxes Stock/Producir en mise, botón Agregar, tab Rutina.
+
+### Sesión 2026-05-30 — OPS: Sync bidireccional + MISE rediseño + Eventos/Rutinas
+1. **MISE card rediseño**: apertura muestra box Stock (cierre anterior, semáforo verde/amarillo/rojo) + box A Producir (target fijo). Cierre mantiene input editable de cantidad_actual.
+2. **Sync bidireccional Producción ↔ Mise**: tildar ítem en Mise crea/marca tarea en Producción (prefijo "Producción:"). Tildar tarea en Producción marca el ítem de Mise.
+3. **Rutinas con días_semana**: columna `int[] DEFAULT NULL` en `checklist_rutina`. RutinasDia filtra por ISO day en Planificación.
+4. **Tabla evento_items**: nueva tabla con RLS completo (4 políticas). Sub-tabs Menú/Eventos en Planificación. CRUD completo con acordeón por evento, ciclo de estado, FAB + modal.
+5. **Tab CIERRE con carryover**: items de apertura sin completar aparecen en sección amarilla "Pendientes del turno" al abrir el turno de cierre.
 
 ### Sesión 2026-05-27 (tarde) — OPS: Rediseño UX completo del workspace diario
 1. **OPS — 3 tabs**: Producción / Mise / Planificación. Ingeniería removida del tab bar.

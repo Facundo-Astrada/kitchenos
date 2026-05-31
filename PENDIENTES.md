@@ -52,13 +52,13 @@ Features pro (Kitchen Coach, multi-usuario, exportar reportes PDF, HACCP) solo e
 
 ## 🟢 Bajo — Roadmap abierto
 
-### 9. Kitchen Coach — mejoras
-Base implementada (`KitchenCoachFAB` + `/api/coach`). Falta:
+### 9. Kitchen Coach — mejoras avanzadas
+FAB draggable, overlay tutorial, tour guiado OPS y opciones seleccionables ya implementados. Falta:
 - Memoria de conversación persistida (tabla `coach_conversaciones`).
 - Acciones agénticas: sugerir "agregá esta tarea" y que con un tap se cree de verdad.
 - Tool use de Anthropic para consultar stock / food cost on-demand.
 - Prompt caching para reducir costo.
-**Status:** ⏳ Pendiente.
+**Status:** ⏳ Pendiente (base completa, falta capa agéntica).
 
 ### 10. Subida de fotos
 - Bucket Supabase Storage: `recetas`, `platos`, `miembros`, `facturas`.
@@ -113,6 +113,10 @@ Los scripts de `scripts/*.mjs` tienen el `SUPABASE_MANAGEMENT_TOKEN` en texto pl
 
 | # | Descripción | Cuándo |
 |---|---|---|
+| KitchenCoach — Tour guiado OPS | FAB draggable (Pointer Events + localStorage), overlay SVG con agujero, tour 11 pasos con tab-switching automático, card final, chips de respuesta rápida, sin markdown en respuestas IA. | 31 mayo 2026 |
+| OPS — Sync bidireccional Producción ↔ Mise | Tildar en Producción marca en Mise y viceversa via prefijo "Producción:" en título de tarea. `syncMiseCompletado` + `handleMiseUpsert`. | 30 mayo 2026 |
+| OPS — MISE card rediseño | Apertura: box Stock (cierre anterior, color semáforo verde/amarillo/rojo) + box A producir (target fijo). Cierre: mantiene input editable. Tab Rutinas + días_semana en checklist_rutina. | 30 mayo 2026 |
+| OPS — Eventos + CIERRE con carryover | Tabla `evento_items` con RLS. Sub-tabs Menú/Eventos en Planificación. Tab Cierre con sección "Pendientes del turno" (items de apertura sin completar en amarillo). | 29 mayo 2026 |
 | OPS: rediseño UX workspace diario | 3 tabs, sublabels prioridades, toggle con subtítulo, QuickAdd recetas, checklist auto-plaza + progreso en grid, calendario mensual, multi-select días, menu_tag, Ingeniería standalone. | 27 mayo 2026 |
 | USUARIO_MOCK en usePase | `usuario_nombre` ya usa `perfil.nombre + perfil.apellido` del AuthProvider. | Mayo 2026 |
 | RLS multi-tenant real | 44 políticas UPDATE corregidas, 0 USING(true) ilegítimos. KitchenOS listo para multi-tenant. | Mayo 2026 |
