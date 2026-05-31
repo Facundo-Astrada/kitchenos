@@ -63,6 +63,7 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
   const [activatingDay, setActivatingDay] = useState(false)
 
   // ── Calendar state ──────────────────────────────────────────
+  const [calendarOpen, setCalendarOpen] = useState(false)
   const [fechasMes, setFechasMes] = useState<Record<string, string[]>>({})
   const [mesActual, setMesActual] = useState(() => fmtDate(new Date()).slice(0, 7))
   const [multiSelectMode, setMultiSelectMode] = useState(false)
@@ -293,41 +294,67 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
           </div>
         )}
 
-        {/* Monthly calendar */}
+        {/* Monthly calendar — collapsible */}
         {platos.length > 0 && (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
-              <button onClick={() => shiftMes(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 18 }}>chevron_left</span>
-              </button>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.8)', textTransform: 'capitalize' }}>
-                {fmtMesLabel(mesActual)}
+            <button
+              onClick={() => setCalendarOpen(v => !v)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center',
+                justifyContent: 'space-between', marginTop: 10,
+                background: 'rgba(255,255,255,.08)', borderRadius: 8,
+                border: 'none', cursor: 'pointer', padding: '6px 10px',
+                WebkitTapHighlightColor: 'transparent',
+              }}
+            >
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.75)', textTransform: 'capitalize' }}>
+                {fmtMesLabel(mesActual)} · {fmtDateLabel(new Date(fecha + 'T12:00:00'))}
               </span>
-              <button onClick={() => shiftMes(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 18 }}>chevron_right</span>
-              </button>
-            </div>
-            <MesCalendar
-              mes={mesActual}
-              fechaSeleccionada={fecha}
-              fechasMes={fechasMes}
-              multiSelectMode={multiSelectMode}
-              diasSeleccionados={diasSeleccionados}
-              onSelectFecha={(f) => { setFecha(f); setView('planilla') }}
-              onToggleDia={(f) => setDiasSeleccionados(prev => {
-                const next = new Set(prev)
-                if (next.has(f)) next.delete(f)
-                else next.add(f)
-                return next
-              })}
-            />
-            {multiSelectMode && diasSeleccionados.size > 0 && (
-              <button
-                onClick={() => setMenuTagModal(true)}
-                style={{ width: '100%', marginTop: 10, padding: '10px', borderRadius: 10, border: 'none', background: '#22c55e', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
-              >
-                Activar {diasSeleccionados.size} {diasSeleccionados.size === 1 ? 'día' : 'días'}
-              </button>
+              <span className="material-symbols-outlined" style={{
+                fontSize: 18, color: 'rgba(255,255,255,.55)',
+                transform: calendarOpen ? 'rotate(180deg)' : 'none',
+                transition: 'transform .2s',
+              }}>
+                expand_more
+              </span>
+            </button>
+
+            {calendarOpen && (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+                  <button onClick={() => shiftMes(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                    <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 18 }}>chevron_left</span>
+                  </button>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.8)', textTransform: 'capitalize' }}>
+                    {fmtMesLabel(mesActual)}
+                  </span>
+                  <button onClick={() => shiftMes(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                    <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 18 }}>chevron_right</span>
+                  </button>
+                </div>
+                <MesCalendar
+                  mes={mesActual}
+                  fechaSeleccionada={fecha}
+                  fechasMes={fechasMes}
+                  multiSelectMode={multiSelectMode}
+                  diasSeleccionados={diasSeleccionados}
+                  onSelectFecha={(f) => { setFecha(f); setView('planilla'); setCalendarOpen(false) }}
+                  onToggleDia={(f) => setDiasSeleccionados(prev => {
+                    const next = new Set(prev)
+                    if (next.has(f)) next.delete(f)
+                    else next.add(f)
+                    return next
+                  })}
+                />
+                {multiSelectMode && diasSeleccionados.size > 0 && (
+                  <button
+                    onClick={() => setMenuTagModal(true)}
+                    style={{ width: '100%', marginTop: 10, padding: '10px', borderRadius: 10, border: 'none', background: '#22c55e', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+                  >
+                    Activar {diasSeleccionados.size} {diasSeleccionados.size === 1 ? 'día' : 'días'}
+                  </button>
+                )}
+              </>
             )}
           </>
         )}
