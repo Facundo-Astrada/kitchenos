@@ -1889,7 +1889,9 @@ function ImportCartaModal({
       type RawItem = { nombre: string; categoria: string; descripcion: string; componentes: string[]; precio_venta: number | null; porciones: number; tags: string[] }
       setItems((data.items as RawItem[]).map(i => ({
         ...i,
-        componentes: (i.componentes ?? []).map((c: string) => autoMatch(c)),
+        componentes: (i.componentes ?? []).map((c: string | ComponenteImportado) =>
+          autoMatch(typeof c === 'string' ? c : c.nombre)
+        ),
         porciones: i.porciones ?? 1,
         tags: i.tags ?? [],
         _sel: true,
