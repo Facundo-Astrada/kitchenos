@@ -489,7 +489,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         <div style={{ paddingBottom: 10 }}>
           <div style={{ display: 'inline-flex', background: 'rgba(255,255,255,.12)', borderRadius: 999, padding: 2, gap: 0 }}>
             {(['apertura', 'cierre', 'rutina'] as Tab[]).map(t => (
-              <button key={t} onClick={() => setTab(t)} style={{
+              <button key={t} onClick={() => setTab(t)} {...(t === 'rutina' ? { 'data-coach-target': 'mise-tab-rutina' } : {})} style={{
                 padding: '5px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
                 fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.07em',
                 fontFamily: 'inherit',

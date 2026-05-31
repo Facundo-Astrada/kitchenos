@@ -609,6 +609,17 @@ export default function OperacionesPage() {
     } catch { /* ignore */ }
   }, [tab, subTabPlan])
 
+  // Listen for kc-set-tab event from the coach tour
+  useEffect(() => {
+    function handleSetTab(e: Event) {
+      const { tab: newTab, subTab } = (e as CustomEvent<{ tab: Tab; subTab?: SubTabPlan }>).detail
+      setTab(newTab)
+      if (subTab) setSubTabPlan(subTab)
+    }
+    window.addEventListener('kc-set-tab', handleSetTab)
+    return () => window.removeEventListener('kc-set-tab', handleSetTab)
+  }, [])
+
   // Dispatch welcome event on first OPS visit
   useEffect(() => {
     if (typeof window === 'undefined') return
