@@ -1154,6 +1154,15 @@ function PackagingGruposDrawer({
 }
 
 // ── Detail View ─────────────────────────────────────────
+const TAG_DEFS = [
+  { key: 's/tacc',      label: 'S/TACC',       bg: '#fef3c7', color: '#92400e' },
+  { key: 'vegano',      label: 'Vegano',        bg: '#d1fae5', color: '#065f46' },
+  { key: 'vegetariano', label: 'Vegetariano',   bg: '#dcfce7', color: '#166534' },
+  { key: 'keto',        label: 'Keto',          bg: '#ede9fe', color: '#5b21b6' },
+  { key: 'picante',     label: '🌶 Picante',    bg: '#fee2e2', color: '#991b1b' },
+  { key: 'sin lactosa', label: 'Sin lactosa',   bg: '#e0f2fe', color: '#075985' },
+]
+
 function DetailView({
   item,
   recetas,
@@ -1168,6 +1177,7 @@ function DetailView({
   onAgregarPackaging,
   onEliminarPackaging,
   onShowGrupos,
+  onActualizarTags,
 }: {
   item: CartaItemEnriquecido
   recetas: RecetaConCosto[]
@@ -1182,12 +1192,32 @@ function DetailView({
   onAgregarPackaging: (productoId: string, cantidad: number) => Promise<void>
   onEliminarPackaging: (packagingId: string) => Promise<void>
   onShowGrupos: () => void
+  onActualizarTags: (tags: string[]) => Promise<void>
 }) {
   const [search, setSearch] = useState('')
-  const [showSearch, setShowSearch] = useState(false)
   const [vinculando, setVinculando] = useState(false)
   const [pendingReceta, setPendingReceta] = useState<RecetaConCosto | null>(null)
   const [porciones, setPorciones] = useState('1')
+  // porciones editables inline por plato_receta
+  const [editingPorcionId, setEditingPorcionId] = useState<string | null>(null)
+  const [editingPorcionVal, setEditingPorcionVal] = useState('')
+  const [savingTags, setSavingTags] = useState(false)
+
+  const handleToggleTag = async (tag: string) => {
+    if (savingTags) return
+    setSavingTags(true)
+    const current = item.tags ?? []
+    const next = current.includes(tag) ? current.filter(t => t !== tag) : [...current, tag]
+    try { await onActualizarTags(next) } finally { setSavingTags(false) }
+  }
+
+  const handleSavePorcion = async (pr: { id: string; porciones: number }) => {
+    const val = parseFloat(editingPorcionVal)
+    if (!isNaN(val) && val > 0 && val !== pr.porciones) {
+      await onActualizarReceta(pr.id, Math.round(val * 10) / 10)
+    }
+    setEditingPorcionId(null)
+  }
 
   // Packaging state
   const [pkgSearch, setPkgSearch] = useState('')
@@ -1235,7 +1265,6 @@ function DetailView({
       await onAgregarReceta(pendingReceta.id, parseFloat(porciones) || 1)
       setPendingReceta(null)
       setSearch('')
-      setShowSearch(false)
     } finally { setVinculando(false) }
   }
 
@@ -1312,6 +1341,28 @@ function DetailView({
             )}
           </div>
 
+          {/* Tags dietarios — toggleables directamente */}
+          <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {TAG_DEFS.map(t => {
+              const active = (item.tags ?? []).includes(t.key)
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => handleToggleTag(t.key)}
+                  disabled={savingTags}
+                  style={{
+                    fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20,
+                    border: `1.5px solid ${active ? t.color + '60' : 'var(--border)'}`,
+                    background: active ? t.bg : 'transparent',
+                    color: active ? t.color : 'var(--text-3)',
+                    cursor: 'pointer', transition: 'all .15s',
+                    opacity: savingTags ? 0.6 : 1,
+                  }}
+                >{t.label}</button>
+              )
+            })}
+          </div>
+
           {/* Donut chart — sólo si hay datos de costo */}
           {item.precio_venta > 0 && item.costo_porcion != null && item.costo_porcion > 0 && (() => {
             const precio = item.precio_venta
@@ -1370,20 +1421,9 @@ function DetailView({
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
               Recetas del plato
             </span>
-            <button
-              onClick={() => { setSearch(''); setPendingReceta(null); setShowSearch(s => !s) }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 4, border: 'none',
-                cursor: 'pointer', padding: '4px 8px', borderRadius: 8,
-                background: 'rgba(67,97,160,.1)', color: 'var(--accent)',
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
-              <span style={{ fontSize: 11, fontWeight: 700 }}>Vincular</span>
-            </button>
           </div>
 
-          {/* Plato_recetas list */}
+          {/* Lista de recetas vinculadas */}
           {item.plato_recetas.length > 0 && (
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', marginBottom: 10 }}>
               {item.plato_recetas.map((pr, idx) => (
@@ -1400,21 +1440,36 @@ function DetailView({
                       <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmtMoney(pr.costo_calculado)}</div>
                     )}
                   </div>
-                  {/* Stepper porciones */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 0, border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
+                  {/* Porciones: click para editar directo */}
+                  {editingPorcionId === pr.id ? (
+                    <input
+                      autoFocus
+                      type="number"
+                      value={editingPorcionVal}
+                      onChange={e => setEditingPorcionVal(e.target.value)}
+                      onBlur={() => handleSavePorcion(pr)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleSavePorcion(pr); if (e.key === 'Escape') setEditingPorcionId(null) }}
+                      style={{
+                        width: 52, textAlign: 'center', fontSize: 13, fontWeight: 700,
+                        border: '1.5px solid var(--accent)', borderRadius: 8, padding: '3px 4px',
+                        background: 'var(--surface)', color: 'var(--navy)', outline: 'none',
+                      }}
+                    />
+                  ) : (
                     <button
-                      onClick={() => { if (pr.porciones > 0.5) onActualizarReceta(pr.id, Math.round((pr.porciones - 0.5) * 10) / 10) }}
-                      disabled={pr.porciones <= 0.5}
-                      style={{ width: 28, height: 28, border: 'none', background: 'none', cursor: pr.porciones > 0.5 ? 'pointer' : 'default', color: pr.porciones > 0.5 ? 'var(--text-1)' : 'var(--border)', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}
-                    >−</button>
-                    <span style={{ minWidth: 28, textAlign: 'center', fontSize: 13, fontWeight: 700, color: 'var(--text-1)', borderLeft: '1px solid var(--border)', borderRight: '1px solid var(--border)', padding: '0 4px', lineHeight: '28px' }}>
+                      onClick={() => { setEditingPorcionId(pr.id); setEditingPorcionVal(String(pr.porciones)) }}
+                      title="Tap para editar porciones"
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        border: '1px solid var(--border)', borderRadius: 8,
+                        background: 'var(--bg)', padding: '4px 8px', cursor: 'pointer',
+                        fontSize: 13, fontWeight: 700, color: 'var(--text-1)',
+                      }}
+                    >
                       {pr.porciones % 1 === 0 ? pr.porciones : pr.porciones.toFixed(1)}
-                    </span>
-                    <button
-                      onClick={() => onActualizarReceta(pr.id, Math.round((pr.porciones + 0.5) * 10) / 10)}
-                      style={{ width: 28, height: 28, border: 'none', background: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}
-                    >+</button>
-                  </div>
+                      <span className="material-symbols-outlined" style={{ fontSize: 12, color: 'var(--text-3)' }}>edit</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => onEliminarReceta(pr.id)}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-3)', flexShrink: 0 }}
@@ -1451,83 +1506,60 @@ function DetailView({
             </a>
           )}
 
-          {/* Add recipe search */}
-          {showSearch && (
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 12 }}>
-              {pendingReceta ? (
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>menu_book</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, flex: 1, color: 'var(--text-1)' }}>{pendingReceta.nombre}</span>
-                    <button onClick={() => setPendingReceta(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 14 }}>close</span>
-                    </button>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <label style={{ fontSize: 11, color: 'var(--text-2)', fontWeight: 700, flexShrink: 0 }}>Porciones:</label>
-                    <input
-                      type="number" min="0.1" step="0.5"
-                      value={porciones}
-                      onChange={e => setPorciones(e.target.value)}
-                      style={{ width: 64, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, fontFamily: 'inherit', color: 'var(--text-1)', background: 'var(--bg)' }}
-                    />
-                    <button
-                      onClick={handleAgregarReceta}
-                      disabled={vinculando}
-                      style={{ flex: 1, background: 'var(--navy)', border: 'none', borderRadius: 8, padding: '8px', fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer', opacity: vinculando ? .6 : 1 }}
-                    >
-                      {vinculando ? 'Guardando…' : 'Agregar'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <input
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    autoFocus
-                    placeholder="Buscar receta para vincular..."
-                    style={{
-                      width: '100%', padding: '9px 12px', borderRadius: 10,
-                      border: '1px solid var(--border)', background: 'var(--bg)',
-                      fontSize: 13, color: 'var(--text-1)',
-                    }}
-                  />
-                  {filtradas.length > 0 && (
-                    <div style={{ maxHeight: 200, overflowY: 'auto', marginTop: 4, border: '1px solid var(--border)', borderRadius: 10 }}>
-                      {filtradas.map(r => (
-                        <button
-                          key={r.id}
-                          onClick={() => { setPendingReceta(r); setPorciones('1') }}
-                          style={{
-                            display: 'block', width: '100%', padding: '10px 12px',
-                            textAlign: 'left', border: 'none', background: 'none',
-                            fontSize: 13, color: 'var(--text-1)', cursor: 'pointer',
-                            borderBottom: '1px solid var(--border)', fontFamily: 'inherit',
-                          }}
-                        >
-                          <div style={{ fontWeight: 600 }}>{r.nombre}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                            {r.categoria} · Costo: {fmtMoney(r.food_cost.costo_porcion)}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
+          {/* Search siempre visible — selección instantánea */}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+            <div style={{ position: 'relative' }}>
+              <span className="material-symbols-outlined" style={{
+                position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)',
+                fontSize: 16, color: 'var(--text-3)', pointerEvents: 'none',
+              }}>search</span>
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Buscar y agregar receta..."
+                style={{
+                  width: '100%', padding: '10px 12px 10px 34px', border: 'none',
+                  background: 'transparent', fontSize: 13, color: 'var(--text-1)',
+                  boxSizing: 'border-box', outline: 'none',
+                }}
+              />
             </div>
-          )}
-
-          {/* Legacy vincular (fallback for items with no plato_recetas and no receta_id) */}
-          {item.plato_recetas.length === 0 && !linkedReceta && !showSearch && (
-            <button
-              onClick={() => { setSearch(''); setShowSearch(true) }}
-              style={{ width: '100%', padding: '10px', borderRadius: 10, border: '1px dashed var(--border)', background: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--text-3)', fontFamily: 'inherit' }}
-            >
-              + Vincular receta para calcular costos
-            </button>
-          )}
+            {search.trim().length > 0 && filtradas.length > 0 && (
+              <div style={{ borderTop: '1px solid var(--border)', maxHeight: 220, overflowY: 'auto' }}>
+                {filtradas.map(r => (
+                  <button
+                    key={r.id}
+                    onClick={async () => {
+                      setVinculando(true)
+                      try { await onAgregarReceta(r.id, 1) } finally { setVinculando(false) }
+                      setSearch('')
+                    }}
+                    disabled={vinculando}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                      padding: '9px 12px', textAlign: 'left', border: 'none',
+                      background: 'none', cursor: 'pointer', borderBottom: '1px solid var(--border)',
+                      fontFamily: 'inherit', opacity: vinculando ? .5 : 1,
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--accent)', flexShrink: 0 }}>menu_book</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{r.nombre}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                        {r.categoria} · {fmtMoney(r.food_cost.costo_porcion)} por porción
+                      </div>
+                    </div>
+                    <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>add_circle</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {search.trim().length > 0 && filtradas.length === 0 && (
+              <div style={{ borderTop: '1px solid var(--border)', padding: '10px 12px', fontSize: 12, color: 'var(--text-3)' }}>
+                Sin resultados para &ldquo;{search}&rdquo;
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Packaging */}
@@ -2302,7 +2334,7 @@ function ImportCartaModal({
 type View = 'list' | 'nuevo' | 'detail' | 'edit' | 'rentabilidad'
 
 export default function CartaPage() {
-  const { items, loading, fetchItems, crearItem, actualizarItem, toggleDisponible, eliminarItem, duplicarItem, agregarPlatoReceta, actualizarPlatoReceta, eliminarPlatoReceta, agregarPlatoPackaging, eliminarPlatoPackaging, categorias } = useCarta()
+  const { items, loading, fetchItems, crearItem, actualizarItem, actualizarTags, toggleDisponible, eliminarItem, duplicarItem, agregarPlatoReceta, actualizarPlatoReceta, eliminarPlatoReceta, agregarPlatoPackaging, eliminarPlatoPackaging, categorias } = useCarta()
   const { recetas } = useRecetas()
   const { productos } = useStock()
   const { grupos, crearGrupo, eliminarGrupo, aplicarGrupoAPlatos } = usePackagingGrupos()
@@ -2460,6 +2492,7 @@ export default function CartaPage() {
           onAgregarPackaging={handleAgregarPackaging}
           onEliminarPackaging={handleEliminarPackaging}
           onShowGrupos={() => setShowGrupos(true)}
+          onActualizarTags={tags => actualizarTags(selectedItem.id, tags)}
         />
         {showGrupos && (
           <PackagingGruposDrawer

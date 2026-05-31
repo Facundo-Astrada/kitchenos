@@ -37,6 +37,7 @@ export interface CartaItemDB {
   disponible: boolean
   foto_url: string | null
   orden: number
+  tags: string[]
   restaurante_id: string
   created_at: string
 }
@@ -273,7 +274,9 @@ export function useCarta() {
         }
 
         return {
-          ...item, receta, plato_recetas: platoRecetas,
+          ...item,
+          tags: (item.tags ?? []) as string[],
+          receta, plato_recetas: platoRecetas,
           plato_packaging: platoPackaging, costo_packaging,
           food_cost_pct, costo_porcion, margen_bruto, margen_pct_computed, costo_total_plato,
         }
@@ -517,6 +520,18 @@ export function useCarta() {
     }
   }, [fetchItems, supabase])
 
+  const actualizarTags = useCallback(async (id: string, tags: string[]) => {
+    try {
+      const { error } = await supabase.from('carta_items').update({ tags }).eq('id', id)
+      if (error) throw error
+      _cartaCache.delete(RESTAURANTE_ID)
+      await fetchItems()
+    } catch (e: unknown) {
+      console.error('[useCarta] actualizarTags Error:', e instanceof Error ? e.message : e)
+      throw e
+    }
+  }, [fetchItems, RESTAURANTE_ID, supabase])
+
   const eliminarPlatoPackaging = useCallback(async (packagingId: string) => {
     try {
       const { error } = await supabase.from('plato_packaging').delete().eq('id', packagingId)
@@ -544,7 +559,7 @@ export function useCarta() {
   return {
     items, loading, error,
     categorias, fetchCategorias, crearCategoria, eliminarCategoria,
-    fetchItems, crearItem, actualizarItem,
+    fetchItems, crearItem, actualizarItem, actualizarTags,
     toggleDisponible, eliminarItem, marcar86PorNombre,
     duplicarItem,
     agregarPlatoReceta, actualizarPlatoReceta, eliminarPlatoReceta,
