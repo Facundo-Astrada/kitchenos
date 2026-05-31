@@ -93,6 +93,8 @@ function detectTags(texto: string): string[] {
   if (/\b(vegano|vegan\b)/.test(t)) tags.push('vegano')
   else if (/\b(vegetariano|vegetarian|veggie)/.test(t)) tags.push('vegetariano')
   if (/\b(keto|low.?carb|sin carbohidratos)/.test(t)) tags.push('keto')
+  if (/\b(picante|spicy|chile|aji\b|habanero|sriracha)/.test(t)) tags.push('picante')
+  if (/\b(sin lactosa|lactose.?free|sin leche|dairy.?free)/.test(t)) tags.push('sin lactosa')
   return tags
 }
 
@@ -138,7 +140,7 @@ Instrucciones importantes:
 - "nombre": SOLO el nombre principal del plato. Ej: si dice "Pastelito. Calabaza. Ricotta. Miel" → nombre es "Pastelito"
 - "componentes": todo lo que compone el plato separado por puntos, comas o líneas después del nombre. Ej: ["Calabaza", "Ricotta de cabra", "Miel"]
 - "porciones": si dice "(x1)", "(x2)", "para 2 personas", etc → ese número. Default: 1
-- "tags": array con los que apliquen: "s/tacc" (sin TACC/gluten), "vegano", "vegetariano", "keto". Array vacío si ninguno.
+- "tags": array con los que apliquen: "s/tacc" (sin TACC/gluten), "vegano", "vegetariano", "keto", "picante", "sin lactosa". Array vacío si ninguno.
 - "precio_venta": número sin símbolo, null si no hay precio
 - Omití encabezados de sección, títulos, notas al pie, separadores
 - Incluí todas las entradas, principales, postres, bebidas y guarniciones`,

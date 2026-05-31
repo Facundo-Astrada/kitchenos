@@ -1802,6 +1802,8 @@ function ImportCartaModal({
     'vegano':       { label: 'Vegano',         bg: '#d1fae5', color: '#065f46' },
     'vegetariano':  { label: 'Vegetariano',    bg: '#dcfce7', color: '#166534' },
     'keto':         { label: 'Keto',           bg: '#ede9fe', color: '#5b21b6' },
+    'picante':      { label: '🌶 Picante',     bg: '#fee2e2', color: '#991b1b' },
+    'sin lactosa':  { label: 'Sin lactosa',    bg: '#e0f2fe', color: '#075985' },
   }
 
   const handleFile = (f: File) => { setFile(f); setError('') }
@@ -2025,15 +2027,16 @@ function ImportCartaModal({
                   </div>
 
                   {/* Componentes */}
-                  {item.componentes.length > 0 && (
-                    <div style={{ padding: '0 12px 8px 34px' }}>
+                  <div style={{ padding: '0 12px 8px 34px' }}>
+                    {item.componentes.length > 0 && (
                       <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 5 }}>
                         Componentes
                       </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                        {item.componentes.map((comp, ci) => (
+                    )}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                      {item.componentes.map((comp, ci) => (
+                        <div key={ci} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                           <input
-                            key={ci}
                             value={comp}
                             onChange={e => toggleComp(idx, ci, e.target.value)}
                             style={{
@@ -2043,10 +2046,22 @@ function ImportCartaModal({
                               maxWidth: 160, minWidth: 40,
                             }}
                           />
-                        ))}
-                      </div>
+                          <button
+                            onClick={() => updateItem(idx, 'componentes', item.componentes.filter((_, i) => i !== ci))}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', color: 'var(--text-3)', fontSize: 14, lineHeight: 1 }}
+                          >×</button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => updateItem(idx, 'componentes', [...item.componentes, ''])}
+                        style={{
+                          fontSize: 11, padding: '3px 10px', borderRadius: 20,
+                          border: '1px dashed var(--accent)', background: 'transparent',
+                          color: 'var(--accent)', cursor: 'pointer', fontWeight: 600,
+                        }}
+                      >+ componente</button>
                     </div>
-                  )}
+                  </div>
 
                   {/* Tags dietarios */}
                   <div style={{ padding: '0 12px 10px 34px', display: 'flex', gap: 5, flexWrap: 'wrap' }}>
