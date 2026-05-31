@@ -6,14 +6,33 @@ import type { Receta, Ingrediente } from '@/types'
 import { calcFoodCost } from './useRecetas'
 import { useRestauranteId } from './useRestauranteId'
 
-export type CategoriaCartaItem = 'Entradas' | 'Principales' | 'Postres' | 'Bebidas' | 'Guarniciones' | 'Brunch' | 'Cafetería'
+// Legacy union type — mantenida para compatibilidad; las categorías ahora son dinámicas
+export type CategoriaCartaItem = string
+
+export const CATEGORIAS_DEFAULT = [
+  { nombre: 'Entradas',     icono: 'tapas' },
+  { nombre: 'Principales',  icono: 'restaurant' },
+  { nombre: 'Postres',      icono: 'cake' },
+  { nombre: 'Bebidas',      icono: 'local_bar' },
+  { nombre: 'Guarniciones', icono: 'dining' },
+  { nombre: 'Brunch',       icono: 'brunch_dining' },
+  { nombre: 'Cafetería',    icono: 'coffee' },
+]
+
+export interface CartaCategoria {
+  id: string
+  nombre: string
+  icono: string
+  orden: number
+  restaurante_id: string
+}
 
 export interface CartaItemDB {
   id: string
   nombre: string
   descripcion: string | null
   precio_venta: number
-  categoria: CategoriaCartaItem
+  categoria: string
   receta_id: string | null
   disponible: boolean
   foto_url: string | null
@@ -66,9 +85,46 @@ const _cartaCache = new Map<string, CartaItemEnriquecido[]>()
 export function useCarta() {
   const RESTAURANTE_ID = useRestauranteId()
   const [items, setItems] = useState<CartaItemEnriquecido[]>([])
+  const [categorias, setCategorias] = useState<CartaCategoria[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const supabase = createClient()
+
+  const fetchCategorias = useCallback(async () => {
+    if (!RESTAURANTE_ID) return
+    const { data } = await supabase
+      .from('carta_categorias')
+      .select('id, nombre, icono, orden, restaurante_id')
+      .eq('restaurante_id', RESTAURANTE_ID)
+      .order('orden')
+    if (data && data.length > 0) {
+      setCategorias(data as CartaCategoria[])
+    } else {
+      // Primera vez: sembrar categorías por defecto
+      const inserts = CATEGORIAS_DEFAULT.map((c, i) => ({
+        nombre: c.nombre, icono: c.icono, orden: i, restaurante_id: RESTAURANTE_ID,
+      }))
+      const { data: seeded } = await supabase
+        .from('carta_categorias')
+        .insert(inserts)
+        .select('id, nombre, icono, orden, restaurante_id')
+      setCategorias((seeded ?? []) as CartaCategoria[])
+    }
+  }, [RESTAURANTE_ID, supabase])
+
+  const crearCategoria = useCallback(async (nombre: string, icono = 'restaurant') => {
+    if (!RESTAURANTE_ID) return
+    const nextOrden = categorias.length
+    await supabase.from('carta_categorias').insert({
+      nombre, icono, orden: nextOrden, restaurante_id: RESTAURANTE_ID,
+    })
+    await fetchCategorias()
+  }, [RESTAURANTE_ID, supabase, categorias.length, fetchCategorias])
+
+  const eliminarCategoria = useCallback(async (id: string) => {
+    await supabase.from('carta_categorias').delete().eq('id', id)
+    await fetchCategorias()
+  }, [supabase, fetchCategorias])
 
   const fetchItems = useCallback(async () => {
     if (!RESTAURANTE_ID) { setLoading(false); return }
@@ -474,17 +530,20 @@ export function useCarta() {
   }, [fetchItems, supabase])
 
   useEffect(() => {
+    fetchCategorias()
     fetchItems()
     const ch = supabase.channel('carta-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'carta_items' }, () => fetchItems())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'plato_recetas' }, () => fetchItems())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'plato_packaging' }, () => fetchItems())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'carta_categorias' }, () => fetchCategorias())
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [fetchItems])
+  }, [fetchItems, fetchCategorias])
 
   return {
     items, loading, error,
+    categorias, fetchCategorias, crearCategoria, eliminarCategoria,
     fetchItems, crearItem, actualizarItem,
     toggleDisponible, eliminarItem, marcar86PorNombre,
     duplicarItem,

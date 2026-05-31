@@ -53,6 +53,7 @@ interface ComponenteConfig {
   cantidad_diaria: number | null
   unidad: string
   orden: number
+  sync_ops: boolean
   ingrediente_plazas: IngredientePlazaConfig[]
 }
 
@@ -91,12 +92,13 @@ export default function IngenieriaMenuView({ embedded }: { embedded?: boolean } 
       const ids = platosData.map(p => p.id)
       const { data: compsData } = await supabase
         .from('plato_componentes')
-        .select('id, plato_compuesto_id, nombre, receta_id, notas_produccion, plaza, cantidad_diaria, unidad, orden')
+        .select('id, plato_compuesto_id, nombre, receta_id, notas_produccion, plaza, cantidad_diaria, unidad, orden, sync_ops')
         .in('plato_compuesto_id', ids)
         .order('orden')
 
+      type CompRow = { id: string; plato_compuesto_id: string; nombre: string; receta_id: string | null; notas_produccion: string | null; plaza: string | null; cantidad_diaria: number | null; unidad: string | null; orden: number; sync_ops: boolean }
       // Load ingredient-plaza assignments from plato_plazas
-      const recetaIds = (compsData ?? []).map(c => (c as PlatoComponente).receta_id).filter(Boolean) as string[]
+      const recetaIds = (compsData ?? []).map(c => (c as CompRow).receta_id).filter(Boolean) as string[]
       const ppMap: Record<string, IngredientePlazaConfig[]> = {}
       if (recetaIds.length > 0) {
         const { data: ppData } = await supabase
@@ -112,7 +114,7 @@ export default function IngenieriaMenuView({ embedded }: { embedded?: boolean } 
       }
 
       const compsMap: Record<string, ComponenteConfig[]> = {}
-      for (const c of (compsData ?? []) as PlatoComponente[]) {
+      for (const c of (compsData ?? []) as CompRow[]) {
         if (!compsMap[c.plato_compuesto_id]) compsMap[c.plato_compuesto_id] = []
         compsMap[c.plato_compuesto_id].push({
           id: c.id,
@@ -123,6 +125,7 @@ export default function IngenieriaMenuView({ embedded }: { embedded?: boolean } 
           cantidad_diaria: c.cantidad_diaria ?? null,
           unidad: c.unidad ?? 'u',
           orden: c.orden,
+          sync_ops: c.sync_ops ?? false,
           ingrediente_plazas: c.receta_id ? (ppMap[c.receta_id] ?? []) : [],
         })
       }
@@ -396,7 +399,7 @@ function PlatoWizard({ plato, recetas, restauranteId, supabase, onSave, onCancel
   const [saveError, setSaveError] = useState('')
 
   function emptyComp(orden: number): ComponenteConfig {
-    return { nombre: '', receta_id: null, notas_produccion: '', plaza: '', cantidad_diaria: null, unidad: 'u', orden, ingrediente_plazas: [] }
+    return { nombre: '', receta_id: null, notas_produccion: '', plaza: '', cantidad_diaria: null, unidad: 'u', orden, sync_ops: false, ingrediente_plazas: [] }
   }
 
   function addComp() {
@@ -407,7 +410,7 @@ function PlatoWizard({ plato, recetas, restauranteId, supabase, onSave, onCancel
     setComponentes(prev => prev.filter((_, i) => i !== idx).map((c, i) => ({ ...c, orden: i })))
   }
 
-  function updateComp(idx: number, field: keyof ComponenteConfig, value: string | number | null) {
+  function updateComp(idx: number, field: keyof ComponenteConfig, value: string | number | boolean | null) {
     setComponentes(prev => prev.map((c, i) => i === idx ? { ...c, [field]: value } : c))
   }
 
@@ -470,13 +473,14 @@ function PlatoWizard({ plato, recetas, restauranteId, supabase, onSave, onCancel
           cantidad_diaria: c.cantidad_diaria ?? null,
           unidad: c.unidad || 'u',
           orden: i,
+          sync_ops: c.sync_ops,
         }))
         const { error } = await supabase.from('plato_componentes').insert(rows)
         if (error) throw error
       }
 
-      // 3. Sync checklist_items + plato_plazas
-      const compsConPlaza = validComps.filter(c => c.plaza)
+      // 3. Sync checklist_items + plato_plazas — solo para componentes con sync_ops activo
+      const compsConPlaza = validComps.filter(c => c.plaza && c.sync_ops)
       if (compsConPlaza.length > 0) {
         // Collect all plazas needed (component + ingredient production plazas)
         const allPlazas = [...new Set([
@@ -787,16 +791,28 @@ function PlatoWizard({ plato, recetas, restauranteId, supabase, onSave, onCancel
                   </div>
                 )
               })}
-              {componentes.filter(c => c.plaza).length > 0 && (
-                <div style={{
-                  marginTop: 8, padding: '10px 12px', borderRadius: 10,
-                  background: 'rgba(34,197,94,.06)', border: '1px solid rgba(34,197,94,.2)',
-                }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#16a34a' }}>
-                    ✓ Se sincronizarán checklist items por componente y por ingrediente según la plaza asignada
+              {(() => {
+                const syncing = componentes.filter(c => c.plaza && c.sync_ops)
+                const noSync = componentes.filter(c => c.nombre.trim() && !c.sync_ops)
+                return (
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {syncing.length > 0 && (
+                      <div style={{ padding: '10px 12px', borderRadius: 10, background: 'rgba(34,197,94,.06)', border: '1px solid rgba(34,197,94,.2)' }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#16a34a' }}>
+                          ✓ {syncing.length} componente{syncing.length > 1 ? 's' : ''} sincronizarán con el checklist de OPS
+                        </div>
+                      </div>
+                    )}
+                    {noSync.length > 0 && (
+                      <div style={{ padding: '10px 12px', borderRadius: 10, background: 'rgba(245,158,11,.06)', border: '1px solid rgba(245,158,11,.2)' }}>
+                        <div style={{ fontSize: 11, color: '#d97706' }}>
+                          {noSync.length} componente{noSync.length > 1 ? 's' : ''} sin sync a OPS — solo en ingeniería
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                )
+              })()}
             </div>
 
             {saveError && (
@@ -869,7 +885,7 @@ function ComponenteRow({
   comp: ComponenteConfig
   idx: number
   recetas: RecetaMinima[]
-  onUpdate: (field: keyof ComponenteConfig, val: string | number | null) => void
+  onUpdate: (field: keyof ComponenteConfig, val: string | number | boolean | null) => void
   onSelectReceta: (r: RecetaMinima) => void
   onUpdateIngredientePlaza: (ingNombre: string, plaza: string) => void
   onRemove: () => void
@@ -929,6 +945,9 @@ function ComponenteRow({
             )}
             {recetaIngredientes.length > 0 && comp.ingrediente_plazas.some(ip => ip.plaza_produccion) && (
               <span style={{ fontSize: 9, color: '#22c55e', fontWeight: 600 }}>· ing. asignados</span>
+            )}
+            {comp.sync_ops && (
+              <span style={{ fontSize: 9, color: '#22c55e', fontWeight: 700, background: 'rgba(34,197,94,.1)', padding: '1px 5px', borderRadius: 4 }}>OPS</span>
             )}
           </div>
         </div>
@@ -1012,6 +1031,22 @@ function ComponenteRow({
             )}
           </div>
 
+          {/* Stock promedio (solo si hay receta vinculada y tiene cantidad_diaria) */}
+          {comp.receta_id && comp.cantidad_diaria != null && (
+            <div style={{
+              padding: '8px 12px', borderRadius: 8,
+              background: 'rgba(67,97,160,.06)', border: '1px solid rgba(67,97,160,.15)',
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent)' }}>inventory_2</span>
+              <div style={{ fontSize: 12, color: 'var(--text-2)' }}>
+                Stock diario configurado:{' '}
+                <strong style={{ color: 'var(--navy)' }}>{comp.cantidad_diaria} {comp.unidad}</strong>
+                <span style={{ color: 'var(--text-3)', marginLeft: 6 }}>por día</span>
+              </div>
+            </div>
+          )}
+
           {/* Plaza de servicio (quien recibe el componente terminado) */}
           <div>
             <LabelSmall>Plaza que recibe el componente</LabelSmall>
@@ -1055,6 +1090,41 @@ function ComponenteRow({
                 {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
               </select>
             </div>
+          </div>
+
+          {/* OPS sync toggle */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '10px 12px', borderRadius: 10,
+            background: comp.sync_ops ? 'rgba(34,197,94,.06)' : 'var(--bg)',
+            border: `1px solid ${comp.sync_ops ? 'rgba(34,197,94,.25)' : 'var(--border)'}`,
+          }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)' }}>
+                Sincronizar a OPS
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>
+                {comp.sync_ops ? 'Aparece en el checklist diario de mise en place' : 'Solo visible en ingeniería de menú'}
+              </div>
+            </div>
+            <button
+              onClick={() => onUpdate('sync_ops', !comp.sync_ops)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            >
+              <div style={{
+                width: 40, height: 22, borderRadius: 11,
+                background: comp.sync_ops ? '#22c55e' : '#d1d5db',
+                position: 'relative', transition: 'background 0.2s',
+              }}>
+                <div style={{
+                  width: 18, height: 18, borderRadius: 9,
+                  background: '#fff', position: 'absolute', top: 2,
+                  left: comp.sync_ops ? 20 : 2,
+                  transition: 'left 0.2s',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }} />
+              </div>
+            </button>
           </div>
 
           {/* Notas producción */}

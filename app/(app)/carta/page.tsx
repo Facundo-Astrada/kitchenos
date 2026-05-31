@@ -2,7 +2,8 @@
 
 import PageTransition from '@/components/PageTransition'
 import { useState, useMemo, useEffect } from 'react'
-import { useCarta, type CategoriaCartaItem, type CartaItemEnriquecido } from '@/lib/hooks/useCarta'
+import { useCarta, type CategoriaCartaItem, type CartaCategoria, type CartaItemEnriquecido } from '@/lib/hooks/useCarta'
+import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { useRecetas, type RecetaConCosto } from '@/lib/hooks/useRecetas'
 import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
 import { usePackagingGrupos, type PackagingGrupo } from '@/lib/hooks/usePackagingGrupos'
@@ -329,12 +330,14 @@ const FORM_EMPTY: FormPlato = {
 function FormView({
   initialData,
   recetas,
+  categorias,
   onSave,
   onDelete,
   onCancel,
 }: {
   initialData?: CartaItemEnriquecido | null
   recetas: RecetaConCosto[]
+  categorias: CartaCategoria[]
   onSave: (data: FormPlato) => Promise<void>
   onDelete?: () => Promise<void>
   onCancel: () => void
@@ -520,22 +523,22 @@ function FormView({
             Categoria
           </label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {CATEGORIAS.map(cat => (
+            {(categorias.length > 0 ? categorias : [{ nombre: 'Principales', icono: 'restaurant', id: '', orden: 0, restaurante_id: '' }]).map(cat => (
               <button
-                key={cat}
-                onClick={() => setForm(prev => ({ ...prev, categoria: cat }))}
+                key={cat.nombre}
+                onClick={() => setForm(prev => ({ ...prev, categoria: cat.nombre }))}
                 style={{
                   padding: '7px 14px', borderRadius: 20, border: 'none',
-                  background: form.categoria === cat ? 'var(--navy)' : 'var(--bg)',
-                  color: form.categoria === cat ? '#fff' : 'var(--text-2)',
+                  background: form.categoria === cat.nombre ? 'var(--navy)' : 'var(--bg)',
+                  color: form.categoria === cat.nombre ? '#fff' : 'var(--text-2)',
                   fontSize: 12, fontWeight: 600, cursor: 'pointer',
                   display: 'flex', alignItems: 'center', gap: 4,
                 }}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
-                  {CAT_ICONS[cat]}
+                  {cat.icono || 'restaurant'}
                 </span>
-                {cat}
+                {cat.nombre}
               </button>
             ))}
           </div>
@@ -1761,20 +1764,304 @@ function RentabilidadView({
   )
 }
 
+// ── Import Carta Modal ──────────────────────────────────
+interface ItemImportado {
+  nombre: string
+  categoria: string
+  descripcion: string
+  precio_venta: number | null
+  _sel: boolean
+}
+
+function ImportCartaModal({
+  categorias,
+  restauranteId,
+  onClose,
+  onDone,
+}: {
+  categorias: CartaCategoria[]
+  restauranteId: string
+  onClose: () => void
+  onDone: (msg: string) => void
+}) {
+  const [step, setStep] = useState<'upload' | 'preview'>('upload')
+  const [file, setFile] = useState<File | null>(null)
+  const [items, setItems] = useState<ItemImportado[]>([])
+  const [parsing, setParsing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const catNombres = categorias.map(c => c.nombre)
+
+  const handleFile = (f: File) => {
+    setFile(f)
+    setError('')
+  }
+
+  const handleParse = async () => {
+    if (!file) return
+    setParsing(true)
+    setError('')
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('modo', 'preview')
+      const res = await fetch('/api/carta/import', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al parsear')
+      setItems((data.items as Omit<ItemImportado, '_sel'>[]).map(i => ({ ...i, _sel: true })))
+      setStep('preview')
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Error al parsear archivo')
+    } finally {
+      setParsing(false)
+    }
+  }
+
+  const handleApply = async () => {
+    const selected = items.filter(i => i._sel)
+    if (selected.length === 0) return
+    setSaving(true)
+    try {
+      const fd = new FormData()
+      fd.append('modo', 'apply')
+      fd.append('restaurante_id', restauranteId)
+      fd.append('items', JSON.stringify(selected.map(({ _sel: _, ...rest }) => rest)))
+      const res = await fetch('/api/carta/import', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al guardar')
+      onDone(`${data.insertados} platos importados`)
+      onClose()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Error al guardar')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const allSel = items.every(i => i._sel)
+  const selCount = items.filter(i => i._sel).length
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 200,
+      background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end',
+    }}>
+      <div style={{
+        width: '100%', maxHeight: '92vh', background: 'var(--surface)',
+        borderRadius: '20px 20px 0 0', overflow: 'hidden',
+        display: 'flex', flexDirection: 'column',
+      }}>
+        {/* Header */}
+        <div style={{ background: 'var(--navy)', padding: '20px 16px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>Importar carta</div>
+            <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11, marginTop: 2 }}>
+              PDF · imagen · Excel · texto
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 4 }}>
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+          {step === 'upload' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {/* Drop zone */}
+              <label style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                gap: 10, padding: 32,
+                border: `2px dashed ${file ? 'var(--accent)' : 'var(--border)'}`,
+                borderRadius: 14, cursor: 'pointer',
+                background: file ? '#eef2ff' : 'var(--bg)',
+              }}>
+                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.csv,.txt" style={{ display: 'none' }}
+                  onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+                <span className="material-symbols-outlined" style={{ fontSize: 40, color: file ? 'var(--accent)' : 'var(--text-3)' }}>
+                  {file ? 'description' : 'upload_file'}
+                </span>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: file ? 'var(--accent)' : 'var(--text-1)' }}>
+                    {file ? file.name : 'Tocá para subir un archivo'}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
+                    Foto de la carta, PDF, Excel (.xlsx/.csv) o texto
+                  </div>
+                </div>
+              </label>
+
+              {/* Tips */}
+              <div style={{
+                background: 'var(--bg)', borderRadius: 10,
+                padding: '12px 14px', fontSize: 12, color: 'var(--text-2)',
+                display: 'flex', flexDirection: 'column', gap: 6,
+              }}>
+                <div style={{ fontWeight: 600, marginBottom: 2 }}>Formatos soportados</div>
+                {[
+                  ['photo_camera', 'Foto de la carta — Claude la lee con visión IA'],
+                  ['picture_as_pdf', 'PDF del menú — extrae platos automáticamente'],
+                  ['table_view', 'Excel/CSV — columnas nombre, precio, categoría'],
+                  ['text_snippet', 'Texto plano — pega el texto de la carta'],
+                ].map(([icon, text]) => (
+                  <div key={icon} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>{icon}</span>
+                    {text}
+                  </div>
+                ))}
+              </div>
+
+              {error && (
+                <div style={{ color: '#dc2626', fontSize: 13, padding: '8px 12px', background: '#fee2e2', borderRadius: 8 }}>
+                  {error}
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === 'preview' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* Selección global */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <div style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>
+                  {items.length} platos detectados — {selCount} seleccionados
+                </div>
+                <button onClick={() => setItems(prev => prev.map(i => ({ ...i, _sel: !allSel })))}
+                  style={{ fontSize: 12, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+                  {allSel ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                </button>
+              </div>
+
+              {items.map((item, idx) => (
+                <div key={idx} style={{
+                  background: 'var(--bg)', borderRadius: 10,
+                  border: `1px solid ${item._sel ? 'var(--accent)' : 'var(--border)'}`,
+                  padding: '10px 12px', opacity: item._sel ? 1 : 0.5,
+                }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <input type="checkbox" checked={item._sel} onChange={e =>
+                      setItems(prev => prev.map((p, i) => i === idx ? { ...p, _sel: e.target.checked } : p))
+                    } style={{ marginTop: 3, accentColor: 'var(--accent)' }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                        <input
+                          value={item.nombre}
+                          onChange={e => setItems(prev => prev.map((p, i) => i === idx ? { ...p, nombre: e.target.value } : p))}
+                          style={{
+                            flex: 1, fontWeight: 600, fontSize: 13, color: 'var(--text-1)',
+                            border: 'none', background: 'transparent', padding: 0,
+                          }}
+                        />
+                        <input
+                          type="number"
+                          placeholder="Precio"
+                          value={item.precio_venta ?? ''}
+                          onChange={e => setItems(prev => prev.map((p, i) => i === idx ? {
+                            ...p, precio_venta: e.target.value ? parseFloat(e.target.value) : null,
+                          } : p))}
+                          style={{
+                            width: 80, fontSize: 13, fontWeight: 700, color: 'var(--navy)',
+                            border: '1px solid var(--border)', borderRadius: 6,
+                            padding: '2px 6px', background: 'var(--surface)',
+                          }}
+                        />
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}>
+                        <select
+                          value={item.categoria}
+                          onChange={e => setItems(prev => prev.map((p, i) => i === idx ? { ...p, categoria: e.target.value } : p))}
+                          style={{
+                            fontSize: 11, padding: '2px 6px', borderRadius: 6,
+                            border: '1px solid var(--border)', background: 'var(--surface)',
+                            color: 'var(--accent)',
+                          }}
+                        >
+                          {(catNombres.length > 0 ? catNombres : ['Entradas','Principales','Postres','Bebidas','Guarniciones']).map(c => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                        {item.descripcion && (
+                          <span style={{ fontSize: 11, color: 'var(--text-3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {item.descripcion}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {error && (
+                <div style={{ color: '#dc2626', fontSize: 13, padding: '8px 12px', background: '#fee2e2', borderRadius: 8 }}>
+                  {error}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10 }}>
+          {step === 'upload' ? (
+            <>
+              <button onClick={onClose} style={{
+                flex: 1, padding: '12px', borderRadius: 12, border: '1px solid var(--border)',
+                background: 'var(--bg)', color: 'var(--text-1)', fontWeight: 600, cursor: 'pointer',
+              }}>Cancelar</button>
+              <button onClick={handleParse} disabled={!file || parsing} style={{
+                flex: 2, padding: '12px', borderRadius: 12, border: 'none',
+                background: file && !parsing ? 'var(--navy)' : 'var(--border)',
+                color: '#fff', fontWeight: 700, cursor: file && !parsing ? 'pointer' : 'default',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              }}>
+                {parsing ? (
+                  <><span className="material-symbols-outlined" style={{ fontSize: 18, animation: 'spin 1s linear infinite' }}>progress_activity</span> Analizando...</>
+                ) : (
+                  <><span className="material-symbols-outlined" style={{ fontSize: 18 }}>psychology</span> Analizar con IA</>
+                )}
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => setStep('upload')} style={{
+                flex: 1, padding: '12px', borderRadius: 12, border: '1px solid var(--border)',
+                background: 'var(--bg)', color: 'var(--text-1)', fontWeight: 600, cursor: 'pointer',
+              }}>Volver</button>
+              <button onClick={handleApply} disabled={selCount === 0 || saving} style={{
+                flex: 2, padding: '12px', borderRadius: 12, border: 'none',
+                background: selCount > 0 && !saving ? 'var(--navy)' : 'var(--border)',
+                color: '#fff', fontWeight: 700, cursor: selCount > 0 && !saving ? 'pointer' : 'default',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              }}>
+                {saving ? (
+                  <><span className="material-symbols-outlined" style={{ fontSize: 18 }}>progress_activity</span> Guardando...</>
+                ) : (
+                  <><span className="material-symbols-outlined" style={{ fontSize: 18 }}>save</span> Agregar {selCount} platos</>
+                )}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── MAIN PAGE ───────────────────────────────────────────
 type View = 'list' | 'nuevo' | 'detail' | 'edit' | 'rentabilidad'
 
 export default function CartaPage() {
-  const { items, loading, fetchItems, crearItem, actualizarItem, toggleDisponible, eliminarItem, duplicarItem, agregarPlatoReceta, actualizarPlatoReceta, eliminarPlatoReceta, agregarPlatoPackaging, eliminarPlatoPackaging } = useCarta()
+  const { items, loading, fetchItems, crearItem, actualizarItem, toggleDisponible, eliminarItem, duplicarItem, agregarPlatoReceta, actualizarPlatoReceta, eliminarPlatoReceta, agregarPlatoPackaging, eliminarPlatoPackaging, categorias } = useCarta()
   const { recetas } = useRecetas()
   const { productos } = useStock()
   const { grupos, crearGrupo, eliminarGrupo, aplicarGrupoAPlatos } = usePackagingGrupos()
 
+  const RESTAURANTE_ID = useRestauranteId()
   const [view, setView] = useState<View>('list')
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
-  const [filter, setFilter] = useState<'Todas' | CategoriaCartaItem>('Todas')
+  const [filter, setFilter] = useState<string>('Todas')
   const [toast, setToast] = useState('')
   const [showGrupos, setShowGrupos] = useState(false)
+  const [showImport, setShowImport] = useState(false)
 
   // Derive selectedItem from fresh items (stays current after plato_recetas changes)
   const selectedItem = useMemo(
@@ -1947,6 +2234,7 @@ export default function CartaPage() {
         <FormView
           initialData={selectedItem}
           recetas={recetas}
+          categorias={categorias}
           onSave={handleEditar}
           onDelete={handleEliminar}
           onCancel={() => setView('detail')}
@@ -1962,6 +2250,7 @@ export default function CartaPage() {
       <>
         <FormView
           recetas={recetas}
+          categorias={categorias}
           onSave={handleCrear}
           onCancel={() => setView('list')}
         />
@@ -1997,6 +2286,15 @@ export default function CartaPage() {
               <span className="material-symbols-outlined" style={{ fontSize: 18 }}>download</span>
               Exportar menú
             </button>
+            <button onClick={() => setShowImport(true)} style={{
+              background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,.25)',
+              borderRadius: 10, padding: '8px 12px', color: '#fff',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+              fontSize: 12, fontWeight: 600,
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>upload_file</span>
+              Importar
+            </button>
             <button onClick={() => setView('nuevo')} style={{
               background: 'rgba(255,255,255,0.15)', border: 'none',
               borderRadius: 10, padding: '8px 14px', color: '#fff',
@@ -2028,26 +2326,29 @@ export default function CartaPage() {
 
         {/* Filters */}
         <div style={{ display: 'flex', gap: 6, marginTop: 10, overflowX: 'auto', paddingBottom: 2 }}>
-          {(['Todas', ...CATEGORIAS] as const).map(cat => (
-            <button
-              key={cat}
-              onClick={() => setFilter(cat)}
-              style={{
-                padding: '5px 12px', borderRadius: 20, border: 'none',
-                background: filter === cat ? '#fff' : 'rgba(255,255,255,0.12)',
-                color: filter === cat ? 'var(--navy)' : 'rgba(255,255,255,0.8)',
-                fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-                display: 'flex', alignItems: 'center', gap: 4,
-              }}
-            >
-              {cat !== 'Todas' && (
-                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>
-                  {CAT_ICONS[cat as CategoriaCartaItem]}
-                </span>
-              )}
-              {cat}
-            </button>
-          ))}
+          {(['Todas', ...categorias.map(c => c.nombre)]).map(cat => {
+            const catObj = categorias.find(c => c.nombre === cat)
+            return (
+              <button
+                key={cat}
+                onClick={() => setFilter(cat)}
+                style={{
+                  padding: '5px 12px', borderRadius: 20, border: 'none',
+                  background: filter === cat ? '#fff' : 'rgba(255,255,255,0.12)',
+                  color: filter === cat ? 'var(--navy)' : 'rgba(255,255,255,0.8)',
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                  display: 'flex', alignItems: 'center', gap: 4,
+                }}
+              >
+                {catObj && (
+                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>
+                    {catObj.icono || 'restaurant'}
+                  </span>
+                )}
+                {cat}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -2110,6 +2411,15 @@ export default function CartaPage() {
       </div>
 
       {toast && <Toast msg={toast} onDone={() => setToast('')} />}
+
+      {showImport && RESTAURANTE_ID && (
+        <ImportCartaModal
+          categorias={categorias}
+          restauranteId={RESTAURANTE_ID}
+          onClose={() => setShowImport(false)}
+          onDone={msg => { setToast(msg); fetchItems() }}
+        />
+      )}
     </div>
     </PageTransition>
   )
