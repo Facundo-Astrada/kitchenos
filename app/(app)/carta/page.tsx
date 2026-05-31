@@ -1178,6 +1178,7 @@ function DetailView({
   onEliminarPackaging,
   onShowGrupos,
   onActualizarTags,
+  restauranteId,
 }: {
   item: CartaItemEnriquecido
   recetas: RecetaConCosto[]
@@ -1193,6 +1194,7 @@ function DetailView({
   onEliminarPackaging: (packagingId: string) => Promise<void>
   onShowGrupos: () => void
   onActualizarTags: (tags: string[]) => Promise<void>
+  restauranteId: string
 }) {
   const [search, setSearch] = useState('')
   const [vinculando, setVinculando] = useState(false)
@@ -1202,6 +1204,106 @@ function DetailView({
   const [editingPorcionId, setEditingPorcionId] = useState<string | null>(null)
   const [editingPorcionVal, setEditingPorcionVal] = useState('')
   const [savingTags, setSavingTags] = useState(false)
+  // OPS destination panel
+  const [opsPanel, setOpsPanel] = useState<string | null>(null) // plato_receta_id
+  const [opsPlaza, setOpsPlaza] = useState('')
+  const [opsCantidad, setOpsCantidad] = useState('1')
+  const [opsUnidad, setOpsUnidad] = useState('u')
+  const [opsSaving, setOpsSaving] = useState(false)
+  // Draft recipe creation
+  const [creatingDraft, setCreatingDraft] = useState(false)
+  const [creatingTarea, setCreatingTarea] = useState(false)
+
+  const PLAZAS_OPS = [
+    { id: 'parrilla',   label: 'Parrilla',    color: '#ef4444' },
+    { id: 'frios',      label: 'Fríos',       color: '#0ea5e9' },
+    { id: 'calientes',  label: 'Calientes',   color: '#f97316' },
+    { id: 'pase',       label: 'Pase',        color: '#8b5cf6' },
+    { id: 'pasteleria', label: 'Pastelería',  color: '#ec4899' },
+    { id: 'panaderia',  label: 'Panadería',   color: '#84cc16' },
+  ]
+  const UNIDADES_OPS = ['u', 'kg', 'g', 'l', 'ml', 'pax', 'porc', 'bandeja']
+
+  const supabaseDV = useMemo(() => createClient(), [])
+
+  const handleCrearBorrador = async () => {
+    if (!search.trim() || creatingDraft) return
+    setCreatingDraft(true)
+    try {
+      const { data: receta, error } = await supabaseDV
+        .from('recetas')
+        .insert({ nombre: search.trim(), categoria: 'Sin categoría', status: 'draft', activa: true, restaurante_id: restauranteId })
+        .select('id')
+        .single()
+      if (error) throw error
+      await onAgregarReceta(receta.id, 1)
+      setSearch('')
+    } finally { setCreatingDraft(false) }
+  }
+
+  const handleCrearTarea = async () => {
+    if (!search.trim() || creatingTarea) return
+    setCreatingTarea(true)
+    try {
+      await supabaseDV.from('tareas').insert({
+        nombre: `Crear receta: ${search.trim()}`,
+        descripcion: `Receta pendiente para el plato "${item.nombre}"`,
+        status: 'pendiente',
+        restaurante_id: restauranteId,
+      })
+      setSearch('')
+    } finally { setCreatingTarea(false) }
+  }
+
+  const handleGuardarOPS = async (pr: { id: string; receta_id: string; receta?: { nombre: string } }) => {
+    if (!opsPlaza || opsSaving) return
+    setOpsSaving(true)
+    try {
+      // 1. Guardar plaza en plato_recetas
+      await supabaseDV.from('plato_recetas').update({ plaza: opsPlaza }).eq('id', pr.id)
+
+      // 2. Buscar sección del checklist para esta plaza
+      const { data: secData } = await supabaseDV
+        .from('checklist_secciones')
+        .select('id')
+        .eq('restaurante_id', restauranteId)
+        .eq('plaza', opsPlaza)
+        .limit(1)
+      const seccionId = secData?.[0]?.id ?? null
+
+      // 3. Upsert checklist_item (por receta_id + plaza, actualiza si existe)
+      const nombre = pr.receta?.nombre ?? search
+      const { data: existente } = await supabaseDV
+        .from('checklist_items')
+        .select('id')
+        .eq('restaurante_id', restauranteId)
+        .eq('receta_id', pr.receta_id)
+        .eq('plaza', opsPlaza)
+        .limit(1)
+
+      if (existente?.[0]) {
+        await supabaseDV.from('checklist_items').update({
+          cantidad: parseFloat(opsCantidad) || 1,
+          unidad: opsUnidad,
+          seccion_id: seccionId,
+        }).eq('id', existente[0].id)
+      } else {
+        await supabaseDV.from('checklist_items').insert({
+          nombre,
+          plaza: opsPlaza,
+          receta_id: pr.receta_id,
+          cantidad: parseFloat(opsCantidad) || 1,
+          unidad: opsUnidad,
+          prioridad: 'sp',
+          seccion_id: seccionId,
+          seccion: PLAZAS_OPS.find(p => p.id === opsPlaza)?.label ?? opsPlaza,
+          restaurante_id: restauranteId,
+          orden: 0,
+        })
+      }
+      setOpsPanel(null)
+    } finally { setOpsSaving(false) }
+  }
 
   const handleToggleTag = async (tag: string) => {
     if (savingTags) return
@@ -1427,9 +1529,9 @@ function DetailView({
           {item.plato_recetas.length > 0 && (
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', marginBottom: 10 }}>
               {item.plato_recetas.map((pr, idx) => (
-                <div key={pr.id} style={{
+                <div key={pr.id} style={{ borderBottom: idx < item.plato_recetas.length - 1 || opsPanel === pr.id ? '1px solid var(--border)' : 'none' }}>
+                <div style={{
                   display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
-                  borderBottom: idx < item.plato_recetas.length - 1 ? '1px solid var(--border)' : 'none',
                 }}>
                   <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)', flexShrink: 0 }}>menu_book</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -1470,12 +1572,86 @@ function DetailView({
                       <span className="material-symbols-outlined" style={{ fontSize: 12, color: 'var(--text-3)' }}>edit</span>
                     </button>
                   )}
+                  {/* → OPS button */}
+                  <button
+                    onClick={() => {
+                      if (opsPanel === pr.id) { setOpsPanel(null); return }
+                      setOpsPanel(pr.id)
+                      setOpsPlaza('')
+                      setOpsCantidad('1')
+                      setOpsUnidad('u')
+                    }}
+                    title="Asignar a OPS"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 3,
+                      padding: '3px 7px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                      fontSize: 10, fontWeight: 700,
+                      background: opsPanel === pr.id ? '#eef2ff' : 'var(--bg)',
+                      color: opsPanel === pr.id ? 'var(--accent)' : 'var(--text-3)',
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 13 }}>store</span>
+                    OPS
+                  </button>
                   <button
                     onClick={() => onEliminarReceta(pr.id)}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-3)', flexShrink: 0 }}
                   >
                     <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
                   </button>
+                </div>
+                {/* OPS panel inline */}
+                {opsPanel === pr.id && (
+                  <div style={{ padding: '10px 12px 12px', borderTop: '1px solid var(--border)', background: '#f8faff' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
+                      Plaza de producción
+                    </div>
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 10 }}>
+                      {PLAZAS_OPS.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => setOpsPlaza(opsPlaza === p.id ? '' : p.id)}
+                          style={{
+                            padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                            fontSize: 11, fontWeight: 700,
+                            background: opsPlaza === p.id ? `${p.color}18` : 'var(--surface)',
+                            color: opsPlaza === p.id ? p.color : 'var(--text-3)',
+                            outline: opsPlaza === p.id ? `1.5px solid ${p.color}50` : 'none',
+                          }}
+                        >{p.label}</button>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+                      Stock ideal
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                      <input
+                        type="number" value={opsCantidad}
+                        onChange={e => setOpsCantidad(e.target.value)}
+                        style={{ width: 70, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, background: 'var(--surface)' }}
+                      />
+                      <select value={opsUnidad} onChange={e => setOpsUnidad(e.target.value)}
+                        style={{ flex: 1, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, background: 'var(--surface)' }}>
+                        {UNIDADES_OPS.map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    </div>
+                    <button
+                      onClick={() => handleGuardarOPS(pr)}
+                      disabled={!opsPlaza || opsSaving}
+                      style={{
+                        width: '100%', padding: '9px', borderRadius: 10, border: 'none',
+                        background: opsPlaza && !opsSaving ? 'var(--navy)' : 'var(--border)',
+                        color: '#fff', fontWeight: 700, fontSize: 12, cursor: opsPlaza ? 'pointer' : 'default',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      }}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                        {opsSaving ? 'progress_activity' : 'checklist'}
+                      </span>
+                      {opsSaving ? 'Guardando…' : 'Agregar al mise en place'}
+                    </button>
+                  </div>
+                )}
                 </div>
               ))}
               {item.costo_total_plato != null && item.costo_total_plato > 0 && (
@@ -1555,8 +1731,54 @@ function DetailView({
               </div>
             )}
             {search.trim().length > 0 && filtradas.length === 0 && (
-              <div style={{ borderTop: '1px solid var(--border)', padding: '10px 12px', fontSize: 12, color: 'var(--text-3)' }}>
-                Sin resultados para &ldquo;{search}&rdquo;
+              <div style={{ borderTop: '1px solid var(--border)' }}>
+                <div style={{ padding: '8px 12px 4px', fontSize: 11, color: 'var(--text-3)' }}>
+                  Sin recetas para &ldquo;{search}&rdquo;
+                </div>
+                {/* Crear receta borrador */}
+                <button
+                  onClick={handleCrearBorrador}
+                  disabled={creatingDraft}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                    padding: '9px 12px', background: 'none', border: 'none',
+                    borderBottom: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left',
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--accent)' }}>
+                    {creatingDraft ? 'progress_activity' : 'add_circle'}
+                  </span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)' }}>
+                      {creatingDraft ? 'Creando…' : `Crear receta "${search}"`}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-3)' }}>
+                      Se agrega como borrador (draft) y queda vinculada al plato
+                    </div>
+                  </div>
+                </button>
+                {/* Agregar como tarea */}
+                <button
+                  onClick={handleCrearTarea}
+                  disabled={creatingTarea}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                    padding: '9px 12px', background: 'none', border: 'none',
+                    cursor: 'pointer', textAlign: 'left',
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 15, color: '#f59e0b' }}>
+                    {creatingTarea ? 'progress_activity' : 'task_alt'}
+                  </span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309' }}>
+                      {creatingTarea ? 'Creando tarea…' : `Agregar como tarea pendiente`}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-3)' }}>
+                      Crea una tarea: &ldquo;Crear receta: {search}&rdquo;
+                    </div>
+                  </div>
+                </button>
               </div>
             )}
           </div>
@@ -2493,6 +2715,7 @@ export default function CartaPage() {
           onEliminarPackaging={handleEliminarPackaging}
           onShowGrupos={() => setShowGrupos(true)}
           onActualizarTags={tags => actualizarTags(selectedItem.id, tags)}
+          restauranteId={RESTAURANTE_ID}
         />
         {showGrupos && (
           <PackagingGruposDrawer
