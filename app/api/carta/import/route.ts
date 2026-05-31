@@ -6,10 +6,13 @@ export const maxDuration = 60
 
 // ── Types ────────────────────────────────────────────────────────────────
 export interface ItemImportado {
-  nombre: string
+  nombre: string          // título del plato (solo el nombre, sin los componentes)
   categoria: string
-  descripcion: string
+  descripcion: string     // descripción libre del plato si existe
+  componentes: string[]   // sub-recetas/preparaciones que componen el plato
   precio_venta: number | null
+  porciones: number       // 1 = individual, 2+ = para compartir
+  tags: string[]          // 's/tacc', 'vegano', 'vegetariano', 'keto'
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -23,7 +26,6 @@ function parsePrice(v: unknown): number | null {
   return isNaN(n) || n <= 0 ? null : n
 }
 
-// Intenta inferir categoría a partir del texto
 function inferCategoria(nombre: string, desc: string): string {
   const texto = (nombre + ' ' + desc).toLowerCase()
   if (/\b(agua|vino|cerveza|bebida|gaseosa|jugo|café|te\b|infusion|licor|coctel|aperitivo)\b/.test(texto)) return 'Bebidas'
@@ -45,17 +47,16 @@ function parseSheet(buffer: ArrayBuffer): ItemImportado[] {
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
     if (rows.length === 0) continue
 
-    // Detectar columnas por nombre normalizado
-    const headers = Object.keys(rows[0]).map(h => h.toLowerCase().trim())
     const findCol = (...candidates: string[]) =>
       Object.keys(rows[0]).find(k =>
         candidates.some(c => k.toLowerCase().includes(c))
       ) ?? null
 
-    const colNombre    = findCol('nombre', 'plato', 'item', 'producto', 'descripcion', 'name')
+    const colNombre    = findCol('nombre', 'plato', 'item', 'producto', 'name')
     const colCategoria = findCol('categoria', 'seccion', 'rubro', 'tipo', 'category')
     const colDesc      = findCol('descripcion', 'detalle', 'description', 'nota')
-    const colPrecio    = findCol('precio', 'price', 'venta', 'importe', 'cost')
+    const colPrecio    = findCol('precio', 'price', 'venta', 'importe')
+    const colPorciones = findCol('porciones', 'personas', 'serves', 'para')
 
     for (const row of rows) {
       const nombre = norm(colNombre ? row[colNombre] : Object.values(row)[0])
@@ -64,12 +65,18 @@ function parseSheet(buffer: ArrayBuffer): ItemImportado[] {
       const desc      = norm(colDesc ? row[colDesc] : '')
       const categoria = norm(colCategoria ? row[colCategoria] : '') || inferCategoria(nombre, desc)
       const precio    = parsePrice(colPrecio ? row[colPrecio] : null)
+      const porciones = parsePrice(colPorciones ? row[colPorciones] : null) ?? 1
 
-      items.push({ nombre, categoria, descripcion: desc, precio_venta: precio })
+      items.push({
+        nombre, categoria, descripcion: desc,
+        componentes: [],
+        precio_venta: precio,
+        porciones: Math.max(1, Math.round(porciones)),
+        tags: detectTags(nombre + ' ' + desc),
+      })
     }
   }
 
-  // Deduplicar por nombre normalizado
   const seen = new Set<string>()
   return items.filter(i => {
     const key = i.nombre.toLowerCase()
@@ -77,6 +84,16 @@ function parseSheet(buffer: ArrayBuffer): ItemImportado[] {
     seen.add(key)
     return true
   })
+}
+
+function detectTags(texto: string): string[] {
+  const t = texto.toLowerCase()
+  const tags: string[] = []
+  if (/\b(sin tacc|s\/tacc|gluten.?free|sin gluten|gf\b|celiac)/.test(t)) tags.push('s/tacc')
+  if (/\b(vegano|vegan\b)/.test(t)) tags.push('vegano')
+  else if (/\b(vegetariano|vegetarian|veggie)/.test(t)) tags.push('vegetariano')
+  if (/\b(keto|low.?carb|sin carbohidratos)/.test(t)) tags.push('keto')
+  return tags
 }
 
 // ── Llamada a Claude (imagen / PDF / texto) ───────────────────────────────
@@ -93,30 +110,38 @@ async function parseConIA(
   const userContent: AnthrContent[] = []
 
   if (typeof content === 'string') {
-    // Texto plano
     userContent.push({ type: 'text', text: content })
   } else if (mimeType === 'application/pdf') {
     const b64 = Buffer.from(content).toString('base64')
     userContent.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } })
   } else {
-    // Imagen
     const b64 = Buffer.from(content).toString('base64')
     userContent.push({ type: 'image', source: { type: 'base64', media_type: mimeType as string, data: b64 } })
   }
 
   userContent.push({
     type: 'text',
-    text: `Extraé todos los platos/productos del menú o carta que aparecen en el contenido.
-Devolvé SOLO un JSON array con este formato exacto (sin markdown, sin texto adicional):
-[{"nombre":"...","categoria":"...","descripcion":"...","precio_venta":null_o_numero}]
+    text: `Analizá este menú/carta y extraé cada plato con su estructura completa.
 
-Reglas:
-- "nombre": nombre del plato tal como aparece
-- "categoria": una de estas: Entradas, Principales, Postres, Bebidas, Guarniciones, Brunch, Cafetería — elegí la más apropiada
-- "descripcion": descripción corta del plato si existe, si no ""
-- "precio_venta": precio numérico sin símbolo (ej: 1500), null si no hay precio
-- Omití bebidas genéricas sin nombre (ej: "Agua", "Vino de la casa" sí, pero no encabezados de sección)
-- Omití títulos de sección, encabezados, notas al pie`,
+Devolvé SOLO un JSON array sin markdown (sin \`\`\`json). Formato exacto:
+[{
+  "nombre": "Nombre del plato",
+  "categoria": "Entradas|Principales|Postres|Bebidas|Guarniciones|Brunch|Cafetería",
+  "descripcion": "descripción libre si hay, si no vacío",
+  "componentes": ["componente 1", "componente 2"],
+  "precio_venta": 1500,
+  "porciones": 1,
+  "tags": []
+}]
+
+Instrucciones importantes:
+- "nombre": SOLO el nombre principal del plato. Ej: si dice "Pastelito. Calabaza. Ricotta. Miel" → nombre es "Pastelito"
+- "componentes": todo lo que compone el plato separado por puntos, comas o líneas después del nombre. Ej: ["Calabaza", "Ricotta de cabra", "Miel"]
+- "porciones": si dice "(x1)", "(x2)", "para 2 personas", etc → ese número. Default: 1
+- "tags": array con los que apliquen: "s/tacc" (sin TACC/gluten), "vegano", "vegetariano", "keto". Array vacío si ninguno.
+- "precio_venta": número sin símbolo, null si no hay precio
+- Omití encabezados de sección, títulos, notas al pie, separadores
+- Incluí todas las entradas, principales, postres, bebidas y guarniciones`,
   })
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -128,7 +153,7 @@ Reglas:
     },
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 4096,
+      max_tokens: 8096,
       messages: [{ role: 'user', content: userContent }],
     }),
   })
@@ -141,17 +166,27 @@ Reglas:
   const data = await response.json()
   const text = data.content?.[0]?.text ?? '[]'
 
-  // Extraer JSON aunque venga con texto alrededor
   const match = text.match(/\[[\s\S]*\]/)
   if (!match) return []
 
   const parsed = JSON.parse(match[0]) as Record<string, unknown>[]
-  return parsed.map(p => ({
-    nombre: norm(p.nombre),
-    categoria: norm(p.categoria) || 'Principales',
-    descripcion: norm(p.descripcion),
-    precio_venta: parsePrice(p.precio_venta),
-  })).filter(p => p.nombre.length >= 2)
+  return parsed.map(p => {
+    const nombre = norm(p.nombre)
+    const allText = nombre + ' ' + norm(p.descripcion) + ' ' + (Array.isArray(p.componentes) ? p.componentes.join(' ') : '')
+    return {
+      nombre,
+      categoria: norm(p.categoria) || inferCategoria(nombre, norm(p.descripcion)),
+      descripcion: norm(p.descripcion),
+      componentes: Array.isArray(p.componentes)
+        ? (p.componentes as unknown[]).map(c => norm(c)).filter(c => c.length > 1)
+        : [],
+      precio_venta: parsePrice(p.precio_venta),
+      porciones: Math.max(1, Math.round(parsePrice(p.porciones) ?? 1)),
+      tags: Array.isArray(p.tags)
+        ? (p.tags as unknown[]).map(t => norm(t)).filter(Boolean)
+        : detectTags(allText),
+    }
+  }).filter(p => p.nombre.length >= 2)
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────
@@ -166,16 +201,15 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData()
     const file = formData.get('file') as File | null
-    const modo = (formData.get('modo') as string) ?? 'preview'  // 'preview' | 'apply'
-    const itemsJson = formData.get('items') as string | null     // JSON para modo apply
+    const modo = (formData.get('modo') as string) ?? 'preview'
+    const itemsJson = formData.get('items') as string | null
 
-    // ── Modo apply: guardar items ya confirmados ──────────────────────────
+    // ── Modo apply ────────────────────────────────────────────────────────
     if (modo === 'apply' && itemsJson) {
       const items = JSON.parse(itemsJson) as ItemImportado[]
       const restauranteId = formData.get('restaurante_id') as string
       if (!restauranteId) return NextResponse.json({ error: 'restaurante_id requerido' }, { status: 400 })
 
-      // Categorías del restaurante
       const { data: cats } = await supabase
         .from('carta_categorias')
         .select('nombre')
@@ -183,7 +217,6 @@ export async function POST(req: NextRequest) {
 
       const catNombres = new Set((cats ?? []).map((c: { nombre: string }) => c.nombre))
 
-      // Detectar máximo orden por categoría
       const { data: existentes } = await supabase
         .from('carta_items')
         .select('categoria, orden')
@@ -200,9 +233,16 @@ export async function POST(req: NextRequest) {
       const inserts = items.map(item => {
         const cat = catNombres.has(item.categoria) ? item.categoria : 'Principales'
         maxOrden[cat] = (maxOrden[cat] ?? -1) + 1
+
+        // Descripción: componentes + info de porciones + tags
+        const partes: string[] = []
+        if (item.componentes.length > 0) partes.push(item.componentes.join(', '))
+        if (item.descripcion && !item.componentes.some(c => item.descripcion.includes(c))) partes.push(item.descripcion)
+        const descripcionFinal = partes.join(' · ') || null
+
         return {
           nombre: item.nombre,
-          descripcion: item.descripcion || null,
+          descripcion: descripcionFinal,
           precio_venta: item.precio_venta ?? 0,
           categoria: cat,
           disponible: true,
@@ -220,7 +260,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ insertados: inserted?.length ?? 0 })
     }
 
-    // ── Modo preview: parsear archivo ─────────────────────────────────────
+    // ── Modo preview ──────────────────────────────────────────────────────
     if (!file) return NextResponse.json({ error: 'No se recibió archivo' }, { status: 400 })
 
     const mimeType = file.type
@@ -234,7 +274,6 @@ export async function POST(req: NextRequest) {
       const text = new TextDecoder().decode(buffer)
       items = await parseConIA(text, mimeType, apiKey)
     } else {
-      // PDF o imagen — Claude con vision
       items = await parseConIA(buffer, mimeType || 'application/pdf', apiKey)
     }
 

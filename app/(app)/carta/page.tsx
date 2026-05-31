@@ -1769,7 +1769,10 @@ interface ItemImportado {
   nombre: string
   categoria: string
   descripcion: string
+  componentes: string[]
   precio_venta: number | null
+  porciones: number
+  tags: string[]
   _sel: boolean
 }
 
@@ -1790,17 +1793,22 @@ function ImportCartaModal({
   const [parsing, setParsing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const catNombres = categorias.map(c => c.nombre)
+  const catNombres = categorias.length > 0
+    ? categorias.map(c => c.nombre)
+    : ['Entradas', 'Principales', 'Postres', 'Bebidas', 'Guarniciones']
 
-  const handleFile = (f: File) => {
-    setFile(f)
-    setError('')
+  const TAG_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
+    's/tacc':       { label: 'S/TACC',        bg: '#fef3c7', color: '#92400e' },
+    'vegano':       { label: 'Vegano',         bg: '#d1fae5', color: '#065f46' },
+    'vegetariano':  { label: 'Vegetariano',    bg: '#dcfce7', color: '#166534' },
+    'keto':         { label: 'Keto',           bg: '#ede9fe', color: '#5b21b6' },
   }
+
+  const handleFile = (f: File) => { setFile(f); setError('') }
 
   const handleParse = async () => {
     if (!file) return
-    setParsing(true)
-    setError('')
+    setParsing(true); setError('')
     try {
       const fd = new FormData()
       fd.append('file', file)
@@ -1808,13 +1816,17 @@ function ImportCartaModal({
       const res = await fetch('/api/carta/import', { method: 'POST', body: fd })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al parsear')
-      setItems((data.items as Omit<ItemImportado, '_sel'>[]).map(i => ({ ...i, _sel: true })))
+      setItems((data.items as Omit<ItemImportado, '_sel'>[]).map(i => ({
+        ...i,
+        componentes: i.componentes ?? [],
+        porciones: i.porciones ?? 1,
+        tags: i.tags ?? [],
+        _sel: true,
+      })))
       setStep('preview')
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error al parsear archivo')
-    } finally {
-      setParsing(false)
-    }
+    } finally { setParsing(false) }
   }
 
   const handleApply = async () => {
@@ -1833,10 +1845,26 @@ function ImportCartaModal({
       onClose()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error al guardar')
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
   }
+
+  const updateItem = <K extends keyof ItemImportado>(idx: number, key: K, val: ItemImportado[K]) =>
+    setItems(prev => prev.map((p, i) => i === idx ? { ...p, [key]: val } : p))
+
+  const toggleTag = (idx: number, tag: string) =>
+    setItems(prev => prev.map((p, i) => {
+      if (i !== idx) return p
+      const has = p.tags.includes(tag)
+      return { ...p, tags: has ? p.tags.filter(t => t !== tag) : [...p.tags, tag] }
+    }))
+
+  const toggleComp = (idx: number, compIdx: number, val: string) =>
+    setItems(prev => prev.map((p, i) => {
+      if (i !== idx) return p
+      const comps = [...p.componentes]
+      comps[compIdx] = val
+      return { ...p, componentes: comps }
+    }))
 
   const allSel = items.every(i => i._sel)
   const selCount = items.filter(i => i._sel).length
@@ -1856,7 +1884,7 @@ function ImportCartaModal({
           <div>
             <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>Importar carta</div>
             <div style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11, marginTop: 2 }}>
-              PDF · imagen · Excel · texto
+              {step === 'upload' ? 'PDF · imagen · Excel · texto' : `${items.length} platos detectados · ${selCount} seleccionados`}
             </div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 4 }}>
@@ -1865,9 +1893,10 @@ function ImportCartaModal({
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+
+          {/* ── Upload step ── */}
           {step === 'upload' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {/* Drop zone */}
               <label style={{
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                 gap: 10, padding: 32,
@@ -1885,45 +1914,38 @@ function ImportCartaModal({
                     {file ? file.name : 'Tocá para subir un archivo'}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
-                    Foto de la carta, PDF, Excel (.xlsx/.csv) o texto
+                    Foto de la carta, PDF, Excel o texto plano
                   </div>
                 </div>
               </label>
 
-              {/* Tips */}
-              <div style={{
-                background: 'var(--bg)', borderRadius: 10,
-                padding: '12px 14px', fontSize: 12, color: 'var(--text-2)',
-                display: 'flex', flexDirection: 'column', gap: 6,
-              }}>
-                <div style={{ fontWeight: 600, marginBottom: 2 }}>Formatos soportados</div>
+              <div style={{ background: 'var(--bg)', borderRadius: 10, padding: '12px 14px', fontSize: 12, color: 'var(--text-2)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ fontWeight: 600, marginBottom: 2 }}>La IA extrae automáticamente</div>
                 {[
-                  ['photo_camera', 'Foto de la carta — Claude la lee con visión IA'],
-                  ['picture_as_pdf', 'PDF del menú — extrae platos automáticamente'],
-                  ['table_view', 'Excel/CSV — columnas nombre, precio, categoría'],
-                  ['text_snippet', 'Texto plano — pega el texto de la carta'],
+                  ['restaurant', 'Nombre del plato y sus componentes/sub-recetas'],
+                  ['sell', 'Precio de venta'],
+                  ['restaurant_menu', 'Categoría (Entradas, Principales, Postres…)'],
+                  ['fiber_manual_record', 'Porciones (individual / para compartir)'],
+                  ['eco', 'Tags dietarios: S/TACC, Vegano, Vegetariano, Keto'],
                 ].map(([icon, text]) => (
                   <div key={icon} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>{icon}</span>
+                    <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--accent)' }}>{icon}</span>
                     {text}
                   </div>
                 ))}
               </div>
 
-              {error && (
-                <div style={{ color: '#dc2626', fontSize: 13, padding: '8px 12px', background: '#fee2e2', borderRadius: 8 }}>
-                  {error}
-                </div>
-              )}
+              {error && <div style={{ color: '#dc2626', fontSize: 13, padding: '8px 12px', background: '#fee2e2', borderRadius: 8 }}>{error}</div>}
             </div>
           )}
 
+          {/* ── Preview step ── */}
           {step === 'preview' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {/* Selección global */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <div style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>
-                  {items.length} platos detectados — {selCount} seleccionados
+              {/* Sel global */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                  Revisá y editá antes de importar
                 </div>
                 <button onClick={() => setItems(prev => prev.map(i => ({ ...i, _sel: !allSel })))}
                   style={{ fontSize: 12, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
@@ -1933,68 +1955,122 @@ function ImportCartaModal({
 
               {items.map((item, idx) => (
                 <div key={idx} style={{
-                  background: 'var(--bg)', borderRadius: 10,
-                  border: `1px solid ${item._sel ? 'var(--accent)' : 'var(--border)'}`,
-                  padding: '10px 12px', opacity: item._sel ? 1 : 0.5,
+                  background: 'var(--bg)', borderRadius: 12,
+                  border: `1.5px solid ${item._sel ? 'var(--accent)' : 'var(--border)'}`,
+                  overflow: 'hidden', opacity: item._sel ? 1 : 0.45,
                 }}>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                    <input type="checkbox" checked={item._sel} onChange={e =>
-                      setItems(prev => prev.map((p, i) => i === idx ? { ...p, _sel: e.target.checked } : p))
-                    } style={{ marginTop: 3, accentColor: 'var(--accent)' }} />
+                  {/* Card header: checkbox + nombre + precio */}
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 12px 8px' }}>
+                    <input type="checkbox" checked={item._sel}
+                      onChange={e => updateItem(idx, '_sel', e.target.checked)}
+                      style={{ marginTop: 4, accentColor: 'var(--accent)', flexShrink: 0 }}
+                    />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                        <input
-                          value={item.nombre}
-                          onChange={e => setItems(prev => prev.map((p, i) => i === idx ? { ...p, nombre: e.target.value } : p))}
-                          style={{
-                            flex: 1, fontWeight: 600, fontSize: 13, color: 'var(--text-1)',
-                            border: 'none', background: 'transparent', padding: 0,
-                          }}
-                        />
-                        <input
-                          type="number"
-                          placeholder="Precio"
-                          value={item.precio_venta ?? ''}
-                          onChange={e => setItems(prev => prev.map((p, i) => i === idx ? {
-                            ...p, precio_venta: e.target.value ? parseFloat(e.target.value) : null,
-                          } : p))}
-                          style={{
-                            width: 80, fontSize: 13, fontWeight: 700, color: 'var(--navy)',
-                            border: '1px solid var(--border)', borderRadius: 6,
-                            padding: '2px 6px', background: 'var(--surface)',
-                          }}
-                        />
-                      </div>
-                      <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}>
+                      {/* Nombre editable */}
+                      <input
+                        value={item.nombre}
+                        onChange={e => updateItem(idx, 'nombre', e.target.value)}
+                        style={{
+                          width: '100%', fontWeight: 700, fontSize: 14, color: 'var(--text-1)',
+                          border: 'none', background: 'transparent', padding: 0, outline: 'none',
+                        }}
+                      />
+                      {/* Fila: categoría + porciones + precio */}
+                      <div style={{ display: 'flex', gap: 8, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                         <select
                           value={item.categoria}
-                          onChange={e => setItems(prev => prev.map((p, i) => i === idx ? { ...p, categoria: e.target.value } : p))}
+                          onChange={e => updateItem(idx, 'categoria', e.target.value)}
                           style={{
-                            fontSize: 11, padding: '2px 6px', borderRadius: 6,
-                            border: '1px solid var(--border)', background: 'var(--surface)',
-                            color: 'var(--accent)',
+                            fontSize: 11, padding: '3px 6px', borderRadius: 6,
+                            border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--accent)',
                           }}
                         >
-                          {(catNombres.length > 0 ? catNombres : ['Entradas','Principales','Postres','Bebidas','Guarniciones']).map(c => (
-                            <option key={c} value={c}>{c}</option>
-                          ))}
+                          {catNombres.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
-                        {item.descripcion && (
-                          <span style={{ fontSize: 11, color: 'var(--text-3)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {item.descripcion}
-                          </span>
-                        )}
+
+                        {/* Porciones */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 13, color: 'var(--text-3)' }}>group</span>
+                          <select
+                            value={item.porciones}
+                            onChange={e => updateItem(idx, 'porciones', Number(e.target.value))}
+                            style={{
+                              fontSize: 11, padding: '3px 6px', borderRadius: 6,
+                              border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)',
+                            }}
+                          >
+                            {[1, 2, 3, 4].map(n => (
+                              <option key={n} value={n}>{n === 1 ? 'Individual' : `Para ${n}`}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Precio */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginLeft: 'auto' }}>
+                          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>$</span>
+                          <input
+                            type="number"
+                            placeholder="Precio"
+                            value={item.precio_venta ?? ''}
+                            onChange={e => updateItem(idx, 'precio_venta', e.target.value ? parseFloat(e.target.value) : null)}
+                            style={{
+                              width: 75, fontSize: 13, fontWeight: 700, color: 'var(--navy)',
+                              border: '1px solid var(--border)', borderRadius: 6,
+                              padding: '2px 6px', background: 'var(--surface)', textAlign: 'right',
+                            }}
+                          />
+                        </div>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Componentes */}
+                  {item.componentes.length > 0 && (
+                    <div style={{ padding: '0 12px 8px 34px' }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 5 }}>
+                        Componentes
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {item.componentes.map((comp, ci) => (
+                          <input
+                            key={ci}
+                            value={comp}
+                            onChange={e => toggleComp(idx, ci, e.target.value)}
+                            style={{
+                              fontSize: 11, padding: '3px 8px', borderRadius: 20,
+                              border: '1px solid var(--border)', background: 'var(--surface)',
+                              color: 'var(--text-2)', outline: 'none',
+                              maxWidth: 160, minWidth: 40,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tags dietarios */}
+                  <div style={{ padding: '0 12px 10px 34px', display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                    {Object.entries(TAG_CONFIG).map(([key, cfg]) => {
+                      const active = item.tags.includes(key)
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => toggleTag(idx, key)}
+                          style={{
+                            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                            border: `1px solid ${active ? cfg.color + '50' : 'var(--border)'}`,
+                            background: active ? cfg.bg : 'var(--surface)',
+                            color: active ? cfg.color : 'var(--text-3)',
+                            cursor: 'pointer',
+                          }}
+                        >{cfg.label}</button>
+                      )
+                    })}
                   </div>
                 </div>
               ))}
 
-              {error && (
-                <div style={{ color: '#dc2626', fontSize: 13, padding: '8px 12px', background: '#fee2e2', borderRadius: 8 }}>
-                  {error}
-                </div>
-              )}
+              {error && <div style={{ color: '#dc2626', fontSize: 13, padding: '8px 12px', background: '#fee2e2', borderRadius: 8 }}>{error}</div>}
             </div>
           )}
         </div>
@@ -2003,40 +2079,36 @@ function ImportCartaModal({
         <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10 }}>
           {step === 'upload' ? (
             <>
-              <button onClick={onClose} style={{
-                flex: 1, padding: '12px', borderRadius: 12, border: '1px solid var(--border)',
-                background: 'var(--bg)', color: 'var(--text-1)', fontWeight: 600, cursor: 'pointer',
-              }}>Cancelar</button>
+              <button onClick={onClose} style={{ flex: 1, padding: '12px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', fontWeight: 600, cursor: 'pointer' }}>
+                Cancelar
+              </button>
               <button onClick={handleParse} disabled={!file || parsing} style={{
                 flex: 2, padding: '12px', borderRadius: 12, border: 'none',
                 background: file && !parsing ? 'var(--navy)' : 'var(--border)',
                 color: '#fff', fontWeight: 700, cursor: file && !parsing ? 'pointer' : 'default',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
               }}>
-                {parsing ? (
-                  <><span className="material-symbols-outlined" style={{ fontSize: 18, animation: 'spin 1s linear infinite' }}>progress_activity</span> Analizando...</>
-                ) : (
-                  <><span className="material-symbols-outlined" style={{ fontSize: 18 }}>psychology</span> Analizar con IA</>
-                )}
+                {parsing
+                  ? <><span className="material-symbols-outlined" style={{ fontSize: 18 }}>progress_activity</span> Analizando...</>
+                  : <><span className="material-symbols-outlined" style={{ fontSize: 18 }}>psychology</span> Analizar con IA</>
+                }
               </button>
             </>
           ) : (
             <>
-              <button onClick={() => setStep('upload')} style={{
-                flex: 1, padding: '12px', borderRadius: 12, border: '1px solid var(--border)',
-                background: 'var(--bg)', color: 'var(--text-1)', fontWeight: 600, cursor: 'pointer',
-              }}>Volver</button>
+              <button onClick={() => setStep('upload')} style={{ flex: 1, padding: '12px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', fontWeight: 600, cursor: 'pointer' }}>
+                Volver
+              </button>
               <button onClick={handleApply} disabled={selCount === 0 || saving} style={{
                 flex: 2, padding: '12px', borderRadius: 12, border: 'none',
                 background: selCount > 0 && !saving ? 'var(--navy)' : 'var(--border)',
                 color: '#fff', fontWeight: 700, cursor: selCount > 0 && !saving ? 'pointer' : 'default',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
               }}>
-                {saving ? (
-                  <><span className="material-symbols-outlined" style={{ fontSize: 18 }}>progress_activity</span> Guardando...</>
-                ) : (
-                  <><span className="material-symbols-outlined" style={{ fontSize: 18 }}>save</span> Agregar {selCount} platos</>
-                )}
+                {saving
+                  ? <><span className="material-symbols-outlined" style={{ fontSize: 18 }}>progress_activity</span> Guardando...</>
+                  : <><span className="material-symbols-outlined" style={{ fontSize: 18 }}>save</span> Agregar {selCount} plato{selCount !== 1 ? 's' : ''}</>
+                }
               </button>
             </>
           )}
