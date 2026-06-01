@@ -373,7 +373,7 @@ export interface CartaItem {
 export type TareaPrioridad = 'critica' | 'alta' | 'media' | 'baja'
 export type TareaStatus = 'pendiente' | 'en_proceso' | 'completada'
 export type TareaCategoria = 'general' | 'plaza' | 'rutina' | 'evento' | 'produccion'
-export type Plaza = 'parrilla' | 'frios' | 'calientes' | 'pase' | 'pasteleria' | 'panaderia'
+export type Plaza = 'parrilla' | 'frios' | 'calientes' | 'pase' | 'pasteleria' | 'panaderia' | 'general'
 export type OpsEstado = 'pendiente' | 'en_curso' | 'listo' | 'duda'
 export type OpsModo = 'menu' | 'carta'
 

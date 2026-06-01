@@ -10,6 +10,7 @@ import type { CategoriaPlato, PlatoComponente } from '@/types'
 
 // ── Constants ─────────────────────────────────────────────────
 const PLAZAS = [
+  { id: 'general',    label: 'General',     color: '#6b7280' },
   { id: 'parrilla',   label: 'Parrilla',    color: '#ef4444' },
   { id: 'frios',      label: 'Fríos',       color: '#0ea5e9' },
   { id: 'calientes',  label: 'Calientes',   color: '#f97316' },

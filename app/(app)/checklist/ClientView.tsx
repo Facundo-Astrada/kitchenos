@@ -13,14 +13,16 @@ import { useProduccionRegistros } from '@/lib/hooks/useProduccionRegistros'
 import type { Plaza, MisePlaceItem, MisePrioridad, ChecklistSeccionConfig, RutinaFrecuencia } from '@/types'
 
 // ── Constants ──
-const PLAZAS: Plaza[] = ['parrilla', 'frios', 'calientes', 'pase', 'pasteleria', 'panaderia']
+const PLAZAS: Plaza[] = ['parrilla', 'frios', 'calientes', 'pase', 'pasteleria', 'panaderia', 'general']
 const PLAZA_LABELS: Record<Plaza, string> = {
   parrilla: 'Parrilla', frios: 'Fríos', calientes: 'Calientes',
   pase: 'Pase', pasteleria: 'Pastelería', panaderia: 'Panadería',
+  general: 'General',
 }
 const PLAZA_ICONS: Record<Plaza, string> = {
   parrilla: 'local_fire_department', frios: 'ac_unit', calientes: 'soup_kitchen',
   pase: 'room_service', pasteleria: 'cake', panaderia: 'bakery_dining',
+  general: 'groups',
 }
 const UNIDADES = ['u', 'kg', 'g', 'l', 'ml', 'pax', 'porc', 'bandeja', 'gastro', 'tupper']
 
@@ -152,7 +154,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   useEffect(() => {
     if (!plaza || items.length === 0) return
     const supabase = createClient()
-    const plazaItemIds = items.filter(i => i.plaza === plaza).map(i => i.id)
+    const plazaItemIds = items.filter(i => i.plaza === plaza || (plaza !== 'general' && i.plaza === 'general')).map(i => i.id)
     if (plazaItemIds.length === 0) return
     const d = new Date(fecha + 'T12:00:00')
     d.setDate(d.getDate() - 1)
@@ -178,7 +180,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     const supabase = createClient()
     async function loadPendientes() {
       // Traer los item_ids de la plaza
-      const plazaItemIds = items.filter(i => i.plaza === plaza).map(i => i.id)
+      const plazaItemIds = items.filter(i => i.plaza === plaza || (plaza !== 'general' && i.plaza === 'general')).map(i => i.id)
       if (plazaItemIds.length === 0) { setPendientesApertura([]); return }
       // Traer registros de apertura del día para esos items
       const { data: regs } = await supabase
@@ -202,7 +204,15 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   }, [tab, plaza, fecha, items]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const plazaSecciones = useMemo(() =>
-    secciones.filter(s => s.plaza === plaza).sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0)), [secciones, plaza])
+    secciones
+      .filter(s => s.plaza === plaza || (plaza !== 'general' && s.plaza === 'general'))
+      .sort((a, b) => {
+        // General siempre primero
+        if (a.plaza === 'general' && b.plaza !== 'general') return -1
+        if (b.plaza === 'general' && a.plaza !== 'general') return 1
+        return (a.orden ?? 0) - (b.orden ?? 0)
+      }),
+    [secciones, plaza])
 
   const seedingRef = useRef(false)
   useEffect(() => {
@@ -216,7 +226,9 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     }
   }, [plaza, loading, secciones, agregarSeccion])
 
-  const plazaItems = useMemo(() => items.filter(i => i.plaza === plaza), [items, plaza])
+  const plazaItems = useMemo(() =>
+    items.filter(i => i.plaza === plaza || (plaza !== 'general' && i.plaza === 'general')),
+    [items, plaza])
 
   const grouped = useMemo(() => {
     const map: Record<string, MisePlaceItem[]> = {}
@@ -232,7 +244,9 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     return m
   }, [registros])
 
-  const plazaRutinas = useMemo(() => rutinas.filter(r => r.plaza === plaza), [rutinas, plaza])
+  const plazaRutinas = useMemo(() =>
+    rutinas.filter(r => r.plaza === plaza || (plaza !== 'general' && r.plaza === 'general')),
+    [rutinas, plaza])
   const rutinaRegSet = useMemo(() => {
     const s = new Set<string>()
     rutinaRegistros.forEach(r => { if (r.completado) s.add(r.rutina_id) })
