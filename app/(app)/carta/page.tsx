@@ -2588,6 +2588,39 @@ export default function CartaPage() {
     noDisponibles: items.filter(i => !i.disponible).length,
   }), [items])
 
+  // Contexto para KitchenCoach
+  useEffect(() => {
+    if (!items.length) return
+    const itemsConFC = items.filter(i => i.food_cost_pct != null)
+    const fcPromedio = itemsConFC.length
+      ? Math.round(itemsConFC.reduce((s, i) => s + (i.food_cost_pct ?? 0), 0) / itemsConFC.length)
+      : null
+    const sinReceta = items.filter(i => !i.receta_id && i.plato_recetas.length === 0)
+    const fcAlto = items
+      .filter(i => (i.food_cost_pct ?? 0) > 35)
+      .map(i => ({ nombre: i.nombre, fc: Math.round(i.food_cost_pct ?? 0), precio: i.precio_venta }))
+      .sort((a, b) => b.fc - a.fc)
+      .slice(0, 5)
+    const margenNeg = items
+      .filter(i => (i.margen_pct_computed ?? 0) < 0)
+      .map(i => ({ nombre: i.nombre, margen: Math.round(i.margen_pct_computed ?? 0) }))
+      .slice(0, 5)
+
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'carta',
+      total: items.length,
+      disponibles: stats.disponibles,
+      marcados86: stats.noDisponibles,
+      sinReceta: sinReceta.length,
+      sinRecetaNombres: sinReceta.map(i => i.nombre).slice(0, 5),
+      fcPromedio,
+      fcAlto,
+      margenNegativo: margenNeg,
+      categorias: [...new Set(items.map(i => i.categoria))],
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [items, stats])
+
   function exportXLSX() {
     exportarExcel(`carta_${fechaArchivo()}.xlsx`, [{
       nombre: 'Carta',
@@ -2773,7 +2806,7 @@ export default function CartaPage() {
     <PageTransition>
     <div className="scroll-body">
       {/* Header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px' }}>
+      <div data-coach-target="carta-header" style={{ background: 'var(--navy)', padding: '46px 16px 14px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ color: '#fff', fontWeight: 700, fontSize: 20 }}>Carta</span>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -2795,7 +2828,7 @@ export default function CartaPage() {
               <span className="material-symbols-outlined" style={{ fontSize: 18 }}>download</span>
               Exportar menú
             </button>
-            <button onClick={() => setShowImport(true)} style={{
+            <button data-coach-target="carta-importar" onClick={() => setShowImport(true)} style={{
               background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,.25)',
               borderRadius: 10, padding: '8px 12px', color: '#fff',
               cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
@@ -2804,7 +2837,7 @@ export default function CartaPage() {
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>upload_file</span>
               Importar
             </button>
-            <button onClick={() => setView('nuevo')} style={{
+            <button data-coach-target="carta-nuevo" onClick={() => setView('nuevo')} style={{
               background: 'rgba(255,255,255,0.15)', border: 'none',
               borderRadius: 10, padding: '8px 14px', color: '#fff',
               fontWeight: 600, fontSize: 13, cursor: 'pointer',
@@ -2834,7 +2867,7 @@ export default function CartaPage() {
         )}
 
         {/* Filters */}
-        <div style={{ display: 'flex', gap: 6, marginTop: 10, overflowX: 'auto', paddingBottom: 2 }}>
+        <div data-coach-target="carta-filtros" style={{ display: 'flex', gap: 6, marginTop: 10, overflowX: 'auto', paddingBottom: 2 }}>
           {(['Todas', ...categorias.map(c => c.nombre)]).map(cat => {
             const catObj = categorias.find(c => c.nombre === cat)
             return (
@@ -2864,7 +2897,7 @@ export default function CartaPage() {
       {/* Rentabilidad shortcut */}
       {items.some(i => i.food_cost_pct != null) && (
         <div style={{ padding: '12px 16px 0' }}>
-          <button onClick={() => setView('rentabilidad')} style={{
+          <button data-coach-target="carta-rentabilidad" onClick={() => setView('rentabilidad')} style={{
             width: '100%', padding: '10px 14px', borderRadius: 10,
             background: '#eef2ff', border: '1px solid var(--accent)',
             display: 'flex', alignItems: 'center', gap: 8,
@@ -2883,7 +2916,7 @@ export default function CartaPage() {
       )}
 
       {/* Content */}
-      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div data-coach-target="carta-lista" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
             Cargando...

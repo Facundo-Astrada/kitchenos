@@ -91,12 +91,35 @@ const CONTENT_STEPS_COUNT = TOUR_STEPS.filter(s => s.targetId !== null).length
 
 // ── Chat suggestions ──────────────────────────────────────────
 interface Suggestion { label: string; action: 'tour' | 'send' }
-const QUICK_SUGGESTIONS: Suggestion[] = [
+
+const SUGGESTIONS_BY_SCREEN: Record<string, Suggestion[]> = {
+  carta: [
+    { label: 'Analizá mi carta completa', action: 'send' },
+    { label: '¿Qué platos tienen el peor food cost?', action: 'send' },
+    { label: '¿Cuáles me falta vincular a recetas?', action: 'send' },
+    { label: 'Ayudame a importar la carta', action: 'send' },
+  ],
+  operaciones: [
+    { label: 'Ver recorrido de OPS', action: 'tour' },
+    { label: '¿Qué me conviene producir hoy?', action: 'send' },
+    { label: '¿Cómo optimizo el mise en place?', action: 'send' },
+  ],
+}
+
+const DEFAULT_SUGGESTIONS: Suggestion[] = [
   { label: 'Ver recorrido de OPS', action: 'tour' },
-  { label: '¿Qué me conviene producir hoy?', action: 'send' },
   { label: 'Analizá mi food cost', action: 'send' },
+  { label: '¿Qué me conviene producir hoy?', action: 'send' },
   { label: '¿Cómo optimizo el mise en place?', action: 'send' },
 ]
+
+function getScreenSuggestions(): Suggestion[] {
+  try {
+    const ctx = JSON.parse(localStorage.getItem('kc_screen_context') ?? 'null')
+    if (ctx?.screen && SUGGESTIONS_BY_SCREEN[ctx.screen]) return SUGGESTIONS_BY_SCREEN[ctx.screen]
+  } catch { /* ignore */ }
+  return DEFAULT_SUGGESTIONS
+}
 
 function formatTime(d: Date) {
   return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
@@ -591,7 +614,7 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
                 Hola! Soy tu Kitchen Coach. ¿En qué te ayudo hoy?
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {QUICK_SUGGESTIONS.map(s => (
+                {getScreenSuggestions().map(s => (
                   <button
                     key={s.label}
                     onClick={() => s.action === 'tour' ? startTour() : doSend(s.label)}

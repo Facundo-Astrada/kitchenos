@@ -18,10 +18,14 @@ interface CoachContext {
 
 // IDs disponibles para el highlight en el módulo OPS
 export const COACH_HIGHLIGHT_IDS = [
+  // OPS
   'ops-tab-produccion', 'ops-tab-mise', 'ops-tab-planificacion',
   'prod-seccion-sp', 'prod-fab-add',
   'mise-stock-box', 'mise-producir-box', 'mise-fab-add',
   'plan-sub-menu', 'plan-sub-eventos',
+  // Carta
+  'carta-header', 'carta-importar', 'carta-nuevo',
+  'carta-filtros', 'carta-lista', 'carta-rentabilidad',
 ] as const
 
 export function useKitchenCoach() {
@@ -115,7 +119,13 @@ Cuando tu respuesta menciona dónde está algo en la pantalla, respondé en JSON
 IDs disponibles: ${COACH_HIGHLIGHT_IDS.join(', ')}
 
 Ejemplo para tour de OPS:
-{"text":"La sección Producción es donde cargás todo lo que hay que cocinar hoy, ordenado por prioridad. El botón + agrega una preparación nueva.","highlight":"ops-tab-produccion","overlay_text":"Producción: tu lista de tareas por prioridad","options":["Contame sobre Mise","Contame sobre Planificación"]}`
+{"text":"La sección Producción es donde cargás todo lo que hay que cocinar hoy, ordenado por prioridad. El botón + agrega una preparación nueva.","highlight":"ops-tab-produccion","overlay_text":"Producción: tu lista de tareas por prioridad","options":["Contame sobre Mise","Contame sobre Planificación"]}
+
+Ejemplo para análisis de carta:
+{"text":"Encontré 3 platos con food cost mayor al 35%: Bife de chorizo (48%), Tabla de quesos (41%) y Croquetas (37%). Te recomiendo revisar los precios o ajustar las porciones. ¿Querés que analice las recetas de estos platos?","highlight":"carta-rentabilidad","overlay_text":"Acá ves todos los platos ordenados por food cost","options":["Ver los platos problema","¿Qué precio debería tener el Bife?","Analizá los que no tienen receta"]}
+
+Ejemplo para ayuda de import:
+{"text":"El botón Importar te permite cargar toda la carta desde una foto, PDF, Excel o texto. La IA extrae los platos, los componentes y detecta si son veganos, sin TACC, etc. Solo tocá el botón y elegí el archivo.","highlight":"carta-importar","overlay_text":"Botón para importar la carta con IA","options":["¿Qué formatos acepta?","¿Cómo vinculo las recetas después?"]}`
 
     systemPrompt += `\n\nUsá el contexto para dar consejos relevantes cuando el usuario lo necesite.`
 
