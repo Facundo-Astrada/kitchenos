@@ -1472,14 +1472,21 @@ function DetailView({
             const costoRecetas = item.costo_total_plato
               ?? (item.costo_porcion != null ? item.costo_porcion - item.costo_packaging : 0)
             const costoPkg = item.costo_packaging
-            const pctRecetas = Math.round((costoRecetas / precio) * 100)
-            const pctPkg = Math.round((costoPkg / precio) * 100)
+            const fcReal = item.food_cost_pct ?? 0
+            // Si el costo supera el precio (margen negativo), el donut se llena de "costo"
+            // y no hay segmento de margen. Clampeamos los stops a 0–100 para que conic-gradient
+            // sea válido aunque el FC real sea > 100% (se muestra el número real aparte).
+            const rawRecetas = (costoRecetas / precio) * 100
+            const rawPkg = (costoPkg / precio) * 100
+            const sobrecosto = rawRecetas + rawPkg > 100
+            const pctRecetas = Math.round(Math.min(rawRecetas, 100))
+            const pctPkg = Math.round(Math.min(rawPkg, Math.max(0, 100 - pctRecetas)))
             const pctMargen = Math.max(0, 100 - pctRecetas - pctPkg)
 
             const segs = [
               { pct: pctRecetas, color: '#4361a0', label: 'Recetas' },
               { pct: pctPkg, color: '#ea580c', label: 'Packaging' },
-              { pct: pctMargen, color: '#10b981', label: 'Margen' },
+              { pct: pctMargen, color: sobrecosto ? '#ef4444' : '#10b981', label: sobrecosto ? 'Pérdida' : 'Margen' },
             ].filter(s => s.pct > 0)
 
             let cum = 0
@@ -1496,10 +1503,12 @@ function DetailView({
                   <div style={{
                     position: 'absolute', inset: 15, borderRadius: '50%',
                     background: 'var(--surface)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    overflow: 'hidden', textAlign: 'center',
                   }}>
-                    <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--text-2)', lineHeight: 1 }}>
-                      FC{'\n'}{(item.food_cost_pct ?? 0).toFixed(0)}%
+                    <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--text-3)', lineHeight: 1 }}>FC</span>
+                    <span style={{ fontSize: fcReal >= 1000 ? 8 : 10, fontWeight: 800, color: sobrecosto ? '#ef4444' : 'var(--text-2)', lineHeight: 1.1 }}>
+                      {fcReal.toFixed(0)}%
                     </span>
                   </div>
                 </div>
