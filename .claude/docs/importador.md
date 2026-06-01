@@ -1,0 +1,30 @@
+# Flujo de importación de datos — KitchenOS
+
+## Endpoints
+
+| Path | Función |
+|---|---|
+| `/api/carta/import` | **Import de carta con IA**. Modo `preview`: parsea archivo y devuelve items estructurados. Modo `apply`: inserta en `carta_items` + crea `plato_recetas` para componentes vinculados a recetas. Excel/CSV: parser directo. PDF/imagen/texto: Claude Haiku extrae nombre, componentes (lista de sub-preparaciones), porciones, precio y tags dietarios. Componentes llegan como `{nombre, tipo: null, ref_id: null}` — el cliente hace el auto-match contra recetas/productos/platos_compuestos. |
+| `/api/importador/facturas-universal` | **Punto de entrada universal**. Detecta Fudo (Gastos+Detalle) → ruta rápida sin IA. Caso contrario → IA Sonnet mapea columnas. Modos `detect`/`apply`. Inspecciona TODAS las hojas del XLSX y elige la mejor por score. |
+| `/api/importador/facturas-fudo` | Legacy Fudo específico (columnas exactas). El universal lo deprecia. |
+| `/api/importador/productos-desde-facturas` | Auto-crea productos en stock desde `factura_items`. Agrupa por nombre normalizado, usa precio más reciente, infiere categoría (rules + Haiku paralelo en apply, solo rules en preview). Crea proveedores faltantes. |
+| `/api/stock/rebuild` | Borra productos del restaurante → llama `productos-desde-facturas` apply → llama `auto-link-ingredientes`. Falla seguro si no hay facturas. |
+| `/api/recetas/auto-link-ingredientes` | Fuzzy match: ingredientes sin `producto_id` ↔ productos. Niveles `exacto`/`parcial`/`fuzzy`. Bug del JOIN PostgREST arreglado: ahora hace 2 queries (recetas → ingredientes con `.in('receta_id', ids)`). |
+| `/api/stock/sync-precio` | Cuando se cambia precio en stock, propaga a `ingredientes.costo_unitario` de los vinculados. |
+
+## Componentes UI
+
+- `ImportCartaModal` (inline en `app/(app)/carta/page.tsx`) — 2 pasos: upload file → preview editable con componentes vinculables. Cada componente tiene: nombre editable, badge de tipo (receta/producto/producción), dropdown de búsqueda unificado, toggle de tags dietarios. Al confirmar: POST `/api/carta/import` modo `apply`.
+- `components/facturas/ExcelPOSImportModal.tsx` — XLSX/CSV de cualquier POS (Fudo, Maxirest, Bistrosoft, etc). Muestra hojas analizadas + mapeo IA.
+- `components/facturas/BulkUploadDrawer.tsx` — Drag&drop multi-archivo (PDF/imagen) con OCR en serie.
+- `app/(app)/onboarding/page.tsx` — Wizard 5 pasos. Se dispara desde `app/(app)/page.tsx` cuando productos+facturas+recetas todos en 0.
+
+## Estrategia "rebuild stock"
+
+1. Sin facturas → onboarding wizard
+2. Con facturas pero stock incompleto → banner CTA "Reconstruir" en `/stock`
+3. Click → preview rápido (sin IA) → confirm → borra productos + recrea desde facturas + auto-link ingredientes
+
+## Para cargar datos por scripts
+
+Patrón: `scripts/load-recetas-2026.mjs` usa `createClient` de `@supabase/supabase-js` con `SUPABASE_SERVICE_ROLE_KEY`.

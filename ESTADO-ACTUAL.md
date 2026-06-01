@@ -19,21 +19,21 @@
 | 5 | **Pedidos** | `/pedidos` | Funcional | CRUD, items con precios, estados (borrador/enviado/recibido/parcial), productos frecuentes como chips, búsqueda predictiva, WhatsApp y PDF, recepción parcial. |
 | 6 | **Proveedores** | `/proveedores` | Funcional | CRUD, CUIT, teléfono, días entrega, rubro, historial facturas por proveedor, **auto-creación** desde facturas con IA. |
 | 7 | **Facturas** | `/facturas` | Funcional | Carga con items, tipos A/B/C/X/remito/ticket, **OCR con IA** (Claude Sonnet 4.6) que detecta proveedor/items/total, detección de variaciones de precio, historial, condición de pago. |
-| 8 | **Carta** | `/carta` | Funcional | Items vinculados a recetas, auto-fill desde receta, food cost preview con colores, 86 (no disponible), categorías, vincular/cambiar receta con tap-through, export PDF. |
-| 9 | **Checklist / Mise en Place** | `/checklist` | Funcional | Mise en place por plaza, items con prioridad SP/P/REF/OK, cantidades "10/25 pax" color-coded, registros diarios, rutinas con frecuencia diaria/semanal/quincenal/mensual, auto-selección de plaza según rol del usuario. **Drag long-press para mover items entre secciones con auto-scroll.** |
+| 8 | **Carta** | `/carta` | Funcional | Items vinculados a recetas, food cost preview coloreado, 86, categorías **dinámicas por restaurante** (`carta_categorias`), vincular/cambiar receta inline (search siempre visible, porciones editables con tap), export PDF. **Tags dietarios** (S/TACC, Vegano, Vegetariano, Keto, Picante, Sin lactosa) toggleables directo en el detalle. **Importar desde foto/PDF/Excel/texto** con IA: extrae nombre, componentes, porciones, precio y tags — cada componente se puede vincular a recetas, productos o producciones existentes. **Crear receta borrador** desde búsqueda sin resultados. **Asignar a OPS** (plaza + stock ideal) por receta vinculada → upserta `checklist_item`. **KitchenCoach integrado**: context con FC promedio, problemas de margen y platos sin receta; suggestions dinámicas según pantalla. |
+| 9 | **Checklist / Mise en Place** | `/checklist` | Funcional | Mise en place por plaza, items SP/P/REF/OK, cantidades color-coded, registros diarios, rutinas con frecuencia. Drag long-press entre secciones. **Plaza General**: items/secciones/rutinas con `plaza='general'` aparecen en TODAS las plazas al tope — para tareas que cualquiera puede cubrir (rutinas de limpieza, mise compartido, etc.). |
 | 10 | **Pase de Turno** | `/pase` | Funcional | Chat continuo entre turnos, grouping por emisor (sin avatar repetido), prioridades, crear tarea desde mensaje, realtime. |
 | 11 | **HACCP** | `/haccp` | Funcional | 3 tabs: Temperaturas, Vencimientos (color coding por días), Limpieza. Export PDF para Bromatología. |
 | 12 | **Reportes / CMV** | `/reportes` | Funcional | 5 tabs: Resumen KPIs, Food Cost por plato, Compras por proveedor, Precios/inflación, Producción. Selector de periodo, gráficos CSS (sin Chart.js). |
 | 13 | **Calendario** | `/calendario` | Funcional | Vista mensual + semanal por horas, eventos con iconos/colores, entregas de pedidos auto-integradas, CRUD eventos, recurrencia. |
 | 14 | **Turnos / Equipo** | `/turnos` | Funcional | 3 tabs: Equipo (lista + ficha + CRUD), Turnos (grilla semanal M/T/N/F/V, asignación inline al tap, columna Hs calculada), Puestos (CRUD, tareas, permisos). Select único Rol+Puesto+Plaza con optgroup. |
 | 15 | **Producción / Planificación** | `/produccion` | Funcional | Planilla de producción del día. **Calendario mensual** con dots indicadores (verde = activo, naranja = evento/tag). **Multi-select** para activar N días con nombre de menú opcional (`menu_tag`). Soporte multi-menú en mismo día con filtro chips. Asignación a miembros, badges P1/P2/P3. |
-| 23 | **OPS — Ingeniería de Menú** | `/ingenieria-menu` (standalone) | Funcional | Wizard 3 pasos: info del plato → componentes (receta vinculada, plaza, cantidad diaria) → revisar. Asignación de plaza de producción por ingrediente. Sync automático a `plato_plazas`, `plato_componentes`, `checklist_items`. Accesible desde "Más" para admin/chef. |
+| 23 | **OPS — Ingeniería de Menú** | `/ingenieria-menu` (standalone) | Funcional | Wizard 3 pasos: info del plato → componentes (receta vinculada, plaza, cantidad diaria) → revisar. Asignación de plaza de producción por ingrediente. Sync a `plato_plazas`, `plato_componentes`, `checklist_items`. **Toggle `sync_ops` por componente** (default OFF) — solo sincroniza al checklist si se activa explícitamente. Plaza **General** disponible para tareas que cualquiera puede cubrir. |
 | 24 | **OPS — Workspace diario** | `/operaciones` | Funcional | **3 tabs**: Producción · Mise · Planificación. Producción: secciones con sublabels (SP·Super Prioridad, P·Prioridad, REF·Refuerzo), toggle Carta/Menú con subtítulo, QuickAdd con sugerencias de receta (≥3 chars). Checklist: auto-select plaza por rol, progreso por plaza en grid. |
 | 16 | **Merma** | `/merma` | Funcional | Bottom sheet desde dashboard y módulo propio, 8 motivos con iconos, turno, plaza, costo estimado. |
 | 17 | **Configuración** | `/configuracion` | Funcional | Tabs: restaurante, plazas, rutinas, permisos por rol. Link a `/turnos` para gestión de equipo (sin tab de invitación). |
 | 18 | **Auth** | `/login`, `/register` | Funcional | Login email+password, registro (crea restaurante + user_restaurantes + equipo_miembros + rol_permisos seed), reset password por email, proxy.ts protege rutas. |
 | 19 | **Perfil** | `/perfil` | Funcional | Avatar, datos, cambiar contraseña, cerrar sesión. Linkado desde el header del dashboard. |
-| 20 | **Kitchen Coach (IA)** | API `/api/coach` + FAB | Funcional | Chat UI con FAB draggable (Pointer Events + localStorage). Overlay tutorial SVG (dim + agujero + tooltip naranja). Tour guiado OPS de 11 pasos con tab-switching automático, barra de progreso, auto-skip si elemento no visible. Opciones seleccionables (chips) en respuestas IA. Respuestas sin markdown. |
+| 20 | **Kitchen Coach (IA)** | API `/api/coach` + FAB | Funcional | Chat UI con FAB draggable. Overlay SVG tutorial. Tour guiado OPS 11 pasos. Chips de respuesta. **Suggestions dinámicas por pantalla**: en Carta muestra sugerencias de análisis de carta, food cost, import. **Integración con Carta**: screen context con FC promedio, platos problema, sin receta; highlights `carta-importar`, `carta-rentabilidad`, `carta-lista`, etc. |
 | 21 | **Modo Servicio** | En dashboard | Parcial | UI existe (`components/dashboard/ModoServicio.tsx`) pero **sin conectar a datos reales** — ver DECISIONES.md, se decidió diferir / descartar. |
 | 22 | **Ventas** | `/ventas` | Funcional | Importación desde Excel/CSV (xlsx) y texto libre con IA (Haiku). Pantalla de revisión editable antes de guardar. Tab Resumen con KPIs y lista de ventas con detalle de items. Requiere migración SQL (`ventas` + `ventas_items`). |
 
@@ -51,8 +51,8 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 ### Operación diaria (7)
 `productos`, `proveedores`, `facturas`, `factura_items`, `precio_historial`, `pedidos`, `pedido_items`
 
-### Recetario y Carta (3)
-`recetas`, `ingredientes`, `carta_items`
+### Recetario y Carta (5)
+`recetas`, `ingredientes`, `carta_items` (+ `tags TEXT[]`), `carta_categorias`, `plato_recetas` (+ `plaza`)
 
 ### Tareas y Checklist (6)
 `tareas`, `checklist_secciones`, `checklist_items`, `checklist_registros`, `checklist_rutina`, `checklist_rutina_registros`
@@ -100,7 +100,18 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 
 ## 4. Implementado en Últimas Sesiones
 
-### Sesión anterior — 22 fixes críticos
+### Sesión 2026-05-31 (tarde) — Carta: import IA + tags + OPS + General + Coach
+1. **Import de carta con IA** (`/api/carta/import`): parsea PDF, imagen, Excel, texto plano. Claude Haiku extrae nombre del plato, componentes (sub-recetas), porciones (individual/para compartir), precio y tags dietarios (S/TACC, Vegano, Vegetariano, Keto, Picante, Sin lactosa). Preview editable antes de confirmar: cada componente se puede vincular a recetas/productos/producciones existentes con auto-match fuzzy + dropdown de búsqueda. Al confirmar, crea `carta_items` + `plato_recetas` automáticamente para los componentes con receta vinculada.
+2. **Categorías dinámicas**: tabla `carta_categorias` con RLS. Se seedea con 7 defaults al primer uso de cada restaurante. UI de carta y formularios usan la lista dinámica.
+3. **Tags dietarios en detail view**: columna `tags TEXT[]` en `carta_items`. Chips toggleables directo en el detalle del plato, sin ir a editar. Se persisten en DB en el momento.
+4. **Vinculación de recetas rediseñada**: search box siempre visible (antes oculto tras botón "Vincular"). Selección instantánea con un tap. Porciones editables inline: tap en el número → input → Enter/blur guarda.
+5. **Crear receta borrador desde búsqueda**: cuando no hay resultados, botón "Crear receta [nombre]" → inserta en `recetas` con `status: 'draft'` y la vincula al plato. También "Agregar como tarea pendiente" para delegar la creación.
+6. **Asignar componente a OPS**: botón "→ OPS" por cada receta vinculada en detail. Panel inline: selector de plaza + stock ideal + unidad. Guarda `plaza` en `plato_recetas` + upserta `checklist_item` en la sección correcta. Soporta upsert (actualiza si ya existe).
+7. **OPS sync toggle en ingeniería de menú**: columna `sync_ops BOOLEAN DEFAULT false` en `plato_componentes`. Toggle visual por componente. Solo los componentes con `sync_ops=true` sincronizan al checklist. Badge "OPS" verde visible en modo colapsado.
+8. **Plaza General**: `'general'` agregado al tipo `Plaza` y a todos los selectores (checklist, ingeniería, carta). Items/secciones/rutinas de `plaza='general'` aparecen al tope del checklist de CUALQUIER otra plaza. Tarjeta propia en el grid de selección.
+9. **KitchenCoach integrado en Carta**: screen context con FC promedio, platos con FC>35%, platos sin receta, márgenes negativos. Suggestions dinámicas: al abrir el coach desde Carta muestra opciones de análisis de carta. 6 elementos con `data-coach-target` (header, importar, nuevo, filtros, lista, rentabilidad). Prompt con ejemplos de highlight para respuestas de análisis.
+
+### Sesión 2026-05-31 — KitchenCoach: Tour guiado OPS + overlay tutorial
 - Build errors, deadlocks de auth, loops de realtime, memory leaks.
 - Corrección de columnas (`stock_actual` vs `cantidad`, `status` vs `completada`).
 - Visual consistency en todos los módulos (headers navy, CSS vars, Material Symbols).
