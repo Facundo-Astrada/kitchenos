@@ -39,17 +39,17 @@ const CATEGORIA_KEYWORDS = {
   Pescados: ['salmon', 'atun', 'merluza', 'trucha', 'langostino', 'camaron', 'pacu', 'pejerrey', 'anchoa', 'sardina', 'calamar', 'pulpo', 'mejillon', 'marisco'],
   Verduras: ['cebolla', 'tomate', 'zanahoria', 'papa', 'lechuga', 'rucula', 'espinaca', 'kale', 'apio', 'ajo', 'perejil', 'cilantro', 'albahaca', 'romero', 'tomillo', 'puerro', 'verdeo', 'remolacha', 'pepino', 'jalapeno', 'pimiento', 'pimenton', 'choclo', 'chaucha', 'arveja', 'brocoli', 'coliflor', 'repollo', 'batata', 'calabacin', 'berenjena', 'champinon', 'portobello', 'girgolas', 'menta', 'hinojo', 'zapallo', 'calabaza', 'hongo', 'rabano', 'radicheta', 'hidroponic'],
   Frutas: ['manzana', 'pera', 'naranja', 'limon', 'lima', 'banana', 'frutilla', 'arandano', 'durazno', 'mandarina', 'pomelo', 'uva', 'mango', 'ciruela', 'cereza', 'membrillo', 'piña', 'palta', 'datil', 'higo', 'frambuesa', 'mora'],
-  Lácteos: ['leche', 'crema', 'queso', 'manteca', 'mantequilla', 'yogur', 'ricota', 'mozzarella', 'parmesano', 'mascarpone', 'provolone', 'reggianito', 'huevo'],
-  Panadería: ['harina', 'pan', 'levadura', 'masa', 'galleta', 'tostada', 'panko', 'pan rallado', 'budin', 'factura', 'medialuna', 'bizcocho'],
-  Secos: ['arroz', 'quinoa', 'fideo', 'pasta', 'lenteja', 'poroto', 'garbanzo', 'cuscus', 'avena', 'cereal', 'azucar', 'sal', 'gelatina', 'glucosa', 'almidon', 'fecula', 'semola', 'polenta', 'trigo', 'lino', 'chia', 'cacao', 'nuez', 'almendra', 'mani', 'sarraceno', 'coco rallado'],
-  Especias: ['pimienta', 'comino', 'oregano', 'curry', 'azafran', 'paprika', 'cayena', 'curcuma', 'jengibre', 'canela', 'laurel', 'clavo', 'nuez moscada', 'cardamomo', 'mostaza', 'aji molido', 'coriandro', 'enebro', 'especia'],
-  Bebidas: ['vino', 'cerveza', 'agua', 'gaseosa', 'jugo', 'cafe', 'te ', 'fernet', 'gin', 'whisky', 'vodka', 'campari', 'aperol', 'malbec', 'cabernet', 'espumante', 'champagne', 'licor', 'mosto', 'tonica'],
-  Aceites: ['aceite', 'oliva', 'sesamo', 'girasol'],
+  Lácteos: ['leche', 'crema', 'queso', 'manteca', 'mantequilla', 'yogur', 'ricota', 'mozzarella', 'parmesano', 'mascarpone', 'provolone', 'reggianito', 'huevo', 'fior di late', 'fior di latte', 'fontina', 'gouda', 'cheddar'],
+  Panadería: ['harina', 'pan ', 'levadura', 'masa', 'galleta', 'tostada', 'panko', 'pan rallado', 'budin', 'factura', 'medialuna', 'bizcocho'],
+  Secos: ['arroz', 'quinoa', 'fideo', 'pasta', 'lenteja', 'poroto', 'garbanzo', 'cuscus', 'avena', 'cereal', 'azucar', 'sal', 'gelatina', 'glucosa', 'almidon', 'fecula', 'semola', 'polenta', 'trigo', 'lino', 'chia', 'cacao', 'nuez', 'almendra', 'mani', 'sarraceno', 'coco rallado', 'chocolate', 'isomalta', 'goma xant'],
+  Especias: ['pimienta', 'comino', 'oregano', 'curry', 'azafran', 'paprika', 'cayena', 'curcuma', 'jengibre', 'canela', 'laurel', 'clavo', 'nuez moscada', 'cardamomo', 'mostaza', 'aji molido', 'coriandro', 'enebro', 'especia', 'garam', 'masala', 'sumak', 'fenogreco'],
+  Bebidas: ['vino', 'cerveza', 'agua', 'gaseosa', 'jugo', 'cafe', 'te ', 'fernet', 'gin', 'whisky', 'vodka', 'campari', 'aperol', 'malbec', 'cabernet', 'espumante', 'champagne', 'licor', 'mosto', 'tonica', 'coca', 'sprite', 'pepsi', 'yerba', 'proseco', 'ipa', 'espiritus', 'saquitos de te'],
+  Aceites: ['aceite', 'oliva', 'sesamo', 'sésamo', 'girasol', 'zuelo', 'fritolin', 'barbieri'],
   Vinagres: ['vinagre', 'aceto', 'balsamico'],
-  Conservas: ['aceitunas', 'alcaparras', 'lata', 'tomate triturado', 'pickle', 'salsa de soja', 'salsa inglesa', 'pure de tomate', 'conserva'],
+  Conservas: ['aceitunas', 'alcaparra', 'tomate triturado', 'pickle', 'salsa de soja', 'salsa inglesa', 'pure de tomate', 'conserva', 'alga', 'miso', 'arrope'],
   Congelados: ['congelado', 'frozen', 'helado'],
-  Limpieza: ['detergente', 'lavandina', 'jabon', 'desengrasante', 'cif', 'cera', 'esponja', 'paño', 'pano', 'cloro', 'alcohol', 'quimica', 'cellwash', 'desinfect'],
-  Descartables: ['servilleta', 'bolsa', 'cinta', 'papel aluminio', 'papel manteca', 'guantes', 'cofia', 'film', 'descartable', 'vaso', 'sorbete', 'contenedor', 'bandeja', 'packaging'],
+  Limpieza: ['detergente', 'lavandina', 'jabon', 'desengrasante', 'cif', 'cera', 'esponja', 'paño', 'pano', 'cloro', 'quimica', 'cellwash', 'desinfect', 'detercell', 'descarboniz', 'descalcific', 'bacteria para', 'blem', 'gotita', 'hot plus'],
+  Descartables: ['servilleta', 'bolsa', 'cinta', 'papel aluminio', 'papel manteca', 'guantes', 'cofia', 'film', 'descartable', 'vaso', 'sorbete', 'contenedor', 'bandeja', 'packaging', 'toalla', 'manga repostera', 'tripa', 'envase', 'microfibra', 'curitas', 'carbon', 'leña', 'lena', 'gas'],
   Otros: [],
 }
 
@@ -57,9 +57,17 @@ function norm(s) {
   return (s || '').toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ')
 }
 
+// Orden de evaluación: más específico primero. Aceites/Vinagres ANTES que
+// Verduras (que tiene 'ajo' → capturaba "Aceite de ajo") y Bebidas.
+const PRIORIDAD = [
+  'Limpieza', 'Descartables', 'Aceites', 'Vinagres', 'Carnes', 'Pescados',
+  'Lácteos', 'Especias', 'Conservas', 'Panadería', 'Secos',
+  'Frutas', 'Verduras', 'Bebidas', 'Congelados',
+]
+
 function categorizarRule(nombre) {
   const n = norm(nombre)
-  for (const cat of CATEGORIAS_VALIDAS) {
+  for (const cat of PRIORIDAD) {
     if (CATEGORIA_KEYWORDS[cat].some(kw => n.includes(norm(kw)))) return cat
   }
   return 'Otros'
@@ -126,8 +134,10 @@ if (ambiguos.length > 0) {
 // Guard: keywords muy confiables de packaging/limpieza pisan a la IA,
 // que a veces manda servilletas/bolsas a 'Bebidas' u 'Otros'.
 const GUARD = {
-  Descartables: ['servilleta', 'bolsa', 'film', 'guantes', 'cofia', 'vaso', 'sorbete', 'bandeja', 'contenedor', 'descartable', 'papel aluminio', 'papel manteca'],
-  Limpieza: ['detergente', 'lavandina', 'desengrasante', 'cloro', 'desinfect', 'jabon'],
+  Aceites: ['aceite', 'oliva', 'zuelo', 'fritolin', 'barbieri'],
+  Vinagres: ['vinagre', 'aceto', 'balsamico'],
+  Descartables: ['servilleta', 'bolsa', 'film', 'guantes', 'cofia', 'vaso', 'sorbete', 'bandeja', 'contenedor', 'descartable', 'papel aluminio', 'papel manteca', 'toalla', 'tripa', 'envase', 'microfibra', 'manga repostera'],
+  Limpieza: ['detergente', 'lavandina', 'desengrasante', 'cloro', 'desinfect', 'jabon', 'detercell', 'descarboniz', 'bacteria para', 'blem', 'gotita', 'hot plus'],
 }
 for (const p of productos) {
   const n = norm(p.nombre)
