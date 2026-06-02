@@ -20,6 +20,30 @@
 | `produccion_diaria` | `menu_tag TEXT NULL` — null = menú base del día, string = nombre de evento/menú específico | (no existía antes de mayo 2026) |
 | `carta_items` | `tags TEXT[] DEFAULT '{}'` — dietarios: `'s/tacc'`, `'vegano'`, `'vegetariano'`, `'keto'`, `'picante'`, `'sin lactosa'` | (agregado mayo 2026) |
 | `carta_categorias` | tabla nueva: `id, nombre, icono, orden, restaurante_id` — categorías dinámicas por restaurante | no usar `CATEGORIAS` hardcodeado en código |
+| `haccp_limpieza` | `dia_semana INT` (0=Dom..6=Sáb, para frecuencia semanal), `dia_mes INT` (1-31, mensual), `sync_ops BOOLEAN DEFAULT true`, `checklist_item_id UUID` (link al item OPS) | (agregado junio 2026 para vista calendario + sync OPS) |
+| `presupuestos` | tabla nueva: `id, restaurante_id, periodo, monto, created_at, updated_at` — `periodo` ∈ `'semanal'\|'mensual'\|'trimestral'\|'semestral'\|'anual'`, UNIQUE(restaurante_id, periodo) → upsert | (junio 2026, Reportes Presupuesto vs Real) |
+| `restaurantes` | `configuracion JSONB` — guarda `{ nombres_excluidos: string[] }` (empleados/socios a excluir del OCR de facturas) y `onboarding_step` | (no es columna plana) |
+| `ventas` | `total_ventas`, `cantidad_cubiertos`, `fecha` (date) | — |
+| `ventas_items` | `nombre_plato` (no FK), `cantidad`, `precio_unitario`, `subtotal` | — |
+
+## Unidades de ingredientes — trampas de conversión
+
+`ingredientes.unidad` y `ingredientes.unidad_costo` pueden llegar con variantes no estándar desde importaciones:
+
+| Lo que viene | Lo correcto | Nota |
+|---|---|---|
+| `gr`, `grs`, `gramo` | `g` | muy frecuente en Bros |
+| `lt`, `lts`, `litro` | `l` | |
+| `cc`, `mililitro` | `ml` | |
+| `unidad`, `unidades`, `un` | `u` | muy frecuente — venía de productos.unidad |
+
+El código en `lib/hooks/useRecetas.ts` canoniza via `canonUnit()` antes de calcular el factor. La migración `supabase/migrations/normalizar_unidades_ingredientes.sql` los corrige en DB.
+
+**Combo imposible `unidad='g/kg/ml/l'` vs `unidad_costo='u'` (o viceversa):** factor = **0** → la línea se excluye del costo en vez de inflarlo. Ej: "4 u de Laurel" a $18.595/kg daba $74.380. Son datos a corregir a mano (setear el peso real por unidad o cambiar la unidad del producto).
+
+**Productos con `unidad='unidad'` y precio alto**: 182 productos en Bros tienen `unidad='unidad'` pero su precio es en realidad por kg/l (ingresados con unidad incorrecta desde facturas). Esto subvalúa 53 recetas. El código los protege con factor 0. Corregir manualmente en Stock editando la unidad del producto.
+
+**Categorías de `productos`**: 16 categorías canónicas: `Carnes`, `Pescados`, `Verduras`, `Frutas`, `Lácteos`, `Panadería`, `Secos`, `Especias`, `Bebidas`, `Aceites`, `Vinagres`, `Conservas`, `Congelados`, `Limpieza`, `Descartables`, `Otros`. Usar siempre estas. Para re-categorizar en bulk: `scripts/recategorizar-productos.mjs --apply` (reglas + Haiku + guard).
 
 ## Cómo verificar columnas reales
 

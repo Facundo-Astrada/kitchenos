@@ -8,10 +8,11 @@ Lista priorizada de todo lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL
 
 ### 2. Invitación de usuarios por email
 **Flujo esperado:** Admin ingresa email + rol → Supabase envía magic link → el empleado llega a la app, setea contraseña, queda vinculado al `restaurante_id` del admin con el rol asignado.
-**Trabajo:**
-- Endpoint `POST /api/invitar` con service role que haga `supabase.auth.admin.inviteUserByEmail()` y pre-cree la fila de `user_restaurantes` + `equipo_miembros`.
-- UI en `/turnos` tab Equipo: botón "Invitar" → modal con email + rol.
-**Status:** ⏳ Pendiente.
+**Hecho (2 junio 2026):**
+- ✅ Endpoint `POST /api/invitar` con service role (`inviteUserByEmail` + pre-crea `user_restaurantes` + `equipo_miembros` con `activo: false`).
+- ✅ UI en `/turnos` tab Equipo: botón "Invitar por email" → modal con nombre + email + rol.
+**Falta:** página `/registro-invitado` (landing del magic link donde el invitado setea contraseña). Hoy el redirectTo apunta ahí pero la página no existe aún. Configurar template de email en Supabase.
+**Status:** 🟡 Parcial.
 
 ### 3. Permisos por rol en UI (esconder acciones)
 Hay un hook `usePermisos` que lee `rol_permisos`, pero no todos los módulos lo consumen.
@@ -113,6 +114,21 @@ Los scripts de `scripts/*.mjs` tienen el `SUPABASE_MANAGEMENT_TOKEN` en texto pl
 
 | # | Descripción | Cuándo |
 |---|---|---|
+| Sesión completa: 12 cambios UX + 3 features | Ver detalle abajo. | 2 junio 2026 |
+| Merma estética azul | Header navy, pills translúcidas, stat "Total costo" en accent. | 2 junio 2026 |
+| Carta botones header | Separado en 2 filas: título + "Nuevo"; chips Importar/PDF/Excel en row scrollable horizontal. | 2 junio 2026 |
+| Coach chip "Registrar merma" | Chip fijo sobre el input del Coach en todas las pantallas → abre MermaBottomSheet. | 2 junio 2026 |
+| Facturas paginación "cargar más" rota | Bug stale closure: `page` era state en deps de fetchFacturas. Fix: `pageRef = useRef(0)`. | 2 junio 2026 |
+| Ingeniería de Menú eliminada | Carpeta `/ingenieria-menu` borrada + limpiado `constants.ts` (ModuloId, MODULO_CONFIG, MODULOS_POR_ROL, RUTA_A_MODULO). | 2 junio 2026 |
+| Horas mensuales en Turnos | Botón "Ver horas del mes" → fetchTurnosMes → tabla por miembro (días + horas, rojo si >176h). | 2 junio 2026 |
+| Calendario ↔ OPS | `useCalendario` lee `produccion_diaria` → días con OPS activo como dots verdes "OPS: [menú]". | 2 junio 2026 |
+| Coach contextual en todas las pantallas | `SUGGESTIONS_BY_SCREEN` + `kc_screen_context` en stock, recetario, facturas, reportes, merma, haccp. | 2 junio 2026 |
+| Equipo: invitar por email | Botón "Invitar" → modal → `POST /api/invitar` (service role: inviteUserByEmail + pre-crea user_restaurantes + equipo_miembros). | 2 junio 2026 |
+| Limpieza: crear tarea + calendario + OPS | Migración haccp_limpieza (dia_semana/dia_mes/sync_ops/checklist_item_id). Form con día + toggle OPS. Sub-tabs Lista/Calendario. Sync a checklist plaza General sección Limpieza. | 2 junio 2026 |
+| Reportes: CMV + Presupuesto + Rendimiento | Tabla `presupuestos` (RLS). Tab CMV (ventas vs compras). Tab Presupuesto vs Real (semanal→anual, input inline). Tab Rendimiento por plaza (tareas + merma). | 2 junio 2026 |
+| Facturas: privacidad (excluir personas) | OCR detecta gastos no-mercadería + persona física → `items_excluidos`/`alerta_privacidad`. Lista `nombres_excluidos` en configuracion. Post-filtro en OCR + importador universal. Banner en confirm. | 2 junio 2026 |
+| UX fixes: OPS sección + drag sin text selection + stock sector scroll | Carta OPS agrega selector de sección (Heladera/Secos/Congelados/Estación). `user-select: none` global en body. Sheet "Stockear" scrolleable con maxHeight 80vh. | 2 junio 2026 |
+| Saneamiento de datos completo (costos + stock + categorías) | `unitConversionFactor` con `canonUnit()` (normaliza gr/lt/cc/unidad), factor 0 para combos u↔peso. Donut blindado FC>100%. Categorías: recategorizador con prioridad (Aceites/Vinagres antes que Verduras/Bebidas) — 69→16 canónicas. 22 productos `unidad='unidad'` corregidos vía `factura_items`. Stock inflado ×1000 arreglado: **$72.2M → $8.0M**. Costos absurdos: Pimientos $896.483→$6.489, Mostaza Fermentada $1.9M→$6.681. | 1 junio 2026 |
 | KitchenCoach — Tour guiado OPS | FAB draggable (Pointer Events + localStorage), overlay SVG con agujero, tour 11 pasos con tab-switching automático, card final, chips de respuesta rápida, sin markdown en respuestas IA. | 31 mayo 2026 |
 | OPS — Sync bidireccional Producción ↔ Mise | Tildar en Producción marca en Mise y viceversa via prefijo "Producción:" en título de tarea. `syncMiseCompletado` + `handleMiseUpsert`. | 30 mayo 2026 |
 | OPS — MISE card rediseño | Apertura: box Stock (cierre anterior, color semáforo verde/amarillo/rojo) + box A producir (target fijo). Cierre: mantiene input editable. Tab Rutinas + días_semana en checklist_rutina. | 30 mayo 2026 |

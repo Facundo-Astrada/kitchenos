@@ -629,6 +629,15 @@ export async function POST(req: NextRequest) {
   return await insertBatch(facturas, items, omitidas)
 }
 
+function normNombre(s: string): string {
+  return (s || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 async function insertBatch(
   facturas: FacturaPayload[],
   items: ItemPayload[],
@@ -641,19 +650,50 @@ async function insertBatch(
   const admin = createAdminClient()
   const BATCH = 100
 
-  for (let i = 0; i < facturas.length; i += BATCH) {
-    const { error } = await admin.from('facturas').insert(facturas.slice(i, i + BATCH))
+  // Filtro de privacidad: excluir facturas cuyo proveedor coincide con un nombre interno (empleado/socio)
+  let facturasFinal = facturas
+  let itemsFinal = items
+  let excluidasPorNombre = 0
+  try {
+    const restId = facturas[0]?.restaurante_id
+    if (restId) {
+      const { data: rest } = await admin.from('restaurantes').select('configuracion').eq('id', restId).single()
+      const cfg = rest?.configuracion as { nombres_excluidos?: string[] } | null
+      const internos = (Array.isArray(cfg?.nombres_excluidos) ? cfg!.nombres_excluidos : []).map(normNombre).filter(Boolean)
+      if (internos.length > 0) {
+        const idsExcluidos = new Set<string>()
+        facturasFinal = facturas.filter(f => {
+          const prov = normNombre(f.proveedor_nombre)
+          const match = internos.some(n => prov.includes(n) || n.includes(prov))
+          if (match) { idsExcluidos.add(f.id); return false }
+          return true
+        })
+        if (idsExcluidos.size > 0) {
+          itemsFinal = items.filter(it => !idsExcluidos.has(it.factura_id))
+          excluidasPorNombre = idsExcluidos.size
+        }
+      }
+    }
+  } catch { /* sin config, seguimos */ }
+
+  if (facturasFinal.length === 0) {
+    return NextResponse.json({ importadas: 0, items: 0, omitidas, excluidas_privacidad: excluidasPorNombre })
+  }
+
+  for (let i = 0; i < facturasFinal.length; i += BATCH) {
+    const { error } = await admin.from('facturas').insert(facturasFinal.slice(i, i + BATCH))
     if (error) return NextResponse.json({ error: `Error insertando facturas: ${error.message}` }, { status: 500 })
   }
 
-  for (let i = 0; i < items.length; i += BATCH) {
-    const { error } = await admin.from('factura_items').insert(items.slice(i, i + BATCH))
+  for (let i = 0; i < itemsFinal.length; i += BATCH) {
+    const { error } = await admin.from('factura_items').insert(itemsFinal.slice(i, i + BATCH))
     if (error) return NextResponse.json({ error: `Error insertando items: ${error.message}` }, { status: 500 })
   }
 
   return NextResponse.json({
-    importadas: facturas.length,
-    items: items.length,
+    importadas: facturasFinal.length,
+    items: itemsFinal.length,
     omitidas,
+    excluidas_privacidad: excluidasPorNombre,
   })
 }

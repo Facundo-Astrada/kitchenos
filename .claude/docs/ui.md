@@ -13,6 +13,22 @@ var(--text-2)    /* contraste medio */
 var(--text-3)    /* contraste bajo (subtítulos) */
 ```
 
+## Selección de texto en mobile
+
+`globals.css` tiene `user-select: none` en `body` y `-webkit-user-select: none`. Re-habilitado en `input, textarea, [contenteditable]`. Esto previene que el browser seleccione texto durante long-press / drag en toda la app (comportamiento nativo). **No agregar `user-select` inline** — ya está cubierto globalmente.
+
+## Bottom sheets scrolleables
+
+Cuando un bottom sheet puede tener contenido variable (listas, categorías), siempre agregar `maxHeight` y scroll:
+
+```tsx
+<div style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+  <div style={{ padding: '20px 16px 0', flexShrink: 0 }}>{/* título fijo */}</div>
+  <div style={{ overflowY: 'auto', flex: 1, padding: '0 16px' }}>{/* lista scrolleable */}</div>
+  <div style={{ padding: '8px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0 }}>{/* botón cancelar fijo */}</div>
+</div>
+```
+
 ## Navy header estándar
 
 ```tsx

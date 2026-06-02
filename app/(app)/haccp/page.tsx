@@ -549,16 +549,24 @@ function NuevoVencView({
 }
 
 // ── Nueva Tarea Limpieza View ───────────────────────────
+const DIAS_SEMANA_LIMP = [
+  { v: 1, l: 'Lun' }, { v: 2, l: 'Mar' }, { v: 3, l: 'Mié' }, { v: 4, l: 'Jue' },
+  { v: 5, l: 'Vie' }, { v: 6, l: 'Sáb' }, { v: 0, l: 'Dom' },
+]
+
 function NuevaTareaLimpView({
   onSave,
   onBack,
 }: {
-  onSave: (d: { area: string; tarea_limpieza: string; frecuencia: string }) => Promise<void>
+  onSave: (d: { area: string; tarea_limpieza: string; frecuencia: string; dia_semana: number | null; dia_mes: number | null; sync_ops: boolean }) => Promise<void>
   onBack: () => void
 }) {
   const [area, setArea] = useState('')
   const [tarea, setTarea] = useState('')
   const [freq, setFreq] = useState('diaria')
+  const [diaSemana, setDiaSemana] = useState(1)
+  const [diaMes, setDiaMes] = useState(1)
+  const [syncOps, setSyncOps] = useState(true)
   const [saving, setSaving] = useState(false)
 
   return (
@@ -581,6 +589,50 @@ function NuevaTareaLimpView({
             <option value="mensual">Mensual</option>
           </select>
         </div>
+
+        {/* Day selector — semanal */}
+        {freq === 'semanal' && (
+          <div>
+            <label style={labelStyle}>¿Qué día de la semana?</label>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {DIAS_SEMANA_LIMP.map(d => (
+                <button key={d.v} onClick={() => setDiaSemana(d.v)} style={{
+                  flex: 1, minWidth: 44, padding: '8px 0', borderRadius: 8, cursor: 'pointer',
+                  border: `1px solid ${diaSemana === d.v ? 'var(--navy)' : 'var(--border)'}`,
+                  background: diaSemana === d.v ? 'var(--navy)' : 'var(--surface)',
+                  color: diaSemana === d.v ? '#fff' : 'var(--text-2)', fontSize: 12, fontWeight: 600,
+                }}>{d.l}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Day selector — mensual */}
+        {freq === 'mensual' && (
+          <div>
+            <label style={labelStyle}>¿Qué día del mes?</label>
+            <select value={diaMes} onChange={e => setDiaMes(Number(e.target.value))} style={fieldStyle}>
+              {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
+                <option key={d} value={d}>Día {d}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Sync OPS toggle */}
+        <button onClick={() => setSyncOps(v => !v)} style={{
+          display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 12,
+          border: `1px solid ${syncOps ? 'var(--accent)' : 'var(--border)'}`,
+          background: syncOps ? 'rgba(67,97,160,0.08)' : 'var(--surface)', cursor: 'pointer', textAlign: 'left',
+        }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 22, color: syncOps ? 'var(--accent)' : 'var(--text-3)' }}>
+            {syncOps ? 'check_box' : 'check_box_outline_blank'}
+          </span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>Mostrar en OPS</div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>Aparece en el checklist de operaciones (plaza General)</div>
+          </div>
+        </button>
       </div>
       <div style={{
         position: 'fixed', bottom: 0, left: 0, right: 0,
@@ -588,7 +640,14 @@ function NuevaTareaLimpView({
       }}>
         <button disabled={!area.trim() || !tarea.trim() || saving} onClick={async () => {
           setSaving(true)
-          try { await onSave({ area: area.trim(), tarea_limpieza: tarea.trim(), frecuencia: freq }) } finally { setSaving(false) }
+          try {
+            await onSave({
+              area: area.trim(), tarea_limpieza: tarea.trim(), frecuencia: freq,
+              dia_semana: freq === 'semanal' ? diaSemana : null,
+              dia_mes: freq === 'mensual' ? diaMes : null,
+              sync_ops: syncOps,
+            })
+          } finally { setSaving(false) }
         }} style={{
           width: '100%', padding: '14px', borderRadius: 12,
           background: (area.trim() && tarea.trim()) ? 'var(--navy)' : '#ccc',
@@ -619,6 +678,13 @@ export default function HaccpPage() {
   const [tab, setTab] = useState<Tab>('temperaturas')
   const [selectedEquipo, setSelectedEquipo] = useState<HaccpEquipo | null>(null)
   const [toast, setToast] = useState('')
+  const [limpSubTab, setLimpSubTab] = useState<'lista' | 'calendario'>('lista')
+  const [calRef, setCalRef] = useState(() => { const d = new Date(); return { m: d.getMonth(), y: d.getFullYear() } })
+
+  useEffect(() => {
+    localStorage.setItem('kc_screen_context', JSON.stringify({ screen: 'haccp', tab }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [tab])
 
   // Get latest temp per equipo
   const latestTemps = useMemo(() => {
@@ -641,6 +707,25 @@ export default function HaccpPage() {
     return map
   }, [limpieza])
 
+  // ¿Toca esta tarea en un día dado?
+  const tareaTocaDia = useCallback((l: HaccpLimpieza, date: Date): boolean => {
+    switch (l.frecuencia) {
+      case 'cada_turno':
+      case 'diaria':
+        return true
+      case 'semanal': {
+        const dia = l.dia_semana ?? new Date(l.created_at).getDay()
+        return date.getDay() === dia
+      }
+      case 'mensual': {
+        const dia = l.dia_mes ?? new Date(l.created_at).getDate()
+        return date.getDate() === dia
+      }
+      default:
+        return false
+    }
+  }, [])
+
   // Vencimientos alerts count
   const vencAlerts = useMemo(() => vencimientos.filter(v => {
     if (v.status === 'descartado') return false
@@ -661,9 +746,9 @@ export default function HaccpPage() {
     setView('main')
   }
 
-  const handleCrearLimp = async (d: { area: string; tarea_limpieza: string; frecuencia: string }) => {
+  const handleCrearLimp = async (d: { area: string; tarea_limpieza: string; frecuencia: string; dia_semana: number | null; dia_mes: number | null; sync_ops: boolean }) => {
     await crearTareaLimpieza({ ...d, frecuencia: d.frecuencia as 'cada_turno' | 'diaria' | 'semanal' | 'mensual', usuario_id: null })
-    setToast('Tarea de limpieza agregada')
+    setToast(d.sync_ops ? 'Tarea agregada y enviada a OPS' : 'Tarea de limpieza agregada')
     setView('main')
   }
 
@@ -906,7 +991,88 @@ export default function HaccpPage() {
                 Nueva tarea de limpieza
               </button>
 
-              {Object.entries(limpiezaByArea).map(([area, tasks]) => (
+              {/* Sub-tabs Lista / Calendario */}
+              <div style={{ display: 'flex', gap: 6, background: 'var(--bg)', borderRadius: 10, padding: 3 }}>
+                {(['lista', 'calendario'] as const).map(st => (
+                  <button key={st} onClick={() => setLimpSubTab(st)} style={{
+                    flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
+                    background: limpSubTab === st ? 'var(--surface)' : 'transparent',
+                    color: limpSubTab === st ? 'var(--navy)' : 'var(--text-3)',
+                    fontSize: 13, fontWeight: 600,
+                    boxShadow: limpSubTab === st ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  }}>
+                    {st === 'lista' ? 'Lista' : 'Calendario'}
+                  </button>
+                ))}
+              </div>
+
+              {/* ── CALENDARIO ── */}
+              {limpSubTab === 'calendario' && (() => {
+                const { m, y } = calRef
+                const monthName = new Date(y, m, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+                const firstDow = (new Date(y, m, 1).getDay() + 6) % 7 // Mon=0
+                const daysInMonth = new Date(y, m + 1, 0).getDate()
+                const cells: (Date | null)[] = []
+                for (let i = 0; i < firstDow; i++) cells.push(null)
+                for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(y, m, d))
+                const todayStr = new Date().toDateString()
+                return (
+                  <div>
+                    {/* Month nav */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                      <button onClick={() => setCalRef(r => r.m === 0 ? { m: 11, y: r.y - 1 } : { m: r.m - 1, y: r.y })} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                        <span className="material-symbols-outlined" style={{ color: 'var(--text-2)' }}>chevron_left</span>
+                      </button>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)', textTransform: 'capitalize' }}>{monthName}</span>
+                      <button onClick={() => setCalRef(r => r.m === 11 ? { m: 0, y: r.y + 1 } : { m: r.m + 1, y: r.y })} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                        <span className="material-symbols-outlined" style={{ color: 'var(--text-2)' }}>chevron_right</span>
+                      </button>
+                    </div>
+                    {/* Weekday header */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3, marginBottom: 4 }}>
+                      {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d, i) => (
+                        <div key={i} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: 'var(--text-3)' }}>{d}</div>
+                      ))}
+                    </div>
+                    {/* Grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3 }}>
+                      {cells.map((date, i) => {
+                        if (!date) return <div key={i} />
+                        const tareasDia = limpieza.filter(l => tareaTocaDia(l, date))
+                        const isToday = date.toDateString() === todayStr
+                        return (
+                          <div key={i} style={{
+                            minHeight: 52, borderRadius: 8, padding: '3px 2px',
+                            border: `1px solid ${isToday ? 'var(--navy)' : 'var(--border)'}`,
+                            background: isToday ? 'rgba(28,45,74,0.05)' : 'var(--surface)',
+                            display: 'flex', flexDirection: 'column', gap: 1,
+                          }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: isToday ? 'var(--navy)' : 'var(--text-3)', textAlign: 'center' }}>{date.getDate()}</div>
+                            {tareasDia.slice(0, 2).map(t => (
+                              <div key={t.id} style={{
+                                fontSize: 8, lineHeight: 1.15, padding: '1px 2px', borderRadius: 3,
+                                background: '#dbeafe', color: '#1e40af', overflow: 'hidden',
+                                textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              }}>{t.tarea_limpieza}</div>
+                            ))}
+                            {tareasDia.length > 2 && (
+                              <div style={{ fontSize: 8, color: 'var(--text-3)', textAlign: 'center' }}>+{tareasDia.length - 2}</div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {limpieza.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-3)', fontSize: 13 }}>
+                        Agregá tareas para verlas en el calendario
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* ── LISTA ── */}
+              {limpSubTab === 'lista' && Object.entries(limpiezaByArea).map(([area, tasks]) => (
                 <div key={area}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-2)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span className="material-symbols-outlined" style={{ fontSize: 16 }}>cleaning_services</span>

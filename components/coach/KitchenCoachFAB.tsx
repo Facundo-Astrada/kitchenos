@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useKitchenCoach } from '@/lib/hooks/useKitchenCoach'
+import { useMerma } from '@/lib/hooks/useMerma'
+import MermaBottomSheet from '@/components/merma/MermaBottomSheet'
 
 interface KitchenCoachFABProps {
   stockCritico?: Array<{ nombre: string; cantidad: number; minimo: number }>
@@ -103,6 +105,36 @@ const SUGGESTIONS_BY_SCREEN: Record<string, Suggestion[]> = {
     { label: 'Ver recorrido de OPS', action: 'tour' },
     { label: '¿Qué me conviene producir hoy?', action: 'send' },
     { label: '¿Cómo optimizo el mise en place?', action: 'send' },
+  ],
+  stock: [
+    { label: '¿Qué productos están en riesgo?', action: 'send' },
+    { label: '¿Cuándo tengo que hacer pedidos?', action: 'send' },
+    { label: 'Ayudame a organizar el inventario', action: 'send' },
+  ],
+  recetario: [
+    { label: '¿Cuáles son mis recetas con mayor costo?', action: 'send' },
+    { label: '¿Cómo bajo el food cost de mis recetas?', action: 'send' },
+    { label: 'Ayudame a crear una receta nueva', action: 'send' },
+  ],
+  facturas: [
+    { label: '¿Qué proveedores me subieron más los precios?', action: 'send' },
+    { label: 'Analizá mi inflación de compras', action: 'send' },
+    { label: '¿Cuánto gasté este mes?', action: 'send' },
+  ],
+  reportes: [
+    { label: 'Explicame el food cost del período', action: 'send' },
+    { label: '¿Qué número debería mejorar primero?', action: 'send' },
+    { label: 'Analizá mis compras por proveedor', action: 'send' },
+  ],
+  merma: [
+    { label: '¿Cuál es mi principal fuente de merma?', action: 'send' },
+    { label: '¿Cómo puedo reducir los desperdicios?', action: 'send' },
+    { label: 'Analizá el costo de merma del mes', action: 'send' },
+  ],
+  haccp: [
+    { label: '¿Qué controles son obligatorios por bromatología?', action: 'send' },
+    { label: '¿Qué productos están por vencer?', action: 'send' },
+    { label: 'Ayudame a preparar una auditoría', action: 'send' },
   ],
 }
 
@@ -448,6 +480,8 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
 
   const [input, setInput] = useState('')
   const [tourStep, setTourStep] = useState(-1)
+  const [mermaOpen, setMermaOpen] = useState(false)
+  const { registrarMerma } = useMerma()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const hasUnread = messages.length > 0 && !isOpen
@@ -679,8 +713,25 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Quick action — merma */}
+        <div style={{ padding: '6px 12px 2px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+          <button
+            onClick={() => setMermaOpen(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: 'rgba(67,97,160,0.08)', border: '1px solid rgba(67,97,160,0.25)',
+              borderRadius: 20, padding: '5px 12px',
+              fontSize: 12, fontWeight: 600, color: 'var(--accent)',
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>delete_sweep</span>
+            Registrar merma
+          </button>
+        </div>
+
         {/* Input */}
-        <div style={{ display: 'flex', gap: 8, padding: '10px 12px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 8, padding: '10px 12px', flexShrink: 0 }}>
           <textarea
             ref={textareaRef}
             value={input}
@@ -699,6 +750,12 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
           </button>
         </div>
       </div>
+
+      <MermaBottomSheet
+        open={mermaOpen}
+        onClose={() => setMermaOpen(false)}
+        onRegistrar={async (data) => { await registrarMerma(data); setMermaOpen(false) }}
+      />
 
       {/* FAB */}
       <button

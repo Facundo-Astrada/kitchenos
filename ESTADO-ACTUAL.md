@@ -15,20 +15,20 @@
 | 1 | **Dashboard** | `/` | Funcional | Header con perfil real (auth), status bars reales (`3/12` mise/tareas), pase preview, stock crítico, grilla de módulos por rol, WelcomeDashboard para restaurantes nuevos, turno tracking en localStorage (iniciar/cerrar con duración y resumen), CTA de merma. |
 | 2 | **Tareas** | `/tareas` | Funcional | CRUD, prioridades (crítica/alta/media/baja), categorías, asignación a plaza, checklist por tarea, filtros, tab Producción con matriz, FAB elevado para no tapar navbar. |
 | 3 | **Recetario** | `/recetario` | Funcional | Lista con food cost, detalle `/recetario/[id]`, CRUD ingredientes, cálculo automático, búsqueda, filtros, tabs Recetas/Ideas (drafts), **importación IA desde foto/imagen/audio/texto/archivo/link** (single + multi), guardado vía API server-side (`/api/recetas/save`) que usa service role y evita RLS. PDF export. |
-| 4 | **Stock** | `/stock` | Funcional | Productos con estado (ok/bajo/crítico), CRUD, categorías, alertas, búsqueda, exportar, **modo rápido** (pantalla grande para stock-take secuencial), precio con fuente reducida. |
+| 4 | **Stock** | `/stock` | Funcional | Productos con estado (ok/bajo/crítico), CRUD, categorías, alertas, búsqueda, exportar, **modo rápido** (pantalla grande para stock-take secuencial), precio con fuente reducida. Sheet de selector de sector scrolleable (maxHeight 80vh). |
 | 5 | **Pedidos** | `/pedidos` | Funcional | CRUD, items con precios, estados (borrador/enviado/recibido/parcial), productos frecuentes como chips, búsqueda predictiva, WhatsApp y PDF, recepción parcial. |
 | 6 | **Proveedores** | `/proveedores` | Funcional | CRUD, CUIT, teléfono, días entrega, rubro, historial facturas por proveedor, **auto-creación** desde facturas con IA. |
 | 7 | **Facturas** | `/facturas` | Funcional | Carga con items, tipos A/B/C/X/remito/ticket, **OCR con IA** (Claude Sonnet 4.6) que detecta proveedor/items/total, detección de variaciones de precio, historial, condición de pago. |
 | 8 | **Carta** | `/carta` | Funcional | Items vinculados a recetas, food cost preview coloreado, 86, categorías **dinámicas por restaurante** (`carta_categorias`), vincular/cambiar receta inline (search siempre visible, porciones editables con tap), export PDF. **Tags dietarios** (S/TACC, Vegano, Vegetariano, Keto, Picante, Sin lactosa) toggleables directo en el detalle. **Importar desde foto/PDF/Excel/texto** con IA: extrae nombre, componentes, porciones, precio y tags — cada componente se puede vincular a recetas, productos o producciones existentes. **Crear receta borrador** desde búsqueda sin resultados. **Asignar a OPS** (plaza + stock ideal) por receta vinculada → upserta `checklist_item`. **KitchenCoach integrado**: context con FC promedio, problemas de margen y platos sin receta; suggestions dinámicas según pantalla. |
 | 9 | **Checklist / Mise en Place** | `/checklist` | Funcional | Mise en place por plaza, items SP/P/REF/OK, cantidades color-coded, registros diarios, rutinas con frecuencia. Drag long-press entre secciones. **Plaza General**: items/secciones/rutinas con `plaza='general'` aparecen en TODAS las plazas al tope — para tareas que cualquiera puede cubrir (rutinas de limpieza, mise compartido, etc.). |
 | 10 | **Pase de Turno** | `/pase` | Funcional | Chat continuo entre turnos, grouping por emisor (sin avatar repetido), prioridades, crear tarea desde mensaje, realtime. |
-| 11 | **HACCP** | `/haccp` | Funcional | 3 tabs: Temperaturas, Vencimientos (color coding por días), Limpieza. Export PDF para Bromatología. |
-| 12 | **Reportes / CMV** | `/reportes` | Funcional | 5 tabs: Resumen KPIs, Food Cost por plato, Compras por proveedor, Precios/inflación, Producción. Selector de periodo, gráficos CSS (sin Chart.js). |
+| 11 | **HACCP / Limpieza** | `/haccp` | Funcional | 3 tabs: Temperaturas, Vencimientos (color coding por días), **Limpieza** (sub-tabs Lista/Calendario; crear tarea con día + frecuencia; sync a OPS checklist plaza General). Export PDF para Bromatología. |
+| 12 | **Reportes / CMV** | `/reportes` | Funcional | 8 tabs: Resumen, **CMV** (ventas vs compras), **Presupuesto vs Real** (semanal→anual), **Rendimiento por plaza**, Food Cost, Compras, Precios/inflación, Producción. Selector de periodo, gráficos CSS (sin Chart.js). |
 | 13 | **Calendario** | `/calendario` | Funcional | Vista mensual + semanal por horas, eventos con iconos/colores, entregas de pedidos auto-integradas, CRUD eventos, recurrencia. |
 | 14 | **Turnos / Equipo** | `/turnos` | Funcional | 3 tabs: Equipo (lista + ficha + CRUD), Turnos (grilla semanal M/T/N/F/V, asignación inline al tap, columna Hs calculada), Puestos (CRUD, tareas, permisos). Select único Rol+Puesto+Plaza con optgroup. |
 | 15 | **Producción / Planificación** | `/produccion` | Funcional | Planilla de producción del día. **Calendario mensual** con dots indicadores (verde = activo, naranja = evento/tag). **Multi-select** para activar N días con nombre de menú opcional (`menu_tag`). Soporte multi-menú en mismo día con filtro chips. Asignación a miembros, badges P1/P2/P3. |
-| 23 | **OPS — Ingeniería de Menú** | `/ingenieria-menu` (standalone) | Funcional | Wizard 3 pasos: info del plato → componentes (receta vinculada, plaza, cantidad diaria) → revisar. Asignación de plaza de producción por ingrediente. Sync a `plato_plazas`, `plato_componentes`, `checklist_items`. **Toggle `sync_ops` por componente** (default OFF) — solo sincroniza al checklist si se activa explícitamente. Plaza **General** disponible para tareas que cualquiera puede cubrir. |
 | 24 | **OPS — Workspace diario** | `/operaciones` | Funcional | **3 tabs**: Producción · Mise · Planificación. Producción: secciones con sublabels (SP·Super Prioridad, P·Prioridad, REF·Refuerzo), toggle Carta/Menú con subtítulo, QuickAdd con sugerencias de receta (≥3 chars). Checklist: auto-select plaza por rol, progreso por plaza en grid. |
+| ~~23~~ | ~~OPS — Ingeniería de Menú~~ | ~~`/ingenieria-menu`~~ | **Eliminado (2 jun 2026)** | Página y referencias en `constants.ts` removidas. Los tipos `CategoriaPlato`/`PlatoComponente` y la lógica `sync_ops` de `plato_componentes` se mantienen (los usa Producción). |
 | 16 | **Merma** | `/merma` | Funcional | Bottom sheet desde dashboard y módulo propio, 8 motivos con iconos, turno, plaza, costo estimado. |
 | 17 | **Configuración** | `/configuracion` | Funcional | Tabs: restaurante, plazas, rutinas, permisos por rol. Link a `/turnos` para gestión de equipo (sin tab de invitación). |
 | 18 | **Auth** | `/login`, `/register` | Funcional | Login email+password, registro (crea restaurante + user_restaurantes + equipo_miembros + rol_permisos seed), reset password por email, proxy.ts protege rutas. |
@@ -99,6 +99,45 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 ---
 
 ## 4. Implementado en Últimas Sesiones
+
+### Sesión 2026-06-02 (tarde) — UX batch + Limpieza/Reportes/Privacidad facturas
+**Bloque A — Quick wins:**
+1. **Merma estética azul**: header navy, pills translúcidas, stat "Total costo" en `var(--accent)`.
+2. **Carta header**: título + "Nuevo" arriba; chips Importar/PDF/Excel en row scrollable horizontal.
+3. **Coach chip "Registrar merma"**: fijo sobre el input del Coach en toda la app → `MermaBottomSheet`.
+4. **Facturas paginación rota**: bug stale closure (`page` state en deps de `fetchFacturas`). Fix `pageRef = useRef(0)`.
+
+**Bloque B — Eliminar Ingeniería de Menú**: carpeta `/ingenieria-menu` borrada + `constants.ts` limpio (ModuloId, MODULO_CONFIG, MODULOS_POR_ROL, RUTA_A_MODULO). Tipos `CategoriaPlato`/`PlatoComponente` se mantienen (los usa `produccion`).
+
+**Bloque C — Verificaciones + medias:**
+5. **Horas mensuales** (Turnos): `fetchTurnosMes` + botón "Ver horas del mes" → tabla por miembro (días + horas, rojo >176h).
+6. **Calendario ↔ OPS**: `useCalendario` lee `produccion_diaria` → dots verdes "OPS: [menú]" en el calendario general.
+7. **Coach contextual**: `SUGGESTIONS_BY_SCREEN` + `kc_screen_context` en stock, recetario, facturas, reportes, merma, haccp.
+8. **Equipo → invitar**: botón + modal + `POST /api/invitar` (service role). Falta página `/registro-invitado`.
+
+**Bloque D — Features grandes (Opus):**
+9. **Limpieza** (HACCP): migración `haccp_limpieza` (`dia_semana`, `dia_mes`, `sync_ops`, `checklist_item_id`). Form con día + toggle "Mostrar en OPS". Sub-tabs Lista/Calendario (calendario mensual deriva días por frecuencia). Sync a `checklist_item` plaza General sección "Limpieza"; al borrar la tarea borra el item.
+10. **Reportes**: tabla `presupuestos` (RLS). 3 tabs nuevas — **CMV** (ventas vs compras, semáforo, ticket prom.), **Presupuesto vs Real** (semanal→anual, input inline que upsert, barra de avance), **Rendimiento por plaza** (cumplimiento tareas + merma).
+11. **Facturas privacidad**: OCR (`/api/facturas`) detecta gastos no-mercadería (sueldos/honorarios/adelantos/retiros socios) → `items_excluidos` + `alerta_privacidad` + `proveedor_es_persona`. Lista `nombres_excluidos` en `restaurantes.configuracion` (botón 🛡️ en Facturas). Post-filtro de seguridad en OCR y en `facturas-universal` (importador masivo Fudo). Banner de alerta en confirm.
+
+**Migraciones aplicadas en prod**: `haccp_limpieza_calendario_ops.sql`, `presupuestos.sql` (en `supabase/migrations/`).
+
+### Sesión 2026-06-02 — UX fixes: OPS sección, drag text, stock sector scroll
+1. **Carta OPS — sección en Apertura/Cierre**: el panel OPS ahora pide plaza + sección (Heladera / Secos/Tuppers / Congelados / Estación). Al guardar, busca o crea la `checklist_secciones` correcta y upserta el `checklist_item` en esa sección específica.
+2. **Drag en Mise — sin selección de texto**: `user-select: none` global en `body` (`globals.css`) + re-habilitado en `input/textarea/[contenteditable]`. Previene que el browser seleccione texto durante long-press y drag en toda la app.
+3. **Stock sector selector scrolleable**: el sheet "¿Qué sector vas a stockear?" tenía desborde cuando hay muchas categorías (13+). Ahora tiene `maxHeight: 80vh`, título y cancelar fijos, lista scrolleable en el medio.
+
+### Sesión 2026-06-01 — Saneamiento de datos: costos, stock, categorías + prevención
+1. **Causa raíz de costos absurdos**: `unitConversionFactor` en `lib/hooks/useRecetas.ts` solo manejaba `g↔kg` y `ml↔l`. Datos reales traen `gr`, `lt`, `cc`, `unidad` y combos masa↔volumen — todos caían en factor 1 e inflaban el costo ×1000 (Pimientos en escabeche $896.483 → **$6.489**, Chimichurri $0 → **$1.653** al vincularse).
+2. **`canonUnit()`**: normaliza variantes antes de comparar (`gr`→`g`, `lt/lts`→`l`, `cc`→`ml`, `unidad/unidades`→`u`). Densidad≈1 para g↔ml y kg↔l (aceite, vinagre, etc.). Factor **0** para combos imposibles (`u` ↔ peso/volumen) — excluye la línea sin inflar.
+3. **Donut de Carta blindado**: stops del `conic-gradient` clampeados a 0–100 para FC>100%, texto ya no desborda el círculo, muestra "Pérdida" en rojo cuando el costo supera el precio.
+4. **Categorías de Stock Bros**: de 69 categorías caóticas (nombres de proveedor, typos, duplicados por acento) → **16 canónicas**. Script `scripts/recategorizar-productos.mjs` con reglas + Haiku + guard descartables/limpieza. 421 productos actualizados.
+5. **Vinculación ingredientes Bros**: de ~340 → **559/616** ingredientes activos vinculados a producto. Script `scripts/autolink-ingredientes.mjs` (exacto + parcial + fuzzy) + UPDATE exacto por nombre normalizado en DB.
+6. **Migraciones aplicadas en producción**: 6 ingredientes duplicados borrados (`fix_ingredientes_duplicados.sql`), unidades normalizadas en DB (`normalizar_unidades_ingredientes.sql`), resync `costo_unitario + unidad_costo` desde producto vinculado.
+7. **Deuda de 22 productos `unidad='unidad'` resuelta** cruzando con `factura_items` (fuente de verdad de unidad/precio reales de Fudo): Grupo A (10 → kg confirmado por factura), Grupo B+D (7 → precio 0, se compran por atado/unidad o precio raro), Grupo C (re-links: Manteca→Manteca pilones, Pan→Pan rallado, "Agua" ×18 desvinculada). Errores de cantidad corregidos: Mostaza Fermentada "450 kg"→"450 g" ($1.9M→$6.681), Fondo Umami $187k→$19.693.
+8. **Stock inflado ×1000 corregido**: ~11 productos con precio por kg/l pero `unidad='g'/'ml'` (Black Label, Café de mistol/Momo, tés Amaiti, Descafeinado). Fix: g→kg, ml→l, `stock_actual/1000`. **Stock total $72.251.932 → $8.025.585**.
+9. **Recategorizador mejorado** (`scripts/recategorizar-productos.mjs`): orden de prioridad (Aceites/Vinagres antes que Verduras/Bebidas — "Aceite de ajo" iba a Verduras), keywords ampliadas para no-alimentos. 65 productos recorregidos (aceites de Bebidas→Aceites, químicos→Limpieza). Commit `b1e84f7`.
+10. **Deploy a producción**: commits `9444b8a` + `b1e84f7` en `main`, Vercel deployado.
 
 ### Sesión 2026-05-31 (tarde) — Carta: import IA + tags + OPS + General + Coach
 1. **Import de carta con IA** (`/api/carta/import`): parsea PDF, imagen, Excel, texto plano. Claude Haiku extrae nombre del plato, componentes (sub-recetas), porciones (individual/para compartir), precio y tags dietarios (S/TACC, Vegano, Vegetariano, Keto, Picante, Sin lactosa). Preview editable antes de confirmar: cada componente se puede vincular a recetas/productos/producciones existentes con auto-match fuzzy + dropdown de búsqueda. Al confirmar, crea `carta_items` + `plato_recetas` automáticamente para los componentes con receta vinculada.

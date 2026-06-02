@@ -13,9 +13,13 @@ import {
   type FacturaResumen,
   type PrecioEvolucion,
   type ProduccionData,
+  type CMVData,
+  type PresupuestoRow,
+  type PeriodoPresupuesto,
+  type RendimientoPlaza,
 } from '@/lib/hooks/useReportes'
 
-type Tab = 'resumen' | 'foodcost' | 'compras' | 'precios' | 'produccion'
+type Tab = 'resumen' | 'cmv' | 'presupuesto' | 'rendimiento' | 'foodcost' | 'compras' | 'precios' | 'produccion'
 
 const PERIODOS: { key: Periodo; label: string }[] = [
   { key: 'semana', label: 'Esta semana' },
@@ -25,11 +29,18 @@ const PERIODOS: { key: Periodo; label: string }[] = [
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'resumen', label: 'Resumen', icon: 'dashboard' },
+  { key: 'cmv', label: 'CMV', icon: 'savings' },
+  { key: 'presupuesto', label: 'Presupuesto', icon: 'account_balance_wallet' },
+  { key: 'rendimiento', label: 'Rendimiento', icon: 'speed' },
   { key: 'foodcost', label: 'Food Cost', icon: 'restaurant' },
   { key: 'compras', label: 'Compras', icon: 'shopping_cart' },
   { key: 'precios', label: 'Precios', icon: 'trending_up' },
   { key: 'produccion', label: 'Producción', icon: 'factory' },
 ]
+
+const PRESU_LABELS: Record<PeriodoPresupuesto, string> = {
+  semanal: 'Semanal', mensual: 'Mensual', trimestral: 'Trimestral', semestral: 'Semestral', anual: 'Anual',
+}
 
 function fmtMoney(n: number) {
   return '$' + n.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
@@ -59,10 +70,15 @@ export default function ReportesPage() {
   const router = useRouter()
   const { perfil } = useAuth()
   const esAdmin = perfil?.rol === 'admin'
-  const { loading, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion } = useReportes()
+  const { loading, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchPresupuestos, savePresupuesto, fetchRendimiento } = useReportes()
 
   const [periodo, setPeriodo] = useState<Periodo>('mes')
   const [tab, setTab] = useState<Tab>('resumen')
+
+  useEffect(() => {
+    localStorage.setItem('kc_screen_context', JSON.stringify({ screen: 'reportes', tab, periodo }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [tab, periodo])
 
   // Data states
   const [resumen, setResumen] = useState<ReporteResumen | null>(null)
@@ -70,6 +86,9 @@ export default function ReportesPage() {
   const [comprasData, setComprasData] = useState<{ proveedores: CompraProveedor[]; facturas: FacturaResumen[] }>({ proveedores: [], facturas: [] })
   const [preciosData, setPreciosData] = useState<{ productos: PrecioEvolucion[]; inflacionCocina: number }>({ productos: [], inflacionCocina: 0 })
   const [produccionData, setProduccionData] = useState<ProduccionData>({ recetasProducidas: [], ingredientesMasUsados: [], horasEstimadas: 0 })
+  const [cmvData, setCmvData] = useState<CMVData | null>(null)
+  const [presuData, setPresuData] = useState<PresupuestoRow[]>([])
+  const [rendData, setRendData] = useState<RendimientoPlaza[]>([])
 
   const [tabLoading, setTabLoading] = useState(false)
 
@@ -103,13 +122,28 @@ export default function ReportesPage() {
           setProduccionData(prod)
           break
         }
+        case 'cmv': {
+          const c = await fetchCMV(p)
+          setCmvData(c)
+          break
+        }
+        case 'presupuesto': {
+          const pr = await fetchPresupuestos()
+          setPresuData(pr)
+          break
+        }
+        case 'rendimiento': {
+          const r = await fetchRendimiento(p)
+          setRendData(r)
+          break
+        }
       }
     } catch (e) {
       console.error('Error loading tab:', e)
     } finally {
       setTabLoading(false)
     }
-  }, [fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion])
+  }, [fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchPresupuestos, fetchRendimiento])
 
   useEffect(() => {
     loadTab(tab, periodo)
@@ -452,6 +486,141 @@ export default function ReportesPage() {
     )
   }
 
+  // ── CMV ──
+  function renderCMV() {
+    if (!cmvData || (cmvData.ventas === 0 && cmvData.compras === 0)) {
+      return <EmptyState icon="savings" text="Sin datos. Importá ventas y cargá facturas para calcular el CMV." />
+    }
+    const c = cmvData
+    const cmvCol = c.cmvPct < 33 ? '#16a34a' : c.cmvPct <= 40 ? '#ca8a04' : '#dc2626'
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* CMV % hero */}
+        <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 18, border: '1px solid var(--border)', textAlign: 'center' }}>
+          <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Costo Mercadería Vendida</div>
+          <div style={{ fontSize: 40, fontWeight: 800, color: cmvCol, lineHeight: 1 }}>{c.ventas > 0 ? fmtPct(c.cmvPct) : '—'}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>
+            {c.ventas > 0 ? (c.cmvPct < 33 ? 'Saludable' : c.cmvPct <= 40 ? 'Atención' : 'Crítico') : 'Importá ventas para el %'}
+          </div>
+        </div>
+        {/* KPIs */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+          <KpiCard label="Ventas" value={c.ventas} prev={c.ventasAnterior} icon="point_of_sale" suffix="$" />
+          <KpiCard label="Compras (costo)" value={c.compras} prev={c.comprasAnterior} icon="shopping_cart" suffix="$" />
+          <KpiCard label="Margen bruto" value={c.margenBruto} icon="trending_up" suffix="$" />
+          <KpiCard label="Ticket promedio" value={Math.round(c.ticketPromedio)} icon="receipt" suffix="$" />
+        </div>
+        {/* Ventas vs compras bar */}
+        <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 12 }}>Ventas vs Costo</div>
+          <BarChart
+            items={[
+              { label: 'Ventas', value: c.ventas, color: '#16a34a', subLabel: fmtMoney(c.ventas) },
+              { label: 'Compras', value: c.compras, color: 'var(--navy)', subLabel: fmtMoney(c.compras) },
+            ]}
+            maxVal={Math.max(c.ventas, c.compras, 1)}
+          />
+        </div>
+        <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
+          El CMV se calcula como compras confirmadas ÷ ventas del período. Un CMV sano en gastronomía suele estar entre 28% y 35%.
+        </p>
+      </div>
+    )
+  }
+
+  // ── Presupuesto vs Real ──
+  function renderPresupuesto() {
+    const periodos: PeriodoPresupuesto[] = ['semanal', 'mensual', 'trimestral', 'semestral', 'anual']
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <p style={{ fontSize: 12, color: 'var(--text-2)', margin: 0, lineHeight: 1.5 }}>
+          Ingresá tu presupuesto de compras por período. Se compara contra las facturas confirmadas del período actual.
+        </p>
+        {periodos.map(per => {
+          const row = presuData.find(r => r.periodo === per) ?? { periodo: per, presupuesto: 0, real: 0 }
+          const pct = row.presupuesto > 0 ? (row.real / row.presupuesto) * 100 : 0
+          const over = row.presupuesto > 0 && row.real > row.presupuesto
+          const barCol = pct < 80 ? '#16a34a' : pct <= 100 ? '#ca8a04' : '#dc2626'
+          return (
+            <div key={per} style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{PRESU_LABELS[per]}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ fontSize: 11, color: 'var(--text-3)' }}>$</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    defaultValue={row.presupuesto || ''}
+                    placeholder="0"
+                    onBlur={async (e) => {
+                      const val = parseFloat(e.target.value) || 0
+                      if (val !== row.presupuesto) {
+                        await savePresupuesto(per, val)
+                        const updated = await fetchPresupuestos()
+                        setPresuData(updated)
+                      }
+                    }}
+                    style={{
+                      width: 110, textAlign: 'right', padding: '6px 10px', borderRadius: 8,
+                      border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)',
+                      fontSize: 14, fontWeight: 600, outline: 'none',
+                    }}
+                  />
+                </div>
+              </div>
+              {row.presupuesto > 0 ? (
+                <>
+                  <div style={{ background: 'var(--border)', borderRadius: 6, height: 20, overflow: 'hidden' }}>
+                    <div style={{ width: `${Math.min(pct, 100)}%`, height: '100%', background: barCol, borderRadius: 6, transition: 'width 0.4s' }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 12 }}>
+                    <span style={{ color: 'var(--text-2)' }}>Gastado: <strong style={{ color: 'var(--text-1)' }}>{fmtMoney(row.real)}</strong></span>
+                    <span style={{ color: over ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
+                      {over ? `Excedido ${fmtMoney(row.real - row.presupuesto)}` : `Resta ${fmtMoney(row.presupuesto - row.real)}`}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                  Gastado este período: <strong style={{ color: 'var(--text-1)' }}>{fmtMoney(row.real)}</strong> · Definí un presupuesto para ver el avance
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  // ── Rendimiento por plaza ──
+  function renderRendimiento() {
+    if (!rendData.length) return <EmptyState icon="speed" text="Sin actividad por plaza en el período" />
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {rendData.map(r => {
+          const col = r.cumplimientoPct >= 80 ? '#16a34a' : r.cumplimientoPct >= 50 ? '#ca8a04' : '#dc2626'
+          return (
+            <div key={r.plaza} style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)', textTransform: 'capitalize' }}>{r.plaza}</span>
+                <span style={{ fontSize: 18, fontWeight: 800, color: col }}>{fmtPct(r.cumplimientoPct)}</span>
+              </div>
+              <div style={{ background: 'var(--border)', borderRadius: 6, height: 16, overflow: 'hidden', marginBottom: 10 }}>
+                <div style={{ width: `${Math.min(r.cumplimientoPct, 100)}%`, height: '100%', background: col, borderRadius: 6, transition: 'width 0.4s' }} />
+              </div>
+              <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-2)' }}>
+                <span><span className="material-symbols-outlined" style={{ fontSize: 14, verticalAlign: 'middle' }}>check_circle</span> {r.tareasCompletadas}/{r.tareasTotal} tareas</span>
+                {r.mermaCosto > 0 && (
+                  <span style={{ color: '#dc2626' }}><span className="material-symbols-outlined" style={{ fontSize: 14, verticalAlign: 'middle' }}>delete_sweep</span> {fmtMoney(r.mermaCosto)} merma</span>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   function EmptyState({ icon, text }: { icon: string; text: string }) {
     return (
       <div style={{
@@ -551,6 +720,9 @@ export default function ReportesPage() {
         ) : (
           <>
             {tab === 'resumen' && renderResumen()}
+            {tab === 'cmv' && renderCMV()}
+            {tab === 'presupuesto' && renderPresupuesto()}
+            {tab === 'rendimiento' && renderRendimiento()}
             {tab === 'foodcost' && renderFoodCost()}
             {tab === 'compras' && renderCompras()}
             {tab === 'precios' && renderPrecios()}

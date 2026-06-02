@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type {
   Factura, FacturaItem, FacturaStatus, TipoFactura,
@@ -63,7 +63,7 @@ export function useFacturas() {
   const [facturas, setFacturas] = useState<Factura[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [page, setPage] = useState(0)
+  const pageRef = useRef(0)
   const [hasMore, setHasMore] = useState(true)
   const [totalCount, setTotalCount] = useState(0)
   const supabase = createClient()
@@ -73,7 +73,7 @@ export function useFacturas() {
     if (showLoading) setLoading(true)
     setError(null)
 
-    const currentPage = reset ? 0 : page
+    const currentPage = reset ? 0 : pageRef.current
     const from = currentPage * PAGE_SIZE
     const to = from + PAGE_SIZE - 1
 
@@ -92,7 +92,7 @@ export function useFacturas() {
       }
       if (count != null) setTotalCount(count)
       setHasMore((data?.length ?? 0) === PAGE_SIZE)
-      setPage(currentPage + 1)
+      pageRef.current = currentPage + 1
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al cargar facturas'
       console.error('[useFacturas] Error:', msg)
@@ -100,7 +100,7 @@ export function useFacturas() {
     } finally {
       setLoading(false)
     }
-  }, [RESTAURANTE_ID, page, supabase])
+  }, [RESTAURANTE_ID, supabase])
 
   const fetchMore = useCallback(() => {
     if (hasMore && !loading) fetchFacturas(false, false)
@@ -420,7 +420,7 @@ export function useFacturas() {
 
   return {
     facturas, loading, error,
-    page, hasMore, fetchMore, totalCount,
+    hasMore, fetchMore, totalCount,
     fetchFacturas, fetchItems, crearFactura,
     actualizarFactura, actualizarStatus, eliminarFactura, fetchHistorialPrecios,
   }

@@ -124,7 +124,41 @@ export function useCalendario() {
         _fromPedido: true,
       }))
 
-      setEventos([...eventosDb, ...pedidoEventos])
+      // 3. Auto-generate from produccion_diaria (OPS Planificación/Menú)
+      const { data: prodDias } = await supabase
+        .from('produccion_diaria')
+        .select('fecha, menu_tag')
+        .eq('restaurante_id', restIdRef.current)
+        .gte('fecha', primerDia)
+        .lte('fecha', ultimoDia)
+
+      // Deduplicate by fecha+menu_tag
+      const seenProd = new Set<string>()
+      const prodEventos: EventoCalendario[] = []
+      for (const row of (prodDias ?? [])) {
+        const key = `${row.fecha}_${row.menu_tag ?? ''}`
+        if (seenProd.has(key)) continue
+        seenProd.add(key)
+        prodEventos.push({
+          id: `ops-${row.fecha}-${row.menu_tag ?? 'base'}`,
+          titulo: row.menu_tag ? `OPS: ${row.menu_tag}` : 'OPS: Menú del día',
+          descripcion: 'Producción planificada desde OPS',
+          tipo: 'otro' as TipoEvento,
+          fecha_inicio: row.fecha,
+          fecha_fin: null,
+          hora_inicio: '09:00:00',
+          hora_fin: '17:00:00',
+          recurrente: false,
+          frecuencia: null,
+          color: '#10b981',
+          proveedor_id: null,
+          usuario_id: null,
+          restaurante_id: restIdRef.current,
+          created_at: '',
+        })
+      }
+
+      setEventos([...eventosDb, ...pedidoEventos, ...prodEventos])
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al cargar eventos del calendario'
       console.error('[useCalendario] fetchEventos Error:', msg)

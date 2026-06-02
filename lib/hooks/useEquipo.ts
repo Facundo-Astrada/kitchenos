@@ -160,6 +160,25 @@ export function useEquipo() {
     }
   }, [RESTAURANTE_ID, supabase])
 
+  const fetchTurnosMes = useCallback(async (mes: number, anio: number): Promise<Turno[]> => {
+    if (!RESTAURANTE_ID) return []
+    const desde = `${anio}-${String(mes).padStart(2, '0')}-01`
+    const lastDay = new Date(anio, mes, 0).getDate()
+    const hasta = `${anio}-${String(mes).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    try {
+      const { data, error } = await supabase
+        .from('turnos')
+        .select('*')
+        .eq('restaurante_id', RESTAURANTE_ID)
+        .gte('fecha', desde)
+        .lte('fecha', hasta)
+      if (error) throw error
+      return (data ?? []) as Turno[]
+    } catch {
+      return []
+    }
+  }, [RESTAURANTE_ID, supabase])
+
   async function asignarTurno(miembro_id: string, fecha: string, turno_tipo: TurnoTipo) {
     try {
       const { error } = await supabase
@@ -289,6 +308,7 @@ export function useEquipo() {
     actualizarMiembro,
     desactivarMiembro,
     fetchTurnos,
+    fetchTurnosMes,
     asignarTurno,
     limpiarTurno,
     fetchPuestos,

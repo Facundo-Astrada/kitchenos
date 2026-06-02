@@ -245,6 +245,16 @@ export default function StockPage() {
   const nBajo = useMemo(() => productos.filter(p => p.estado === 'bajo').length, [productos])
   const nPendiente = useMemo(() => productos.filter(p => p.stock_actual === 0 && p.precio_unitario === 0).length, [productos])
 
+  useEffect(() => {
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'stock',
+      total: productos.length,
+      criticos: nCritico,
+      bajos: nBajo,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [productos.length, nCritico, nBajo])
+
   // Quick mode: lista filtrada por sector, críticos/bajos primero
   const quickList = useMemo(() => {
     const base = quickSector ? filtered.filter(p => p.categoria === quickSector) : filtered

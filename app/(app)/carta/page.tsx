@@ -2862,46 +2862,47 @@ export default function CartaPage() {
     <div className="scroll-body">
       {/* Header */}
       <div data-coach-target="carta-header" style={{ background: 'var(--navy)', padding: '46px 16px 14px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <span style={{ color: '#fff', fontWeight: 700, fontSize: 20 }}>Carta</span>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={exportXLSX} style={{
-              background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,.25)',
-              borderRadius: 10, padding: '8px 12px', color: '#fff',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-              fontSize: 12, fontWeight: 600,
-            }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>table_view</span>
-              Excel
-            </button>
-            <button onClick={() => exportCartaPDF(items)} style={{
-              background: 'rgba(255,255,255,0.15)', border: 'none',
-              borderRadius: 10, padding: '8px 12px', color: '#fff',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-              fontSize: 12, fontWeight: 600,
-            }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>download</span>
-              Exportar menú
-            </button>
-            <button data-coach-target="carta-importar" onClick={() => setShowImport(true)} style={{
-              background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,.25)',
-              borderRadius: 10, padding: '8px 12px', color: '#fff',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-              fontSize: 12, fontWeight: 600,
-            }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>upload_file</span>
-              Importar
-            </button>
-            <button data-coach-target="carta-nuevo" onClick={() => setView('nuevo')} style={{
-              background: 'rgba(255,255,255,0.15)', border: 'none',
-              borderRadius: 10, padding: '8px 14px', color: '#fff',
-              fontWeight: 600, fontSize: 13, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 4,
-            }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
-              Nuevo
-            </button>
-          </div>
+          <button data-coach-target="carta-nuevo" onClick={() => setView('nuevo')} style={{
+            background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,.3)',
+            borderRadius: 10, padding: '7px 14px', color: '#fff',
+            fontWeight: 700, fontSize: 13, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 4,
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
+            Nuevo
+          </button>
+        </div>
+        {/* Action chips — scrollable row */}
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 }}>
+          <button data-coach-target="carta-importar" onClick={() => setShowImport(true)} style={{
+            background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,.2)',
+            borderRadius: 20, padding: '5px 12px', color: '#fff',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+            fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>upload_file</span>
+            Importar
+          </button>
+          <button onClick={() => exportCartaPDF(items)} style={{
+            background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,.2)',
+            borderRadius: 20, padding: '5px 12px', color: '#fff',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+            fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>picture_as_pdf</span>
+            PDF
+          </button>
+          <button onClick={exportXLSX} style={{
+            background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,.2)',
+            borderRadius: 20, padding: '5px 12px', color: '#fff',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+            fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>table_view</span>
+            Excel
+          </button>
         </div>
 
         {/* Stats row */}

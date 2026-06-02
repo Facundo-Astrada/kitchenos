@@ -2,7 +2,7 @@
 
 import PageTransition from '@/components/PageTransition'
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-import { useEquipo, TURNO_CONFIG, type Miembro, type Puesto, type TurnoTipo } from '@/lib/hooks/useEquipo'
+import { useEquipo, TURNO_CONFIG, type Miembro, type Puesto, type TurnoTipo, type Turno } from '@/lib/hooks/useEquipo'
 
 // ── Helpers ──
 
@@ -163,7 +163,7 @@ export default function TurnosPage() {
   const {
     miembros, turnos, puestos, loading,
     crearMiembro, actualizarMiembro, desactivarMiembro,
-    fetchTurnos, asignarTurno, limpiarTurno,
+    fetchTurnos, fetchTurnosMes, asignarTurno, limpiarTurno,
     crearPuesto, actualizarPuesto,
   } = useEquipo()
 
@@ -176,8 +176,41 @@ export default function TurnosPage() {
   const [miembroForm, setMiembroForm] = useState<MiembroForm>(EMPTY_MIEMBRO_FORM)
   const [saving, setSaving] = useState(false)
 
+  // ── Invitar state ──
+  const [showInvitar, setShowInvitar] = useState(false)
+  const [invEmail, setInvEmail] = useState('')
+  const [invRol, setInvRol] = useState('cocinero')
+  const [invNombre, setInvNombre] = useState('')
+  const [inviting, setInviting] = useState(false)
+  const [invToast, setInvToast] = useState('')
+
+  async function handleInvitar() {
+    if (!invEmail.trim()) return
+    setInviting(true)
+    try {
+      const res = await fetch('/api/invitar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: invEmail.trim(), rol: invRol, nombre: invNombre.trim() }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      setInvToast(`Invitación enviada a ${invEmail}`)
+      setShowInvitar(false)
+      setInvEmail(''); setInvNombre('')
+    } catch (e: any) {
+      setInvToast('Error: ' + e.message)
+    } finally {
+      setInviting(false)
+      setTimeout(() => setInvToast(''), 3500)
+    }
+  }
+
   // ── Turnos state ──
   const [weekOffset, setWeekOffset] = useState(0)
+  const [showMesResumen, setShowMesResumen] = useState(false)
+  const [turnosMes, setTurnosMes] = useState<Turno[]>([])
+  const [loadingMes, setLoadingMes] = useState(false)
   const weekDates = useMemo(() => getWeekDates(weekOffset), [weekOffset])
   const weekStart = fmtDate(weekDates[0])
   const weekEnd = fmtDate(weekDates[6])
@@ -475,6 +508,7 @@ export default function TurnosPage() {
     if (equipoView === 'nuevo') return <NuevoMiembroView />
 
     return (
+      <>
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {miembros.map((m) => (
           <div
@@ -548,11 +582,64 @@ export default function TurnosPage() {
           </div>
         )}
 
-        <button onClick={openNuevoMiembro} style={{ ...btnPrimary, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 6 }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
-          Agregar miembro
-        </button>
+        <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+          <button onClick={openNuevoMiembro} style={{ ...btnPrimary, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
+            Agregar
+          </button>
+          <button onClick={() => setShowInvitar(true)} style={{ ...btnPrimary, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'var(--accent)' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>send</span>
+            Invitar por email
+          </button>
+        </div>
       </div>
+
+      {/* Invite modal */}
+      {showInvitar && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 200 }} onClick={() => setShowInvitar(false)} />
+          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 201, background: 'var(--surface)', borderRadius: '20px 20px 0 0', padding: '24px 16px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>Invitar al equipo</h3>
+              <button onClick={() => setShowInvitar(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-3)' }}>close</span>
+              </button>
+            </div>
+            <div>
+              <label style={{ ...labelStyle }}>Nombre (opcional)</label>
+              <input value={invNombre} onChange={e => setInvNombre(e.target.value)} placeholder="Juan" style={fieldStyle} />
+            </div>
+            <div>
+              <label style={{ ...labelStyle }}>Email *</label>
+              <input value={invEmail} onChange={e => setInvEmail(e.target.value)} placeholder="juan@email.com" type="email" style={fieldStyle} />
+            </div>
+            <div>
+              <label style={{ ...labelStyle }}>Rol</label>
+              <select value={invRol} onChange={e => setInvRol(e.target.value)} style={fieldStyle}>
+                {ROLES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+              </select>
+            </div>
+            <button
+              onClick={handleInvitar}
+              disabled={inviting || !invEmail.trim()}
+              style={{ ...btnPrimary, opacity: inviting || !invEmail.trim() ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>send</span>
+              {inviting ? 'Enviando...' : 'Enviar invitación'}
+            </button>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, textAlign: 'center' }}>
+              El empleado recibirá un email con un link para crear su cuenta y acceder a la app.
+            </p>
+          </div>
+        </>
+      )}
+
+      {invToast && (
+        <div style={{ position: 'fixed', bottom: 100, left: '50%', transform: 'translateX(-50%)', background: 'var(--navy)', color: '#fff', padding: '10px 20px', borderRadius: 12, fontSize: 13, fontWeight: 600, zIndex: 300, whiteSpace: 'nowrap' }}>
+          {invToast}
+        </div>
+      )}
+      </>
     )
   }
 
@@ -867,6 +954,64 @@ export default function TurnosPage() {
         {miembros.length === 0 && (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
             Agrega miembros del equipo primero
+          </div>
+        )}
+
+        {/* Monthly hours summary */}
+        {miembros.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <button
+              onClick={async () => {
+                if (!showMesResumen) {
+                  setLoadingMes(true)
+                  const now = new Date()
+                  const data = await fetchTurnosMes(now.getMonth() + 1, now.getFullYear())
+                  setTurnosMes(data)
+                  setLoadingMes(false)
+                }
+                setShowMesResumen(v => !v)
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                background: showMesResumen ? 'var(--navy)' : 'var(--surface)',
+                color: showMesResumen ? '#fff' : 'var(--text-2)',
+                border: `1px solid ${showMesResumen ? 'var(--navy)' : 'var(--border)'}`,
+                borderRadius: 10, padding: '8px 14px',
+                fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>calendar_month</span>
+              {loadingMes ? 'Cargando...' : showMesResumen ? 'Ocultar resumen del mes' : 'Ver horas del mes'}
+            </button>
+
+            {showMesResumen && !loadingMes && (
+              <div style={{ marginTop: 10, background: 'var(--surface)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
+                <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {new Date().toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}
+                </div>
+                {miembros.map(m => {
+                  const HOURS: Record<string, number> = { mañana: 8, tarde: 8, noche: 8, franco: 0, vacaciones: 0 }
+                  const mTurnos = turnosMes.filter(t => t.miembro_id === m.id)
+                  const totalHs = mTurnos.reduce((acc, t) => acc + (HOURS[t.turno_tipo] ?? 0), 0)
+                  const dias = mTurnos.filter(t => t.turno_tipo !== 'franco' && t.turno_tipo !== 'vacaciones').length
+                  return (
+                    <div key={m.id} style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--border)', gap: 10 }}>
+                      <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>
+                        {m.nombre} {m.apellido}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{dias} días</div>
+                      <div style={{
+                        fontSize: 15, fontWeight: 800,
+                        color: totalHs > 176 ? '#ef4444' : totalHs > 0 ? 'var(--navy)' : 'var(--text-3)',
+                        minWidth: 40, textAlign: 'right',
+                      }}>
+                        {totalHs}h
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>

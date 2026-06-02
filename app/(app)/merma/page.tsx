@@ -1,7 +1,7 @@
 'use client'
 
 import PageTransition from '@/components/PageTransition'
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useMerma } from '@/lib/hooks/useMerma'
 import { MOTIVOS_MERMA } from '@/types'
 import type { Merma, MotivoMerma } from '@/types'
@@ -69,6 +69,11 @@ const PERIODOS: { value: Periodo; label: string }[] = [
 export default function MermaPage() {
   const { registros, loading, fetchMerma, registrarMerma, eliminarMerma } = useMerma()
   const [periodo, setPeriodo] = useState<Periodo>('hoy')
+
+  useEffect(() => {
+    localStorage.setItem('kc_screen_context', JSON.stringify({ screen: 'merma', total: registros.length }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [registros.length])
   const [sheetOpen, setSheetOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [toast, setToast] = useState('')
@@ -148,32 +153,37 @@ export default function MermaPage() {
     <div style={{ minHeight: '100dvh', background: 'var(--bg)', paddingBottom: 100 }}>
 
       {/* Header */}
-      <div style={{ padding: '46px 16px 14px' }}>
-        <h1 className="text-[22px] font-bold" style={{ color: 'var(--navy)' }}>Merma</h1>
-        <p className="text-[13px] mt-0.5" style={{ color: 'var(--text-2)' }}>Control de desperdicios</p>
-      </div>
+      <div style={{ background: 'var(--navy)', padding: '46px 16px 0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <h1 className="text-[22px] font-bold" style={{ color: '#fff' }}>Merma</h1>
+            <p className="text-[13px] mt-0.5" style={{ color: 'rgba(255,255,255,0.65)' }}>Control de desperdicios</p>
+          </div>
+          <span className="material-symbols-outlined" style={{ fontSize: 28, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>delete_sweep</span>
+        </div>
 
-      {/* Period pills */}
-      <div className="flex gap-2 px-4 pb-3">
-        {PERIODOS.map(p => (
-          <button
-            key={p.value}
-            onClick={() => handlePeriodo(p.value)}
-            className="text-[13px] font-medium px-3.5 py-1.5 rounded-full transition-colors"
-            style={{
-              background: periodo === p.value ? 'var(--navy)' : 'var(--surface)',
-              color: periodo === p.value ? '#fff' : 'var(--text-2)',
-              border: `1px solid ${periodo === p.value ? 'var(--navy)' : 'var(--border)'}`,
-            }}
-          >
-            {p.label}
-          </button>
-        ))}
+        {/* Period pills in header */}
+        <div className="flex gap-2 pb-3 pt-3 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          {PERIODOS.map(p => (
+            <button
+              key={p.value}
+              onClick={() => handlePeriodo(p.value)}
+              className="text-[13px] font-medium px-3.5 py-1.5 rounded-full transition-colors shrink-0"
+              style={{
+                background: periodo === p.value ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08)',
+                color: '#fff',
+                border: `1px solid ${periodo === p.value ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.15)'}`,
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Stats cards */}
       <div className="flex gap-3 px-4 pb-4 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-        <StatCard icon="payments" label="Total costo" value={fmtPrecio(stats.totalCosto)} color="#ef4444" />
+        <StatCard icon="payments" label="Total costo" value={fmtPrecio(stats.totalCosto)} color="var(--accent)" />
         <StatCard icon="inventory_2" label="Registros" value={String(stats.totalRegistros)} color="var(--navy)" />
         <StatCard
           icon={stats.topMotivo?.icon ?? 'help'}

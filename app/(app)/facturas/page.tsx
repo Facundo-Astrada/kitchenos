@@ -9,6 +9,7 @@ import ImageCropModal from '@/components/ui/ImageCropModal'
 import BulkUploadDrawer from '@/components/facturas/BulkUploadDrawer'
 import ExcelPOSImportModal from '@/components/facturas/ExcelPOSImportModal'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
+import { createClient } from '@/lib/supabase/client'
 import type {
   Factura, FacturaItem, FacturaStatus, TipoFactura, CondicionPago,
 } from '@/types'
@@ -108,6 +109,9 @@ interface AIResult {
   iva_total: number
   total: number
   notas: string | null
+  proveedor_es_persona?: boolean
+  items_excluidos?: { concepto: string; motivo: string }[]
+  alerta_privacidad?: string | null
   _demo?: boolean
 }
 
@@ -364,6 +368,34 @@ function ConfirmView({ result, productos, proveedores, onConfirm, onCancel, savi
       </div>
 
       <div className="flex-1 overflow-y-auto">
+        {/* Alerta de privacidad */}
+        {(data.alerta_privacidad || (data.items_excluidos && data.items_excluidos.length > 0)) && (
+          <div className="mx-4 mt-4 rounded-[12px] p-3" style={{ background: '#fef3c7', border: '1px solid #fcd34d' }}>
+            <div className="flex items-start gap-2">
+              <span className="material-symbols-outlined text-[18px]" style={{ color: '#92400e' }}>shield_person</span>
+              <div className="flex-1">
+                <div className="text-[12px] font-bold" style={{ color: '#92400e' }}>Datos de personas detectados</div>
+                {data.alerta_privacidad && (
+                  <div className="text-[11px] mt-1" style={{ color: '#92400e' }}>{data.alerta_privacidad}</div>
+                )}
+                {data.items_excluidos && data.items_excluidos.length > 0 && (
+                  <div className="mt-2 flex flex-col gap-1">
+                    {data.items_excluidos.map((ex, i) => (
+                      <div key={i} className="text-[11px]" style={{ color: '#92400e' }}>
+                        <span className="line-through opacity-70">{ex.concepto}</span>
+                        <span className="opacity-60"> — {ex.motivo}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="text-[10px] mt-2 opacity-70" style={{ color: '#92400e' }}>
+                  Estos conceptos no se cargarán como compras. Configurá los nombres internos desde el botón de privacidad en Facturas.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Datos detectados */}
         <div className="p-4">
           <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-3)' }}>
@@ -1845,6 +1877,15 @@ export default function FacturasPage() {
   const { proveedores } = useProveedores()
   const [mainTab, setMainTab] = useState<MainTab>('facturas')
   const [view, setView] = useState<View>('list')
+
+  useEffect(() => {
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'facturas',
+      total: facturas.length,
+      totalCount,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [facturas.length, totalCount])
   const [importMode, setImportMode] = useState<ImportMode>(null)
   const [aiResult, setAiResult] = useState<AIResult | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
@@ -1857,6 +1898,37 @@ export default function FacturasPage() {
   const [showBulkUpload, setShowBulkUpload] = useState(false)
   const [showExcelPOS, setShowExcelPOS] = useState(false)
   const [cropPendingFile, setCropPendingFile] = useState<File | null>(null)
+
+  // ── Privacidad: nombres internos a excluir ──
+  const [showPrivacidad, setShowPrivacidad] = useState(false)
+  const [nombresExcluidos, setNombresExcluidos] = useState<string[]>([])
+  const [nuevoNombre, setNuevoNombre] = useState('')
+  const supabasePriv = useMemo(() => createClient(), [])
+
+  useEffect(() => {
+    let cancel = false
+    ;(async () => {
+      const { data: { user } } = await supabasePriv.auth.getUser()
+      if (!user || cancel) return
+      const { data: ur } = await supabasePriv.from('user_restaurantes').select('restaurante_id').eq('user_id', user.id).single()
+      if (!ur?.restaurante_id || cancel) return
+      const { data: rest } = await supabasePriv.from('restaurantes').select('configuracion').eq('id', ur.restaurante_id).single()
+      const cfg = rest?.configuracion as { nombres_excluidos?: string[] } | null
+      if (!cancel && Array.isArray(cfg?.nombres_excluidos)) setNombresExcluidos(cfg.nombres_excluidos)
+    })()
+    return () => { cancel = true }
+  }, [supabasePriv])
+
+  async function guardarNombresExcluidos(lista: string[]) {
+    setNombresExcluidos(lista)
+    const { data: { user } } = await supabasePriv.auth.getUser()
+    if (!user) return
+    const { data: ur } = await supabasePriv.from('user_restaurantes').select('restaurante_id').eq('user_id', user.id).single()
+    if (!ur?.restaurante_id) return
+    const { data: rest } = await supabasePriv.from('restaurantes').select('configuracion').eq('id', ur.restaurante_id).single()
+    const cfg = (rest?.configuracion as Record<string, unknown> | null) ?? {}
+    await supabasePriv.from('restaurantes').update({ configuracion: { ...cfg, nombres_excluidos: lista } }).eq('id', ur.restaurante_id)
+  }
 
   // Filter facturas
   const facturasFiltradas = useMemo(() => {
@@ -2271,13 +2343,23 @@ export default function FacturasPage() {
       <div style={{ background: 'var(--navy)', padding: '46px 16px 0', flexShrink: 0 }}>
         <div className="flex items-center justify-between mb-1">
           <h1 className="text-white text-[18px] font-bold m-0">Compras</h1>
-          <button
-            onClick={exportXLSX}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8, background: 'rgba(255,255,255,.15)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>table_view</span>
-            Exportar
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowPrivacidad(true)}
+              title="Nombres a excluir (privacidad)"
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 8, background: 'rgba(255,255,255,.15)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>shield_person</span>
+              {nombresExcluidos.length > 0 && <span>{nombresExcluidos.length}</span>}
+            </button>
+            <button
+              onClick={exportXLSX}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8, background: 'rgba(255,255,255,.15)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>table_view</span>
+              Exportar
+            </button>
+          </div>
         </div>
 
         {/* Tab pills */}
@@ -2399,6 +2481,67 @@ export default function FacturasPage() {
           fetchFacturas()
         }}
       />
+
+      {/* Modal privacidad \u2014 nombres a excluir */}
+      {showPrivacidad && (
+        <>
+          <div className="fixed inset-0 z-[310]" style={{ background: 'rgba(0,0,0,0.45)' }} onClick={() => setShowPrivacidad(false)} />
+          <div className="fixed bottom-0 left-0 right-0 z-[311] rounded-t-[20px] flex flex-col" style={{ background: 'var(--surface)', maxHeight: '80vh', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}>
+            <div className="p-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined" style={{ color: 'var(--accent)' }}>shield_person</span>
+                  <h3 className="text-[16px] font-bold m-0" style={{ color: 'var(--text-1)' }}>Nombres a excluir</h3>
+                </div>
+                <button onClick={() => setShowPrivacidad(false)} className="bg-transparent border-none cursor-pointer">
+                  <span className="material-symbols-outlined" style={{ color: 'var(--text-3)' }}>close</span>
+                </button>
+              </div>
+              <p className="text-[12px] mt-2 mb-0" style={{ color: 'var(--text-2)' }}>
+                Empleados y socios cuyos nombres aparecen en facturas. El OCR los detecta y excluye autom\u00e1ticamente de las compras.
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="flex gap-2 mb-3">
+                <input
+                  value={nuevoNombre}
+                  onChange={e => setNuevoNombre(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && nuevoNombre.trim()) { guardarNombresExcluidos([...nombresExcluidos, nuevoNombre.trim()]); setNuevoNombre('') } }}
+                  placeholder="Ej: Juan P\u00e9rez"
+                  className="flex-1 rounded-[10px] px-3 py-2 text-[14px] outline-none"
+                  style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
+                />
+                <button
+                  onClick={() => { if (nuevoNombre.trim()) { guardarNombresExcluidos([...nombresExcluidos, nuevoNombre.trim()]); setNuevoNombre('') } }}
+                  disabled={!nuevoNombre.trim()}
+                  className="px-4 rounded-[10px] border-none cursor-pointer text-[14px] font-bold text-white"
+                  style={{ background: nuevoNombre.trim() ? 'var(--navy)' : '#ccc' }}
+                >
+                  Agregar
+                </button>
+              </div>
+
+              {nombresExcluidos.length === 0 ? (
+                <div className="text-center py-8 text-[13px]" style={{ color: 'var(--text-3)' }}>
+                  Sin nombres configurados todav\u00eda
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {nombresExcluidos.map((n, i) => (
+                    <div key={i} className="flex items-center justify-between rounded-[10px] px-3 py-2" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                      <span className="text-[14px]" style={{ color: 'var(--text-1)' }}>{n}</span>
+                      <button onClick={() => guardarNombresExcluidos(nombresExcluidos.filter((_, j) => j !== i))} className="bg-transparent border-none cursor-pointer">
+                        <span className="material-symbols-outlined text-[18px]" style={{ color: 'var(--text-3)' }}>delete</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Toast */}
       {toast && (

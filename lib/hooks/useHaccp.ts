@@ -56,6 +56,10 @@ export interface HaccpLimpieza {
   usuario_id: string | null
   restaurante_id: string
   created_at: string
+  dia_semana: number | null
+  dia_mes: number | null
+  sync_ops: boolean
+  checklist_item_id: string | null
 }
 
 export interface HaccpLimpiezaRegistro {
@@ -382,13 +386,63 @@ export function useHaccp() {
     }
   }, [RESTAURANTE_ID, supabase])
 
+  // Crea (o reusa) el checklist_item de OPS en plaza 'general' sección 'Limpieza'
+  async function syncLimpiezaToOps(nombre: string, frecuencia: string): Promise<string | null> {
+    try {
+      // 1. Buscar o crear sección 'Limpieza' en plaza general
+      const { data: secExist } = await supabase
+        .from('checklist_secciones')
+        .select('id')
+        .eq('restaurante_id', RESTAURANTE_ID)
+        .eq('plaza', 'general')
+        .ilike('nombre', 'Limpieza')
+        .limit(1)
+      let seccionId: string | null = secExist?.[0]?.id ?? null
+      if (!seccionId) {
+        const { data: newSec } = await supabase
+          .from('checklist_secciones')
+          .insert({ nombre: 'Limpieza', icono: 'cleaning_services', plaza: 'general', orden: 90, restaurante_id: RESTAURANTE_ID })
+          .select('id').single()
+        seccionId = newSec?.id ?? null
+      }
+
+      // 2. Insertar el checklist_item
+      const { data: newItem } = await supabase
+        .from('checklist_items')
+        .insert({
+          nombre,
+          plaza: 'general',
+          cantidad: 1,
+          unidad: 'vez',
+          prioridad: 'chk',
+          seccion_id: seccionId,
+          seccion: 'Limpieza',
+          observacion: `Limpieza · ${frecuencia}`,
+          restaurante_id: RESTAURANTE_ID,
+          orden: 0,
+        })
+        .select('id').single()
+      return newItem?.id ?? null
+    } catch (e) {
+      console.error('[useHaccp] syncLimpiezaToOps Error:', e)
+      return null
+    }
+  }
+
   async function crearTareaLimpieza(
-    datos: Omit<HaccpLimpieza, 'id' | 'restaurante_id' | 'created_at' | 'ultimo_registro'>
+    datos: Omit<HaccpLimpieza, 'id' | 'restaurante_id' | 'created_at' | 'ultimo_registro' | 'checklist_item_id'>
   ) {
     try {
+      // Sync a OPS si corresponde
+      let checklistItemId: string | null = null
+      if (datos.sync_ops) {
+        checklistItemId = await syncLimpiezaToOps(`${datos.area}: ${datos.tarea_limpieza}`, datos.frecuencia)
+      }
+
       const { error } = await supabase.from('haccp_limpieza').insert({
         ...datos,
         ultimo_registro: null,
+        checklist_item_id: checklistItemId,
         restaurante_id: RESTAURANTE_ID,
       })
       if (error) throw error
@@ -433,6 +487,11 @@ export function useHaccp() {
 
   async function eliminarTareaLimpieza(id: string) {
     try {
+      // Borrar el checklist_item de OPS asociado si existe
+      const tarea = limpieza.find(l => l.id === id)
+      if (tarea?.checklist_item_id) {
+        await supabase.from('checklist_items').delete().eq('id', tarea.checklist_item_id)
+      }
       const { error } = await supabase
         .from('haccp_limpieza')
         .delete()

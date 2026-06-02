@@ -190,6 +190,16 @@ export default function RecetarioPage() {
   const recetasPublicadas = useMemo(() => recetas.filter(r => r.status !== 'draft'), [recetas])
   const recetasDraft = useMemo(() => recetas.filter(r => r.status === 'draft'), [recetas])
 
+  useEffect(() => {
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'recetario',
+      total: recetas.length,
+      publicadas: recetasPublicadas.length,
+      drafts: recetasDraft.length,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [recetas.length, recetasPublicadas.length, recetasDraft.length])
+
   function exportXLSX() {
     const recetasRows = recetas.map(r => ({
       'Nombre': r.nombre,

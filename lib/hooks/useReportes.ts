@@ -51,6 +51,33 @@ export interface ProduccionData {
   horasEstimadas: number
 }
 
+export interface CMVData {
+  ventas: number
+  compras: number
+  cmvPct: number          // compras / ventas * 100
+  cubiertos: number
+  ticketPromedio: number
+  margenBruto: number     // ventas - compras
+  ventasAnterior: number
+  comprasAnterior: number
+}
+
+export type PeriodoPresupuesto = 'semanal' | 'mensual' | 'trimestral' | 'semestral' | 'anual'
+
+export interface PresupuestoRow {
+  periodo: PeriodoPresupuesto
+  presupuesto: number
+  real: number
+}
+
+export interface RendimientoPlaza {
+  plaza: string
+  tareasTotal: number
+  tareasCompletadas: number
+  cumplimientoPct: number
+  mermaCosto: number
+}
+
 function getDateRange(periodo: Periodo): { from: string; to: string; prevFrom: string; prevTo: string } {
   const now = new Date()
   const to = now.toISOString().slice(0, 10)
@@ -422,5 +449,123 @@ export function useReportes() {
     } finally { setLoading(false) }
   }, [RESTAURANTE_ID, supabase])
 
-  return { loading, error, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion }
+  // ── CMV (Costo Mercadería Vendida) ──
+  const fetchCMV = useCallback(async (periodo: Periodo): Promise<CMVData> => {
+    const empty: CMVData = { ventas: 0, compras: 0, cmvPct: 0, cubiertos: 0, ticketPromedio: 0, margenBruto: 0, ventasAnterior: 0, comprasAnterior: 0 }
+    if (!RESTAURANTE_ID) return empty
+    setLoading(true)
+    try {
+      const { from, to, prevFrom, prevTo } = getDateRange(periodo)
+
+      const [ventasRes, comprasRes, ventasPrevRes, comprasPrevRes] = await Promise.all([
+        supabase.from('ventas').select('total_ventas, cantidad_cubiertos').eq('restaurante_id', RESTAURANTE_ID).gte('fecha', from).lte('fecha', to),
+        supabase.from('facturas').select('total').eq('restaurante_id', RESTAURANTE_ID).eq('status', 'confirmada').gte('fecha_factura', from).lte('fecha_factura', to),
+        supabase.from('ventas').select('total_ventas').eq('restaurante_id', RESTAURANTE_ID).gte('fecha', prevFrom).lte('fecha', prevTo),
+        supabase.from('facturas').select('total').eq('restaurante_id', RESTAURANTE_ID).eq('status', 'confirmada').gte('fecha_factura', prevFrom).lte('fecha_factura', prevTo),
+      ])
+
+      const ventas = (ventasRes.data ?? []).reduce((s, v) => s + (v.total_ventas || 0), 0)
+      const cubiertos = (ventasRes.data ?? []).reduce((s, v) => s + (v.cantidad_cubiertos || 0), 0)
+      const compras = (comprasRes.data ?? []).reduce((s, f) => s + (f.total || 0), 0)
+      const ventasAnterior = (ventasPrevRes.data ?? []).reduce((s, v) => s + (v.total_ventas || 0), 0)
+      const comprasAnterior = (comprasPrevRes.data ?? []).reduce((s, f) => s + (f.total || 0), 0)
+
+      return {
+        ventas, compras,
+        cmvPct: ventas > 0 ? (compras / ventas) * 100 : 0,
+        cubiertos,
+        ticketPromedio: cubiertos > 0 ? ventas / cubiertos : 0,
+        margenBruto: ventas - compras,
+        ventasAnterior, comprasAnterior,
+      }
+    } catch (e: unknown) {
+      console.error('[useReportes] fetchCMV Error:', e)
+      return empty
+    } finally { setLoading(false) }
+  }, [RESTAURANTE_ID, supabase])
+
+  // ── Presupuesto vs Real ──
+  const fetchPresupuestos = useCallback(async (): Promise<PresupuestoRow[]> => {
+    if (!RESTAURANTE_ID) return []
+    setLoading(true)
+    try {
+      const { data: presu } = await supabase.from('presupuestos').select('periodo, monto').eq('restaurante_id', RESTAURANTE_ID)
+      const presuMap: Record<string, number> = {}
+      for (const p of (presu ?? [])) presuMap[p.periodo] = p.monto || 0
+
+      const now = new Date()
+      const y = now.getFullYear(), m = now.getMonth()
+      // Rangos del período actual
+      const startWeek = new Date(now); startWeek.setDate(now.getDate() - ((now.getDay() + 6) % 7))
+      const ranges: Record<PeriodoPresupuesto, string> = {
+        semanal: startWeek.toISOString().slice(0, 10),
+        mensual: new Date(y, m, 1).toISOString().slice(0, 10),
+        trimestral: new Date(y, Math.floor(m / 3) * 3, 1).toISOString().slice(0, 10),
+        semestral: new Date(y, m < 6 ? 0 : 6, 1).toISOString().slice(0, 10),
+        anual: new Date(y, 0, 1).toISOString().slice(0, 10),
+      }
+      const hoy = now.toISOString().slice(0, 10)
+
+      const periodos: PeriodoPresupuesto[] = ['semanal', 'mensual', 'trimestral', 'semestral', 'anual']
+      const rows = await Promise.all(periodos.map(async (per) => {
+        const { data } = await supabase.from('facturas').select('total')
+          .eq('restaurante_id', RESTAURANTE_ID).eq('status', 'confirmada')
+          .gte('fecha_factura', ranges[per]).lte('fecha_factura', hoy)
+        const real = (data ?? []).reduce((s, f) => s + (f.total || 0), 0)
+        return { periodo: per, presupuesto: presuMap[per] ?? 0, real }
+      }))
+      return rows
+    } catch (e: unknown) {
+      console.error('[useReportes] fetchPresupuestos Error:', e)
+      return []
+    } finally { setLoading(false) }
+  }, [RESTAURANTE_ID, supabase])
+
+  const savePresupuesto = useCallback(async (periodo: PeriodoPresupuesto, monto: number) => {
+    if (!RESTAURANTE_ID) return
+    const { error } = await supabase.from('presupuestos').upsert(
+      { restaurante_id: RESTAURANTE_ID, periodo, monto, updated_at: new Date().toISOString() },
+      { onConflict: 'restaurante_id,periodo' }
+    )
+    if (error) throw error
+  }, [RESTAURANTE_ID, supabase])
+
+  // ── Rendimiento por plaza ──
+  const fetchRendimiento = useCallback(async (periodo: Periodo): Promise<RendimientoPlaza[]> => {
+    if (!RESTAURANTE_ID) return []
+    setLoading(true)
+    try {
+      const { from, to } = getDateRange(periodo)
+      const [tareasRes, mermaRes] = await Promise.all([
+        supabase.from('tareas').select('plaza, status').eq('restaurante_id', RESTAURANTE_ID)
+          .gte('created_at', `${from}T00:00:00`).lte('created_at', `${to}T23:59:59`),
+        supabase.from('merma').select('plaza, costo_estimado').eq('restaurante_id', RESTAURANTE_ID)
+          .gte('fecha', from).lte('fecha', to),
+      ])
+
+      const map: Record<string, RendimientoPlaza> = {}
+      const ensure = (plaza: string) => {
+        const key = plaza || 'sin plaza'
+        if (!map[key]) map[key] = { plaza: key, tareasTotal: 0, tareasCompletadas: 0, cumplimientoPct: 0, mermaCosto: 0 }
+        return map[key]
+      }
+      for (const t of (tareasRes.data ?? [])) {
+        const r = ensure(t.plaza)
+        r.tareasTotal++
+        if (t.status === 'completada') r.tareasCompletadas++
+      }
+      for (const mm of (mermaRes.data ?? [])) {
+        ensure(mm.plaza).mermaCosto += mm.costo_estimado || 0
+      }
+      return Object.values(map).map(r => ({
+        ...r,
+        cumplimientoPct: r.tareasTotal > 0 ? (r.tareasCompletadas / r.tareasTotal) * 100 : 0,
+      })).sort((a, b) => b.tareasTotal - a.tareasTotal)
+    } catch (e: unknown) {
+      console.error('[useReportes] fetchRendimiento Error:', e)
+      return []
+    } finally { setLoading(false) }
+  }, [RESTAURANTE_ID, supabase])
+
+  return { loading, error, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchPresupuestos, savePresupuesto, fetchRendimiento }
 }
