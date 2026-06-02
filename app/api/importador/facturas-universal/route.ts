@@ -660,18 +660,18 @@ async function insertBatch(
       const { data: rest } = await admin.from('restaurantes').select('configuracion').eq('id', restId).single()
       const cfg = rest?.configuracion as { nombres_excluidos?: string[] } | null
       const internos = (Array.isArray(cfg?.nombres_excluidos) ? cfg!.nombres_excluidos : []).map(normNombre).filter(Boolean)
-      if (internos.length > 0) {
-        const idsExcluidos = new Set<string>()
-        facturasFinal = facturas.filter(f => {
-          const prov = normNombre(f.proveedor_nombre)
-          const match = internos.some(n => prov.includes(n) || n.includes(prov))
-          if (match) { idsExcluidos.add(f.id); return false }
-          return true
-        })
-        if (idsExcluidos.size > 0) {
-          itemsFinal = items.filter(it => !idsExcluidos.has(it.factura_id))
-          excluidasPorNombre = idsExcluidos.size
-        }
+      const idsExcluidos = new Set<string>()
+      facturasFinal = facturas.filter(f => {
+        const prov = normNombre(f.proveedor_nombre)
+        // Prefijo "Empleado" (Fudo marca así sueldos/adelantos) o match con nombre interno
+        const esEmpleado = prov.startsWith('empleado')
+        const match = esEmpleado || internos.some(n => n && (prov.includes(n) || n.includes(prov)))
+        if (match) { idsExcluidos.add(f.id); return false }
+        return true
+      })
+      if (idsExcluidos.size > 0) {
+        itemsFinal = items.filter(it => !idsExcluidos.has(it.factura_id))
+        excluidasPorNombre = idsExcluidos.size
       }
     }
   } catch { /* sin config, seguimos */ }
