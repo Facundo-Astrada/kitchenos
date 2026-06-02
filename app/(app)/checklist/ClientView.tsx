@@ -636,6 +636,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                         opacity: dragging?.item.id === item.id ? 0.35 : 1,
                         transition: 'opacity .15s',
                         touchAction: dragging ? 'none' : 'auto',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
                       }}
                     >
                       <ProductoMiseCard

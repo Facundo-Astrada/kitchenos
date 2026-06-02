@@ -1103,10 +1103,13 @@ export default function StockPage() {
       {/* ── Sector selector ── */}
       {showSectorSelect && (
         <div onClick={() => setShowSectorSelect(false)} style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-end' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', width: '100%', padding: '20px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 24px)' }}>
-            <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 16px' }} />
-            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>¿Qué sector vas a stockear?</div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 14 }}>Filtrá por sector para agilizar el recorrido</div>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '20px 16px 0', flexShrink: 0 }}>
+              <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 16px' }} />
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>¿Qué sector vas a stockear?</div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 14 }}>Filtrá por sector para agilizar el recorrido</div>
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1, padding: '0 16px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <button
                 onClick={() => { setQuickSector(null); setQuickIdx(0); setQuickChangedCount(0); setQuickValue(String(quickList[0]?.stock_actual ?? '')); setQuickMode(true); setShowSectorSelect(false) }}
@@ -1132,9 +1135,12 @@ export default function StockPage() {
                 )
               })}
             </div>
-            <button onClick={() => setShowSectorSelect(false)} style={{ marginTop: 12, width: '100%', padding: 12, borderRadius: 12, background: 'transparent', border: '1px solid var(--border)', fontSize: 13, color: 'var(--text-3)', cursor: 'pointer', fontFamily: 'inherit' }}>
-              Cancelar
-            </button>
+            </div>
+            <div style={{ padding: '8px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0 }}>
+              <button onClick={() => setShowSectorSelect(false)} style={{ width: '100%', padding: 12, borderRadius: 12, background: 'transparent', border: '1px solid var(--border)', fontSize: 13, color: 'var(--text-3)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}

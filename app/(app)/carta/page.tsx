@@ -1207,6 +1207,7 @@ function DetailView({
   // OPS destination panel
   const [opsPanel, setOpsPanel] = useState<string | null>(null) // plato_receta_id
   const [opsPlaza, setOpsPlaza] = useState('')
+  const [opsSeccion, setOpsSeccion] = useState('')
   const [opsCantidad, setOpsCantidad] = useState('1')
   const [opsUnidad, setOpsUnidad] = useState('u')
   const [opsSaving, setOpsSaving] = useState(false)
@@ -1222,6 +1223,12 @@ function DetailView({
     { id: 'pase',       label: 'Pase',        color: '#8b5cf6' },
     { id: 'pasteleria', label: 'Pastelería',  color: '#ec4899' },
     { id: 'panaderia',  label: 'Panadería',   color: '#84cc16' },
+  ]
+  const SECCIONES_OPS = [
+    { id: 'heladera',   label: 'Heladera',        icono: 'kitchen' },
+    { id: 'secos',      label: 'Secos / Tuppers',  icono: 'inventory_2' },
+    { id: 'congelados', label: 'Congelados',       icono: 'severe_cold' },
+    { id: 'estacion',   label: 'Estación',         icono: 'countertops' },
   ]
   const UNIDADES_OPS = ['u', 'kg', 'g', 'l', 'ml', 'pax', 'porc', 'bandeja']
 
@@ -1257,20 +1264,31 @@ function DetailView({
   }
 
   const handleGuardarOPS = async (pr: { id: string; receta_id: string; receta?: { nombre: string } }) => {
-    if (!opsPlaza || opsSaving) return
+    if (!opsPlaza || !opsSeccion || opsSaving) return
     setOpsSaving(true)
     try {
       // 1. Guardar plaza en plato_recetas
       await supabaseDV.from('plato_recetas').update({ plaza: opsPlaza }).eq('id', pr.id)
 
-      // 2. Buscar sección del checklist para esta plaza
-      const { data: secData } = await supabaseDV
+      // 2. Buscar o crear sección del checklist para esta plaza + sección elegida
+      const secNombre = SECCIONES_OPS.find(s => s.id === opsSeccion)?.label ?? opsSeccion
+      const secIcono = SECCIONES_OPS.find(s => s.id === opsSeccion)?.icono ?? 'inventory_2'
+      const secOrden = SECCIONES_OPS.findIndex(s => s.id === opsSeccion)
+      const { data: secExistente } = await supabaseDV
         .from('checklist_secciones')
         .select('id')
         .eq('restaurante_id', restauranteId)
         .eq('plaza', opsPlaza)
+        .ilike('nombre', secNombre)
         .limit(1)
-      const seccionId = secData?.[0]?.id ?? null
+      let seccionId: string | null = secExistente?.[0]?.id ?? null
+      if (!seccionId) {
+        const { data: newSec } = await supabaseDV
+          .from('checklist_secciones')
+          .insert({ nombre: secNombre, icono: secIcono, plaza: opsPlaza, orden: secOrden, restaurante_id: restauranteId })
+          .select('id').single()
+        seccionId = newSec?.id ?? null
+      }
 
       // 3. Upsert checklist_item (por receta_id + plaza, actualiza si existe)
       const nombre = pr.receta?.nombre ?? search
@@ -1287,6 +1305,7 @@ function DetailView({
           cantidad: parseFloat(opsCantidad) || 1,
           unidad: opsUnidad,
           seccion_id: seccionId,
+          seccion: secNombre,
         }).eq('id', existente[0].id)
       } else {
         await supabaseDV.from('checklist_items').insert({
@@ -1297,7 +1316,7 @@ function DetailView({
           unidad: opsUnidad,
           prioridad: 'sp',
           seccion_id: seccionId,
-          seccion: PLAZAS_OPS.find(p => p.id === opsPlaza)?.label ?? opsPlaza,
+          seccion: secNombre,
           restaurante_id: restauranteId,
           orden: 0,
         })
@@ -1588,6 +1607,7 @@ function DetailView({
                       if (opsPanel === pr.id) { setOpsPanel(null); return }
                       setOpsPanel(pr.id)
                       setOpsPlaza('')
+                      setOpsSeccion('')
                       setOpsCantidad('1')
                       setOpsUnidad('u')
                     }}
@@ -1620,7 +1640,7 @@ function DetailView({
                       {PLAZAS_OPS.map(p => (
                         <button
                           key={p.id}
-                          onClick={() => setOpsPlaza(opsPlaza === p.id ? '' : p.id)}
+                          onClick={() => { setOpsPlaza(opsPlaza === p.id ? '' : p.id); setOpsSeccion('') }}
                           style={{
                             padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
                             fontSize: 11, fontWeight: 700,
@@ -1631,6 +1651,32 @@ function DetailView({
                         >{p.label}</button>
                       ))}
                     </div>
+                    {opsPlaza && (
+                      <>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
+                          Sección en Apertura / Cierre
+                        </div>
+                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 10 }}>
+                          {SECCIONES_OPS.map(s => (
+                            <button
+                              key={s.id}
+                              onClick={() => setOpsSeccion(opsSeccion === s.id ? '' : s.id)}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 4,
+                                padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                                fontSize: 11, fontWeight: 700,
+                                background: opsSeccion === s.id ? '#4361a018' : 'var(--surface)',
+                                color: opsSeccion === s.id ? 'var(--accent)' : 'var(--text-3)',
+                                outline: opsSeccion === s.id ? '1.5px solid #4361a050' : 'none',
+                              }}
+                            >
+                              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>{s.icono}</span>
+                              {s.label}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
                     <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
                       Stock ideal
                     </div>
@@ -1647,11 +1693,11 @@ function DetailView({
                     </div>
                     <button
                       onClick={() => handleGuardarOPS(pr)}
-                      disabled={!opsPlaza || opsSaving}
+                      disabled={!opsPlaza || !opsSeccion || opsSaving}
                       style={{
                         width: '100%', padding: '9px', borderRadius: 10, border: 'none',
-                        background: opsPlaza && !opsSaving ? 'var(--navy)' : 'var(--border)',
-                        color: '#fff', fontWeight: 700, fontSize: 12, cursor: opsPlaza ? 'pointer' : 'default',
+                        background: opsPlaza && opsSeccion && !opsSaving ? 'var(--navy)' : 'var(--border)',
+                        color: '#fff', fontWeight: 700, fontSize: 12, cursor: opsPlaza && opsSeccion ? 'pointer' : 'default',
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                       }}
                     >
