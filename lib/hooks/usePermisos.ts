@@ -22,12 +22,15 @@ interface PermisosState {
 
 export function usePermisos(): PermisosState {
   const RESTAURANTE_ID = useRestauranteId()
-  const { perfil } = useAuth()
+  const { perfil, user } = useAuth()
   const [supabase] = useState(() => createClient())
   const [permisos, setPermisos] = useState<RolPermiso | null>(null)
   const [allPermisos, setAllPermisos] = useState<RolPermiso[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Módulos efectivos del usuario logueado (puesto + overrides individuales)
+  const [modulosEfectivos, setModulosEfectivos] = useState<string[] | null>(null)
 
   const dbRol = perfil?.rol === 'admin' ? 'admin'
     : perfil?.rol === 'chef' ? 'sous_chef'
@@ -37,7 +40,6 @@ export function usePermisos(): PermisosState {
 
   const fetchPermisos = useCallback(async () => {
     if (!RESTAURANTE_ID) {
-      // No restaurant ID — stop loading so RouteGuard doesn't hang
       setLoading(false)
       return
     }
@@ -45,20 +47,48 @@ export function usePermisos(): PermisosState {
     setError(null)
 
     try {
-      // Fetch all role permissions for this restaurant
+      // 1. Cargar todos los rol_permisos del restaurante
       const { data: all, error: allErr } = await supabase
         .from('rol_permisos')
         .select('*')
         .eq('restaurante_id', RESTAURANTE_ID)
         .order('rol')
-
       if (allErr) throw allErr
 
       setAllPermisos(all ?? [])
 
-      // Find the current user's role permissions
       const mine = (all ?? []).find(p => p.rol === dbRol) ?? null
       setPermisos(mine)
+
+      // 2. Si hay un usuario logueado con auth_user_id, buscar su equipo_miembro + puesto
+      if (user?.id && dbRol !== 'admin') {
+        const { data: miembro } = await supabase
+          .from('equipo_miembros')
+          .select('puesto_id, modulos_extra, modulos_restringidos')
+          .eq('restaurante_id', RESTAURANTE_ID)
+          .eq('auth_user_id', user.id)
+          .eq('activo', true)
+          .maybeSingle()
+
+        if (miembro?.puesto_id) {
+          const { data: puesto } = await supabase
+            .from('puestos')
+            .select('permisos_app')
+            .eq('id', miembro.puesto_id)
+            .maybeSingle()
+
+          if (puesto?.permisos_app) {
+            const extra = miembro.modulos_extra ?? []
+            const restringidos = miembro.modulos_restringidos ?? []
+            const base = puesto.permisos_app as string[]
+            const efectivos = [...new Set([...base, ...extra])].filter(m => !restringidos.includes(m))
+            setModulosEfectivos(efectivos)
+            return
+          }
+        }
+      }
+      // Sin puesto asignado — usa rol_permisos como fallback
+      setModulosEfectivos(null)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al cargar permisos'
       console.error('[usePermisos] Error:', msg)
@@ -66,28 +96,29 @@ export function usePermisos(): PermisosState {
     } finally {
       setLoading(false)
     }
-  }, [RESTAURANTE_ID, dbRol, supabase])
+  }, [RESTAURANTE_ID, dbRol, supabase, user?.id])
 
   useEffect(() => {
     fetchPermisos()
   }, [fetchPermisos])
 
   const puedeVer = useCallback((modulo: string): boolean => {
-    // Admin always sees everything
     if (dbRol === 'admin') return true
+    // Prioridad: módulos efectivos del puesto (si existen) → rol_permisos fallback
+    if (modulosEfectivos !== null) return modulosEfectivos.includes(modulo)
     if (!permisos) return false
     return permisos.modulos_visibles.includes(modulo)
-  }, [permisos, dbRol])
+  }, [permisos, dbRol, modulosEfectivos])
 
   const puedeEditar = useCallback((recurso: 'stock' | 'equipo' | 'recetas' | 'carta'): boolean => {
     if (dbRol === 'admin') return true
     if (!permisos) return false
     switch (recurso) {
-      case 'stock': return permisos.puede_editar_stock
-      case 'equipo': return permisos.puede_editar_equipo
+      case 'stock':   return permisos.puede_editar_stock
+      case 'equipo':  return permisos.puede_editar_equipo
       case 'recetas': return permisos.puede_editar_recetas
-      case 'carta': return permisos.puede_editar_carta
-      default: return false
+      case 'carta':   return permisos.puede_editar_carta
+      default:        return false
     }
   }, [permisos, dbRol])
 

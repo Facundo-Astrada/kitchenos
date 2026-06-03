@@ -528,7 +528,7 @@ export interface ChecklistRutinaRegistro {
 }
 
 // ── Equipo & Puestos ─────────────────────────────────────────
-// DB: equipo_miembros (id, auth_user_id, nombre, apellido, rol, puesto_id, plaza_asignada, telefono, email, fecha_ingreso, activo, foto_url, restaurante_id, created_at)
+// DB: equipo_miembros (id, auth_user_id, nombre, apellido, rol, puesto_id, plaza_asignada, telefono, email, fecha_ingreso, activo, foto_url, modulos_extra, modulos_restringidos, restaurante_id, created_at)
 export interface EquipoMiembro {
   id: string
   auth_user_id?: string | null
@@ -542,17 +542,21 @@ export interface EquipoMiembro {
   fecha_ingreso?: string | null
   activo: boolean
   foto_url?: string | null
+  modulos_extra?: string[]
+  modulos_restringidos?: string[]
   restaurante_id: string
   created_at: string
 }
 
-// DB: puestos (id, nombre, descripcion, tareas_funciones text[], permisos_app text[], restaurante_id, created_at)
+// DB: puestos (id, nombre, descripcion, tareas_funciones text[], permisos_app text[], nivel, plaza_default, restaurante_id, created_at)
 export interface Puesto {
   id: string
   nombre: string
   descripcion: string | null
   tareas_funciones: string[] | null
-  permisos_app: string[] | null
+  permisos_app: string[] | null  // array de ModuloId reales
+  nivel: string                   // admin | sous_chef | cocinero | bachero
+  plaza_default: string | null    // plaza OPS por defecto
   restaurante_id: string
   created_at: string
 }

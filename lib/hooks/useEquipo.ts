@@ -19,6 +19,8 @@ export interface Miembro {
   fecha_ingreso: string | null
   activo: boolean
   foto_url: string | null
+  modulos_extra: string[]
+  modulos_restringidos: string[]
   restaurante_id: string
   created_at: string
 }
@@ -40,7 +42,9 @@ export interface Puesto {
   nombre: string
   descripcion: string | null
   tareas_funciones: string[] | null
-  permisos_app: string[] | null
+  permisos_app: string[] | null   // ModuloId[]
+  nivel: string                   // admin | sous_chef | cocinero | bachero
+  plaza_default: string | null
   restaurante_id: string
   created_at: string
 }
@@ -48,12 +52,135 @@ export interface Puesto {
 export type TurnoTipo = 'mañana' | 'tarde' | 'noche' | 'franco' | 'vacaciones'
 
 export const TURNO_CONFIG: Record<TurnoTipo, { label: string; fullLabel: string; color: string; bg: string }> = {
-  mañana: { label: 'M', fullLabel: 'Mañana', color: '#f59e0b', bg: '#fef3c7' },
-  tarde: { label: 'T', fullLabel: 'Tarde', color: '#3b82f6', bg: '#dbeafe' },
-  noche: { label: 'N', fullLabel: 'Noche', color: '#4361a0', bg: '#e0e7ff' },
-  franco: { label: 'F', fullLabel: 'Franco', color: '#6b7280', bg: '#f3f4f6' },
+  mañana:     { label: 'M', fullLabel: 'Mañana',     color: '#f59e0b', bg: '#fef3c7' },
+  tarde:      { label: 'T', fullLabel: 'Tarde',      color: '#3b82f6', bg: '#dbeafe' },
+  noche:      { label: 'N', fullLabel: 'Noche',      color: '#4361a0', bg: '#e0e7ff' },
+  franco:     { label: 'F', fullLabel: 'Franco',     color: '#6b7280', bg: '#f3f4f6' },
   vacaciones: { label: 'V', fullLabel: 'Vacaciones', color: '#10b981', bg: '#d1fae5' },
 }
+
+// ── Niveles de acceso ──
+
+export const NIVELES_ACCESO = [
+  { value: 'admin',      label: 'Administrador',   color: '#4361a0' },
+  { value: 'sous_chef',  label: 'Jefe de cocina',  color: '#1e3a6e' },
+  { value: 'cocinero',   label: 'Cocinero',         color: '#f59e0b' },
+  { value: 'bachero',    label: 'Bachero / Ayudante', color: '#6b7280' },
+] as const
+
+// ── Templates de puestos pre-definidos ──
+
+export interface PuestoTemplate {
+  nombre: string
+  descripcion: string
+  nivel: string
+  plaza_default: string | null
+  permisos_app: string[]
+  tareas_funciones: string[]
+  icon: string
+}
+
+export const PUESTO_TEMPLATES: PuestoTemplate[] = [
+  {
+    nombre: 'Chef / Sous Chef',
+    descripcion: 'Jefatura de cocina, supervisión general de plazas',
+    nivel: 'sous_chef',
+    plaza_default: null,
+    icon: 'local_fire_department',
+    permisos_app: [
+      'home', 'operaciones', 'recetario', 'stock', 'pedidos',
+      'haccp', 'reportes', 'calendario', 'carta', 'pase',
+      'facturas', 'merma', 'equipo', 'ventas',
+    ],
+    tareas_funciones: [
+      'Supervisar todas las plazas', 'Aprobar mise en place', 'Controlar food cost',
+      'Gestionar pedidos a proveedores', 'Cerrar turno y pase',
+    ],
+  },
+  {
+    nombre: 'Parrillero',
+    descripcion: 'Encargado de brasa, fuegos y proteínas',
+    nivel: 'cocinero',
+    plaza_default: 'parrilla',
+    icon: 'outdoor_grill',
+    permisos_app: ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta'],
+    tareas_funciones: [
+      'Encender y mantener la brasa', 'Mise en place de parrilla',
+      'Control de temperaturas de carnes', 'Limpiar estación al cierre',
+    ],
+  },
+  {
+    nombre: 'Chef de Fríos',
+    descripcion: 'Garde manger, ensaladas, entradas frías y salsas frías',
+    nivel: 'cocinero',
+    plaza_default: 'frios',
+    icon: 'ac_unit',
+    permisos_app: ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta'],
+    tareas_funciones: [
+      'Mise en place de fríos', 'Preparar entradas y ensaladas',
+      'Control de temperatura de heladeras', 'Porcionar y etiquetar',
+    ],
+  },
+  {
+    nombre: 'Chef de Calientes',
+    descripcion: 'Salsas, fondos, guarniciones y elaboraciones al fuego',
+    nivel: 'cocinero',
+    plaza_default: 'calientes',
+    icon: 'whatshot',
+    permisos_app: ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta'],
+    tareas_funciones: [
+      'Mise en place de calientes', 'Elaborar fondos y salsas',
+      'Preparar guarniciones', 'Mantener temperaturas de servicio',
+    ],
+  },
+  {
+    nombre: 'Pastelero',
+    descripcion: 'Producción de postres, masas y repostería',
+    nivel: 'cocinero',
+    plaza_default: 'pasteleria',
+    icon: 'cake',
+    permisos_app: ['home', 'operaciones', 'recetario', 'stock', 'pase'],
+    tareas_funciones: [
+      'Mise en place de pastelería', 'Elaborar postres del menú',
+      'Control de stock de ingredientes dulces', 'Planificación de producción diaria',
+    ],
+  },
+  {
+    nombre: 'Panadero',
+    descripcion: 'Producción de panes, masas fermentadas y bollería',
+    nivel: 'cocinero',
+    plaza_default: 'panaderia',
+    icon: 'bakery_dining',
+    permisos_app: ['home', 'operaciones', 'recetario', 'stock', 'pase'],
+    tareas_funciones: [
+      'Elaborar panes del día', 'Controlar fermentaciones', 'Mise en place de panadería',
+    ],
+  },
+  {
+    nombre: 'Cocinero Polivalente',
+    descripcion: 'Rota entre plazas según necesidad del servicio',
+    nivel: 'cocinero',
+    plaza_default: null,
+    icon: 'soup_kitchen',
+    permisos_app: ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta'],
+    tareas_funciones: [
+      'Refuerzo en plaza asignada por turno', 'Mise en place general',
+      'Apoyo en producción y pase',
+    ],
+  },
+  {
+    nombre: 'Bachero / Ayudante',
+    descripcion: 'Apoyo operativo, limpieza y tareas de soporte',
+    nivel: 'bachero',
+    plaza_default: null,
+    icon: 'person',
+    permisos_app: ['home', 'operaciones', 'pase'],
+    tareas_funciones: [
+      'Limpieza de cocina', 'Apoyo en mise en place',
+      'Lavado de vajilla y ollas', 'Soporte en servicio',
+    ],
+  },
+]
 
 // ── Hook ──
 
@@ -72,7 +199,6 @@ export function useEquipo() {
     if (!RESTAURANTE_ID) { setLoading(false); return }
     setLoading(true)
     setError(null)
-
     try {
       const { data, error } = await supabase
         .from('equipo_miembros')
@@ -80,9 +206,12 @@ export function useEquipo() {
         .eq('restaurante_id', RESTAURANTE_ID)
         .eq('activo', true)
         .order('nombre')
-
       if (error) throw error
-      setMiembros(data ?? [])
+      setMiembros((data ?? []).map(m => ({
+        ...m,
+        modulos_extra: m.modulos_extra ?? [],
+        modulos_restringidos: m.modulos_restringidos ?? [],
+      })))
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al cargar miembros del equipo'
       console.error('[useEquipo] fetchMiembros Error:', msg)
@@ -93,12 +222,14 @@ export function useEquipo() {
   }, [RESTAURANTE_ID, supabase])
 
   async function crearMiembro(
-    datos: Omit<Miembro, 'id' | 'restaurante_id' | 'created_at' | 'activo'>
+    datos: Omit<Miembro, 'id' | 'restaurante_id' | 'created_at' | 'activo' | 'modulos_extra' | 'modulos_restringidos'>
   ) {
     try {
       const { error } = await supabase.from('equipo_miembros').insert({
         ...datos,
         activo: true,
+        modulos_extra: [],
+        modulos_restringidos: [],
         restaurante_id: RESTAURANTE_ID,
       })
       if (error) throw error
@@ -121,6 +252,21 @@ export function useEquipo() {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al actualizar miembro'
       console.error('[useEquipo] actualizarMiembro Error:', msg)
+      throw new Error(msg)
+    }
+  }
+
+  async function actualizarOverridesMiembro(id: string, modulos_extra: string[], modulos_restringidos: string[]) {
+    try {
+      const { error } = await supabase
+        .from('equipo_miembros')
+        .update({ modulos_extra, modulos_restringidos })
+        .eq('id', id)
+      if (error) throw error
+      setMiembros(prev => prev.map(m => m.id === id ? { ...m, modulos_extra, modulos_restringidos } : m))
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al actualizar permisos del miembro'
+      console.error('[useEquipo] actualizarOverridesMiembro Error:', msg)
       throw new Error(msg)
     }
   }
@@ -150,7 +296,6 @@ export function useEquipo() {
         .eq('restaurante_id', RESTAURANTE_ID)
         .gte('fecha', weekStart)
         .lte('fecha', weekEnd)
-
       if (error) throw error
       setTurnos(data ?? [])
     } catch (e: unknown) {
@@ -184,12 +329,7 @@ export function useEquipo() {
       const { error } = await supabase
         .from('turnos')
         .upsert(
-          {
-            miembro_id,
-            fecha,
-            turno_tipo,
-            restaurante_id: RESTAURANTE_ID,
-          },
+          { miembro_id, fecha, turno_tipo, restaurante_id: RESTAURANTE_ID },
           { onConflict: 'miembro_id,fecha' }
         )
       if (error) throw error
@@ -217,15 +357,20 @@ export function useEquipo() {
   // ── Puestos ──
 
   const fetchPuestos = useCallback(async () => {
+    if (!RESTAURANTE_ID) return
     try {
       const { data, error } = await supabase
         .from('puestos')
         .select('*')
         .eq('restaurante_id', RESTAURANTE_ID)
         .order('nombre')
-
       if (error) throw error
-      setPuestos(data ?? [])
+      setPuestos((data ?? []).map(p => ({
+        ...p,
+        nivel: p.nivel ?? 'cocinero',
+        plaza_default: p.plaza_default ?? null,
+        permisos_app: p.permisos_app ?? [],
+      })))
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al cargar puestos'
       console.error('[useEquipo] fetchPuestos Error:', msg)
@@ -265,6 +410,29 @@ export function useEquipo() {
     }
   }
 
+  async function eliminarPuesto(id: string) {
+    try {
+      const { error } = await supabase
+        .from('puestos')
+        .delete()
+        .eq('id', id)
+      if (error) throw error
+      setPuestos(prev => prev.filter(p => p.id !== id))
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al eliminar puesto'
+      console.error('[useEquipo] eliminarPuesto Error:', msg)
+      throw new Error(msg)
+    }
+  }
+
+  // Calcula los módulos efectivos de un miembro combinando puesto + overrides
+  function getModulosMiembro(miembro: Miembro): string[] {
+    const puesto = puestos.find(p => p.id === miembro.puesto_id)
+    const base = puesto?.permisos_app ?? []
+    const conExtras = [...new Set([...base, ...miembro.modulos_extra])]
+    return conExtras.filter(m => !miembro.modulos_restringidos.includes(m))
+  }
+
   // ── Realtime + init ──
 
   useEffect(() => {
@@ -273,22 +441,12 @@ export function useEquipo() {
 
     const chMiembros = supabase
       .channel('equipo-miembros-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'equipo_miembros' },
-        () => fetchMiembros()
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'equipo_miembros' }, () => fetchMiembros())
       .subscribe()
 
     const chTurnos = supabase
       .channel('turnos-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'turnos' },
-        () => {
-          // Re-fetch turnos if we have a current range — handled by the page
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'turnos' }, () => {})
       .subscribe()
 
     return () => {
@@ -306,6 +464,7 @@ export function useEquipo() {
     fetchMiembros,
     crearMiembro,
     actualizarMiembro,
+    actualizarOverridesMiembro,
     desactivarMiembro,
     fetchTurnos,
     fetchTurnosMes,
@@ -314,5 +473,7 @@ export function useEquipo() {
     fetchPuestos,
     crearPuesto,
     actualizarPuesto,
+    eliminarPuesto,
+    getModulosMiembro,
   }
 }
