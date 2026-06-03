@@ -170,39 +170,6 @@ export default function DashboardPage() {
           <StockCriticoSection productos={productos} />
           <ModulosGrid rol={rol} />
 
-          {/* Card Registrar merma */}
-          {puedeEscribir && (
-            <div style={{ padding: '4px 16px 4px' }}>
-              <Link
-                href="/merma"
-                className="flex items-center gap-3 rounded-[14px] p-[14px_16px] transition-transform active:scale-[.98]"
-                style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                }}
-              >
-                <div
-                  className="w-10 h-10 rounded-[12px] flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'rgba(239,68,68,.1)' }}
-                >
-                  <span className="material-symbols-outlined text-[22px]" style={{ color: '#ef4444' }}>
-                    delete_sweep
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-bold" style={{ color: 'var(--text-1)' }}>
-                    Registrar merma
-                  </div>
-                  <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-                    Descarte, vencimiento o producción
-                  </div>
-                </div>
-                <span className="material-symbols-outlined text-[18px]" style={{ color: 'var(--text-3)' }}>
-                  chevron_right
-                </span>
-              </Link>
-            </div>
-          )}
           <div className="h-4" />
         </div>
       )}

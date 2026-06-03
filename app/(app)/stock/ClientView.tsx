@@ -384,21 +384,16 @@ export default function StockPage() {
     doc.setTextColor(0, 0, 0)
     autoTable(doc, {
       startY: 38,
-      head: [['#', 'Producto', 'Categoría', 'Unidad', 'Precio', 'Stock', 'Valor', 'Estado']],
-      body: filtered.map((p, i) => [
-        i + 1,
-        p.nombre,
-        p.categoria,
-        p.unidad,
-        fmtPrecio(p.precio_unitario),
-        p.stock_actual,
-        valorStock(p) > 0 ? fmtValor(valorStock(p)) : '—',
-        p.estado === 'critico' ? 'CRÍTICO' : p.estado === 'bajo' ? 'BAJO' : 'OK',
-      ]),
+      head: [isAdmin
+        ? ['#', 'Producto', 'Categoría', 'Unidad', 'Precio', 'Stock', 'Valor', 'Estado']
+        : ['#', 'Producto', 'Categoría', 'Unidad', 'Stock', 'Estado']],
+      body: filtered.map((p, i) => isAdmin
+        ? [i + 1, p.nombre, p.categoria, p.unidad, fmtPrecio(p.precio_unitario), p.stock_actual, valorStock(p) > 0 ? fmtValor(valorStock(p)) : '—', p.estado === 'critico' ? 'CRÍTICO' : p.estado === 'bajo' ? 'BAJO' : 'OK']
+        : [i + 1, p.nombre, p.categoria, p.unidad, p.stock_actual, p.estado === 'critico' ? 'CRÍTICO' : p.estado === 'bajo' ? 'BAJO' : 'OK']),
       styles: { fontSize: 9 },
       headStyles: { fillColor: [30, 41, 59] },
     })
-    if (totalValor > 0) {
+    if (totalValor > 0 && isAdmin) {
       const finalY = (doc as InstanceType<typeof jsPDF> & { lastAutoTable: { finalY: number } }).lastAutoTable?.finalY ?? 200
       doc.setFontSize(9)
       doc.setTextColor(60, 60, 60)
@@ -835,7 +830,7 @@ export default function StockPage() {
                           <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>
                             {p.categoria} · {p.unidad_uso ?? p.unidad}
                           </div>
-                          {val > 0 && (
+                          {val > 0 && isAdmin && (
                             <div style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700, marginTop: 1, fontFamily: "'DM Mono', monospace" }}>
                               {fmtValor(val)}
                             </div>
@@ -850,11 +845,13 @@ export default function StockPage() {
                         </button>
                       </div>
                     </td>
+                    {isAdmin && (
                     <td style={{ padding: '8px 4px', textAlign: 'right' }}>
                       <span style={{ fontSize: 10, fontWeight: 500, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', opacity: 0.7 }}>
                         {fmtPrecio(p.precio_unitario)}
                       </span>
                     </td>
+                    )}
                     <td style={{ padding: '8px 4px', textAlign: 'center', background: 'rgba(255,255,255,.02)' }}>
                       {editingId === p.id ? (
                         <input
@@ -896,7 +893,7 @@ export default function StockPage() {
       <div style={{ background: 'var(--surface)', borderTop: '1px solid var(--border)', padding: '7px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <span style={{ fontSize: 10, color: 'var(--text-3)' }}>✏️ Doble tap en fila para editar</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {totalValor > 0 && (
+          {totalValor > 0 && isAdmin && (
             <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-2)' }}>
               Stock: <span style={{ color: 'var(--accent)', fontFamily: "'DM Mono', monospace" }}>{fmtValor(totalValor)}</span>
             </span>

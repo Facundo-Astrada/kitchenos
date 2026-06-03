@@ -74,7 +74,7 @@ export const MODULO_CONFIG: Record<
   ventas: { label: 'Ventas', icon: 'bar_chart', href: '/ventas' },
 }
 
-// Módulos accesibles por rol
+// Módulos accesibles por rol (base hardcodeada — se sobrescribe con puestos/permisos del admin)
 export const MODULOS_POR_ROL: Record<Rol, ModuloId[]> = {
   admin: [
     'home', 'operaciones', 'recetario', 'stock', 'pedidos',
@@ -86,14 +86,14 @@ export const MODULOS_POR_ROL: Record<Rol, ModuloId[]> = {
     'haccp', 'reportes', 'calendario',
     'carta', 'pase', 'facturas', 'merma', 'equipo', 'ventas',
   ],
-  parrilla: ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta'],
-  frios: ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta'],
-  calientes: ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta'],
-  pase: ['home', 'operaciones', 'carta', 'pase'],
-  pasteleria: ['home', 'operaciones', 'recetario', 'stock', 'pase'],
-  panaderia: ['home', 'operaciones', 'recetario', 'stock', 'pase'],
-  linea: ['home', 'operaciones', 'recetario', 'stock', 'pase'],
-  ayudante: ['home', 'operaciones', 'pase'],
+  parrilla:   ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta', 'merma', 'calendario', 'haccp'],
+  frios:      ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta', 'merma', 'calendario', 'haccp'],
+  calientes:  ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta', 'merma', 'calendario', 'haccp'],
+  pase:       ['home', 'operaciones', 'carta', 'pase', 'merma', 'calendario'],
+  pasteleria: ['home', 'operaciones', 'recetario', 'stock', 'pase', 'merma', 'calendario', 'haccp'],
+  panaderia:  ['home', 'operaciones', 'recetario', 'stock', 'pase', 'merma', 'calendario', 'haccp'],
+  linea:      ['home', 'operaciones', 'recetario', 'stock', 'pase', 'merma', 'calendario', 'haccp'],
+  ayudante:   ['home', 'operaciones', 'pase', 'merma', 'calendario'],
 }
 
 // ── Nav inferior (4 ítems fijos) ────────────────────────────

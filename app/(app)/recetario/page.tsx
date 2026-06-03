@@ -294,6 +294,7 @@ export default function RecetarioPage() {
               <div style={{ fontSize: 10, color: 'rgba(255,255,255,.45)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Fichas técnicas · Food cost</div>
             </div>
           </div>
+          {isAdmin && (
           <button
             onClick={exportXLSX}
             style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, background: 'rgba(255,255,255,.15)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
@@ -301,6 +302,7 @@ export default function RecetarioPage() {
             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>table_view</span>
             Exportar
           </button>
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 8, padding: '0 10px', height: 34 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'rgba(255,255,255,.4)' }}>search</span>
@@ -395,20 +397,19 @@ export default function RecetarioPage() {
 
       {/* ── Botones NUEVA RECETA + IMPORTAR FICHAS ── */}
       <div style={{ position: 'absolute', bottom: 110, left: 14, right: 14, zIndex: 10, display: 'flex', gap: 10 }}>
-        {canEdit && (
-          <button
-            onClick={() => setCreando(true)}
-            style={{
-              flex: 1, background: 'linear-gradient(135deg, var(--navy), #4361a0)',
-              border: 'none', borderRadius: 16, padding: '14px 20px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              boxShadow: '0 6px 24px rgba(28,45,74,.45)', cursor: 'pointer',
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#fff' }}>add_circle</span>
-            <span style={{ fontSize: 15, fontWeight: 700, color: '#fff', fontFamily: 'inherit' }}>Nueva receta</span>
-          </button>
-        )}
+        <button
+          onClick={() => setCreando(true)}
+          style={{
+            flex: 1, background: 'linear-gradient(135deg, var(--navy), #4361a0)',
+            border: 'none', borderRadius: 16, padding: '14px 20px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            boxShadow: '0 6px 24px rgba(28,45,74,.45)', cursor: 'pointer',
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#fff' }}>add_circle</span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: '#fff', fontFamily: 'inherit' }}>Nueva receta</span>
+        </button>
+        {isAdmin && (
         <button
           onClick={() => setShowFichas(true)}
           title="Importar fichas técnicas"
@@ -421,6 +422,7 @@ export default function RecetarioPage() {
         >
           <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--accent)' }}>upload_file</span>
         </button>
+        )}
         <button
           onClick={() => setShowLink(true)}
           title="Vincular ingredientes con stock"

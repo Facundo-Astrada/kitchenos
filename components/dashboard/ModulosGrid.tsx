@@ -6,21 +6,27 @@ import type { ModuloId } from '@/lib/constants'
 import type { Rol } from '@/types'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 
+// Todos los módulos que pueden aparecer en el grid
+const GRID_MODULOS: ModuloId[] = [
+  'operaciones', 'recetario', 'stock', 'pedidos', 'carta',
+  'facturas', 'proveedores', 'calendario', 'reportes', 'haccp',
+  'pase', 'produccion', 'turnos', 'ventas', 'merma', 'equipo', 'configuracion',
+]
+
 interface ModulosGridProps {
   rol: Rol
 }
 
 export default function ModulosGrid({ rol }: ModulosGridProps) {
-  const { puedeVer, loading } = usePermisos()
+  const { puedeVer, isAdmin, loading } = usePermisos()
 
-  const todos = MODULOS_POR_ROL[rol]
-  const modulos = todos.filter((m) => {
+  const fallback = new Set<string>(MODULOS_POR_ROL[rol] ?? [])
+
+  const modulos = GRID_MODULOS.filter(m => {
     if (NAV_ITEMS.includes(m as (typeof NAV_ITEMS)[number])) return false
-    if (!loading) {
-      const dbKey = m === 'home' ? 'inicio' : m
-      return puedeVer(dbKey)
-    }
-    return true
+    if (loading) return fallback.has(m)
+    if (isAdmin) return true
+    return puedeVer(m)
   })
 
   if (modulos.length === 0) return null

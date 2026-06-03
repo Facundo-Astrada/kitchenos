@@ -3,6 +3,7 @@
 import PageTransition from '@/components/PageTransition'
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useMerma } from '@/lib/hooks/useMerma'
+import { usePermisos } from '@/lib/hooks/usePermisos'
 import { MOTIVOS_MERMA } from '@/types'
 import type { Merma, MotivoMerma } from '@/types'
 import MermaBottomSheet from '@/components/merma/MermaBottomSheet'
@@ -68,6 +69,7 @@ const PERIODOS: { value: Periodo; label: string }[] = [
 // ── Component ───────────────────────────────────────────────
 export default function MermaPage() {
   const { registros, loading, fetchMerma, registrarMerma, eliminarMerma } = useMerma()
+  const { isAdmin } = usePermisos()
   const [periodo, setPeriodo] = useState<Periodo>('hoy')
 
   useEffect(() => {
@@ -183,7 +185,7 @@ export default function MermaPage() {
 
       {/* Stats cards */}
       <div className="flex gap-3 px-4 pb-4 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-        <StatCard icon="payments" label="Total costo" value={fmtPrecio(stats.totalCosto)} color="var(--accent)" />
+        {isAdmin && <StatCard icon="payments" label="Total costo" value={fmtPrecio(stats.totalCosto)} color="var(--accent)" />}
         <StatCard icon="inventory_2" label="Registros" value={String(stats.totalRegistros)} color="var(--navy)" />
         <StatCard
           icon={stats.topMotivo?.icon ?? 'help'}
@@ -269,7 +271,7 @@ export default function MermaPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-3 mt-1.5">
-                    {(m.costo_estimado ?? 0) > 0 && (
+                    {isAdmin && (m.costo_estimado ?? 0) > 0 && (
                       <span className="text-[12px] font-semibold" style={{ color: '#ef4444' }}>
                         {fmtPrecio(m.costo_estimado ?? 0)}
                       </span>

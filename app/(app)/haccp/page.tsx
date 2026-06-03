@@ -4,6 +4,7 @@ import PageTransition from '@/components/PageTransition'
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useHaccp, type HaccpEquipo, type HaccpTemperatura, type HaccpVencimiento, type HaccpLimpieza } from '@/lib/hooks/useHaccp'
 import { useMerma } from '@/lib/hooks/useMerma'
+import { usePermisos } from '@/lib/hooks/usePermisos'
 
 // ── Helpers ─────────────────────────────────────────────
 const fmtDate = (d: string | null) => {
@@ -673,6 +674,7 @@ export default function HaccpPage() {
     crearTareaLimpieza, registrarLimpieza, eliminarTareaLimpieza,
   } = useHaccp()
   const { registrarMerma } = useMerma()
+  const { isAdmin } = usePermisos()
 
   const [view, setView] = useState<View>('main')
   const [tab, setTab] = useState<Tab>('temperaturas')
@@ -860,6 +862,7 @@ export default function HaccpPage() {
                   <span className="material-symbols-outlined" style={{ fontSize: 20 }}>edit_note</span>
                   Registrar temperaturas
                 </button>
+                {isAdmin && (
                 <button onClick={() => setView('config')} style={{
                   width: 48, borderRadius: 12, background: 'var(--surface)',
                   border: '1px solid var(--border)', cursor: 'pointer',
@@ -867,6 +870,7 @@ export default function HaccpPage() {
                 }}>
                   <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-2)' }}>settings</span>
                 </button>
+                )}
               </div>
 
               {equipos.filter(e => e.activo).map(e => {
@@ -954,7 +958,7 @@ export default function HaccpPage() {
                         fontSize: 11, fontWeight: 700, color: c.text,
                         background: `${c.text}15`, padding: '2px 8px', borderRadius: 6,
                       }}>{statusLabel}</span>
-                      {v.status !== 'descartado' && (
+                      {isAdmin && v.status !== 'descartado' && (
                         <button onClick={async () => {
                           await descartarVencimiento(v.id)
                           try {
@@ -982,6 +986,7 @@ export default function HaccpPage() {
           {/* ── TAB: LIMPIEZA ── */}
           {tab === 'limpieza' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {isAdmin && (
               <button onClick={() => setView('nuevaLimp')} style={{
                 width: '100%', padding: '12px', borderRadius: 12, background: 'var(--navy)',
                 color: '#fff', border: 'none', fontWeight: 700, fontSize: 14, cursor: 'pointer',
@@ -990,6 +995,7 @@ export default function HaccpPage() {
                 <span className="material-symbols-outlined" style={{ fontSize: 20 }}>add</span>
                 Nueva tarea de limpieza
               </button>
+              )}
 
               {/* Sub-tabs Lista / Calendario */}
               <div style={{ display: 'flex', gap: 6, background: 'var(--bg)', borderRadius: 10, padding: 3 }}>
@@ -1109,11 +1115,13 @@ export default function HaccpPage() {
                               </span>
                             </div>
                           </div>
+                          {isAdmin && (
                           <button onClick={() => { if (confirm('Eliminar?')) eliminarTareaLimpieza(l.id) }} style={{
                             background: 'none', border: 'none', cursor: 'pointer',
                           }}>
                             <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)' }}>close</span>
                           </button>
+                          )}
                         </div>
                       )
                     })}

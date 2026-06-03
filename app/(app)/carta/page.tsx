@@ -112,7 +112,7 @@ async function exportCartaPDF(items: CartaItemEnriquecido[]) {
 }
 
 // ── Rentabilidad PDF ────────────────────────────────────
-async function exportRentabilidadPDF(items: CartaItemEnriquecido[]) {
+async function exportRentabilidadPDF(items: CartaItemEnriquecido[], isAdmin = false) {
   const { default: jsPDF } = await import('jspdf')
   const { default: autoTable } = await import('jspdf-autotable')
   const doc = new jsPDF()
@@ -130,14 +130,10 @@ async function exportRentabilidadPDF(items: CartaItemEnriquecido[]) {
 
   autoTable(doc, {
     startY: 38,
-    head: [['Plato', 'Precio', 'Costo', 'FC%', 'Margen']],
-    body: conReceta.map(it => [
-      it.nombre,
-      fmtMoney(it.precio_venta),
-      fmtMoney(it.costo_porcion ?? 0),
-      `${(it.food_cost_pct ?? 0).toFixed(1)}%`,
-      fmtMoney(it.margen_bruto ?? 0),
-    ]),
+    head: [isAdmin ? ['Plato', 'Precio', 'Costo', 'FC%', 'Margen'] : ['Plato']],
+    body: conReceta.map(it => isAdmin
+      ? [it.nombre, fmtMoney(it.precio_venta), fmtMoney(it.costo_porcion ?? 0), `${(it.food_cost_pct ?? 0).toFixed(1)}%`, fmtMoney(it.margen_bruto ?? 0)]
+      : [it.nombre]),
     styles: { fontSize: 9 },
     headStyles: { fillColor: [30, 41, 59] },
   })
@@ -169,10 +165,12 @@ function PlatoCard({
   item,
   onClick,
   onToggle,
+  isAdmin = false,
 }: {
   item: CartaItemEnriquecido
   onClick: () => void
   onToggle: () => void
+  isAdmin?: boolean
 }) {
   const hasFc = item.food_cost_pct != null && item.food_cost_pct > 0
   const fc = fcBadge(item.food_cost_pct ?? 0)
@@ -227,12 +225,14 @@ function PlatoCard({
               </div>
             )}
           </div>
+          {isAdmin && (
           <div style={{
             fontSize: 18, fontWeight: 700, color: 'var(--navy)',
             whiteSpace: 'nowrap', paddingTop: 1,
           }}>
             {fmtMoney(item.precio_venta)}
           </div>
+          )}
         </div>
 
         {/* Badges row */}
@@ -244,7 +244,7 @@ function PlatoCard({
           }}>
             {item.categoria}
           </span>
-          {hasMrg && (
+          {isAdmin && hasMrg && (
             <span style={{
               fontSize: 11, fontWeight: 700,
               background: mrg.bg, color: mrg.text,
@@ -253,7 +253,7 @@ function PlatoCard({
               Mrg {(item.margen_pct_computed ?? 0).toFixed(1)}%
             </span>
           )}
-          {!hasMrg && hasFc && (
+          {isAdmin && !hasMrg && hasFc && (
             <span style={{
               fontSize: 11, fontWeight: 700,
               background: fc.bg, color: fc.text,
@@ -2000,9 +2000,11 @@ function DetailView({
 function RentabilidadView({
   items,
   onBack,
+  isAdmin = false,
 }: {
   items: CartaItemEnriquecido[]
   onBack: () => void
+  isAdmin?: boolean
 }) {
   const sorted = useMemo(() =>
     items
@@ -2018,7 +2020,8 @@ function RentabilidadView({
         </button>
         <span style={{ color: '#fff', fontWeight: 700, fontSize: 17 }}>Rentabilidad</span>
         <div style={{ flex: 1 }} />
-        <button onClick={() => exportRentabilidadPDF(items)} style={{
+        {isAdmin && (
+        <button onClick={() => exportRentabilidadPDF(items, isAdmin)} style={{
           background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8,
           padding: '6px 12px', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
           display: 'flex', alignItems: 'center', gap: 4,
@@ -2026,6 +2029,7 @@ function RentabilidadView({
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>picture_as_pdf</span>
           PDF
         </button>
+        )}
       </div>
 
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -2783,7 +2787,7 @@ export default function CartaPage() {
   if (view === 'rentabilidad') {
     return (
       <>
-        <RentabilidadView items={items} onBack={() => setView('list')} />
+        <RentabilidadView items={items} onBack={() => setView('list')} isAdmin={isAdmin} />
         {toast && <Toast msg={toast} onDone={() => setToast('')} />}
       </>
     )
@@ -3009,6 +3013,7 @@ export default function CartaPage() {
               item={item}
               onClick={() => handleCardClick(item)}
               onToggle={() => toggleDisponible(item.id, !item.disponible)}
+              isAdmin={isAdmin}
             />
           ))
         )}
