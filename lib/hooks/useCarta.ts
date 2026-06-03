@@ -48,6 +48,9 @@ interface PlatoRecetaDB {
   receta_id: string
   porciones: number
   orden: number
+  plaza?: string | null
+  cantidad_ops?: number | null
+  unidad_ops?: string | null
 }
 
 export interface PlatoRecetaEnriquecido extends PlatoRecetaDB {

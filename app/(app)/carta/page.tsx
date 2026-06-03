@@ -1268,10 +1268,27 @@ function DetailView({
     if (!opsPlaza || !opsSeccion || opsSaving) return
     setOpsSaving(true)
     try {
-      // 1. Guardar plaza en plato_recetas
-      await supabaseDV.from('plato_recetas').update({ plaza: opsPlaza }).eq('id', pr.id)
+      const miCantidad = parseFloat(opsCantidad) || 1
 
-      // 2. Buscar o crear sección del checklist para esta plaza + sección elegida
+      // 1. Guardar plaza + contribución de ESTE plato en plato_recetas
+      await supabaseDV.from('plato_recetas')
+        .update({ plaza: opsPlaza, cantidad_ops: miCantidad, unidad_ops: opsUnidad })
+        .eq('id', pr.id)
+
+      // 2. Sumar TODAS las contribuciones de esta receta en esta plaza
+      //    (RLS filtra por restaurante vía carta_items)
+      const { data: todasContribuciones } = await supabaseDV
+        .from('plato_recetas')
+        .select('cantidad_ops')
+        .eq('receta_id', pr.receta_id)
+        .eq('plaza', opsPlaza)
+        .not('cantidad_ops', 'is', null)
+
+      const cantidadTotal = (todasContribuciones ?? []).reduce(
+        (sum, r) => sum + (r.cantidad_ops ?? 0), 0
+      )
+
+      // 3. Buscar o crear sección del checklist para esta plaza + sección elegida
       const secNombre = SECCIONES_OPS.find(s => s.id === opsSeccion)?.label ?? opsSeccion
       const secIcono = SECCIONES_OPS.find(s => s.id === opsSeccion)?.icono ?? 'inventory_2'
       const secOrden = SECCIONES_OPS.findIndex(s => s.id === opsSeccion)
@@ -1291,7 +1308,7 @@ function DetailView({
         seccionId = newSec?.id ?? null
       }
 
-      // 3. Upsert checklist_item (por receta_id + plaza, actualiza si existe)
+      // 4. Upsert checklist_item con la SUMA de todas las contribuciones
       const nombre = pr.receta?.nombre ?? search
       const { data: existente } = await supabaseDV
         .from('checklist_items')
@@ -1303,7 +1320,7 @@ function DetailView({
 
       if (existente?.[0]) {
         await supabaseDV.from('checklist_items').update({
-          cantidad: parseFloat(opsCantidad) || 1,
+          cantidad: cantidadTotal,
           unidad: opsUnidad,
           seccion_id: seccionId,
           seccion: secNombre,
@@ -1313,7 +1330,7 @@ function DetailView({
           nombre,
           plaza: opsPlaza,
           receta_id: pr.receta_id,
-          cantidad: parseFloat(opsCantidad) || 1,
+          cantidad: cantidadTotal,
           unidad: opsUnidad,
           prioridad: 'sp',
           seccion_id: seccionId,
@@ -1606,9 +1623,16 @@ function DetailView({
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {pr.receta?.nombre ?? pr.receta_id}
                     </div>
-                    {pr.costo_calculado > 0 && (
-                      <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmtMoney(pr.costo_calculado)}</div>
-                    )}
+                    <div style={{ display: 'flex', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                      {pr.costo_calculado > 0 && (
+                        <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmtMoney(pr.costo_calculado)}</span>
+                      )}
+                      {pr.plaza && pr.cantidad_ops != null && (
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#eef2ff', color: 'var(--accent)' }}>
+                          OPS {pr.plaza}: {pr.cantidad_ops} {pr.unidad_ops ?? 'u'}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   {/* Porciones: click para editar directo */}
                   {editingPorcionId === pr.id ? (
@@ -1645,10 +1669,11 @@ function DetailView({
                     onClick={() => {
                       if (opsPanel === pr.id) { setOpsPanel(null); return }
                       setOpsPanel(pr.id)
-                      setOpsPlaza('')
+                      // Prefill con valores guardados del plato_receta
+                      setOpsPlaza(pr.plaza ?? '')
                       setOpsSeccion('')
-                      setOpsCantidad('1')
-                      setOpsUnidad('u')
+                      setOpsCantidad(pr.cantidad_ops != null ? String(pr.cantidad_ops) : '1')
+                      setOpsUnidad(pr.unidad_ops ?? 'u')
                     }}
                     title="Asignar a OPS"
                     style={{
@@ -1717,9 +1742,9 @@ function DetailView({
                       </>
                     )}
                     <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
-                      Stock ideal
+                      Cantidad para este plato
                     </div>
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                       <input
                         type="number" value={opsCantidad}
                         onChange={e => setOpsCantidad(e.target.value)}
@@ -1730,6 +1755,23 @@ function DetailView({
                         {UNIDADES_OPS.map(u => <option key={u} value={u}>{u}</option>)}
                       </select>
                     </div>
+                    {/* Indicador de suma si hay otras contribuciones */}
+                    {(() => {
+                      const otrasCantidad = item.plato_recetas
+                        .filter(otro => otro.receta_id === pr.receta_id && otro.id !== pr.id && otro.plaza === opsPlaza && otro.cantidad_ops != null)
+                        .reduce((s, o) => s + (o.cantidad_ops ?? 0), 0)
+                      const miVal = parseFloat(opsCantidad) || 0
+                      const total = otrasCantidad + miVal
+                      if (otrasCantidad > 0) return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: '#eef2ff', borderRadius: 8, marginBottom: 8 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent)' }}>functions</span>
+                          <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>
+                            Total en OPS: <b>{total} {opsUnidad}</b> ({otrasCantidad} de otros platos + {miVal} de este)
+                          </span>
+                        </div>
+                      )
+                      return null
+                    })()}
                     <button
                       onClick={() => handleGuardarOPS(pr)}
                       disabled={!opsPlaza || !opsSeccion || opsSaving}
@@ -1743,7 +1785,7 @@ function DetailView({
                       <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
                         {opsSaving ? 'progress_activity' : 'checklist'}
                       </span>
-                      {opsSaving ? 'Guardando…' : 'Agregar al mise en place'}
+                      {opsSaving ? 'Guardando…' : 'Guardar en mise en place'}
                     </button>
                   </div>
                 )}
