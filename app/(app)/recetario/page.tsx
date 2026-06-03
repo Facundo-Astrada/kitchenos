@@ -189,6 +189,61 @@ export default function RecetarioPage() {
   const [showFichas, setShowFichas] = useState(false)
   const [showLink, setShowLink] = useState(false)
 
+  // Enriquecer borrador con IA
+  const [enrichTarget, setEnrichTarget] = useState<typeof recetas[0] | null>(null)
+  const [enrichText, setEnrichText] = useState('')
+  const [enrichParsed, setEnrichParsed] = useState<IAResult | null>(null)
+  const [enrichProcessing, setEnrichProcessing] = useState(false)
+  const [enrichSaving, setEnrichSaving] = useState(false)
+
+  async function handleEnrichParse() {
+    if (!enrichText.trim() || !enrichTarget) return
+    setEnrichProcessing(true)
+    try {
+      const res = await fetch('/api/recetas/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'import', mode: 'text', text: enrichText }),
+      })
+      const data = await res.json()
+      if (data?.receta) setEnrichParsed(apiToForm(data.receta))
+    } catch (e) {
+      console.error('Enrich parse error:', e)
+    } finally {
+      setEnrichProcessing(false)
+    }
+  }
+
+  async function handleEnrichSave() {
+    if (!enrichTarget || !enrichParsed) return
+    setEnrichSaving(true)
+    try {
+      const procedimiento = enrichParsed.pasos.filter(Boolean)
+      const ingredientes = enrichParsed.ingredientes.map(i => ({
+        nombre: i.nombre,
+        cantidad: i.cantidad,
+        unidad: i.unidad,
+        costo_unitario: 0,
+      }))
+      await fetch('/api/recetas/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enrichRecetaId: enrichTarget.id,
+          receta: { procedimiento },
+          ingredientes,
+        }),
+      })
+      setEnrichTarget(null)
+      setEnrichText('')
+      setEnrichParsed(null)
+    } catch (e) {
+      console.error('Enrich save error:', e)
+    } finally {
+      setEnrichSaving(false)
+    }
+  }
+
   // Separar publicadas vs borradores
   const recetasPublicadas = useMemo(() => recetas.filter(r => r.status !== 'draft'), [recetas])
   const recetasDraft = useMemo(() => recetas.filter(r => r.status === 'draft'), [recetas])
@@ -388,6 +443,7 @@ export default function RecetarioPage() {
                   receta={r}
                   isDraft={r.status === 'draft'}
                   onPublish={r.status === 'draft' ? () => publicarReceta(r.id) : undefined}
+                  onCompleteIA={r.status === 'draft' ? () => { setEnrichTarget(r); setEnrichParsed(null); setEnrichText('') } : undefined}
                 />
               </motion.div>
             ))}
@@ -465,6 +521,124 @@ export default function RecetarioPage() {
           <div className="fixed inset-0 z-[200]" style={{ background: 'rgba(0,0,0,.45)' }} onClick={() => setShowLink(false)} />
           <div className="fixed inset-x-0 bottom-0 z-[201]" style={{ background: 'var(--bg)', borderRadius: '20px 20px 0 0', maxHeight: '92dvh', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxWidth: 520, margin: '0 auto' }}>
             <VincularStockDrawer restauranteId={RESTAURANTE_ID} onClose={() => setShowLink(false)} />
+          </div>
+        </>
+      )}
+
+      {/* ── Bottom sheet: Completar borrador con IA ── */}
+      {enrichTarget && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 300 }} onClick={() => { setEnrichTarget(null); setEnrichParsed(null) }} />
+          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 301, background: 'var(--surface)', borderRadius: '20px 20px 0 0', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            {/* Header */}
+            <div style={{ padding: '20px 16px 12px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(245,158,11,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#f59e0b' }}>auto_awesome</span>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>Completar con IA</div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{enrichTarget.nombre}</div>
+              </div>
+              <button onClick={() => { setEnrichTarget(null); setEnrichParsed(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-3)' }}>close</span>
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+              {!enrichParsed ? (
+                <>
+                  <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 12px' }}>
+                    Escribí los ingredientes y pasos de la receta. La IA los va a estructurar automáticamente.
+                  </p>
+                  <textarea
+                    value={enrichText}
+                    onChange={e => setEnrichText(e.target.value)}
+                    placeholder={`Ej:\nIngredientes: 200g de harina, 2 huevos, 100ml de leche...\nPreparación: Mezclar la harina con los huevos...`}
+                    style={{
+                      width: '100%', minHeight: 180, padding: '12px', borderRadius: 12,
+                      border: '1px solid var(--border)', background: 'var(--bg)',
+                      color: 'var(--text-1)', fontSize: 13, resize: 'vertical',
+                      outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
+                    }}
+                  />
+                  <button
+                    onClick={handleEnrichParse}
+                    disabled={!enrichText.trim() || enrichProcessing}
+                    style={{
+                      marginTop: 12, width: '100%', padding: '13px', borderRadius: 12,
+                      background: enrichText.trim() && !enrichProcessing ? 'var(--navy)' : 'var(--border)',
+                      color: '#fff', border: 'none', fontWeight: 700, fontSize: 14,
+                      cursor: enrichText.trim() && !enrichProcessing ? 'pointer' : 'default',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>auto_awesome</span>
+                    {enrichProcessing ? 'Procesando con IA...' : 'Parsear con IA'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize: 12, color: '#059669', fontWeight: 600, margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>check_circle</span>
+                    IA procesó la receta. Revisá antes de aplicar.
+                  </p>
+
+                  {/* Ingredientes */}
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                      {enrichParsed.ingredientes.length} ingredientes
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {enrichParsed.ingredientes.map((ing, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--bg)', borderRadius: 8, fontSize: 13 }}>
+                          <span style={{ color: 'var(--text-3)', fontSize: 10, minWidth: 16 }}>{i+1}.</span>
+                          <span style={{ flex: 1, color: 'var(--text-1)' }}>{ing.nombre}</span>
+                          <span style={{ color: 'var(--text-3)', fontFamily: 'monospace' }}>{ing.cantidad} {ing.unidad}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Pasos */}
+                  {enrichParsed.pasos.filter(Boolean).length > 0 && (
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                        {enrichParsed.pasos.filter(Boolean).length} pasos
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {enrichParsed.pasos.filter(Boolean).map((paso, i) => (
+                          <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 10px', background: 'var(--bg)', borderRadius: 8, fontSize: 12 }}>
+                            <span style={{ color: 'var(--accent)', fontWeight: 700, minWidth: 18 }}>{i+1}.</span>
+                            <span style={{ color: 'var(--text-1)', lineHeight: 1.5 }}>{paso}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => setEnrichParsed(null)}
+                    style={{ marginBottom: 8, width: '100%', padding: '10px', borderRadius: 10, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-2)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    ← Volver a editar
+                  </button>
+                  <button
+                    onClick={handleEnrichSave}
+                    disabled={enrichSaving}
+                    style={{
+                      width: '100%', padding: '13px', borderRadius: 12,
+                      background: '#059669', color: '#fff', border: 'none',
+                      fontWeight: 700, fontSize: 14, cursor: enrichSaving ? 'default' : 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      opacity: enrichSaving ? 0.7 : 1,
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>save</span>
+                    {enrichSaving ? 'Guardando...' : `Aplicar a "${enrichTarget.nombre}"`}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </>
       )}
@@ -2546,11 +2720,12 @@ function EmptyMsg({ icon, text }: { icon: string; text: string }) {
   )
 }
 
-function RecetaCard({ receta: r, isDraft, onPublish }: { receta: RecetaConCosto; isDraft?: boolean; onPublish?: () => void }) {
+function RecetaCard({ receta: r, isDraft, onPublish, onCompleteIA }: { receta: RecetaConCosto; isDraft?: boolean; onPublish?: () => void; onCompleteIA?: () => void }) {
   const fc = r.food_cost
+  const sinIngredientes = (r.ingredientes?.length ?? 0) === 0
   return (
     <div style={{ position: 'relative' }}>
-      <Link href={`/recetario/${r.id}`} style={{ textDecoration: 'none', display: 'block', background: 'var(--surface)', border: isDraft ? '1px solid rgba(245,158,11,.3)' : '1px solid var(--border)', borderRadius: 14, padding: 14, cursor: 'pointer' }}>
+      <Link href={`/recetario/${r.id}`} style={{ textDecoration: 'none', display: 'block', background: 'var(--surface)', border: isDraft ? '1px solid rgba(245,158,11,.3)' : '1px solid var(--border)', borderRadius: 14, padding: isDraft && onCompleteIA ? '14px 14px 44px' : '14px', cursor: 'pointer' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -2578,24 +2753,43 @@ function RecetaCard({ receta: r, isDraft, onPublish }: { receta: RecetaConCosto;
             <span style={{ color: 'var(--text-3)' }}>Margen: <b style={{ color: fc.margen_bruto > 0 ? '#4ade80' : '#ef4444', fontFamily: "'DM Mono', monospace" }}>${fc.margen_bruto.toFixed(0)}</b></span>
           </div>
         )}
-        {(r.ingredientes?.length ?? 0) === 0 && (
+        {sinIngredientes && (
           <div style={{ marginTop: 6, fontSize: 10, color: '#f59e0b', fontWeight: 600 }}>⚠ Sin ingredientes cargados</div>
         )}
       </Link>
-      {isDraft && onPublish && (
-        <button
-          onClick={e => { e.stopPropagation(); onPublish() }}
-          style={{
-            position: 'absolute', bottom: 10, right: 10,
-            background: 'var(--navy)', border: 'none', borderRadius: 8,
-            padding: '5px 10px', fontSize: 10, fontWeight: 700, color: '#fff',
-            cursor: 'pointer', fontFamily: 'inherit',
-            display: 'flex', alignItems: 'center', gap: 4,
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 13 }}>publish</span>
-          Publicar
-        </button>
+
+      {/* Botones de acción para borradores */}
+      {isDraft && (
+        <div style={{ position: 'absolute', bottom: 8, left: 10, right: 10, display: 'flex', gap: 6 }}>
+          {onCompleteIA && (
+            <button
+              onClick={e => { e.stopPropagation(); e.preventDefault(); onCompleteIA() }}
+              style={{
+                flex: 1, background: 'rgba(245,158,11,.12)', border: '1px solid rgba(245,158,11,.3)',
+                borderRadius: 8, padding: '5px 10px', fontSize: 10, fontWeight: 700,
+                color: '#92400e', cursor: 'pointer', fontFamily: 'inherit',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>auto_awesome</span>
+              {sinIngredientes ? 'Cargar con IA' : 'Actualizar con IA'}
+            </button>
+          )}
+          {onPublish && (
+            <button
+              onClick={e => { e.stopPropagation(); e.preventDefault(); onPublish() }}
+              style={{
+                background: 'var(--navy)', border: 'none', borderRadius: 8,
+                padding: '5px 10px', fontSize: 10, fontWeight: 700, color: '#fff',
+                cursor: 'pointer', fontFamily: 'inherit',
+                display: 'flex', alignItems: 'center', gap: 4,
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>publish</span>
+              Publicar
+            </button>
+          )}
+        </div>
       )}
     </div>
   )

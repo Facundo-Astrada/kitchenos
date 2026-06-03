@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { receta, ingredientes, addIngredientsOnly } = body
+    const { receta, ingredientes, addIngredientsOnly, enrichRecetaId } = body
 
     const adminSupabase = createAdminClient()
 
@@ -36,6 +36,27 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: error.message }, { status: 500 })
       }
       return NextResponse.json({ ok: true })
+    }
+
+    // Mode: enrich existing recipe (replace ingredients + update procedimiento)
+    if (enrichRecetaId) {
+      // Borrar ingredientes anteriores
+      await adminSupabase.from('ingredientes').delete().eq('receta_id', enrichRecetaId)
+      // Insertar nuevos ingredientes
+      if (ingredientes?.length > 0) {
+        const rows = ingredientes.map((ing: Record<string, unknown>) => ({ ...ing, receta_id: enrichRecetaId }))
+        const { error: ingErr } = await adminSupabase.from('ingredientes').insert(rows)
+        if (ingErr) console.error('[save-receta] Enrich ingredientes error:', ingErr)
+      }
+      // Actualizar procedimiento y publicar como draft→published si corresponde
+      if (receta) {
+        const { error: upErr } = await adminSupabase
+          .from('recetas')
+          .update({ procedimiento: receta.procedimiento, updated_at: new Date().toISOString() })
+          .eq('id', enrichRecetaId)
+        if (upErr) console.error('[save-receta] Enrich update error:', upErr)
+      }
+      return NextResponse.json({ id: enrichRecetaId, ok: true })
     }
 
     if (!receta || !restauranteId) {

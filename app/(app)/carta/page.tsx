@@ -1376,6 +1376,44 @@ function DetailView({
     return base.filter(r => r.nombre.toLowerCase().includes(q)).slice(0, 15)
   }, [recetas, search, item.plato_recetas])
 
+  const filtradosProductos = useMemo(() => {
+    if (!search.trim() || search.trim().length < 2) return []
+    const q = search.toLowerCase()
+    return productos.filter(p => p.nombre.toLowerCase().includes(q)).slice(0, 8)
+  }, [productos, search])
+
+  async function handleVincularProducto(producto: ProductoConEstado) {
+    setVinculando(true)
+    try {
+      const res = await fetch('/api/recetas/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          receta: {
+            nombre: producto.nombre,
+            categoria: producto.categoria || 'Insumo',
+            porciones: 1,
+            status: 'draft',
+            restaurante_id: restauranteId,
+          },
+          ingredientes: [{
+            nombre: producto.nombre,
+            cantidad: 1,
+            unidad: producto.unidad,
+            costo_unitario: producto.precio_unitario || 0,
+            unidad_costo: producto.unidad,
+            producto_id: producto.id,
+          }],
+        }),
+      })
+      const json = await res.json()
+      if (json.id) {
+        await onAgregarReceta(json.id, 1)
+        setSearch('')
+      }
+    } finally { setVinculando(false) }
+  }
+
   const handleVincular = async (recetaId: string) => {
     setVinculando(true)
     try { await onVincular(recetaId) } finally { setVinculando(false) }
@@ -1749,7 +1787,7 @@ function DetailView({
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Buscar y agregar receta..."
+                placeholder="Buscar receta o insumo de stock..."
                 style={{
                   width: '100%', padding: '10px 12px 10px 34px', border: 'none',
                   background: 'transparent', fontSize: 13, color: 'var(--text-1)',
@@ -1757,34 +1795,74 @@ function DetailView({
                 }}
               />
             </div>
-            {search.trim().length > 0 && filtradas.length > 0 && (
-              <div style={{ borderTop: '1px solid var(--border)', maxHeight: 220, overflowY: 'auto' }}>
-                {filtradas.map(r => (
-                  <button
-                    key={r.id}
-                    onClick={async () => {
-                      setVinculando(true)
-                      try { await onAgregarReceta(r.id, 1) } finally { setVinculando(false) }
-                      setSearch('')
-                    }}
-                    disabled={vinculando}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-                      padding: '9px 12px', textAlign: 'left', border: 'none',
-                      background: 'none', cursor: 'pointer', borderBottom: '1px solid var(--border)',
-                      fontFamily: 'inherit', opacity: vinculando ? .5 : 1,
-                    }}
-                  >
-                    <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--accent)', flexShrink: 0 }}>menu_book</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{r.nombre}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                        {r.categoria} · {fmtMoney(r.food_cost.costo_porcion)} por porción
+            {search.trim().length > 0 && (filtradas.length > 0 || filtradosProductos.length > 0) && (
+              <div style={{ borderTop: '1px solid var(--border)', maxHeight: 260, overflowY: 'auto' }}>
+                {/* Recetas */}
+                {filtradas.length > 0 && (
+                  <>
+                    {filtradosProductos.length > 0 && (
+                      <div style={{ padding: '5px 12px 3px', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', background: 'var(--bg)' }}>
+                        Recetas
                       </div>
+                    )}
+                    {filtradas.map(r => (
+                      <button
+                        key={r.id}
+                        onClick={async () => {
+                          setVinculando(true)
+                          try { await onAgregarReceta(r.id, 1) } finally { setVinculando(false) }
+                          setSearch('')
+                        }}
+                        disabled={vinculando}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                          padding: '9px 12px', textAlign: 'left', border: 'none',
+                          background: 'none', cursor: 'pointer', borderBottom: '1px solid var(--border)',
+                          fontFamily: 'inherit', opacity: vinculando ? .5 : 1,
+                        }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--accent)', flexShrink: 0 }}>menu_book</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{r.nombre}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                            {r.categoria} · {fmtMoney(r.food_cost.costo_porcion)} por porción
+                          </div>
+                        </div>
+                        <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>add_circle</span>
+                      </button>
+                    ))}
+                  </>
+                )}
+                {/* Productos de stock */}
+                {filtradosProductos.length > 0 && (
+                  <>
+                    <div style={{ padding: '5px 12px 3px', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', background: 'var(--bg)' }}>
+                      Insumos de stock
                     </div>
-                    <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>add_circle</span>
-                  </button>
-                ))}
+                    {filtradosProductos.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => handleVincularProducto(p)}
+                        disabled={vinculando}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                          padding: '9px 12px', textAlign: 'left', border: 'none',
+                          background: 'none', cursor: 'pointer', borderBottom: '1px solid var(--border)',
+                          fontFamily: 'inherit', opacity: vinculando ? .5 : 1,
+                        }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 15, color: '#10b981', flexShrink: 0 }}>inventory_2</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{p.nombre}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                            {p.categoria} · {p.stock_actual} {p.unidad} en stock
+                          </div>
+                        </div>
+                        <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#10b981' }}>add_circle</span>
+                      </button>
+                    ))}
+                  </>
+                )}
               </div>
             )}
             {search.trim().length > 0 && filtradas.length === 0 && (
