@@ -120,7 +120,10 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 10. **Reportes**: tabla `presupuestos` (RLS). 3 tabs nuevas — **CMV** (ventas vs compras, semáforo, ticket prom.), **Presupuesto vs Real** (semanal→anual, input inline que upsert, barra de avance), **Rendimiento por plaza** (cumplimiento tareas + merma).
 11. **Facturas privacidad**: OCR (`/api/facturas`) detecta gastos no-mercadería (sueldos/honorarios/adelantos/retiros socios) → `items_excluidos` + `alerta_privacidad` + `proveedor_es_persona`. Lista `nombres_excluidos` en `restaurantes.configuracion` (botón 🛡️ en Facturas). Post-filtro de seguridad en OCR y en `facturas-universal` (importador masivo Fudo). Banner de alerta en confirm.
 
-**Migraciones aplicadas en prod**: `haccp_limpieza_calendario_ops.sql`, `presupuestos.sql` (en `supabase/migrations/`).
+**Bloque E — Limpieza de datos (post-deploy):**
+12. **Facturas personales borradas** (Bros): script `scripts/limpiar-facturas-personales.mjs` (dry-run + `--nombres` + `--apply`). Eliminadas **112 facturas ($63.9M) + 103 items** — 102 con prefijo `"Empleado -"` + 10 de Franco Ghione. Quedan 888 facturas de mercadería. `facturas-universal` ahora también filtra prefijo `"Empleado"`. Franco Ghione guardado en `nombres_excluidos`.
+
+**Migraciones aplicadas en prod**: `haccp_limpieza_calendario_ops.sql`, `presupuestos.sql` (en `supabase/migrations/`). **Commits**: `ac87329` (features) + `8b08b58` (script limpieza) en `main`, deployados.
 
 ### Sesión 2026-06-02 — UX fixes: OPS sección, drag text, stock sector scroll
 1. **Carta OPS — sección en Apertura/Cierre**: el panel OPS ahora pide plaza + sección (Heladera / Secos/Tuppers / Congelados / Estación). Al guardar, busca o crea la `checklist_secciones` correcta y upserta el `checklist_item` en esa sección específica.
