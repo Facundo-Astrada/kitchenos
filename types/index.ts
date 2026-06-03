@@ -344,8 +344,8 @@ export interface Turno {
   miembro_id: string
   fecha: string
   turno_tipo: string
-  hora_entrada: string
-  hora_salida: string
+  hora_entrada: string | null
+  hora_salida: string | null
   notas?: string | null
   restaurante_id: string
   created_at: string
@@ -546,12 +546,12 @@ export interface EquipoMiembro {
   created_at: string
 }
 
-// NOTE: "puestos" table not in provided DB schema. Kept for backward compatibility.
+// DB: puestos (id, nombre, descripcion, tareas_funciones text[], permisos_app text[], restaurante_id, created_at)
 export interface Puesto {
   id: string
   nombre: string
   descripcion: string | null
-  tareas_funciones: string | null
+  tareas_funciones: string[] | null
   permisos_app: string[] | null
   restaurante_id: string
   created_at: string

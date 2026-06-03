@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { NAV_ITEMS, MODULO_CONFIG } from '@/lib/constants'
 import { cn } from '@/lib/utils'
+import { usePermisos } from '@/lib/hooks/usePermisos'
 
 interface BottomNavProps {
   onMoreClick: () => void
@@ -11,6 +12,11 @@ interface BottomNavProps {
 
 export default function BottomNav({ onMoreClick }: BottomNavProps) {
   const pathname = usePathname()
+  const { puedeVer, isAdmin } = usePermisos()
+
+  const visibleItems = NAV_ITEMS.filter(id =>
+    id === 'home' || isAdmin || puedeVer(id)
+  )
 
   return (
     <nav
@@ -25,7 +31,7 @@ export default function BottomNav({ onMoreClick }: BottomNavProps) {
         boxShadow: '0 -4px 20px rgba(0,0,0,.08)',
       }}
     >
-      {NAV_ITEMS.map((moduloId) => {
+      {visibleItems.map((moduloId) => {
         const modulo = MODULO_CONFIG[moduloId]
         const isActive =
           moduloId === 'home'

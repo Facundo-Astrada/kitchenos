@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { useRecetas, calcFoodCost, type RecetaConCosto } from '@/lib/hooks/useRecetas'
 import { useStock } from '@/lib/hooks/useStock'
 import { useCategoriasProducto } from '@/lib/hooks/useCategoriasProducto'
+import { usePermisos } from '@/lib/hooks/usePermisos'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
 import ImageCropModal from '@/components/ui/ImageCropModal'
@@ -178,6 +179,8 @@ export default function RecetarioPage() {
   const { recetas, loading, error, agregarReceta, agregarIngrediente, actualizarReceta, eliminarReceta, publicarReceta } = useRecetas()
   const { productos: stockProductos, agregarProducto } = useStock()
   const { categorias: catDB } = useCategoriasProducto()
+  const { puedeEditar, isAdmin } = usePermisos()
+  const canEdit = isAdmin || puedeEditar('recetas')
 
   const [search, setSearch] = useState('')
   const [catFilter, setCatFilter] = useState('')
@@ -392,18 +395,20 @@ export default function RecetarioPage() {
 
       {/* ── Botones NUEVA RECETA + IMPORTAR FICHAS ── */}
       <div style={{ position: 'absolute', bottom: 110, left: 14, right: 14, zIndex: 10, display: 'flex', gap: 10 }}>
-        <button
-          onClick={() => setCreando(true)}
-          style={{
-            flex: 1, background: 'linear-gradient(135deg, var(--navy), #4361a0)',
-            border: 'none', borderRadius: 16, padding: '14px 20px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            boxShadow: '0 6px 24px rgba(28,45,74,.45)', cursor: 'pointer',
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#fff' }}>add_circle</span>
-          <span style={{ fontSize: 15, fontWeight: 700, color: '#fff', fontFamily: 'inherit' }}>Nueva receta</span>
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setCreando(true)}
+            style={{
+              flex: 1, background: 'linear-gradient(135deg, var(--navy), #4361a0)',
+              border: 'none', borderRadius: 16, padding: '14px 20px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              boxShadow: '0 6px 24px rgba(28,45,74,.45)', cursor: 'pointer',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#fff' }}>add_circle</span>
+            <span style={{ fontSize: 15, fontWeight: 700, color: '#fff', fontFamily: 'inherit' }}>Nueva receta</span>
+          </button>
+        )}
         <button
           onClick={() => setShowFichas(true)}
           title="Importar fichas técnicas"

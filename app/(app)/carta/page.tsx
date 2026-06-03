@@ -4,6 +4,7 @@ import PageTransition from '@/components/PageTransition'
 import { useState, useMemo, useEffect } from 'react'
 import { useCarta, type CategoriaCartaItem, type CartaCategoria, type CartaItemEnriquecido } from '@/lib/hooks/useCarta'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
+import { usePermisos } from '@/lib/hooks/usePermisos'
 import { useRecetas, type RecetaConCosto } from '@/lib/hooks/useRecetas'
 import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
 import { usePackagingGrupos, type PackagingGrupo } from '@/lib/hooks/usePackagingGrupos'
@@ -2618,6 +2619,9 @@ export default function CartaPage() {
   const { grupos, crearGrupo, eliminarGrupo, aplicarGrupoAPlatos } = usePackagingGrupos()
 
   const RESTAURANTE_ID = useRestauranteId()
+  const { puedeEditar, isAdmin } = usePermisos()
+  const canEdit = isAdmin || puedeEditar('carta')
+
   const [view, setView] = useState<View>('list')
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [filter, setFilter] = useState<string>('Todas')
@@ -2864,15 +2868,17 @@ export default function CartaPage() {
       <div data-coach-target="carta-header" style={{ background: 'var(--navy)', padding: '46px 16px 14px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <span style={{ color: '#fff', fontWeight: 700, fontSize: 20 }}>Carta</span>
-          <button data-coach-target="carta-nuevo" onClick={() => setView('nuevo')} style={{
-            background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,.3)',
-            borderRadius: 10, padding: '7px 14px', color: '#fff',
-            fontWeight: 700, fontSize: 13, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 4,
-          }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
-            Nuevo
-          </button>
+          {canEdit && (
+            <button data-coach-target="carta-nuevo" onClick={() => setView('nuevo')} style={{
+              background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,.3)',
+              borderRadius: 10, padding: '7px 14px', color: '#fff',
+              fontWeight: 700, fontSize: 13, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
+              Nuevo
+            </button>
+          )}
         </div>
         {/* Action chips — scrollable row */}
         <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 }}>

@@ -5,6 +5,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
 import { useCategoriasProducto } from '@/lib/hooks/useCategoriasProducto'
+import { usePermisos } from '@/lib/hooks/usePermisos'
 import PageHeader from '@/components/shell/PageHeader'
 import ActionButton from '@/components/shell/ActionButton'
 import MermaBottomSheet from '@/components/merma/MermaBottomSheet'
@@ -88,6 +89,8 @@ export default function StockPage() {
   const RESTAURANTE_ID = useRestauranteId()
   const { productos, loading, error, actualizarStock, agregarProducto, actualizarProducto, eliminarProducto, refetch } = useStock()
   const { categorias, agregarCategoria } = useCategoriasProducto()
+  const { puedeEditar, puedeEliminar, isAdmin } = usePermisos()
+  const canEdit = isAdmin || puedeEditar('stock')
 
   // ── Tabs ──
   const [activeTab, setActiveTab] = useState<'insumos' | 'producciones'>('insumos')
@@ -813,7 +816,7 @@ export default function StockPage() {
                 return (
                   <tr
                     key={p.id}
-                    onDoubleClick={() => openEdit(p)}
+                    onDoubleClick={() => canEdit && openEdit(p)}
                     style={{
                       borderBottom: '1px solid var(--border)',
                       background: (p.stock_actual === 0 && p.precio_unitario === 0)
@@ -923,7 +926,7 @@ export default function StockPage() {
               <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>
                 {editingProducto ? 'Editar producto' : 'Nuevo producto'}
               </h2>
-              {editingProducto && (
+              {editingProducto && puedeEliminar && (
                 <button
                   onClick={() => setDeleteId(editingProducto.id)}
                   style={{ background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#ef4444', fontFamily: 'inherit' }}
