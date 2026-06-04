@@ -64,7 +64,7 @@ const SUGGESTIONS_BY_SCREEN: Record<string, Suggestion[]> = {
     { label: '¿Cómo cargo un evento especial?', action: 'send' },
   ],
   carta: [
-    { label: 'Analizá mi carta completa', action: 'send' },
+    { label: 'Ver recorrido de Carta', action: 'tour' },
     { label: '¿Qué platos tienen el peor food cost?', action: 'send' },
     { label: '¿Cuáles me falta vincular a recetas?', action: 'send' },
     { label: 'Ayudame a importar la carta', action: 'send' },

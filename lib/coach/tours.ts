@@ -6,6 +6,44 @@ export interface TourStep {
 }
 
 export const TOURS: Record<string, TourStep[]> = {
+  carta: [
+    {
+      targetId: 'carta-header',
+      title: 'Tu carta digital',
+      description: 'Todos los platos del menú con precio de venta, food cost calculado y disponibilidad. Desde acá gestionás qué se vende, a qué precio y qué está 86 (agotado).',
+    },
+    {
+      targetId: 'carta-filtros',
+      title: 'Filtrar por categoría',
+      description: 'Filtrá por entrada, principal, postre, bebida o cualquier categoría que hayas creado. Útil para revisar el food cost de una familia de platos antes de actualizar precios.',
+    },
+    {
+      targetId: 'carta-lista',
+      title: 'Los platos',
+      description: 'Cada card muestra el food cost en porcentaje. Verde: bajo control. Amarillo: atención. Rojo: crítico. Los que no tienen receta vinculada muestran costo cero — hay que vincularlos para que el cálculo sea real.',
+    },
+    {
+      targetId: 'carta-rentabilidad',
+      title: 'Análisis de rentabilidad',
+      description: 'Una vista ordenada por food cost de mayor a menor. De un vistazo ves cuáles platos te cuestan más, cuáles tienen margen negativo y cuáles son tus mejores opciones. Fundamental para tomar decisiones de precio.',
+    },
+    {
+      targetId: 'carta-importar',
+      title: 'Importar la carta con IA',
+      description: 'Subí una foto, PDF, Excel o texto de tu carta. La IA extrae nombre, precio, componentes y detecta tags dietarios (vegano, sin TACC, keto). Después vinculás cada componente a las recetas del recetario.',
+    },
+    {
+      targetId: 'carta-nuevo',
+      title: 'Nuevo plato',
+      description: 'Agregás un plato manualmente: nombre, categoría, precio y los componentes que lo forman. Podés vincularlo directamente a recetas del recetario para que el food cost se calcule en tiempo real.',
+    },
+    {
+      targetId: null,
+      title: '¡Ya conocés la Carta!',
+      description: 'Abrí al Kitchen Coach en cualquier momento para analizar el food cost de tu carta, detectar los platos más costosos o pedir consejos de precio y porciones.',
+    },
+  ],
+
   operaciones: [
     {
       targetId: 'ops-tab-produccion',
