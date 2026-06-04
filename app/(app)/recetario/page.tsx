@@ -199,60 +199,8 @@ export default function RecetarioPage() {
   const [showFichas, setShowFichas] = useState(false)
   const [showLink, setShowLink] = useState(false)
 
-  // Enriquecer borrador con IA
-  const [enrichTarget, setEnrichTarget] = useState<typeof recetas[0] | null>(null)
-  const [enrichText, setEnrichText] = useState('')
-  const [enrichParsed, setEnrichParsed] = useState<IAResult | null>(null)
-  const [enrichProcessing, setEnrichProcessing] = useState(false)
-  const [enrichSaving, setEnrichSaving] = useState(false)
-
-  async function handleEnrichParse() {
-    if (!enrichText.trim() || !enrichTarget) return
-    setEnrichProcessing(true)
-    try {
-      const res = await fetch('/api/recetas/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'import', mode: 'text', text: enrichText }),
-      })
-      const data = await res.json()
-      if (data?.receta) setEnrichParsed(apiToForm(data.receta))
-    } catch (e) {
-      console.error('Enrich parse error:', e)
-    } finally {
-      setEnrichProcessing(false)
-    }
-  }
-
-  async function handleEnrichSave() {
-    if (!enrichTarget || !enrichParsed) return
-    setEnrichSaving(true)
-    try {
-      const procedimiento = enrichParsed.pasos.filter(Boolean)
-      const ingredientes = enrichParsed.ingredientes.map(i => ({
-        nombre: i.nombre,
-        cantidad: i.cantidad,
-        unidad: i.unidad,
-        costo_unitario: 0,
-      }))
-      await fetch('/api/recetas/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          enrichRecetaId: enrichTarget.id,
-          receta: { procedimiento },
-          ingredientes,
-        }),
-      })
-      setEnrichTarget(null)
-      setEnrichText('')
-      setEnrichParsed(null)
-    } catch (e) {
-      console.error('Enrich save error:', e)
-    } finally {
-      setEnrichSaving(false)
-    }
-  }
+  // Borrador a enriquecer con IA (abre NuevaFichaScreen pre-poblado)
+  const [enrichingDraft, setEnrichingDraft] = useState<typeof recetas[0] | null>(null)
 
   // Separar publicadas vs borradores
   const recetasPublicadas = useMemo(() => recetas.filter(r => r.status !== 'draft'), [recetas])
@@ -360,9 +308,18 @@ export default function RecetarioPage() {
         agregarIngrediente={agregarIngrediente}
         agregarProducto={agregarProducto}
         actualizarReceta={actualizarReceta}
-        onClose={() => setCreando(false)}
+        initialDraft={enrichingDraft ? {
+          id: enrichingDraft.id,
+          nombre: enrichingDraft.nombre,
+          categoria: enrichingDraft.categoria,
+          porciones: enrichingDraft.porciones ?? undefined,
+          precio_venta: enrichingDraft.precio_venta ?? undefined,
+          tiempo_min: enrichingDraft.tiempo_min ?? undefined,
+        } : undefined}
+        onClose={() => { setCreando(false); setEnrichingDraft(null) }}
         onCreated={(id, asDraft) => {
           setCreando(false)
+          setEnrichingDraft(null)
           if (asDraft) { setTab('ideas') }
           else { router.push(`/recetario/${id}`) }
         }}
@@ -477,7 +434,7 @@ export default function RecetarioPage() {
                   receta={r}
                   isDraft={r.status === 'draft'}
                   onPublish={r.status === 'draft' ? () => publicarReceta(r.id) : undefined}
-                  onCompleteIA={r.status === 'draft' ? () => { setEnrichTarget(r); setEnrichParsed(null); setEnrichText('') } : undefined}
+                  onCompleteIA={r.status === 'draft' ? () => { setEnrichingDraft(r); setCreando(true) } : undefined}
                 />
               </motion.div>
             ))}
@@ -562,123 +519,6 @@ export default function RecetarioPage() {
         </>
       )}
 
-      {/* ── Bottom sheet: Completar borrador con IA ── */}
-      {enrichTarget && (
-        <>
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 300 }} onClick={() => { setEnrichTarget(null); setEnrichParsed(null) }} />
-          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 301, background: 'var(--surface)', borderRadius: '20px 20px 0 0', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-            {/* Header */}
-            <div style={{ padding: '20px 16px 12px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(245,158,11,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#f59e0b' }}>auto_awesome</span>
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>Completar con IA</div>
-                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{enrichTarget.nombre}</div>
-              </div>
-              <button onClick={() => { setEnrichTarget(null); setEnrichParsed(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-3)' }}>close</span>
-              </button>
-            </div>
-
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
-              {!enrichParsed ? (
-                <>
-                  <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 12px' }}>
-                    Escribí los ingredientes y pasos de la receta. La IA los va a estructurar automáticamente.
-                  </p>
-                  <textarea
-                    value={enrichText}
-                    onChange={e => setEnrichText(e.target.value)}
-                    placeholder={`Ej:\nIngredientes: 200g de harina, 2 huevos, 100ml de leche...\nPreparación: Mezclar la harina con los huevos...`}
-                    style={{
-                      width: '100%', minHeight: 180, padding: '12px', borderRadius: 12,
-                      border: '1px solid var(--border)', background: 'var(--bg)',
-                      color: 'var(--text-1)', fontSize: 13, resize: 'vertical',
-                      outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
-                    }}
-                  />
-                  <button
-                    onClick={handleEnrichParse}
-                    disabled={!enrichText.trim() || enrichProcessing}
-                    style={{
-                      marginTop: 12, width: '100%', padding: '13px', borderRadius: 12,
-                      background: enrichText.trim() && !enrichProcessing ? 'var(--navy)' : 'var(--border)',
-                      color: '#fff', border: 'none', fontWeight: 700, fontSize: 14,
-                      cursor: enrichText.trim() && !enrichProcessing ? 'pointer' : 'default',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                    }}
-                  >
-                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>auto_awesome</span>
-                    {enrichProcessing ? 'Procesando con IA...' : 'Parsear con IA'}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <p style={{ fontSize: 12, color: '#059669', fontWeight: 600, margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>check_circle</span>
-                    IA procesó la receta. Revisá antes de aplicar.
-                  </p>
-
-                  {/* Ingredientes */}
-                  <div style={{ marginBottom: 14 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.05em' }}>
-                      {enrichParsed.ingredientes.length} ingredientes
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {enrichParsed.ingredientes.map((ing, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--bg)', borderRadius: 8, fontSize: 13 }}>
-                          <span style={{ color: 'var(--text-3)', fontSize: 10, minWidth: 16 }}>{i+1}.</span>
-                          <span style={{ flex: 1, color: 'var(--text-1)' }}>{ing.nombre}</span>
-                          <span style={{ color: 'var(--text-3)', fontFamily: 'monospace' }}>{ing.cantidad} {ing.unidad}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Pasos */}
-                  {enrichParsed.pasos.filter(Boolean).length > 0 && (
-                    <div style={{ marginBottom: 14 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.05em' }}>
-                        {enrichParsed.pasos.filter(Boolean).length} pasos
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {enrichParsed.pasos.filter(Boolean).map((paso, i) => (
-                          <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 10px', background: 'var(--bg)', borderRadius: 8, fontSize: 12 }}>
-                            <span style={{ color: 'var(--accent)', fontWeight: 700, minWidth: 18 }}>{i+1}.</span>
-                            <span style={{ color: 'var(--text-1)', lineHeight: 1.5 }}>{paso}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <button
-                    onClick={() => setEnrichParsed(null)}
-                    style={{ marginBottom: 8, width: '100%', padding: '10px', borderRadius: 10, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-2)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
-                  >
-                    ← Volver a editar
-                  </button>
-                  <button
-                    onClick={handleEnrichSave}
-                    disabled={enrichSaving}
-                    style={{
-                      width: '100%', padding: '13px', borderRadius: 12,
-                      background: '#059669', color: '#fff', border: 'none',
-                      fontWeight: 700, fontSize: 14, cursor: enrichSaving ? 'default' : 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                      opacity: enrichSaving ? 0.7 : 1,
-                    }}
-                  >
-                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>save</span>
-                    {enrichSaving ? 'Guardando...' : `Aplicar a "${enrichTarget.nombre}"`}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </>
-      )}
     </div>
     </PageTransition>
   )
@@ -1644,6 +1484,15 @@ function IAMultiResultScreen({ results, previewUrl, inputText, agregarReceta, ag
 // Flujo: Ingredientes → Procedimiento → Nombre/Datos → Guardar
 // ════════════════════════════════════════════════════════════════════
 
+interface InitialDraft {
+  id: string
+  nombre: string
+  categoria?: string
+  porciones?: number
+  precio_venta?: number
+  tiempo_min?: number
+}
+
 interface NuevaFichaProps {
   categorias: string[]
   stockProductos: { id: string; nombre: string; unidad: string; precio_unitario: number; categoria: string }[]
@@ -1651,18 +1500,19 @@ interface NuevaFichaProps {
   agregarIngrediente: (recetaId: string, d: any) => Promise<void>
   agregarProducto: (datos: any) => Promise<void>
   actualizarReceta: (id: string, d: any) => Promise<void>
+  initialDraft?: InitialDraft
   onClose: () => void
   onCreated: (id: string, asDraft?: boolean) => void
 }
 
-function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIngrediente, agregarProducto, actualizarReceta, onClose, onCreated }: NuevaFichaProps) {
+function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIngrediente, agregarProducto, actualizarReceta, initialDraft, onClose, onCreated }: NuevaFichaProps) {
   const [ings, setIngs] = useState<FormIng[]>(() => [{ id: uid(), cantidad: '', unidad: 'kg', nombre: '', costo_unitario: 0 }])
   const [pasos, setPasos] = useState<FormPaso[]>(() => [{ id: uid(), texto: '' }])
-  const [nombre, setNombre] = useState('')
-  const [categoria, setCategoria] = useState('')
-  const [porciones, setPorciones] = useState('1')
-  const [tiempoMin, setTiempoMin] = useState('')
-  const [precioVenta, setPrecioVenta] = useState('')
+  const [nombre, setNombre] = useState(initialDraft?.nombre || '')
+  const [categoria, setCategoria] = useState(initialDraft?.categoria || '')
+  const [porciones, setPorciones] = useState(String(initialDraft?.porciones || 1))
+  const [tiempoMin, setTiempoMin] = useState(initialDraft?.tiempo_min ? String(initialDraft.tiempo_min) : '')
+  const [precioVenta, setPrecioVenta] = useState(initialDraft?.precio_venta ? String(initialDraft.precio_venta) : '')
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [activeIngId, setActiveIngId] = useState<number | null>(null)
@@ -1964,7 +1814,6 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
   // ── Save ──
   async function handleGuardar(status: 'published' | 'draft' = 'published') {
     const isDraft = status === 'draft'
-    // Drafts don't require a name
     if (!isDraft && !nombre.trim()) { setFormError('Ponele un nombre a la receta'); return }
     const ingsValidos = ings.filter(i => i.nombre.trim())
     const pasosValidos = pasos.filter(p => p.texto.trim())
@@ -1979,19 +1828,45 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
         costo_unitario: ing.costo_unitario ?? 0,
         unidad_costo: ing.unidad || 'u',
       }))
-      const id = await agregarReceta({
-        nombre: nombre.trim() || (isDraft ? 'Borrador sin nombre' : ''),
-        categoria: categoria.trim() || 'otros',
-        porciones: porcionesN,
-        tiempo_min: parseInt(tiempoMin) || 0,
-        precio_venta: precioVentaN,
-        procedimiento,
-        activa: true,
-        status,
-      }, ingredientesData)
-      // Fix 2: sync stock tras guardar
+      let savedId: string
+      if (initialDraft?.id) {
+        // Actualizar el borrador existente en vez de crear uno nuevo
+        await actualizarReceta(initialDraft.id, {
+          nombre: nombre.trim() || (isDraft ? 'Borrador sin nombre' : ''),
+          categoria: categoria.trim() || 'otros',
+          porciones: porcionesN,
+          tiempo_min: parseInt(tiempoMin) || 0,
+          precio_venta: precioVentaN,
+          procedimiento,
+          activa: true,
+          status,
+        })
+        if (ingredientesData.length > 0) {
+          await fetch('/api/recetas/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              enrichRecetaId: initialDraft.id,
+              receta: { procedimiento },
+              ingredientes: ingredientesData,
+            }),
+          })
+        }
+        savedId = initialDraft.id
+      } else {
+        savedId = await agregarReceta({
+          nombre: nombre.trim() || (isDraft ? 'Borrador sin nombre' : ''),
+          categoria: categoria.trim() || 'otros',
+          porciones: porcionesN,
+          tiempo_min: parseInt(tiempoMin) || 0,
+          precio_venta: precioVentaN,
+          procedimiento,
+          activa: true,
+          status,
+        }, ingredientesData)
+      }
       await sincronizarIngredientesConStock(ingredientesData)
-      onCreated(id, isDraft)
+      onCreated(savedId, isDraft)
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : 'Error al crear')
     } finally { setSaving(false) }
@@ -2049,7 +1924,7 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button onClick={onClose} style={btnClear}><span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 20 }}>close</span></button>
-            <span style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>Nueva receta</span>
+            <span style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{initialDraft ? 'Completar receta' : 'Nueva receta'}</span>
             {ingCount > 0 && <span style={{ fontSize: 11, color: 'rgba(255,255,255,.4)', fontWeight: 600 }}>{ingCount} ing.</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

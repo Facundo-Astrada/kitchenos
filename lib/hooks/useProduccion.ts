@@ -197,7 +197,7 @@ export function useProduccion() {
     nombre: string
     categoria: string
     descripcion?: string
-    componentes: { nombre: string; receta_id?: string | null; notas_produccion?: string }[]
+    componentes: { nombre: string; receta_id?: string | null; notas_produccion?: string; plaza?: string | null }[]
   }) => {
     const rid = ridRef.current
     if (!rid) return
@@ -223,6 +223,7 @@ export function useProduccion() {
           nombre: c.nombre,
           receta_id: c.receta_id ?? null,
           notas_produccion: c.notas_produccion ?? null,
+          plaza: c.plaza ?? null,
           orden: i,
         }))
         const { error: cErr } = await supabase.from('plato_componentes').insert(comps)
@@ -240,7 +241,7 @@ export function useProduccion() {
   const actualizarPlato = useCallback(async (
     id: string,
     data: Partial<PlatoCompuesto>,
-    componentes?: { id?: string; nombre: string; receta_id?: string | null; notas_produccion?: string; orden: number }[]
+    componentes?: { id?: string; nombre: string; receta_id?: string | null; notas_produccion?: string; plaza?: string | null; orden: number }[]
   ) => {
     try {
       const { error: pErr } = await supabase
@@ -260,6 +261,7 @@ export function useProduccion() {
             nombre: c.nombre,
             receta_id: c.receta_id ?? null,
             notas_produccion: c.notas_produccion ?? null,
+            plaza: c.plaza ?? null,
             orden: i,
           }))
           const { error: insErr } = await supabase.from('plato_componentes').insert(comps)

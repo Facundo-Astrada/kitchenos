@@ -61,6 +61,7 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
   const [mermaOpen, setMermaOpen] = useState(false)
   const [mermaPrefill, setMermaPrefill] = useState<{ producto_nombre?: string } | undefined>()
   const [activatingDay, setActivatingDay] = useState(false)
+  const [miseItems, setMiseItems] = useState<{ nombre: string; plaza: string }[]>([])
 
   // ── Calendar state ──────────────────────────────────────────
   const [calendarOpen, setCalendarOpen] = useState(false)
@@ -93,6 +94,14 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
 
   // Reset tag filter when date changes
   useEffect(() => { setActiveMenuTag('') }, [fecha])
+
+  // Load mise items for stock indicators
+  useEffect(() => {
+    if (!RESTAURANTE_ID) return
+    const supabase = createClient()
+    supabase.from('checklist_items').select('nombre, plaza').eq('restaurante_id', RESTAURANTE_ID)
+      .then(({ data }) => setMiseItems((data ?? []).map((i: { nombre: string; plaza: string }) => ({ nombre: i.nombre.toLowerCase().trim(), plaza: i.plaza }))))
+  }, [RESTAURANTE_ID])
 
   function showToast(msg: string) {
     setToast(msg)
@@ -383,8 +392,9 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
 
       {/* Content */}
       <div>
-        {view === 'planilla' && (
-          produccion.length === 0 && platos.length > 0 ? (
+        {/* Planilla: visible en modo planilla normal y también cuando se está creando/editando */}
+        {(view === 'planilla' || view === 'crear' || view === 'editar') && (
+          produccion.length === 0 && platos.length > 0 && view === 'planilla' ? (
             /* Sin producción para este día — mostrar CTA para activar */
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 24px', gap: 12 }}>
               <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'var(--text-3)' }}>calendar_today</span>
@@ -419,6 +429,7 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
               stats={stats}
               componentNameCount={componentNameCount}
               cycleStatus={cycleStatus}
+              miseItems={miseItems}
               onEdit={(p) => { setEditingPlato(p); setView('editar') }}
               onCrear={(cat) => { setView('crear'); setEditingPlato({ id: '', nombre: '', categoria: cat, activo: true, restaurante_id: '', orden: 0, componentes: [], created_at: '' } as unknown as PlatoConComponentes) }}
               onIngredientes={() => setView('ingredientes')}
@@ -429,43 +440,6 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
               fecha={fecha}
             />
           )
-        )}
-        {(view === 'crear' || view === 'editar') && (
-          <PlatoForm
-            plato={view === 'editar' ? editingPlato : null}
-            categoriaInicial={view === 'crear' && editingPlato?.categoria ? editingPlato.categoria : undefined}
-            restauranteId={RESTAURANTE_ID}
-            onSave={async (data, comps) => {
-              try {
-                if (view === 'editar' && editingPlato) {
-                  await actualizarPlato(editingPlato.id, data, comps)
-                } else {
-                  await crearPlato({ ...data, componentes: comps })
-                  await agregarTarea({
-                    titulo: data.nombre,
-                    descripcion: comps.length > 0
-                      ? `Preparar: ${comps.map((c: { nombre: string }) => c.nombre).join(', ')}`
-                      : null,
-                    status: 'pendiente',
-                    prioridad: 'media',
-                    categoria: 'produccion',
-                    plaza: null,
-                    receta_id: null,
-                  })
-                }
-                showToast('Guardado')
-                setView('planilla')
-              } catch (e: any) { showToast('Error: ' + e.message) }
-            }}
-            onDelete={view === 'editar' && editingPlato?.id ? async () => {
-              try {
-                await eliminarPlato(editingPlato!.id)
-                showToast('Eliminado')
-                setView('planilla')
-              } catch (e: any) { showToast('Error: ' + e.message) }
-            } : undefined}
-            onCancel={() => { setEditingPlato(null); setView('planilla') }}
-          />
         )}
         {view === 'ingredientes' && (
           <IngredientesConsolidados
@@ -487,6 +461,61 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
           />
         )}
       </div>
+
+      {/* ── PlatoForm como bottom sheet ── */}
+      {(view === 'crear' || view === 'editar') && (
+        <>
+          <div
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 200 }}
+            onClick={() => { setEditingPlato(null); setView('planilla') }}
+          />
+          <div style={{
+            position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 201,
+            background: 'var(--surface)', borderRadius: '20px 20px 0 0',
+            maxHeight: '88dvh', overflowY: 'auto',
+            maxWidth: 520, margin: '0 auto',
+          }}>
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)', margin: '12px auto 0' }} />
+            <PlatoForm
+              plato={view === 'editar' ? editingPlato : null}
+              categoriaInicial={view === 'crear' && editingPlato?.categoria ? editingPlato.categoria : undefined}
+              restauranteId={RESTAURANTE_ID}
+              onSave={async (data, comps) => {
+                try {
+                  if (view === 'editar' && editingPlato) {
+                    await actualizarPlato(editingPlato.id, data, comps)
+                  } else {
+                    await crearPlato({ ...data, componentes: comps })
+                    await agregarTarea({
+                      titulo: data.nombre,
+                      descripcion: comps.length > 0
+                        ? `Preparar: ${comps.map((c: { nombre: string }) => c.nombre).join(', ')}`
+                        : null,
+                      status: 'pendiente',
+                      prioridad: data.prioridad,
+                      categoria: 'produccion',
+                      plaza: null,
+                      receta_id: null,
+                    })
+                  }
+                  showToast('Guardado')
+                  setEditingPlato(null)
+                  setView('planilla')
+                } catch (e: any) { showToast('Error: ' + e.message) }
+              }}
+              onDelete={view === 'editar' && editingPlato?.id ? async () => {
+                try {
+                  await eliminarPlato(editingPlato!.id)
+                  showToast('Eliminado')
+                  setEditingPlato(null)
+                  setView('planilla')
+                } catch (e: any) { showToast('Error: ' + e.message) }
+              } : undefined}
+              onCancel={() => { setEditingPlato(null); setView('planilla') }}
+            />
+          </div>
+        </>
+      )}
 
       <MermaBottomSheet
         open={mermaOpen}
@@ -809,7 +838,7 @@ const CAT_COLORS: Record<string, string> = {
 }
 
 function PlanillaView({
-  grouped, statusMap, produccion, miembros, puedeDelegar, stats, componentNameCount, cycleStatus, onEdit, onCrear, onIngredientes, onDuplicar, openMerma, router, restauranteId, fecha,
+  grouped, statusMap, produccion, miembros, puedeDelegar, stats, componentNameCount, cycleStatus, miseItems, onEdit, onCrear, onIngredientes, onDuplicar, openMerma, router, restauranteId, fecha,
 }: {
   grouped: [string, PlatoConComponentes[]][]
   statusMap: Map<string, { id: string; status: StatusProduccion }>
@@ -819,6 +848,7 @@ function PlanillaView({
   stats: { platos: number; totalComps: number; listos: number; pendientes: number; enProceso: number }
   componentNameCount: Map<string, number>
   cycleStatus: (compId: string) => void
+  miseItems: { nombre: string; plaza: string }[]
   onEdit: (p: PlatoConComponentes) => void
   onCrear: (categoria: string) => void
   onIngredientes: () => void
@@ -934,6 +964,8 @@ function PlanillaView({
                 const colors = STATUS_COLORS[status]
                 const nameKey = comp.nombre.toLowerCase().trim()
                 const shared = (componentNameCount.get(nameKey) ?? 1) > 1
+                const compPlaza = (comp as any).plaza as string | null
+                const miseMatch = miseItems.find(m => m.nombre === nameKey)
 
                 return (
                   <div
@@ -962,7 +994,7 @@ function PlanillaView({
 
                     {/* Component info */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 flex-wrap">
                         <span
                           className="text-xs font-semibold truncate"
                           style={{ color: status === 'listo' ? '#15803d' : 'var(--text-1)', opacity: status === 'listo' ? 0.7 : 1 }}
@@ -975,8 +1007,27 @@ function PlanillaView({
                             x{componentNameCount.get(nameKey)}
                           </span>
                         )}
+                        {/* Plaza badge */}
+                        {compPlaza && (
+                          <span style={{
+                            fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 99,
+                            background: 'rgba(67,97,160,.1)', color: 'var(--accent)', textTransform: 'capitalize', flexShrink: 0,
+                          }}>
+                            {compPlaza}
+                          </span>
+                        )}
+                        {/* Mise indicator */}
+                        {miseMatch ? (
+                          <span title={`En mise · ${miseMatch.plaza}`} style={{
+                            width: 7, height: 7, borderRadius: '50%', background: '#22c55e', flexShrink: 0, display: 'inline-block',
+                          }} />
+                        ) : (
+                          <span title="No está en mise" style={{
+                            width: 7, height: 7, borderRadius: '50%', background: 'var(--border)', flexShrink: 0, display: 'inline-block',
+                          }} />
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         {comp.notas_produccion && (
                           <span className="text-[10px] truncate" style={{ color: 'var(--text-3)' }}>
                             {comp.notas_produccion}
@@ -1042,7 +1093,9 @@ function PlanillaView({
 // ══════════════════════════════════════════════════════════════
 // PLATO FORM (crear / editar)
 // ══════════════════════════════════════════════════════════════
-interface CompForm { nombre: string; receta_id: string | null; notas_produccion: string; orden: number }
+interface CompForm { nombre: string; receta_id: string | null; notas_produccion: string; plaza: string; orden: number }
+
+const PLAZAS = ['parrilla', 'fríos', 'calientes', 'pase', 'pastelería', 'otro']
 
 function PlatoForm({
   plato, restauranteId, categoriaInicial, onSave, onDelete, onCancel,
@@ -1050,21 +1103,24 @@ function PlatoForm({
   plato: PlatoConComponentes | null
   restauranteId: string
   categoriaInicial?: string
-  onSave: (data: { nombre: string; categoria: CategoriaPlato; descripcion?: string }, comps: CompForm[]) => void
+  onSave: (data: { nombre: string; categoria: CategoriaPlato; descripcion?: string; prioridad: 'alta' | 'media' | 'baja' }, comps: CompForm[]) => void
   onDelete?: () => void
   onCancel: () => void
 }) {
   const [nombre, setNombre] = useState(plato?.nombre ?? '')
   const [categoria, setCategoria] = useState<CategoriaPlato>((plato?.categoria as CategoriaPlato) ?? (categoriaInicial as CategoriaPlato) ?? 'Principal')
   const [descripcion, setDescripcion] = useState(plato?.descripcion ?? '')
+  const [prioridad, setPrioridad] = useState<'alta' | 'media' | 'baja'>('media')
   const [comps, setComps] = useState<CompForm[]>(
     plato?.componentes.map((c, i) => ({
       nombre: c.nombre,
       receta_id: c.receta_id ?? null,
       notas_produccion: c.notas_produccion ?? '',
+      plaza: (c as any).plaza ?? '',
       orden: i,
-    })) ?? [{ nombre: '', receta_id: null, notas_produccion: '', orden: 0 }]
+    })) ?? [{ nombre: '', receta_id: null, notas_produccion: '', plaza: '', orden: 0 }]
   )
+  const [plazaPickerIdx, setPlazaPickerIdx] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [recetas, setRecetas] = useState<{ id: string; nombre: string }[]>([])
   const [supabase] = useState(() => createClient())
@@ -1085,8 +1141,8 @@ function PlatoForm({
   }, [restauranteId, supabase])
 
   function addCompManual() {
-    setComps([...comps, { nombre: '', receta_id: null, notas_produccion: '', orden: comps.length }])
-    setEditingNotasIdx(comps.length) // abrir el form para editar inmediatamente
+    setComps([...comps, { nombre: '', receta_id: null, notas_produccion: '', plaza: '', orden: comps.length }])
+    setEditingNotasIdx(comps.length)
   }
 
   function updateComp(idx: number, field: keyof CompForm, value: string | null) {
@@ -1113,7 +1169,7 @@ function PlatoForm({
         i === comps.length - 1 ? { ...c, nombre: receta.nombre, receta_id: receta.id } : c
       ))
     } else {
-      setComps([...comps, { nombre: receta.nombre, receta_id: receta.id, notas_produccion: '', orden: comps.length }])
+      setComps([...comps, { nombre: receta.nombre, receta_id: receta.id, notas_produccion: '', plaza: '', orden: comps.length }])
     }
     setRecetaSearch('')
     setShowRecetas(false)
@@ -1129,7 +1185,7 @@ function PlatoForm({
     if (!nombre.trim()) return
     const validComps = comps.filter(c => c.nombre.trim())
     setSaving(true)
-    await onSave({ nombre, categoria, descripcion: descripcion || undefined }, validComps)
+    await onSave({ nombre, categoria, descripcion: descripcion || undefined, prioridad }, validComps)
     setSaving(false)
   }
 
@@ -1186,6 +1242,34 @@ function PlatoForm({
         />
       </div>
 
+      {/* Prioridad — solo al crear */}
+      {!plato && (
+        <div>
+          <label className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Prioridad de tarea</label>
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            {([
+              { id: 'alta' as const, label: 'Alta', color: '#ef4444', bg: '#fef2f2' },
+              { id: 'media' as const, label: 'Media', color: '#f59e0b', bg: '#fffbeb' },
+              { id: 'baja' as const, label: 'Baja', color: '#22c55e', bg: '#f0fdf4' },
+            ]).map(p => (
+              <button
+                key={p.id}
+                onClick={() => setPrioridad(p.id)}
+                style={{
+                  flex: 1, padding: '7px 0', borderRadius: 8, border: `1.5px solid ${prioridad === p.id ? p.color : 'var(--border)'}`,
+                  background: prioridad === p.id ? p.bg : 'var(--surface)',
+                  color: prioridad === p.id ? p.color : 'var(--text-3)',
+                  fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                  transition: 'all .15s',
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Componentes */}
       <div>
         <label className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>
@@ -1232,16 +1316,26 @@ function PlatoForm({
                           {comp.nombre}
                         </div>
                       )}
-                      {comp.notas_produccion && !isEditing && (
-                        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2, fontStyle: 'italic' }}>
-                          {comp.notas_produccion}
-                        </div>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                        {comp.notas_produccion && !isEditing && (
+                          <span style={{ fontSize: 10, color: 'var(--text-3)', fontStyle: 'italic' }}>
+                            {comp.notas_produccion}
+                          </span>
+                        )}
+                        {comp.plaza && !isEditing && (
+                          <span style={{
+                            fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99,
+                            background: 'rgba(67,97,160,.1)', color: 'var(--accent)', textTransform: 'capitalize',
+                          }}>
+                            {comp.plaza}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <button
                       onClick={() => setEditingNotasIdx(isEditing ? null : idx)}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-3)' }}
-                      title={isEditing ? 'Cerrar' : 'Agregar notas'}
+                      title={isEditing ? 'Cerrar' : 'Notas y plaza'}
                     >
                       <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
                         {isEditing ? 'expand_less' : 'tune'}
@@ -1255,9 +1349,9 @@ function PlatoForm({
                     </button>
                   </div>
 
-                  {/* Expandible: notas de producción */}
+                  {/* Expandible: notas + plaza */}
                   {isEditing && (
-                    <div style={{ padding: '0 12px 10px 36px' }}>
+                    <div style={{ padding: '0 12px 10px 36px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                       <input
                         value={comp.notas_produccion}
                         onChange={e => updateComp(idx, 'notas_produccion', e.target.value)}
@@ -1268,6 +1362,24 @@ function PlatoForm({
                           fontSize: 12, color: 'var(--text-1)',
                         }}
                       />
+                      {/* Plaza selector */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Mise:</span>
+                        {PLAZAS.map(pz => (
+                          <button
+                            key={pz}
+                            onClick={() => updateComp(idx, 'plaza', comp.plaza === pz ? '' : pz)}
+                            style={{
+                              padding: '3px 8px', borderRadius: 99, border: `1px solid ${comp.plaza === pz ? 'var(--accent)' : 'var(--border)'}`,
+                              background: comp.plaza === pz ? 'rgba(67,97,160,.12)' : 'var(--surface)',
+                              color: comp.plaza === pz ? 'var(--accent)' : 'var(--text-3)',
+                              fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize',
+                            }}
+                          >
+                            {pz}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
