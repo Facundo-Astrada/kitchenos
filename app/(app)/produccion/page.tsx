@@ -124,21 +124,31 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
     return produccion.filter(p => (p.menu_tag ?? '') === activeMenuTag)
   }, [produccion, menuTagsHoy, activeMenuTag])
 
+  // ── Platos activados para esta fecha específica ──────────
+  // Si hay producción activa: solo los platos con registros para hoy.
+  // Si no hay producción aún (ej: creando el primer plato): muestra todos como preview.
+  const platosActivos = useMemo(() => {
+    if (produccion.length === 0) return platos
+    const idsEnProduccion = new Set(
+      produccion.map(p => p.plato_compuesto_id).filter(Boolean) as string[]
+    )
+    return platos.filter(p => idsEnProduccion.has(p.id))
+  }, [platos, produccion])
+
   // ── Group platos by categoria ─────────────────────────────
   const grouped = useMemo(() => {
     const map = new Map<string, PlatoConComponentes[]>()
-    for (const p of platos) {
+    for (const p of platosActivos) {
       const list = map.get(p.categoria) ?? []
       list.push(p)
       map.set(p.categoria, list)
     }
-    // Sort by CATEGORIAS_PLATO order
     const sorted: [string, PlatoConComponentes[]][] = []
     for (const cat of CATEGORIAS_PLATO) {
       if (map.has(cat)) sorted.push([cat, map.get(cat)!])
     }
     return sorted
-  }, [platos])
+  }, [platosActivos])
 
   // ── Produccion status map (filtered by active tag) ──────────
   const statusMap = useMemo(() => {
@@ -152,20 +162,20 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
   // ── Count shared components ───────────────────────────────
   const componentNameCount = useMemo(() => {
     const m = new Map<string, number>()
-    for (const p of platos) {
+    for (const p of platosActivos) {
       for (const c of p.componentes) {
         const key = c.nombre.toLowerCase().trim()
         m.set(key, (m.get(key) ?? 0) + 1)
       }
     }
     return m
-  }, [platos])
+  }, [platosActivos])
 
   // ── Summary stats ─────────────────────────────────────────
   const stats = useMemo(() => {
-    const totalComps = platos.reduce((s, p) => s + p.componentes.length, 0)
+    const totalComps = platosActivos.reduce((s, p) => s + p.componentes.length, 0)
     let listos = 0, pendientes = 0, enProceso = 0
-    for (const p of platos) {
+    for (const p of platosActivos) {
       for (const c of p.componentes) {
         const st = statusMap.get(c.id)?.status ?? 'pendiente'
         if (st === 'listo') listos++
@@ -173,8 +183,8 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
         else pendientes++
       }
     }
-    return { platos: platos.length, totalComps, listos, pendientes, enProceso }
-  }, [platos, statusMap])
+    return { platos: platosActivos.length, totalComps, listos, pendientes, enProceso }
+  }, [platosActivos, statusMap])
 
   // ── Cycle status ──────────────────────────────────────────
   async function cycleStatus(compId: string) {
@@ -462,18 +472,16 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
         )}
       </div>
 
-      {/* ── PlatoForm como bottom sheet ── */}
+      {/* ── PlatoForm como bottom sheet (sin overlay: planilla queda visible arriba) ── */}
       {(view === 'crear' || view === 'editar') && (
         <>
-          <div
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 200 }}
-            onClick={() => { setEditingPlato(null); setView('planilla') }}
-          />
           <div style={{
             position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 201,
             background: 'var(--surface)', borderRadius: '20px 20px 0 0',
-            maxHeight: '88dvh', overflowY: 'auto',
+            maxHeight: '72dvh', overflowY: 'auto',
             maxWidth: 520, margin: '0 auto',
+            boxShadow: '0 -4px 32px rgba(0,0,0,.18)',
+            borderTop: '1px solid var(--border)',
           }}>
             <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)', margin: '12px auto 0' }} />
             <PlatoForm
@@ -1103,14 +1111,14 @@ function PlatoForm({
   plato: PlatoConComponentes | null
   restauranteId: string
   categoriaInicial?: string
-  onSave: (data: { nombre: string; categoria: CategoriaPlato; descripcion?: string; prioridad: 'alta' | 'media' | 'baja' }, comps: CompForm[]) => void
+  onSave: (data: { nombre: string; categoria: CategoriaPlato; descripcion?: string; prioridad: 'critica' | 'alta' | 'media' | 'baja' }, comps: CompForm[]) => void
   onDelete?: () => void
   onCancel: () => void
 }) {
   const [nombre, setNombre] = useState(plato?.nombre ?? '')
   const [categoria, setCategoria] = useState<CategoriaPlato>((plato?.categoria as CategoriaPlato) ?? (categoriaInicial as CategoriaPlato) ?? 'Principal')
   const [descripcion, setDescripcion] = useState(plato?.descripcion ?? '')
-  const [prioridad, setPrioridad] = useState<'alta' | 'media' | 'baja'>('media')
+  const [prioridad, setPrioridad] = useState<'critica' | 'alta' | 'media' | 'baja'>('media')
   const [comps, setComps] = useState<CompForm[]>(
     plato?.componentes.map((c, i) => ({
       nombre: c.nombre,
@@ -1242,28 +1250,31 @@ function PlatoForm({
         />
       </div>
 
-      {/* Prioridad — solo al crear */}
+      {/* Prioridad — solo al crear, usando el mismo sistema que en Producción */}
       {!plato && (
         <div>
-          <label className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Prioridad de tarea</label>
+          <label className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Prioridad en Producción</label>
           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
             {([
-              { id: 'alta' as const, label: 'Alta', color: '#ef4444', bg: '#fef2f2' },
-              { id: 'media' as const, label: 'Media', color: '#f59e0b', bg: '#fffbeb' },
-              { id: 'baja' as const, label: 'Baja', color: '#22c55e', bg: '#f0fdf4' },
+              { id: 'critica' as const, label: 'SP',    sublabel: 'Super Prior.',  color: '#ef4444', bg: '#fef2f2' },
+              { id: 'alta'   as const, label: 'P',     sublabel: 'Prioridad',     color: '#f97316', bg: '#fff7ed' },
+              { id: 'media'  as const, label: 'REF',   sublabel: 'Refuerzo',      color: '#3b82f6', bg: '#eff6ff' },
+              { id: 'baja'   as const, label: 'Check', sublabel: 'Check',         color: '#64748b', bg: '#f8fafc' },
             ]).map(p => (
               <button
                 key={p.id}
                 onClick={() => setPrioridad(p.id)}
                 style={{
-                  flex: 1, padding: '7px 0', borderRadius: 8, border: `1.5px solid ${prioridad === p.id ? p.color : 'var(--border)'}`,
+                  flex: 1, padding: '7px 4px', borderRadius: 8,
+                  border: `1.5px solid ${prioridad === p.id ? p.color : 'var(--border)'}`,
                   background: prioridad === p.id ? p.bg : 'var(--surface)',
                   color: prioridad === p.id ? p.color : 'var(--text-3)',
-                  fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-                  transition: 'all .15s',
+                  cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
                 }}
               >
-                {p.label}
+                <span style={{ fontSize: 12, fontWeight: 800 }}>{p.label}</span>
+                <span style={{ fontSize: 8, fontWeight: 500, opacity: .8 }}>{p.sublabel}</span>
               </button>
             ))}
           </div>
