@@ -14,11 +14,6 @@ Lista priorizada de todo lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL
 **Falta:** página `/registro-invitado` (landing del magic link donde el invitado setea contraseña). Hoy el redirectTo apunta ahí pero la página no existe aún. Configurar template de email en Supabase.
 **Status:** 🟡 Parcial.
 
-### 3. Permisos por rol en UI (esconder acciones)
-Hay un hook `usePermisos` que lee `rol_permisos`, pero no todos los módulos lo consumen.
-- `/stock`, `/recetario`, `/carta`: esconder botones de crear/editar/eliminar si el rol no tiene `puede_editar_*`.
-- Módulos fuera de `modulos_visibles` ya no deberían aparecer en `BottomNav` / `MoreMenu`.
-**Status:** ⏳ Pendiente.
 
 ### 4. Tipos desactualizados
 `Evento`, `Turno` y `Puesto` en `types/index.ts` tienen campos legacy. Sincronizar con el schema real. Puede causar type errors en refactors.
@@ -53,13 +48,13 @@ Features pro (Kitchen Coach, multi-usuario, exportar reportes PDF, HACCP) solo e
 
 ## 🟢 Bajo — Roadmap abierto
 
-### 9. Kitchen Coach — mejoras avanzadas
-FAB draggable, overlay tutorial, tour guiado OPS y opciones seleccionables ya implementados. Falta:
-- Memoria de conversación persistida (tabla `coach_conversaciones`).
-- Acciones agénticas: sugerir "agregá esta tarea" y que con un tap se cree de verdad.
-- Tool use de Anthropic para consultar stock / food cost on-demand.
-- Prompt caching para reducir costo.
-**Status:** ⏳ Pendiente (base completa, falta capa agéntica).
+### 9. Kitchen Coach — capa agéntica (M1 + M5)
+Tour guiado, cobertura 19/19 pantallas, motor genérico `lib/coach/tours.ts` completados (3 jun 2026). Falta:
+- **M1 — Datos server-side**: `api/coach/route.ts` recibe `restauranteId` pero no consulta la DB. Agregar queries server-side por pantalla (stock crítico, FC recetas, vencimientos) para que el Coach sea asesor con números reales.
+- **M5 — Tool use agéntico**: ejecutar acciones desde el chat (crear tarea, marcar 86, registrar merma). Merma ya existe como botón — convertirlo en tool de Anthropic.
+- Memoria persistida (tabla `coach_conversaciones`).
+- Prompt caching para reducir costo ~3× (sistema prompt es 90% estático).
+**Status:** ⏳ Pendiente — TODOs documentados en `app/api/coach/route.ts`.
 
 ### 10. Subida de fotos
 - Bucket Supabase Storage: `recetas`, `platos`, `miembros`, `facturas`.
@@ -114,6 +109,9 @@ Los scripts de `scripts/*.mjs` tienen el `SUPABASE_MANAGEMENT_TOKEN` en texto pl
 
 | # | Descripción | Cuándo |
 |---|---|---|
+| Ítem 3: Permisos granulares por rol en UI | Stock/Carta/Merma ocultan montos al no-admin; Recetario permite crear pero no importar/exportar; HACCP permite registrar pero no editar tareas. ModulosGrid usa puedeVer() dinámico desde puestos. | 3 junio 2026 |
+| Sistema puestos con permisos reales | DB: `puestos.nivel+plaza_default`, `equipo_miembros.modulos_extra+restringidos`. 8 templates. Tab Puestos con toggles de módulos reales. Form 2 pasos equipo. Overrides por persona. usePermisos carga puesto del usuario logueado. | 3 junio 2026 |
+| OPS mise: suma por receta+plaza (no reemplaza) | `plato_recetas.cantidad_ops+unidad_ops`. handleGuardarOPS suma todas las contribuciones de la misma receta+plaza → checklist_item.cantidad = total acumulado. Badge OPS en receta lista. Preview del total antes de guardar. | 3 junio 2026 |
 | Sesión completa: 12 cambios UX + 3 features | Ver detalle abajo. | 2 junio 2026 |
 | Merma estética azul | Header navy, pills translúcidas, stat "Total costo" en accent. | 2 junio 2026 |
 | Carta botones header | Separado en 2 filas: título + "Nuevo"; chips Importar/PDF/Excel en row scrollable horizontal. | 2 junio 2026 |
@@ -122,7 +120,8 @@ Los scripts de `scripts/*.mjs` tienen el `SUPABASE_MANAGEMENT_TOKEN` en texto pl
 | Ingeniería de Menú eliminada | Carpeta `/ingenieria-menu` borrada + limpiado `constants.ts` (ModuloId, MODULO_CONFIG, MODULOS_POR_ROL, RUTA_A_MODULO). | 2 junio 2026 |
 | Horas mensuales en Turnos | Botón "Ver horas del mes" → fetchTurnosMes → tabla por miembro (días + horas, rojo si >176h). | 2 junio 2026 |
 | Calendario ↔ OPS | `useCalendario` lee `produccion_diaria` → días con OPS activo como dots verdes "OPS: [menú]". | 2 junio 2026 |
-| Coach contextual en todas las pantallas | `SUGGESTIONS_BY_SCREEN` + `kc_screen_context` en stock, recetario, facturas, reportes, merma, haccp. | 2 junio 2026 |
+| Kitchen Coach — cobertura total 19/19 pantallas | Motor de tour genérico (`lib/coach/tours.ts`), skill `/coach-screen`, tours en todas las pantallas, screen_context con insights reales (no solo conteos), 40+ `data-coach-target`, ejemplos de highlight en el prompt. | 3 junio 2026 |
+| Coach contextual — base inicial | `SUGGESTIONS_BY_SCREEN` + `kc_screen_context` en stock, recetario, facturas, reportes, merma, haccp. | 2 junio 2026 |
 | Equipo: invitar por email | Botón "Invitar" → modal → `POST /api/invitar` (service role: inviteUserByEmail + pre-crea user_restaurantes + equipo_miembros). | 2 junio 2026 |
 | Limpieza: crear tarea + calendario + OPS | Migración haccp_limpieza (dia_semana/dia_mes/sync_ops/checklist_item_id). Form con día + toggle OPS. Sub-tabs Lista/Calendario. Sync a checklist plaza General sección Limpieza. | 2 junio 2026 |
 | Reportes: CMV + Presupuesto + Rendimiento | Tabla `presupuestos` (RLS). Tab CMV (ventas vs compras). Tab Presupuesto vs Real (semanal→anual, input inline). Tab Rendimiento por plaza (tareas + merma). | 2 junio 2026 |

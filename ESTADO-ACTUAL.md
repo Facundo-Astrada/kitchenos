@@ -125,6 +125,41 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 
 **Commits:** `980f0bb` (puestos), `510b864` (permisos granulares), `724e712` (UX mejoras), `353cd51` (OPS suma).
 
+### Sesión 2026-06-03 — Kitchen Coach: cobertura total 19/19 pantallas
+
+**Análisis y planificación:**
+- Auditoría completa del sistema Coach existente: arquitectura de 4 piezas, 3 mecanismos de contexto, 2 sistemas de tour. Detectado: API nunca consulta DB (M1 pendiente), sin motor genérico de tour, cobertura parcial en 6 pantallas, 0 cobertura en 11.
+
+**Motor de tour genérico (Fase 0):**
+- `lib/coach/tours.ts`: registry data-driven `TOURS: Record<screen, TourStep[]>`. OPS migrado exacto. `requireTab` generalizado de union OPS-only a `string`.
+- `KitchenCoachFAB`: eliminado `TOUR_STEPS` hardcodeado → `getActiveTour()` lee `kc_screen_context.screen` y carga el tour correcto. `startTour()` setea `activeTourSteps` dinámicamente. `TourOverlay` recibe `steps[]` completo.
+
+**Skill `/coach-screen` creada** (`.claude/skills/coach-screen/SKILL.md`): 6 entregables por pantalla (screen_context con insights, data-coach-target, suggestions, tour, ejemplos highlight, funciones explicadas), apuntando a visión guía + datos + acciones.
+
+**Cobertura implementada — 19/19 pantallas:**
+- ✅ Carta (fix): tour 7 pasos + chip "Ver recorrido" (faltaba en el gold standard)
+- ✅ Stock: context insights (críticos top-8, sin precio, valor total, categorías en riesgo), 7 targets, tour 8 pasos, listener kc-set-tab
+- ✅ Recetario: context (fcAlto/sinIngredientes/sinPrecio/sinVincular), 7 targets, tour 8 pasos, listener kc-set-tab
+- ✅ Facturas: context (pendientes, cuentaCorriente, montoFiltrado), 6 targets, tour 7 pasos
+- ✅ Reportes: context (totalCompras, foodCostPromedio, fcAlto, topProveedores, inflacionCocina), 3 targets, tour 6 pasos
+- ✅ Merma: context (costoPeriodo, topMotivo, topProducto), 3 targets, tour 4 pasos
+- ✅ HACCP: context (equiposFueraRango, equiposSinRegistro, vencEnRiesgo), 5 targets, tour 5 pasos
+- ✅ Dashboard: context (nCritico, tareasCriticas, miseProgress), 5 targets, tour 6 pasos
+- ✅ Tareas: context (modo, listos/total, topCriticas), 2 targets, tour 4 pasos
+- ✅ Pase: context (hoy, urgentes, plazasActivas), 4 targets, tour 5 pasos
+- ✅ Pedidos: context (borradores, enviados, pendienteRecepcion), 2 targets, tour 3 pasos
+- ✅ Ventas: context (totalVentas, cubiertos, topPlato), 2 targets, tour 3 pasos
+- ✅ Proveedores: context (total, sinTeléfono), 1 target, tour 2 pasos
+- ✅ Turnos: context (miembros, puestos, tab), tour 1 paso
+- ✅ Calendario: context (eventosHoy, eventosProximos), tour 1 paso
+- Todos con chips de suggestions + acción `tour`
+
+**System prompt enriquecido**: 7 ejemplos de highlight específicos por pantalla (recetario ×2, stock ×2, facturas, reportes/inflación, HACCP vencimientos, merma costo).
+
+**TODOs documentados en `app/api/coach/route.ts`**: M1 (datos server-side por pantalla) y M5 (tool use: crear tarea, marcar 86, registrar merma).
+
+**Commits:** `9f63548` (motor + stock + recetario) → `4120277` (facturas/reportes/merma/haccp) → `ea82939` (dashboard/tareas/pase/pedidos/ventas/proveedores/turnos/calendario) → `d4aa85e` (fix Carta tour).
+
 ### Sesión 2026-06-02 (tarde) — UX batch + Limpieza/Reportes/Privacidad facturas
 **Bloque A — Quick wins:**
 1. **Merma estética azul**: header navy, pills translúcidas, stat "Total costo" en `var(--accent)`.
