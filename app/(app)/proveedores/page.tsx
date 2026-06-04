@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
@@ -64,6 +64,18 @@ export default function ProveedoresPage({ embedded = false }: { embedded?: boole
   const [showImportador, setShowImportador] = useState(false)
 
   const activos = useMemo(() => proveedores.filter(p => p.activo), [proveedores])
+
+  useEffect(() => {
+    const sinTelefono = activos.filter(p => !p.telefono).length
+    const conDiasEntrega = activos.filter(p => p.dias_entrega && p.dias_entrega.length > 0).length
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'proveedores',
+      total: activos.length,
+      sinTelefono,
+      conDiasEntrega,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [activos])
 
   // ── Expand / facturas ──
   async function toggleExpand(id: string) {
@@ -241,7 +253,7 @@ export default function ProveedoresPage({ embedded = false }: { embedded?: boole
       <UndoBanner tipo="proveedores" onUndo={() => refetchProveedores()} />
 
       {/* ── Body ── */}
-      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 14px 80px' }}>
+      <div data-coach-target="proveedores-lista" style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 14px 80px' }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: '48px 24px' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 28, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>hourglass_empty</span>

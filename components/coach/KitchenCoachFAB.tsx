@@ -23,6 +23,46 @@ function getActiveTour(): TourStep[] {
 interface Suggestion { label: string; action: 'tour' | 'send' }
 
 const SUGGESTIONS_BY_SCREEN: Record<string, Suggestion[]> = {
+  dashboard: [
+    { label: '¿Qué tengo que hacer primero hoy?', action: 'send' },
+    { label: '¿Cuántos productos están en crítico?', action: 'send' },
+    { label: '¿Cómo va el mise en place?', action: 'send' },
+  ],
+  tareas: [
+    { label: 'Ver recorrido de Producción', action: 'tour' },
+    { label: '¿Qué tareas son críticas para el servicio?', action: 'send' },
+    { label: '¿Cómo organizo el turno de hoy?', action: 'send' },
+  ],
+  pase: [
+    { label: 'Ver recorrido del Pase', action: 'tour' },
+    { label: '¿Cómo mando un 86?', action: 'send' },
+    { label: '¿Cómo filtro los mensajes por plaza?', action: 'send' },
+  ],
+  pedidos: [
+    { label: 'Ver recorrido de Pedidos', action: 'tour' },
+    { label: '¿Qué pedidos están esperando recepción?', action: 'send' },
+    { label: '¿Cómo envío un pedido por WhatsApp?', action: 'send' },
+  ],
+  ventas: [
+    { label: 'Ver recorrido de Ventas', action: 'tour' },
+    { label: '¿Cuál es mi promedio de ventas diario?', action: 'send' },
+    { label: '¿Cuál es el plato más vendido?', action: 'send' },
+  ],
+  proveedores: [
+    { label: 'Ver recorrido de Proveedores', action: 'tour' },
+    { label: '¿Cómo cargo una factura de un proveedor?', action: 'send' },
+    { label: '¿Qué proveedores tienen días de entrega configurados?', action: 'send' },
+  ],
+  turnos: [
+    { label: 'Ver recorrido de Equipo', action: 'tour' },
+    { label: '¿Cómo cargo el turno de un miembro?', action: 'send' },
+    { label: '¿Cómo invito a alguien al equipo?', action: 'send' },
+  ],
+  calendario: [
+    { label: 'Ver recorrido del Calendario', action: 'tour' },
+    { label: '¿Qué eventos hay esta semana?', action: 'send' },
+    { label: '¿Cómo cargo un evento especial?', action: 'send' },
+  ],
   carta: [
     { label: 'Analizá mi carta completa', action: 'send' },
     { label: '¿Qué platos tienen el peor food cost?', action: 'send' },

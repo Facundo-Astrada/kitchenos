@@ -973,6 +973,21 @@ export default function PedidosPage() {
     return pedidos.filter(p => p.status === filter)
   }, [pedidos, filter])
 
+  useEffect(() => {
+    const borradores = pedidos.filter(p => p.status === 'borrador').length
+    const enviados = pedidos.filter(p => p.status === 'enviado').length
+    const pendienteRecepcion = pedidos.filter(p => p.status === 'enviado' || p.status === 'parcial').length
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'pedidos',
+      total: pedidos.length,
+      borradores,
+      enviados,
+      pendienteRecepcion,
+      filter,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [pedidos, filter])
+
   const openDetail = async (pedido: Pedido) => {
     const items = await fetchItems(pedido.id)
     setSelectedPedido(pedido)
@@ -1080,7 +1095,7 @@ export default function PedidosPage() {
         subtitle={loading ? '…' : `${pedidos.length} pedido${pedidos.length !== 1 ? 's' : ''}`}
         actions={<ActionButton icon="add" label="Nuevo pedido" onClick={() => setView('nuevo')} />}
         below={
-          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+          <div data-coach-target="pedidos-filtros" style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
             {(['todos', 'borrador', 'enviado', 'parcial', 'recibido'] as const).map(f => (
               <button
                 key={f}
@@ -1101,7 +1116,7 @@ export default function PedidosPage() {
       />
 
       {/* Content */}
-      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div data-coach-target="pedidos-lista" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
             Cargando...

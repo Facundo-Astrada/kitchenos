@@ -115,6 +115,16 @@ export default function TurnosPage() {
 
   const [tab, setTab] = useState<Tab>('equipo')
 
+  useEffect(() => {
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'turnos',
+      tab,
+      totalMiembros: miembros.length,
+      totalPuestos: puestos.length,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [tab, miembros.length, puestos.length])
+
   // ── Equipo state ──
   const [equipoView, setEquipoView] = useState<EquipoView>('list')
   const [selectedMiembro, setSelectedMiembro] = useState<Miembro | null>(null)

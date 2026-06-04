@@ -40,6 +40,18 @@ export const COACH_HIGHLIGHT_IDS = [
   'merma-periodo', 'merma-stats', 'merma-fab',
   // HACCP
   'haccp-tabs', 'haccp-temperaturas', 'haccp-registrar', 'haccp-vencimientos', 'haccp-limpieza',
+  // Dashboard
+  'dashboard-turno', 'dashboard-pase', 'dashboard-plaza', 'dashboard-stock', 'dashboard-modulos',
+  // Tareas (OPS)
+  'tareas-header', 'tareas-lista',
+  // Pase
+  'pase-filtros', 'pase-mensajes', 'pase-rapidos', 'pase-86',
+  // Pedidos
+  'pedidos-filtros', 'pedidos-lista',
+  // Ventas
+  'ventas-stats', 'ventas-lista',
+  // Proveedores
+  'proveedores-lista',
 ] as const
 
 export function useKitchenCoach() {

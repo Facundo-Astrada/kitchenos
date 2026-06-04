@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { useVentas, type NuevaVenta } from '@/lib/hooks/useVentas'
 import type { Venta, VentaItem, OrigenVenta } from '@/types'
@@ -159,6 +159,20 @@ export default function VentasPage() {
 
     return { totalVentas, totalCubiertos, promedioDiario, topPlato }
   }, [ventas])
+
+  useEffect(() => {
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'ventas',
+      tab,
+      periodo,
+      totalVentas: Math.round(stats.totalVentas),
+      totalCubiertos: stats.totalCubiertos,
+      promedioDiario: Math.round(stats.promedioDiario),
+      topPlato: stats.topPlato,
+      dias: ventas.length,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [tab, periodo, stats, ventas.length])
 
   // ── Delete ──────────────────────────────────────────────
   async function handleEliminar(id: string) {
@@ -399,7 +413,7 @@ export default function VentasPage() {
           </div>
 
           {/* KPI cards */}
-          <div className="flex gap-3 px-4 pb-4 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+          <div data-coach-target="ventas-stats" className="flex gap-3 px-4 pb-4 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
             <StatCard icon="payments" label="Total ventas" value={fmtPrecio(stats.totalVentas)} color="var(--accent)" />
             <StatCard icon="groups" label="Cubiertos" value={String(stats.totalCubiertos || '—')} color="#10b981" />
             <StatCard icon="trending_up" label="Prom. diario" value={fmtPrecio(stats.promedioDiario)} color="#f97316" />
@@ -440,7 +454,7 @@ export default function VentasPage() {
 
           {/* Ventas list */}
           {!loading && ventas.length > 0 && (
-            <div className="px-4 flex flex-col gap-3">
+            <div data-coach-target="ventas-lista" className="px-4 flex flex-col gap-3">
               {ventas.map(v => {
                 const origenConf = ORIGEN_CONFIG[v.origen] ?? ORIGEN_CONFIG.manual
                 const isExpanded = ventaDetalle?.id === v.id

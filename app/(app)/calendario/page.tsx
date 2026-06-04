@@ -155,6 +155,23 @@ export default function CalendarioPage() {
   }, [eventos])
 
   const grid = useMemo(() => buildGrid(currentMonth, currentYear), [currentMonth, currentYear])
+
+  useEffect(() => {
+    const hoyStr = today()
+    const eventosHoy = (eventosByDate[hoyStr] ?? []).length
+    const eventosProximos = Object.entries(eventosByDate)
+      .filter(([k]) => k >= hoyStr)
+      .flatMap(([, evs]) => evs)
+      .slice(0, 3)
+      .map(ev => ({ titulo: ev.titulo, fecha: ev.fecha_inicio }))
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'calendario',
+      totalEventos: eventos.length,
+      eventosHoy,
+      eventosProximos,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [eventos, eventosByDate])
   const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate])
   const selectedEvents = eventosByDate[selectedDate] ?? []
 

@@ -123,6 +123,155 @@ export const TOURS: Record<string, TourStep[]> = {
     },
   ],
 
+  dashboard: [
+    {
+      targetId: 'dashboard-turno',
+      title: 'Tu turno',
+      description: 'Iniciá el turno al entrar a la cocina. El sistema registra la hora de entrada y calcula el tiempo trabajado. Al cerrar el turno aparece el resumen del día: tareas completadas y estado del mise.',
+    },
+    {
+      targetId: 'dashboard-pase',
+      title: 'Último pase',
+      description: 'Un preview de los últimos mensajes del canal de cocina. Si hay novedades urgentes del turno anterior, aparecen acá. Tocá para abrir el Pase completo.',
+    },
+    {
+      targetId: 'dashboard-plaza',
+      title: 'Mi plaza',
+      description: 'El avance de tu checklist y tareas del turno: cuántos ítems completaste del total del día. Verde: todo bajo control. La barra muestra el progreso en tiempo real a medida que vas marcando.',
+    },
+    {
+      targetId: 'dashboard-stock',
+      title: 'Alertas de stock',
+      description: 'Los productos que llegaron a nivel crítico o bajo. Si algo está en crítico, hay que reponerlo antes del próximo servicio o informar al encargado.',
+    },
+    {
+      targetId: 'dashboard-modulos',
+      title: 'Los módulos',
+      description: 'Acceso rápido a todos los módulos del sistema. Solo ves los que tu rol o puesto tiene habilitados. Tocá cualquiera para ir directamente.',
+    },
+    {
+      targetId: null,
+      title: '¡Ya conocés el Dashboard!',
+      description: 'Abrí al Kitchen Coach en cualquier momento para preguntar qué tenés que hacer hoy, revisar el estado del turno o pedir consejos para organizar la cocina.',
+    },
+  ],
+
+  tareas: [
+    {
+      targetId: 'tareas-header',
+      title: 'Modo Carta y Menú',
+      description: 'Carta: organizás la producción por prioridad (SP, Prioridad, Refuerzo, Check). Menú: organizás por sección del menú del día (Entrada, Proteína, Pasta...). Cambiá de modo según cómo preferís ver la lista del turno.',
+    },
+    {
+      targetId: 'prod-seccion-sp',
+      title: 'Super Prioridad',
+      description: 'Las preparaciones más críticas: las que bloquean el servicio si no salen primero. Deben resolverse antes que cualquier otra cosa. Podés vincular una tarea a una receta para que arrastre automáticamente porciones y plaza.',
+    },
+    {
+      targetId: 'tareas-lista',
+      title: 'La lista de producción',
+      description: 'Cada ítem tiene estado (pendiente, en proceso, listo) y se puede marcar desde acá. Las tareas vinculadas a mise se reflejan automáticamente en el checklist de plaza. Las que quedan sin hacer arrastran al turno siguiente.',
+    },
+    {
+      targetId: null,
+      title: '¡Ya conocés Producción!',
+      description: 'Abrí al Kitchen Coach en cualquier momento para organizar el turno, priorizar tareas o entender qué está bloqueando el servicio.',
+    },
+  ],
+
+  pase: [
+    {
+      targetId: 'pase-filtros',
+      title: 'Filtrar por plaza',
+      description: 'Filtrá los mensajes por plaza: Parrilla, Fríos, Calientes, Pase, Pastelería, Panadería. Cada mensaje puede llevar una mención de plaza con #NombrePlaza para que solo vean los que corresponde.',
+    },
+    {
+      targetId: 'pase-mensajes',
+      title: 'El chat de cocina',
+      description: 'El historial de comunicación del turno. Los mensajes urgentes aparecen en rojo. Podés revisar lo que pasó en turnos anteriores bajando en el historial. Las menciones @usuario y #plaza dirigen el mensaje al destinatario correcto.',
+    },
+    {
+      targetId: 'pase-86',
+      title: '86 — plato agotado',
+      description: 'Cuando un ingrediente o plato se agota, mandás un 86. Aparece como alerta urgente en el pase para que el salón deje de venderlo inmediatamente. Es el aviso más importante del servicio.',
+    },
+    {
+      targetId: 'pase-rapidos',
+      title: 'Mensajes rápidos',
+      description: 'Chips de respuesta rápida para las situaciones más comunes: Falta stock, Producción pendiente, Equipo roto, Todo OK. Un tap manda el mensaje sin necesidad de escribirlo.',
+    },
+    {
+      targetId: null,
+      title: '¡Ya conocés el Pase!',
+      description: 'Abrí al Kitchen Coach para ayudarte a comunicar novedades del turno, entender el historial de mensajes o saber cómo manejar situaciones de urgencia.',
+    },
+  ],
+
+  pedidos: [
+    {
+      targetId: 'pedidos-filtros',
+      title: 'Estados del pedido',
+      description: 'Borrador: en preparación. Enviado: el proveedor ya lo recibió. Parcial: llegó parte de lo pedido. Recibido: completo y en stock. El flujo normal es Borrador → Enviado → Recibido.',
+    },
+    {
+      targetId: 'pedidos-lista',
+      title: 'Lista de pedidos',
+      description: 'Cada pedido muestra proveedor, fecha, total estimado y estado. Tocá para ver el detalle, actualizar el estado, confirmar la recepción ítem por ítem o exportar como PDF o WhatsApp.',
+    },
+    {
+      targetId: null,
+      title: '¡Ya conocés Pedidos!',
+      description: 'Abrí al Kitchen Coach en cualquier momento para preguntar qué pedidos están pendientes, cómo preparar una orden o gestionar la recepción de mercadería.',
+    },
+  ],
+
+  ventas: [
+    {
+      targetId: 'ventas-stats',
+      title: 'Las 4 métricas de ventas',
+      description: 'Total ventas del período, cubiertos, promedio diario y el plato más vendido. El promedio diario es clave para planificar la producción: si vendes 80 cubiertos por día en promedio, el mise tiene que estar listo para eso.',
+    },
+    {
+      targetId: 'ventas-lista',
+      title: 'Historial de ventas',
+      description: 'Cada registro muestra fecha, total, cubiertos y el origen de los datos (Excel, manual, POS). Tocá para ver el detalle de platos vendidos ese día. Los datos alimentan el tab Food Cost de Reportes.',
+    },
+    {
+      targetId: null,
+      title: '¡Ya conocés Ventas!',
+      description: 'Abrí al Kitchen Coach para analizar tendencias de ventas, identificar el plato más rentable o entender cómo los cubiertos impactan en el food cost.',
+    },
+  ],
+
+  proveedores: [
+    {
+      targetId: 'proveedores-lista',
+      title: 'Directorio de proveedores',
+      description: 'Cada proveedor muestra rubro, teléfono y días de entrega configurados. Tocá uno para expandirlo, ver sus facturas, escanear una nueva factura directamente o enviarlo por WhatsApp.',
+    },
+    {
+      targetId: null,
+      title: '¡Ya conocés Proveedores!',
+      description: 'Abrí al Kitchen Coach para preguntar sobre un proveedor, analizar el historial de compras o saber cómo gestionar días de entrega y condiciones de pago.',
+    },
+  ],
+
+  turnos: [
+    {
+      targetId: null,
+      title: 'Equipo y Turnos',
+      description: 'Equipo: los miembros del restaurante con su puesto y rol. Turnos: la planilla semanal de quién trabaja cada día. Puestos: los roles definidos con sus módulos habilitados. Todo desde acá.',
+    },
+  ],
+
+  calendario: [
+    {
+      targetId: null,
+      title: 'El Calendario',
+      description: 'Vista mensual con todos los eventos del restaurante: menús especiales, eventos privados, feriados, cierres. Los puntos en los días indican eventos OPS sincronizados. Tocá un día para ver el detalle.',
+    },
+  ],
+
   facturas: [
     {
       targetId: 'facturas-tabs',

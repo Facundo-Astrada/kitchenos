@@ -317,6 +317,22 @@ export default function PasePage() {
     marcarLeidos()
   }, [fetchMensajes, marcarLeidos])
 
+  useEffect(() => {
+    const urgentes = mensajes.filter(m => m.prioridad === 'urgente').length
+    const hoyStr = hoy()
+    const hoyMensajes = mensajes.filter(m => m.created_at.startsWith(hoyStr))
+    const plazasActivas = [...new Set(hoyMensajes.map(m => m.plaza).filter(Boolean))]
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'pase',
+      total: mensajes.length,
+      hoy: hoyMensajes.length,
+      urgentes,
+      plazasActivas,
+      filtroPlaza,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [mensajes, filtroPlaza])
+
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (scrollRef.current) {
@@ -473,6 +489,7 @@ export default function PasePage() {
 
         {/* Plaza filter */}
         <div
+          data-coach-target="pase-filtros"
           className="flex gap-[6px] overflow-x-auto pb-[10px] -mx-4 px-4"
           style={{ scrollbarWidth: 'none' }}
         >
@@ -494,6 +511,7 @@ export default function PasePage() {
 
       {/* ── Chat area ── */}
       <div
+        data-coach-target="pase-mensajes"
         ref={scrollRef}
         className="flex-1 overflow-y-auto"
         style={{ paddingTop: 14, paddingBottom: 8 }}
@@ -562,9 +580,10 @@ export default function PasePage() {
         }}
       >
         {/* Quick messages */}
-        <div className="flex gap-[6px] overflow-x-auto px-3 py-[8px]" style={{ scrollbarWidth: 'none' }}>
+        <div data-coach-target="pase-rapidos" className="flex gap-[6px] overflow-x-auto px-3 py-[8px]" style={{ scrollbarWidth: 'none' }}>
           {/* 86 button — special */}
           <button
+            data-coach-target="pase-86"
             onClick={() => setShow86(true)}
             className="flex items-center gap-[4px] px-[10px] py-[5px] rounded-full border-none cursor-pointer whitespace-nowrap text-[11px] font-bold flex-shrink-0"
             style={{ background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca' }}

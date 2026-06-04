@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useAuth } from '@/lib/auth/context'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { useRecetas } from '@/lib/hooks/useRecetas'
@@ -81,6 +81,23 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   }
 
   // ── Filtrar tareas del turno ──────────────────────────────────
+  useEffect(() => {
+    const topCriticas = tareas.filter(t => t.prioridad === 'critica' && t.estado !== 'listo').map(t => t.titulo).slice(0, 3)
+    const { total, listos } = (() => {
+      const totalHoy = tareas.filter((t) => t.turno_fecha === today && !t.parent_id)
+      return { total: totalHoy.length, listos: totalHoy.filter(t => t.estado === 'listo').length }
+    })()
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'tareas',
+      modo,
+      total,
+      listos,
+      pendientesTotal: tareas.filter(t => t.estado !== 'listo').length,
+      topCriticas,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [tareas, modo, today])
+
   const { topLevel, subtareasByParent, statsHoy } = useMemo(() => {
     const hoyCandidates = tareas.filter((t) =>
       t.modo === modo && !t.parent_id &&
@@ -199,7 +216,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
       {/* ── Header ── */}
-      <div style={{
+      <div data-coach-target="tareas-header" style={{
         background: 'var(--navy)',
         padding: `${embedded ? 0 : 46}px 16px 12px`,
         flexShrink: 0,
@@ -242,7 +259,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
       </div>
 
       {/* ── Lista agrupada por prioridad ── */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px 120px' }}>
+      <div data-coach-target="tareas-lista" style={{ flex: 1, overflowY: 'auto', padding: '10px 12px 120px' }}>
         {restauranteId && (
           <EventoBanner
             restauranteId={restauranteId}

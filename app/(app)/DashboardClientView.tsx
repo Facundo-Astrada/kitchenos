@@ -86,6 +86,22 @@ export default function DashboardPage() {
     }
   }, [tareas, checklistItems, registros])
 
+  useEffect(() => {
+    const nCritico = productos.filter(p => p.estado === 'critico').length
+    const tareasCriticas = tareas.filter(t => t.prioridad === 'critica' && t.estado !== 'listo').map(t => t.titulo).slice(0, 3)
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'dashboard',
+      turnoActivo: !!turnoActivo,
+      nCritico,
+      tareasCriticas,
+      miseCompletados: miseStats.completados,
+      miseTotal: miseStats.total,
+      tareasCompletadas: tareasStats.completadas,
+      tareasTotal: tareasStats.total,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [productos, tareas, turnoActivo, miseStats, tareasStats])
+
   return (
     <PageTransition>
     <div className="flex flex-col h-full">
@@ -114,7 +130,7 @@ export default function DashboardPage() {
       ) : (
         <div className="scroll-body screen-enter" style={{ paddingTop: 0 }}>
           {/* Turno card */}
-          <div style={{ padding: '8px 16px 0' }}>
+          <div data-coach-target="dashboard-turno" style={{ padding: '8px 16px 0' }}>
             {!turnoActivo ? (
               <button
                 onClick={iniciarTurno}
@@ -165,10 +181,10 @@ export default function DashboardPage() {
             )}
           </div>
 
-          <PasePreview puedeEscribir={puedeEscribir} />
-          <MiPlaza rol={rol} completados={plazaStats.completados} total={plazaStats.total} />
-          <StockCriticoSection productos={productos} />
-          <ModulosGrid rol={rol} />
+          <div data-coach-target="dashboard-pase"><PasePreview puedeEscribir={puedeEscribir} /></div>
+          <div data-coach-target="dashboard-plaza"><MiPlaza rol={rol} completados={plazaStats.completados} total={plazaStats.total} /></div>
+          <div data-coach-target="dashboard-stock"><StockCriticoSection productos={productos} /></div>
+          <div data-coach-target="dashboard-modulos"><ModulosGrid rol={rol} /></div>
 
           <div className="h-4" />
         </div>
