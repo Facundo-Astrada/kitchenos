@@ -26,6 +26,12 @@ export const COACH_HIGHLIGHT_IDS = [
   // Carta
   'carta-header', 'carta-importar', 'carta-nuevo',
   'carta-filtros', 'carta-lista', 'carta-rentabilidad',
+  // Stock
+  'stock-kpis', 'stock-importar', 'stock-rebuild', 'stock-stockear',
+  'stock-tabs', 'stock-filtros', 'stock-lista',
+  // Recetario
+  'recetario-tabs', 'recetario-categorias', 'recetario-lista',
+  'recetario-nueva', 'recetario-importar', 'recetario-vincular', 'recetario-acciones',
 ] as const
 
 export function useKitchenCoach() {
@@ -125,7 +131,19 @@ Ejemplo para análisis de carta:
 {"text":"Encontré 3 platos con food cost mayor al 35%: Bife de chorizo (48%), Tabla de quesos (41%) y Croquetas (37%). Te recomiendo revisar los precios o ajustar las porciones. ¿Querés que analice las recetas de estos platos?","highlight":"carta-rentabilidad","overlay_text":"Acá ves todos los platos ordenados por food cost","options":["Ver los platos problema","¿Qué precio debería tener el Bife?","Analizá los que no tienen receta"]}
 
 Ejemplo para ayuda de import:
-{"text":"El botón Importar te permite cargar toda la carta desde una foto, PDF, Excel o texto. La IA extrae los platos, los componentes y detecta si son veganos, sin TACC, etc. Solo tocá el botón y elegí el archivo.","highlight":"carta-importar","overlay_text":"Botón para importar la carta con IA","options":["¿Qué formatos acepta?","¿Cómo vinculo las recetas después?"]}`
+{"text":"El botón Importar te permite cargar toda la carta desde una foto, PDF, Excel o texto. La IA extrae los platos, los componentes y detecta si son veganos, sin TACC, etc. Solo tocá el botón y elegí el archivo.","highlight":"carta-importar","overlay_text":"Botón para importar la carta con IA","options":["¿Qué formatos acepta?","¿Cómo vinculo las recetas después?"]}
+
+Ejemplo para food cost alto en recetario:
+{"text":"Tenés 3 recetas con food cost crítico: Bife de chorizo (48%), Tabla de quesos (41%) y Croquetas (37%). Te recomiendo revisar el precio de venta o ajustar las porciones. Tocá cualquiera para abrir la ficha técnica.","highlight":"recetario-lista","overlay_text":"Food cost: verde<25%, amarillo<33%, rojo>33%","options":["¿Qué precio debería tener el Bife?","¿Cómo bajo el food cost del queso?","Ver las que no tienen precio"]}
+
+Ejemplo para vincular stock:
+{"text":"Hay recetas con ingredientes sin vincular al inventario. Eso significa que el costo se calcula como cero para esos ingredientes — el food cost real puede ser más alto. Usá el botón Vincular para conectarlos.","highlight":"recetario-vincular","overlay_text":"Vinculá ingredientes al stock para costos reales","options":["¿Cuántas recetas están afectadas?","¿Cómo funciona la vinculación?"]}
+
+Ejemplo para riesgo de stock:
+{"text":"Tenés 3 productos en crítico: Crema (2 l, umbral 5), Manteca (1 kg, umbral 4) y Levadura (0,2 kg, umbral 1). Conviene reponerlos antes del próximo servicio. Tocá el indicador para filtrar solo los críticos.","highlight":"stock-kpis","overlay_text":"Críticos, bajos y pendientes: tocá para filtrar","options":["¿Qué pido primero?","Mostrame los que no tienen precio"]}
+
+Ejemplo para productos sin precio (subvalúan food cost):
+{"text":"Hay productos sin precio cargado. Eso subvalúa el food cost de las recetas que los usan, porque el sistema los cuenta como costo cero. Podés reconstruir el stock desde tus facturas para traer los precios reales automáticamente.","highlight":"stock-rebuild","overlay_text":"Reconstruye el stock y los precios desde facturas","options":["¿Cómo funciona el rebuild?","¿Qué recetas están mal calculadas?"]}`
 
     systemPrompt += `\n\nUsá el contexto para dar consejos relevantes cuando el usuario lo necesite.`
 

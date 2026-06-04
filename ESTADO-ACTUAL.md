@@ -1,6 +1,6 @@
 # KitchenOS — Estado Actual del Proyecto
 
-**Fecha:** 31 de mayo de 2026
+**Fecha:** 3 de junio de 2026
 **URL Producción:** https://kos-app-one.vercel.app
 **Credenciales test:** admin@elrescoldo.com / kitchenos2026
 **Supabase:** https://clipcxcbtlibswfzsgzk.supabase.co
@@ -12,20 +12,20 @@
 
 | # | Módulo | Ruta | Estado | Detalle |
 |---|--------|------|--------|---------|
-| 1 | **Dashboard** | `/` | Funcional | Header con perfil real (auth), status bars reales (`3/12` mise/tareas), pase preview, stock crítico, grilla de módulos por rol, WelcomeDashboard para restaurantes nuevos, turno tracking en localStorage (iniciar/cerrar con duración y resumen), CTA de merma. |
+| 1 | **Dashboard** | `/` | Funcional | Header con perfil real (auth), status bars reales, pase preview, stock crítico, **ModulosGrid usa `puedeVer()` dinámico** (muestra módulos del puesto asignado, no lista hardcodeada). Turno tracking en localStorage (único — banner del layout.tsx eliminado). |
 | 2 | **Tareas** | `/tareas` | Funcional | CRUD, prioridades (crítica/alta/media/baja), categorías, asignación a plaza, checklist por tarea, filtros, tab Producción con matriz, FAB elevado para no tapar navbar. |
-| 3 | **Recetario** | `/recetario` | Funcional | Lista con food cost, detalle `/recetario/[id]`, CRUD ingredientes, cálculo automático, búsqueda, filtros, tabs Recetas/Ideas (drafts), **importación IA desde foto/imagen/audio/texto/archivo/link** (single + multi), guardado vía API server-side (`/api/recetas/save`) que usa service role y evita RLS. PDF export. |
+| 3 | **Recetario** | `/recetario` | Funcional | Lista con food cost, detalle `/recetario/[id]`, CRUD ingredientes, cálculo automático, búsqueda, filtros, tabs Recetas/Ideas (drafts), **importación IA** (single + multi). **Ideas: botón "Cargar/Actualizar con IA"** → bottom sheet texto → IA parsea → aplica ingredientes+pasos a la receta existente sin crear nueva (modo `enrichRecetaId` en `/api/recetas/save`). Crear recetas abierto a todos, **importar/exportar solo admin**. |
 | 4 | **Stock** | `/stock` | Funcional | Productos con estado (ok/bajo/crítico), CRUD, categorías, alertas, búsqueda, exportar, **modo rápido** (pantalla grande para stock-take secuencial), precio con fuente reducida. Sheet de selector de sector scrolleable (maxHeight 80vh). |
 | 5 | **Pedidos** | `/pedidos` | Funcional | CRUD, items con precios, estados (borrador/enviado/recibido/parcial), productos frecuentes como chips, búsqueda predictiva, WhatsApp y PDF, recepción parcial. |
 | 6 | **Proveedores** | `/proveedores` | Funcional | CRUD, CUIT, teléfono, días entrega, rubro, historial facturas por proveedor, **auto-creación** desde facturas con IA. |
 | 7 | **Facturas** | `/facturas` | Funcional | Carga con items, tipos A/B/C/X/remito/ticket, **OCR con IA** (Claude Sonnet 4.6) que detecta proveedor/items/total, detección de variaciones de precio, historial, condición de pago. |
-| 8 | **Carta** | `/carta` | Funcional | Items vinculados a recetas, food cost preview coloreado, 86, categorías **dinámicas por restaurante** (`carta_categorias`), vincular/cambiar receta inline (search siempre visible, porciones editables con tap), export PDF. **Tags dietarios** (S/TACC, Vegano, Vegetariano, Keto, Picante, Sin lactosa) toggleables directo en el detalle. **Importar desde foto/PDF/Excel/texto** con IA: extrae nombre, componentes, porciones, precio y tags — cada componente se puede vincular a recetas, productos o producciones existentes. **Crear receta borrador** desde búsqueda sin resultados. **Asignar a OPS** (plaza + stock ideal) por receta vinculada → upserta `checklist_item`. **KitchenCoach integrado**: context con FC promedio, problemas de margen y platos sin receta; suggestions dinámicas según pantalla. |
+| 8 | **Carta** | `/carta` | Funcional | Items vinculados a recetas, food cost preview coloreado, 86, categorías **dinámicas por restaurante** (`carta_categorias`), vincular/cambiar receta inline (search siempre visible, porciones editables con tap), export PDF. **Tags dietarios** toggleables. **Importar con IA**. **Crear receta borrador** desde búsqueda. **Vincular productos de stock** en la misma búsqueda (crea stub receta draft con el producto como ingrediente). **Asignar a OPS**: `plato_recetas.cantidad_ops+unidad_ops` → checklist_item.cantidad = suma de todas las contribuciones del mismo receta_id+plaza (no reemplaza). Precio y food cost visible **solo para admin**. **KitchenCoach integrado**. |
 | 9 | **Checklist / Mise en Place** | `/checklist` | Funcional | Mise en place por plaza, items SP/P/REF/OK, cantidades color-coded, registros diarios, rutinas con frecuencia. Drag long-press entre secciones. **Plaza General**: items/secciones/rutinas con `plaza='general'` aparecen en TODAS las plazas al tope — para tareas que cualquiera puede cubrir (rutinas de limpieza, mise compartido, etc.). |
 | 10 | **Pase de Turno** | `/pase` | Funcional | Chat continuo entre turnos, grouping por emisor (sin avatar repetido), prioridades, crear tarea desde mensaje, realtime. |
 | 11 | **HACCP / Limpieza** | `/haccp` | Funcional | 3 tabs: Temperaturas, Vencimientos (color coding por días), **Limpieza** (sub-tabs Lista/Calendario; crear tarea con día + frecuencia; sync a OPS checklist plaza General). Export PDF para Bromatología. |
 | 12 | **Reportes / CMV** | `/reportes` | Funcional | 8 tabs: Resumen, **CMV** (ventas vs compras), **Presupuesto vs Real** (semanal→anual), **Rendimiento por plaza**, Food Cost, Compras, Precios/inflación, Producción. Selector de periodo, gráficos CSS (sin Chart.js). |
 | 13 | **Calendario** | `/calendario` | Funcional | Vista mensual + semanal por horas, eventos con iconos/colores, entregas de pedidos auto-integradas, CRUD eventos, recurrencia. |
-| 14 | **Turnos / Equipo** | `/turnos` | Funcional | 3 tabs: Equipo (lista + ficha + CRUD), Turnos (grilla semanal M/T/N/F/V, asignación inline al tap, columna Hs calculada), Puestos (CRUD, tareas, permisos). Select único Rol+Puesto+Plaza con optgroup. |
+| 14 | **Turnos / Equipo** | `/turnos` | Funcional | 3 tabs: Equipo (form 2 pasos datos→puesto, ficha con overrides de módulos), Turnos (grilla semanal), Puestos (toggles de módulos reales, nivel badge, plaza OPS, template picker con 8 puestos comunes). **Sistema de puestos**: cada puesto define `nivel` (admin/sous_chef/cocinero/bachero) + `plaza_default` + `modulos_visibles[]`. Overrides por persona (`modulos_extra`, `modulos_restringidos`). DB: `puestos.nivel+plaza_default`, `equipo_miembros.modulos_extra+restringidos`. |
 | 15 | **Producción / Planificación** | `/produccion` | Funcional | Planilla de producción del día. **Calendario mensual** con dots indicadores (verde = activo, naranja = evento/tag). **Multi-select** para activar N días con nombre de menú opcional (`menu_tag`). Soporte multi-menú en mismo día con filtro chips. Asignación a miembros, badges P1/P2/P3. |
 | 24 | **OPS — Workspace diario** | `/operaciones` | Funcional | **3 tabs**: Producción · Mise · Planificación. Producción: secciones con sublabels (SP·Super Prioridad, P·Prioridad, REF·Refuerzo), toggle Carta/Menú con subtítulo, QuickAdd con sugerencias de receta (≥3 chars). Checklist: auto-select plaza por rol, progreso por plaza en grid. |
 | ~~23~~ | ~~OPS — Ingeniería de Menú~~ | ~~`/ingenieria-menu`~~ | **Eliminado (2 jun 2026)** | Página y referencias en `constants.ts` removidas. Los tipos `CategoriaPlato`/`PlatoComponente` y la lógica `sync_ops` de `plato_componentes` se mantienen (los usa Producción). |
@@ -100,6 +100,31 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 
 ## 4. Implementado en Últimas Sesiones
 
+### Sesión 2026-06-03 — Sistema de puestos + permisos granulares + UX mejoras carta/recetario
+
+**Bloque A — Sistema de puestos con permisos reales:**
+1. **DB migration**: `puestos.nivel` (admin/sous_chef/cocinero/bachero) + `puestos.plaza_default` + `equipo_miembros.modulos_extra[]` + `equipo_miembros.modulos_restringidos[]`.
+2. **Tab Puestos rediseñado**: toggles de módulos reales (no texto libre), nivel badge coloreado, plaza OPS, template picker con 8 puestos comunes (Parrillero, Pastelero, Chef, Bachero, etc.).
+3. **Tab Equipo**: form 2 pasos (datos → selección de puesto con preview de módulos incluidos), ficha con panel de overrides individuales por persona.
+4. **usePermisos**: carga puesto del usuario logueado vía `equipo_miembros.auth_user_id` → `puestos.permisos_app` + `modulos_extra` − `modulos_restringidos`. Fallback a `rol_permisos` si no tiene puesto asignado.
+5. **ModulosGrid**: usa `puedeVer()` sobre todos los módulos posibles (no lista hardcodeada del rol).
+6. **constants.ts**: calendario y merma añadidos a todos los roles base.
+
+**Bloque B — Permisos granulares por módulo:**
+7. **Stock**: precio_unitario y monto total visible solo para admin (tanto en tabla como PDF).
+8. **Carta**: precio de venta y FC%/margen visible solo para admin; componentes y platos visibles para todos.
+9. **Recetario**: crear recetas abierto a todos; importar fichas técnicas y exportar Excel solo admin.
+10. **HACCP/Limpieza**: registrar temperaturas/limpieza/vencimientos abierto a todos; crear/eliminar tareas, config equipos, descartar vencimientos solo admin.
+11. **Merma**: accesible para todos; `costo_estimado` y stat "Total costo" solo admin.
+12. **Dashboard**: eliminado banner de clock-in del `layout.tsx` (usaba tabla `turnos_personal` que no existe en DB — era el segundo botón de turno que confundía).
+
+**Bloque C — UX mejoras carta y recetario:**
+13. **Ideas → Completar con IA**: botón en cada borrador → bottom sheet con textarea → IA parsea ingredientes+pasos → "Aplicar a [nombre]" enriquece la receta existente (no crea nueva). Modo `enrichRecetaId` agregado a `/api/recetas/save`.
+14. **Carta → Vincular productos de stock**: la búsqueda de recetas en detalle del plato ahora muestra también productos de stock. Al seleccionar uno, crea una receta borrador automática con ese producto como ingrediente y la vincula.
+15. **OPS mise acumulativo**: `plato_recetas` ahora guarda `cantidad_ops` + `unidad_ops` por plato. `handleGuardarOPS` suma TODAS las contribuciones de la misma `receta_id+plaza` → `checklist_items.cantidad` = total correcto. Preview del total antes de guardar. Badge OPS visible en la lista de recetas del plato.
+
+**Commits:** `980f0bb` (puestos), `510b864` (permisos granulares), `724e712` (UX mejoras), `353cd51` (OPS suma).
+
 ### Sesión 2026-06-02 (tarde) — UX batch + Limpieza/Reportes/Privacidad facturas
 **Bloque A — Quick wins:**
 1. **Merma estética azul**: header navy, pills translúcidas, stat "Total costo" en `var(--accent)`.
@@ -112,7 +137,7 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 **Bloque C — Verificaciones + medias:**
 5. **Horas mensuales** (Turnos): `fetchTurnosMes` + botón "Ver horas del mes" → tabla por miembro (días + horas, rojo >176h).
 6. **Calendario ↔ OPS**: `useCalendario` lee `produccion_diaria` → dots verdes "OPS: [menú]" en el calendario general.
-7. **Coach contextual**: `SUGGESTIONS_BY_SCREEN` + `kc_screen_context` en stock, recetario, facturas, reportes, merma, haccp.
+7. **Coach contextual**: `SUGGESTIONS_BY_SCREEN` + `kc_screen_context` en stock, recetario, facturas, reportes, merma, haccp. **Stock** elevado a nivel OPS/Carta vía skill `/coach-screen` (jun 2026): screen_context con insights (críticos top-8, sin precio, valor total, categorías en riesgo), 7 `data-coach-target`, tour 8 pasos, ejemplos highlight. **Recetario** ídem (jun 2026): screen_context con fcAlto/sinIngredientes/sinPrecio/sinVincular, 7 `data-coach-target`, tour 8 pasos con tabs, 2 ejemplos highlight. Motor de tour genérico en `lib/coach/tours.ts` — cualquier pantalla agrega sus pasos ahí.
 8. **Equipo → invitar**: botón + modal + `POST /api/invitar` (service role). Falta página `/registro-invitado`.
 
 **Bloque D — Features grandes (Opus):**

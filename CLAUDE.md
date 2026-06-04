@@ -74,6 +74,7 @@ curl -X POST https://api.supabase.com/v1/projects/clipcxcbtlibswfzsgzk/database/
 | Skill | Cuándo usarla |
 |---|---|
 | `/new-module nombre` | Crear módulo nuevo (page + hook) |
+| `/coach-screen pantalla` | Integrar Kitchen Coach completo en una pantalla (contexto + targets + tour + suggestions + acciones) |
 | `/supabase-check tabla` | Verificar columnas reales antes de queries |
 | `/debug-error descripción` | Resolver errores (400, 42501, datos vacíos) |
 | `/deploy` | Build + validación + deploy a Vercel |

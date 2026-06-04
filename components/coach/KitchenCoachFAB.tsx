@@ -4,92 +4,20 @@ import { useState, useRef, useEffect } from 'react'
 import { useKitchenCoach } from '@/lib/hooks/useKitchenCoach'
 import { useMerma } from '@/lib/hooks/useMerma'
 import MermaBottomSheet from '@/components/merma/MermaBottomSheet'
+import { type TourStep, TOURS } from '@/lib/coach/tours'
 
 interface KitchenCoachFABProps {
   stockCritico?: Array<{ nombre: string; cantidad: number; minimo: number }>
   tareasPendientes?: Array<{ titulo: string; prioridad: string; plaza?: string }>
 }
 
-// ── Tour steps ─────────────────────────────────────────────────
-interface TourStep {
-  targetId: string | null
-  requireTab?: 'produccion' | 'mise' | 'planificacion'
-  title: string
-  description: string
+function getActiveTour(): TourStep[] {
+  try {
+    const ctx = JSON.parse(localStorage.getItem('kc_screen_context') ?? 'null')
+    if (ctx?.screen && TOURS[ctx.screen]) return TOURS[ctx.screen]
+  } catch { /* ignore */ }
+  return TOURS.operaciones ?? []
 }
-
-const TOUR_STEPS: TourStep[] = [
-  {
-    targetId: 'ops-tab-produccion',
-    title: 'Producción',
-    description: 'El tablero operativo del turno. Cargás todo lo que hay que cocinar, organizás por prioridad y seguís el avance del equipo en tiempo real. Funciona como una lista de producción viva que refleja el estado real de la cocina.',
-  },
-  {
-    targetId: 'prod-seccion-sp',
-    requireTab: 'produccion',
-    title: 'Super Prioridad (SP)',
-    description: 'Las preparaciones más críticas del turno, las que bloquean el servicio si no salen. Deben atacarse primero. Las secciones siguientes son Prioridad, Refuerzo y Check, en orden descendente de urgencia.',
-  },
-  {
-    targetId: 'prod-seccion-sp',
-    requireTab: 'produccion',
-    title: 'Agregar preparación',
-    description: 'Cada sección tiene un campo para agregar una preparación nueva. Podés tipear el nombre o vincularlo a una receta del recetario para que la información de porciones y plaza se complete automáticamente.',
-  },
-  {
-    targetId: 'ops-tab-mise',
-    title: 'Mise en Place',
-    description: 'Tu mise en place digital, organizado por plaza y sección. Cada ítem muestra cuánto quedó del cierre anterior y cuánto hay que producir para el turno. Al marcar algo en Mise se refleja en Producción y viceversa.',
-  },
-  {
-    targetId: 'mise-stock-box',
-    requireTab: 'mise',
-    title: 'Stock del cierre',
-    description: 'Lo que quedó disponible cuando cerró la cocina ayer. Verde: hay suficiente, no hace falta producir más. Amarillo o rojo: stock bajo, producción urgente antes del servicio.',
-  },
-  {
-    targetId: 'mise-producir-box',
-    requireTab: 'mise',
-    title: 'Objetivo del turno',
-    description: 'La cantidad estándar definida para ese ítem en el turno. Si el stock ya cubre esa cantidad, el cocinero puede saltearlo. Si no, produce hasta cubrir el objetivo y marca el ítem como listo.',
-  },
-  {
-    targetId: 'mise-fab-add',
-    requireTab: 'mise',
-    title: 'Agregar a mise',
-    description: 'El botón Agregar de cada sección incorpora ítems nuevos al mise. Podés vincularlo a una receta del recetario para que la info de porciones, unidades y plaza se llene automáticamente.',
-  },
-  {
-    targetId: 'mise-tab-rutina',
-    requireTab: 'mise',
-    title: 'Rutinas',
-    description: 'Tareas recurrentes de la plaza: limpieza de heladera, descongelado semanal, control de fechas. Se configuran con frecuencia (diaria, semanal, mensual) y aparecen automáticamente en el día que corresponde.',
-  },
-  {
-    targetId: 'ops-tab-planificacion',
-    title: 'Planificación',
-    description: 'Preparás con tiempo el menú del día y los eventos especiales. Organizás la demanda antes del turno para que la producción sea más eficiente y el equipo sepa exactamente qué viene.',
-  },
-  {
-    targetId: 'plan-sub-menu',
-    requireTab: 'planificacion',
-    title: 'Menú del día',
-    description: 'Armás la planilla de producción por categorías de plato: entradas, proteínas, pastas, postres. Podés copiar el menú de días anteriores o crear uno nuevo y asignar responsables por plaza.',
-  },
-  {
-    targetId: 'plan-sub-eventos',
-    requireTab: 'planificacion',
-    title: 'Eventos especiales',
-    description: 'Cargás eventos (bodas, corporativos, degustaciones) con sus platos, cantidad de personas y necesidades particulares. Cada evento tiene su lista de ítems con estado de producción y plaza asignada.',
-  },
-  {
-    targetId: null,
-    title: '¡Ya conocés OPS!',
-    description: 'Abrí al Kitchen Coach en cualquier momento para preguntar sobre cualquier función, pedir consejos de producción para el turno o analizar tu mise en place.',
-  },
-]
-
-const CONTENT_STEPS_COUNT = TOUR_STEPS.filter(s => s.targetId !== null).length
 
 // ── Chat suggestions ──────────────────────────────────────────
 interface Suggestion { label: string; action: 'tour' | 'send' }
@@ -107,14 +35,16 @@ const SUGGESTIONS_BY_SCREEN: Record<string, Suggestion[]> = {
     { label: '¿Cómo optimizo el mise en place?', action: 'send' },
   ],
   stock: [
-    { label: '¿Qué productos están en riesgo?', action: 'send' },
-    { label: '¿Cuándo tengo que hacer pedidos?', action: 'send' },
-    { label: 'Ayudame a organizar el inventario', action: 'send' },
+    { label: 'Ver recorrido de Inventario', action: 'tour' },
+    { label: '¿Qué productos están en crítico?', action: 'send' },
+    { label: '¿Qué productos sin precio me bajan el food cost?', action: 'send' },
+    { label: '¿Me conviene reconstruir el stock desde facturas?', action: 'send' },
   ],
   recetario: [
-    { label: '¿Cuáles son mis recetas con mayor costo?', action: 'send' },
-    { label: '¿Cómo bajo el food cost de mis recetas?', action: 'send' },
-    { label: 'Ayudame a crear una receta nueva', action: 'send' },
+    { label: 'Ver recorrido del Recetario', action: 'tour' },
+    { label: '¿Cuáles son mis recetas con mayor food cost?', action: 'send' },
+    { label: '¿Qué recetas me falta vincular al stock?', action: 'send' },
+    { label: '¿Cómo bajo el food cost sin bajar la calidad?', action: 'send' },
   ],
   facturas: [
     { label: '¿Qué proveedores me subieron más los precios?', action: 'send' },
@@ -160,21 +90,22 @@ function formatTime(d: Date) {
 // ── Tour Overlay ───────────────────────────────────────────────
 function TourOverlay({
   step,
-  stepData,
+  steps,
   onNext,
   onSkip,
 }: {
   step: number
-  stepData: TourStep
+  steps: TourStep[]
   onNext: () => void
   onSkip: () => void
 }) {
+  const stepData = steps[step]
   const [rect, setRect] = useState<DOMRect | null>(null)
   const onNextRef = useRef(onNext)
   useEffect(() => { onNextRef.current = onNext })
 
   useEffect(() => {
-    if (!stepData.targetId) { setRect(null); return }
+    if (!stepData?.targetId) { setRect(null); return }
 
     if (stepData.requireTab) {
       window.dispatchEvent(new CustomEvent('kc-set-tab', {
@@ -205,8 +136,9 @@ function TourOverlay({
     const delay = stepData.requireTab ? 220 : 80
     const timer = setTimeout(tryRect, delay)
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [step, stepData.targetId, stepData.requireTab])
+  }, [step, stepData?.targetId, stepData?.requireTab])
 
+  if (!stepData) return null
   const isFinal = !stepData.targetId
 
   // ── Final celebration card ──
@@ -280,9 +212,9 @@ function TourOverlay({
   const arrowOffset = Math.min(cardWidth - 28, Math.max(12, x + w / 2 - cardLeft - 8))
 
   // Progress: count only content steps (exclude final)
-  const contentStep = TOUR_STEPS.slice(0, step).filter(s => s.targetId !== null).length + 1
-
-  const isLast = step === TOUR_STEPS.length - 2 // one before final
+  const totalContentSteps = steps.filter(s => s.targetId !== null).length
+  const contentStep = steps.slice(0, step).filter(s => s.targetId !== null).length + 1
+  const isLast = step === steps.length - 2
 
   return (
     <div
@@ -344,14 +276,14 @@ function TourOverlay({
         <div style={{ height: 3, borderRadius: 99, background: 'var(--border)', marginBottom: 10, overflow: 'hidden' }}>
           <div style={{
             height: '100%', borderRadius: 99, background: '#f97316',
-            width: `${(contentStep / CONTENT_STEPS_COUNT) * 100}%`,
+            width: `${(contentStep / totalContentSteps) * 100}%`,
             transition: 'width .35s ease',
           }} />
         </div>
 
         {/* Step counter */}
         <div style={{ fontSize: 10, fontWeight: 700, color: '#f97316', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 5 }}>
-          {contentStep} de {CONTENT_STEPS_COUNT}
+          {contentStep} de {totalContentSteps}
         </div>
 
         {/* Title */}
@@ -480,6 +412,7 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
 
   const [input, setInput] = useState('')
   const [tourStep, setTourStep] = useState(-1)
+  const [activeTourSteps, setActiveTourSteps] = useState<TourStep[]>([])
   const [mermaOpen, setMermaOpen] = useState(false)
   const { registrarMerma } = useMerma()
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -519,13 +452,16 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
 
   // ── Tour controls ──────────────────────────────────────────
   function startTour() {
+    const steps = getActiveTour()
+    if (!steps.length) return
+    setActiveTourSteps(steps)
     close()
     setTimeout(() => setTourStep(0), 280)
   }
 
   function handleTourNext() {
     const next = tourStep + 1
-    if (next >= TOUR_STEPS.length) {
+    if (next >= activeTourSteps.length) {
       setTourStep(-1)
     } else {
       setTourStep(next)
@@ -597,10 +533,10 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
   return (
     <>
       {/* Tour overlay (independent of chat) */}
-      {tourStep >= 0 && tourStep < TOUR_STEPS.length && (
+      {tourStep >= 0 && tourStep < activeTourSteps.length && (
         <TourOverlay
           step={tourStep}
-          stepData={TOUR_STEPS[tourStep]}
+          steps={activeTourSteps}
           onNext={handleTourNext}
           onSkip={handleTourSkip}
         />

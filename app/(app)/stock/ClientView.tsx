@@ -134,6 +134,16 @@ export default function StockPage() {
     if (activeTab === 'producciones') fetchProdStock()
   }, [activeTab, fetchProdStock])
 
+  // Allow Kitchen Coach tour to switch tabs via kc-set-tab event
+  useEffect(() => {
+    function handleSetTab(e: Event) {
+      const { tab } = (e as CustomEvent<{ tab: string }>).detail
+      if (tab === 'insumos' || tab === 'producciones') setActiveTab(tab)
+    }
+    window.addEventListener('kc-set-tab', handleSetTab)
+    return () => window.removeEventListener('kc-set-tab', handleSetTab)
+  }, [])
+
   // Filters
   const [search, setSearch] = useState('')
   const [catFilter, setCatFilter] = useState('')
@@ -249,14 +259,35 @@ export default function StockPage() {
   const nPendiente = useMemo(() => productos.filter(p => p.stock_actual === 0 && p.precio_unitario === 0).length, [productos])
 
   useEffect(() => {
+    // Insights accionables para Kitchen Coach (no solo conteos)
+    const criticos = productos
+      .filter(p => p.estado === 'critico')
+      .map(p => ({ nombre: p.nombre, stock: p.stock_actual, critico: p.stock_critico, unidad: p.unidad }))
+      .slice(0, 8)
+    const sinPrecio = productos.filter(p => !p.precio_unitario || p.precio_unitario <= 0).length
+    const valorTotalStock = productos.reduce((acc, p) => acc + valorStock(p), 0)
+    // categorías con más productos en riesgo (crítico o bajo)
+    const riesgoPorCat: Record<string, number> = {}
+    for (const p of productos) {
+      if (p.estado === 'critico' || p.estado === 'bajo') riesgoPorCat[p.categoria] = (riesgoPorCat[p.categoria] ?? 0) + 1
+    }
+    const categoriasEnRiesgo = Object.entries(riesgoPorCat)
+      .sort((a, b) => b[1] - a[1]).slice(0, 3)
+      .map(([cat, n]) => ({ categoria: cat, enRiesgo: n }))
+
     localStorage.setItem('kc_screen_context', JSON.stringify({
       screen: 'stock',
+      tab: activeTab,
       total: productos.length,
-      criticos: nCritico,
+      criticos,            // top-8 con nombre + cuánto queda vs umbral
       bajos: nBajo,
+      pendientes: nPendiente, // sin stock y sin precio (a completar)
+      sinPrecio,           // subvalúan el food cost de las recetas
+      valorTotalStock: Math.round(valorTotalStock),
+      categoriasEnRiesgo,
     }))
     return () => localStorage.removeItem('kc_screen_context')
-  }, [productos.length, nCritico, nBajo])
+  }, [productos, activeTab, nCritico, nBajo, nPendiente])
 
   // Quick mode: lista filtrada por sector, críticos/bajos primero
   const quickList = useMemo(() => {
@@ -452,6 +483,7 @@ export default function StockPage() {
         actions={
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
             <button
+              data-coach-target="stock-kpis"
               onClick={() => setEstadoFilter(f => f === 'critico' ? 'all' : 'critico')}
               style={{ background: estadoFilter === 'critico' ? 'rgba(239,68,68,.4)' : 'rgba(239,68,68,.2)', border: `1px solid ${estadoFilter === 'critico' ? 'rgba(239,68,68,.7)' : 'rgba(239,68,68,.35)'}`, borderRadius: 8, padding: '5px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
             >
@@ -477,6 +509,7 @@ export default function StockPage() {
             <ActionButton icon="table_view" label="Excel" variant="secondary" onClick={exportXLSX} />
             <ActionButton icon="picture_as_pdf" label="PDF" variant="secondary" onClick={exportPDF} />
             <button
+              data-coach-target="stock-importar"
               onClick={() => setShowImportador(true)}
               style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, background: 'rgba(255,255,255,.15)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
             >
@@ -484,6 +517,7 @@ export default function StockPage() {
               Importar
             </button>
             <button
+              data-coach-target="stock-rebuild"
               onClick={async () => {
                 setShowRebuildModal(true)
                 setRebuildLoading(true)
@@ -508,6 +542,7 @@ export default function StockPage() {
               Rebuild
             </button>
             <button
+              data-coach-target="stock-stockear"
               onClick={() => setShowSectorSelect(v => !v)}
               style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, background: '#fff', color: 'var(--navy)', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
             >
@@ -519,7 +554,7 @@ export default function StockPage() {
         below={
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {/* Tab bar */}
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div data-coach-target="stock-tabs" style={{ display: 'flex', gap: 6 }}>
               {(['insumos', 'producciones'] as const).map(tab => (
                 <button key={tab} onClick={() => setActiveTab(tab)}
                   style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', transition: 'all .15s',
@@ -532,7 +567,7 @@ export default function StockPage() {
             </div>
             {/* Insumos filters */}
             {activeTab === 'insumos' && (
-              <div style={{ display: 'flex', gap: 6 }}>
+              <div data-coach-target="stock-filtros" style={{ display: 'flex', gap: 6 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 8, padding: '0 10px', height: 32, flex: 1 }}>
                   <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'rgba(255,255,255,.4)' }}>search</span>
                   <input
@@ -779,7 +814,7 @@ export default function StockPage() {
 
       {/* ── Scrollable body (insumos) ── */}
       {activeTab === 'insumos' && (
-      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <div data-coach-target="stock-lista" style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {loading ? (
           <div style={{ padding: '48px 24px', textAlign: 'center' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 28, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>hourglass_empty</span>

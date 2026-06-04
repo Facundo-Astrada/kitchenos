@@ -186,6 +186,16 @@ export default function RecetarioPage() {
   const [catFilter, setCatFilter] = useState('')
   const [creando, setCreando] = useState(false)
   const [tab, setTab] = useState<'recetas' | 'ideas'>('recetas')
+
+  // Allow Kitchen Coach tour to switch tabs
+  useEffect(() => {
+    function handleSetTab(e: Event) {
+      const { tab: t } = (e as CustomEvent<{ tab: string }>).detail
+      if (t === 'recetas' || t === 'ideas') { setTab(t); setCatFilter('') }
+    }
+    window.addEventListener('kc-set-tab', handleSetTab)
+    return () => window.removeEventListener('kc-set-tab', handleSetTab)
+  }, [])
   const [showFichas, setShowFichas] = useState(false)
   const [showLink, setShowLink] = useState(false)
 
@@ -248,16 +258,6 @@ export default function RecetarioPage() {
   const recetasPublicadas = useMemo(() => recetas.filter(r => r.status !== 'draft'), [recetas])
   const recetasDraft = useMemo(() => recetas.filter(r => r.status === 'draft'), [recetas])
 
-  useEffect(() => {
-    localStorage.setItem('kc_screen_context', JSON.stringify({
-      screen: 'recetario',
-      total: recetas.length,
-      publicadas: recetasPublicadas.length,
-      drafts: recetasDraft.length,
-    }))
-    return () => localStorage.removeItem('kc_screen_context')
-  }, [recetas.length, recetasPublicadas.length, recetasDraft.length])
-
   function exportXLSX() {
     const recetasRows = recetas.map(r => ({
       'Nombre': r.nombre,
@@ -317,6 +317,40 @@ export default function RecetarioPage() {
 
   const nAlertas = useMemo(() => recetasPublicadas.filter(r => r.food_cost.food_cost_pct >= FC_ALERT_HIGH).length, [recetasPublicadas])
 
+  useEffect(() => {
+    // Insights accionables para Kitchen Coach
+    const fcAlto = recetasPublicadas
+      .filter(r => r.food_cost.food_cost_pct >= FC_ALERT_HIGH)
+      .map(r => ({ nombre: r.nombre, fc: Math.round(r.food_cost.food_cost_pct), precio: r.precio_venta ?? 0 }))
+      .sort((a, b) => b.fc - a.fc)
+      .slice(0, 5)
+    const sinIngredientes = recetas
+      .filter(r => (r.ingredientes?.length ?? 0) === 0)
+      .map(r => r.nombre)
+      .slice(0, 5)
+    const sinPrecio = recetasPublicadas
+      .filter(r => (r.precio_venta ?? 0) === 0)
+      .map(r => r.nombre)
+      .slice(0, 5)
+    const sinVincular = recetasPublicadas
+      .filter(r => r.ingredientes?.some(i => !i.producto_id))
+      .map(r => r.nombre)
+      .slice(0, 5)
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'recetario',
+      tab,
+      total: recetas.length,
+      publicadas: recetasPublicadas.length,
+      ideas: recetasDraft.length,
+      fcPromedio: Math.round(fcPromedio),
+      fcAlto,
+      sinIngredientes,
+      sinPrecio,
+      sinVincular,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [recetas, recetasPublicadas, recetasDraft, tab, fcPromedio])
+
   if (creando) {
     return (
       <NuevaFichaScreen
@@ -367,7 +401,7 @@ export default function RecetarioPage() {
       </div>
 
       {/* ── Tabs: Recetas | Ideas ── */}
-      <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0 14px', display: 'flex', gap: 0, flexShrink: 0 }}>
+      <div data-coach-target="recetario-tabs" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0 14px', display: 'flex', gap: 0, flexShrink: 0 }}>
         <button
           onClick={() => { setTab('recetas'); setCatFilter('') }}
           style={{
@@ -403,14 +437,14 @@ export default function RecetarioPage() {
 
       {/* Category tabs (solo en pestaña Recetas) */}
       {tab === 'recetas' && categoriasFiltro.length > 0 && (
-        <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '8px 14px', display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0, scrollbarWidth: 'none' }}>
+        <div data-coach-target="recetario-categorias" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '8px 14px', display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0, scrollbarWidth: 'none' }}>
           <CatTab label="Todas" active={!catFilter} onClick={() => setCatFilter('')} />
           {categoriasFiltro.map(c => <CatTab key={c} label={c} active={catFilter === c} onClick={() => setCatFilter(catFilter === c ? '' : c)} />)}
         </div>
       )}
 
       {/* Body */}
-      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 14px 80px' }}>
+      <div data-coach-target="recetario-lista" style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 14px 80px' }}>
         {loading ? (
           <EmptyMsg icon="hourglass_empty" text="Cargando recetas…" />
         ) : error ? (
@@ -452,8 +486,9 @@ export default function RecetarioPage() {
       </div>
 
       {/* ── Botones NUEVA RECETA + IMPORTAR FICHAS ── */}
-      <div style={{ position: 'absolute', bottom: 110, left: 14, right: 14, zIndex: 10, display: 'flex', gap: 10 }}>
+      <div data-coach-target="recetario-acciones" style={{ position: 'absolute', bottom: 110, left: 14, right: 14, zIndex: 10, display: 'flex', gap: 10 }}>
         <button
+          data-coach-target="recetario-nueva"
           onClick={() => setCreando(true)}
           style={{
             flex: 1, background: 'linear-gradient(135deg, var(--navy), #4361a0)',
@@ -467,6 +502,7 @@ export default function RecetarioPage() {
         </button>
         {isAdmin && (
         <button
+          data-coach-target="recetario-importar"
           onClick={() => setShowFichas(true)}
           title="Importar fichas técnicas"
           style={{
@@ -480,6 +516,7 @@ export default function RecetarioPage() {
         </button>
         )}
         <button
+          data-coach-target="recetario-vincular"
           onClick={() => setShowLink(true)}
           title="Vincular ingredientes con stock"
           style={{
