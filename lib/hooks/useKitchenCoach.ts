@@ -32,6 +32,14 @@ export const COACH_HIGHLIGHT_IDS = [
   // Recetario
   'recetario-tabs', 'recetario-categorias', 'recetario-lista',
   'recetario-nueva', 'recetario-importar', 'recetario-vincular', 'recetario-acciones',
+  // Facturas
+  'facturas-tabs', 'facturas-filtros', 'facturas-lista', 'facturas-acciones', 'facturas-pos', 'facturas-lote',
+  // Reportes
+  'reportes-tabs', 'reportes-periodo', 'reportes-contenido',
+  // Merma
+  'merma-periodo', 'merma-stats', 'merma-fab',
+  // HACCP
+  'haccp-tabs', 'haccp-temperaturas', 'haccp-registrar', 'haccp-vencimientos', 'haccp-limpieza',
 ] as const
 
 export function useKitchenCoach() {
@@ -138,6 +146,18 @@ Ejemplo para food cost alto en recetario:
 
 Ejemplo para vincular stock:
 {"text":"Hay recetas con ingredientes sin vincular al inventario. Eso significa que el costo se calcula como cero para esos ingredientes — el food cost real puede ser más alto. Usá el botón Vincular para conectarlos.","highlight":"recetario-vincular","overlay_text":"Vinculá ingredientes al stock para costos reales","options":["¿Cuántas recetas están afectadas?","¿Cómo funciona la vinculación?"]}
+
+Ejemplo para facturas pendientes de pago:
+{"text":"Tenés 4 facturas en estado pendiente por un total de $180.000. Los proveedores con deuda en cuenta corriente son: El Gaucho ($95.000) y Lácteos del Sur ($85.000). Tocá cualquier factura para actualizar el estado de pago.","highlight":"facturas-lista","overlay_text":"Listado de facturas — tocá para ver detalle","options":["Mostrá solo las pendientes","¿Cuánto debo este mes en total?"]}
+
+Ejemplo para inflación en reportes:
+{"text":"La inflación de cocina del mes fue 8,3%. Los productos que más subieron: Crema de leche (+22%), Manteca (+18%), Harina (+15%). Te recomiendo revisar el costo de las recetas que más los usan.","highlight":"reportes-contenido","overlay_text":"Variación de precios vs período anterior","options":["¿Qué recetas usan Crema?","¿Cómo ajusto los precios de la carta?"]}
+
+Ejemplo para vencimientos próximos en HACCP:
+{"text":"Hay 3 productos que vencen en los próximos 3 días: Queso brie (mañana), Crema pastelera (pasado mañana) y Salmón ahumado (en 3 días). Conviene usarlos primero o descartarlos si ya no están aptos.","highlight":"haccp-vencimientos","overlay_text":"Alertas de vencimiento próximo","options":["¿Cómo registro el descarte?","¿Puedo agregar más productos?"]}
+
+Ejemplo para costo de merma:
+{"text":"El costo total de merma de la semana fue $12.400. El motivo más frecuente es vencimiento (5 registros) y el producto que más aparece es Albahaca fresca. Te recomiendo revisar la cantidad que se compra vs la que se usa.","highlight":"merma-stats","overlay_text":"Costo, motivo top y producto top del período","options":["¿Cómo reduzco la merma de verduras?","¿Cuánto es normal de merma?"]}
 
 Ejemplo para riesgo de stock:
 {"text":"Tenés 3 productos en crítico: Crema (2 l, umbral 5), Manteca (1 kg, umbral 4) y Levadura (0,2 kg, umbral 1). Conviene reponerlos antes del próximo servicio. Tocá el indicador para filtrar solo los críticos.","highlight":"stock-kpis","overlay_text":"Críticos, bajos y pendientes: tocá para filtrar","options":["¿Qué pido primero?","Mostrame los que no tienen precio"]}

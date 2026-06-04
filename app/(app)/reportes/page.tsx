@@ -76,9 +76,15 @@ export default function ReportesPage() {
   const [tab, setTab] = useState<Tab>('resumen')
 
   useEffect(() => {
-    localStorage.setItem('kc_screen_context', JSON.stringify({ screen: 'reportes', tab, periodo }))
-    return () => localStorage.removeItem('kc_screen_context')
-  }, [tab, periodo])
+    function handleSetTab(e: Event) {
+      const { tab: t } = (e as CustomEvent<{ tab: string }>).detail
+      if (['resumen','cmv','presupuesto','rendimiento','foodcost','compras','precios','produccion'].includes(t)) setTab(t as Tab)
+    }
+    window.addEventListener('kc-set-tab', handleSetTab)
+    return () => window.removeEventListener('kc-set-tab', handleSetTab)
+  }, [])
+
+  // kc_screen_context se escribe después de declarar los estados de datos
 
   // Data states
   const [resumen, setResumen] = useState<ReporteResumen | null>(null)
@@ -91,6 +97,28 @@ export default function ReportesPage() {
   const [rendData, setRendData] = useState<RendimientoPlaza[]>([])
 
   const [tabLoading, setTabLoading] = useState(false)
+
+  useEffect(() => {
+    const ctx: Record<string, unknown> = { screen: 'reportes', tab, periodo }
+    if (resumen) {
+      ctx.totalCompras = Math.round(resumen.totalCompras ?? 0)
+      ctx.foodCostPromedio = Math.round(resumen.foodCostPromedio ?? 0)
+    }
+    if (foodCostData.length > 0) {
+      ctx.fcAlto = foodCostData.filter(r => r.food_cost_pct >= 33)
+        .map(r => ({ nombre: r.nombre, fc: Math.round(r.food_cost_pct) }))
+        .slice(0, 5)
+    }
+    if (comprasData.proveedores.length > 0) {
+      ctx.topProveedores = comprasData.proveedores
+        .slice(0, 3)
+        .map(p => ({ proveedor: p.proveedor, total: Math.round(p.total) }))
+    }
+    if (preciosData.inflacionCocina > 0) ctx.inflacionCocina = Math.round(preciosData.inflacionCocina)
+    if (cmvData) ctx.cmvPct = Math.round(cmvData.cmvPct ?? 0)
+    localStorage.setItem('kc_screen_context', JSON.stringify(ctx))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [tab, periodo, resumen, foodCostData, comprasData, preciosData, cmvData])
 
   // Lazy fetch per tab
   const loadTab = useCallback(async (t: Tab, p: Periodo) => {
@@ -661,7 +689,7 @@ export default function ReportesPage() {
         </div>
 
         {/* Period selector */}
-        <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
+        <div data-coach-target="reportes-periodo" style={{ display: 'flex', gap: 6, marginTop: 12 }}>
           {PERIODOS.map(p => (
             <button
               key={p.key}
@@ -681,7 +709,7 @@ export default function ReportesPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{
+      <div data-coach-target="reportes-tabs" style={{
         display: 'flex', overflowX: 'auto', gap: 0,
         borderBottom: '1px solid var(--border)',
         background: 'var(--surface)',
@@ -708,7 +736,7 @@ export default function ReportesPage() {
       </div>
 
       {/* Content */}
-      <div style={{ padding: 16 }}>
+      <div data-coach-target="reportes-contenido" style={{ padding: 16 }}>
         {(loading || tabLoading) ? (
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',

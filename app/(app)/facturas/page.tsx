@@ -1879,13 +1879,14 @@ export default function FacturasPage() {
   const [view, setView] = useState<View>('list')
 
   useEffect(() => {
-    localStorage.setItem('kc_screen_context', JSON.stringify({
-      screen: 'facturas',
-      total: facturas.length,
-      totalCount,
-    }))
-    return () => localStorage.removeItem('kc_screen_context')
-  }, [facturas.length, totalCount])
+    function handleSetTab(e: Event) {
+      const { tab: t } = (e as CustomEvent<{ tab: string }>).detail
+      if (t === 'facturas' || t === 'listas' || t === 'proveedores') setMainTab(t as MainTab)
+    }
+    window.addEventListener('kc-set-tab', handleSetTab)
+    return () => window.removeEventListener('kc-set-tab', handleSetTab)
+  }, [])
+
   const [importMode, setImportMode] = useState<ImportMode>(null)
   const [aiResult, setAiResult] = useState<AIResult | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
@@ -1944,6 +1945,25 @@ export default function FacturasPage() {
     const proveedores = new Set(ff.map(f => f.proveedor_nombre)).size
     return { total, count: ff.length, proveedores }
   }, [facturasFiltradas])
+
+  useEffect(() => {
+    const pendientes = facturas.filter(f => f.status === 'pendiente')
+      .map(f => ({ proveedor: f.proveedor_nombre, total: f.total }))
+      .slice(0, 5)
+    const cuentaCorriente = facturas.filter(f => f.condicion_pago === 'cuenta_corriente' && f.status !== 'pagada')
+      .reduce((s, f) => s + f.total, 0)
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'facturas',
+      tab: mainTab,
+      filtro,
+      totalCount,
+      montoFiltrado: Math.round(resumen.total),
+      pendientes,
+      cuentaCorriente: Math.round(cuentaCorriente),
+      proveedoresActivos: resumen.proveedores,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [facturas, facturasFiltradas, mainTab, filtro, totalCount, resumen])
 
   async function exportXLSX() {
     const facturasRows = facturasFiltradas.map(f => ({
@@ -2363,7 +2383,7 @@ export default function FacturasPage() {
         </div>
 
         {/* Tab pills */}
-        <div className="flex gap-[6px] mb-3">
+        <div data-coach-target="facturas-tabs" className="flex gap-[6px] mb-3">
           {(['facturas', 'listas', 'proveedores'] as const).map(t => (
             <button key={t} onClick={() => setMainTab(t)}
               className="px-[12px] py-[5px] rounded-full border-none cursor-pointer text-[12px] font-semibold"
@@ -2380,7 +2400,7 @@ export default function FacturasPage() {
         </p>
 
         {/* Filter pills */}
-        <div className="flex gap-[6px] pb-[10px]">
+        <div data-coach-target="facturas-filtros" className="flex gap-[6px] pb-[10px]">
           {([['todas', 'Todas'], ['semana', 'Esta semana'], ['mes', 'Este mes']] as const).map(([id, label]) => (
             <button
               key={id}
@@ -2398,7 +2418,7 @@ export default function FacturasPage() {
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div data-coach-target="facturas-lista" className="flex-1 overflow-y-auto p-4">
         {loading ? (
           <div className="flex items-center justify-center h-32">
             <span className="text-[13px]" style={{ color: 'var(--text-3)' }}>Cargando...</span>
@@ -2432,10 +2452,11 @@ export default function FacturasPage() {
       </div>
 
       {/* FABs */}
-      <div className="flex-shrink-0 p-4 flex gap-2" style={{
+      <div data-coach-target="facturas-acciones" className="flex-shrink-0 p-4 flex gap-2" style={{
         paddingBottom: 'max(env(safe-area-inset-bottom, 16px), 16px)',
       }}>
         <button
+          data-coach-target="facturas-pos"
           onClick={() => setShowExcelPOS(true)}
           className="py-[14px] px-3 rounded-[14px] border-none cursor-pointer text-[13px] font-bold flex items-center justify-center gap-1"
           style={{ background: '#166534', color: 'white' }}
@@ -2445,6 +2466,7 @@ export default function FacturasPage() {
           POS
         </button>
         <button
+          data-coach-target="facturas-lote"
           onClick={() => setShowBulkUpload(true)}
           className="py-[14px] px-3 rounded-[14px] border-none cursor-pointer text-[13px] font-bold flex items-center justify-center gap-1"
           style={{ background: 'var(--accent)', color: 'white' }}

@@ -678,15 +678,19 @@ export default function HaccpPage() {
 
   const [view, setView] = useState<View>('main')
   const [tab, setTab] = useState<Tab>('temperaturas')
+
+  useEffect(() => {
+    function handleSetTab(e: Event) {
+      const { tab: t } = (e as CustomEvent<{ tab: string }>).detail
+      if (t === 'temperaturas' || t === 'vencimientos' || t === 'limpieza') setTab(t as Tab)
+    }
+    window.addEventListener('kc-set-tab', handleSetTab)
+    return () => window.removeEventListener('kc-set-tab', handleSetTab)
+  }, [])
   const [selectedEquipo, setSelectedEquipo] = useState<HaccpEquipo | null>(null)
   const [toast, setToast] = useState('')
   const [limpSubTab, setLimpSubTab] = useState<'lista' | 'calendario'>('lista')
   const [calRef, setCalRef] = useState(() => { const d = new Date(); return { m: d.getMonth(), y: d.getFullYear() } })
-
-  useEffect(() => {
-    localStorage.setItem('kc_screen_context', JSON.stringify({ screen: 'haccp', tab }))
-    return () => localStorage.removeItem('kc_screen_context')
-  }, [tab])
 
   // Get latest temp per equipo
   const latestTemps = useMemo(() => {
@@ -734,6 +738,27 @@ export default function HaccpPage() {
     const d = daysUntil(v.fecha_vencimiento)
     return d <= 3
   }).length, [vencimientos])
+
+  useEffect(() => {
+    const equiposFueraRango = equipos.filter(e => {
+      const t = latestTemps[e.id]
+      if (!t) return false
+      return t.temperatura < e.temp_min || t.temperatura > e.temp_max
+    }).map(e => e.nombre)
+    const equiposSinRegistro = equipos.filter(e => e.activo && !latestTemps[e.id]).map(e => e.nombre)
+    const vencEnRiesgo = vencimientos.filter(v => v.status !== 'descartado' && daysUntil(v.fecha_vencimiento) <= 3)
+      .map(v => ({ nombre: v.producto_nombre, dias: daysUntil(v.fecha_vencimiento) }))
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'haccp',
+      tab,
+      equipos: equipos.filter(e => e.activo).length,
+      equiposFueraRango,
+      equiposSinRegistro,
+      vencEnRiesgo,
+      alertasTotal: vencAlerts,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [tab, equipos, latestTemps, vencimientos, vencAlerts])
 
   const handleRegistrar = async (registros: { equipo_id: string; temperatura: number; observacion?: string; accion_correctiva?: string }[]) => {
     await registrarTemperaturas(registros)
@@ -818,7 +843,7 @@ export default function HaccpPage() {
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
+        <div data-coach-target="haccp-tabs" style={{ display: 'flex', gap: 6, marginTop: 12 }}>
           {([
             { key: 'temperaturas', label: 'Temperaturas', icon: 'thermostat' },
             { key: 'vencimientos', label: 'Vencimientos', icon: 'event', badge: vencAlerts },
@@ -852,9 +877,9 @@ export default function HaccpPage() {
         <div style={{ padding: 16 }}>
           {/* ── TAB: TEMPERATURAS ── */}
           {tab === 'temperaturas' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div data-coach-target="haccp-temperaturas" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setView('registrar')} style={{
+                <button data-coach-target="haccp-registrar" onClick={() => setView('registrar')} style={{
                   flex: 1, padding: '12px', borderRadius: 12, background: 'var(--navy)',
                   color: '#fff', border: 'none', fontWeight: 700, fontSize: 14, cursor: 'pointer',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -916,7 +941,7 @@ export default function HaccpPage() {
 
           {/* ── TAB: VENCIMIENTOS ── */}
           {tab === 'vencimientos' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div data-coach-target="haccp-vencimientos" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button onClick={() => setView('nuevoVenc')} style={{
                 width: '100%', padding: '12px', borderRadius: 12, background: 'var(--navy)',
                 color: '#fff', border: 'none', fontWeight: 700, fontSize: 14, cursor: 'pointer',
@@ -985,7 +1010,7 @@ export default function HaccpPage() {
 
           {/* ── TAB: LIMPIEZA ── */}
           {tab === 'limpieza' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div data-coach-target="haccp-limpieza" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {isAdmin && (
               <button onClick={() => setView('nuevaLimp')} style={{
                 width: '100%', padding: '12px', borderRadius: 12, background: 'var(--navy)',

@@ -47,24 +47,28 @@ const SUGGESTIONS_BY_SCREEN: Record<string, Suggestion[]> = {
     { label: '¿Cómo bajo el food cost sin bajar la calidad?', action: 'send' },
   ],
   facturas: [
+    { label: 'Ver recorrido de Facturas', action: 'tour' },
     { label: '¿Qué proveedores me subieron más los precios?', action: 'send' },
-    { label: 'Analizá mi inflación de compras', action: 'send' },
-    { label: '¿Cuánto gasté este mes?', action: 'send' },
+    { label: '¿Tengo facturas pendientes de pago?', action: 'send' },
+    { label: '¿Cuánto gasté este mes vs el anterior?', action: 'send' },
   ],
   reportes: [
+    { label: 'Ver recorrido de Reportes', action: 'tour' },
     { label: 'Explicame el food cost del período', action: 'send' },
     { label: '¿Qué número debería mejorar primero?', action: 'send' },
-    { label: 'Analizá mis compras por proveedor', action: 'send' },
+    { label: '¿Cuánto subió la inflación de mis compras?', action: 'send' },
   ],
   merma: [
-    { label: '¿Cuál es mi principal fuente de merma?', action: 'send' },
+    { label: 'Ver recorrido de Merma', action: 'tour' },
+    { label: '¿Cuál es mi principal causa de merma?', action: 'send' },
+    { label: '¿Cuánto me cuesta la merma este mes?', action: 'send' },
     { label: '¿Cómo puedo reducir los desperdicios?', action: 'send' },
-    { label: 'Analizá el costo de merma del mes', action: 'send' },
   ],
   haccp: [
-    { label: '¿Qué controles son obligatorios por bromatología?', action: 'send' },
+    { label: 'Ver recorrido de HACCP', action: 'tour' },
     { label: '¿Qué productos están por vencer?', action: 'send' },
-    { label: 'Ayudame a preparar una auditoría', action: 'send' },
+    { label: '¿Algún equipo está fuera de temperatura?', action: 'send' },
+    { label: 'Ayudame a preparar una auditoría de bromatología', action: 'send' },
   ],
 }
 

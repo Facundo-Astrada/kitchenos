@@ -72,10 +72,6 @@ export default function MermaPage() {
   const { isAdmin } = usePermisos()
   const [periodo, setPeriodo] = useState<Periodo>('hoy')
 
-  useEffect(() => {
-    localStorage.setItem('kc_screen_context', JSON.stringify({ screen: 'merma', total: registros.length }))
-    return () => localStorage.removeItem('kc_screen_context')
-  }, [registros.length])
   const [sheetOpen, setSheetOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [toast, setToast] = useState('')
@@ -105,6 +101,18 @@ export default function MermaPage() {
 
     return { totalCosto, totalRegistros, topMotivo, topMotivoKey, topProducto }
   }, [registros])
+
+  useEffect(() => {
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'merma',
+      periodo,
+      total: registros.length,
+      costoPeriodo: Math.round(stats.totalCosto),
+      topMotivo: stats.topMotivoKey ?? null,
+      topProducto: stats.topProducto ?? null,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [registros.length, periodo, stats])
 
   // ── Group by date ─────────────────────────────────────────
   const grouped = useMemo(() => {
@@ -165,7 +173,7 @@ export default function MermaPage() {
         </div>
 
         {/* Period pills in header */}
-        <div className="flex gap-2 pb-3 pt-3 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+        <div data-coach-target="merma-periodo" className="flex gap-2 pb-3 pt-3 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {PERIODOS.map(p => (
             <button
               key={p.value}
@@ -184,7 +192,7 @@ export default function MermaPage() {
       </div>
 
       {/* Stats cards */}
-      <div className="flex gap-3 px-4 pb-4 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+      <div data-coach-target="merma-stats" className="flex gap-3 px-4 pb-4 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
         {isAdmin && <StatCard icon="payments" label="Total costo" value={fmtPrecio(stats.totalCosto)} color="var(--accent)" />}
         <StatCard icon="inventory_2" label="Registros" value={String(stats.totalRegistros)} color="var(--navy)" />
         <StatCard
@@ -307,6 +315,7 @@ export default function MermaPage() {
 
       {/* FAB */}
       <button
+        data-coach-target="merma-fab"
         onClick={() => setSheetOpen(true)}
         className="fixed right-5 z-40 flex items-center justify-center rounded-full shadow-lg active:scale-95 transition-transform"
         style={{ width: 56, height: 56, background: 'var(--navy)', bottom: 110 }}

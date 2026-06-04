@@ -123,6 +123,136 @@ export const TOURS: Record<string, TourStep[]> = {
     },
   ],
 
+  facturas: [
+    {
+      targetId: 'facturas-tabs',
+      title: 'Tres vistas de compras',
+      description: 'Facturas: el historial completo de todas tus compras. Listas: precios acordados con proveedores para comparar con lo que te facturan. Proveedores: el directorio con datos de contacto y condiciones de pago.',
+    },
+    {
+      targetId: 'facturas-filtros',
+      requireTab: 'facturas',
+      title: 'Filtros de período',
+      description: 'Filtrá por esta semana o este mes para ver el gasto del período. Útil para comparar el costo de las compras entre períodos y detectar aumentos de proveedores.',
+    },
+    {
+      targetId: 'facturas-lista',
+      requireTab: 'facturas',
+      title: 'El historial de facturas',
+      description: 'Cada factura muestra proveedor, fecha, total y estado (pendiente, confirmada, pagada, observada). Tocá una para ver el detalle de los ítems y actualizar el estado de pago.',
+    },
+    {
+      targetId: 'facturas-acciones',
+      title: 'Cómo cargar facturas',
+      description: 'Tres formas: Cargar factura (foto, PDF o texto con OCR), Lote (varias facturas PDF de una vez), o POS (Excel de Fudo, Maxirest, Bistrosoft). La IA extrae todos los datos automáticamente.',
+    },
+    {
+      targetId: 'facturas-lote',
+      title: 'Carga masiva en lote',
+      description: 'Arrastrá varios archivos PDF o imágenes de una vez. El sistema los procesa en serie con OCR — ideal para cargar el batch semanal de facturas de todos los proveedores en un solo paso.',
+    },
+    {
+      targetId: 'facturas-pos',
+      title: 'Importar desde el POS',
+      description: 'Si usás Fudo, Maxirest, Bistrosoft u otro sistema, exportá el Excel de gastos y cargalo acá. El sistema detecta las columnas automáticamente y mapea los proveedores y productos.',
+    },
+    {
+      targetId: null,
+      title: '¡Ya conocés Facturas!',
+      description: 'Abrí al Kitchen Coach en cualquier momento para analizar la inflación de tus compras, detectar los proveedores que más subieron o entender cómo las facturas impactan tu food cost.',
+    },
+  ],
+
+  reportes: [
+    {
+      targetId: 'reportes-tabs',
+      title: 'Las 8 vistas de análisis',
+      description: 'Resumen (KPIs del período), CMV (costo de mercadería vendida), Presupuesto (vs real), Rendimiento (por plaza), Food Cost (por receta), Compras (por proveedor), Precios (inflación de compras), Producción (lo más producido).',
+    },
+    {
+      targetId: 'reportes-periodo',
+      title: 'Seleccionar período',
+      description: 'Filtrá por esta semana, este mes o el mes anterior. Todos los gráficos y números se recalculan al cambiar el período — útil para comparar y detectar tendencias.',
+    },
+    {
+      targetId: 'reportes-contenido',
+      requireTab: 'resumen',
+      title: 'Resumen ejecutivo',
+      description: 'Los KPIs más importantes del período: compras totales, ventas, food cost promedio y CMV. Los cambios porcentuales muestran si el número mejoró o empeoró respecto al período anterior.',
+    },
+    {
+      targetId: 'reportes-contenido',
+      requireTab: 'compras',
+      title: 'Compras por proveedor',
+      description: 'El gasto del período desglosado por proveedor, ordenado de mayor a menor. Identifica qué proveedores concentran más presupuesto y si hubo variaciones respecto a períodos anteriores.',
+    },
+    {
+      targetId: 'reportes-contenido',
+      requireTab: 'precios',
+      title: 'Inflación de cocina',
+      description: 'La variación de precios de cada producto en el tiempo, calculada desde las facturas cargadas. El índice de inflación de cocina te muestra cuánto subieron tus insumos en el período.',
+    },
+    {
+      targetId: null,
+      title: '¡Ya conocés Reportes!',
+      description: 'Abrí al Kitchen Coach en cualquier momento para analizar cualquier número, entender qué está impactando el food cost o pedir recomendaciones para mejorar los márgenes.',
+    },
+  ],
+
+  merma: [
+    {
+      targetId: 'merma-periodo',
+      title: 'Filtrar por período',
+      description: 'Hoy, esta semana, este mes o todo el historial. El costo total de merma cambia según el período seleccionado. Mirá la semana para el operativo, el mes para el análisis de gestión.',
+    },
+    {
+      targetId: 'merma-stats',
+      title: 'Las 4 métricas clave',
+      description: 'Costo total del desperdicio, cantidad de registros, el motivo más frecuente (vencimiento, caída, exceso de producción...) y el producto que más aparece. Con estos 4 datos vas directo al problema.',
+    },
+    {
+      targetId: 'merma-fab',
+      title: 'Registrar merma',
+      description: 'El botón + abre el formulario de registro: producto, cantidad, motivo y turno. Cuanto más seguido se registra (en el momento, no al cierre), más preciso es el análisis. Puede registrarse desde el Coach también.',
+    },
+    {
+      targetId: null,
+      title: '¡Ya conocés Merma!',
+      description: 'Abrí al Kitchen Coach en cualquier momento para analizar las causas del desperdicio, calcular el costo real de la merma o pedir estrategias para reducirla.',
+    },
+  ],
+
+  haccp: [
+    {
+      targetId: 'haccp-tabs',
+      title: 'Los 3 controles HACCP',
+      description: 'Temperaturas: registros de heladeras, cámaras y hornos para control de cadena de frío. Vencimientos: fechas de productos con alerta de proximidad. Limpieza: tareas programadas por área con historial de cumplimiento.',
+    },
+    {
+      targetId: 'haccp-registrar',
+      requireTab: 'temperaturas',
+      title: 'Registrar temperaturas',
+      description: 'Ingresás la temperatura actual de cada equipo. El sistema la compara con el rango aceptado y marca los que están fuera de límite para tomar acción correctiva. Este registro es parte del expediente HACCP para bromatología.',
+    },
+    {
+      targetId: 'haccp-vencimientos',
+      requireTab: 'vencimientos',
+      title: 'Control de vencimientos',
+      description: 'Agregás los productos con fecha de vencimiento y el sistema te alerta cuando se acerca el límite (≤3 días). Los vencidos se marcan en rojo. Al descartar un producto podés registrar la merma directamente.',
+    },
+    {
+      targetId: 'haccp-limpieza',
+      requireTab: 'limpieza',
+      title: 'Tareas de limpieza',
+      description: 'Cada tarea tiene área, descripción y frecuencia (diaria, semanal, mensual). Al registrar el cumplimiento queda el historial. Las tareas con sync_ops aparecen en el checklist OPS del día que corresponde.',
+    },
+    {
+      targetId: null,
+      title: '¡Ya conocés HACCP!',
+      description: 'Abrí al Kitchen Coach para consultar qué controles son obligatorios por bromatología, preparar una auditoría o analizar el historial de incidencias de temperatura.',
+    },
+  ],
+
   stock: [
     {
       targetId: 'stock-tabs',
