@@ -10,6 +10,7 @@ import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
 import { usePackagingGrupos, type PackagingGrupo } from '@/lib/hooks/usePackagingGrupos'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import { createClient } from '@/lib/supabase/client'
+import MenusView from './MenusView'
 // ── Helpers ─────────────────────────────────────────────
 const fmtMoney = (n: number) =>
   n > 0 ? `$${n.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—'
@@ -2734,7 +2735,7 @@ function ImportCartaModal({
 }
 
 // ── MAIN PAGE ───────────────────────────────────────────
-type View = 'list' | 'nuevo' | 'detail' | 'edit' | 'rentabilidad'
+type View = 'list' | 'nuevo' | 'detail' | 'edit' | 'rentabilidad' | 'menus'
 
 export default function CartaPage() {
   const { items, loading, fetchItems, crearItem, actualizarItem, actualizarTags, toggleDisponible, eliminarItem, duplicarItem, agregarPlatoReceta, actualizarPlatoReceta, eliminarPlatoReceta, agregarPlatoPackaging, eliminarPlatoPackaging, categorias } = useCarta()
@@ -2913,6 +2914,22 @@ export default function CartaPage() {
     )
   }
 
+  // ── Menús ──
+  if (view === 'menus') {
+    return (
+      <>
+        <MenusView
+          recetas={recetas.map(r => ({ id: r.id, nombre: r.nombre }))}
+          productos={productos.map(p => ({ id: p.id, nombre: p.nombre }))}
+          cartaItems={items.map(i => ({ id: i.id, nombre: i.nombre }))}
+          onBack={() => setView('list')}
+          onToast={setToast}
+        />
+        {toast && <Toast msg={toast} onDone={() => setToast('')} />}
+      </>
+    )
+  }
+
   // ── Detail ──
   if (view === 'detail' && selectedItem) {
     return (
@@ -3006,6 +3023,15 @@ export default function CartaPage() {
         </div>
         {/* Action chips — scrollable row */}
         <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 }}>
+          <button onClick={() => setView('menus')} style={{
+            background: '#fff', border: 'none',
+            borderRadius: 20, padding: '5px 12px', color: 'var(--navy)',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+            fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0,
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>menu_book</span>
+            Menús
+          </button>
           <button data-coach-target="carta-importar" onClick={() => setShowImport(true)} style={{
             background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,.2)',
             borderRadius: 20, padding: '5px 12px', color: '#fff',

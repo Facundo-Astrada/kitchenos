@@ -29,6 +29,8 @@
 | `restaurantes` | `configuracion JSONB` — guarda `{ nombres_excluidos: string[] }` (empleados/socios a excluir del OCR de facturas) y `onboarding_step` | (no es columna plana) |
 | `ventas` | `total_ventas`, `cantidad_cubiertos`, `fecha` (date) | — |
 | `ventas_items` | `nombre_plato` (no FK), `cantidad`, `precio_unitario`, `subtotal` | — |
+| `menus` | tabla nueva (jun 2026): `id, restaurante_id, nombre, tipo ('fijo'\|'evento'), descripcion, activo, created_at, updated_at` — capa por encima del plato (Carta → Menú → Producción) | — |
+| `menu_preparaciones` | tabla nueva (jun 2026): `menu_id` (FK CASCADE), `paso` (curso/Apetizer…), `tipo ('plato'\|'receta'\|'producto'\|null)` + `ref_id UUID` (polimórfico a carta_items/recetas/productos, sin FK dura), `nombre`, `prioridad ('critica'\|'alta'\|'media'\|'baja')`, `plaza`, `usuario_asignado` (TEXT = equipo_miembros.id, igual que produccion_diaria), `cantidad`, `unidad`, `orden` | — |
 
 ## Unidades de ingredientes — trampas de conversión
 
