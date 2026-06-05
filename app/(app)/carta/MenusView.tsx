@@ -5,8 +5,8 @@ import { useMenus, type MenuConPreparaciones, type MenuTipo, type PrepTipo, type
 import { useEquipo } from '@/lib/hooks/useEquipo'
 
 // ── Constantes ──────────────────────────────────────────────
-const PASOS = ['Apetizer', 'Entrada', 'Principal', 'Guarnición', 'Postre', 'Bebida', 'Otro']
-const PLAZAS = ['parrilla', 'fríos', 'calientes', 'pase', 'pastelería', 'otro']
+const DEFAULT_SECCIONES = ['Entradas', 'Principales', 'Postres']
+const PLAZAS_BASE = ['parrilla', 'fríos', 'calientes', 'pase', 'pastelería']
 
 const PRIORIDADES: { id: PrepPrioridad; label: string; sublabel: string; color: string; bg: string }[] = [
   { id: 'critica', label: 'SP',    sublabel: 'Super Prior.', color: '#ef4444', bg: '#fef2f2' },
@@ -126,7 +126,7 @@ export default function MenusView({
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-2)', marginTop: 8 }}>
               {menus.length === 0 ? 'Sin menús todavía' : 'Sin menús de este tipo'}
             </div>
-            <div style={{ fontSize: 12, marginTop: 4 }}>Tocá “Nuevo” para armar uno por pasos</div>
+            <div style={{ fontSize: 12, marginTop: 4 }}>Tocá “Nuevo” para armar uno por secciones</div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -149,7 +149,7 @@ export default function MenusView({
 
 // ── Card de menú en la lista ──
 function MenuCard({ menu, onEdit, onDelete }: { menu: MenuConPreparaciones; onEdit: () => void; onDelete: () => void }) {
-  const porPaso = useMemo(() => {
+  const porSeccion = useMemo(() => {
     const m = new Map<string, number>()
     for (const p of menu.preparaciones) m.set(p.paso, (m.get(p.paso) ?? 0) + 1)
     return [...m.entries()]
@@ -172,11 +172,11 @@ function MenuCard({ menu, onEdit, onDelete }: { menu: MenuConPreparaciones; onEd
         {menu.descripcion && (
           <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>{menu.descripcion}</div>
         )}
-        {porPaso.length > 0 && (
+        {porSeccion.length > 0 && (
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 8 }}>
-            {porPaso.map(([paso, n]) => (
-              <span key={paso} style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'var(--bg)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
-                {paso} · {n}
+            {porSeccion.map(([sec, n]) => (
+              <span key={sec} style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: 'var(--bg)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
+                {sec} · {n}
               </span>
             ))}
           </div>
@@ -195,7 +195,7 @@ function MenuCard({ menu, onEdit, onDelete }: { menu: MenuConPreparaciones; onEd
 }
 
 // ════════════════════════════════════════════════════════════
-// MENU BUILDER — crear / editar un menú por pasos
+// MENU BUILDER — un menú = "otra carta" con secciones editables
 // ════════════════════════════════════════════════════════════
 function MenuBuilder({
   menu, recetas, productos, cartaItems, onSave, onCancel,
@@ -208,9 +208,20 @@ function MenuBuilder({
   onCancel: () => void
 }) {
   const { miembros } = useEquipo()
+  const safeMiembros = miembros ?? []
   const [nombre, setNombre] = useState(menu?.nombre ?? '')
   const [tipo, setTipo] = useState<MenuTipo>(menu?.tipo ?? 'fijo')
   const [descripcion, setDescripcion] = useState(menu?.descripcion ?? '')
+
+  // Secciones editables del menú (sus "cursos" propios)
+  const [secciones, setSecciones] = useState<string[]>(() => {
+    if (menu && menu.preparaciones.length > 0) {
+      const orden: string[] = []
+      for (const p of menu.preparaciones) if (!orden.includes(p.paso)) orden.push(p.paso)
+      return orden
+    }
+    return [...DEFAULT_SECCIONES]
+  })
   const [preps, setPreps] = useState<PrepRow[]>(
     menu?.preparaciones.map(p => ({
       _uid: puid(), paso: p.paso, tipo: p.tipo, ref_id: p.ref_id, nombre: p.nombre,
@@ -218,32 +229,55 @@ function MenuBuilder({
       cantidad: p.cantidad, unidad: p.unidad,
     })) ?? [],
   )
-  const [editorIdx, setEditorIdx] = useState<number | null>(null) // índice de prep en edición; -1 = nueva
+
+  // Plazas disponibles (base + las que cree el usuario en esta sesión)
+  const [plazas, setPlazas] = useState<string[]>(() => {
+    const fromPreps = (menu?.preparaciones ?? []).map(p => p.plaza).filter((x): x is string => !!x)
+    return Array.from(new Set([...PLAZAS_BASE, ...fromPreps]))
+  })
+
+  // Editor de preparación: { paso, idx } — idx=null → nueva
+  const [editorCtx, setEditorCtx] = useState<{ paso: string; idx: number | null } | null>(null)
+  // Sección en edición de nombre + valor temporal
+  const [secEdit, setSecEdit] = useState<{ idx: number; val: string } | null>(null)
+  const [nuevaSeccion, setNuevaSeccion] = useState('')
   const [saving, setSaving] = useState(false)
 
-  // Agrupar preparaciones por paso, en el orden de PASOS
-  const grouped = useMemo(() => {
-    const m = new Map<string, { row: PrepRow; idx: number }[]>()
-    preps.forEach((row, idx) => {
-      const list = m.get(row.paso) ?? []
-      list.push({ row, idx })
-      m.set(row.paso, list)
-    })
-    const ordered = [...PASOS.filter(p => m.has(p)), ...[...m.keys()].filter(p => !PASOS.includes(p))]
-    return ordered.map(paso => [paso, m.get(paso)!] as [string, { row: PrepRow; idx: number }[]])
-  }, [preps])
-
   function upsertPrep(data: PrepInput, idx: number | null) {
-    if (idx === null || idx < 0) {
-      setPreps(prev => [...prev, { ...data, _uid: puid() }])
-    } else {
-      setPreps(prev => prev.map((p, i) => i === idx ? { ...data, _uid: p._uid } : p))
-    }
-    setEditorIdx(null)
+    if (idx === null) setPreps(prev => [...prev, { ...data, _uid: puid() }])
+    else setPreps(prev => prev.map((p, i) => i === idx ? { ...data, _uid: p._uid } : p))
+    // Si la plaza es nueva, agregarla a la lista disponible
+    if (data.plaza && !plazas.includes(data.plaza)) setPlazas(prev => [...prev, data.plaza!])
+    setEditorCtx(null)
   }
 
   function removePrep(idx: number) {
     setPreps(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  function commitSeccionRename() {
+    if (!secEdit) return
+    const nuevo = secEdit.val.trim()
+    const viejo = secciones[secEdit.idx]
+    if (nuevo && nuevo !== viejo) {
+      setSecciones(prev => prev.map((s, i) => i === secEdit.idx ? nuevo : s))
+      setPreps(prev => prev.map(p => p.paso === viejo ? { ...p, paso: nuevo } : p))
+    }
+    setSecEdit(null)
+  }
+
+  function removeSeccion(sec: string) {
+    const enSeccion = preps.filter(p => p.paso === sec).length
+    if (enSeccion > 0 && !confirm(`La sección “${sec}” tiene ${enSeccion} preparación(es). ¿Eliminarla con sus preparaciones?`)) return
+    setSecciones(prev => prev.filter(s => s !== sec))
+    setPreps(prev => prev.filter(p => p.paso !== sec))
+  }
+
+  function addSeccion() {
+    const n = nuevaSeccion.trim()
+    if (!n || secciones.includes(n)) { setNuevaSeccion(''); return }
+    setSecciones(prev => [...prev, n])
+    setNuevaSeccion('')
   }
 
   async function handleSave() {
@@ -277,7 +311,7 @@ function MenuBuilder({
       {/* Body */}
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '14px 14px 32px' }}>
         {/* Nombre + tipo + descripción */}
-        <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre del menú (ej: Menú ejecutivo semana 23)" style={{ ...inp, fontWeight: 700, marginBottom: 10 }} autoFocus />
+        <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre del menú (ej: Menú degustación verano)" style={{ ...inp, fontWeight: 700, marginBottom: 10 }} autoFocus />
         <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
           {([['fijo', 'Fijo'], ['evento', 'Evento']] as const).map(([id, label]) => (
             <button key={id} onClick={() => setTipo(id)}
@@ -288,21 +322,45 @@ function MenuBuilder({
         </div>
         <input value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder="Descripción (opcional)" style={{ ...inp, marginBottom: 16 }} />
 
-        {/* Preparaciones por paso */}
-        {grouped.map(([paso, rows]) => (
-          <div key={paso} style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>{paso}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* Secciones del menú */}
+        {secciones.map((sec, secIdx) => {
+          const rows = preps.map((row, idx) => ({ row, idx })).filter(({ row }) => row.paso === sec)
+          const isEditing = secEdit?.idx === secIdx
+          return (
+            <div key={`${sec}-${secIdx}`} style={{ marginBottom: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
+              {/* Header de sección */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+                {isEditing ? (
+                  <input
+                    value={secEdit!.val}
+                    onChange={e => setSecEdit({ idx: secIdx, val: e.target.value })}
+                    onBlur={commitSeccionRename}
+                    onKeyDown={e => { if (e.key === 'Enter') commitSeccionRename() }}
+                    autoFocus
+                    style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 13, fontWeight: 700, color: 'var(--text-1)', outline: 'none', textTransform: 'uppercase', letterSpacing: '.04em' }}
+                  />
+                ) : (
+                  <button onClick={() => setSecEdit({ idx: secIdx, val: sec })}
+                    style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: '.04em', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    {sec}
+                    <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--text-3)' }}>edit</span>
+                  </button>
+                )}
+                <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 700, fontFamily: 'monospace' }}>{rows.length}</span>
+                <button onClick={() => removeSeccion(sec)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)', display: 'flex' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
+                </button>
+              </div>
+
+              {/* Preparaciones */}
               {rows.map(({ row, idx }) => {
                 const tcfg = row.tipo ? TIPO_CFG[row.tipo] : null
                 const pcfg = PRIO_CFG[row.prioridad]
-                const miembro = miembros.find(m => m.id === row.usuario_asignado)
+                const miembro = safeMiembros.find(m => m.id === row.usuario_asignado)
                 return (
-                  <div key={row._uid} onClick={() => setEditorIdx(idx)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer' }}>
-                    {tcfg && (
-                      <span className="material-symbols-outlined" style={{ fontSize: 18, color: tcfg.color, flexShrink: 0 }}>{tcfg.icon}</span>
-                    )}
+                  <div key={row._uid} onClick={() => setEditorCtx({ paso: sec, idx })}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderTop: '1px solid var(--border)', cursor: 'pointer' }}>
+                    {tcfg && <span className="material-symbols-outlined" style={{ fontSize: 18, color: tcfg.color, flexShrink: 0 }}>{tcfg.icon}</span>}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.nombre}</div>
                       <div style={{ display: 'flex', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
@@ -318,28 +376,44 @@ function MenuBuilder({
                   </div>
                 )
               })}
-            </div>
-          </div>
-        ))}
 
-        {/* Agregar preparación */}
-        <button onClick={() => setEditorIdx(-1)}
-          style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1.5px dashed var(--accent)', background: 'rgba(67,97,160,.05)', color: 'var(--accent)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
-          Agregar preparación
-        </button>
+              {/* Agregar preparación a la sección */}
+              <button onClick={() => setEditorCtx({ paso: sec, idx: null })}
+                style={{ width: '100%', padding: '9px', background: 'none', border: 'none', borderTop: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
+                Agregar a {sec}
+              </button>
+            </div>
+          )
+        })}
+
+        {/* Agregar sección */}
+        <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+          <input
+            value={nuevaSeccion}
+            onChange={e => setNuevaSeccion(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') addSeccion() }}
+            placeholder="Nueva sección (ej: Bebidas)"
+            style={{ ...inp, flex: 1 }}
+          />
+          <button onClick={addSeccion} disabled={!nuevaSeccion.trim()}
+            style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: nuevaSeccion.trim() ? 'var(--navy)' : 'var(--border)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: nuevaSeccion.trim() ? 'pointer' : 'default', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
+          </button>
+        </div>
       </div>
 
-      {/* Editor de preparación (bottom sheet) */}
-      {editorIdx !== null && (
+      {/* Editor de preparación */}
+      {editorCtx && (
         <PrepEditor
-          initial={editorIdx >= 0 ? preps[editorIdx] : null}
+          initial={editorCtx.idx !== null ? preps[editorCtx.idx] : null}
           recetas={recetas}
           productos={productos}
           cartaItems={cartaItems}
-          miembros={miembros}
-          onSave={(data) => upsertPrep(data, editorIdx)}
-          onClose={() => setEditorIdx(null)}
+          miembros={safeMiembros}
+          plazas={plazas}
+          onSave={(data) => upsertPrep({ ...data, paso: editorCtx.paso }, editorCtx.idx)}
+          onClose={() => setEditorCtx(null)}
         />
       )}
     </div>
@@ -347,25 +421,27 @@ function MenuBuilder({
 }
 
 // ════════════════════════════════════════════════════════════
-// PREP EDITOR — bottom sheet para agregar/editar una preparación
+// PREP EDITOR — bottom sheet (la plaza es elegible Y creable acá)
 // ════════════════════════════════════════════════════════════
 function PrepEditor({
-  initial, recetas, productos, cartaItems, miembros, onSave, onClose,
+  initial, recetas, productos, cartaItems, miembros, plazas, onSave, onClose,
 }: {
   initial: PrepRow | null
   recetas: RefItem[]
   productos: RefItem[]
   cartaItems: RefItem[]
   miembros: { id: string; nombre: string; apellido: string }[]
-  onSave: (data: PrepInput) => void
+  plazas: string[]
+  onSave: (data: Omit<PrepInput, 'paso'>) => void
   onClose: () => void
 }) {
   const [nombre, setNombre] = useState(initial?.nombre ?? '')
   const [tipo, setTipo] = useState<PrepTipo>(initial?.tipo ?? null)
   const [refId, setRefId] = useState<string | null>(initial?.ref_id ?? null)
-  const [paso, setPaso] = useState(initial?.paso ?? 'Principal')
   const [prioridad, setPrioridad] = useState<PrepPrioridad>(initial?.prioridad ?? 'media')
   const [plaza, setPlaza] = useState<string | null>(initial?.plaza ?? null)
+  const [plazasLocal, setPlazasLocal] = useState<string[]>(plazas)
+  const [nuevaPlaza, setNuevaPlaza] = useState('')
   const [usuario, setUsuario] = useState<string | null>(initial?.usuario_asignado ?? null)
   const [cantidad, setCantidad] = useState(initial?.cantidad != null ? String(initial.cantidad) : '')
   const [unidad, setUnidad] = useState(initial?.unidad ?? '')
@@ -387,10 +463,18 @@ function PrepEditor({
     setSearch(''); setShowResults(false)
   }
 
+  function addPlaza() {
+    const n = nuevaPlaza.trim().toLowerCase()
+    if (!n) return
+    if (!plazasLocal.includes(n)) setPlazasLocal(prev => [...prev, n])
+    setPlaza(n)
+    setNuevaPlaza('')
+  }
+
   function handleSave() {
     if (!nombre.trim()) return
     onSave({
-      paso, tipo, ref_id: refId, nombre: nombre.trim(), prioridad,
+      tipo, ref_id: refId, nombre: nombre.trim(), prioridad,
       plaza, usuario_asignado: usuario,
       cantidad: cantidad.trim() ? parseFloat(cantidad.replace(',', '.')) : null,
       unidad: unidad.trim() || null,
@@ -447,19 +531,13 @@ function PrepEditor({
             )}
           </div>
 
-          {/* Nombre (editable; o libre si no se vincula) */}
+          {/* Nombre */}
           <label style={lbl}>Nombre de la preparación</label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <input value={nombre} onChange={e => { setNombre(e.target.value); if (tipo) { setTipo(null); setRefId(null) } }} placeholder="Ej: Salsa criolla" style={fieldInp} />
             {tipo && (
               <span style={{ fontSize: 9, fontWeight: 700, padding: '4px 8px', borderRadius: 99, background: TIPO_CFG[tipo].bg, color: TIPO_CFG[tipo].color, flexShrink: 0 }}>{TIPO_CFG[tipo].label}</span>
             )}
-          </div>
-
-          {/* Paso */}
-          <label style={lbl}>Paso (curso)</label>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-            {PASOS.map(p => <button key={p} onClick={() => setPaso(p)} style={chip(paso === p)}>{p}</button>)}
           </div>
 
           {/* Prioridad */}
@@ -474,25 +552,30 @@ function PrepEditor({
             ))}
           </div>
 
-          {/* Plaza */}
-          <label style={lbl}>Plaza (delegar)</label>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-            {PLAZAS.map(pz => <button key={pz} onClick={() => setPlaza(plaza === pz ? null : pz)} style={chip(plaza === pz)}>{pz}</button>)}
+          {/* Plaza — elegible y creable */}
+          <label style={lbl}>Plaza (delegar / crear)</label>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+            {plazasLocal.map(pz => <button key={pz} onClick={() => setPlaza(plaza === pz ? null : pz)} style={chip(plaza === pz)}>{pz}</button>)}
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+            <input value={nuevaPlaza} onChange={e => setNuevaPlaza(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addPlaza() } }} placeholder="Crear nueva plaza…" style={{ ...fieldInp, flex: 1 }} />
+            <button onClick={addPlaza} disabled={!nuevaPlaza.trim()} style={{ padding: '0 14px', borderRadius: 10, border: 'none', background: nuevaPlaza.trim() ? 'var(--accent)' : 'var(--border)', color: '#fff', cursor: nuevaPlaza.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
+            </button>
           </div>
 
           {/* Usuario */}
           {miembros.length > 0 && (
             <>
               <label style={lbl}>Asignar a (opcional)</label>
-              <select value={usuario ?? ''} onChange={e => setUsuario(e.target.value || null)}
-                style={{ ...fieldInp, marginBottom: 12, appearance: 'auto' as React.CSSProperties['appearance'] }}>
+              <select value={usuario ?? ''} onChange={e => setUsuario(e.target.value || null)} style={{ ...fieldInp, marginBottom: 12 }}>
                 <option value="">Sin asignar</option>
                 {miembros.map(m => <option key={m.id} value={m.id}>{m.nombre} {m.apellido}</option>)}
               </select>
             </>
           )}
 
-          {/* Cantidad + unidad (opcional, útil para ingredientes brutos) */}
+          {/* Cantidad + unidad */}
           <label style={lbl}>Cantidad (opcional)</label>
           <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
             <input value={cantidad} onChange={e => setCantidad(e.target.value)} placeholder="Ej: 250" inputMode="decimal" style={{ ...fieldInp, flex: 1 }} />
