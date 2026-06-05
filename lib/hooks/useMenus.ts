@@ -16,6 +16,7 @@ export interface MenuPreparacion {
   nombre: string
   prioridad: PrepPrioridad
   plaza: string | null
+  seccion_mise: string | null
   usuario_asignado: string | null
   cantidad: number | null
   unidad: string | null
@@ -41,6 +42,7 @@ export interface PrepInput {
   nombre: string
   prioridad: PrepPrioridad
   plaza: string | null
+  seccion_mise?: string | null
   usuario_asignado: string | null
   cantidad?: number | null
   unidad?: string | null
@@ -110,6 +112,7 @@ export function useMenus() {
         nombre: p.nombre,
         prioridad: p.prioridad,
         plaza: p.plaza,
+        seccion_mise: p.seccion_mise ?? null,
         usuario_asignado: p.usuario_asignado,
         cantidad: p.cantidad ?? null,
         unidad: p.unidad ?? null,
@@ -146,6 +149,7 @@ export function useMenus() {
         nombre: p.nombre,
         prioridad: p.prioridad,
         plaza: p.plaza,
+        seccion_mise: p.seccion_mise ?? null,
         usuario_asignado: p.usuario_asignado,
         cantidad: p.cantidad ?? null,
         unidad: p.unidad ?? null,

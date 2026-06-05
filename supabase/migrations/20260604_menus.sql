@@ -26,12 +26,16 @@ CREATE TABLE IF NOT EXISTS menu_preparaciones (
   nombre TEXT NOT NULL,
   prioridad TEXT NOT NULL DEFAULT 'media',  -- 'critica' | 'alta' | 'media' | 'baja'  (SP/P/REF/Check)
   plaza TEXT,                               -- plaza delegada (parrilla, fríos…)
+  seccion_mise TEXT,                        -- sección fina del checklist de mise (Heladera, Secos/Tuppers, Congelados…)
   usuario_asignado TEXT,                    -- equipo_miembros.id (como texto, igual que produccion_diaria)
   cantidad NUMERIC,
   unidad TEXT,
   orden INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Recargar el schema cache de PostgREST para que el cliente browser vea las tablas/columnas nuevas
+NOTIFY pgrst, 'reload schema';
 
 -- ── Índices ──
 CREATE INDEX IF NOT EXISTS idx_menus_restaurante ON menus(restaurante_id);

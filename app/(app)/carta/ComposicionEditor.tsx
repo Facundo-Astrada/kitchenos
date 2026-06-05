@@ -1,7 +1,9 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useEquipo } from '@/lib/hooks/useEquipo'
+import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
+import { createClient } from '@/lib/supabase/client'
 
 // ── Tipos públicos ──────────────────────────────────────────
 export type CompModo = 'plato' | 'menu' | 'evento'
@@ -14,6 +16,7 @@ export interface CompItemOut {
   nombre: string
   prioridad: CompPrioridad
   plaza: string | null
+  seccion_mise: string | null
   usuario_asignado: string | null
   cantidad: number | null
   unidad: string | null
@@ -91,6 +94,23 @@ export default function ComposicionEditor({
 }) {
   const { miembros } = useEquipo()
   const safeMiembros = miembros ?? []
+  const RESTAURANTE_ID = useRestauranteId()
+
+  // Secciones de mise (checklist_secciones) para rutear cada preparación
+  const [miseSecciones, setMiseSecciones] = useState<{ plaza: string; nombre: string }[]>([])
+  useEffect(() => {
+    if (!RESTAURANTE_ID) return
+    createClient().from('checklist_secciones').select('plaza, nombre').eq('restaurante_id', RESTAURANTE_ID)
+      .then(({ data }) => {
+        const seen = new Set<string>()
+        const out: { plaza: string; nombre: string }[] = []
+        for (const s of (data ?? []) as { plaza: string; nombre: string }[]) {
+          const k = `${s.plaza}|${s.nombre}`
+          if (!seen.has(k)) { seen.add(k); out.push(s) }
+        }
+        setMiseSecciones(out)
+      })
+  }, [RESTAURANTE_ID])
 
   const [modo, setModo] = useState<CompModo>(inicial?.modo ?? 'plato')
   const [nombre, setNombre] = useState(inicial?.nombre ?? '')
@@ -147,7 +167,7 @@ export default function ComposicionEditor({
 
   // ── Item ops ──
   function addItem(seccion: string) {
-    const nuevo: ItemRow = { _uid: uid(), _seccion: seccion, tipo: null, ref_id: null, nombre: '', prioridad: 'media', plaza: null, usuario_asignado: null, cantidad: null, unidad: null }
+    const nuevo: ItemRow = { _uid: uid(), _seccion: seccion, tipo: null, ref_id: null, nombre: '', prioridad: 'media', plaza: null, seccion_mise: null, usuario_asignado: null, cantidad: null, unidad: null }
     setItems(prev => [...prev, nuevo])
     setExpandedUid(nuevo._uid)
   }
@@ -224,44 +244,71 @@ export default function ComposicionEditor({
       </div>
 
       {/* Resumen vivo pegajoso */}
-      <div style={{ flexShrink: 0, background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '7px 14px', display: 'flex', gap: 14, alignItems: 'center' }}>
-        <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{items.filter(i => i.nombre.trim()).length} ítems</span>
-        <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Costo <b style={{ color: 'var(--text-1)', fontFamily: 'monospace' }}>{fmtMoney(costoTotal)}</b></span>
-        {fcPct != null && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>FC <b style={{ color: fcColor, fontFamily: 'monospace' }}>{fcPct.toFixed(0)}%</b></span>}
-        {esPlato && precioN > 0 && <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 'auto' }}>Margen <b style={{ color: precioN - costoTotal > 0 ? '#16a34a' : '#dc2626', fontFamily: 'monospace' }}>{fmtMoney(precioN - costoTotal)}</b></span>}
+      <div style={{ flexShrink: 0, background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '8px 12px', display: 'flex', gap: 8, alignItems: 'stretch' }}>
+        {(() => {
+          const Metric = ({ label, value, color }: { label: string; value: string; color?: string }) => (
+            <div style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 9, padding: '5px 8px', textAlign: 'center' }}>
+              <div style={{ fontSize: 8, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: color ?? 'var(--text-1)', fontFamily: 'monospace' }}>{value}</div>
+            </div>
+          )
+          return (
+            <>
+              <Metric label="Ítems" value={String(items.filter(i => i.nombre.trim()).length)} />
+              <Metric label="Costo" value={fmtMoney(costoTotal)} />
+              {fcPct != null && <Metric label="Food cost" value={`${fcPct.toFixed(0)}%`} color={fcColor} />}
+              {esPlato && precioN > 0 && <Metric label="Margen" value={fmtMoney(precioN - costoTotal)} color={precioN - costoTotal > 0 ? '#16a34a' : '#dc2626'} />}
+            </>
+          )
+        })()}
       </div>
 
       {/* Body */}
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '14px 14px 32px' }}>
-        <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder={esPlato ? 'Nombre del plato' : 'Nombre del menú'} style={{ ...inp, fontWeight: 700, marginBottom: 10 }} autoFocus />
+        {/* ── Bloque DATOS ── */}
+        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', margin: '0 2px 7px' }}>
+          {esPlato ? 'Datos del plato' : modo === 'evento' ? 'Datos del evento' : 'Datos del menú'}
+        </div>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 12, marginBottom: 18 }}>
+          <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder={esPlato ? 'Nombre del plato' : 'Nombre del menú'} style={{ ...inp, fontWeight: 700, marginBottom: 10 }} autoFocus />
 
-        {/* Campos de Plato */}
-        {esPlato && (
-          <>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-              <div style={{ position: 'relative', flex: 1 }}>
-                <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', fontSize: 14 }}>$</span>
-                <input value={precio} onChange={e => setPrecio(e.target.value)} placeholder="Precio" inputMode="decimal" style={{ ...inp, paddingLeft: 24 }} />
+          {/* Campos de Plato */}
+          {esPlato && (
+            <>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', fontSize: 14 }}>$</span>
+                  <input value={precio} onChange={e => setPrecio(e.target.value)} placeholder="Precio" inputMode="decimal" style={{ ...inp, paddingLeft: 24 }} />
+                </div>
+                <select value={categoria} onChange={e => setCategoria(e.target.value)} style={{ ...inp, width: 150 }}>
+                  {categoriasCarta.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
               </div>
-              <select value={categoria} onChange={e => setCategoria(e.target.value)} style={{ ...inp, width: 150 }}>
-                {categoriasCarta.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            {/* Tags dietarios */}
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-              {Object.entries(TAG_CFG).map(([id, cfg]) => {
-                const on = tags.includes(id)
-                return (
-                  <button key={id} onClick={() => setTags(prev => on ? prev.filter(t => t !== id) : [...prev, id])}
-                    style={{ padding: '4px 10px', borderRadius: 99, border: `1px solid ${on ? cfg.color : 'var(--border)'}`, background: on ? cfg.bg : 'var(--surface)', color: on ? cfg.color : 'var(--text-3)', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                    {cfg.label}
-                  </button>
-                )
-              })}
-            </div>
-          </>
-        )}
-        <input value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder="Descripción (opcional)" style={{ ...inp, marginBottom: 16 }} />
+              {/* Tags dietarios */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                {Object.entries(TAG_CFG).map(([id, cfg]) => {
+                  const on = tags.includes(id)
+                  return (
+                    <button key={id} onClick={() => setTags(prev => on ? prev.filter(t => t !== id) : [...prev, id])}
+                      style={{ padding: '4px 10px', borderRadius: 99, border: `1px solid ${on ? cfg.color : 'var(--border)'}`, background: on ? cfg.bg : 'var(--surface)', color: on ? cfg.color : 'var(--text-3)', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                      {cfg.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )}
+          <input value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder="Descripción (opcional)" style={{ ...inp }} />
+        </div>
+
+        {/* ── Bloque COMPOSICIÓN ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 2px 7px' }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em' }}>
+            {esPlato ? 'Componentes' : 'Composición'}
+          </span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', fontFamily: 'monospace' }}>· {items.filter(i => i.nombre.trim()).length}</span>
+          {!esPlato && <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 'auto' }}>{secciones.length} {secciones.length === 1 ? 'sección' : 'secciones'}</span>}
+        </div>
 
         {/* Secciones + ítems */}
         {secciones.map((sec, secIdx) => {
@@ -296,6 +343,7 @@ export default function ComposicionEditor({
                   onRemove={() => removeItem(it._uid)}
                   recetas={recetas} productos={productos} cartaItems={cartaItems}
                   miembros={safeMiembros} plazas={plazas} esPlato={esPlato}
+                  miseSecciones={miseSecciones}
                 />
               ))}
 
@@ -326,7 +374,7 @@ export default function ComposicionEditor({
 // ITEM ROW — fila colapsada + editor inline expandible
 // ════════════════════════════════════════════════════════════
 function ItemRowInline({
-  item, expanded, onToggle, onChange, onRemove, recetas, productos, cartaItems, miembros, plazas, esPlato,
+  item, expanded, onToggle, onChange, onRemove, recetas, productos, cartaItems, miembros, plazas, esPlato, miseSecciones,
 }: {
   item: ItemRow
   expanded: boolean
@@ -339,10 +387,18 @@ function ItemRowInline({
   miembros: { id: string; nombre: string; apellido: string }[]
   plazas: string[]
   esPlato: boolean
+  miseSecciones: { plaza: string; nombre: string }[]
 }) {
   const [search, setSearch] = useState('')
   const [showResults, setShowResults] = useState(false)
   const [nuevaPlaza, setNuevaPlaza] = useState('')
+  const [nuevaSecMise, setNuevaSecMise] = useState('')
+
+  // Secciones de mise disponibles para la plaza elegida (si no hay plaza, todas las distintas)
+  const seccionesParaPlaza = useMemo(() => {
+    const rel = item.plaza ? miseSecciones.filter(s => s.plaza === item.plaza) : miseSecciones
+    return Array.from(new Set(rel.map(s => s.nombre)))
+  }, [miseSecciones, item.plaza])
 
   const results = useMemo(() => {
     if (!search.trim()) return []
@@ -376,9 +432,10 @@ function ItemRowInline({
           <div style={{ fontSize: 13, fontWeight: 600, color: item.nombre ? 'var(--text-1)' : 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {item.nombre || 'Tocá para completar…'}
           </div>
-          {!expanded && (item.plaza || miembro || item.cantidad != null) && (
+          {!expanded && (item.plaza || item.seccion_mise || miembro || item.cantidad != null) && (
             <div style={{ display: 'flex', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
               {item.plaza && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(67,97,160,.1)', color: 'var(--accent)', textTransform: 'capitalize' }}>{item.plaza}</span>}
+              {item.seccion_mise && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: '#ecfeff', color: '#0e7490' }}>{item.seccion_mise}</span>}
               {miembro && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: '#f1f5f9', color: '#475569' }}>{miembro.nombre}</span>}
               {item.cantidad != null && <span style={{ fontSize: 9, color: 'var(--text-3)', fontFamily: 'monospace' }}>{item.cantidad}{item.unidad ?? ''}</span>}
             </div>
@@ -445,6 +502,23 @@ function ItemRowInline({
               <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
             </button>
           </div>
+
+          {/* Sección de mise — dónde aparece en el checklist de Mise (solo menú/evento) */}
+          {!esPlato && (
+            <>
+              <label style={lbl}>Sección de mise <span style={{ textTransform: 'none', fontWeight: 500, color: 'var(--text-3)' }}>(en qué parte del checklist va)</span></label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 7 }}>
+                {seccionesParaPlaza.map(sn => <button key={sn} onClick={() => onChange({ seccion_mise: item.seccion_mise === sn ? null : sn })} style={chip(item.seccion_mise === sn)}>{sn}</button>)}
+                {seccionesParaPlaza.length === 0 && <span style={{ fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic' }}>{item.plaza ? 'Sin secciones cargadas para esta plaza' : 'Elegí una plaza o creá una sección abajo'}</span>}
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                <input value={nuevaSecMise} onChange={e => setNuevaSecMise(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && nuevaSecMise.trim()) { e.preventDefault(); onChange({ seccion_mise: nuevaSecMise.trim() }); setNuevaSecMise('') } }} placeholder="Crear sección de mise…" style={{ ...fieldInp, flex: 1 }} />
+                <button onClick={() => { if (nuevaSecMise.trim()) { onChange({ seccion_mise: nuevaSecMise.trim() }); setNuevaSecMise('') } }} disabled={!nuevaSecMise.trim()} style={{ padding: '0 13px', borderRadius: 9, border: 'none', background: nuevaSecMise.trim() ? 'var(--accent)' : 'var(--border)', color: '#fff', cursor: nuevaSecMise.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
+                </button>
+              </div>
+            </>
+          )}
 
           {/* Asignar + cantidad */}
           <div style={{ display: 'flex', gap: 8 }}>
