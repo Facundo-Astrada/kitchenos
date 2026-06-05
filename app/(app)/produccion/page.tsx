@@ -37,6 +37,16 @@ const STATUS_COLORS: Record<StatusProduccion, { bg: string; text: string; border
   listo: { bg: '#dcfce7', text: '#15803d', border: '#86efac' },
 }
 
+// Normaliza la plaza del menú al enum del checklist de mise (sin acentos). null = plaza no reconocida.
+const PLAZAS_MISE = ['parrilla', 'frios', 'calientes', 'pase', 'pasteleria', 'panaderia', 'general']
+function normPlaza(s: string | null | undefined): string | null {
+  if (!s) return null
+  const m = s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
+  return PLAZAS_MISE.includes(m) ? m : null
+}
+// Mapea prioridad de tarea (critica/alta/media/baja) a la de mise (sp/p/ref/chk)
+const PRIO_MISE: Record<string, 'sp' | 'p' | 'ref' | 'chk'> = { critica: 'sp', alta: 'p', media: 'ref', baja: 'chk' }
+
 type View = 'planilla' | 'crear' | 'editar' | 'ingredientes' | 'duplicar'
 
 export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}) {
@@ -142,13 +152,62 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
       }))
       const { error } = await supabase.from('tareas').insert(rows)
       if (error) throw error
+
+      // ── Fase 3: sincronizar con Mise (crear checklist_items en plaza+sección) ──
+      const miseCreados = await sincronizarMise(supabase, menu)
+
       setShowMenuPicker(false)
-      showToast(`${rows.length} ${rows.length === 1 ? 'tarea' : 'tareas'} cargadas en Producción`)
+      const tareasMsg = `${rows.length} ${rows.length === 1 ? 'tarea' : 'tareas'} en Producción`
+      showToast(miseCreados > 0 ? `${tareasMsg} + ${miseCreados} en Mise` : tareasMsg)
     } catch (e: unknown) {
       showToast('Error: ' + (e instanceof Error ? e.message : 'desconocido'))
     } finally {
       setCargandoMenu(false)
     }
+  }
+
+  // Crea los items de mise para las preparaciones con plaza+sección reconocidas (dedupe).
+  async function sincronizarMise(supabase: ReturnType<typeof createClient>, menu: MenuConPreparaciones): Promise<number> {
+    const prepsMise = menu.preparaciones.filter(p => normPlaza(p.plaza) && p.seccion_mise)
+    if (prepsMise.length === 0) return 0
+
+    const { data: secData } = await supabase.from('checklist_secciones').select('id, plaza, nombre').eq('restaurante_id', RESTAURANTE_ID)
+    const secMap = new Map<string, string>()
+    for (const s of (secData ?? []) as { id: string; plaza: string; nombre: string }[]) secMap.set(`${s.plaza}|${s.nombre.toLowerCase()}`, s.id)
+
+    const { data: itemData } = await supabase.from('checklist_items').select('plaza, seccion_id, nombre').eq('restaurante_id', RESTAURANTE_ID)
+    const itemSet = new Set<string>()
+    for (const it of (itemData ?? []) as { plaza: string; seccion_id: string; nombre: string }[]) itemSet.add(`${it.plaza}|${it.seccion_id}|${(it.nombre ?? '').toLowerCase()}`)
+
+    type ItemMise = { plaza: string; seccion_id: string; nombre: string; cantidad: number; unidad: string; prioridad: string; receta_id: string | null; orden: number; restaurante_id: string }
+    const toInsert: ItemMise[] = []
+    for (const p of prepsMise) {
+      const plaza = normPlaza(p.plaza)!
+      const secNombre = p.seccion_mise!
+      const secKey = `${plaza}|${secNombre.toLowerCase()}`
+      let secId = secMap.get(secKey)
+      if (!secId) {
+        const { data: nuevaSec, error: secErr } = await supabase.from('checklist_secciones')
+          .insert({ nombre: secNombre, icono: 'tapas', orden: 99, plaza, restaurante_id: RESTAURANTE_ID })
+          .select('id').single()
+        if (secErr || !nuevaSec) continue
+        secId = nuevaSec.id as string
+        secMap.set(secKey, secId)
+      }
+      const dedupeKey = `${plaza}|${secId}|${p.nombre.toLowerCase()}`
+      if (itemSet.has(dedupeKey)) continue
+      itemSet.add(dedupeKey)
+      toInsert.push({
+        plaza, seccion_id: secId, nombre: p.nombre,
+        cantidad: p.cantidad ?? 0, unidad: p.unidad ?? 'u',
+        prioridad: PRIO_MISE[p.prioridad] ?? 'ref',
+        receta_id: p.tipo === 'receta' ? p.ref_id : null,
+        orden: 0, restaurante_id: RESTAURANTE_ID,
+      })
+    }
+    if (toInsert.length === 0) return 0
+    const { error } = await supabase.from('checklist_items').insert(toInsert)
+    return error ? 0 : toInsert.length
   }
 
   // ── Menu tags present in today's produccion ────────────────
