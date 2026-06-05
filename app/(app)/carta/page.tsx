@@ -2832,53 +2832,62 @@ export default function CartaPage() {
 
   // ── Editor unificado: guardar Plato / Menú / Evento ──
   const handleComposicionSave = async (payload: CompPayload) => {
-    if (payload.tipo === 'plato') {
-      const newId = await crearItem({
-        nombre: payload.nombre,
-        descripcion: payload.descripcion,
-        precio_venta: payload.precio,
-        categoria: payload.categoria as CategoriaCartaItem,
-        receta_id: null,
-      })
-      if (payload.tags.length > 0) await actualizarTags(newId, payload.tags)
-      const compItems = payload.secciones.flatMap(s => s.items)
-      const supa = createClient()
-      for (const it of compItems) {
-        if (it.tipo === 'receta' && it.ref_id) {
-          await agregarPlatoReceta(newId, it.ref_id, it.cantidad ?? 1)
-          if (it.plaza) {
-            await supa.from('plato_recetas')
-              .update({ plaza: it.plaza })
-              .eq('plato_id', newId).eq('receta_id', it.ref_id)
+    try {
+      if (payload.tipo === 'plato') {
+        const newId = await crearItem({
+          nombre: payload.nombre,
+          descripcion: payload.descripcion,
+          precio_venta: payload.precio,
+          categoria: payload.categoria as CategoriaCartaItem,
+          receta_id: null,
+        })
+        if (payload.tags.length > 0) await actualizarTags(newId, payload.tags)
+        const compItems = payload.secciones.flatMap(s => s.items)
+        const supa = createClient()
+        for (const it of compItems) {
+          if (it.tipo === 'receta' && it.ref_id) {
+            await agregarPlatoReceta(newId, it.ref_id, it.cantidad ?? 1)
+            if (it.plaza) {
+              await supa.from('plato_recetas')
+                .update({ plaza: it.plaza })
+                .eq('plato_id', newId).eq('receta_id', it.ref_id)
+            }
           }
         }
+        setToast('Plato creado')
+        setComposing(null)
+        setView('list')
+        return
       }
-      setToast('Plato creado')
+      // Menú / Evento
+      const preps = payload.secciones.flatMap(s => s.items.map(it => ({
+        paso: s.nombre,
+        tipo: it.tipo,
+        ref_id: it.ref_id,
+        nombre: it.nombre,
+        prioridad: it.prioridad,
+        plaza: it.plaza,
+        usuario_asignado: it.usuario_asignado,
+        cantidad: it.cantidad,
+        unidad: it.unidad,
+      })))
+      const data = {
+        nombre: payload.nombre,
+        tipo: (payload.tipo === 'evento' ? 'evento' : 'fijo') as 'fijo' | 'evento',
+        descripcion: payload.descripcion,
+      }
+      if (composing?.menuEditId) {
+        await actualizarMenu(composing.menuEditId, data, preps)
+      } else {
+        const newId = await crearMenu(data, preps)
+        if (!newId) throw new Error('No se pudo crear el menú (sin restaurante activo)')
+      }
+      setToast(payload.tipo === 'evento' ? 'Evento guardado' : 'Menú guardado')
       setComposing(null)
-      setView('list')
-      return
+    } catch (e) {
+      console.error('[Carta] handleComposicionSave error:', e)
+      setToast('Error al guardar: ' + (e instanceof Error ? e.message : 'desconocido'))
     }
-    // Menú / Evento
-    const preps = payload.secciones.flatMap(s => s.items.map(it => ({
-      paso: s.nombre,
-      tipo: it.tipo,
-      ref_id: it.ref_id,
-      nombre: it.nombre,
-      prioridad: it.prioridad,
-      plaza: it.plaza,
-      usuario_asignado: it.usuario_asignado,
-      cantidad: it.cantidad,
-      unidad: it.unidad,
-    })))
-    const data = {
-      nombre: payload.nombre,
-      tipo: (payload.tipo === 'evento' ? 'evento' : 'fijo') as 'fijo' | 'evento',
-      descripcion: payload.descripcion,
-    }
-    if (composing?.menuEditId) await actualizarMenu(composing.menuEditId, data, preps)
-    else await crearMenu(data, preps)
-    setToast(payload.tipo === 'evento' ? 'Evento guardado' : 'Menú guardado')
-    setComposing(null)
   }
 
   // Mapear un menú existente al formato del editor unificado
