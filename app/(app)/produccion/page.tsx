@@ -505,30 +505,47 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
       <div>
         {/* Planilla: visible en modo planilla normal y también cuando se está creando/editando */}
         {(view === 'planilla' || view === 'crear' || view === 'editar') && (
-          produccion.length === 0 && platos.length > 0 && view === 'planilla' ? (
-            /* Sin producción para este día — mostrar CTA para activar */
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 24px', gap: 12 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'var(--text-3)' }}>calendar_today</span>
+          produccion.length === 0 && view === 'planilla' ? (
+            /* Sin producción para este día — ofrecer cargar un menú del catálogo */
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', gap: 10 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'var(--text-3)' }}>restaurant_menu</span>
               <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-2)', margin: 0, textAlign: 'center' }}>
-                Sin menú para este día
+                Sin menú cargado para este día
               </p>
-              <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0, textAlign: 'center' }}>
-                Tocá el día en el calendario para activar el menú, o usá el botón de abajo.
-              </p>
-              <button
-                onClick={async () => {
-                  setActivatingDay(true)
-                  try {
-                    await initProduccion(fecha)
-                    const refreshed = await fetchFechasMes(mesActual)
-                    setFechasMes(refreshed)
-                  } finally { setActivatingDay(false) }
-                }}
-                disabled={activatingDay}
-                style={{ marginTop: 8, padding: '12px 24px', borderRadius: 12, border: 'none', background: 'var(--navy)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: activatingDay ? 0.6 : 1 }}
-              >
-                {activatingDay ? 'Activando...' : 'Activar menú para este día'}
-              </button>
+              {catalogoMenus.length > 0 ? (
+                <>
+                  <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0, textAlign: 'center' }}>
+                    Tenés {catalogoMenus.length} {catalogoMenus.length === 1 ? 'menú' : 'menús'} en el catálogo. Cargá uno para generar las tareas y el mise del día.
+                  </p>
+                  <button
+                    onClick={() => setShowMenuPicker(true)}
+                    style={{ marginTop: 6, padding: '13px 26px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, var(--navy), #4361a0)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 16px rgba(28,45,74,.35)' }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>menu_book</span>
+                    Cargar menú del catálogo
+                  </button>
+                </>
+              ) : (
+                <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0, textAlign: 'center' }}>
+                  Armá un menú en <b>Carta → Menús</b> y después cargalo acá.
+                </p>
+              )}
+              {platos.length > 0 && (
+                <button
+                  onClick={async () => {
+                    setActivatingDay(true)
+                    try {
+                      await initProduccion(fecha)
+                      const refreshed = await fetchFechasMes(mesActual)
+                      setFechasMes(refreshed)
+                    } finally { setActivatingDay(false) }
+                  }}
+                  disabled={activatingDay}
+                  style={{ marginTop: 4, padding: '9px 18px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: activatingDay ? 0.6 : 1 }}
+                >
+                  {activatingDay ? 'Activando...' : 'O activar el menú base de platos'}
+                </button>
+              )}
             </div>
           ) : (
             <PlanillaView
