@@ -10,7 +10,9 @@ import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
 import { usePackagingGrupos, type PackagingGrupo } from '@/lib/hooks/usePackagingGrupos'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import { createClient } from '@/lib/supabase/client'
+import { useMenus, type MenuConPreparaciones } from '@/lib/hooks/useMenus'
 import MenusView from './MenusView'
+import ComposicionEditor, { type CompPayload, type CompInicial } from './ComposicionEditor'
 // ── Helpers ─────────────────────────────────────────────
 const fmtMoney = (n: number) =>
   n > 0 ? `$${n.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—'
@@ -2742,6 +2744,7 @@ export default function CartaPage() {
   const { recetas } = useRecetas()
   const { productos } = useStock()
   const { grupos, crearGrupo, eliminarGrupo, aplicarGrupoAPlatos } = usePackagingGrupos()
+  const { crearMenu, actualizarMenu } = useMenus()
 
   const RESTAURANTE_ID = useRestauranteId()
   const { puedeEditar, isAdmin } = usePermisos()
@@ -2753,6 +2756,8 @@ export default function CartaPage() {
   const [toast, setToast] = useState('')
   const [showGrupos, setShowGrupos] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  // Editor unificado de composición (Plato / Menú / Evento)
+  const [composing, setComposing] = useState<null | { inicial?: CompInicial; menuEditId?: string }>(null)
 
   // Derive selectedItem from fresh items (stays current after plato_recetas changes)
   const selectedItem = useMemo(
@@ -2823,6 +2828,84 @@ export default function CartaPage() {
   const handleCardClick = (item: CartaItemEnriquecido) => {
     setSelectedItemId(item.id)
     setView('detail')
+  }
+
+  // ── Editor unificado: guardar Plato / Menú / Evento ──
+  const handleComposicionSave = async (payload: CompPayload) => {
+    if (payload.tipo === 'plato') {
+      const newId = await crearItem({
+        nombre: payload.nombre,
+        descripcion: payload.descripcion,
+        precio_venta: payload.precio,
+        categoria: payload.categoria as CategoriaCartaItem,
+        receta_id: null,
+      })
+      if (payload.tags.length > 0) await actualizarTags(newId, payload.tags)
+      const compItems = payload.secciones.flatMap(s => s.items)
+      const supa = createClient()
+      for (const it of compItems) {
+        if (it.tipo === 'receta' && it.ref_id) {
+          await agregarPlatoReceta(newId, it.ref_id, it.cantidad ?? 1)
+          if (it.plaza) {
+            await supa.from('plato_recetas')
+              .update({ plaza: it.plaza })
+              .eq('plato_id', newId).eq('receta_id', it.ref_id)
+          }
+        }
+      }
+      setToast('Plato creado')
+      setComposing(null)
+      setView('list')
+      return
+    }
+    // Menú / Evento
+    const preps = payload.secciones.flatMap(s => s.items.map(it => ({
+      paso: s.nombre,
+      tipo: it.tipo,
+      ref_id: it.ref_id,
+      nombre: it.nombre,
+      prioridad: it.prioridad,
+      plaza: it.plaza,
+      usuario_asignado: it.usuario_asignado,
+      cantidad: it.cantidad,
+      unidad: it.unidad,
+    })))
+    const data = {
+      nombre: payload.nombre,
+      tipo: (payload.tipo === 'evento' ? 'evento' : 'fijo') as 'fijo' | 'evento',
+      descripcion: payload.descripcion,
+    }
+    if (composing?.menuEditId) await actualizarMenu(composing.menuEditId, data, preps)
+    else await crearMenu(data, preps)
+    setToast(payload.tipo === 'evento' ? 'Evento guardado' : 'Menú guardado')
+    setComposing(null)
+  }
+
+  // Mapear un menú existente al formato del editor unificado
+  const menuToInicial = (menu: MenuConPreparaciones): CompInicial => {
+    const secOrden: string[] = []
+    for (const p of menu.preparaciones) if (!secOrden.includes(p.paso)) secOrden.push(p.paso)
+    return {
+      modo: menu.tipo === 'evento' ? 'evento' : 'menu',
+      nombre: menu.nombre,
+      descripcion: menu.descripcion,
+      precio: 0,
+      categoria: '',
+      tags: [],
+      secciones: secOrden.map(sec => ({
+        nombre: sec,
+        items: menu.preparaciones.filter(p => p.paso === sec).map(p => ({
+          tipo: p.tipo,
+          ref_id: p.ref_id,
+          nombre: p.nombre,
+          prioridad: p.prioridad,
+          plaza: p.plaza,
+          usuario_asignado: p.usuario_asignado,
+          cantidad: p.cantidad,
+          unidad: p.unidad,
+        })),
+      })),
+    }
   }
 
   const handleCrear = async (form: FormPlato) => {
@@ -2914,15 +2997,32 @@ export default function CartaPage() {
     )
   }
 
+  // ── Editor unificado (Plato / Menú / Evento) ──
+  if (composing) {
+    return (
+      <>
+        <ComposicionEditor
+          inicial={composing.inicial}
+          recetas={recetas.map(r => ({ id: r.id, nombre: r.nombre, costo: r.food_cost.costo_porcion }))}
+          productos={productos.map(p => ({ id: p.id, nombre: p.nombre, costo: p.precio_unitario }))}
+          cartaItems={items.map(i => ({ id: i.id, nombre: i.nombre, costo: i.costo_porcion ?? 0 }))}
+          categoriasCarta={categorias.length > 0 ? categorias.map(c => c.nombre) : CATEGORIAS}
+          onSave={handleComposicionSave}
+          onCancel={() => setComposing(null)}
+        />
+        {toast && <Toast msg={toast} onDone={() => setToast('')} />}
+      </>
+    )
+  }
+
   // ── Menús ──
   if (view === 'menus') {
     return (
       <>
         <MenusView
-          recetas={recetas.map(r => ({ id: r.id, nombre: r.nombre }))}
-          productos={productos.map(p => ({ id: p.id, nombre: p.nombre }))}
-          cartaItems={items.map(i => ({ id: i.id, nombre: i.nombre }))}
           onBack={() => setView('list')}
+          onNuevo={() => setComposing({ inicial: { modo: 'menu', nombre: '', descripcion: null, precio: 0, categoria: '', tags: [], secciones: [] } })}
+          onEditar={(menu) => setComposing({ inicial: menuToInicial(menu), menuEditId: menu.id })}
           onToast={setToast}
         />
         {toast && <Toast msg={toast} onDone={() => setToast('')} />}
@@ -3010,7 +3110,7 @@ export default function CartaPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <span style={{ color: '#fff', fontWeight: 700, fontSize: 20 }}>Carta</span>
           {canEdit && (
-            <button data-coach-target="carta-nuevo" onClick={() => setView('nuevo')} style={{
+            <button data-coach-target="carta-nuevo" onClick={() => setComposing({})} style={{
               background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,.3)',
               borderRadius: 10, padding: '7px 14px', color: '#fff',
               fontWeight: 700, fontSize: 13, cursor: 'pointer',
@@ -3144,7 +3244,7 @@ export default function CartaPage() {
             <p style={{ color: 'var(--text-3)', fontSize: 13 }}>
               {filter === 'Todas' ? 'No hay platos en la carta' : `No hay platos en ${filter}`}
             </p>
-            <button onClick={() => setView('nuevo')} style={{
+            <button onClick={() => setComposing({})} style={{
               padding: '8px 16px', borderRadius: 8, border: 'none',
               background: 'var(--navy)', color: '#fff', fontWeight: 600,
               fontSize: 13, cursor: 'pointer', marginTop: 4,
