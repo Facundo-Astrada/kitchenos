@@ -7,6 +7,7 @@ import { useProduccion, type PlatoConComponentes } from '@/lib/hooks/useProducci
 import { useEquipo } from '@/lib/hooks/useEquipo'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { useTareas } from '@/lib/hooks/useTareas'
+import { useMenus, type MenuConPreparaciones } from '@/lib/hooks/useMenus'
 import { createClient } from '@/lib/supabase/client'
 import type { StatusProduccion, CategoriaPlato, PlatoComponente } from '@/types'
 import { CATEGORIAS_PLATO } from '@/types'
@@ -53,6 +54,9 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
 
   const { registrarMerma } = useMerma()
   const { agregarTarea } = useTareas()
+  const { menus: catalogoMenus } = useMenus()
+  const [showMenuPicker, setShowMenuPicker] = useState(false)
+  const [cargandoMenu, setCargandoMenu] = useState(false)
   const puedeDelegar = authPerfil?.rol === 'admin' || authPerfil?.rol === 'chef'
   const [fecha, setFecha] = useState(() => fmtDate(new Date()))
   const [view, setView] = useState<View>('planilla')
@@ -111,6 +115,40 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
   function openMerma(nombre: string) {
     setMermaPrefill({ producto_nombre: nombre })
     setMermaOpen(true)
+  }
+
+  // ── Fase 2: cargar un menú del catálogo → genera tareas del día en Producción ──
+  async function cargarMenu(menu: MenuConPreparaciones) {
+    if (!RESTAURANTE_ID || menu.preparaciones.length === 0) { setShowMenuPicker(false); return }
+    setCargandoMenu(true)
+    try {
+      const supabase = createClient()
+      const rows = menu.preparaciones.map((p, i) => ({
+        titulo: p.nombre,
+        descripcion: p.paso ? `${menu.nombre} · ${p.paso}` : menu.nombre,
+        status: 'pendiente',
+        estado: 'pendiente',
+        prioridad: p.prioridad,
+        categoria: 'produccion',
+        modo: 'carta',                       // se agrupa por prioridad en Producción
+        seccion: p.seccion_mise ?? null,     // sección de mise (para sincronizar luego)
+        plaza: p.plaza,
+        asignado_a: p.usuario_asignado,
+        receta_id: p.tipo === 'receta' ? p.ref_id : null,
+        cantidad: p.cantidad,
+        turno_fecha: fecha,
+        orden: i,
+        restaurante_id: RESTAURANTE_ID,
+      }))
+      const { error } = await supabase.from('tareas').insert(rows)
+      if (error) throw error
+      setShowMenuPicker(false)
+      showToast(`${rows.length} ${rows.length === 1 ? 'tarea' : 'tareas'} cargadas en Producción`)
+    } catch (e: unknown) {
+      showToast('Error: ' + (e instanceof Error ? e.message : 'desconocido'))
+    } finally {
+      setCargandoMenu(false)
+    }
   }
 
   // ── Menu tags present in today's produccion ────────────────
@@ -288,6 +326,10 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
                 Cancelar
               </button>
             )}
+            <button onClick={() => setShowMenuPicker(true)} style={{ background: '#fff', border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: 'var(--navy)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>menu_book</span>
+              Cargar menú
+            </button>
             <button onClick={() => setView('crear')} style={{ background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer' }}>
               + Plato
             </button>
@@ -535,6 +577,52 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
         }}
         prefill={mermaPrefill}
       />
+
+      {/* ── Fase 2: selector de menú del catálogo ── */}
+      {showMenuPicker && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowMenuPicker(false) }}
+        >
+          <div style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 520, maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '18px 16px 12px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>Cargar menú</div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Genera las tareas para {fmtDateLabel(new Date(fecha + 'T12:00:00'))}</div>
+              </div>
+              <button onClick={() => setShowMenuPicker(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-3)' }}>close</span>
+              </button>
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1, padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}>
+              {catalogoMenus.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-3)' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 40, opacity: .5 }}>menu_book</span>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginTop: 8 }}>No hay menús en el catálogo</div>
+                  <div style={{ fontSize: 11, marginTop: 4 }}>Armá uno en Carta → Menús</div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {catalogoMenus.map(menu => (
+                    <button key={menu.id} onClick={() => !cargandoMenu && cargarMenu(menu)} disabled={cargandoMenu}
+                      style={{ textAlign: 'left', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 14px', cursor: cargandoMenu ? 'default' : 'pointer', fontFamily: 'inherit', opacity: cargandoMenu ? .6 : 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 99, textTransform: 'uppercase', letterSpacing: '.04em', background: menu.tipo === 'evento' ? '#ede9fe' : '#e0f2fe', color: menu.tipo === 'evento' ? '#6d28d9' : '#075985' }}>
+                          {menu.tipo === 'evento' ? 'Evento' : 'Fijo'}
+                        </span>
+                        <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{menu.nombre}</span>
+                        <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>{menu.preparaciones.length} prep.</span>
+                        <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--accent)' }}>add_circle</span>
+                      </div>
+                      {menu.descripcion && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>{menu.descripcion}</div>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Menu tag modal */}
       {menuTagModal && (
