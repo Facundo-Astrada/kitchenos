@@ -133,32 +133,14 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
     setCargandoMenu(true)
     try {
       const supabase = createClient()
-      const rows = menu.preparaciones.map((p, i) => ({
-        titulo: p.nombre,
-        descripcion: p.paso ? `${menu.nombre} · ${p.paso}` : menu.nombre,
-        status: 'pendiente',
-        estado: 'pendiente',
-        prioridad: p.prioridad,
-        categoria: 'produccion',
-        modo: 'carta',                       // se agrupa por prioridad en Producción
-        seccion: p.seccion_mise ?? 'general',  // NOT NULL en tareas; default 'general'
-        plaza: p.plaza,
-        asignado_a: p.usuario_asignado,
-        receta_id: p.tipo === 'receta' ? p.ref_id : null,
-        cantidad: p.cantidad,
-        turno_fecha: fecha,
-        orden: i,
-        restaurante_id: RESTAURANTE_ID,
-      }))
-      const { error } = await supabase.from('tareas').insert(rows)
-      if (error) throw error
-
-      // ── Fase 3: sincronizar con Mise (crear checklist_items en plaza+sección) ──
+      // El menú llena MISE: cada preparación se vuelve un item de mise en su plaza+sección.
+      // Desde Mise, "crear tarea" genera la tarea en Producción (tildable en verde).
       const miseCreados = await sincronizarMise(supabase, menu)
 
       setShowMenuPicker(false)
-      const tareasMsg = `${rows.length} ${rows.length === 1 ? 'tarea' : 'tareas'} en Producción`
-      showToast(miseCreados > 0 ? `${tareasMsg} + ${miseCreados} en Mise` : tareasMsg)
+      showToast(miseCreados > 0
+        ? `${miseCreados} ${miseCreados === 1 ? 'preparación cargada' : 'preparaciones cargadas'} en Mise`
+        : 'El menú no tiene preparaciones para cargar')
     } catch (e: unknown) {
       // Los errores de Supabase no son instancias de Error: extraer .message del objeto
       const msg = e instanceof Error ? e.message
@@ -170,10 +152,9 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
     }
   }
 
-  // Crea los items de mise para las preparaciones con plaza+sección reconocidas (dedupe).
+  // Llena Mise: crea un checklist_item por cada preparación (plaza normalizada, sección por defecto si falta). Dedupe.
   async function sincronizarMise(supabase: ReturnType<typeof createClient>, menu: MenuConPreparaciones): Promise<number> {
-    const prepsMise = menu.preparaciones.filter(p => normPlaza(p.plaza) && p.seccion_mise)
-    if (prepsMise.length === 0) return 0
+    if (menu.preparaciones.length === 0) return 0
 
     const { data: secData } = await supabase.from('checklist_secciones').select('id, plaza, nombre').eq('restaurante_id', RESTAURANTE_ID)
     const secMap = new Map<string, string>()
@@ -185,9 +166,9 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
 
     type ItemMise = { plaza: string; seccion_id: string; nombre: string; cantidad: number; unidad: string; prioridad: string; receta_id: string | null; orden: number; restaurante_id: string }
     const toInsert: ItemMise[] = []
-    for (const p of prepsMise) {
-      const plaza = normPlaza(p.plaza)!
-      const secNombre = p.seccion_mise!
+    for (const p of menu.preparaciones) {
+      const plaza = normPlaza(p.plaza) ?? 'general'
+      const secNombre = p.seccion_mise || 'Producción del menú'
       const secKey = `${plaza}|${secNombre.toLowerCase()}`
       let secId = secMap.get(secKey)
       if (!secId) {
@@ -519,7 +500,7 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
               {catalogoMenus.length > 0 ? (
                 <>
                   <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0, textAlign: 'center' }}>
-                    Tenés {catalogoMenus.length} {catalogoMenus.length === 1 ? 'menú' : 'menús'} en el catálogo. Cargá uno para generar las tareas y el mise del día.
+                    Tenés {catalogoMenus.length} {catalogoMenus.length === 1 ? 'menú' : 'menús'} en el catálogo. Cargá uno para llenar el Mise; desde ahí creás las tareas de Producción.
                   </p>
                   <button
                     onClick={() => setShowMenuPicker(true)}
@@ -652,7 +633,7 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
             <div style={{ padding: '18px 16px 12px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)' }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>Cargar menú</div>
-                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Genera las tareas para {fmtDateLabel(new Date(fecha + 'T12:00:00'))}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Carga sus preparaciones en Mise</div>
               </div>
               <button onClick={() => setShowMenuPicker(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-3)' }}>close</span>
