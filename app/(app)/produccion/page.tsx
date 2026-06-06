@@ -55,7 +55,7 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
   const { miembros } = useEquipo()
 
   const { registrarMerma } = useMerma()
-  const { agregarTarea, tareas, cambiarEstado, eliminarTarea } = useTareas()
+  const { agregarTarea, tareas, eliminarTarea } = useTareas()
   const { menus: catalogoMenus } = useMenus()
   const [showMenuPicker, setShowMenuPicker] = useState(false)
   const [cargandoMenu, setCargandoMenu] = useState(false)
@@ -471,9 +471,15 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
 
       {/* Content */}
       <div>
-        {/* Vista del menú activo del día (Planificación) */}
+        {/* Vista del menú activo del día (Planificación organiza; la ejecución es en Producción) */}
         {view === 'planilla' && menuTareasDelDia.length > 0 && (
-          <MenuActivoView tareas={menuTareasDelDia} miembros={miembros} onToggle={(id, listo) => cambiarEstado(id, listo ? 'listo' : 'pendiente')} onVaciar={vaciarMenuDelDia} onActivarOtro={() => setShowMenuPicker(true)} />
+          <MenuActivoView
+            tareas={menuTareasDelDia}
+            miembros={miembros}
+            onVaciar={vaciarMenuDelDia}
+            onActivarOtro={() => setShowMenuPicker(true)}
+            onIrAProduccion={() => window.dispatchEvent(new CustomEvent('kc-set-tab', { detail: { tab: 'produccion' } }))}
+          />
         )}
 
         {/* Planilla / estado vacío — solo si NO hay menú activo del día */}
@@ -1778,13 +1784,13 @@ const PRIO_BADGE: Record<string, { label: string; color: string; bg: string }> =
 }
 
 function MenuActivoView({
-  tareas, miembros, onToggle, onVaciar, onActivarOtro,
+  tareas, miembros, onVaciar, onActivarOtro, onIrAProduccion,
 }: {
   tareas: Tarea[]
   miembros: { id: string; nombre: string; apellido: string }[]
-  onToggle: (id: string, listo: boolean) => void
   onVaciar: () => void
   onActivarOtro: () => void
+  onIrAProduccion: () => void
 }) {
   const grouped = useMemo(() => {
     const m = new Map<string, Tarea[]>()
@@ -1804,20 +1810,26 @@ function MenuActivoView({
   return (
     <div style={{ padding: '10px 12px 120px' }}>
       {/* Resumen + acciones */}
-      <div style={{ margin: '0 2px 10px', padding: '10px 12px', borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)' }}>
+      <div style={{ margin: '0 2px 10px', padding: '12px', borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>Menú activo · {listos}/{total} listas</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Menú activo · {listos}/{total} listas</span>
           <div style={{ display: 'flex', gap: 6 }}>
             <button onClick={onActivarOtro} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 700, color: 'var(--accent)', cursor: 'pointer', fontFamily: 'inherit' }}>+ Otro</button>
             <button onClick={onVaciar} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 700, color: '#ef4444', cursor: 'pointer', fontFamily: 'inherit' }}>Vaciar</button>
           </div>
         </div>
-        <div style={{ height: 6, background: 'var(--border)', borderRadius: 99, overflow: 'hidden' }}>
+        <div style={{ height: 6, background: 'var(--border)', borderRadius: 99, overflow: 'hidden', marginBottom: 10 }}>
           <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? '#22c55e' : '#3b82f6', transition: 'width .3s' }} />
         </div>
+        {/* La ejecución (tildar) se hace en Producción */}
+        <button onClick={onIrAProduccion} style={{ width: '100%', padding: '11px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, var(--navy), #4361a0)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>task_alt</span>
+          Ir a Producción a ejecutar
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_forward</span>
+        </button>
       </div>
 
-      {/* Secciones del menú */}
+      {/* Secciones del menú — resumen read-only (la ejecución es en Producción) */}
       {grouped.map(([sec, items]) => {
         const listosSec = items.filter(t => t.estado === 'listo').length
         return (
@@ -1826,18 +1838,16 @@ function MenuActivoView({
               <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{sec}</span>
               <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'monospace', color: listosSec === items.length ? '#22c55e' : 'var(--text-3)' }}>{listosSec}/{items.length}</span>
             </div>
-            <div style={{ padding: '6px 8px 8px' }}>
+            <div style={{ padding: '4px 12px 8px' }}>
               {items.map(t => {
                 const listo = t.estado === 'listo'
                 const badge = PRIO_BADGE[t.prioridad ?? 'media'] ?? PRIO_BADGE.media
                 const miembro = miembros.find(m => m.id === t.asignado_a)
                 return (
-                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 8px', borderBottom: '1px solid var(--border)' }}>
-                    <button onClick={() => onToggle(t.id, !listo)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0, display: 'flex' }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 24, color: listo ? '#22c55e' : 'var(--border)' }}>{listo ? 'check_circle' : 'radio_button_unchecked'}</span>
-                    </button>
+                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: listo ? '#22c55e' : 'var(--border)', flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: listo ? '#15803d' : 'var(--text-1)', textDecoration: listo ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.titulo}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: listo ? '#15803d' : 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.titulo}</div>
                       <div style={{ display: 'flex', gap: 6, marginTop: 2, flexWrap: 'wrap', alignItems: 'center' }}>
                         {t.plaza && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(67,97,160,.1)', color: 'var(--accent)', textTransform: 'capitalize' }}>{t.plaza}</span>}
                         {miembro && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: '#f1f5f9', color: '#475569' }}>{miembro.nombre}</span>}
