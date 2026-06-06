@@ -10,7 +10,7 @@ import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { useMenus, type MenuConPreparaciones } from '@/lib/hooks/useMenus'
 import { createClient } from '@/lib/supabase/client'
-import type { StatusProduccion, CategoriaPlato, PlatoComponente } from '@/types'
+import type { StatusProduccion, CategoriaPlato, PlatoComponente, Tarea } from '@/types'
 import { CATEGORIAS_PLATO } from '@/types'
 import MermaBottomSheet from '@/components/merma/MermaBottomSheet'
 import { useMerma } from '@/lib/hooks/useMerma'
@@ -55,7 +55,7 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
   const { miembros } = useEquipo()
 
   const { registrarMerma } = useMerma()
-  const { agregarTarea } = useTareas()
+  const { agregarTarea, tareas, cambiarEstado, eliminarTarea } = useTareas()
   const { menus: catalogoMenus } = useMenus()
   const [showMenuPicker, setShowMenuPicker] = useState(false)
   const [cargandoMenu, setCargandoMenu] = useState(false)
@@ -162,6 +162,20 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
     } finally {
       setCargandoMenu(false)
     }
+  }
+
+  // ── Tareas del menú activo para la fecha seleccionada (Planificación) ──
+  const menuTareasDelDia = useMemo(
+    () => tareas.filter(t => t.menu_id && t.turno_fecha === fecha && !t.parent_id),
+    [tareas, fecha],
+  )
+
+  async function vaciarMenuDelDia() {
+    const ids = menuTareasDelDia.map(t => t.id)
+    if (ids.length === 0) return
+    if (!confirm(`¿Vaciar el menú del día? Se eliminan ${ids.length} tareas.`)) return
+    try { for (const id of ids) await eliminarTarea(id); showToast('Menú del día vaciado') }
+    catch (e: unknown) { showToast('Error: ' + (e instanceof Error ? e.message : 'desconocido')) }
   }
 
   // ── Menu tags present in today's produccion ────────────────
@@ -457,8 +471,13 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
 
       {/* Content */}
       <div>
-        {/* Planilla: visible en modo planilla normal y también cuando se está creando/editando */}
-        {(view === 'planilla' || view === 'crear' || view === 'editar') && (
+        {/* Vista del menú activo del día (Planificación) */}
+        {view === 'planilla' && menuTareasDelDia.length > 0 && (
+          <MenuActivoView tareas={menuTareasDelDia} miembros={miembros} onToggle={(id, listo) => cambiarEstado(id, listo ? 'listo' : 'pendiente')} onVaciar={vaciarMenuDelDia} onActivarOtro={() => setShowMenuPicker(true)} />
+        )}
+
+        {/* Planilla / estado vacío — solo si NO hay menú activo del día */}
+        {(view === 'planilla' || view === 'crear' || view === 'editar') && !(view === 'planilla' && menuTareasDelDia.length > 0) && (
           produccion.length === 0 && view === 'planilla' ? (
             /* Sin producción para este día — ofrecer cargar un menú del catálogo */
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', gap: 10 }}>
@@ -1744,6 +1763,95 @@ function DuplicarView({
           Copiar
         </button>
       </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════
+// MENU ACTIVO VIEW — vista estilo Mise del menú activo del día (Planificación)
+// ══════════════════════════════════════════════════════════════
+const PRIO_BADGE: Record<string, { label: string; color: string; bg: string }> = {
+  critica: { label: 'SP', color: '#ef4444', bg: '#fef2f2' },
+  alta: { label: 'P', color: '#f97316', bg: '#fff7ed' },
+  media: { label: 'REF', color: '#3b82f6', bg: '#eff6ff' },
+  baja: { label: 'Check', color: '#64748b', bg: '#f8fafc' },
+}
+
+function MenuActivoView({
+  tareas, miembros, onToggle, onVaciar, onActivarOtro,
+}: {
+  tareas: Tarea[]
+  miembros: { id: string; nombre: string; apellido: string }[]
+  onToggle: (id: string, listo: boolean) => void
+  onVaciar: () => void
+  onActivarOtro: () => void
+}) {
+  const grouped = useMemo(() => {
+    const m = new Map<string, Tarea[]>()
+    for (const t of tareas) {
+      const sec = (t.seccion ?? '').trim() || 'General'
+      const list = m.get(sec) ?? []
+      list.push(t)
+      m.set(sec, list)
+    }
+    return [...m.entries()]
+  }, [tareas])
+
+  const listos = tareas.filter(t => t.estado === 'listo').length
+  const total = tareas.length
+  const pct = total > 0 ? Math.round((listos / total) * 100) : 0
+
+  return (
+    <div style={{ padding: '10px 12px 120px' }}>
+      {/* Resumen + acciones */}
+      <div style={{ margin: '0 2px 10px', padding: '10px 12px', borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>Menú activo · {listos}/{total} listas</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={onActivarOtro} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 700, color: 'var(--accent)', cursor: 'pointer', fontFamily: 'inherit' }}>+ Otro</button>
+            <button onClick={onVaciar} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 700, color: '#ef4444', cursor: 'pointer', fontFamily: 'inherit' }}>Vaciar</button>
+          </div>
+        </div>
+        <div style={{ height: 6, background: 'var(--border)', borderRadius: 99, overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? '#22c55e' : '#3b82f6', transition: 'width .3s' }} />
+        </div>
+      </div>
+
+      {/* Secciones del menú */}
+      {grouped.map(([sec, items]) => {
+        const listosSec = items.filter(t => t.estado === 'listo').length
+        return (
+          <div key={sec} style={{ margin: '0 2px 10px', borderRadius: 14, overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--surface)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+              <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{sec}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'monospace', color: listosSec === items.length ? '#22c55e' : 'var(--text-3)' }}>{listosSec}/{items.length}</span>
+            </div>
+            <div style={{ padding: '6px 8px 8px' }}>
+              {items.map(t => {
+                const listo = t.estado === 'listo'
+                const badge = PRIO_BADGE[t.prioridad ?? 'media'] ?? PRIO_BADGE.media
+                const miembro = miembros.find(m => m.id === t.asignado_a)
+                return (
+                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 8px', borderBottom: '1px solid var(--border)' }}>
+                    <button onClick={() => onToggle(t.id, !listo)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0, display: 'flex' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 24, color: listo ? '#22c55e' : 'var(--border)' }}>{listo ? 'check_circle' : 'radio_button_unchecked'}</span>
+                    </button>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: listo ? '#15803d' : 'var(--text-1)', textDecoration: listo ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.titulo}</div>
+                      <div style={{ display: 'flex', gap: 6, marginTop: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+                        {t.plaza && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(67,97,160,.1)', color: 'var(--accent)', textTransform: 'capitalize' }}>{t.plaza}</span>}
+                        {miembro && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: '#f1f5f9', color: '#475569' }}>{miembro.nombre}</span>}
+                        {t.cantidad != null && <span style={{ fontSize: 9, color: 'var(--text-3)', fontFamily: 'monospace' }}>{t.cantidad}</span>}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 99, background: badge.bg, color: badge.color, flexShrink: 0 }}>{badge.label}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
