@@ -141,7 +141,7 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
         prioridad: p.prioridad,
         categoria: 'produccion',
         modo: 'carta',                       // se agrupa por prioridad en Producción
-        seccion: p.seccion_mise ?? null,     // sección de mise (para sincronizar luego)
+        seccion: p.seccion_mise ?? 'general',  // NOT NULL en tareas; default 'general'
         plaza: p.plaza,
         asignado_a: p.usuario_asignado,
         receta_id: p.tipo === 'receta' ? p.ref_id : null,
@@ -160,7 +160,11 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
       const tareasMsg = `${rows.length} ${rows.length === 1 ? 'tarea' : 'tareas'} en Producción`
       showToast(miseCreados > 0 ? `${tareasMsg} + ${miseCreados} en Mise` : tareasMsg)
     } catch (e: unknown) {
-      showToast('Error: ' + (e instanceof Error ? e.message : 'desconocido'))
+      // Los errores de Supabase no son instancias de Error: extraer .message del objeto
+      const msg = e instanceof Error ? e.message
+        : (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message)
+        : 'desconocido'
+      showToast('Error: ' + msg)
     } finally {
       setCargandoMenu(false)
     }
