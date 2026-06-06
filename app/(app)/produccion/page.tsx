@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth/context'
 import { useProduccion, type PlatoConComponentes } from '@/lib/hooks/useProduccion'
@@ -74,7 +75,6 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
   const [toast, setToast] = useState('')
   const [mermaOpen, setMermaOpen] = useState(false)
   const [mermaPrefill, setMermaPrefill] = useState<{ producto_nombre?: string } | undefined>()
-  const [activatingDay, setActivatingDay] = useState(false)
   const [miseItems, setMiseItems] = useState<{ nombre: string; plaza: string }[]>([])
 
   // ── Calendar state ──────────────────────────────────────────
@@ -530,22 +530,6 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
                   Armá un menú en <b>Carta → Menús</b> y después cargalo acá.
                 </p>
               )}
-              {platos.length > 0 && (
-                <button
-                  onClick={async () => {
-                    setActivatingDay(true)
-                    try {
-                      await initProduccion(fecha)
-                      const refreshed = await fetchFechasMes(mesActual)
-                      setFechasMes(refreshed)
-                    } finally { setActivatingDay(false) }
-                  }}
-                  disabled={activatingDay}
-                  style={{ marginTop: 4, padding: '9px 18px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: activatingDay ? 0.6 : 1 }}
-                >
-                  {activatingDay ? 'Activando...' : 'O activar el menú base de platos'}
-                </button>
-              )}
             </div>
           ) : (
             <PlanillaView
@@ -654,10 +638,10 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
         prefill={mermaPrefill}
       />
 
-      {/* ── Fase 2: selector de menú del catálogo ── */}
-      {showMenuPicker && (
+      {/* ── Fase 2: selector de menú del catálogo (portal para escapar de overflow/transform/BottomNav) ── */}
+      {showMenuPicker && typeof document !== 'undefined' && createPortal(
         <div
-          style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+          style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
           onClick={(e) => { if (e.target === e.currentTarget) setShowMenuPicker(false) }}
         >
           <div style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 520, maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
@@ -697,7 +681,8 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Menu tag modal */}
