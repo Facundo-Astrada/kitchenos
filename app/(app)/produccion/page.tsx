@@ -55,7 +55,7 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
   const { miembros } = useEquipo()
 
   const { registrarMerma } = useMerma()
-  const { agregarTarea, tareas, eliminarTarea } = useTareas()
+  const { agregarTarea, tareas, eliminarTarea, refetch: refetchTareas } = useTareas()
   const { menus: catalogoMenus } = useMenus()
   const [showMenuPicker, setShowMenuPicker] = useState(false)
   const [cargandoMenu, setCargandoMenu] = useState(false)
@@ -152,6 +152,7 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
       }))
       const { error } = await supabase.from('tareas').insert(rows)
       if (error) throw error
+      refetchTareas()   // refresca al instante (sin esperar el realtime de Supabase)
       setShowMenuPicker(false)
       showToast(`Menú activado · ${rows.length} ${rows.length === 1 ? 'tarea' : 'tareas'} en Producción`)
     } catch (e: unknown) {
