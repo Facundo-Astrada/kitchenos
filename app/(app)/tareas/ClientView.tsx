@@ -272,27 +272,36 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
             Cargando...
           </div>
         ) : modo === 'menu' ? (
-          // Modo menú: agrupar por sección de plato, ordenar por prioridad dentro de cada una
-          SECCIONES_MENU.map((sec) => {
-            const items = topLevel
-              .filter((t) => t.seccion === sec.id)
-              .sort((a, b) => (PRIO_SORT[a.prioridad ?? 'baja'] ?? 3) - (PRIO_SORT[b.prioridad ?? 'baja'] ?? 3))
-            return (
-              <SeccionOps
-                key={sec.id}
-                titulo={sec.label}
-                color={sec.color}
-                items={items}
-                subtareasByParent={subtareasByParent}
-                onAddItem={(titulo, recetaId) => handleAddItem('media', titulo, recetaId)}
-                onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
-                onAddSubtarea={handleAddSubtarea}
-                modo={modo}
-                showPrioChip
-                recetas={recetasSimple}
-              />
-            )
-          })
+          // Modo menú: secciones dinámicas — las del menú activo (las conocidas en su orden + las custom)
+          (() => {
+            const conocidas = new Set<string>(SECCIONES_MENU.map(s => s.id))
+            const presentes: string[] = []
+            for (const t of topLevel) { const s = (t.seccion ?? '').trim(); if (s && !presentes.includes(s)) presentes.push(s) }
+            const ordered: { id: string; label: string; color: string }[] = [
+              ...SECCIONES_MENU.filter(s => presentes.includes(s.id)),
+              ...presentes.filter(s => !conocidas.has(s)).map(s => ({ id: s, label: s, color: '#64748b' })),
+            ]
+            return ordered.map((sec) => {
+              const items = topLevel
+                .filter((t) => (t.seccion ?? '') === sec.id)
+                .sort((a, b) => (PRIO_SORT[a.prioridad ?? 'baja'] ?? 3) - (PRIO_SORT[b.prioridad ?? 'baja'] ?? 3))
+              return (
+                <SeccionOps
+                  key={sec.id}
+                  titulo={sec.label}
+                  color={sec.color}
+                  items={items}
+                  subtareasByParent={subtareasByParent}
+                  onAddItem={(titulo, recetaId) => handleAddItem('media', titulo, recetaId)}
+                  onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
+                  onAddSubtarea={handleAddSubtarea}
+                  modo={modo}
+                  showPrioChip
+                  recetas={recetasSimple}
+                />
+              )
+            })
+          })()
         ) : (
           // Modo carta: agrupar por prioridad
           PRIORIDADES.map((prio) => {

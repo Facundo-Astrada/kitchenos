@@ -38,15 +38,6 @@ const STATUS_COLORS: Record<StatusProduccion, { bg: string; text: string; border
   listo: { bg: '#dcfce7', text: '#15803d', border: '#86efac' },
 }
 
-// Normaliza la plaza del menú al enum del checklist de mise (sin acentos). null = plaza no reconocida.
-const PLAZAS_MISE = ['parrilla', 'frios', 'calientes', 'pase', 'pasteleria', 'panaderia', 'general']
-function normPlaza(s: string | null | undefined): string | null {
-  if (!s) return null
-  const m = s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
-  return PLAZAS_MISE.includes(m) ? m : null
-}
-// Mapea prioridad de tarea (critica/alta/media/baja) a la de mise (sp/p/ref/chk)
-const PRIO_MISE: Record<string, 'sp' | 'p' | 'ref' | 'chk'> = { critica: 'sp', alta: 'p', media: 'ref', baja: 'chk' }
 
 type View = 'planilla' | 'crear' | 'editar' | 'ingredientes' | 'duplicar'
 
@@ -127,22 +118,43 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
     setMermaOpen(true)
   }
 
-  // ── Fase 2: cargar un menú del catálogo → genera tareas del día en Producción ──
-  async function cargarMenu(menu: MenuConPreparaciones) {
+  // ── Activar un menú del catálogo → crea las tareas en Producción/Menú (no toca Mise) ──
+  async function activarMenu(menu: MenuConPreparaciones) {
     if (!RESTAURANTE_ID || menu.preparaciones.length === 0) { setShowMenuPicker(false); return }
     setCargandoMenu(true)
     try {
       const supabase = createClient()
-      // El menú llena MISE: cada preparación se vuelve un item de mise en su plaza+sección.
-      // Desde Mise, "crear tarea" genera la tarea en Producción (tildable en verde).
-      const miseCreados = await sincronizarMise(supabase, menu)
-
+      // Dedupe: si el menú ya está activo para esta fecha, no duplicar
+      const { data: existing } = await supabase.from('tareas').select('id')
+        .eq('restaurante_id', RESTAURANTE_ID).eq('menu_id', menu.id).eq('turno_fecha', fecha).limit(1)
+      if (existing && existing.length > 0) {
+        setShowMenuPicker(false)
+        showToast('Ese menú ya está activo para este día')
+        return
+      }
+      const rows = menu.preparaciones.map((p, i) => ({
+        titulo: p.nombre,
+        descripcion: menu.nombre,
+        status: 'pendiente',
+        estado: 'pendiente',
+        prioridad: p.prioridad,
+        categoria: 'produccion',
+        modo: 'menu',                      // se ve en Producción → Menú
+        seccion: p.paso || 'general',      // sección del menú (NOT NULL en tareas)
+        plaza: p.plaza,
+        asignado_a: p.usuario_asignado,
+        receta_id: p.tipo === 'receta' ? p.ref_id : null,
+        cantidad: p.cantidad,
+        turno_fecha: fecha,
+        menu_id: menu.id,
+        orden: i,
+        restaurante_id: RESTAURANTE_ID,
+      }))
+      const { error } = await supabase.from('tareas').insert(rows)
+      if (error) throw error
       setShowMenuPicker(false)
-      showToast(miseCreados > 0
-        ? `${miseCreados} ${miseCreados === 1 ? 'preparación cargada' : 'preparaciones cargadas'} en Mise`
-        : 'El menú no tiene preparaciones para cargar')
+      showToast(`Menú activado · ${rows.length} ${rows.length === 1 ? 'tarea' : 'tareas'} en Producción`)
     } catch (e: unknown) {
-      // Los errores de Supabase no son instancias de Error: extraer .message del objeto
       const msg = e instanceof Error ? e.message
         : (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message)
         : 'desconocido'
@@ -150,49 +162,6 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
     } finally {
       setCargandoMenu(false)
     }
-  }
-
-  // Llena Mise: crea un checklist_item por cada preparación (plaza normalizada, sección por defecto si falta). Dedupe.
-  async function sincronizarMise(supabase: ReturnType<typeof createClient>, menu: MenuConPreparaciones): Promise<number> {
-    if (menu.preparaciones.length === 0) return 0
-
-    const { data: secData } = await supabase.from('checklist_secciones').select('id, plaza, nombre').eq('restaurante_id', RESTAURANTE_ID)
-    const secMap = new Map<string, string>()
-    for (const s of (secData ?? []) as { id: string; plaza: string; nombre: string }[]) secMap.set(`${s.plaza}|${s.nombre.toLowerCase()}`, s.id)
-
-    const { data: itemData } = await supabase.from('checklist_items').select('plaza, seccion_id, nombre').eq('restaurante_id', RESTAURANTE_ID)
-    const itemSet = new Set<string>()
-    for (const it of (itemData ?? []) as { plaza: string; seccion_id: string; nombre: string }[]) itemSet.add(`${it.plaza}|${it.seccion_id}|${(it.nombre ?? '').toLowerCase()}`)
-
-    type ItemMise = { plaza: string; seccion_id: string; nombre: string; cantidad: number; unidad: string; prioridad: string; receta_id: string | null; orden: number; restaurante_id: string }
-    const toInsert: ItemMise[] = []
-    for (const p of menu.preparaciones) {
-      const plaza = normPlaza(p.plaza) ?? 'general'
-      const secNombre = p.seccion_mise || 'Producción del menú'
-      const secKey = `${plaza}|${secNombre.toLowerCase()}`
-      let secId = secMap.get(secKey)
-      if (!secId) {
-        const { data: nuevaSec, error: secErr } = await supabase.from('checklist_secciones')
-          .insert({ nombre: secNombre, icono: 'tapas', orden: 99, plaza, restaurante_id: RESTAURANTE_ID })
-          .select('id').single()
-        if (secErr || !nuevaSec) continue
-        secId = nuevaSec.id as string
-        secMap.set(secKey, secId)
-      }
-      const dedupeKey = `${plaza}|${secId}|${p.nombre.toLowerCase()}`
-      if (itemSet.has(dedupeKey)) continue
-      itemSet.add(dedupeKey)
-      toInsert.push({
-        plaza, seccion_id: secId, nombre: p.nombre,
-        cantidad: p.cantidad ?? 0, unidad: p.unidad ?? 'u',
-        prioridad: PRIO_MISE[p.prioridad] ?? 'ref',
-        receta_id: p.tipo === 'receta' ? p.ref_id : null,
-        orden: 0, restaurante_id: RESTAURANTE_ID,
-      })
-    }
-    if (toInsert.length === 0) return 0
-    const { error } = await supabase.from('checklist_items').insert(toInsert)
-    return error ? 0 : toInsert.length
   }
 
   // ── Menu tags present in today's produccion ────────────────
@@ -372,7 +341,7 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
             )}
             <button onClick={() => setShowMenuPicker(true)} style={{ background: '#fff', border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: 'var(--navy)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
               <span className="material-symbols-outlined" style={{ fontSize: 14 }}>menu_book</span>
-              Cargar menú
+              Activar menú
             </button>
             <button onClick={() => setView('crear')} style={{ background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer' }}>
               + Plato
@@ -500,19 +469,19 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
               {catalogoMenus.length > 0 ? (
                 <>
                   <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0, textAlign: 'center' }}>
-                    Tenés {catalogoMenus.length} {catalogoMenus.length === 1 ? 'menú' : 'menús'} en el catálogo. Cargá uno para llenar el Mise; desde ahí creás las tareas de Producción.
+                    Tenés {catalogoMenus.length} {catalogoMenus.length === 1 ? 'menú' : 'menús'} en el catálogo. Activá uno para crear sus tareas en Producción → Menú.
                   </p>
                   <button
                     onClick={() => setShowMenuPicker(true)}
                     style={{ marginTop: 6, padding: '13px 26px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, var(--navy), #4361a0)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 16px rgba(28,45,74,.35)' }}
                   >
                     <span className="material-symbols-outlined" style={{ fontSize: 20 }}>menu_book</span>
-                    Cargar menú del catálogo
+                    Activar menú del catálogo
                   </button>
                 </>
               ) : (
                 <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0, textAlign: 'center' }}>
-                  Armá un menú en <b>Carta → Menús</b> y después cargalo acá.
+                  Armá un menú en <b>Carta → Menús</b> y después activalo acá.
                 </p>
               )}
             </div>
@@ -632,8 +601,8 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
           <div style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 520, maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '18px 16px 12px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)' }}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>Cargar menú</div>
-                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Carga sus preparaciones en Mise</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>Activar menú</div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Crea las tareas en Producción → Menú</div>
               </div>
               <button onClick={() => setShowMenuPicker(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-3)' }}>close</span>
@@ -649,7 +618,7 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {catalogoMenus.map(menu => (
-                    <button key={menu.id} onClick={() => !cargandoMenu && cargarMenu(menu)} disabled={cargandoMenu}
+                    <button key={menu.id} onClick={() => !cargandoMenu && activarMenu(menu)} disabled={cargandoMenu}
                       style={{ textAlign: 'left', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 14px', cursor: cargandoMenu ? 'default' : 'pointer', fontFamily: 'inherit', opacity: cargandoMenu ? .6 : 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 99, textTransform: 'uppercase', letterSpacing: '.04em', background: menu.tipo === 'evento' ? '#ede9fe' : '#e0f2fe', color: menu.tipo === 'evento' ? '#6d28d9' : '#075985' }}>
