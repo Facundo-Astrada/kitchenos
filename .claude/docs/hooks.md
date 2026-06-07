@@ -1,5 +1,13 @@
 # Patrón de hooks — KitchenOS
 
+## Gotchas de Supabase (jun 2026)
+
+1. **Tablas/columnas nuevas → recargar el schema cache de PostgREST.** Tras crear una tabla o columna por migración, el cliente browser (supabase-js, vía PostgREST con anon key) **no la ve** hasta recargar el cache → insert/select "no hacen nada" / no persisten / lista vacía. Pero el SQL directo (management API) la ve enseguida. Síntoma clásico: el INSERT simulando RLS funciona, pero desde la app no. **Fix:** `NOTIFY pgrst, 'reload schema';` (sumarlo al final de TODA migración que cree tablas/columnas) y verificar con un GET REST `…/rest/v1/<tabla>?select=id&limit=1` (debe dar 200). Pasó con `menus`/`menu_preparaciones`.
+
+2. **Los errores de Supabase NO son instancias de `Error`.** Son objetos `{ message, code, details }`. Un `catch (e) { e instanceof Error ? e.message : 'desconocido' }` traga el mensaje real → siempre "desconocido". Extraer así: `const msg = e instanceof Error ? e.message : (e && typeof e === 'object' && 'message' in e) ? String(e.message) : 'desconocido'`.
+
+3. **Insert directo no actualiza el SWR de otro hook.** Si insertás con `supabase.from(...).insert()` directo (no vía la función del hook), el cache SWR de `useTareas`/etc. solo se entera por el **realtime** (1-3 s). Para refresco inmediato, llamar `refetch()`/`mutate()` del hook justo después del insert. (Ver `activarMenu` en produccion/page.tsx.)
+
 ## Estructura estándar
 
 ```ts

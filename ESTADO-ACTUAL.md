@@ -100,6 +100,20 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 
 ## 4. Implementado en Últimas Sesiones
 
+### Sesión 2026-06-06 — Unificación de Menús (Carta → Planificación → Producción)
+
+**Modelo nuevo "Menú" como capa por encima del plato** (jerarquía: ingrediente → receta → plato → **menú**).
+
+1. **Migración** (`supabase/migrations/20260604_menus.sql`): tablas `menus` (`tipo` fijo/evento) + `menu_preparaciones` (polimórfico `tipo`/`ref_id` a receta/producto/plato, `prioridad`, `plaza`, `seccion_mise`, `usuario_asignado`, `cantidad`, `paso`). Hook `useMenus`. Columna `tareas.menu_id`.
+2. **Editor unificado** `ComposicionEditor.tsx`: una sola pantalla para **Plato / Menú / Evento** (toggle). Reemplaza el "+ Plato" de carta para crear. Secciones editables, ítems inline expandibles, buscador unificado, prioridad SP/P/REF/Check, plaza creable + sección de mise, resumen vivo de costo/FC. Plato → `carta_items`+`plato_recetas`; Menú/Evento → `menus`. `MenusView` queda solo como lista.
+3. **Flujo final**: Carta (crear menú fijo/evento) → **Planificación** (activar) → **Producción → Menú** (ejecutar, tildable). **Mise queda intacto** (flujo propio).
+4. **Planificación**: una sola pantalla (sin sub-tabs Menú/Eventos; eliminado `EventosView`, −642 líneas). "Activar menú" (1 día o N días en modo Días) crea tareas `modo='menu'`, `seccion=paso`, `menu_id`. Dedupe por menu_id+fecha. Refetch inmediato (no espera realtime). `MenuActivoView` = resumen organizativo (progreso por sección, sin toggle) + botón "Ir a Producción".
+5. **Producción → Menú**: secciones **dinámicas** (las del menú activo, no las 6 fijas).
+6. **Recetario**: "Cargar con IA" en Ideas abre `NuevaFichaScreen` completa pre-poblada (no el bottom sheet de texto).
+7. **Fixes**: bug guardado de menú (PostgREST schema cache — ver docs); error toast real (Supabase no son `Error`); `tareas.seccion` NOT NULL; sección de mise recién creada aparece como chip; multi-día usa el selector del catálogo (eliminado modal viejo con botón tapado).
+
+**Commits:** `d7951bb` (editor unificado), `160e4af` (sección mise), `f552ff5`/`9e950f3` (Fase 2/3), `64262db` (vista activo), `d1847a8` (simplificación), `a225aa0` (refetch), `7d3154b` (chip mise), `8518831` (multi-día).
+
 ### Sesión 2026-06-03 — Sistema de puestos + permisos granulares + UX mejoras carta/recetario
 
 **Bloque A — Sistema de puestos con permisos reales:**

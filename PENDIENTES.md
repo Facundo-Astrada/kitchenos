@@ -109,6 +109,7 @@ Los scripts de `scripts/*.mjs` tienen el `SUPABASE_MANAGEMENT_TOKEN` en texto pl
 
 | # | Descripción | Cuándo |
 |---|---|---|
+| Unificación de Menús (Carta→Planificación→Producción) | Entidad `menus`+`menu_preparaciones`. Editor unificado Plato/Menú/Evento en Carta. Activar menú en Planificación (1 o N días) → tareas en Producción/Menú (secciones dinámicas, tildable). Mise intacto. Una sola Planificación (sin sub-tabs, EventosView eliminado). Recetario "Cargar con IA" abre form completo. Varios fixes (schema cache, NOT NULL, chip mise, multi-día). | 6 junio 2026 |
 | Ítem 3: Permisos granulares por rol en UI | Stock/Carta/Merma ocultan montos al no-admin; Recetario permite crear pero no importar/exportar; HACCP permite registrar pero no editar tareas. ModulosGrid usa puedeVer() dinámico desde puestos. | 3 junio 2026 |
 | Sistema puestos con permisos reales | DB: `puestos.nivel+plaza_default`, `equipo_miembros.modulos_extra+restringidos`. 8 templates. Tab Puestos con toggles de módulos reales. Form 2 pasos equipo. Overrides por persona. usePermisos carga puesto del usuario logueado. | 3 junio 2026 |
 | OPS mise: suma por receta+plaza (no reemplaza) | `plato_recetas.cantidad_ops+unidad_ops`. handleGuardarOPS suma todas las contribuciones de la misma receta+plaza → checklist_item.cantidad = total acumulado. Badge OPS en receta lista. Preview del total antes de guardar. | 3 junio 2026 |
