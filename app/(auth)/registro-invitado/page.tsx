@@ -41,39 +41,59 @@ export default function RegistroInvitadoPage() {
   const [error, setError] = useState('')
   const [userEmail, setUserEmail] = useState('')
 
-  // Supabase envía el token de invitación en el fragment de la URL:
-  // /registro-invitado#access_token=...&refresh_token=...&type=invite
+  // El link de invitación puede llegar en distintos formatos según la versión/config de Supabase.
+  // Manejamos todos para que el flujo no dependa del flowType:
+  //   1. hash implícito  → /registro-invitado#access_token=...&refresh_token=...
+  //   2. PKCE code        → /registro-invitado?code=...
+  //   3. token_hash       → /registro-invitado?token_hash=...&type=invite
+  //   4. sesión ya activa → detectSessionInUrl ya la procesó, o mismo browser
   useEffect(() => {
-    const hash = window.location.hash.substring(1)
-    const params = new URLSearchParams(hash)
-    const accessToken = params.get('access_token')
-    const refreshToken = params.get('refresh_token')
-    const type = params.get('type')
+    let cancelled = false
+    const onOk = (email: string | undefined) => { if (!cancelled) { setUserEmail(email ?? ''); setStep('form') } }
+    const onErr = () => { if (!cancelled) setStep('error') }
 
-    if (!accessToken || !refreshToken) {
-      // Intentar sesión ya activa (ej: usuario que siguió el link en el mismo browser)
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session?.user) {
-          setUserEmail(session.user.email ?? '')
-          setStep('form')
-        } else {
-          setStep('error')
+    async function init() {
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+      const query = new URLSearchParams(window.location.search)
+
+      // 0. Error explícito de Supabase (link expirado/usado)
+      if (hash.get('error_description') || query.get('error')) { onErr(); return }
+
+      // 1. Flujo implícito: tokens en el hash
+      const accessToken = hash.get('access_token')
+      const refreshToken = hash.get('refresh_token')
+      if (accessToken && refreshToken) {
+        const { data, error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+        return error || !data.session ? onErr() : onOk(data.session.user.email)
+      }
+
+      // 2. Flujo PKCE: ?code= (puede haberlo consumido detectSessionInUrl → fallback a getSession)
+      const code = query.get('code')
+      if (code) {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+        if (data?.session) return onOk(data.session.user.email)
+        if (error) {
+          const { data: { session } } = await supabase.auth.getSession()
+          return session?.user ? onOk(session.user.email) : onErr()
         }
-      })
-      return
+        return onErr()
+      }
+
+      // 3. token_hash + type (verifyOtp)
+      const tokenHash = query.get('token_hash')
+      const type = (query.get('type') || hash.get('type')) as 'invite' | 'recovery' | 'signup' | 'email' | null
+      if (tokenHash && type) {
+        const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type })
+        return error || !data.session ? onErr() : onOk(data.session.user.email)
+      }
+
+      // 4. Sesión ya activa
+      const { data: { session } } = await supabase.auth.getSession()
+      return session?.user ? onOk(session.user.email) : onErr()
     }
 
-    if (type !== 'invite') {
-      setStep('error')
-      return
-    }
-
-    supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
-      .then(({ data, error }) => {
-        if (error || !data.session) { setStep('error'); return }
-        setUserEmail(data.session.user.email ?? '')
-        setStep('form')
-      })
+    init()
+    return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

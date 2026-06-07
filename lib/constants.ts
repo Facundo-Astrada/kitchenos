@@ -118,7 +118,11 @@ export const RUTA_A_MODULO: Record<string, string> = {
   '/merma': 'merma',
   '/ventas': 'ventas',
   // /perfil — not listed: modulo = undefined → always accessible
-  // /tareas, /checklist, /produccion — sub-routes, no individual protection
+  // /tareas, /checklist, /produccion — rutas viejas: redirigen a /operaciones (tab correspondiente).
+  // La vista real vive embebida en OPS. Mapeadas a 'operaciones' por consistencia de permisos.
+  '/tareas': 'operaciones',
+  '/checklist': 'operaciones',
+  '/produccion': 'operaciones',
 }
 
 // ── Colores de prioridad ─────────────────────────────────────

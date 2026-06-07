@@ -145,6 +145,7 @@ export function useFacturas() {
     }[]
   }) => {
     try {
+      if (!RESTAURANTE_ID) throw new Error('Restaurante no cargado todavía — reintentá en un segundo')
       // 0. Fetch all existing products for matching (including stock_actual)
       const { data: allProductos, error: fetchError } = await supabase
         .from('productos')
@@ -209,9 +210,14 @@ export function useFacturas() {
         if (!productoId) {
           const match =
             productosExistentes.find(p => p.nombre.toLowerCase() === nombreLower) ??
-            // Only match if the EXISTING product name contains the invoice item name
-            // (prevents short names like "Tomate" from matching "Extracto De Tomate")
-            productosExistentes.find(p => p.nombre.toLowerCase().includes(nombreLower))
+            // Match parcial seguro: el ítem de factura (más descriptivo) CONTIENE el nombre
+            // canónico del producto. Ej: "Aceite De Oliva Extra Virgen 5l" → "Aceite De Oliva".
+            // Guard de longitud (≥4) para no matchear nombres base muy cortos.
+            // (Antes era al revés y "Tomate" pisaba "Extracto De Tomate" — falso positivo.)
+            productosExistentes.find(p => {
+              const pn = p.nombre.toLowerCase()
+              return pn.length >= 4 && nombreLower.includes(pn)
+            })
           if (match) {
             productoId = match.id
             precioAnterior = match.precio_unitario || null

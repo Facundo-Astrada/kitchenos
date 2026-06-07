@@ -8,11 +8,12 @@ Lista priorizada de todo lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL
 
 ### 2. Invitación de usuarios por email
 **Flujo esperado:** Admin ingresa email + rol → Supabase envía magic link → el empleado llega a la app, setea contraseña, queda vinculado al `restaurante_id` del admin con el rol asignado.
-**Hecho (2 junio 2026):**
+**Hecho:**
 - ✅ Endpoint `POST /api/invitar` con service role (`inviteUserByEmail` + pre-crea `user_restaurantes` + `equipo_miembros` con `activo: false`).
 - ✅ UI en `/turnos` tab Equipo: botón "Invitar por email" → modal con nombre + email + rol.
-**Falta:** página `/registro-invitado` (landing del magic link donde el invitado setea contraseña). Hoy el redirectTo apunta ahí pero la página no existe aún. Configurar template de email en Supabase.
-**Status:** 🟡 Parcial.
+- ✅ Página `/registro-invitado` (ya existía; 7 jun 2026 reforzada para manejar hash / PKCE `?code=` / `token_hash` / sesión activa).
+**Falta (solo config de dashboard, no código):** whitelistear `https://kos-app-one.vercel.app/registro-invitado` en Supabase Auth → URL Configuration → Redirect URLs, y activar/ajustar la plantilla de email "Invite user". Setear `NEXT_PUBLIC_SITE_URL` en Vercel.
+**Status:** 🟢 Código completo — falta verificar config Supabase end-to-end.
 
 
 ### 4. Tipos desactualizados
@@ -109,6 +110,9 @@ Los scripts de `scripts/*.mjs` tienen el `SUPABASE_MANAGEMENT_TOKEN` en texto pl
 
 | # | Descripción | Cuándo |
 |---|---|---|
+| Desambiguación OPS — única puerta de entrada | `/operaciones` con deep-link `?tab=`; `/tareas`, `/checklist`, `/produccion` redirigen a OPS (antes eran vistas huérfanas sin tab bar). `ProduccionView` como export nombrado. | 7 junio 2026 |
+| Fix Facturas → Stock (matching invertido) | `crearFactura` matcheaba `producto.includes(factura)` → pisaba el producto equivocado / creaba duplicados. Corregido a `factura.includes(producto)` + guard longitud ≥4 + guard `RESTAURANTE_ID`. | 7 junio 2026 |
+| Invitación: página `/registro-invitado` | Ya existía; reforzada para hash/PKCE/token_hash/sesión activa. Falta solo config dashboard Supabase. | 7 junio 2026 |
 | Unificación de Menús (Carta→Planificación→Producción) | Entidad `menus`+`menu_preparaciones`. Editor unificado Plato/Menú/Evento en Carta. Activar menú en Planificación (1 o N días) → tareas en Producción/Menú (secciones dinámicas, tildable). Mise intacto. Una sola Planificación (sin sub-tabs, EventosView eliminado). Recetario "Cargar con IA" abre form completo. Varios fixes (schema cache, NOT NULL, chip mise, multi-día). | 6 junio 2026 |
 | Ítem 3: Permisos granulares por rol en UI | Stock/Carta/Merma ocultan montos al no-admin; Recetario permite crear pero no importar/exportar; HACCP permite registrar pero no editar tareas. ModulosGrid usa puedeVer() dinámico desde puestos. | 3 junio 2026 |
 | Sistema puestos con permisos reales | DB: `puestos.nivel+plaza_default`, `equipo_miembros.modulos_extra+restringidos`. 8 templates. Tab Puestos con toggles de módulos reales. Form 2 pasos equipo. Overrides por persona. usePermisos carga puesto del usuario logueado. | 3 junio 2026 |

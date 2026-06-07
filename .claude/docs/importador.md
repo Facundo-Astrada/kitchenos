@@ -1,5 +1,9 @@
 # Flujo de importación de datos — KitchenOS
 
+## Gotcha — dirección del match factura ↔ producto (jun 2026)
+
+Al cargar una factura, `useFacturas.crearFactura` matchea cada ítem contra `productos` para sumar stock / actualizar precio o crear el producto. El match parcial debe ser **`itemFactura.includes(nombreProducto)`** (el ítem de factura es el más descriptivo y contiene al nombre canónico: "Aceite De Oliva Extra Virgen 5l" → "Aceite De Oliva"), **nunca al revés**. Si se invierte (`producto.includes(item)`), un ítem genérico como "Tomate" pisa el stock/precio de "Extracto De Tomate" y un ítem específico no encuentra su canónico (crea duplicados). Guard de longitud ≥4 en el nombre del producto para no matchear nombres base muy cortos. **El importador masivo `productos-desde-facturas` usa su propio matching — auditar igual.**
+
 ## Endpoints
 
 | Path | Función |

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import ChecklistPage from '@/app/(app)/checklist/ClientView'
 import TareasPage from '@/app/(app)/tareas/ClientView'
-import ProduccionPage from '@/app/(app)/produccion/page'
+import { ProduccionView } from '@/app/(app)/produccion/page'
 
 type Tab = 'produccion' | 'mise' | 'planificacion'
 
@@ -18,6 +18,12 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 // ══════════════════════════════════════════════════════════════
 export default function OperacionesPage() {
   const [tab, setTab] = useState<Tab>('produccion')
+
+  // Tab inicial desde la URL (?tab=) — permite deep-link y redirects desde las rutas viejas
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tab')
+    if (t === 'produccion' || t === 'mise' || t === 'planificacion') setTab(t)
+  }, [])
 
   // Write screen context for KitchenCoach on tab change
   useEffect(() => {
@@ -80,7 +86,7 @@ export default function OperacionesPage() {
         <ChecklistPage embedded />
       </div>
       <div style={{ flex: 1, overflow: tab === 'planificacion' ? 'auto' : 'hidden', display: tab === 'planificacion' ? 'block' : 'none' }}>
-        <ProduccionPage embedded />
+        <ProduccionView embedded />
       </div>
     </div>
   )

@@ -41,7 +41,15 @@ const STATUS_COLORS: Record<StatusProduccion, { bg: string; text: string; border
 
 type View = 'planilla' | 'crear' | 'editar' | 'ingredientes' | 'duplicar'
 
-export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}) {
+// Ruta vieja /produccion → redirige a OPS. La implementación vive como <ProduccionView/>,
+// que OPS renderiza embebida en su tab "Planificación".
+export default function ProduccionRoute() {
+  const router = useRouter()
+  useEffect(() => { router.replace('/operaciones?tab=planificacion') }, [router])
+  return null
+}
+
+export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
   const router = useRouter()
   const { perfil: authPerfil } = useAuth()
   const RESTAURANTE_ID = useRestauranteId()

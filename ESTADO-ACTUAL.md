@@ -27,7 +27,7 @@
 | 13 | **Calendario** | `/calendario` | Funcional | Vista mensual + semanal por horas, eventos con iconos/colores, entregas de pedidos auto-integradas, CRUD eventos, recurrencia. |
 | 14 | **Turnos / Equipo** | `/turnos` | Funcional | 3 tabs: Equipo (form 2 pasos datos→puesto, ficha con overrides de módulos), Turnos (grilla semanal), Puestos (toggles de módulos reales, nivel badge, plaza OPS, template picker con 8 puestos comunes). **Sistema de puestos**: cada puesto define `nivel` (admin/sous_chef/cocinero/bachero) + `plaza_default` + `modulos_visibles[]`. Overrides por persona (`modulos_extra`, `modulos_restringidos`). DB: `puestos.nivel+plaza_default`, `equipo_miembros.modulos_extra+restringidos`. |
 | 15 | **Producción / Planificación** | `/produccion` | Funcional | Planilla de producción del día. **Calendario mensual** con dots indicadores (verde = activo, naranja = evento/tag). **Multi-select** para activar N días con nombre de menú opcional (`menu_tag`). Soporte multi-menú en mismo día con filtro chips. Asignación a miembros, badges P1/P2/P3. |
-| 24 | **OPS — Workspace diario** | `/operaciones` | Funcional | **3 tabs**: Producción · Mise · Planificación. Producción: secciones con sublabels (SP·Super Prioridad, P·Prioridad, REF·Refuerzo), toggle Carta/Menú con subtítulo, QuickAdd con sugerencias de receta (≥3 chars). Checklist: auto-select plaza por rol, progreso por plaza en grid. |
+| 24 | **OPS — Workspace diario** | `/operaciones` | Funcional | **Única puerta de entrada** al trabajo diario. **3 tabs**: Producción · Mise · Planificación (deep-link `?tab=`). Producción: secciones con sublabels (SP·Super Prioridad, P·Prioridad, REF·Refuerzo), toggle Carta/Menú con subtítulo, QuickAdd con sugerencias de receta (≥3 chars). Checklist: auto-select plaza por rol, progreso por plaza en grid. **`/tareas`, `/checklist`, `/produccion` redirigen acá** (rutas viejas; la vista vive embebida). |
 | ~~23~~ | ~~OPS — Ingeniería de Menú~~ | ~~`/ingenieria-menu`~~ | **Eliminado (2 jun 2026)** | Página y referencias en `constants.ts` removidas. Los tipos `CategoriaPlato`/`PlatoComponente` y la lógica `sync_ops` de `plato_componentes` se mantienen (los usa Producción). |
 | 16 | **Merma** | `/merma` | Funcional | Bottom sheet desde dashboard y módulo propio, 8 motivos con iconos, turno, plaza, costo estimado. |
 | 17 | **Configuración** | `/configuracion` | Funcional | Tabs: restaurante, plazas, rutinas, permisos por rol. Link a `/turnos` para gestión de equipo (sin tab de invitación). |
@@ -81,10 +81,10 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 ### Críticos reportados por Facundo (testing en restaurante real)
 | # | Severidad | Descripción | Estado |
 |---|-----------|-------------|--------|
-| 1 | Media | **Facturas → Stock**: al cargar factura con IA, los productos no siempre se crean/actualizan en `productos`. | Pendiente diagnóstico |
+| 1 | Media | **Facturas → Stock**: al cargar factura con IA, los productos no siempre se crean/actualizan en `productos`. | ✅ Resuelto (7 jun 2026) — el matching en `crearFactura` estaba invertido (un ítem genérico pisaba un producto específico; uno específico no encontraba su canónico). Corregido a dirección segura + guard de longitud + guard `RESTAURANTE_ID`. Validar con datos reales. |
 | 2 | Media | **Login en producción**: hard navigation (F5/URL directa) a veces no resuelve el perfil y muestra `??` hasta el safety timer de 3s. | Mitigado con timer, fix real pendiente |
-| 3 | Media | **Merma → Stock**: al registrar merma, el `stock_actual` no se descuenta automáticamente. | Pendiente |
-| 4 | Baja | `USUARIO_MOCK` sigue hardcoded en `lib/hooks/usePase.ts` para nombre al enviar mensajes. | Pendiente |
+| 3 | Media | **Merma → Stock**: al registrar merma, el `stock_actual` no se descuenta automáticamente. | ✅ Resuelto — `useMerma.agregarMerma` hace UPDATE de `stock_actual` tras el insert. |
+| 4 | Baja | `USUARIO_MOCK` hardcoded en `lib/hooks/usePase.ts`. | ✅ Resuelto — ya no existe; usa `perfil.nombre`. |
 
 ### Deuda técnica
 | # | Severidad | Descripción | Archivo |
@@ -99,6 +99,22 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 ---
 
 ## 4. Implementado en Últimas Sesiones
+
+### Sesión 2026-06-07 (tarde) — Reducir errores: OPS, Facturas→Stock, Invitación + sync de docs
+
+1. **Desambiguación OPS (una sola puerta de entrada)**: `/operaciones` es ahora el único acceso al workspace diario, con deep-link `?tab=produccion|mise|planificacion`. Las rutas viejas `/tareas`, `/checklist`, `/produccion` **redirigen** a OPS con su tab (antes mostraban la vista huérfana sin barra de tabs). La implementación de Planificación pasó de default export a export nombrado `ProduccionView` (la que OPS embebe); el default de `/produccion` solo redirige. `RUTA_A_MODULO` mapea las 3 a `operaciones`.
+2. **Fix Facturas → Stock** (`lib/hooks/useFacturas.ts` `crearFactura`): el match parcial estaba **invertido** (`producto.includes(factura)`) → un ítem genérico ("Tomate") pisaba stock/precio de un producto específico ("Extracto de Tomate") y un ítem específico no encontraba su canónico (creaba duplicados). Corregido a `factura.includes(producto)` + guard de longitud ≥4 + guard `RESTAURANTE_ID` al inicio. Heurística mejorada — validar con datos reales de Bros. El importador masivo `productos-desde-facturas` usa otro matching: auditar aparte.
+3. **Invitación de usuarios**: `/registro-invitado` **ya existía** (el doc decía que no). Reforzado el manejo de sesión del link de email para cubrir todos los formatos: hash implícito, PKCE `?code=`, `token_hash`+type (verifyOtp) y sesión ya activa, con detección de errores explícitos. **Pendiente (config dashboard, no código)**: whitelistear `…/registro-invitado` en Supabase Auth → URL Configuration y activar la plantilla de email "Invite user".
+4. **Docs reconciliados**: §3 de este archivo listaba como pendientes 2 bugs ya resueltos (Merma→Stock, USUARIO_MOCK). Corregido.
+
+### Sesión 2026-06-07 — Carga masiva de recetas desde Google Drive
+
+1. **53 recetas** cargadas desde Google Docs del Drive via MCP → script `scripts/load-recetas-drive-2026.mjs` (con deduplicación por nombre normalizado + fuzzy match de ingredientes contra stock).
+2. **139 recetas adicionales** cargadas desde ZIP de carpetas (`recetas para cargar K-OS.zip`) → script `scripts/parse-zip-recetas.mjs`: lee `.docx` con `mammoth`, parsea tablas de ingredientes, infiere categoría, inserta con deduplicación. **Sin tokens de Claude en runtime** — corre 100% local.
+3. Total sesión: **~192 recetas nuevas** en Bros (de ~165 a ~357). Ingredientes vinculados automáticamente al stock existente.
+4. Detectados 3 duplicados exactos (Almendras x2 draft, Hummus x2 published, Mbeju draft+published) + Polenta blanca draft vs 2 FINAL published — dejados como están por decisión del cliente.
+
+**Scripts reutilizables:** bajar más carpetas como ZIP → `node scripts/parse-zip-recetas.mjs` (solo agrega las que faltan).
 
 ### Sesión 2026-06-06 — Unificación de Menús (Carta → Planificación → Producción)
 
