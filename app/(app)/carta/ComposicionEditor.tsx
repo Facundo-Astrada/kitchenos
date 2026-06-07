@@ -395,10 +395,14 @@ function ItemRowInline({
   const [nuevaSecMise, setNuevaSecMise] = useState('')
 
   // Secciones de mise disponibles para la plaza elegida (si no hay plaza, todas las distintas)
+  // Incluye la sección recién creada (item.seccion_mise) aunque todavía no exista en la base,
+  // así el chip aparece seleccionado y el usuario ve que se creó.
   const seccionesParaPlaza = useMemo(() => {
     const rel = item.plaza ? miseSecciones.filter(s => s.plaza === item.plaza) : miseSecciones
-    return Array.from(new Set(rel.map(s => s.nombre)))
-  }, [miseSecciones, item.plaza])
+    const base = rel.map(s => s.nombre)
+    if (item.seccion_mise && !base.includes(item.seccion_mise)) base.push(item.seccion_mise)
+    return Array.from(new Set(base))
+  }, [miseSecciones, item.plaza, item.seccion_mise])
 
   const results = useMemo(() => {
     if (!search.trim()) return []
