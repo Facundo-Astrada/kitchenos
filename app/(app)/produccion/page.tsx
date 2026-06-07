@@ -74,9 +74,6 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
   const [mesActual, setMesActual] = useState(() => fmtDate(new Date()).slice(0, 7))
   const [multiSelectMode, setMultiSelectMode] = useState(false)
   const [diasSeleccionados, setDiasSeleccionados] = useState<Set<string>>(new Set())
-  const [menuTagModal, setMenuTagModal] = useState(false)
-  const [menuTagInput, setMenuTagInput] = useState('')
-  const [activatingMulti, setActivatingMulti] = useState(false)
   const [activeMenuTag, setActiveMenuTag] = useState('')
 
   // Sync mesActual when fecha changes month
@@ -121,40 +118,46 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
   // ── Activar un menú del catálogo → crea las tareas en Producción/Menú (no toca Mise) ──
   async function activarMenu(menu: MenuConPreparaciones) {
     if (!RESTAURANTE_ID || menu.preparaciones.length === 0) { setShowMenuPicker(false); return }
+    // Días destino: los seleccionados en modo "Días", o el día actual
+    const fechas = (multiSelectMode && diasSeleccionados.size > 0) ? Array.from(diasSeleccionados).sort() : [fecha]
     setCargandoMenu(true)
     try {
       const supabase = createClient()
-      // Dedupe: si el menú ya está activo para esta fecha, no duplicar
-      const { data: existing } = await supabase.from('tareas').select('id')
-        .eq('restaurante_id', RESTAURANTE_ID).eq('menu_id', menu.id).eq('turno_fecha', fecha).limit(1)
-      if (existing && existing.length > 0) {
-        setShowMenuPicker(false)
-        showToast('Ese menú ya está activo para este día')
-        return
+      let totalTareas = 0, diasActivados = 0, diasYaActivos = 0
+      for (const f of fechas) {
+        // Dedupe: si el menú ya está activo para ese día, saltear
+        const { data: existing } = await supabase.from('tareas').select('id')
+          .eq('restaurante_id', RESTAURANTE_ID).eq('menu_id', menu.id).eq('turno_fecha', f).limit(1)
+        if (existing && existing.length > 0) { diasYaActivos++; continue }
+        const rows = menu.preparaciones.map((p, i) => ({
+          titulo: p.nombre,
+          descripcion: menu.nombre,
+          status: 'pendiente',
+          estado: 'pendiente',
+          prioridad: p.prioridad,
+          categoria: 'produccion',
+          modo: 'menu',                      // se ve en Producción → Menú
+          seccion: p.paso || 'general',      // sección del menú (NOT NULL en tareas)
+          plaza: p.plaza,
+          asignado_a: p.usuario_asignado,
+          receta_id: p.tipo === 'receta' ? p.ref_id : null,
+          cantidad: p.cantidad,
+          turno_fecha: f,
+          menu_id: menu.id,
+          orden: i,
+          restaurante_id: RESTAURANTE_ID,
+        }))
+        const { error } = await supabase.from('tareas').insert(rows)
+        if (error) throw error
+        totalTareas += rows.length
+        diasActivados++
       }
-      const rows = menu.preparaciones.map((p, i) => ({
-        titulo: p.nombre,
-        descripcion: menu.nombre,
-        status: 'pendiente',
-        estado: 'pendiente',
-        prioridad: p.prioridad,
-        categoria: 'produccion',
-        modo: 'menu',                      // se ve en Producción → Menú
-        seccion: p.paso || 'general',      // sección del menú (NOT NULL en tareas)
-        plaza: p.plaza,
-        asignado_a: p.usuario_asignado,
-        receta_id: p.tipo === 'receta' ? p.ref_id : null,
-        cantidad: p.cantidad,
-        turno_fecha: fecha,
-        menu_id: menu.id,
-        orden: i,
-        restaurante_id: RESTAURANTE_ID,
-      }))
-      const { error } = await supabase.from('tareas').insert(rows)
-      if (error) throw error
       refetchTareas()   // refresca al instante (sin esperar el realtime de Supabase)
       setShowMenuPicker(false)
-      showToast(`Menú activado · ${rows.length} ${rows.length === 1 ? 'tarea' : 'tareas'} en Producción`)
+      if (multiSelectMode) { setDiasSeleccionados(new Set()); setMultiSelectMode(false) }
+      if (diasActivados === 0) showToast('Ese menú ya estaba activo en los días elegidos')
+      else if (fechas.length === 1) showToast(`Menú activado · ${totalTareas} ${totalTareas === 1 ? 'tarea' : 'tareas'} en Producción`)
+      else showToast(`Menú activado en ${diasActivados} ${diasActivados === 1 ? 'día' : 'días'}${diasYaActivos > 0 ? ` (${diasYaActivos} ya activos)` : ''}`)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message
         : (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message)
@@ -288,27 +291,6 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
     setMesActual(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   }
 
-  async function handleActivarDias() {
-    setActivatingMulti(true)
-    try {
-      const tag = menuTagInput.trim() || null
-      for (const d of diasSeleccionados) {
-        await initProduccion(d, tag)
-      }
-      const n = diasSeleccionados.size
-      const refreshed = await fetchFechasMes(mesActual)
-      setFechasMes(refreshed)
-      setDiasSeleccionados(new Set())
-      setMultiSelectMode(false)
-      setMenuTagModal(false)
-      setMenuTagInput('')
-      showToast(`${n} ${n === 1 ? 'día activado' : 'días activados'}`)
-    } catch (e: unknown) {
-      showToast('Error: ' + (e instanceof Error ? e.message : 'desconocido'))
-    } finally {
-      setActivatingMulti(false)
-    }
-  }
 
   if (loading) {
     return (
@@ -437,10 +419,11 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
                 />
                 {multiSelectMode && diasSeleccionados.size > 0 && (
                   <button
-                    onClick={() => setMenuTagModal(true)}
-                    style={{ width: '100%', marginTop: 10, padding: '10px', borderRadius: 10, border: 'none', background: '#22c55e', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+                    onClick={() => setShowMenuPicker(true)}
+                    style={{ width: '100%', marginTop: 10, padding: '10px', borderRadius: 10, border: 'none', background: '#22c55e', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
                   >
-                    Activar {diasSeleccionados.size} {diasSeleccionados.size === 1 ? 'día' : 'días'}
+                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>menu_book</span>
+                    Activar menú en {diasSeleccionados.size} {diasSeleccionados.size === 1 ? 'día' : 'días'}
                   </button>
                 )}
               </>
@@ -628,7 +611,7 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
             <div style={{ padding: '18px 16px 12px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)' }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>Activar menú</div>
-                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Crea las tareas en Producción → Menú</div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{multiSelectMode && diasSeleccionados.size > 0 ? `En ${diasSeleccionados.size} ${diasSeleccionados.size === 1 ? 'día' : 'días'} seleccionados` : 'Crea las tareas en Producción → Menú'}</div>
               </div>
               <button onClick={() => setShowMenuPicker(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-3)' }}>close</span>
@@ -663,60 +646,6 @@ export default function ProduccionPage({ embedded }: { embedded?: boolean } = {}
           </div>
         </div>,
         document.body
-      )}
-
-      {/* Menu tag modal */}
-      {menuTagModal && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-          onClick={(e) => { if (e.target === e.currentTarget) setMenuTagModal(false) }}
-        >
-          <div style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', padding: '20px 16px 36px', width: '100%', maxWidth: 480 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>
-              Activar {diasSeleccionados.size} {diasSeleccionados.size === 1 ? 'día' : 'días'}
-            </div>
-            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 12px' }}>
-              Nombre del menú (opcional). Ej: "Menú ejecutivo semana 22", "Evento boda".
-            </p>
-            <input
-              autoFocus
-              value={menuTagInput}
-              onChange={e => setMenuTagInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleActivarDias() }}
-              placeholder="Menú ejecutivo semana 22"
-              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, color: 'var(--text-1)', fontFamily: 'inherit', boxSizing: 'border-box' }}
-            />
-            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-              <button
-                onClick={() => setMenuTagInput('Menú ejecutivo')}
-                style={{ padding: '4px 10px', borderRadius: 99, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 11, fontWeight: 600, color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'inherit' }}
-              >
-                Menu ejecutivo
-              </button>
-              <button
-                onClick={() => setMenuTagInput('Evento')}
-                style={{ padding: '4px 10px', borderRadius: 99, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 11, fontWeight: 600, color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'inherit' }}
-              >
-                Evento
-              </button>
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button
-                onClick={() => setMenuTagModal(false)}
-                style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 13, fontWeight: 600, color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'inherit' }}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleActivarDias}
-                disabled={activatingMulti}
-                style={{ flex: 2, padding: '10px', borderRadius: 10, border: 'none', background: 'var(--navy)', fontSize: 13, fontWeight: 700, color: '#fff', cursor: 'pointer', fontFamily: 'inherit', opacity: activatingMulti ? 0.6 : 1 }}
-              >
-                {activatingMulti ? 'Activando...' : 'Confirmar'}
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* Toast */}
