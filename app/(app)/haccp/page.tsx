@@ -299,11 +299,7 @@ function RegistrarTempsView({
         })}
       </div>
 
-      <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
-        background: 'var(--surface)', borderTop: '1px solid var(--border)',
-        padding: '12px 16px', zIndex: 50,
-      }}>
+      <div style={{ padding: '4px 16px 16px' }}>
         <button
           disabled={filledCount === 0 || saving}
           onClick={handleSave}
@@ -533,10 +529,7 @@ function NuevoVencView({
         <div><label style={labelStyle}>Lote (opcional)</label><input value={lote} onChange={e => setLote(e.target.value)} placeholder="Ej: L-2026-0341" style={fieldStyle} /></div>
         <div><label style={labelStyle}>Ubicación (opcional)</label><input value={ubic} onChange={e => setUbic(e.target.value)} placeholder="Ej: Cámara 1" style={fieldStyle} /></div>
       </div>
-      <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
-        background: 'var(--surface)', borderTop: '1px solid var(--border)', padding: '12px 16px', zIndex: 50,
-      }}>
+      <div style={{ padding: '4px 16px 16px' }}>
         <button disabled={!nombre.trim() || !fechaVenc || saving} onClick={handleSave} style={{
           width: '100%', padding: '14px', borderRadius: 12,
           background: (nombre.trim() && fechaVenc) ? 'var(--navy)' : '#ccc',
@@ -635,10 +628,7 @@ function NuevaTareaLimpView({
           </div>
         </button>
       </div>
-      <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
-        background: 'var(--surface)', borderTop: '1px solid var(--border)', padding: '12px 16px', zIndex: 50,
-      }}>
+      <div style={{ padding: '4px 16px 16px' }}>
         <button disabled={!area.trim() || !tarea.trim() || saving} onClick={async () => {
           setSaving(true)
           try {
