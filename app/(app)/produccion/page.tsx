@@ -133,11 +133,25 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
       const supabase = createClient()
       let totalTareas = 0, diasActivados = 0, diasYaActivos = 0
       for (const f of fechas) {
-        // Dedupe: si el menú ya está activo para ese día, saltear
-        const { data: existing } = await supabase.from('tareas').select('id')
-          .eq('restaurante_id', RESTAURANTE_ID).eq('menu_id', menu.id).eq('turno_fecha', f).limit(1)
-        if (existing && existing.length > 0) { diasYaActivos++; continue }
-        const rows = menu.preparaciones.map((p, i) => ({
+        // Dedupe por preparación: no recrear una tarea si ya existe para ese día,
+        // o si la del día anterior quedó sin completar (arrastra al día siguiente).
+        // Así "tomates asados" pendiente de ayer NO se duplica al activar hoy.
+        const prev = new Date(f + 'T12:00:00'); prev.setDate(prev.getDate() - 1)
+        const prevDay = fmtDate(prev)
+        const { data: previas } = await supabase.from('tareas')
+          .select('titulo, turno_fecha, estado')
+          .eq('restaurante_id', RESTAURANTE_ID).eq('menu_id', menu.id)
+          .gte('turno_fecha', prevDay).lte('turno_fecha', f)
+        const yaCubiertas = new Set<string>()
+        for (const t of previas ?? []) {
+          if (t.turno_fecha === f) yaCubiertas.add(t.titulo)                       // mismo día
+          else if (t.turno_fecha === prevDay && t.estado !== 'listo') yaCubiertas.add(t.titulo) // arrastre de ayer
+        }
+        const preparacionesNuevas = menu.preparaciones
+          .map((p, i) => ({ p, orden: i }))
+          .filter(({ p }) => !yaCubiertas.has(p.nombre))
+        if (preparacionesNuevas.length === 0) { diasYaActivos++; continue }
+        const rows = preparacionesNuevas.map(({ p, orden: i }) => ({
           titulo: p.nombre,
           descripcion: menu.nombre,
           status: 'pendiente',

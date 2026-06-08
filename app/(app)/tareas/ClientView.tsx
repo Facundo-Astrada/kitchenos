@@ -99,14 +99,17 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   }, [tareas, modo, today])
 
   const { topLevel, subtareasByParent, statsHoy } = useMemo(() => {
+    // Ayer = carryover de un solo día: una tarea no completada se arrastra al día
+    // siguiente y nada más. Evita que las pendientes se apilen indefinidamente.
+    const ayer = (() => { const d = new Date(today + 'T12:00:00'); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0] })()
     const hoyCandidates = tareas.filter((t) =>
-      t.modo === modo && !t.parent_id &&
-      (!t.turno_fecha || t.turno_fecha === today ||
-        (t.turno_fecha < today && t.estado !== 'listo'))
+      t.modo === modo && !t.parent_id && !!t.turno_fecha &&
+      (t.turno_fecha === today ||
+        (t.turno_fecha === ayer && t.estado !== 'listo'))
     ).sort((a, b) => {
       // Turno actual primero
-      const aHoy = !a.turno_fecha || a.turno_fecha === today
-      const bHoy = !b.turno_fecha || b.turno_fecha === today
+      const aHoy = a.turno_fecha === today
+      const bHoy = b.turno_fecha === today
       if (aHoy && !bHoy) return -1
       if (!aHoy && bHoy) return 1
       return 0
