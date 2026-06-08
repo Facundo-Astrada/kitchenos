@@ -158,8 +158,67 @@ export function useMenus() {
       const { error: prepErr } = await supabase.from('menu_preparaciones').insert(rows)
       if (prepErr) throw new Error(prepErr.message)
     }
+
+    // ── Propagar a las fechas YA activadas (hoy en adelante; el pasado no se toca) ──
+    // Las tareas son un snapshot del menú al activarlo. Al editar el menú sincronizamos:
+    // agregamos las preparaciones nuevas, refrescamos las existentes, y sacamos las
+    // borradas SOLO si todavía no se empezaron (no se pisa trabajo ya hecho/en curso).
+    const hoy = new Date().toISOString().split('T')[0]
+    const { data: activadas } = await supabase
+      .from('tareas')
+      .select('id, titulo, turno_fecha, estado')
+      .eq('menu_id', id)
+      .is('parent_id', null)
+      .gte('turno_fecha', hoy)
+    if (activadas && activadas.length > 0) {
+      const fechas = [...new Set((activadas as { turno_fecha: string }[]).map(t => t.turno_fecha))]
+      const prepByName = new Map(preps.map(p => [p.nombre, p]))
+      for (const f of fechas) {
+        const existentes = (activadas as { id: string; titulo: string; turno_fecha: string; estado: string }[])
+          .filter(t => t.turno_fecha === f)
+        const existentesNombres = new Set(existentes.map(t => t.titulo))
+        // AGREGAR las preparaciones que aún no existen en esa fecha
+        const nuevas = preps
+          .filter(p => !existentesNombres.has(p.nombre))
+          .map((p, i) => ({
+            titulo: p.nombre,
+            descripcion: data.nombre,
+            status: 'pendiente',
+            estado: 'pendiente',
+            prioridad: p.prioridad,
+            categoria: 'produccion',
+            modo: 'menu',
+            seccion: p.paso || 'general',
+            plaza: p.plaza,
+            asignado_a: p.usuario_asignado,
+            receta_id: p.tipo === 'receta' ? p.ref_id : null,
+            cantidad: p.cantidad ?? null,
+            turno_fecha: f,
+            menu_id: id,
+            orden: 1000 + i,
+            restaurante_id: RESTAURANTE_ID,
+          }))
+        if (nuevas.length > 0) await supabase.from('tareas').insert(nuevas)
+        // ACTUALIZAR las existentes / SACAR las borradas que no se empezaron
+        for (const t of existentes) {
+          const p = prepByName.get(t.titulo)
+          if (p) {
+            await supabase.from('tareas').update({
+              prioridad: p.prioridad,
+              seccion: p.paso || 'general',
+              plaza: p.plaza,
+              receta_id: p.tipo === 'receta' ? p.ref_id : null,
+              cantidad: p.cantidad ?? null,
+            }).eq('id', t.id)
+          } else if (t.estado === 'pendiente') {
+            await supabase.from('tareas').delete().eq('id', t.id)
+          }
+        }
+      }
+    }
+
     await fetchMenus()
-  }, [fetchMenus]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [RESTAURANTE_ID, fetchMenus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Soft-delete ──
   const eliminarMenu = useCallback(async (id: string) => {
