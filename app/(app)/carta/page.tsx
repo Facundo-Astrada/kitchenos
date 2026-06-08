@@ -3132,42 +3132,59 @@ export default function CartaPage() {
             </button>
           )}
         </div>
-        {/* Action chips — scrollable row */}
-        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 }}>
-          <button onClick={() => setView('menus')} style={{
-            background: '#fff', border: 'none',
-            borderRadius: 20, padding: '5px 12px', color: 'var(--navy)',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-            fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0,
+        {/* Navegación primaria — Platos | Menús (segmentado, mismo peso visual) */}
+        <div style={{
+          display: 'flex', gap: 4, background: 'rgba(255,255,255,0.1)',
+          borderRadius: 13, padding: 4,
+        }}>
+          <button onClick={() => setView('list')} style={{
+            flex: 1, border: 'none', borderRadius: 10, padding: '9px 0', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
+            background: '#fff', color: 'var(--navy)',
+            boxShadow: '0 1px 3px rgba(0,0,0,.15)',
           }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>menu_book</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 17 }}>restaurant_menu</span>
+            Platos
+          </button>
+          <button data-coach-target="carta-menus" onClick={() => setView('menus')} style={{
+            flex: 1, border: 'none', borderRadius: 10, padding: '9px 0', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
+            background: 'transparent', color: 'rgba(255,255,255,0.75)',
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 17 }}>menu_book</span>
             Menús
           </button>
+        </div>
+
+        {/* Utilidades — secundarias, discretas */}
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', marginTop: 8 }}>
           <button data-coach-target="carta-importar" onClick={() => setShowImport(true)} style={{
-            background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,.2)',
-            borderRadius: 20, padding: '5px 12px', color: '#fff',
+            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,.15)',
+            borderRadius: 18, padding: '4px 11px', color: 'rgba(255,255,255,0.85)',
             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-            fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,
+            fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,
           }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>upload_file</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>upload_file</span>
             Importar
           </button>
           <button onClick={() => exportCartaPDF(items)} style={{
-            background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,.2)',
-            borderRadius: 20, padding: '5px 12px', color: '#fff',
+            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,.15)',
+            borderRadius: 18, padding: '4px 11px', color: 'rgba(255,255,255,0.85)',
             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-            fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,
+            fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,
           }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>picture_as_pdf</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>picture_as_pdf</span>
             PDF
           </button>
           <button onClick={exportXLSX} style={{
-            background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,.2)',
-            borderRadius: 20, padding: '5px 12px', color: '#fff',
+            background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,.15)',
+            borderRadius: 18, padding: '4px 11px', color: 'rgba(255,255,255,0.85)',
             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-            fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,
+            fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,
           }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>table_view</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>table_view</span>
             Excel
           </button>
         </div>
