@@ -92,6 +92,21 @@ useEffect(() => {
 
 Llamar desde `useRecetas.agregarReceta`, no directamente desde el browser.
 
+## AuthProvider — race de hard-navigation (junio 2026)
+
+En F5 / URL directa el cookie de sesión está, pero el access token puede **no estar adjunto a la primera query** → RLS devuelve vacío → `user_restaurantes` da `null`. El código viejo seteaba `perfil=null` + `loading=false` **permanente** → el header mostraba `??`. **No había** "timer de 3s" (el doc lo afirmaba pero nunca existió).
+
+Fix en `lib/auth/context.tsx`:
+1. `loadPerfil(u, attempt)` **reintenta** con backoff (`PERFIL_RETRY_MS * (attempt+1)`, hasta `PERFIL_MAX_RETRIES=3`) cuando `ur` viene null o la query tira error. Durante los reintentos `loading` queda `true` → spinner, nunca `??`. En el 2º intento el token ya está adjunto.
+2. **Safety timeout** (`PERFIL_SAFETY_MS=10000`): `useEffect` que fuerza `loading=false` si la resolución se cuelga (red muerta), para no spinear infinito.
+3. `giveUp()` usa `setPerfil(prev => prev)` (no `setPerfil(null)`) para **no pisar** el perfil que `signUp` setea en paralelo durante el alta.
+
+## Kitchen Coach — datos reales + acciones server-side (M1/M5, junio 2026)
+
+`app/api/coach/route.ts` usa el **server client** (sesión del usuario → RLS por tenant automático), NO el admin client.
+- **M1 (`buildSnapshot`)**: consulta en vivo stock crítico/bajo (`productos`, los 120 de menor stock), vencimientos ≤3 días (`haccp_vencimientos` status `vigente`/`por_vencer`), facturas pendientes (`facturas`). Se inyecta al system prompt. Acotado + `try/catch` por sección (falla seguro, no rompe el chat).
+- **M5 (tool use)**: loop agéntico server-side (hasta 4 vueltas: modelo → `tool_use` → ejecutar → `tool_result` → modelo). 3 tools: `crear_tarea` (inserta `tareas` con `seccion='general'`, `turno_fecha=hoy`, `checklist='[]'`), `marcar_86` (`carta_items.disponible=false` con `.ilike('nombre', '%x%')`), `registrar_merma` (inserta `merma` + descuenta `stock_actual` si matchea producto). **`restaurante_id` se resuelve de la sesión (`user_restaurantes`), nunca del body** — RLS igual lo enforcea en el WITH CHECK. Cada tool devuelve un **string** (resultado o error) que vuelve al modelo. El cliente (`useKitchenCoach`) no cambió: sigue leyendo `data.content[0].text`.
+
 ## usePermisos — resolución de módulos efectivos (junio 2026)
 
 Orden de prioridad para `puedeVer(modulo)`:

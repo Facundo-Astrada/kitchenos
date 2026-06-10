@@ -52,10 +52,10 @@ Features pro (Kitchen Coach, multi-usuario, exportar reportes PDF, HACCP) solo e
 ### 9. Kitchen Coach — capa agéntica (M1 + M5)
 Tour guiado, cobertura 19/19 pantallas, motor genérico `lib/coach/tours.ts` completados (3 jun 2026). Estado:
 - ✅ **M1 — Datos server-side** (10 jun 2026): `api/coach/route.ts` consulta datos reales vía `buildSnapshot()` (server client → respeta RLS) y los inyecta al system prompt: stock crítico/bajo (`productos`), vencimientos ≤3 días (`haccp_vencimientos`), facturas pendientes (`facturas`). Acotado y falla seguro. Falta opcional: FC de recetas server-side (hoy llega por `kc_screen_context` del cliente).
-- **M5 — Tool use agéntico**: ejecutar acciones desde el chat (crear tarea, marcar 86, registrar merma). Merma ya existe como botón — convertirlo en tool de Anthropic. TODO marcado en `route.ts`.
-- Memoria persistida (tabla `coach_conversaciones`).
-- Prompt caching para reducir costo ~3× (sistema prompt es 90% estático).
-**Status:** 🟡 M1 hecho · falta M5 + memoria + caching.
+- ✅ **M5 — Tool use agéntico** (10 jun 2026): el Coach ejecuta acciones desde el chat vía tool use + loop agéntico server-side (hasta 4 vueltas) en `route.ts`. 3 tools (`crear_tarea`, `marcar_86`, `registrar_merma`) corren con el server client → RLS por tenant; `restaurante_id` se resuelve de la sesión, no del body. Falla seguro (cada tool devuelve string al modelo).
+- **Memoria persistida** (tabla `coach_conversaciones`). ⏳ Pendiente.
+- **Prompt caching** para reducir costo ~3× (sistema prompt es 90% estático). ⏳ Pendiente.
+**Status:** 🟡 M1 + M5 hechos · falta memoria persistida + prompt caching.
 
 ### 10. Subida de fotos
 - Bucket Supabase Storage: `recetas`, `platos`, `miembros`, `facturas`.

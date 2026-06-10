@@ -100,6 +100,14 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 
 ## 4. Implementado en Últimas Sesiones
 
+### Sesión 2026-06-10 (tarde) — Auth race condition + Kitchen Coach M1/M5
+
+1. **Auth race (hard-nav) resuelta** (`lib/auth/context.tsx`): en F5/URL directa el access token no estaba adjunto a la primera query → RLS vacío → `user_restaurantes` null → se rendía permanente mostrando `??`. `loadPerfil` ahora **reintenta** con backoff (400/800/1200 ms) manteniendo `loading=true` (spinner, no `??`) + **safety timeout de 10 s** si la query se cuelga. `giveUp()` usa `setPerfil(prev => prev)` para no pisar el perfil que setea `signUp`. El "timer de 3s" que el doc decía tener no existía.
+2. **Coach M1 — datos reales server-side** (`app/api/coach/route.ts`): `buildSnapshot()` consulta en vivo (server client → respeta RLS, aislamiento por tenant automático) stock crítico/bajo, vencimientos ≤3 días y facturas pendientes, y los inyecta al system prompt. Acotado (limits) y falla seguro (try/catch por sección).
+3. **Coach M5 — tool use agéntico** (`route.ts`): loop server-side (hasta 4 vueltas) con 3 tools de Anthropic — `crear_tarea` (inserta en `tareas`, hoy, aparece en Producción), `marcar_86` (`carta_items.disponible=false` por nombre fuzzy), `registrar_merma` (inserta `merma` + descuenta `stock_actual` si matchea el producto). `restaurante_id` se resuelve de la sesión (no del body); writes respetan RLS. Cada tool devuelve un string de resultado/error al modelo.
+
+**Pendiente del Coach:** memoria persistida (`coach_conversaciones`) + prompt caching. **Commits:** `109383d` (auth+M1) · `f5c5099` (M5), deployados.
+
 ### Sesión 2026-06-10 — Bugs de Producción/Menús + UX Carta + forms HACCP
 
 1. **Producción no acumula ni duplica** (`tareas/ClientView.tsx` + `produccion/page.tsx`):
