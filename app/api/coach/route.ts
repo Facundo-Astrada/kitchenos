@@ -66,6 +66,149 @@ async function buildSnapshot(supabase: SupabaseClient): Promise<string> {
     + lines.map(l => '- ' + l).join('\n')
 }
 
+// ── M5: tool use agéntico ─────────────────────────────────────
+// El Coach puede EJECUTAR acciones. Las herramientas corren server-side
+// con el server client → RLS asegura que solo tocan el restaurante del
+// usuario. restauranteId se resuelve de la sesión (no se confía en el body).
+const COACH_TOOLS = [
+  {
+    name: 'crear_tarea',
+    description: 'Crea una tarea/producción pendiente para el día de hoy. Usar solo cuando el usuario pide explícitamente crear una tarea o anotar algo para hacer.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        titulo: { type: 'string', description: 'Qué hay que hacer. Ej: "Cortar mirepoix", "Preparar fondo oscuro".' },
+        prioridad: { type: 'string', enum: ['critica', 'alta', 'media', 'baja'], description: 'Prioridad. Default media.' },
+        plaza: { type: 'string', description: 'Plaza/estación opcional. Ej: parrilla, frios, pasteleria.' },
+        descripcion: { type: 'string', description: 'Detalle opcional.' },
+      },
+      required: ['titulo'],
+    },
+  },
+  {
+    name: 'marcar_86',
+    description: 'Marca un plato de la carta como NO disponible (86). Usar cuando el usuario dice que se acabó o no hay un plato.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        plato: { type: 'string', description: 'Nombre (o parte) del plato a marcar como no disponible.' },
+      },
+      required: ['plato'],
+    },
+  },
+  {
+    name: 'registrar_merma',
+    description: 'Registra una merma (desperdicio) de un producto. Si el producto está en stock, descuenta la cantidad. Usar cuando el usuario reporta que se tiró/perdió/venció algo.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        producto: { type: 'string', description: 'Nombre del producto mermado.' },
+        cantidad: { type: 'number', description: 'Cantidad mermada.' },
+        unidad: { type: 'string', description: 'Unidad. Ej: kg, g, l, ml, u.' },
+        motivo: { type: 'string', enum: ['vencimiento', 'error_coccion', 'mala_recepcion', 'sobro_servicio', 'deterioro', 'devolucion_cliente', 'mala_conservacion', 'otro'], description: 'Motivo de la merma.' },
+        detalle: { type: 'string', description: 'Detalle opcional.' },
+      },
+      required: ['producto', 'cantidad', 'unidad', 'motivo'],
+    },
+  },
+]
+
+function turnoActual(): 'apertura' | 'servicio' | 'cierre' {
+  const h = new Date().getHours()
+  return h < 12 ? 'apertura' : h < 18 ? 'servicio' : 'cierre'
+}
+
+type ToolInput = Record<string, unknown>
+
+async function executeTool(name: string, input: ToolInput, supabase: SupabaseClient, restauranteId: string | null): Promise<string> {
+  if (!restauranteId) return 'Error: no pude identificar tu restaurante. No ejecuté la acción.'
+  const hoy = new Date().toISOString().split('T')[0]
+
+  try {
+    if (name === 'crear_tarea') {
+      const titulo = String(input.titulo ?? '').trim()
+      if (!titulo) return 'Error: falta el título de la tarea.'
+      const prioridad = ['critica', 'alta', 'media', 'baja'].includes(String(input.prioridad)) ? String(input.prioridad) : 'media'
+      const { error } = await supabase.from('tareas').insert({
+        titulo,
+        descripcion: input.descripcion ? String(input.descripcion) : null,
+        status: 'pendiente',
+        estado: 'pendiente',
+        prioridad,
+        categoria: 'general',
+        seccion: 'general',
+        plaza: input.plaza ? String(input.plaza) : null,
+        turno_fecha: hoy,
+        checklist: '[]',
+        restaurante_id: restauranteId,
+      })
+      if (error) return `Error al crear la tarea: ${error.message}`
+      return `Tarea creada para hoy: "${titulo}" (prioridad ${prioridad}). Aparece en Producción.`
+    }
+
+    if (name === 'marcar_86') {
+      const plato = String(input.plato ?? '').trim()
+      if (!plato) return 'Error: falta el nombre del plato.'
+      const { data, error } = await supabase.from('carta_items')
+        .update({ disponible: false })
+        .eq('restaurante_id', restauranteId)
+        .ilike('nombre', `%${plato}%`)
+        .select('nombre')
+      if (error) return `Error al marcar 86: ${error.message}`
+      if (!data || data.length === 0) return `No encontré ningún plato que coincida con "${plato}". No marqué nada.`
+      return `Marcado como 86 (no disponible): ${data.map(d => d.nombre).join(', ')}.`
+    }
+
+    if (name === 'registrar_merma') {
+      const producto = String(input.producto ?? '').trim()
+      const cantidad = Number(input.cantidad)
+      const unidad = String(input.unidad ?? '').trim()
+      const motivo = String(input.motivo ?? 'otro')
+      if (!producto || !cantidad || cantidad <= 0 || !unidad) return 'Error: faltan datos de la merma (producto, cantidad o unidad).'
+
+      // Intentar resolver el producto en stock para costo y descuento.
+      const { data: prod } = await supabase.from('productos')
+        .select('id, precio_unitario, stock_actual')
+        .eq('restaurante_id', restauranteId)
+        .ilike('nombre', `%${producto}%`)
+        .limit(1)
+        .maybeSingle()
+
+      const costo = prod?.precio_unitario ? Number(prod.precio_unitario) * cantidad : 0
+      const { error } = await supabase.from('merma').insert({
+        producto_nombre: producto,
+        producto_id: prod?.id ?? null,
+        cantidad,
+        unidad,
+        motivo,
+        motivo_detalle: input.detalle ? String(input.detalle) : null,
+        fecha: hoy,
+        turno: turnoActual(),
+        costo_estimado: costo,
+        restaurante_id: restauranteId,
+      })
+      if (error) return `Error al registrar la merma: ${error.message}`
+
+      let extra = ''
+      if (prod?.id) {
+        const nuevo = Math.max(0, (Number(prod.stock_actual) || 0) - cantidad)
+        await supabase.from('productos').update({ stock_actual: nuevo }).eq('id', prod.id)
+        extra = ` Stock actualizado a ${nuevo} ${unidad}.`
+      }
+      const costoTxt = costo > 0 ? ` Costo estimado $${Math.round(costo).toLocaleString('es-AR')}.` : ''
+      return `Merma registrada: ${cantidad} ${unidad} de ${producto} (${motivo}).${costoTxt}${extra}`
+    }
+
+    return `Error: herramienta desconocida "${name}".`
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'desconocido'
+    return `Error al ejecutar ${name}: ${msg}`
+  }
+}
+
+interface ContentBlock { type: string; [k: string]: unknown }
+interface AnthropicMsg { role: string; content: unknown }
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -73,11 +216,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
-  const { messages, context, systemPrompt: bodySystemPrompt } = await req.json()
+  // restaurante_id de la sesión (fuente confiable para writes; no del body).
+  const { data: ur } = await supabase.from('user_restaurantes')
+    .select('restaurante_id').eq('user_id', user.id).maybeSingle()
+  const restauranteId = (ur?.restaurante_id as string | undefined) ?? null
 
-  // ── TODO (M5) acciones ejecutables vía tool use ──
-  //   stock: marcar producto para reponer · carta: marcar 86 · tareas: crear tarea
-  //   merma: registrar merma (hoy es botón en el panel del FAB → candidato a tool)
+  const { messages, context, systemPrompt: bodySystemPrompt } = await req.json()
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
@@ -99,26 +243,63 @@ Respondé de forma concisa y práctica. Usá el contexto para dar recomendacione
     if (snapshot) systemPrompt += snapshot
   } catch { /* sin snapshot — seguimos */ }
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages,
-    }),
-  })
+  // M5 — instrucciones de acciones ejecutables.
+  systemPrompt += `\n\n## Acciones ejecutables
+Tenés herramientas para EJECUTAR acciones reales: crear_tarea, marcar_86, registrar_merma.
+- Usalas SOLO cuando el usuario pide explícitamente hacer la acción ("creá una tarea…", "se acabó el…", "se tiraron 2 kg de…").
+- Después de ejecutar, confirmá en una frase breve en texto plano (sin JSON, sin markdown) lo que hiciste.
+- Si faltan datos para ejecutar (ej. cantidad de la merma), preguntá antes de llamar la herramienta.`
 
-  if (!response.ok) {
-    const error = await response.text()
-    return NextResponse.json({ error }, { status: response.status })
+  // Loop agéntico: hasta 4 vueltas (modelo → tool → resultado → modelo).
+  const convo: AnthropicMsg[] = Array.isArray(messages) ? [...messages] : []
+  let finalContent: unknown = [{ type: 'text', text: 'Sin respuesta' }]
+
+  for (let i = 0; i < 4; i++) {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1024,
+        system: systemPrompt,
+        tools: COACH_TOOLS,
+        messages: convo,
+      }),
+    })
+
+    if (!response.ok) {
+      const error = await response.text()
+      return NextResponse.json({ error }, { status: response.status })
+    }
+
+    const data = await response.json()
+    finalContent = data.content
+    const blocks = (data.content ?? []) as ContentBlock[]
+
+    if (data.stop_reason === 'tool_use') {
+      convo.push({ role: 'assistant', content: data.content })
+      const toolResults = []
+      for (const block of blocks) {
+        if (block.type === 'tool_use') {
+          const result = await executeTool(
+            String(block.name),
+            (block.input ?? {}) as ToolInput,
+            supabase,
+            restauranteId,
+          )
+          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result })
+        }
+      }
+      convo.push({ role: 'user', content: toolResults })
+      continue
+    }
+
+    break // end_turn — respuesta final lista
   }
 
-  const data = await response.json()
-  return NextResponse.json({ content: data.content })
+  return NextResponse.json({ content: finalContent })
 }
