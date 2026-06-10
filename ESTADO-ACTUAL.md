@@ -100,6 +100,18 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 
 ## 4. Implementado en Últimas Sesiones
 
+### Sesión 2026-06-10 — Bugs de Producción/Menús + UX Carta + forms HACCP
+
+1. **Producción no acumula ni duplica** (`tareas/ClientView.tsx` + `produccion/page.tsx`):
+   - Carryover de **un solo día**: la vista muestra solo tareas de hoy + las de ayer sin completar (y requiere `turno_fecha`). Antes las tareas con `turno_fecha=NULL` o pasadas sin completar se mostraban **para siempre** → "producciones viejas" que nunca se iban.
+   - `activarMenu` deduplica **por preparación** contra el día y el arrastre de ayer: si "tomates asados" quedó pendiente ayer, activar hoy NO crea un duplicado.
+   - Limpieza de datos: borradas **203 tareas viejas** en Bros (completadas antiguas + sin-fecha previas a hoy). Activaciones futuras intactas.
+2. **Editar un menú propaga a fechas ya activadas** (`useMenus.actualizarMenu`): las tareas (snapshot) de Planificación/Producción se sincronizan para hoy en adelante — agrega preparaciones nuevas, refresca prioridad/sección/plaza/receta/cantidad de las existentes, y saca las borradas **solo si no se empezaron** (no pisa trabajo hecho/en curso). El pasado no se toca.
+3. **Carta — Menús como navegación primaria** (`carta/page.tsx`): toggle segmentado **Platos | Menús** (mismo peso visual, estilo tabs OPS). Importar/PDF/Excel bajaron a una fila de utilidades secundaria.
+4. **HACCP — botón guardar tapado** (`haccp/page.tsx`): las 3 sub-vistas (Nueva tarea de limpieza, Agregar vencimiento, Registrar temperaturas) tenían la barra de guardar `position:fixed bottom:0 z-50` **detrás del BottomNav** (`z-100`). Pasadas a botón **inline** dentro del scroll de `main` → siempre visible sobre el nav.
+
+**Commits:** `4dd9c6f` (carryover) · `407f374` (propagación menú) · `fd11ad9` (UX carta) · `d19c3f4` (forms HACCP).
+
 ### Sesión 2026-06-07 (tarde) — Reducir errores: OPS, Facturas→Stock, Invitación + sync de docs
 
 1. **Desambiguación OPS (una sola puerta de entrada)**: `/operaciones` es ahora el único acceso al workspace diario, con deep-link `?tab=produccion|mise|planificacion`. Las rutas viejas `/tareas`, `/checklist`, `/produccion` **redirigen** a OPS con su tab (antes mostraban la vista huérfana sin barra de tabs). La implementación de Planificación pasó de default export a export nombrado `ProduccionView` (la que OPS embebe); el default de `/produccion` solo redirige. `RUTA_A_MODULO` mapea las 3 a `operaciones`.

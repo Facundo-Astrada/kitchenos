@@ -47,6 +47,21 @@ Cuando un bottom sheet puede tener contenido variable (listas, categorías), sie
 </button>
 ```
 
+## Botón "Guardar" en forms full-screen — NO usar `position: fixed; bottom: 0`
+
+El `BottomNav` es `z-[100]` y vive en el flujo del layout (`app/(app)/layout.tsx`: `<main flex-1 overflow-y-auto>` + `<BottomNav>` después). Una barra de guardar con `position: fixed; bottom: 0; zIndex: 50` se escapa al viewport y queda **detrás del nav** → el botón no se ve ni se puede tocar. Pasó en los 3 forms de HACCP (limpieza/vencimientos/temperaturas, jun 2026).
+
+**Patrón correcto:** botón **inline** al final del contenido (dentro del scroll de `main`), nunca fixed. Como `main` está *antes* del nav en el flex, todo su contenido queda por encima del nav automáticamente:
+
+```tsx
+<div style={{ paddingBottom: 24 }}>
+  {/* ...campos del form... */}
+  <div style={{ padding: '4px 16px 16px' }}>
+    <button style={{ width: '100%', padding: 14, borderRadius: 12, background: 'var(--navy)', color: '#fff' }}>Guardar</button>
+  </div>
+</div>
+```
+
 ## Iconos
 
 Solo `Material Symbols Outlined`. Nunca emoji ni SVG custom.

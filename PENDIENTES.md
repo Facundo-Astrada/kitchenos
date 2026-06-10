@@ -110,6 +110,10 @@ Los scripts de `scripts/*.mjs` tienen el `SUPABASE_MANAGEMENT_TOKEN` en texto pl
 
 | # | Descripción | Cuándo |
 |---|---|---|
+| HACCP: botón guardar tapado por el BottomNav | Las 3 sub-vistas (limpieza/vencimientos/temperaturas) tenían la barra de guardar `position:fixed bottom:0 z-50` detrás del nav (`z-100`). Pasadas a botón inline dentro del scroll. | 10 junio 2026 |
+| Carta: Menús como navegación primaria | Toggle segmentado Platos \| Menús (mismo peso visual). Importar/PDF/Excel bajan a fila secundaria discreta. | 10 junio 2026 |
+| Editar un menú propaga a fechas ya activadas | `actualizarMenu` sincroniza las tareas de Planificación/Producción (hoy en adelante): agrega nuevas preparaciones, refresca existentes, saca borradas solo si no se empezaron. | 10 junio 2026 |
+| Producción: no acumula tareas viejas ni duplica carryover | Carryover de 1 día (hoy + ayer sin completar, requiere `turno_fecha`). `activarMenu` deduplica por preparación contra el día y el arrastre de ayer. Limpieza de 203 tareas viejas en Bros. | 10 junio 2026 |
 | Desambiguación OPS — única puerta de entrada | `/operaciones` con deep-link `?tab=`; `/tareas`, `/checklist`, `/produccion` redirigen a OPS (antes eran vistas huérfanas sin tab bar). `ProduccionView` como export nombrado. | 7 junio 2026 |
 | Fix Facturas → Stock (matching invertido) | `crearFactura` matcheaba `producto.includes(factura)` → pisaba el producto equivocado / creaba duplicados. Corregido a `factura.includes(producto)` + guard longitud ≥4 + guard `RESTAURANTE_ID`. | 7 junio 2026 |
 | Invitación: página `/registro-invitado` | Ya existía; reforzada para hash/PKCE/token_hash/sesión activa. Falta solo config dashboard Supabase. | 7 junio 2026 |
