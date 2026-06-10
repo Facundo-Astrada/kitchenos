@@ -1,5 +1,70 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+// ── M1: snapshot de datos reales del restaurante ──────────────
+// Consulta en vivo vía el server client (lleva la sesión del usuario →
+// RLS filtra por su restaurante automáticamente, sin necesidad de pasar
+// restauranteId). Acotado y a prueba de fallos: si una query rompe, se
+// omite esa sección y el chat sigue funcionando.
+async function buildSnapshot(supabase: SupabaseClient): Promise<string> {
+  const hoy = new Date()
+  const hoyStr = hoy.toISOString().split('T')[0]
+  const en3dias = new Date(hoy.getTime() + 3 * 86_400_000).toISOString().split('T')[0]
+  const fmt = (n: number) => Math.round(n).toLocaleString('es-AR')
+
+  const [prodRes, vencRes, factRes] = await Promise.all([
+    // Solo los 120 de menor stock — ahí viven críticos y bajos (acotado para Bros ~600).
+    supabase.from('productos')
+      .select('nombre, stock_actual, stock_critico, stock_minimo, unidad')
+      .eq('activo', true)
+      .order('stock_actual', { ascending: true })
+      .limit(120),
+    supabase.from('haccp_vencimientos')
+      .select('nombre, fecha_vencimiento')
+      .in('status', ['vigente', 'por_vencer'])
+      .lte('fecha_vencimiento', en3dias)
+      .order('fecha_vencimiento', { ascending: true })
+      .limit(10),
+    supabase.from('facturas')
+      .select('proveedor_nombre, total')
+      .eq('status', 'pendiente')
+      .order('fecha_factura', { ascending: false })
+      .limit(20),
+  ])
+
+  const lines: string[] = []
+
+  // Stock crítico / bajo
+  const productos = (prodRes.data ?? []) as Array<{ nombre: string; stock_actual: number; stock_critico: number | null; stock_minimo: number | null; unidad: string | null }>
+  const criticos = productos.filter(p => p.stock_actual <= (p.stock_critico ?? 0))
+  const bajos = productos.filter(p => p.stock_actual > (p.stock_critico ?? 0) && p.stock_actual <= (p.stock_minimo ?? 0))
+  if (criticos.length) {
+    lines.push(`Stock CRÍTICO (${criticos.length}): ` + criticos.slice(0, 8)
+      .map(p => `${p.nombre} (${p.stock_actual} ${p.unidad ?? ''}, umbral ${p.stock_critico})`).join('; '))
+  }
+  if (bajos.length) {
+    lines.push(`Stock bajo (${bajos.length}): ` + bajos.slice(0, 6).map(p => p.nombre).join(', '))
+  }
+
+  // Vencimientos próximos
+  const venc = (vencRes.data ?? []) as Array<{ nombre: string; fecha_vencimiento: string }>
+  if (venc.length) {
+    lines.push(`Vencen en ≤3 días (${venc.length}): ` + venc.map(v => `${v.nombre} (${v.fecha_vencimiento})`).join('; '))
+  }
+
+  // Facturas pendientes de pago
+  const facts = (factRes.data ?? []) as Array<{ proveedor_nombre: string | null; total: number | null }>
+  if (facts.length) {
+    const totalPend = facts.reduce((s, f) => s + (Number(f.total) || 0), 0)
+    lines.push(`Facturas pendientes de pago (${facts.length}, total $${fmt(totalPend)}): ` + facts.slice(0, 6)
+      .map(f => `${f.proveedor_nombre ?? 'Proveedor'} $${fmt(Number(f.total) || 0)}`).join('; '))
+  }
+
+  if (lines.length === 0) return ''
+  return `\n\n## Datos reales del restaurante (consultados en vivo, ${hoyStr}) — son la verdad, usá estos números:\n`
+    + lines.map(l => '- ' + l).join('\n')
+}
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -10,12 +75,6 @@ export async function POST(req: NextRequest) {
 
   const { messages, context, systemPrompt: bodySystemPrompt } = await req.json()
 
-  // ── TODO (M1) datos reales server-side por pantalla ──
-  // Hoy el Coach solo conoce lo que el cliente mandó en kc_screen_context.
-  // Para volverlo asesor, consultar Supabase acá según context.screen, p.ej:
-  //   stock      → productos en crítico/bajo + sin precio (subvalúan food cost)
-  //   carta      → platos con food_cost_pct > 35 + márgenes negativos
-  //   facturas   → variación de precios por proveedor (inflación de compras)
   // ── TODO (M5) acciones ejecutables vía tool use ──
   //   stock: marcar producto para reponer · carta: marcar 86 · tareas: crear tarea
   //   merma: registrar merma (hoy es botón en el panel del FAB → candidato a tool)
@@ -25,7 +84,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'API key no configurada' }, { status: 500 })
   }
 
-  const systemPrompt = bodySystemPrompt ?? `Sos el Kitchen Coach de KitchenOS, un asistente de cocina profesional para ${context?.restaurante ?? 'el restaurante'}.
+  let systemPrompt = bodySystemPrompt ?? `Sos el Kitchen Coach de KitchenOS, un asistente de cocina profesional para ${context?.restaurante ?? 'el restaurante'}.
 Tenés acceso al estado actual de la cocina:
 - Usuario: ${context?.usuario ?? 'desconocido'} (${context?.rol ?? ''})
 - Stock crítico: ${JSON.stringify(context?.stockCritico ?? [])}
@@ -33,6 +92,12 @@ Tenés acceso al estado actual de la cocina:
 - Food cost por receta: ${JSON.stringify(context?.foodCost ?? [])}
 
 Respondé de forma concisa y práctica. Usá el contexto para dar recomendaciones específicas.`
+
+  // M1 — inyectar datos reales server-side. No rompe el chat si falla.
+  try {
+    const snapshot = await buildSnapshot(supabase)
+    if (snapshot) systemPrompt += snapshot
+  } catch { /* sin snapshot — seguimos */ }
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',

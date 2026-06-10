@@ -25,6 +25,18 @@ function getInitials(nombre: string, apellido: string): string {
   return (n + a).toUpperCase() || '??'
 }
 
+// ── Race de hard-navigation (F5 / URL directa) ────────────────
+// En una navegación dura el cookie de sesión está, pero el access token
+// puede no estar adjunto todavía a la primera query → RLS devuelve vacío
+// y `user_restaurantes` da null. Reintentamos unas veces (backoff corto)
+// antes de concluir que el usuario realmente no tiene restaurante vinculado.
+const PERFIL_MAX_RETRIES = 3
+const PERFIL_RETRY_MS = 400
+// Última red de seguridad: si la resolución del perfil se cuelga (red muerta,
+// query colgada), liberar el spinner para mostrar el estado real.
+const PERFIL_SAFETY_MS = 10000
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
+
 // ── Map DB roles to app Rol type ──────────────────────────────
 function mapRol(dbRol: string, plaza?: string | null): Rol {
   switch (dbRol) {
@@ -107,7 +119,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     let cancelled = false
 
-    async function loadPerfil(u: User) {
+    // Rendirse sin pisar un perfil que signUp pudo haber seteado directo:
+    // si `prev` ya es válido (alta recién creada), lo mantenemos.
+    function giveUp() {
+      if (cancelled) return
+      setPerfil(prev => prev)
+      setLoading(false)
+    }
+
+    async function loadPerfil(u: User, attempt = 0) {
       try {
         const [{ data: ur }, { data: miembro }] = await Promise.all([
           supabase.from('user_restaurantes').select('rol, restaurante_id').eq('user_id', u.id).maybeSingle(),
@@ -116,11 +136,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (cancelled) return
         if (!ur) {
-          // During signUp, onAuthStateChange fires before DB rows are created.
-          // Keep loading=true so RouteGuard shows spinner instead of lock screen.
-          // signUp will directly set perfil after creating rows.
-          setPerfil(null)
-          setLoading(false)
+          // Sin fila de user_restaurantes. Puede ser:
+          //  (a) race de hard-nav: el token aún no llegó → RLS vacío → reintentar.
+          //  (b) durante signUp: las filas todavía no existen (signUp setea perfil aparte).
+          //  (c) usuario realmente sin restaurante vinculado.
+          // Reintentamos con backoff; mantener loading=true muestra spinner, no '??'.
+          if (attempt < PERFIL_MAX_RETRIES) {
+            await sleep(PERFIL_RETRY_MS * (attempt + 1))
+            if (cancelled) return
+            return loadPerfil(u, attempt + 1)
+          }
+          giveUp()
           return
         }
 
@@ -141,16 +167,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })
         setLoading(false)
       } catch {
-        if (!cancelled) {
-          setPerfil(null)
-          setLoading(false)
+        // Error transitorio de red/cliente → reintentar antes de rendirse.
+        if (cancelled) return
+        if (attempt < PERFIL_MAX_RETRIES) {
+          await sleep(PERFIL_RETRY_MS * (attempt + 1))
+          if (cancelled) return
+          return loadPerfil(u, attempt + 1)
         }
+        giveUp()
       }
     }
 
     loadPerfil(user)
     return () => { cancelled = true }
   }, [user, supabase])
+
+  // Safety net: nunca spinear para siempre. Si la resolución del perfil se
+  // cuelga, liberamos el spinner tras PERFIL_SAFETY_MS para mostrar el estado real.
+  useEffect(() => {
+    if (!loading) return
+    const t = setTimeout(() => setLoading(false), PERFIL_SAFETY_MS)
+    return () => clearTimeout(t)
+  }, [loading])
 
   // On mount — resolve auth user only (no DB queries here)
   useEffect(() => {
