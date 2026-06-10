@@ -7,9 +7,6 @@ import type { Perfil } from '@/types'
 
 interface DashboardHeaderProps {
   perfil: Perfil
-  modoServicio: boolean
-  onToggleModoServicio: () => void
-  onOpenCoach: () => void
   onOpenNotifications?: () => void
   notifCount?: number
   miseCompletados?: number
@@ -20,9 +17,6 @@ interface DashboardHeaderProps {
 
 export default function DashboardHeader({
   perfil,
-  modoServicio,
-  onToggleModoServicio,
-  onOpenCoach,
   onOpenNotifications,
   notifCount = 0,
   miseCompletados = 0,
@@ -83,40 +77,6 @@ export default function DashboardHeader({
 
         {/* Botones de acción */}
         <div className="flex gap-[6px]">
-          {/* Modo servicio */}
-          <button
-            onClick={onToggleModoServicio}
-            className="w-[36px] h-[36px] rounded-[10px] flex items-center justify-center border cursor-pointer relative transition-transform active:scale-[.92]"
-            style={{
-              background: modoServicio ? '#ef4444' : 'rgba(255,255,255,.12)',
-              borderColor: modoServicio ? '#ef4444' : 'rgba(255,255,255,.2)',
-              color: '#fff',
-            }}
-            title="Modo servicio"
-          >
-            <span className="material-symbols-outlined text-[20px]">local_fire_department</span>
-            {modoServicio && (
-              <span
-                className="absolute top-[6px] right-[6px] w-[7px] h-[7px] rounded-full"
-                style={{ background: '#fff', border: '1.5px solid #ef4444' }}
-              />
-            )}
-          </button>
-
-          {/* Kitchen Coach */}
-          <button
-            onClick={onOpenCoach}
-            className="w-[36px] h-[36px] rounded-[10px] flex items-center justify-center border cursor-pointer transition-transform active:scale-[.92]"
-            style={{
-              background: 'rgba(255,255,255,.12)',
-              borderColor: 'rgba(255,255,255,.2)',
-              color: '#fff',
-            }}
-            title="Kitchen Coach"
-          >
-            <span className="material-symbols-outlined text-[20px]">smart_toy</span>
-          </button>
-
           {/* Dark mode */}
           <button
             onClick={toggleTheme}

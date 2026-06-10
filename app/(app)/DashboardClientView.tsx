@@ -9,7 +9,6 @@ import PasePreview from '@/components/dashboard/PasePreview'
 import MiPlaza from '@/components/dashboard/MiPlaza'
 import StockCriticoSection from '@/components/dashboard/StockCriticoSection'
 import ModulosGrid from '@/components/dashboard/ModulosGrid'
-import ModoServicio from '@/components/dashboard/ModoServicio'
 import WelcomeDashboard from '@/components/dashboard/WelcomeDashboard'
 import { useStock } from '@/lib/hooks/useStock'
 import { useTareas } from '@/lib/hooks/useTareas'
@@ -18,7 +17,6 @@ import type { Perfil, Rol } from '@/types'
 
 export default function DashboardPage() {
   const { perfil: authPerfil } = useAuth()
-  const [modoServicio, setModoServicio] = useState(false)
   const [turnoActivo, setTurnoActivo] = useState<string | null>(null)
   const [showCierre, setShowCierre] = useState(false)
   const [showNotif, setShowNotif] = useState(false)
@@ -107,9 +105,6 @@ export default function DashboardPage() {
     <div className="flex flex-col h-full">
       <DashboardHeader
         perfil={perfil}
-        modoServicio={modoServicio}
-        onToggleModoServicio={() => setModoServicio((v) => !v)}
-        onOpenCoach={() => {}}
         onOpenNotifications={() => setShowNotif(true)}
         notifCount={productos.filter(p => p.estado === 'critico').length}
         miseCompletados={miseStats.completados}
@@ -118,12 +113,7 @@ export default function DashboardPage() {
         tareasTotal={tareasStats.total}
       />
 
-      {modoServicio ? (
-        <ModoServicio
-          platos={[]}
-          onSalir={() => setModoServicio(false)}
-        />
-      ) : isEmpty ? (
+      {isEmpty ? (
         <div className="scroll-body screen-enter" style={{ paddingTop: 0 }}>
           <WelcomeDashboard nombre={authPerfil?.nombre ?? 'Chef'} />
         </div>

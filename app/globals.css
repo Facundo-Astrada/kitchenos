@@ -8,6 +8,7 @@
   --navy-light: #2d4070;
   --accent: #4361a0;
   --text: #1a2b4b;
+  --text-1: var(--text);
   --text-2: #64748b;
   --text-3: #94a3b8;
   --border: #e2e8f0;

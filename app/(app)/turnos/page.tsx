@@ -411,7 +411,7 @@ export default function TurnosPage() {
           </div>
         ) : (
           <>
-            {tab === 'equipo' && <TabEquipo />}
+            {tab === 'equipo' && TabEquipo()}
             {tab === 'turnos' && <TabTurnos />}
             {tab === 'puestos' && <TabPuestos />}
           </>
