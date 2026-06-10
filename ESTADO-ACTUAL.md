@@ -82,7 +82,7 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 | # | Severidad | Descripción | Estado |
 |---|-----------|-------------|--------|
 | 1 | Media | **Facturas → Stock**: al cargar factura con IA, los productos no siempre se crean/actualizan en `productos`. | ✅ Resuelto (7 jun 2026) — el matching en `crearFactura` estaba invertido (un ítem genérico pisaba un producto específico; uno específico no encontraba su canónico). Corregido a dirección segura + guard de longitud + guard `RESTAURANTE_ID`. Validar con datos reales. |
-| 2 | Media | **Login en producción**: hard navigation (F5/URL directa) a veces no resuelve el perfil y muestra `??` hasta el safety timer de 3s. | Mitigado con timer, fix real pendiente |
+| 2 | Media | **Login en producción**: hard navigation (F5/URL directa) a veces no resuelve el perfil y muestra `??`. | ✅ Resuelto (10 jun 2026) — causa real: en hard-nav el token no está adjunto a la primera query → RLS vacío → `user_restaurantes` null → se rendía permanente. `loadPerfil` ahora **reintenta** (backoff 400/800/1200ms) manteniendo `loading=true` (spinner, no `??`) + **safety timeout 10s** si la query se cuelga. Sin pisar perfil de signUp. `context.tsx`. Validado en prod. |
 | 3 | Media | **Merma → Stock**: al registrar merma, el `stock_actual` no se descuenta automáticamente. | ✅ Resuelto — `useMerma.agregarMerma` hace UPDATE de `stock_actual` tras el insert. |
 | 4 | Baja | `USUARIO_MOCK` hardcoded en `lib/hooks/usePase.ts`. | ✅ Resuelto — ya no existe; usa `perfil.nombre`. |
 
