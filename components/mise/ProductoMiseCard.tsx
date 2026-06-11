@@ -158,6 +158,11 @@ export function ProductoMiseCard({
   const isBajo = cantActual !== null && item.cantidad > 0 && cantActual < item.cantidad
   const prio = PRIO_CFG[item.prioridad] ?? PRIO_CFG.ref
 
+  // Apertura: stock = apertura corregida por el usuario si existe, sino cierre anterior
+  const stockDisplay = !esCierre ? (reg?.cantidad_actual ?? regCierreAnterior ?? null) : null
+  const [editingStock, setEditingStock] = useState(false)
+  const [stockInput, setStockInput] = useState('')
+
   const hasReceta = !!item.receta_id && (recetaInfo?.porciones ?? 0) > 0
   const porciones = recetaInfo?.porciones ?? null
   const primaryPlaza = platoPlazo.length > 0 ? platoPlazo[0].plaza : item.plaza
@@ -285,10 +290,45 @@ export function ProductoMiseCard({
         )}
       </div>
 
-      {/* ── Info row — solo apertura: stock del cierre anterior + target ── */}
+      {/* ── Info row — solo apertura: stock editable + target ── */}
       {!esCierre && !checked && (
         <div style={{ display: 'flex', gap: 6, padding: '0 12px 10px', paddingLeft: 44 }}>
-          <StockBox stockCierre={regCierreAnterior ?? null} target={item.cantidad} unidad={item.unidad} />
+          {editingStock ? (
+            <div data-coach-target="mise-stock-box" style={{
+              flex: 1, padding: '6px 10px', borderRadius: 10,
+              background: 'rgba(59,130,246,.08)', border: '1.5px solid #3b82f6',
+            }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 2 }}>stock</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                <input
+                  autoFocus
+                  type="number"
+                  inputMode="decimal"
+                  value={stockInput}
+                  onChange={e => setStockInput(e.target.value)}
+                  onBlur={() => {
+                    setEditingStock(false)
+                    const v = stockInput === '' ? null : parseFloat(stockInput)
+                    onUpsert(item.id, fecha, turno, { cantidad_actual: (!v && v !== 0) ? null : v })
+                  }}
+                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                  style={{
+                    background: 'none', border: 'none', outline: 'none', padding: 0,
+                    width: '100%', fontSize: 14, fontWeight: 800, color: '#3b82f6',
+                    fontFamily: "'DM Mono', monospace",
+                  }}
+                />
+                <span style={{ fontSize: 10, fontWeight: 600, color: '#3b82f6' }}>{item.unidad}</span>
+              </div>
+            </div>
+          ) : (
+            <div
+              onClick={() => { setStockInput(stockDisplay?.toString() ?? ''); setEditingStock(true) }}
+              style={{ flex: 1, cursor: 'text' }}
+            >
+              <StockBox stockCierre={stockDisplay} target={item.cantidad} unidad={item.unidad} />
+            </div>
+          )}
           <ProducirBox cantidad={item.cantidad} unidad={item.unidad} />
         </div>
       )}
