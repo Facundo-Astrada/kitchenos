@@ -102,6 +102,157 @@ const EMPTY_PUESTO_FORM: PuestoForm = {
 }
 
 // ══════════════════════════════════════════════════════════════
+// FORM COMPONENTS — fuera de TurnosPage para identidad estable
+// React nunca remonta estos componentes al re-renderizar TurnosPage,
+// por eso el teclado no se cierra al tipear.
+// ══════════════════════════════════════════════════════════════
+
+function MiembroFormDatos({
+  form, setForm,
+}: {
+  form: MiembroForm
+  setForm: React.Dispatch<React.SetStateAction<MiembroForm>>
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <label style={labelStyle}>Nombre *</label>
+          <input style={fieldStyle} value={form.nombre}
+            onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} placeholder="Nombre" />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={labelStyle}>Apellido *</label>
+          <input style={fieldStyle} value={form.apellido}
+            onChange={e => setForm(f => ({ ...f, apellido: e.target.value }))} placeholder="Apellido" />
+        </div>
+      </div>
+      <div>
+        <label style={labelStyle}>Teléfono</label>
+        <input style={fieldStyle} value={form.telefono}
+          onChange={e => setForm(f => ({ ...f, telefono: e.target.value }))} placeholder="Teléfono" type="tel" />
+      </div>
+      <div>
+        <label style={labelStyle}>Email</label>
+        <input style={fieldStyle} value={form.email}
+          onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="email@ejemplo.com" type="email" />
+      </div>
+      <div>
+        <label style={labelStyle}>Fecha de ingreso</label>
+        <input style={fieldStyle} value={form.fecha_ingreso}
+          onChange={e => setForm(f => ({ ...f, fecha_ingreso: e.target.value }))} type="date" />
+      </div>
+    </div>
+  )
+}
+
+function PuestoFormBody({
+  form, setForm,
+}: {
+  form: PuestoForm
+  setForm: React.Dispatch<React.SetStateAction<PuestoForm>>
+}) {
+  function toggleModulo(modulo: string) {
+    setForm(f => ({
+      ...f,
+      permisos_app: f.permisos_app.includes(modulo)
+        ? f.permisos_app.filter(m => m !== modulo)
+        : [...f.permisos_app, modulo],
+    }))
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div>
+        <label style={labelStyle}>Nombre del puesto *</label>
+        <input style={fieldStyle} value={form.nombre}
+          onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} placeholder="Ej: Parrillero" />
+      </div>
+      <div>
+        <label style={labelStyle}>Descripción</label>
+        <textarea style={{ ...fieldStyle, minHeight: 60, resize: 'vertical' }} value={form.descripcion}
+          onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} placeholder="Descripción del puesto y responsabilidades" />
+      </div>
+      <div>
+        <label style={labelStyle}>Nivel de acceso</label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {NIVELES_ACCESO.map(n => (
+            <button key={n.value} type="button"
+              onClick={() => setForm(f => ({ ...f, nivel: n.value }))}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 12,
+                border: `2px solid ${form.nivel === n.value ? n.color : 'var(--border)'}`,
+                background: form.nivel === n.value ? n.color + '11' : 'var(--surface)',
+                cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              <div style={{ width: 10, height: 10, borderRadius: '50%', background: n.color, flexShrink: 0 }} />
+              <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', flex: 1 }}>{n.label}</span>
+              {form.nivel === n.value && (
+                <span className="material-symbols-outlined" style={{ fontSize: 18, color: n.color }}>check</span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <label style={labelStyle}>Plaza OPS por defecto</label>
+        <select style={fieldStyle} value={form.plaza_default}
+          onChange={e => setForm(f => ({ ...f, plaza_default: e.target.value }))}>
+          <option value="">Sin plaza fija (rota entre plazas)</option>
+          {PLAZAS_OPS.map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={{ ...labelStyle, marginBottom: 8 }}>Módulos visibles en la app</label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {MODULOS_ASIGNABLES.map(mod => {
+            const cfg = MODULO_CONFIG[mod as keyof typeof MODULO_CONFIG]
+            const active = form.permisos_app.includes(mod)
+            return (
+              <button key={mod} type="button" onClick={() => toggleModulo(mod)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 12,
+                  border: 'none', cursor: 'pointer', textAlign: 'left',
+                  background: active ? 'var(--navy)' + '11' : 'var(--surface)',
+                }}
+              >
+                <div style={{
+                  width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                  background: active ? 'var(--navy)' : 'var(--border)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'background 0.15s',
+                }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16, color: active ? '#fff' : 'var(--text-3)' }}>
+                    {cfg?.icon ?? 'widgets'}
+                  </span>
+                </div>
+                <span style={{ fontSize: 14, fontWeight: active ? 600 : 400, color: active ? 'var(--text-1)' : 'var(--text-2)', flex: 1 }}>
+                  {cfg?.label ?? mod}
+                </span>
+                <div style={{
+                  width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                  background: active ? 'var(--navy)' : 'transparent',
+                  border: active ? 'none' : '2px solid var(--border)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {active && <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#fff' }}>check</span>}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <div>
+        <label style={labelStyle}>Tareas y funciones (una por línea)</label>
+        <textarea style={{ ...fieldStyle, minHeight: 80, resize: 'vertical' }} value={form.tareas_funciones}
+          onChange={e => setForm(f => ({ ...f, tareas_funciones: e.target.value }))}
+          placeholder={'Mise en place de parrilla\nControl de temperaturas\nLimpiar estación al cierre'} />
+      </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ══════════════════════════════════════════════════════════════
 
@@ -410,15 +561,6 @@ export default function TurnosPage() {
     setPuestosView('nuevo')
   }
 
-  function toggleModulo(modulo: string) {
-    setPuestoForm(f => ({
-      ...f,
-      permisos_app: f.permisos_app.includes(modulo)
-        ? f.permisos_app.filter(m => m !== modulo)
-        : [...f.permisos_app, modulo],
-    }))
-  }
-
   // ══════════════════════════════════════════════════════════════
   // RENDER
   // ══════════════════════════════════════════════════════════════
@@ -614,7 +756,7 @@ export default function TurnosPage() {
             </button>
             <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>Editar miembro</h2>
           </div>
-          {MiembroFormDatos()}
+          <MiembroFormDatos form={miembroForm} setForm={setMiembroForm} />
           <div style={{ marginTop: 12 }}>
             {MiembroFormPuesto()}
           </div>
@@ -786,7 +928,7 @@ export default function TurnosPage() {
 
         {formStep === 'datos' && (
           <>
-            {MiembroFormDatos()}
+            <MiembroFormDatos form={miembroForm} setForm={setMiembroForm} />
             <button
               onClick={() => {
                 if (!miembroForm.nombre.trim() || !miembroForm.apellido.trim()) { alert('Nombre y apellido son obligatorios'); return }
@@ -810,42 +952,6 @@ export default function TurnosPage() {
             </div>
           </>
         )}
-      </div>
-    )
-  }
-
-  // ── FORM: datos del miembro ──
-
-  function MiembroFormDatos() {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <div style={{ flex: 1 }}>
-            <label style={labelStyle}>Nombre *</label>
-            <input style={fieldStyle} value={miembroForm.nombre}
-              onChange={e => setMiembroForm(f => ({ ...f, nombre: e.target.value }))} placeholder="Nombre" />
-          </div>
-          <div style={{ flex: 1 }}>
-            <label style={labelStyle}>Apellido *</label>
-            <input style={fieldStyle} value={miembroForm.apellido}
-              onChange={e => setMiembroForm(f => ({ ...f, apellido: e.target.value }))} placeholder="Apellido" />
-          </div>
-        </div>
-        <div>
-          <label style={labelStyle}>Teléfono</label>
-          <input style={fieldStyle} value={miembroForm.telefono}
-            onChange={e => setMiembroForm(f => ({ ...f, telefono: e.target.value }))} placeholder="Teléfono" type="tel" />
-        </div>
-        <div>
-          <label style={labelStyle}>Email</label>
-          <input style={fieldStyle} value={miembroForm.email}
-            onChange={e => setMiembroForm(f => ({ ...f, email: e.target.value }))} placeholder="email@ejemplo.com" type="email" />
-        </div>
-        <div>
-          <label style={labelStyle}>Fecha de ingreso</label>
-          <input style={fieldStyle} value={miembroForm.fecha_ingreso}
-            onChange={e => setMiembroForm(f => ({ ...f, fecha_ingreso: e.target.value }))} type="date" />
-        </div>
       </div>
     )
   }
@@ -1292,119 +1398,12 @@ export default function TurnosPage() {
             {isEdit ? `Editar: ${selectedPuesto?.nombre}` : 'Nuevo puesto'}
           </h2>
         </div>
-        {PuestoFormBody()}
+        <PuestoFormBody form={puestoForm} setForm={setPuestoForm} />
         <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
           <button onClick={() => isEdit ? setEditingPuesto(false) : setPuestosView('list')} style={btnSecondary}>Cancelar</button>
           <button onClick={isEdit ? saveEditPuesto : saveNuevoPuesto} disabled={saving} style={btnPrimary}>
             {saving ? 'Guardando...' : 'Guardar puesto'}
           </button>
-        </div>
-      </div>
-    )
-  }
-
-  function PuestoFormBody() {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {/* Nombre */}
-        <div>
-          <label style={labelStyle}>Nombre del puesto *</label>
-          <input style={fieldStyle} value={puestoForm.nombre}
-            onChange={e => setPuestoForm(f => ({ ...f, nombre: e.target.value }))} placeholder="Ej: Parrillero" />
-        </div>
-
-        {/* Descripción */}
-        <div>
-          <label style={labelStyle}>Descripción</label>
-          <textarea style={{ ...fieldStyle, minHeight: 60, resize: 'vertical' }} value={puestoForm.descripcion}
-            onChange={e => setPuestoForm(f => ({ ...f, descripcion: e.target.value }))} placeholder="Descripción del puesto y responsabilidades" />
-        </div>
-
-        {/* Nivel de acceso */}
-        <div>
-          <label style={labelStyle}>Nivel de acceso</label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {NIVELES_ACCESO.map(n => (
-              <button
-                key={n.value}
-                onClick={() => setPuestoForm(f => ({ ...f, nivel: n.value }))}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 12,
-                  border: `2px solid ${puestoForm.nivel === n.value ? n.color : 'var(--border)'}`,
-                  background: puestoForm.nivel === n.value ? n.color + '11' : 'var(--surface)',
-                  cursor: 'pointer', textAlign: 'left',
-                }}
-              >
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: n.color, flexShrink: 0 }} />
-                <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-1)', flex: 1 }}>{n.label}</span>
-                {puestoForm.nivel === n.value && (
-                  <span className="material-symbols-outlined" style={{ fontSize: 18, color: n.color }}>check</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Plaza OPS por defecto */}
-        <div>
-          <label style={labelStyle}>Plaza OPS por defecto</label>
-          <select style={fieldStyle} value={puestoForm.plaza_default}
-            onChange={e => setPuestoForm(f => ({ ...f, plaza_default: e.target.value }))}>
-            <option value="">Sin plaza fija (rota entre plazas)</option>
-            {PLAZAS_OPS.map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
-          </select>
-        </div>
-
-        {/* Módulos visibles */}
-        <div>
-          <label style={{ ...labelStyle, marginBottom: 8 }}>Módulos visibles en la app</label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {MODULOS_ASIGNABLES.map(mod => {
-              const cfg = MODULO_CONFIG[mod as keyof typeof MODULO_CONFIG]
-              const active = puestoForm.permisos_app.includes(mod)
-              return (
-                <button
-                  key={mod}
-                  onClick={() => toggleModulo(mod)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 12,
-                    border: 'none', cursor: 'pointer', textAlign: 'left',
-                    background: active ? 'var(--navy)' + '11' : 'var(--surface)',
-                  }}
-                >
-                  <div style={{
-                    width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-                    background: active ? 'var(--navy)' : 'var(--border)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'background 0.15s',
-                  }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 16, color: active ? '#fff' : 'var(--text-3)' }}>
-                      {cfg?.icon ?? 'widgets'}
-                    </span>
-                  </div>
-                  <span style={{ fontSize: 14, fontWeight: active ? 600 : 400, color: active ? 'var(--text-1)' : 'var(--text-2)', flex: 1 }}>
-                    {cfg?.label ?? mod}
-                  </span>
-                  <div style={{
-                    width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
-                    background: active ? 'var(--navy)' : 'transparent',
-                    border: active ? 'none' : '2px solid var(--border)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    {active && <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#fff' }}>check</span>}
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Tareas y funciones */}
-        <div>
-          <label style={labelStyle}>Tareas y funciones (una por línea)</label>
-          <textarea style={{ ...fieldStyle, minHeight: 80, resize: 'vertical' }} value={puestoForm.tareas_funciones}
-            onChange={e => setPuestoForm(f => ({ ...f, tareas_funciones: e.target.value }))}
-            placeholder={'Mise en place de parrilla\nControl de temperaturas\nLimpiar estación al cierre'} />
         </div>
       </div>
     )
