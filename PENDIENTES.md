@@ -12,6 +12,7 @@ Lista priorizada de todo lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL
 - ✅ Endpoint `POST /api/invitar` con service role (`inviteUserByEmail` + pre-crea `user_restaurantes` + `equipo_miembros` con `activo: false`).
 - ✅ UI en `/turnos` tab Equipo: botón "Invitar por email" → modal con nombre + email + rol.
 - ✅ Página `/registro-invitado` (ya existía; 7 jun 2026 reforzada para manejar hash / PKCE `?code=` / `token_hash` / sesión activa).
+- ✅ `proxy.ts` marca `/registro-invitado` como ruta pública (11 jun 2026) — el invitado sin sesión ya no rebota a `/login`.
 **Falta (solo config de dashboard, no código):** whitelistear `https://kos-app-one.vercel.app/registro-invitado` en Supabase Auth → URL Configuration → Redirect URLs, y activar/ajustar la plantilla de email "Invite user". Setear `NEXT_PUBLIC_SITE_URL` en Vercel.
 **Status:** 🟢 Código completo — falta verificar config Supabase end-to-end.
 
@@ -22,7 +23,7 @@ Lista priorizada de todo lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL
 
 ### 5. `useCallback` deps faltantes
 Varios hooks tienen `useCallback(…, [])` cuando capturan `RESTAURANTE_ID`. Agregar `RESTAURANTE_ID` a las deps para evitar stale closure si el usuario cambia de restaurante.
-**Status:** ⏳ Pendiente.
+**Status:** ✅ Resuelto de facto (verificado en auditoría 10 jun 2026 — los hooks principales ya tienen RESTAURANTE_ID en deps).
 
 ---
 
@@ -102,7 +103,7 @@ Rediseñar las vistas principales para pantalla grande. La DB, hooks y API route
 
 ### 16. Limpiar tokens hardcodeados en scripts
 Los scripts de `scripts/*.mjs` tienen el `SUPABASE_MANAGEMENT_TOKEN` en texto plano. Mover a `.env.local`.
-**Status:** ⏳ Pendiente.
+**Status:** ✅ Resuelto (verificado en auditoría 10 jun 2026 — los scripts ya leen `process.env.SUPABASE_MANAGEMENT_TOKEN`).
 
 ---
 
@@ -110,6 +111,8 @@ Los scripts de `scripts/*.mjs` tienen el `SUPABASE_MANAGEMENT_TOKEN` en texto pl
 
 | # | Descripción | Cuándo |
 |---|---|---|
+| Cierre hallazgos auditoría de seguridad | 10 endpoints ahora resuelven tenant de la sesión (no del body): `importador/import`, `facturas-universal`, `facturas-fudo`, `stock-fudo`, `productos-desde-facturas`, `stock/rebuild`, `auto-link-ingredientes`, `recetas/save` (+validación de pertenencia), `sync-precio`, `undo`. `/api/migrate` eliminado (sin auth, service role). `recetas/save`: 401 sin sesión; modos `enrich`/`addIngredients` verifican pertenencia al tenant. `proxy.ts`: `/registro-invitado` es ruta pública. | 11 junio 2026 |
+| Coach: prompt server-side + caching + rate limit | Prompt estático (~4k tokens) movido al server con `cache_control: ephemeral` → ~75-85% menos costo de input tokens a partir del 2° request. Rate limit 15 req/60s por usuario. Body del cliente simplificado: solo `{messages, screenContext, ctx}`. `COACH_HIGHLIGHT_IDS` movido a `lib/coach/highlights.ts`. | 11 junio 2026 |
 | HACCP: botón guardar tapado por el BottomNav | Las 3 sub-vistas (limpieza/vencimientos/temperaturas) tenían la barra de guardar `position:fixed bottom:0 z-50` detrás del nav (`z-100`). Pasadas a botón inline dentro del scroll. | 10 junio 2026 |
 | Carta: Menús como navegación primaria | Toggle segmentado Platos \| Menús (mismo peso visual). Importar/PDF/Excel bajan a fila secundaria discreta. | 10 junio 2026 |
 | Editar un menú propaga a fechas ya activadas | `actualizarMenu` sincroniza las tareas de Planificación/Producción (hoy en adelante): agrega nuevas preparaciones, refresca existentes, saca borradas solo si no se empezaron. | 10 junio 2026 |

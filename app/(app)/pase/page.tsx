@@ -4,6 +4,7 @@ import PageTransition from '@/components/PageTransition'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { usePase } from '@/lib/hooks/usePase'
 import { useTareas } from '@/lib/hooks/useTareas'
+import { useEquipo } from '@/lib/hooks/useEquipo'
 import { createClient } from '@/lib/supabase/client'
 import type { PaseMensaje, PrioridadPase, Plaza } from '@/types'
 
@@ -52,12 +53,6 @@ const PLAZA_LABELS: Record<string, string> = {
   pase: '#Pase', pasteleria: '#Pastelería', panaderia: '#Panadería',
 }
 
-const USUARIOS_MOCK = [
-  { id: 'user-1', nombre: 'Facundo A.' },
-  { id: 'user-2', nombre: 'Juan D.' },
-  { id: 'user-3', nombre: 'Marta L.' },
-  { id: 'todos', nombre: 'Todos' },
-]
 
 const PLAZA_MENTION_LIST: { id: Plaza; label: string }[] = [
   { id: 'parrilla', label: 'Parrilla' },
@@ -253,14 +248,15 @@ function Sheet86({ onSelect, onClose }: { onSelect: (nombre: string, id: string)
 }
 
 // ── Mention dropdown ─────────────────────────────────────────
-function MentionDropdown({ type, filter, onSelect, position }: {
+function MentionDropdown({ type, filter, onSelect, position, usuarios }: {
   type: '@' | '#'
   filter: string
   onSelect: (value: string) => void
   position: { bottom: number; left: number }
+  usuarios: { id: string; nombre: string }[]
 }) {
   const items = type === '@'
-    ? USUARIOS_MOCK
+    ? usuarios
         .filter(u => u.nombre.toLowerCase().includes(filter.toLowerCase()))
         .map(u => ({ key: u.id, label: u.nombre, icon: 'person' }))
     : PLAZA_MENTION_LIST
@@ -302,6 +298,10 @@ function MentionDropdown({ type, filter, onSelect, position }: {
 export default function PasePage() {
   const { mensajes, loading, fetchMensajes, enviarMensaje, marcarLeidos } = usePase()
   const { agregarTarea } = useTareas()
+  const { miembros } = useEquipo()
+  const usuariosMencion = useMemo(() => [
+    ...miembros.map(m => ({ id: m.id, nombre: `${m.nombre} ${m.apellido?.[0] ?? ''}.`.trimEnd().replace(/\.$/, '.') })),
+  ], [miembros])
   const [texto, setTexto] = useState('')
   const [toast, setToast] = useState<string | null>(null)
   const [prioridad, setPrioridad] = useState<PrioridadPase>('normal')
@@ -611,6 +611,7 @@ export default function PasePage() {
             filter={mention.filter}
             onSelect={handleMentionSelect}
             position={{ bottom: 100, left: 16 }}
+            usuarios={usuariosMencion}
           />
         )}
 
