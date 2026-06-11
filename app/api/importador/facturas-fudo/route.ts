@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requireRestauranteId } from '@/lib/api/tenant'
 import * as XLSX from 'xlsx'
 import { randomUUID } from 'crypto'
 
@@ -40,15 +40,14 @@ function mapStatus(estado: string): string {
 const BATCH = 100
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const tenant = await requireRestauranteId()
+  if (!tenant.ok) return NextResponse.json({ error: tenant.error }, { status: tenant.status })
+  const { restauranteId } = tenant
 
   const formData = await req.formData()
   const file = formData.get('file') as File | null
-  const restauranteId = formData.get('restauranteId') as string | null
 
-  if (!file || !restauranteId) return NextResponse.json({ error: 'Faltan parámetros' }, { status: 400 })
+  if (!file) return NextResponse.json({ error: 'Faltan parámetros' }, { status: 400 })
 
   const buffer = await file.arrayBuffer()
   const wb = XLSX.read(buffer, { type: 'array' })

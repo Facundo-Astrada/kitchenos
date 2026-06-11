@@ -35,6 +35,7 @@ export async function proxy(request: NextRequest) {
   const isPublicRoute =
     pathname.startsWith('/login') ||
     pathname.startsWith('/register') ||
+    pathname.startsWith('/registro-invitado') ||
     pathname.startsWith('/api/')
 
   // No session → redirect to /login

@@ -158,10 +158,17 @@ export default function TurnosPage() {
   const [editingPuesto, setEditingPuesto] = useState(false)
   const [puestoForm, setPuestoForm] = useState<PuestoForm>(EMPTY_PUESTO_FORM)
 
+  // ── Override state (lifted from FichaMiembroView to evitar remount en cada keystroke) ──
+  const [overrideMode, setOverrideMode] = useState(false)
+  const [localExtra, setLocalExtra] = useState<string[]>([])
+  const [localRestringidos, setLocalRestringidos] = useState<string[]>([])
+  const [savingOverride, setSavingOverride] = useState(false)
+
   useEffect(() => { fetchTurnos(weekStart, weekEnd) }, [weekStart, weekEnd, fetchTurnos])
   useEffect(() => {
     setEquipoView('list'); setSelectedMiembro(null); setEditingMiembro(false)
     setPuestosView('list'); setSelectedPuesto(null); setEditingPuesto(false)
+    setOverrideMode(false)
   }, [tab])
 
   const turnoMap = useMemo(() => {
@@ -192,6 +199,8 @@ export default function TurnosPage() {
 
   function openFicha(m: Miembro) {
     setSelectedMiembro(m); setEditingMiembro(false); setEquipoView('ficha')
+    setLocalExtra(m.modulos_extra); setLocalRestringidos(m.modulos_restringidos)
+    setOverrideMode(false)
   }
 
   function startEditMiembro() {
@@ -234,6 +243,42 @@ export default function TurnosPage() {
       await desactivarMiembro(selectedMiembro.id)
       setEquipoView('list'); setSelectedMiembro(null)
     } catch (e: any) { alert(e.message) }
+  }
+
+  function toggleExtra(modulo: string) {
+    if (!selectedMiembro) return
+    const puesto = puestos.find(p => p.id === selectedMiembro.puesto_id)
+    const baseModulos = puesto?.permisos_app ?? []
+    if (baseModulos.includes(modulo)) {
+      setLocalRestringidos(prev =>
+        prev.includes(modulo) ? prev.filter(x => x !== modulo) : [...prev, modulo]
+      )
+    } else {
+      setLocalExtra(prev =>
+        prev.includes(modulo) ? prev.filter(x => x !== modulo) : [...prev, modulo]
+      )
+    }
+  }
+
+  function moduloState(modulo: string): 'puesto' | 'extra' | 'restringido' | 'off' {
+    if (!selectedMiembro) return 'off'
+    const puesto = puestos.find(p => p.id === selectedMiembro.puesto_id)
+    const enPuesto = (puesto?.permisos_app ?? []).includes(modulo)
+    if (localRestringidos.includes(modulo)) return 'restringido'
+    if (enPuesto) return 'puesto'
+    if (localExtra.includes(modulo)) return 'extra'
+    return 'off'
+  }
+
+  async function saveOverrides() {
+    if (!selectedMiembro) return
+    setSavingOverride(true)
+    try {
+      await actualizarOverridesMiembro(selectedMiembro.id, localExtra, localRestringidos)
+      setOverrideMode(false)
+      showToast('Permisos actualizados')
+    } catch (e: any) { alert(e.message) }
+    setSavingOverride(false)
   }
 
   function openNuevoMiembro() {
@@ -433,8 +478,8 @@ export default function TurnosPage() {
   // ══════════════════════════════════════════════════════════════
 
   function TabEquipo() {
-    if (equipoView === 'ficha' && selectedMiembro) return <FichaMiembroView />
-    if (equipoView === 'nuevo') return <NuevoMiembroView />
+    if (equipoView === 'ficha' && selectedMiembro) return FichaMiembroView()
+    if (equipoView === 'nuevo') return NuevoMiembroView()
 
     return (
       <>
@@ -473,7 +518,7 @@ export default function TurnosPage() {
                   {m.nombre} {m.apellido}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-                  {puesto?.nombre ?? '—'}{m.plaza_asignada ? ` · ${m.plaza_asignada}` : ''}
+                  {puesto?.nombre ?? '—'}{m.plaza_asignada ? ` · ${m.plaza_asignada.split(',').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' · ')}` : ''}
                 </div>
               </div>
 
@@ -559,43 +604,6 @@ export default function TurnosPage() {
     const m = selectedMiembro!
     const puesto = puestos.find(p => p.id === m.puesto_id)
     const modulos = getModulosMiembro(m)
-    const [overrideMode, setOverrideMode] = useState(false)
-    const [localExtra, setLocalExtra] = useState<string[]>(m.modulos_extra)
-    const [localRestringidos, setLocalRestringidos] = useState<string[]>(m.modulos_restringidos)
-    const [savingOverride, setSavingOverride] = useState(false)
-
-    function toggleExtra(modulo: string) {
-      const baseModulos = puesto?.permisos_app ?? []
-      if (baseModulos.includes(modulo)) {
-        // Está en el puesto: toggle restringir/restaurar
-        setLocalRestringidos(prev =>
-          prev.includes(modulo) ? prev.filter(m => m !== modulo) : [...prev, modulo]
-        )
-      } else {
-        // No está en el puesto: toggle agregar/quitar
-        setLocalExtra(prev =>
-          prev.includes(modulo) ? prev.filter(m => m !== modulo) : [...prev, modulo]
-        )
-      }
-    }
-
-    function moduloState(modulo: string): 'puesto' | 'extra' | 'restringido' | 'off' {
-      const enPuesto = (puesto?.permisos_app ?? []).includes(modulo)
-      if (localRestringidos.includes(modulo)) return 'restringido'
-      if (enPuesto) return 'puesto'
-      if (localExtra.includes(modulo)) return 'extra'
-      return 'off'
-    }
-
-    async function saveOverrides() {
-      setSavingOverride(true)
-      try {
-        await actualizarOverridesMiembro(m.id, localExtra, localRestringidos)
-        setOverrideMode(false)
-        showToast('Permisos actualizados')
-      } catch (e: any) { alert(e.message) }
-      setSavingOverride(false)
-    }
 
     if (editingMiembro) {
       return (
@@ -606,9 +614,9 @@ export default function TurnosPage() {
             </button>
             <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>Editar miembro</h2>
           </div>
-          <MiembroFormDatos />
+          {MiembroFormDatos()}
           <div style={{ marginTop: 12 }}>
-            <MiembroFormPuesto />
+            {MiembroFormPuesto()}
           </div>
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
             <button onClick={() => setEditingMiembro(false)} style={btnSecondary}>Cancelar</button>
@@ -650,7 +658,7 @@ export default function TurnosPage() {
         <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: 16, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
           {[
             { label: 'Nivel de acceso', value: nivelLabel(puesto?.nivel ?? m.rol) },
-            { label: 'Plaza asignada', value: m.plaza_asignada ?? '—' },
+            { label: 'Plaza/s OPS', value: m.plaza_asignada ? m.plaza_asignada.split(',').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' · ') : '—' },
             { label: 'Teléfono', value: m.telefono ?? '—' },
             { label: 'Email', value: m.email ?? '—' },
             { label: 'Ingreso', value: m.fecha_ingreso ?? '—' },
@@ -778,7 +786,7 @@ export default function TurnosPage() {
 
         {formStep === 'datos' && (
           <>
-            <MiembroFormDatos />
+            {MiembroFormDatos()}
             <button
               onClick={() => {
                 if (!miembroForm.nombre.trim() || !miembroForm.apellido.trim()) { alert('Nombre y apellido son obligatorios'); return }
@@ -793,7 +801,7 @@ export default function TurnosPage() {
 
         {formStep === 'puesto' && (
           <>
-            <MiembroFormPuesto />
+            {MiembroFormPuesto()}
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
               <button onClick={() => setEquipoView('list')} style={btnSecondary}>Cancelar</button>
               <button onClick={saveNuevoMiembro} disabled={saving} style={btnPrimary}>
@@ -920,19 +928,43 @@ export default function TurnosPage() {
           </div>
         )}
 
-        {/* Plaza override manual */}
+        {/* Plazas OPS — multi-select */}
         <div>
           <label style={labelStyle}>
-            Plaza OPS{puestoSelected?.plaza_default ? ` (por defecto: ${puestoSelected.plaza_default})` : ''}
+            Plazas OPS{puestoSelected?.plaza_default ? ` (por defecto: ${puestoSelected.plaza_default})` : ''}
           </label>
-          <select
-            style={fieldStyle}
-            value={miembroForm.plaza_asignada}
-            onChange={e => setMiembroForm(f => ({ ...f, plaza_asignada: e.target.value }))}
-          >
-            <option value="">Sin plaza fija</option>
-            {PLAZAS_OPS.map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
-          </select>
+          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 8px' }}>
+            Seleccioná todas las plazas que cubre. La primera es la principal en el checklist.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {PLAZAS_OPS.map(p => {
+              const selectedPlazas = miembroForm.plaza_asignada.split(',').map(s => s.trim()).filter(Boolean)
+              const isSelected = selectedPlazas.includes(p)
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => {
+                    const current = miembroForm.plaza_asignada.split(',').map(s => s.trim()).filter(Boolean)
+                    const next = isSelected ? current.filter(v => v !== p) : [...current, p]
+                    setMiembroForm(f => ({ ...f, plaza_asignada: next.join(',') }))
+                  }}
+                  style={{
+                    padding: '8px 14px', borderRadius: 10, cursor: 'pointer',
+                    background: isSelected ? 'var(--navy)' : 'var(--bg)',
+                    color: isSelected ? '#fff' : 'var(--text-2)',
+                    fontSize: 13, fontWeight: 600,
+                    border: `1px solid ${isSelected ? 'var(--navy)' : 'var(--border)'}`,
+                  }}
+                >
+                  {p.charAt(0).toUpperCase() + p.slice(1)}
+                </button>
+              )
+            })}
+          </div>
+          {!miembroForm.plaza_asignada && (
+            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '6px 0 0' }}>Sin plaza fija — rota entre plazas</p>
+          )}
         </div>
       </div>
     )
@@ -1098,9 +1130,9 @@ export default function TurnosPage() {
   // ══════════════════════════════════════════════════════════════
 
   function TabPuestos() {
-    if (puestosView === 'detalle' && selectedPuesto) return <PuestoDetalleView />
-    if (puestosView === 'nuevo') return <NuevoPuestoView />
-    if (puestosView === 'template') return <TemplatePicker />
+    if (puestosView === 'detalle' && selectedPuesto) return PuestoDetalleView()
+    if (puestosView === 'nuevo') return NuevoPuestoView()
+    if (puestosView === 'template') return TemplatePicker()
 
     return (
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1251,7 +1283,7 @@ export default function TurnosPage() {
             {isEdit ? `Editar: ${selectedPuesto?.nombre}` : 'Nuevo puesto'}
           </h2>
         </div>
-        <PuestoFormBody />
+        {PuestoFormBody()}
         <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
           <button onClick={() => isEdit ? setEditingPuesto(false) : setPuestosView('list')} style={btnSecondary}>Cancelar</button>
           <button onClick={isEdit ? saveEditPuesto : saveNuevoPuesto} disabled={saving} style={btnPrimary}>
@@ -1375,7 +1407,7 @@ export default function TurnosPage() {
     const p = selectedPuesto!
     const miembrosDelPuesto = miembros.filter(m => m.puesto_id === p.id)
 
-    if (editingPuesto) return <NuevoPuestoView />
+    if (editingPuesto) return NuevoPuestoView()
 
     return (
       <div style={{ padding: 16 }}>
@@ -1448,7 +1480,7 @@ export default function TurnosPage() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{m.nombre} {m.apellido}</div>
-                    {m.plaza_asignada && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{m.plaza_asignada}</div>}
+                    {m.plaza_asignada && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{m.plaza_asignada.split(',').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' · ')}</div>}
                   </div>
                   {(m.modulos_extra.length > 0 || m.modulos_restringidos.length > 0) && (
                     <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 600 }}>Personalizado</span>

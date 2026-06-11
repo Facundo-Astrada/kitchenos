@@ -15,7 +15,6 @@
     "framer-motion": "^12.38.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",
-    "mammoth": "^1.12.0",
     "motion": "^12.38.0",
     "next": "16.2.0",
     "pg": "^8.20.0",
@@ -33,8 +32,10 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "adm-zip": "^0.5.17",
     "eslint": "^9",
     "eslint-config-next": "16.2.0",
+    "mammoth": "^1.12.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

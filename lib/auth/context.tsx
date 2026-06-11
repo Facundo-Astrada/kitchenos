@@ -45,6 +45,7 @@ function mapRol(dbRol: string, plaza?: string | null): Rol {
     case 'sous_chef':
       return 'chef'
     case 'cocinero': {
+      const primaryPlaza = plaza?.split(',')[0]?.trim()
       const plazaMap: Record<string, Rol> = {
         parrilla: 'parrilla',
         frios: 'frios',
@@ -54,13 +55,14 @@ function mapRol(dbRol: string, plaza?: string | null): Rol {
         panaderia: 'panaderia',
         linea: 'linea',
       }
-      return (plaza && plazaMap[plaza]) || 'linea'
+      return (primaryPlaza && plazaMap[primaryPlaza]) || 'linea'
     }
     case 'owner':
       return 'admin'
     case 'chef':
       return 'chef'
     case 'staff': {
+      const primaryPlaza = plaza?.split(',')[0]?.trim()
       const plazaMap: Record<string, Rol> = {
         parrilla: 'parrilla',
         frios: 'frios',
@@ -70,7 +72,7 @@ function mapRol(dbRol: string, plaza?: string | null): Rol {
         panaderia: 'panaderia',
         linea: 'linea',
       }
-      return (plaza && plazaMap[plaza]) || 'ayudante'
+      return (primaryPlaza && plazaMap[primaryPlaza]) || 'ayudante'
     }
     case 'bachero':
       return 'ayudante'

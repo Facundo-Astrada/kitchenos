@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requireRestauranteId } from '@/lib/api/tenant'
 
 export const maxDuration = 60
 
@@ -150,15 +150,14 @@ type ProductoCandidato = {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+    const tenant = await requireRestauranteId()
+    if (!tenant.ok) return NextResponse.json({ error: tenant.error }, { status: tenant.status })
+    const restaurante_id = tenant.restauranteId
 
-    const { restaurante_id, mode } = await req.json() as {
-      restaurante_id: string
+    const { mode } = await req.json() as {
+      restaurante_id?: string
       mode: 'preview' | 'apply'
     }
-    if (!restaurante_id) return NextResponse.json({ error: 'Falta restaurante_id' }, { status: 400 })
 
     const admin = createAdminClient()
 

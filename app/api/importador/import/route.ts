@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requireRestauranteId } from '@/lib/api/tenant'
 
 type MappedRow = Record<string, unknown>
 
@@ -43,14 +43,13 @@ function parseActivo(v: unknown): boolean {
 }
 
 export async function POST(req: NextRequest) {
-  // Auth check with anon client
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const tenant = await requireRestauranteId()
+  if (!tenant.ok) return NextResponse.json({ error: tenant.error }, { status: tenant.status })
+  const { restauranteId } = tenant
 
-  const { tipo, restauranteId, rows, importInactivos, importConfig } = await req.json() as {
+  const { tipo, rows, importInactivos, importConfig } = await req.json() as {
     tipo: 'stock' | 'proveedores'
-    restauranteId: string
+    restauranteId?: string
     rows: MappedRow[]
     importInactivos?: boolean
     importConfig?: { proveedorNombre?: string }

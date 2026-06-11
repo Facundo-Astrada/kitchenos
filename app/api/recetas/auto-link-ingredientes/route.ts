@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { createClient } from '@/lib/supabase/server'
+import { requireRestauranteId } from '@/lib/api/tenant'
 
 function normalize(s: string): string {
   return s
@@ -54,12 +54,11 @@ function findMatch(
 // POST — devuelve sugerencias de vinculación sin escribir en DB
 export async function POST(req: NextRequest) {
   try {
-    const serverSupabase = await createClient()
-    const { data: { user } } = await serverSupabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+    const tenant = await requireRestauranteId()
+    if (!tenant.ok) return NextResponse.json({ error: tenant.error }, { status: tenant.status })
+    const restaurante_id = tenant.restauranteId
 
-    const { restaurante_id } = await req.json()
-    if (!restaurante_id) return NextResponse.json({ error: 'Falta restaurante_id' }, { status: 400 })
+    await req.json().catch(() => ({})) // consume body (restaurante_id del body se ignora)
 
     const admin = createAdminClient()
 
@@ -164,9 +163,8 @@ export async function POST(req: NextRequest) {
 // PATCH — aplica los vínculos seleccionados
 export async function PATCH(req: NextRequest) {
   try {
-    const serverSupabase = await createClient()
-    const { data: { user } } = await serverSupabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+    const tenant = await requireRestauranteId()
+    if (!tenant.ok) return NextResponse.json({ error: tenant.error }, { status: tenant.status })
 
     const { links } = await req.json() as {
       links: Array<{ ingrediente_ids: string[]; producto_id: string }>
