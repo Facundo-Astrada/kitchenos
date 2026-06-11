@@ -88,6 +88,7 @@ export interface PerfilAuth {
   nombre: string
   apellido: string
   rol: Rol
+  plaza_asignada: string | null
   initials: string
   color: string
   restaurante_id: string
@@ -162,6 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           nombre,
           apellido,
           rol,
+          plaza_asignada: miembro?.plaza_asignada ?? null,
           initials: getInitials(nombre, apellido),
           color: pickColor(u.id),
           restaurante_id: ur.restaurante_id,
@@ -353,6 +355,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         nombre: finalNombre,
         apellido: finalApellido,
         rol: 'admin',
+        plaza_asignada: null,
         initials: getInitials(finalNombre, finalApellido),
         color: pickColor(userId),
         restaurante_id: restauranteId,

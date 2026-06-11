@@ -126,15 +126,38 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     })
   }, [])
 
-  const autoPlaza = (PLAZAS as readonly string[]).includes(authPerfil?.rol ?? '') ? (authPerfil!.rol as Plaza) : null
+  // Plazas asignadas al usuario (equipo_miembros.plaza_asignada, coma-separadas)
+  const userPlazas: Plaza[] = useMemo(() => {
+    if (!authPerfil?.plaza_asignada) return []
+    return authPerfil.plaza_asignada
+      .split(',')
+      .map((p: string) => p.trim())
+      .filter((p: string) => (PLAZAS as readonly string[]).includes(p)) as Plaza[]
+  }, [authPerfil])
+
+  // Plazas a mostrar en el selector: si tiene ≥2 asignadas, solo esas + general
+  const plazasForSelector: Plaza[] = useMemo(() => {
+    if (userPlazas.length < 2) return PLAZAS
+    return userPlazas.includes('general') ? userPlazas : [...userPlazas, 'general']
+  }, [userPlazas])
+
+  const autoPlaza: Plaza | null = (() => {
+    if (userPlazas.length === 1) return userPlazas[0]
+    if (userPlazas.length > 1) return null  // mostrar selector
+    return (PLAZAS as readonly string[]).includes(authPerfil?.rol ?? '') ? (authPerfil!.rol as Plaza) : null
+  })()
   const [plaza, setPlaza] = useState<Plaza | null>(autoPlaza)
 
   // Auto-select cuando auth carga después del mount (authPerfil null al inicio)
   useEffect(() => {
-    if (plaza === null && authPerfil?.rol && (PLAZAS as readonly string[]).includes(authPerfil.rol)) {
+    if (plaza !== null) return
+    if (!authPerfil) return
+    if (userPlazas.length === 1) { setPlaza(userPlazas[0]); return }
+    if (userPlazas.length > 1) return  // mostrar selector con sus plazas
+    if ((PLAZAS as readonly string[]).includes(authPerfil.rol)) {
       setPlaza(authPerfil.rol as Plaza)
     }
-  }, [authPerfil, plaza])
+  }, [authPerfil, plaza, userPlazas])
   const [tab, setTab] = useState<Tab>('apertura')
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [showAddSheet, setShowAddSheet] = useState<string | null>(null)
@@ -446,7 +469,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         </div>
         <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {PLAZAS.map(p => {
+            {plazasForSelector.map(p => {
               const gp = gridProgress[p]
               const gpPct = gp.total > 0 ? Math.round((gp.done / gp.total) * 100) : 0
               const isCompleto = gp.total > 0 && gp.done === gp.total
@@ -517,6 +540,27 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
             ))}
           </div>
         </div>
+
+        {/* Switcher de plazas — solo si el usuario tiene ≥2 asignadas */}
+        {userPlazas.length > 1 && (
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, scrollbarWidth: 'none' }}>
+            {plazasForSelector.map(p => (
+              <button
+                key={p}
+                onClick={() => setPlaza(p)}
+                style={{
+                  padding: '5px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
+                  background: plaza === p ? '#fff' : 'rgba(255,255,255,0.15)',
+                  color: plaza === p ? 'var(--navy)' : 'rgba(255,255,255,0.65)',
+                  fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
+                  flexShrink: 0, fontFamily: 'inherit',
+                }}
+              >
+                {PLAZA_LABELS[p]}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Overall progress bar */}
         {tab !== 'rutina' && (
