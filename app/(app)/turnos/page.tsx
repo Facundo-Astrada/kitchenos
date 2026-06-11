@@ -457,8 +457,8 @@ export default function TurnosPage() {
         ) : (
           <>
             {tab === 'equipo' && TabEquipo()}
-            {tab === 'turnos' && <TabTurnos />}
-            {tab === 'puestos' && <TabPuestos />}
+            {tab === 'turnos' && TabTurnos()}
+            {tab === 'puestos' && TabPuestos()}
           </>
         )}
       </div>
@@ -872,11 +872,17 @@ export default function TurnosPage() {
               {puestos.map(p => (
                 <button
                   key={p.id}
-                  onClick={() => setMiembroForm(f => ({
-                    ...f,
-                    puesto_id: f.puesto_id === p.id ? '' : p.id,
-                    plaza_asignada: f.puesto_id === p.id ? '' : (p.plaza_default ?? ''),
-                  }))}
+                  type="button"
+                  onClick={() => setMiembroForm(f => {
+                    const deselecting = f.puesto_id === p.id
+                    return {
+                      ...f,
+                      puesto_id: deselecting ? '' : p.id,
+                      // Al seleccionar: mantener plazas existentes o usar default del puesto
+                      // Al deseleccionar: limpiar plazas
+                      plaza_asignada: deselecting ? '' : (f.plaza_asignada || p.plaza_default || ''),
+                    }
+                  })}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
                     borderRadius: 12, border: `2px solid ${miembroForm.puesto_id === p.id ? nivelColor(p.nivel) : 'var(--border)'}`,
@@ -945,9 +951,12 @@ export default function TurnosPage() {
                   key={p}
                   type="button"
                   onClick={() => {
-                    const current = miembroForm.plaza_asignada.split(',').map(s => s.trim()).filter(Boolean)
-                    const next = isSelected ? current.filter(v => v !== p) : [...current, p]
-                    setMiembroForm(f => ({ ...f, plaza_asignada: next.join(',') }))
+                    setMiembroForm(f => {
+                      const current = f.plaza_asignada.split(',').map(s => s.trim()).filter(Boolean)
+                      const nowSelected = current.includes(p)
+                      const next = nowSelected ? current.filter(v => v !== p) : [...current, p]
+                      return { ...f, plaza_asignada: next.join(',') }
+                    })
                   }}
                   style={{
                     padding: '8px 14px', borderRadius: 10, cursor: 'pointer',
