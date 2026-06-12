@@ -100,6 +100,18 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 
 ## 4. Implementado en Últimas Sesiones
 
+### Sesión 2026-06-12 — Equipo teclado + multi-plaza OPS/checklist + stock editable apertura
+
+1. **Fix teclado en Equipo** (`turnos/page.tsx`): el teclado se cerraba al escribir el primer carácter. Causa: `MiembroFormDatos` y `PuestoFormBody` eran funciones definidas dentro de `TurnosPage` y usadas como JSX (`<MiembroFormDatos />`). React las trataba como nuevo tipo de componente en cada re-render → unmount/remount → foco perdido. Fix definitivo: extraídas como componentes **a nivel de módulo** (fuera de `TurnosPage`), reciben `form` y `setForm` como props. Referencia estable → React nunca remonta → teclado permanece abierto.
+
+2. **Multi-plaza OPS en equipo** (`turnos/page.tsx`): al asignar un puesto ya no se resetean las plazas seleccionadas. Los botones de plaza usan `setMiembroForm(f => ...)` (actualización funcional, evita stale closure). `plaza_asignada` guarda comma-separated: `"pasteleria,frios"`.
+
+3. **Selector multi-plaza en checklist** (`lib/auth/context.tsx` + `checklist/ClientView.tsx`): `PerfilAuth` expone `plaza_asignada: string | null`. `ClientView` deriva `userPlazas[]` del perfil; si el usuario tiene ≥2 plazas, el grid se filtra a sus plazas + general, y aparecen tabs inline en el header del checklist para cambiar entre ellas sin volver al grid.
+
+4. **Stock editable inline en apertura** (`components/mise/ProductoMiseCard.tsx`): el box "stock" (que mostraba el cierre anterior, read-only) ahora es tappable. Al tocar → input azul inline prellenado con el valor actual. Enter/blur → `onUpsert(id, fecha, 'apertura', { cantidad_actual: v })`. El valor se muestra con prioridad: apertura corregida por el usuario > cierre anterior de ayer.
+
+**Commits:** `6c3784b` (primer fix teclado) · `3a13e5a` (fix definitivo módulo-nivel) · `aa8ed67` (multi-plaza checklist) · `b2d46d6` (stock editable).
+
 ### Sesión 2026-06-10 (tarde) — Auth race condition + Kitchen Coach M1/M5
 
 1. **Auth race (hard-nav) resuelta** (`lib/auth/context.tsx`): en F5/URL directa el access token no estaba adjunto a la primera query → RLS vacío → `user_restaurantes` null → se rendía permanente mostrando `??`. `loadPerfil` ahora **reintenta** con backoff (400/800/1200 ms) manteniendo `loading=true` (spinner, no `??`) + **safety timeout de 10 s** si la query se cuelga. `giveUp()` usa `setPerfil(prev => prev)` para no pisar el perfil que setea `signUp`. El "timer de 3s" que el doc decía tener no existía.

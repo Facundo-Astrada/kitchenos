@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useCallback, useMemo } from 'react'
+import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
 
@@ -72,58 +73,105 @@ export interface HaccpLimpiezaRegistro {
   created_at: string
 }
 
+interface HaccpData {
+  equipos: HaccpEquipo[]
+  temperaturas: HaccpTemperatura[]
+  vencimientos: HaccpVencimiento[]
+  limpieza: HaccpLimpieza[]
+  limpiezaRegistros: HaccpLimpiezaRegistro[]
+}
+
+const EMPTY: HaccpData = { equipos: [], temperaturas: [], vencimientos: [], limpieza: [], limpiezaRegistros: [] }
+
+// ---------------------------------------------------------------------------
+// Fetcher combinado (1 sola carga para los 5 datasets)
+// ---------------------------------------------------------------------------
+
+async function fetchHaccpData(key: string): Promise<HaccpData> {
+  const rid = key.slice('haccp-'.length)
+  const supabase = createClient()
+
+  const [equiposRes, tempsRes, vencRes, limpRes] = await Promise.all([
+    supabase.from('haccp_equipos').select('*').eq('restaurante_id', rid).eq('activo', true).order('nombre'),
+    supabase.from('haccp_temperaturas').select('*').eq('restaurante_id', rid).order('created_at', { ascending: false }).limit(200),
+    supabase.from('haccp_vencimientos').select('*').eq('restaurante_id', rid).order('fecha_vencimiento', { ascending: true }),
+    supabase.from('haccp_limpieza').select('*').eq('restaurante_id', rid).order('area').order('tarea_limpieza'),
+  ])
+
+  if (equiposRes.error) throw equiposRes.error
+
+  // haccp_limpieza_registros no tiene restaurante_id — scope vía limpieza_id
+  const limpieza = (limpRes.data ?? []) as HaccpLimpieza[]
+  const limpiezaIds = limpieza.map(l => l.id)
+  let limpiezaRegistros: HaccpLimpiezaRegistro[] = []
+  if (limpiezaIds.length > 0) {
+    const { data } = await supabase
+      .from('haccp_limpieza_registros')
+      .select('*')
+      .in('limpieza_id', limpiezaIds)
+      .order('fecha', { ascending: false })
+      .limit(200)
+    limpiezaRegistros = (data ?? []) as HaccpLimpiezaRegistro[]
+  }
+
+  return {
+    equipos: (equiposRes.data ?? []) as HaccpEquipo[],
+    temperaturas: (tempsRes.data ?? []) as HaccpTemperatura[],
+    vencimientos: (vencRes.data ?? []) as HaccpVencimiento[],
+    limpieza,
+    limpiezaRegistros,
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
 
 export function useHaccp() {
   const RESTAURANTE_ID = useRestauranteId()
-  const [equipos, setEquipos] = useState<HaccpEquipo[]>([])
-  const [temperaturas, setTemperaturas] = useState<HaccpTemperatura[]>([])
-  const [vencimientos, setVencimientos] = useState<HaccpVencimiento[]>([])
-  const [limpieza, setLimpieza] = useState<HaccpLimpieza[]>([])
-  const [limpiezaRegistros, setLimpiezaRegistros] = useState<HaccpLimpiezaRegistro[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const supabase = useMemo(() => createClient(), [])
 
-  const supabase = createClient()
+  const swrKey = RESTAURANTE_ID ? `haccp-${RESTAURANTE_ID}` : null
+
+  const { data = EMPTY, isLoading: loading, error: swrError, mutate } = useSWR(
+    swrKey,
+    fetchHaccpData,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: true,
+      dedupingInterval: 300_000,
+      keepPreviousData: true,
+    }
+  )
+
+  const { equipos, temperaturas, vencimientos, limpieza, limpiezaRegistros } = data
+  const error = (swrError as Error | null)?.message ?? null
+
+  const refetch = useCallback(async () => { await mutate() }, [mutate])
+
+  // Realtime — un único canal revalida la cache combinada
+  useEffect(() => {
+    if (!RESTAURANTE_ID) return
+    const channel = supabase
+      .channel(`haccp-rt-${RESTAURANTE_ID}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_equipos' }, () => mutate())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_temperaturas' }, () => mutate())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_vencimientos' }, () => mutate())
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [RESTAURANTE_ID, supabase, mutate])
 
   // -------------------------------------------------------------------------
   // EQUIPOS
   // -------------------------------------------------------------------------
 
-  const fetchEquipos = useCallback(async () => {
-    if (!RESTAURANTE_ID) return []
-    try {
-      const { data, error } = await supabase
-        .from('haccp_equipos')
-        .select('*')
-        .eq('restaurante_id', RESTAURANTE_ID)
-        .eq('activo', true)
-        .order('nombre')
-
-      if (error) throw error
-      setEquipos(data ?? [])
-      return data ?? []
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al cargar equipos HACCP'
-      console.error('[useHaccp] fetchEquipos Error:', msg)
-      setError(msg)
-      return []
-    }
-  }, [RESTAURANTE_ID, supabase])
-
   async function crearEquipo(
     datos: Omit<HaccpEquipo, 'id' | 'restaurante_id' | 'created_at' | 'activo'>
   ) {
     try {
-      const { error } = await supabase.from('haccp_equipos').insert({
-        ...datos,
-        activo: true,
-        restaurante_id: RESTAURANTE_ID,
-      })
+      const { error } = await supabase.from('haccp_equipos').insert({ ...datos, activo: true, restaurante_id: RESTAURANTE_ID })
       if (error) throw error
-      await fetchEquipos()
+      await mutate()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al crear equipo'
       console.error('[useHaccp] crearEquipo Error:', msg)
@@ -133,12 +181,9 @@ export function useHaccp() {
 
   async function actualizarEquipo(id: string, datos: Partial<HaccpEquipo>) {
     try {
-      const { error } = await supabase
-        .from('haccp_equipos')
-        .update(datos)
-        .eq('id', id)
+      const { error } = await supabase.from('haccp_equipos').update(datos).eq('id', id)
       if (error) throw error
-      await fetchEquipos()
+      await mutate()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al actualizar equipo'
       console.error('[useHaccp] actualizarEquipo Error:', msg)
@@ -148,12 +193,9 @@ export function useHaccp() {
 
   async function eliminarEquipo(id: string) {
     try {
-      const { error } = await supabase
-        .from('haccp_equipos')
-        .update({ activo: false })
-        .eq('id', id)
+      const { error } = await supabase.from('haccp_equipos').update({ activo: false }).eq('id', id)
       if (error) throw error
-      await fetchEquipos()
+      await mutate()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al eliminar equipo'
       console.error('[useHaccp] eliminarEquipo Error:', msg)
@@ -164,32 +206,6 @@ export function useHaccp() {
   // -------------------------------------------------------------------------
   // TEMPERATURAS
   // -------------------------------------------------------------------------
-
-  const fetchTemperaturas = useCallback(async (equipoId?: string) => {
-    if (!RESTAURANTE_ID) return []
-    try {
-      let query = supabase
-        .from('haccp_temperaturas')
-        .select('*')
-        .eq('restaurante_id', RESTAURANTE_ID)
-        .order('created_at', { ascending: false })
-        .limit(200)
-
-      if (equipoId) {
-        query = query.eq('equipo_id', equipoId)
-      }
-
-      const { data, error } = await query
-      if (error) throw error
-      setTemperaturas(data ?? [])
-      return data ?? []
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al cargar temperaturas'
-      console.error('[useHaccp] fetchTemperaturas Error:', msg)
-      setError(msg)
-      return []
-    }
-  }, [RESTAURANTE_ID, supabase])
 
   async function fetchUltimaTemperatura(equipoId: string): Promise<HaccpTemperatura | null> {
     try {
@@ -212,26 +228,15 @@ export function useHaccp() {
   }
 
   async function registrarTemperaturas(
-    registros: {
-      equipo_id: string
-      temperatura: number
-      observacion?: string
-      accion_correctiva?: string
-    }[]
+    registros: { equipo_id: string; temperatura: number; observacion?: string; accion_correctiva?: string }[]
   ) {
     try {
-      // Build a map from equipos state for quick lookup of temp ranges
       const equipoMap = new Map<string, HaccpEquipo>()
-      for (const eq of equipos) {
-        equipoMap.set(eq.id, eq)
-      }
+      for (const eq of equipos) equipoMap.set(eq.id, eq)
 
       const rows = registros.map((r) => {
         const equipo = equipoMap.get(r.equipo_id)
-        const dentro_rango = equipo
-          ? r.temperatura >= equipo.temp_min && r.temperatura <= equipo.temp_max
-          : false
-
+        const dentro_rango = equipo ? r.temperatura >= equipo.temp_min && r.temperatura <= equipo.temp_max : false
         return {
           equipo_id: r.equipo_id,
           temperatura: r.temperatura,
@@ -244,7 +249,7 @@ export function useHaccp() {
 
       const { error } = await supabase.from('haccp_temperaturas').insert(rows)
       if (error) throw error
-      await fetchTemperaturas()
+      await mutate()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al registrar temperaturas'
       console.error('[useHaccp] registrarTemperaturas Error:', msg)
@@ -256,36 +261,11 @@ export function useHaccp() {
   // VENCIMIENTOS
   // -------------------------------------------------------------------------
 
-  const fetchVencimientos = useCallback(async () => {
-    if (!RESTAURANTE_ID) return []
+  async function crearVencimiento(datos: Omit<HaccpVencimiento, 'id' | 'restaurante_id' | 'created_at'>) {
     try {
-      const { data, error } = await supabase
-        .from('haccp_vencimientos')
-        .select('*')
-        .eq('restaurante_id', RESTAURANTE_ID)
-        .order('fecha_vencimiento', { ascending: true })
-
+      const { error } = await supabase.from('haccp_vencimientos').insert({ ...datos, restaurante_id: RESTAURANTE_ID })
       if (error) throw error
-      setVencimientos(data ?? [])
-      return data ?? []
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al cargar vencimientos'
-      console.error('[useHaccp] fetchVencimientos Error:', msg)
-      setError(msg)
-      return []
-    }
-  }, [RESTAURANTE_ID, supabase])
-
-  async function crearVencimiento(
-    datos: Omit<HaccpVencimiento, 'id' | 'restaurante_id' | 'created_at'>
-  ) {
-    try {
-      const { error } = await supabase.from('haccp_vencimientos').insert({
-        ...datos,
-        restaurante_id: RESTAURANTE_ID,
-      })
-      if (error) throw error
-      await fetchVencimientos()
+      await mutate()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al crear vencimiento'
       console.error('[useHaccp] crearVencimiento Error:', msg)
@@ -295,12 +275,9 @@ export function useHaccp() {
 
   async function actualizarVencimiento(id: string, datos: Partial<HaccpVencimiento>) {
     try {
-      const { error } = await supabase
-        .from('haccp_vencimientos')
-        .update(datos)
-        .eq('id', id)
+      const { error } = await supabase.from('haccp_vencimientos').update(datos).eq('id', id)
       if (error) throw error
-      await fetchVencimientos()
+      await mutate()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al actualizar vencimiento'
       console.error('[useHaccp] actualizarVencimiento Error:', msg)
@@ -310,12 +287,9 @@ export function useHaccp() {
 
   async function descartarVencimiento(id: string) {
     try {
-      const { error } = await supabase
-        .from('haccp_vencimientos')
-        .update({ status: 'descartado' })
-        .eq('id', id)
+      const { error } = await supabase.from('haccp_vencimientos').update({ status: 'descartado' }).eq('id', id)
       if (error) throw error
-      await fetchVencimientos()
+      await mutate()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al descartar vencimiento'
       console.error('[useHaccp] descartarVencimiento Error:', msg)
@@ -327,69 +301,9 @@ export function useHaccp() {
   // LIMPIEZA
   // -------------------------------------------------------------------------
 
-  const fetchLimpieza = useCallback(async () => {
-    if (!RESTAURANTE_ID) return []
-    try {
-      const { data, error } = await supabase
-        .from('haccp_limpieza')
-        .select('*')
-        .eq('restaurante_id', RESTAURANTE_ID)
-        .order('area')
-        .order('tarea_limpieza')
-
-      if (error) throw error
-      setLimpieza(data ?? [])
-      return data ?? []
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al cargar tareas de limpieza'
-      console.error('[useHaccp] fetchLimpieza Error:', msg)
-      setError(msg)
-      return []
-    }
-  }, [RESTAURANTE_ID, supabase])
-
-  const fetchLimpiezaRegistros = useCallback(async (limpiezaId?: string) => {
-    if (!RESTAURANTE_ID) return []
-    try {
-      let query = supabase
-        .from('haccp_limpieza_registros')
-        .select('*')
-        .order('fecha', { ascending: false })
-        .limit(200)
-
-      if (limpiezaId) {
-        query = query.eq('limpieza_id', limpiezaId)
-      } else {
-        // haccp_limpieza_registros has no restaurante_id — scope via limpieza_id
-        const { data: limpiezaData, error: lErr } = await supabase
-          .from('haccp_limpieza')
-          .select('id')
-          .eq('restaurante_id', RESTAURANTE_ID)
-        if (lErr) throw lErr
-        const limpiezaIds = (limpiezaData ?? []).map((l: { id: string }) => l.id)
-        if (limpiezaIds.length === 0) {
-          setLimpiezaRegistros([])
-          return []
-        }
-        query = query.in('limpieza_id', limpiezaIds)
-      }
-
-      const { data, error } = await query
-      if (error) throw error
-      setLimpiezaRegistros(data ?? [])
-      return data ?? []
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al cargar registros de limpieza'
-      console.error('[useHaccp] fetchLimpiezaRegistros Error:', msg)
-      setError(msg)
-      return []
-    }
-  }, [RESTAURANTE_ID, supabase])
-
   // Crea (o reusa) el checklist_item de OPS en plaza 'general' sección 'Limpieza'
   async function syncLimpiezaToOps(nombre: string, frecuencia: string): Promise<string | null> {
     try {
-      // 1. Buscar o crear sección 'Limpieza' en plaza general
       const { data: secExist } = await supabase
         .from('checklist_secciones')
         .select('id')
@@ -406,7 +320,6 @@ export function useHaccp() {
         seccionId = newSec?.id ?? null
       }
 
-      // 2. Insertar el checklist_item
       const { data: newItem } = await supabase
         .from('checklist_items')
         .insert({
@@ -433,7 +346,6 @@ export function useHaccp() {
     datos: Omit<HaccpLimpieza, 'id' | 'restaurante_id' | 'created_at' | 'ultimo_registro' | 'checklist_item_id'>
   ) {
     try {
-      // Sync a OPS si corresponde
       let checklistItemId: string | null = null
       if (datos.sync_ops) {
         checklistItemId = await syncLimpiezaToOps(`${datos.area}: ${datos.tarea_limpieza}`, datos.frecuencia)
@@ -446,7 +358,7 @@ export function useHaccp() {
         restaurante_id: RESTAURANTE_ID,
       })
       if (error) throw error
-      await fetchLimpieza()
+      await mutate()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al crear tarea de limpieza'
       console.error('[useHaccp] crearTareaLimpieza Error:', msg)
@@ -458,26 +370,18 @@ export function useHaccp() {
     try {
       const ahora = new Date().toISOString()
 
-      // Create the registro
       const { error: errRegistro } = await supabase
         .from('haccp_limpieza_registros')
-        .insert({
-          limpieza_id: limpiezaId,
-          fecha: ahora,
-          completado: true,
-          observacion: observacion ?? null,
-        })
+        .insert({ limpieza_id: limpiezaId, fecha: ahora, completado: true, observacion: observacion ?? null })
       if (errRegistro) throw errRegistro
 
-      // Update ultimo_registro on the parent task
       const { error: errUpdate } = await supabase
         .from('haccp_limpieza')
         .update({ ultimo_registro: ahora })
         .eq('id', limpiezaId)
       if (errUpdate) throw errUpdate
 
-      await fetchLimpieza()
-      await fetchLimpiezaRegistros(limpiezaId)
+      await mutate()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al registrar limpieza'
       console.error('[useHaccp] registrarLimpieza Error:', msg)
@@ -487,72 +391,19 @@ export function useHaccp() {
 
   async function eliminarTareaLimpieza(id: string) {
     try {
-      // Borrar el checklist_item de OPS asociado si existe
       const tarea = limpieza.find(l => l.id === id)
       if (tarea?.checklist_item_id) {
         await supabase.from('checklist_items').delete().eq('id', tarea.checklist_item_id)
       }
-      const { error } = await supabase
-        .from('haccp_limpieza')
-        .delete()
-        .eq('id', id)
+      const { error } = await supabase.from('haccp_limpieza').delete().eq('id', id)
       if (error) throw error
-      await fetchLimpieza()
+      await mutate()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al eliminar tarea de limpieza'
       console.error('[useHaccp] eliminarTareaLimpieza Error:', msg)
       throw new Error(msg)
     }
   }
-
-  // -------------------------------------------------------------------------
-  // Initial fetch + Realtime
-  // -------------------------------------------------------------------------
-
-  useEffect(() => {
-    async function fetchAll() {
-      setLoading(true)
-      try {
-        await Promise.all([
-          fetchEquipos(),
-          fetchTemperaturas(),
-          fetchVencimientos(),
-          fetchLimpieza(),
-          fetchLimpiezaRegistros(),
-        ])
-      } catch {
-        // individual fetches handle their own errors
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchAll()
-
-    // Realtime subscriptions
-    const channel = supabase
-      .channel('haccp-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'haccp_equipos' },
-        () => fetchEquipos()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'haccp_temperaturas' },
-        () => fetchTemperaturas()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'haccp_vencimientos' },
-        () => fetchVencimientos()
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [fetchEquipos, fetchTemperaturas, fetchVencimientos, fetchLimpieza, fetchLimpiezaRegistros])
 
   // -------------------------------------------------------------------------
   // Return
@@ -569,25 +420,25 @@ export function useHaccp() {
     error,
 
     // Equipos
-    fetchEquipos,
+    fetchEquipos: refetch,
     crearEquipo,
     actualizarEquipo,
     eliminarEquipo,
 
     // Temperaturas
-    fetchTemperaturas,
+    fetchTemperaturas: refetch,
     fetchUltimaTemperatura,
     registrarTemperaturas,
 
     // Vencimientos
-    fetchVencimientos,
+    fetchVencimientos: refetch,
     crearVencimiento,
     actualizarVencimiento,
     descartarVencimiento,
 
     // Limpieza
-    fetchLimpieza,
-    fetchLimpiezaRegistros,
+    fetchLimpieza: refetch,
+    fetchLimpiezaRegistros: refetch,
     crearTareaLimpieza,
     registrarLimpieza,
     eliminarTareaLimpieza,

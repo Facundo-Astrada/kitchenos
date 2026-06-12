@@ -1,36 +1,41 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useCallback, useMemo } from 'react'
+import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import type { Pedido, PedidoItem, EstadoPedido } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
 
+async function fetchPedidosData(key: string): Promise<Pedido[]> {
+  const rid = key.slice('pedidos-'.length)
+  const supabase = createClient()
+  const { data, error } = await supabase.from('pedidos').select('*')
+    .eq('restaurante_id', rid)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as Pedido[]
+}
+
 export function usePedidos() {
   const RESTAURANTE_ID = useRestauranteId()
-  const [pedidos, setPedidos] = useState<Pedido[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
-  const fetchPedidos = useCallback(async () => {
-    if (!RESTAURANTE_ID) { setLoading(false); return }
-    setLoading(true)
-    setError(null)
+  const swrKey = RESTAURANTE_ID ? `pedidos-${RESTAURANTE_ID}` : null
 
-    try {
-      const { data, error } = await supabase.from('pedidos').select('*')
-        .eq('restaurante_id', RESTAURANTE_ID)
-        .order('created_at', { ascending: false })
-      if (error) throw error
-      setPedidos((data ?? []) as Pedido[])
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al cargar pedidos'
-      console.error('[usePedidos] Error:', msg)
-      setError(msg)
-    } finally {
-      setLoading(false)
+  const { data: pedidos = [], isLoading: loading, error: swrError, mutate } = useSWR(
+    swrKey,
+    fetchPedidosData,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: true,
+      dedupingInterval: 300_000,
+      keepPreviousData: true,
     }
-  }, [RESTAURANTE_ID, supabase])
+  )
+
+  const error = (swrError as Error | null)?.message ?? null
+
+  const fetchPedidos = useCallback(async () => { await mutate() }, [mutate])
 
   const fetchItems = useCallback(async (pedidoId: string): Promise<PedidoItem[]> => {
     try {
@@ -214,12 +219,12 @@ export function usePedidos() {
   }, [fetchPedidos, supabase])
 
   useEffect(() => {
-    fetchPedidos()
-    const ch = supabase.channel('pedidos-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => fetchPedidos())
+    if (!RESTAURANTE_ID) return
+    const ch = supabase.channel(`pedidos-rt-${RESTAURANTE_ID}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => mutate())
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [fetchPedidos])
+  }, [RESTAURANTE_ID, supabase, mutate])
 
   return {
     pedidos, loading, error,

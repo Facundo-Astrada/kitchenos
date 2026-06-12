@@ -164,13 +164,18 @@ interface FormPaso {
 let _id = 0
 function uid() { return ++_id }
 
+// Sin stagger ni y-translate: la animación de entrada con `y: 12` por ítem hacía
+// que las cards se movieran bajo el dedo durante >1s (stagger 0.05 × N recetas),
+// y el primer tap caía sobre un target en movimiento → "hay que apretar dos veces"
+// (tanto en una receta como en el buscador, por el main thread ocupado componiendo).
+// Fade rápido en su posición final → tappable de inmediato.
 const containerVariants = {
   hidden: {},
-  show: { transition: { staggerChildren: 0.05 } },
+  show: { transition: { staggerChildren: 0 } },
 }
 const itemVariants = {
-  hidden: { opacity: 0, y: 12 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.2 } },
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { duration: 0.12 } },
 }
 
 export default function RecetarioPage() {

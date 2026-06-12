@@ -1,8 +1,16 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
+
+const SWR_OPTS = {
+  revalidateOnFocus: false,
+  revalidateOnReconnect: true,
+  dedupingInterval: 300_000,
+  keepPreviousData: true,
+} as const
 
 // ── Types ──
 
@@ -184,42 +192,61 @@ export const PUESTO_TEMPLATES: PuestoTemplate[] = [
 
 // ── Hook ──
 
+async function fetchMiembrosData(key: string): Promise<Miembro[]> {
+  const rid = key.slice('miembros-'.length)
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('equipo_miembros')
+    .select('*')
+    .eq('restaurante_id', rid)
+    .eq('activo', true)
+    .order('nombre')
+  if (error) throw error
+  return (data ?? []).map(m => ({
+    ...m,
+    modulos_extra: m.modulos_extra ?? [],
+    modulos_restringidos: m.modulos_restringidos ?? [],
+  })) as Miembro[]
+}
+
+async function fetchPuestosData(key: string): Promise<Puesto[]> {
+  const rid = key.slice('puestos-'.length)
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('puestos')
+    .select('*')
+    .eq('restaurante_id', rid)
+    .order('nombre')
+  if (error) throw error
+  return (data ?? []).map(p => ({
+    ...p,
+    nivel: p.nivel ?? 'cocinero',
+    plaza_default: p.plaza_default ?? null,
+    permisos_app: p.permisos_app ?? [],
+  })) as Puesto[]
+}
+
 export function useEquipo() {
   const RESTAURANTE_ID = useRestauranteId()
-  const [miembros, setMiembros] = useState<Miembro[]>([])
+  const supabase = useMemo(() => createClient(), [])
   const [turnos, setTurnos] = useState<Turno[]>([])
-  const [puestos, setPuestos] = useState<Puesto[]>([])
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
 
-  // ── Miembros ──
+  // ── Miembros (SWR) ──
+  const { data: miembros = [], isLoading: loading, mutate: mutateMiembros } = useSWR(
+    RESTAURANTE_ID ? `miembros-${RESTAURANTE_ID}` : null,
+    fetchMiembrosData,
+    SWR_OPTS,
+  )
 
-  const fetchMiembros = useCallback(async () => {
-    if (!RESTAURANTE_ID) { setLoading(false); return }
-    setLoading(true)
-    setError(null)
-    try {
-      const { data, error } = await supabase
-        .from('equipo_miembros')
-        .select('*')
-        .eq('restaurante_id', RESTAURANTE_ID)
-        .eq('activo', true)
-        .order('nombre')
-      if (error) throw error
-      setMiembros((data ?? []).map(m => ({
-        ...m,
-        modulos_extra: m.modulos_extra ?? [],
-        modulos_restringidos: m.modulos_restringidos ?? [],
-      })))
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al cargar miembros del equipo'
-      console.error('[useEquipo] fetchMiembros Error:', msg)
-      setError(msg)
-    } finally {
-      setLoading(false)
-    }
-  }, [RESTAURANTE_ID, supabase])
+  // ── Puestos (SWR) ──
+  const { data: puestos = [], mutate: mutatePuestos } = useSWR(
+    RESTAURANTE_ID ? `puestos-${RESTAURANTE_ID}` : null,
+    fetchPuestosData,
+    SWR_OPTS,
+  )
+
+  const fetchMiembros = useCallback(async () => { await mutateMiembros() }, [mutateMiembros])
 
   async function crearMiembro(
     datos: Omit<Miembro, 'id' | 'restaurante_id' | 'created_at' | 'activo' | 'modulos_extra' | 'modulos_restringidos'>
@@ -263,7 +290,7 @@ export function useEquipo() {
         .update({ modulos_extra, modulos_restringidos })
         .eq('id', id)
       if (error) throw error
-      setMiembros(prev => prev.map(m => m.id === id ? { ...m, modulos_extra, modulos_restringidos } : m))
+      mutateMiembros(prev => (prev ?? []).map(m => m.id === id ? { ...m, modulos_extra, modulos_restringidos } : m), { revalidate: false })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al actualizar permisos del miembro'
       console.error('[useEquipo] actualizarOverridesMiembro Error:', msg)
@@ -278,7 +305,7 @@ export function useEquipo() {
         .update({ activo: false })
         .eq('id', id)
       if (error) throw error
-      setMiembros((prev) => prev.filter((m) => m.id !== id))
+      mutateMiembros((prev) => (prev ?? []).filter((m) => m.id !== id), { revalidate: false })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al desactivar miembro'
       console.error('[useEquipo] desactivarMiembro Error:', msg)
@@ -356,27 +383,7 @@ export function useEquipo() {
 
   // ── Puestos ──
 
-  const fetchPuestos = useCallback(async () => {
-    if (!RESTAURANTE_ID) return
-    try {
-      const { data, error } = await supabase
-        .from('puestos')
-        .select('*')
-        .eq('restaurante_id', RESTAURANTE_ID)
-        .order('nombre')
-      if (error) throw error
-      setPuestos((data ?? []).map(p => ({
-        ...p,
-        nivel: p.nivel ?? 'cocinero',
-        plaza_default: p.plaza_default ?? null,
-        permisos_app: p.permisos_app ?? [],
-      })))
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al cargar puestos'
-      console.error('[useEquipo] fetchPuestos Error:', msg)
-      setError(msg)
-    }
-  }, [RESTAURANTE_ID, supabase])
+  const fetchPuestos = useCallback(async () => { await mutatePuestos() }, [mutatePuestos])
 
   async function crearPuesto(
     datos: Omit<Puesto, 'id' | 'restaurante_id' | 'created_at'>
@@ -417,7 +424,7 @@ export function useEquipo() {
         .delete()
         .eq('id', id)
       if (error) throw error
-      setPuestos(prev => prev.filter(p => p.id !== id))
+      mutatePuestos(prev => (prev ?? []).filter(p => p.id !== id), { revalidate: false })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al eliminar puesto'
       console.error('[useEquipo] eliminarPuesto Error:', msg)
@@ -436,24 +443,16 @@ export function useEquipo() {
   // ── Realtime + init ──
 
   useEffect(() => {
-    fetchMiembros()
-    fetchPuestos()
-
+    if (!RESTAURANTE_ID) return
     const chMiembros = supabase
-      .channel('equipo-miembros-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'equipo_miembros' }, () => fetchMiembros())
-      .subscribe()
-
-    const chTurnos = supabase
-      .channel('turnos-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'turnos' }, () => {})
+      .channel(`equipo-miembros-rt-${RESTAURANTE_ID}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'equipo_miembros' }, () => mutateMiembros())
       .subscribe()
 
     return () => {
       supabase.removeChannel(chMiembros)
-      supabase.removeChannel(chTurnos)
     }
-  }, [fetchMiembros, fetchPuestos])
+  }, [RESTAURANTE_ID, supabase, mutateMiembros])
 
   return {
     miembros,

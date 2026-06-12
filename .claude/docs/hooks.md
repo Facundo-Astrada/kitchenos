@@ -8,6 +8,38 @@
 
 3. **Insert directo no actualiza el SWR de otro hook.** Si insertás con `supabase.from(...).insert()` directo (no vía la función del hook), el cache SWR de `useTareas`/etc. solo se entera por el **realtime** (1-3 s). Para refresco inmediato, llamar `refetch()`/`mutate()` del hook justo después del insert. (Ver `activarMenu` en produccion/page.tsx.)
 
+## Anti-patrón: funciones internas usadas como JSX en React (jun 2026)
+
+**Síntoma:** el teclado se cierra al escribir el primer carácter en un input; el focus se pierde; un formulario se "resetea" solo.
+
+**Causa:** si definís una función DENTRO de un componente padre y la usás como `<InnerComp />` (no como `{InnerComp()}`), React trata cada nueva referencia de función como un tipo de componente distinto → unmount + remount en cada re-render del padre → se destruye el DOM incluyendo el foco activo.
+
+```tsx
+// ❌ MAL — InnerForm definido dentro de Page:
+export default function Page() {
+  function InnerForm() { return <input ... /> }  // nueva referencia en cada render
+  return <InnerForm />                            // React la ve como componente nuevo → remount
+}
+
+// ✅ BIEN — InnerForm definido a nivel de módulo:
+function InnerForm({ value, onChange }: Props) {  // referencia estable
+  return <input value={value} onChange={onChange} ... />
+}
+export default function Page() {
+  return <InnerForm value={...} onChange={...} />  // React reconoce el mismo tipo → no remonta
+}
+
+// ✅ También válido — invocar como función (inlined en el JSX del padre):
+export default function Page() {
+  function InnerSection() { return <div>...</div> }
+  return <>{InnerSection()}</>  // no es un componente React, es JSX inlined — no hay fiber propio
+}
+```
+
+**Regla:** cualquier función con inputs (focus, teclado) DEBE estar a nivel de módulo. Recibe `form` y `setForm` como props con `React.Dispatch<SetStateAction<T>>`. Pasó en `turnos/page.tsx` con `MiembroFormDatos` y `PuestoFormBody` (jun 2026).
+
+---
+
 ## Estructura estándar
 
 ```ts

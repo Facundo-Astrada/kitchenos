@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
+import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import type { CategoriaProducto } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
@@ -10,47 +11,49 @@ const CATEGORIAS_DEFAULT = [
   'Bebidas', 'Packaging', 'Limpieza', 'Insumos',
 ]
 
+async function fetchCategoriasData(key: string): Promise<CategoriaProducto[]> {
+  const rid = key.slice('categorias-prod-'.length)
+  const supabase = createClient()
+
+  const { data, error } = await supabase
+    .from('categorias_producto')
+    .select('*')
+    .eq('restaurante_id', rid)
+    .order('nombre')
+  if (error) throw error
+
+  // Seed defaults la primera vez (idempotente: solo si está vacío)
+  if ((data ?? []).length === 0) {
+    await supabase.from('categorias_producto').insert(
+      CATEGORIAS_DEFAULT.map(nombre => ({ restaurante_id: rid, nombre }))
+    )
+    const { data: seeded } = await supabase
+      .from('categorias_producto')
+      .select('*')
+      .eq('restaurante_id', rid)
+      .order('nombre')
+    return seeded ?? []
+  }
+
+  return data ?? []
+}
+
 export function useCategoriasProducto() {
   const RESTAURANTE_ID = useRestauranteId()
-  const [categorias, setCategorias] = useState<CategoriaProducto[]>([])
-  const [loading, setLoading] = useState(true)
   const supabase = useMemo(() => createClient(), [])
 
-  const fetchCategorias = useCallback(async () => {
-    if (!RESTAURANTE_ID) { setLoading(false); return }
-    setLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from('categorias_producto')
-        .select('*')
-        .eq('restaurante_id', RESTAURANTE_ID)
-        .order('nombre')
-      if (error) throw error
-      setCategorias(data ?? [])
-    } finally {
-      setLoading(false)
-    }
-  }, [RESTAURANTE_ID, supabase])
+  const swrKey = RESTAURANTE_ID ? `categorias-prod-${RESTAURANTE_ID}` : null
 
-  // Seed defaults if table is empty for this restaurante
-  const seedDefaults = useCallback(async () => {
-    if (!RESTAURANTE_ID) return
-    const { count } = await supabase
-      .from('categorias_producto')
-      .select('*', { count: 'exact', head: true })
-      .eq('restaurante_id', RESTAURANTE_ID)
-    if ((count ?? 0) === 0) {
-      await supabase.from('categorias_producto').insert(
-        CATEGORIAS_DEFAULT.map(nombre => ({ restaurante_id: RESTAURANTE_ID, nombre }))
-      )
-      await fetchCategorias()
+  const { data: categorias = [], isLoading: loading, mutate } = useSWR(
+    swrKey,
+    fetchCategoriasData,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: true,
+      dedupingInterval: 300_000,
+      keepPreviousData: true,
     }
-  }, [RESTAURANTE_ID, supabase, fetchCategorias])
-
-  useEffect(() => {
-    if (!RESTAURANTE_ID) return
-    fetchCategorias().then(() => seedDefaults())
-  }, [fetchCategorias, seedDefaults, RESTAURANTE_ID])
+  )
 
   async function agregarCategoria(nombre: string, color?: string) {
     if (!RESTAURANTE_ID || !nombre.trim()) return
@@ -58,7 +61,7 @@ export function useCategoriasProducto() {
       .from('categorias_producto')
       .insert({ restaurante_id: RESTAURANTE_ID, nombre: nombre.trim(), color: color ?? null })
     if (error) throw error
-    await fetchCategorias()
+    await mutate()
   }
 
   async function eliminarCategoria(id: string) {
@@ -67,8 +70,8 @@ export function useCategoriasProducto() {
       .delete()
       .eq('id', id)
     if (error) throw error
-    setCategorias(prev => prev.filter(c => c.id !== id))
+    mutate(prev => prev?.filter(c => c.id !== id), { revalidate: false })
   }
 
-  return { categorias, loading, agregarCategoria, eliminarCategoria, refetch: fetchCategorias }
+  return { categorias, loading, agregarCategoria, eliminarCategoria, refetch: useCallback(() => { mutate() }, [mutate]) }
 }

@@ -1,10 +1,18 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useCallback, useMemo } from 'react'
+import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import type { Receta, Ingrediente } from '@/types'
 import { calcFoodCost } from './useRecetas'
 import { useRestauranteId } from './useRestauranteId'
+
+const SWR_OPTS = {
+  revalidateOnFocus: false,
+  revalidateOnReconnect: true,
+  dedupingInterval: 300_000,
+  keepPreviousData: true,
+} as const
 
 // Legacy union type — mantenida para compatibilidad; las categorías ahora son dinámicas
 export type CategoriaCartaItem = string
@@ -84,37 +92,193 @@ export interface CartaItemEnriquecido extends CartaItemDB {
   costo_packaging: number
 }
 
-const _cartaCache = new Map<string, CartaItemEnriquecido[]>()
+async function fetchCartaCategoriasData(key: string): Promise<CartaCategoria[]> {
+  const rid = key.slice('carta-cat-'.length)
+  const supabase = createClient()
+  const { data } = await supabase
+    .from('carta_categorias')
+    .select('id, nombre, icono, orden, restaurante_id')
+    .eq('restaurante_id', rid)
+    .order('orden')
+  if (data && data.length > 0) return data as CartaCategoria[]
+  // Primera vez: sembrar categorías por defecto
+  const inserts = CATEGORIAS_DEFAULT.map((c, i) => ({
+    nombre: c.nombre, icono: c.icono, orden: i, restaurante_id: rid,
+  }))
+  const { data: seeded } = await supabase
+    .from('carta_categorias')
+    .insert(inserts)
+    .select('id, nombre, icono, orden, restaurante_id')
+  return (seeded ?? []) as CartaCategoria[]
+}
+
+async function fetchCartaItemsData(key: string): Promise<CartaItemEnriquecido[]> {
+  const rid = key.slice('carta-items-'.length)
+  const supabase = createClient()
+
+  const { data: cartaData, error: cartaErr } = await supabase
+    .from('carta_items')
+    .select('*')
+    .eq('restaurante_id', rid)
+    .order('categoria')
+    .order('orden')
+    .order('nombre')
+
+  if (cartaErr) throw cartaErr
+  const cartaItems = (cartaData ?? []) as CartaItemDB[]
+
+  const recetaMap: Record<string, Receta & { ingredientes: Ingrediente[] }> = {}
+  const platoRecetasMap: Record<string, PlatoRecetaEnriquecido[]> = {}
+  const platoPackagingMap: Record<string, PlatoPackagingEnriquecido[]> = {}
+
+  if (cartaItems.length > 0) {
+    const platoIds = cartaItems.map(c => c.id)
+
+    // Fetch plato_recetas
+    const { data: prData } = await supabase
+      .from('plato_recetas')
+      .select('*')
+      .in('plato_id', platoIds)
+      .order('orden')
+
+    const prItems = (prData ?? []) as PlatoRecetaDB[]
+    const prRecetaIds = [...new Set(prItems.map(pr => pr.receta_id))]
+    const legacyRecetaIds = cartaItems.map(c => c.receta_id).filter(Boolean) as string[]
+    const allRecetaIds = [...new Set([...prRecetaIds, ...legacyRecetaIds])]
+
+    if (allRecetaIds.length > 0) {
+      const { data: recetasData, error: recErr } = await supabase
+        .from('recetas')
+        .select('*')
+        .in('id', allRecetaIds)
+      if (recErr) throw recErr
+
+      const { data: ingData, error: ingErr } = await supabase
+        .from('ingredientes')
+        .select('*')
+        .in('receta_id', allRecetaIds)
+      if (ingErr) throw ingErr
+
+      const ingMap: Record<string, Ingrediente[]> = {}
+      for (const ing of (ingData ?? []) as Ingrediente[]) {
+        if (!ingMap[ing.receta_id]) ingMap[ing.receta_id] = []
+        ingMap[ing.receta_id].push(ing)
+      }
+      for (const r of (recetasData ?? []) as Receta[]) {
+        recetaMap[r.id] = { ...r, ingredientes: ingMap[r.id] ?? [] }
+      }
+    }
+
+    for (const pr of prItems) {
+      if (!platoRecetasMap[pr.plato_id]) platoRecetasMap[pr.plato_id] = []
+      const r = recetaMap[pr.receta_id]
+      const costo_calculado = r
+        ? calcFoodCost(r.ingredientes, r.porciones ?? 1, 0).costo_porcion * pr.porciones
+        : 0
+      platoRecetasMap[pr.plato_id].push({ ...pr, receta: r, costo_calculado })
+    }
+
+    // Fetch plato_packaging + productos
+    const { data: pkgData } = await supabase
+      .from('plato_packaging')
+      .select('*')
+      .in('plato_id', platoIds)
+      .order('orden')
+
+    const pkgItems = (pkgData ?? []) as PlatoPackagingDB[]
+    const pkgProductoIds = [...new Set(pkgItems.map(p => p.producto_id))]
+
+    if (pkgProductoIds.length > 0) {
+      const { data: prodData } = await supabase
+        .from('productos')
+        .select('id, nombre, unidad, precio_unitario')
+        .in('id', pkgProductoIds)
+
+      const prodMap: Record<string, { nombre: string; unidad: string; precio_unitario: number }> = {}
+      for (const p of (prodData ?? []) as { id: string; nombre: string; unidad: string; precio_unitario: number }[]) {
+        prodMap[p.id] = p
+      }
+
+      for (const pkg of pkgItems) {
+        if (!platoPackagingMap[pkg.plato_id]) platoPackagingMap[pkg.plato_id] = []
+        const prod = prodMap[pkg.producto_id]
+        platoPackagingMap[pkg.plato_id].push({
+          ...pkg,
+          producto_nombre: prod?.nombre ?? '—',
+          producto_unidad: prod?.unidad ?? 'u',
+          producto_precio_unitario: prod?.precio_unitario ?? 0,
+        })
+      }
+    }
+  }
+
+  return cartaItems.map(item => {
+    const receta = item.receta_id ? recetaMap[item.receta_id] : undefined
+    const platoRecetas = platoRecetasMap[item.id] ?? []
+    const platoPackaging = platoPackagingMap[item.id] ?? []
+
+    // Costo de packaging para 1 porción del plato
+    const costo_packaging = platoPackaging.reduce(
+      (sum, p) => sum + p.producto_precio_unitario * p.cantidad, 0
+    )
+
+    let food_cost_pct: number | undefined
+    let costo_porcion: number | undefined
+    let margen_bruto: number | undefined
+    let margen_pct_computed: number | undefined
+    let costo_total_plato: number | undefined
+
+    if (platoRecetas.length > 0) {
+      costo_total_plato = platoRecetas.reduce((sum, pr) => sum + pr.costo_calculado, 0)
+      const costo_con_pkg = costo_total_plato + costo_packaging
+      const precio = item.precio_venta ?? 0
+      if (precio > 0 && costo_con_pkg > 0) {
+        costo_porcion = costo_con_pkg
+        margen_bruto = precio - costo_con_pkg
+        food_cost_pct = (costo_con_pkg / precio) * 100
+        margen_pct_computed = ((precio - costo_con_pkg) / precio) * 100
+      }
+    } else if (receta && receta.ingredientes.length > 0) {
+      const fc = calcFoodCost(receta.ingredientes, receta.porciones ?? 0, item.precio_venta ?? 0)
+      const costo_con_pkg = (fc.costo_porcion ?? 0) + costo_packaging
+      food_cost_pct = item.precio_venta > 0 ? (costo_con_pkg / item.precio_venta) * 100 : fc.food_cost_pct
+      costo_porcion = costo_con_pkg > 0 ? costo_con_pkg : fc.costo_porcion
+      margen_bruto = item.precio_venta > 0 ? item.precio_venta - costo_con_pkg : fc.margen_bruto
+      if (item.precio_venta > 0 && costo_porcion != null) {
+        margen_pct_computed = ((item.precio_venta - costo_con_pkg) / item.precio_venta) * 100
+      }
+    }
+
+    return {
+      ...item,
+      tags: (item.tags ?? []) as string[],
+      receta, plato_recetas: platoRecetas,
+      plato_packaging: platoPackaging, costo_packaging,
+      food_cost_pct, costo_porcion, margen_bruto, margen_pct_computed, costo_total_plato,
+    }
+  })
+}
 
 export function useCarta() {
   const RESTAURANTE_ID = useRestauranteId()
-  const [items, setItems] = useState<CartaItemEnriquecido[]>([])
-  const [categorias, setCategorias] = useState<CartaCategoria[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
-  const fetchCategorias = useCallback(async () => {
-    if (!RESTAURANTE_ID) return
-    const { data } = await supabase
-      .from('carta_categorias')
-      .select('id, nombre, icono, orden, restaurante_id')
-      .eq('restaurante_id', RESTAURANTE_ID)
-      .order('orden')
-    if (data && data.length > 0) {
-      setCategorias(data as CartaCategoria[])
-    } else {
-      // Primera vez: sembrar categorías por defecto
-      const inserts = CATEGORIAS_DEFAULT.map((c, i) => ({
-        nombre: c.nombre, icono: c.icono, orden: i, restaurante_id: RESTAURANTE_ID,
-      }))
-      const { data: seeded } = await supabase
-        .from('carta_categorias')
-        .insert(inserts)
-        .select('id, nombre, icono, orden, restaurante_id')
-      setCategorias((seeded ?? []) as CartaCategoria[])
-    }
-  }, [RESTAURANTE_ID, supabase])
+  const { data: categorias = [], mutate: mutateCategorias } = useSWR(
+    RESTAURANTE_ID ? `carta-cat-${RESTAURANTE_ID}` : null,
+    fetchCartaCategoriasData,
+    SWR_OPTS,
+  )
+
+  const { data: items = [], isLoading: loading, error: swrError, mutate: mutateItems } = useSWR(
+    RESTAURANTE_ID ? `carta-items-${RESTAURANTE_ID}` : null,
+    fetchCartaItemsData,
+    SWR_OPTS,
+  )
+
+  const error = (swrError as Error | null)?.message ?? null
+
+  const fetchCategorias = useCallback(async () => { await mutateCategorias() }, [mutateCategorias])
+  const fetchItems = useCallback(async () => { await mutateItems() }, [mutateItems])
 
   const crearCategoria = useCallback(async (nombre: string, icono = 'restaurant') => {
     if (!RESTAURANTE_ID) return
@@ -129,172 +293,6 @@ export function useCarta() {
     await supabase.from('carta_categorias').delete().eq('id', id)
     await fetchCategorias()
   }, [supabase, fetchCategorias])
-
-  const fetchItems = useCallback(async () => {
-    if (!RESTAURANTE_ID) { setLoading(false); return }
-
-    const cached = _cartaCache.get(RESTAURANTE_ID)
-    if (cached) {
-      setItems(cached)
-      setLoading(false)
-    } else {
-      setLoading(true)
-    }
-    setError(null)
-
-    try {
-      const { data: cartaData, error: cartaErr } = await supabase
-        .from('carta_items')
-        .select('*')
-        .eq('restaurante_id', RESTAURANTE_ID)
-        .order('categoria')
-        .order('orden')
-        .order('nombre')
-
-      if (cartaErr) throw cartaErr
-      const cartaItems = (cartaData ?? []) as CartaItemDB[]
-
-      const recetaMap: Record<string, Receta & { ingredientes: Ingrediente[] }> = {}
-      const platoRecetasMap: Record<string, PlatoRecetaEnriquecido[]> = {}
-      const platoPackagingMap: Record<string, PlatoPackagingEnriquecido[]> = {}
-
-      if (cartaItems.length > 0) {
-        const platoIds = cartaItems.map(c => c.id)
-
-        // Fetch plato_recetas
-        const { data: prData } = await supabase
-          .from('plato_recetas')
-          .select('*')
-          .in('plato_id', platoIds)
-          .order('orden')
-
-        const prItems = (prData ?? []) as PlatoRecetaDB[]
-        const prRecetaIds = [...new Set(prItems.map(pr => pr.receta_id))]
-        const legacyRecetaIds = cartaItems.map(c => c.receta_id).filter(Boolean) as string[]
-        const allRecetaIds = [...new Set([...prRecetaIds, ...legacyRecetaIds])]
-
-        if (allRecetaIds.length > 0) {
-          const { data: recetasData, error: recErr } = await supabase
-            .from('recetas')
-            .select('*')
-            .in('id', allRecetaIds)
-          if (recErr) throw recErr
-
-          const { data: ingData, error: ingErr } = await supabase
-            .from('ingredientes')
-            .select('*')
-            .in('receta_id', allRecetaIds)
-          if (ingErr) throw ingErr
-
-          const ingMap: Record<string, Ingrediente[]> = {}
-          for (const ing of (ingData ?? []) as Ingrediente[]) {
-            if (!ingMap[ing.receta_id]) ingMap[ing.receta_id] = []
-            ingMap[ing.receta_id].push(ing)
-          }
-          for (const r of (recetasData ?? []) as Receta[]) {
-            recetaMap[r.id] = { ...r, ingredientes: ingMap[r.id] ?? [] }
-          }
-        }
-
-        for (const pr of prItems) {
-          if (!platoRecetasMap[pr.plato_id]) platoRecetasMap[pr.plato_id] = []
-          const r = recetaMap[pr.receta_id]
-          const costo_calculado = r
-            ? calcFoodCost(r.ingredientes, r.porciones ?? 1, 0).costo_porcion * pr.porciones
-            : 0
-          platoRecetasMap[pr.plato_id].push({ ...pr, receta: r, costo_calculado })
-        }
-
-        // Fetch plato_packaging + productos
-        const { data: pkgData } = await supabase
-          .from('plato_packaging')
-          .select('*')
-          .in('plato_id', platoIds)
-          .order('orden')
-
-        const pkgItems = (pkgData ?? []) as PlatoPackagingDB[]
-        const pkgProductoIds = [...new Set(pkgItems.map(p => p.producto_id))]
-
-        if (pkgProductoIds.length > 0) {
-          const { data: prodData } = await supabase
-            .from('productos')
-            .select('id, nombre, unidad, precio_unitario')
-            .in('id', pkgProductoIds)
-
-          const prodMap: Record<string, { nombre: string; unidad: string; precio_unitario: number }> = {}
-          for (const p of (prodData ?? []) as { id: string; nombre: string; unidad: string; precio_unitario: number }[]) {
-            prodMap[p.id] = p
-          }
-
-          for (const pkg of pkgItems) {
-            if (!platoPackagingMap[pkg.plato_id]) platoPackagingMap[pkg.plato_id] = []
-            const prod = prodMap[pkg.producto_id]
-            platoPackagingMap[pkg.plato_id].push({
-              ...pkg,
-              producto_nombre: prod?.nombre ?? '—',
-              producto_unidad: prod?.unidad ?? 'u',
-              producto_precio_unitario: prod?.precio_unitario ?? 0,
-            })
-          }
-        }
-      }
-
-      const enriched: CartaItemEnriquecido[] = cartaItems.map(item => {
-        const receta = item.receta_id ? recetaMap[item.receta_id] : undefined
-        const platoRecetas = platoRecetasMap[item.id] ?? []
-        const platoPackaging = platoPackagingMap[item.id] ?? []
-
-        // Costo de packaging para 1 porción del plato
-        const costo_packaging = platoPackaging.reduce(
-          (sum, p) => sum + p.producto_precio_unitario * p.cantidad, 0
-        )
-
-        let food_cost_pct: number | undefined
-        let costo_porcion: number | undefined
-        let margen_bruto: number | undefined
-        let margen_pct_computed: number | undefined
-        let costo_total_plato: number | undefined
-
-        if (platoRecetas.length > 0) {
-          costo_total_plato = platoRecetas.reduce((sum, pr) => sum + pr.costo_calculado, 0)
-          const costo_con_pkg = costo_total_plato + costo_packaging
-          const precio = item.precio_venta ?? 0
-          if (precio > 0 && costo_con_pkg > 0) {
-            costo_porcion = costo_con_pkg
-            margen_bruto = precio - costo_con_pkg
-            food_cost_pct = (costo_con_pkg / precio) * 100
-            margen_pct_computed = ((precio - costo_con_pkg) / precio) * 100
-          }
-        } else if (receta && receta.ingredientes.length > 0) {
-          const fc = calcFoodCost(receta.ingredientes, receta.porciones ?? 0, item.precio_venta ?? 0)
-          const costo_con_pkg = (fc.costo_porcion ?? 0) + costo_packaging
-          food_cost_pct = item.precio_venta > 0 ? (costo_con_pkg / item.precio_venta) * 100 : fc.food_cost_pct
-          costo_porcion = costo_con_pkg > 0 ? costo_con_pkg : fc.costo_porcion
-          margen_bruto = item.precio_venta > 0 ? item.precio_venta - costo_con_pkg : fc.margen_bruto
-          if (item.precio_venta > 0 && costo_porcion != null) {
-            margen_pct_computed = ((item.precio_venta - costo_con_pkg) / item.precio_venta) * 100
-          }
-        }
-
-        return {
-          ...item,
-          tags: (item.tags ?? []) as string[],
-          receta, plato_recetas: platoRecetas,
-          plato_packaging: platoPackaging, costo_packaging,
-          food_cost_pct, costo_porcion, margen_bruto, margen_pct_computed, costo_total_plato,
-        }
-      })
-
-      _cartaCache.set(RESTAURANTE_ID, enriched)
-      setItems(enriched)
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al cargar la carta'
-      console.error('[useCarta] fetchItems Error:', msg)
-      setError(msg)
-    } finally {
-      setLoading(false)
-    }
-  }, [RESTAURANTE_ID, supabase])
 
   const crearItem = useCallback(async (datos: {
     nombre: string
@@ -364,7 +362,7 @@ export function useCarta() {
 
   const duplicarItem = useCallback(async (platoId: string): Promise<string> => {
     try {
-      const original = _cartaCache.get(RESTAURANTE_ID)?.find(i => i.id === platoId)
+      const original = items.find(i => i.id === platoId)
       if (!original) throw new Error('Plato no encontrado')
 
       const { data: maxData } = await supabase
@@ -420,7 +418,7 @@ export function useCarta() {
       console.error('[useCarta] duplicarItem Error:', msg)
       throw new Error(msg)
     }
-  }, [RESTAURANTE_ID, supabase, fetchItems])
+  }, [RESTAURANTE_ID, supabase, fetchItems, items])
 
   const eliminarItem = useCallback(async (id: string) => {
     try {
@@ -527,7 +525,6 @@ export function useCarta() {
     try {
       const { error } = await supabase.from('carta_items').update({ tags }).eq('id', id)
       if (error) throw error
-      _cartaCache.delete(RESTAURANTE_ID)
       await fetchItems()
     } catch (e: unknown) {
       console.error('[useCarta] actualizarTags Error:', e instanceof Error ? e.message : e)
@@ -548,16 +545,15 @@ export function useCarta() {
   }, [fetchItems, supabase])
 
   useEffect(() => {
-    fetchCategorias()
-    fetchItems()
-    const ch = supabase.channel('carta-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'carta_items' }, () => fetchItems())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'plato_recetas' }, () => fetchItems())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'plato_packaging' }, () => fetchItems())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'carta_categorias' }, () => fetchCategorias())
+    if (!RESTAURANTE_ID) return
+    const ch = supabase.channel(`carta-rt-${RESTAURANTE_ID}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'carta_items' }, () => mutateItems())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'plato_recetas' }, () => mutateItems())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'plato_packaging' }, () => mutateItems())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'carta_categorias' }, () => mutateCategorias())
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [fetchItems, fetchCategorias])
+  }, [RESTAURANTE_ID, supabase, mutateItems, mutateCategorias])
 
   return {
     items, loading, error,

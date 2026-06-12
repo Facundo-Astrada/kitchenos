@@ -1,5 +1,6 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
+import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
 
@@ -48,42 +49,51 @@ export interface PrepInput {
   unidad?: string | null
 }
 
+async function fetchMenusData(key: string): Promise<MenuConPreparaciones[]> {
+  const rid = key.slice('menus-'.length)
+  const supabase = createClient()
+  const { data: menusData } = await supabase
+    .from('menus')
+    .select('*')
+    .eq('restaurante_id', rid)
+    .eq('activo', true)
+    .order('created_at', { ascending: false })
+
+  const ids = (menusData ?? []).map(m => m.id)
+  let preps: MenuPreparacion[] = []
+  if (ids.length > 0) {
+    const { data: prepData } = await supabase
+      .from('menu_preparaciones')
+      .select('*')
+      .in('menu_id', ids)
+      .order('orden', { ascending: true })
+    preps = (prepData ?? []) as MenuPreparacion[]
+  }
+
+  return (menusData ?? []).map(m => ({
+    ...(m as Omit<MenuConPreparaciones, 'preparaciones'>),
+    preparaciones: preps.filter(p => p.menu_id === m.id),
+  }))
+}
+
 export function useMenus() {
   const RESTAURANTE_ID = useRestauranteId()
-  const supabase = createClient()
-  const [menus, setMenus] = useState<MenuConPreparaciones[]>([])
-  const [loading, setLoading] = useState(true)
+  const supabase = useMemo(() => createClient(), [])
 
-  const fetchMenus = useCallback(async () => {
-    if (!RESTAURANTE_ID) return
-    setLoading(true)
-    const { data: menusData } = await supabase
-      .from('menus')
-      .select('*')
-      .eq('restaurante_id', RESTAURANTE_ID)
-      .eq('activo', true)
-      .order('created_at', { ascending: false })
+  const swrKey = RESTAURANTE_ID ? `menus-${RESTAURANTE_ID}` : null
 
-    const ids = (menusData ?? []).map(m => m.id)
-    let preps: MenuPreparacion[] = []
-    if (ids.length > 0) {
-      const { data: prepData } = await supabase
-        .from('menu_preparaciones')
-        .select('*')
-        .in('menu_id', ids)
-        .order('orden', { ascending: true })
-      preps = (prepData ?? []) as MenuPreparacion[]
+  const { data: menus = [], isLoading: loading, mutate } = useSWR(
+    swrKey,
+    fetchMenusData,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: true,
+      dedupingInterval: 300_000,
+      keepPreviousData: true,
     }
+  )
 
-    const result: MenuConPreparaciones[] = (menusData ?? []).map(m => ({
-      ...(m as Omit<MenuConPreparaciones, 'preparaciones'>),
-      preparaciones: preps.filter(p => p.menu_id === m.id),
-    }))
-    setMenus(result)
-    setLoading(false)
-  }, [RESTAURANTE_ID]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => { fetchMenus() }, [fetchMenus])
+  const fetchMenus = useCallback(async () => { await mutate() }, [mutate])
 
   // ── Crear menú + sus preparaciones ──
   const crearMenu = useCallback(async (

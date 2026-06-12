@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useCallback, useMemo } from 'react'
+import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
-import type { Venta, VentaItem, OrigenVenta } from '@/types'
+import type { Venta, OrigenVenta } from '@/types'
 
 export interface NuevaVenta {
   fecha: string
@@ -18,53 +19,61 @@ export interface NuevaVenta {
   }>
 }
 
+async function fetchVentasData(key: string): Promise<Venta[]> {
+  const rid = key.slice('ventas-'.length)
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('ventas')
+    .select('*, items:ventas_items(*)')
+    .eq('restaurante_id', rid)
+    .order('fecha', { ascending: false })
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as Venta[]
+}
+
 export function useVentas() {
   const RESTAURANTE_ID = useRestauranteId()
-  const ridRef = useRef(RESTAURANTE_ID)
-  ridRef.current = RESTAURANTE_ID
+  const supabase = useMemo(() => createClient(), [])
 
-  const [supabase] = useState(() => createClient())
-  const [ventas, setVentas] = useState<Venta[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const swrKey = RESTAURANTE_ID ? `ventas-${RESTAURANTE_ID}` : null
 
-  const fetchVentas = useCallback(async (desde?: string, hasta?: string) => {
-    const rid = ridRef.current
-    if (!rid) { setLoading(false); return }
-    setLoading(true)
-    setError(null)
-
-    try {
-      let query = supabase
-        .from('ventas')
-        .select('*, items:ventas_items(*)')
-        .eq('restaurante_id', rid)
-        .order('fecha', { ascending: false })
-        .order('created_at', { ascending: false })
-
-      if (desde) query = query.gte('fecha', desde)
-      if (hasta) query = query.lte('fecha', hasta)
-
-      const { data, error: err } = await query
-      if (err) throw err
-      setVentas((data ?? []) as Venta[])
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al cargar ventas'
-      console.error('[useVentas] fetchVentas Error:', msg)
-      setError(msg)
-    } finally {
-      setLoading(false)
+  const { data: ventas = [], isLoading: loading, error: swrError, mutate } = useSWR(
+    swrKey,
+    fetchVentasData,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: true,
+      dedupingInterval: 300_000,
+      keepPreviousData: true,
     }
-  }, [supabase])
+  )
+
+  const error = (swrError as Error | null)?.message ?? null
+
+  // Sin params revalida la lista base (cache); con rango filtra imperativamente.
+  const fetchVentas = useCallback(async (desde?: string, hasta?: string) => {
+    if (!RESTAURANTE_ID) return
+    if (!desde && !hasta) { await mutate(); return }
+    let query = supabase
+      .from('ventas')
+      .select('*, items:ventas_items(*)')
+      .eq('restaurante_id', RESTAURANTE_ID)
+      .order('fecha', { ascending: false })
+      .order('created_at', { ascending: false })
+    if (desde) query = query.gte('fecha', desde)
+    if (hasta) query = query.lte('fecha', hasta)
+    const { data } = await query
+    await mutate((data ?? []) as Venta[], { revalidate: false })
+  }, [RESTAURANTE_ID, supabase, mutate])
 
   const agregarVenta = useCallback(async (datos: NuevaVenta): Promise<string> => {
-    const rid = ridRef.current
-    if (!rid) throw new Error('Sin restaurante')
+    if (!RESTAURANTE_ID) throw new Error('Sin restaurante')
 
     const { data: ventaData, error: ventaErr } = await supabase
       .from('ventas')
       .insert({
-        restaurante_id: rid,
+        restaurante_id: RESTAURANTE_ID,
         fecha: datos.fecha,
         origen: datos.origen,
         total_ventas: datos.total_ventas,
@@ -89,19 +98,15 @@ export function useVentas() {
       if (itemsErr) throw itemsErr
     }
 
-    await fetchVentas()
+    await mutate()
     return ventaId
-  }, [supabase, fetchVentas])
+  }, [RESTAURANTE_ID, supabase, mutate])
 
   const eliminarVenta = useCallback(async (id: string) => {
     const { error: err } = await supabase.from('ventas').delete().eq('id', id)
     if (err) throw err
-    await fetchVentas()
-  }, [supabase, fetchVentas])
-
-  useEffect(() => {
-    fetchVentas()
-  }, [fetchVentas, RESTAURANTE_ID])
+    mutate(prev => prev?.filter(v => v.id !== id), { revalidate: false })
+  }, [supabase, mutate])
 
   return { ventas, loading, error, agregarVenta, eliminarVenta, fetchVentas }
 }

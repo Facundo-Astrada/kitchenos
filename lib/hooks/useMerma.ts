@@ -1,48 +1,58 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useCallback, useMemo } from 'react'
+import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
 import { useAuth } from '@/lib/auth/context'
 import type { Merma, MotivoMerma, TurnoMerma } from '@/types'
 
+async function fetchMermaData(key: string): Promise<Merma[]> {
+  const rid = key.slice('merma-'.length)
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('merma')
+    .select('*')
+    .eq('restaurante_id', rid)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
 export function useMerma() {
   const RESTAURANTE_ID = useRestauranteId()
-  const ridRef = useRef(RESTAURANTE_ID)
-  ridRef.current = RESTAURANTE_ID
   const { perfil } = useAuth()
-  const [supabase] = useState(() => createClient())
-  const [registros, setRegistros] = useState<Merma[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const supabase = useMemo(() => createClient(), [])
 
-  const fetchMerma = useCallback(async (desde?: string, hasta?: string) => {
-    const rid = ridRef.current
-    if (!rid) { setLoading(false); return }
-    setLoading(true)
-    setError(null)
+  const swrKey = RESTAURANTE_ID ? `merma-${RESTAURANTE_ID}` : null
 
-    try {
-      let query = supabase
-        .from('merma')
-        .select('*')
-        .eq('restaurante_id', rid)
-        .order('created_at', { ascending: false })
-
-      if (desde) query = query.gte('fecha', desde)
-      if (hasta) query = query.lte('fecha', hasta)
-
-      const { data, error: err } = await query
-      if (err) throw err
-      setRegistros(data ?? [])
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al cargar registros de merma'
-      console.error('[useMerma] Error:', msg)
-      setError(msg)
-    } finally {
-      setLoading(false)
+  const { data: registros = [], isLoading: loading, error: swrError, mutate } = useSWR(
+    swrKey,
+    fetchMermaData,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: true,
+      dedupingInterval: 300_000,
+      keepPreviousData: true,
     }
-  }, [supabase])
+  )
+
+  const error = (swrError as Error | null)?.message ?? null
+
+  // Filtro imperativo por rango de fechas. Sin params revalida la lista base (cache).
+  const fetchMerma = useCallback(async (desde?: string, hasta?: string) => {
+    if (!RESTAURANTE_ID) return
+    if (!desde && !hasta) { await mutate(); return }
+    let query = supabase
+      .from('merma')
+      .select('*')
+      .eq('restaurante_id', RESTAURANTE_ID)
+      .order('created_at', { ascending: false })
+    if (desde) query = query.gte('fecha', desde)
+    if (hasta) query = query.lte('fecha', hasta)
+    const { data } = await query
+    await mutate(data ?? [], { revalidate: false })
+  }, [RESTAURANTE_ID, supabase, mutate])
 
   const registrarMerma = useCallback(async (data: {
     producto_nombre: string
@@ -53,8 +63,7 @@ export function useMerma() {
     motivo_detalle?: string
     costo_estimado?: number
   }) => {
-    const rid = ridRef.current
-    if (!rid) throw new Error('Sin restaurante')
+    if (!RESTAURANTE_ID) throw new Error('Sin restaurante')
 
     try {
       // Determine turno based on current hour
@@ -74,7 +83,7 @@ export function useMerma() {
         fecha: new Date().toISOString().split('T')[0],
         turno,
         costo_estimado: data.costo_estimado ?? 0,
-        restaurante_id: rid,
+        restaurante_id: RESTAURANTE_ID,
       })
 
       if (err) throw err
@@ -95,27 +104,25 @@ export function useMerma() {
           if (updErr) throw updErr
         }
       }
+      await mutate()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al registrar merma'
       console.error('[useMerma] registrarMerma Error:', msg)
       throw new Error(msg)
     }
-  }, [supabase, perfil])
+  }, [RESTAURANTE_ID, supabase, perfil, mutate])
 
   const eliminarMerma = useCallback(async (id: string) => {
     try {
       const { error: err } = await supabase.from('merma').delete().eq('id', id)
       if (err) throw err
+      mutate(prev => prev?.filter(m => m.id !== id), { revalidate: false })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al eliminar registro de merma'
       console.error('[useMerma] eliminarMerma Error:', msg)
       throw new Error(msg)
     }
-  }, [supabase])
-
-  useEffect(() => {
-    fetchMerma()
-  }, [fetchMerma, RESTAURANTE_ID])
+  }, [supabase, mutate])
 
   return { registros, loading, error, fetchMerma, registrarMerma, eliminarMerma }
 }

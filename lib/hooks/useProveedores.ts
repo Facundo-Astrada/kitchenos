@@ -1,66 +1,51 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useCallback, useMemo } from 'react'
+import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import type { Proveedor, Factura } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
 
-const _cache = new Map<string, Proveedor[]>()
+async function fetchProveedoresData(key: string): Promise<Proveedor[]> {
+  const rid = key.slice('proveedores-'.length)
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('proveedores')
+    .select('*')
+    .eq('restaurante_id', rid)
+    .eq('activo', true)
+    .order('nombre')
+  if (error) throw error
+  return data ?? []
+}
 
 export function useProveedores() {
   const RESTAURANTE_ID = useRestauranteId()
-  const [proveedores, setProveedores] = useState<Proveedor[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
-  const fetchProveedores = useCallback(async (showLoading = true) => {
-    if (!RESTAURANTE_ID) { setLoading(false); return }
+  const swrKey = RESTAURANTE_ID ? `proveedores-${RESTAURANTE_ID}` : null
 
-    const cached = _cache.get(RESTAURANTE_ID)
-    if (cached) {
-      setProveedores(cached)
-      setLoading(false)
-    } else if (showLoading) {
-      setLoading(true)
+  const { data: proveedores = [], isLoading: loading, error: swrError, mutate } = useSWR(
+    swrKey,
+    fetchProveedoresData,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: true,
+      dedupingInterval: 300_000,
+      keepPreviousData: true,
     }
-    setError(null)
+  )
 
-    try {
-      const { data, error } = await supabase
-        .from('proveedores')
-        .select('*')
-        .eq('restaurante_id', RESTAURANTE_ID)
-        .eq('activo', true)
-        .order('nombre')
-
-      if (error) throw error
-      const result = data ?? []
-      _cache.set(RESTAURANTE_ID, result)
-      setProveedores(result)
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al cargar proveedores'
-      console.error('[useProveedores] Error:', msg)
-      setError(msg)
-    } finally {
-      setLoading(false)
-    }
-  }, [RESTAURANTE_ID, supabase])
+  const error = (swrError as Error | null)?.message ?? null
 
   useEffect(() => {
-    fetchProveedores()
-
+    if (!RESTAURANTE_ID) return
     const channel = supabase
-      .channel('proveedores-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'proveedores' },
-        () => fetchProveedores(false)
-      )
+      .channel(`proveedores-rt-${RESTAURANTE_ID}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'proveedores' }, () => mutate())
       .subscribe()
-
     return () => { supabase.removeChannel(channel) }
-  }, [fetchProveedores])
+  }, [RESTAURANTE_ID, supabase, mutate])
 
   async function agregarProveedor(
     datos: Omit<Proveedor, 'id' | 'restaurante_id' | 'activo'>
@@ -71,7 +56,7 @@ export function useProveedores() {
         restaurante_id: RESTAURANTE_ID,
       })
       if (error) throw error
-      await fetchProveedores()
+      await mutate()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al agregar proveedor'
       console.error('[useProveedores] agregarProveedor Error:', msg)
@@ -86,7 +71,7 @@ export function useProveedores() {
         .update(datos)
         .eq('id', id)
       if (error) throw error
-      await fetchProveedores()
+      await mutate()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al actualizar proveedor'
       console.error('[useProveedores] actualizarProveedor Error:', msg)
@@ -101,7 +86,7 @@ export function useProveedores() {
         .update({ activo: false })
         .eq('id', id)
       if (error) throw error
-      setProveedores(prev => prev.filter(p => p.id !== id))
+      mutate((prev) => prev?.filter(p => p.id !== id), { revalidate: false })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al eliminar proveedor'
       console.error('[useProveedores] eliminarProveedor Error:', msg)
@@ -147,7 +132,7 @@ export function useProveedores() {
     proveedores,
     loading,
     error,
-    refetch: fetchProveedores,
+    refetch: useCallback(() => { mutate() }, [mutate]),
     agregarProveedor,
     actualizarProveedor,
     eliminarProveedor,
