@@ -396,7 +396,7 @@ export function useReportes() {
       const { from, to } = getDateRange(periodo)
 
       const { data: tareas, error: tarErr } = await supabase
-        .from('tareas').select('receta_id, titulo, tiempo_estimado_min, status')
+        .from('tareas').select('receta_id, titulo, tiempo_estimado_min')
         .eq('restaurante_id', RESTAURANTE_ID)
         .eq('categoria', 'produccion')
         .gte('created_at', `${from}T00:00:00`)
@@ -537,7 +537,7 @@ export function useReportes() {
     try {
       const { from, to } = getDateRange(periodo)
       const [tareasRes, mermaRes] = await Promise.all([
-        supabase.from('tareas').select('plaza, status').eq('restaurante_id', RESTAURANTE_ID)
+        supabase.from('tareas').select('plaza, estado').eq('restaurante_id', RESTAURANTE_ID)
           .gte('created_at', `${from}T00:00:00`).lte('created_at', `${to}T23:59:59`),
         supabase.from('merma').select('plaza, costo_estimado').eq('restaurante_id', RESTAURANTE_ID)
           .gte('fecha', from).lte('fecha', to),
@@ -552,7 +552,7 @@ export function useReportes() {
       for (const t of (tareasRes.data ?? [])) {
         const r = ensure(t.plaza)
         r.tareasTotal++
-        if (t.status === 'completada') r.tareasCompletadas++
+        if (t.estado === 'listo') r.tareasCompletadas++
       }
       for (const mm of (mermaRes.data ?? [])) {
         ensure(mm.plaza).mermaCosto += mm.costo_estimado || 0

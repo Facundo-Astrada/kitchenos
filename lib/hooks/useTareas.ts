@@ -88,28 +88,18 @@ export function useTareas() {
     )
   }
 
-  async function cambiarStatus(id: string, status: Tarea['status']) {
-    const completed_at = status === 'completada' ? new Date().toISOString() : null
-    const optimistic = (prev: Tarea[] | undefined) =>
-      (prev ?? []).map(t => t.id === id ? { ...t, status, completed_at } : t)
-
-    await mutate(
-      async (current) => {
-        const { error } = await supabase.from('tareas').update({ status, completed_at }).eq('id', id)
-        if (error) throw error
-        return optimistic(current)
-      },
-      { optimisticData: optimistic, revalidate: false, rollbackOnError: true }
-    )
-  }
-
+  // `estado` (OpsEstado) es la única fuente de verdad del avance de la tarea.
+  // `status` (legacy) y `completed_at` se derivan acá para que cualquier lector
+  // legacy (Reportes) quede consistente sin una segunda forma de escribir status.
   async function cambiarEstado(id: string, estado: OpsEstado) {
+    const status = estado === 'listo' ? 'completada' : 'pendiente'
+    const completed_at = estado === 'listo' ? new Date().toISOString() : null
     const optimistic = (prev: Tarea[] | undefined) =>
-      (prev ?? []).map(t => t.id === id ? { ...t, estado } : t)
+      (prev ?? []).map(t => t.id === id ? { ...t, estado, status, completed_at } : t)
 
     await mutate(
       async (current) => {
-        const { error } = await supabase.from('tareas').update({ estado }).eq('id', id)
+        const { error } = await supabase.from('tareas').update({ estado, status, completed_at }).eq('id', id)
         if (error) throw error
         return optimistic(current)
       },
@@ -141,7 +131,6 @@ export function useTareas() {
     refetch: useCallback(() => { mutate() }, [mutate]),
     agregarTarea,
     actualizarTarea,
-    cambiarStatus,
     cambiarEstado,
     toggleChecklistItem,
     eliminarTarea,
