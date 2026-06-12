@@ -18,12 +18,21 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 // ══════════════════════════════════════════════════════════════
 export default function OperacionesPage() {
   const [tab, setTab] = useState<Tab>('produccion')
+  // Lazy-mount: cada tab se monta recién en su primera visita y de ahí en más
+  // se mantiene (display:none preserva el estado). Evita disparar los ~10 hooks
+  // de los 3 sub-módulos en paralelo al entrar a OPS.
+  const [mounted, setMounted] = useState<Set<Tab>>(() => new Set<Tab>(['produccion']))
 
   // Tab inicial desde la URL (?tab=) — permite deep-link y redirects desde las rutas viejas
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get('tab')
     if (t === 'produccion' || t === 'mise' || t === 'planificacion') setTab(t)
   }, [])
+
+  // Marcar el tab activo como montado (se queda montado para preservar estado)
+  useEffect(() => {
+    setMounted(prev => prev.has(tab) ? prev : new Set(prev).add(tab))
+  }, [tab])
 
   // Write screen context for KitchenCoach on tab change
   useEffect(() => {
@@ -78,16 +87,22 @@ export default function OperacionesPage() {
         </div>
       </div>
 
-      {/* Tab panels */}
-      <div style={{ flex: 1, overflow: 'hidden', display: tab === 'produccion' ? 'flex' : 'none', flexDirection: 'column' }}>
-        <TareasPage embedded />
-      </div>
-      <div style={{ flex: 1, overflow: 'hidden', display: tab === 'mise' ? 'flex' : 'none', flexDirection: 'column' }}>
-        <ChecklistPage embedded />
-      </div>
-      <div style={{ flex: 1, overflow: tab === 'planificacion' ? 'auto' : 'hidden', display: tab === 'planificacion' ? 'block' : 'none' }}>
-        <ProduccionView embedded />
-      </div>
+      {/* Tab panels — cada uno se monta en su primera visita y se conserva */}
+      {mounted.has('produccion') && (
+        <div style={{ flex: 1, overflow: 'hidden', display: tab === 'produccion' ? 'flex' : 'none', flexDirection: 'column' }}>
+          <TareasPage embedded />
+        </div>
+      )}
+      {mounted.has('mise') && (
+        <div style={{ flex: 1, overflow: 'hidden', display: tab === 'mise' ? 'flex' : 'none', flexDirection: 'column' }}>
+          <ChecklistPage embedded />
+        </div>
+      )}
+      {mounted.has('planificacion') && (
+        <div style={{ flex: 1, overflow: tab === 'planificacion' ? 'auto' : 'hidden', display: tab === 'planificacion' ? 'block' : 'none' }}>
+          <ProduccionView embedded />
+        </div>
+      )}
     </div>
   )
 }

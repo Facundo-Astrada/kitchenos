@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { ThemeProvider } from '@/components/providers/ThemeProvider'
 import { AuthProvider } from '@/lib/auth/context'
+import ErrorReporter from '@/components/ErrorReporter'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -39,6 +40,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
       </head>
       <body>
+        <ErrorReporter />
         <ThemeProvider>
           <AuthProvider>
             <div id="shell">{children}</div>
