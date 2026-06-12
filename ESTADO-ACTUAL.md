@@ -100,6 +100,17 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 
 ## 4. Implementado en Últimas Sesiones
 
+### Sesión 2026-06-12 (tarde) — Performance: cache SWR en 10 hooks + fix doble-tap
+
+Reporte de Facundo: la app se sentía lenta al cambiar de pantalla, y algunos botones necesitaban doble tap (nav de Stock, y en Recetario al tocar una receta o el buscador).
+
+1. **Cache SWR en 10 hooks** (de 4 a 14 con cache): `useProveedores`, `useMenus`, `useCategoriasProducto`, `useMerma`, `useHaccp`, `useVentas`, `usePackagingGrupos`, `usePedidos`, `useEquipo` (miembros+puestos), `useCarta` — migrados al patrón SWR de `useStock`/`useTareas` (`dedupingInterval: 300_000` + `keepPreviousData`). Re-entrar a una pantalla muestra la data cacheada al instante y revalida en background, en vez de spinner + refetch completo. **`useHaccp` pasó de 5 fetches separados a 1 fetcher combinado.** Realtime sigue funcionando vía `mutate()`. Los fetchers se movieron a nivel de módulo (reciben la SWR key con el `restaurante_id` embebido). Hooks con caches manuales previos (`_cache`/`_cartaCache` Map) reemplazados por SWR.
+2. **Doble-tap del nav de Stock**: `/stock` era el único item del nav que era un **Server Component async** (`await getUser()` + queries server-side) → ruta `ƒ dynamic` → cada tap hacía un round-trip al server **antes** de transicionar, dando la sensación de "no responde". Convertido a página client estática (`○`, como `/recetario` y `/operaciones`); la data la carga `useStock` (SWR con cache). Se removió el `SWRFallback` SSR (forzaba la ruta dynamic).
+3. **Doble-tap en Recetario** (receta + buscador): la lista usaba animación de entrada con `staggerChildren: 0.05` + `y: 12` por ítem → con 20+ recetas eran >1s de cards moviéndose y semi-transparentes; el primer tap caía sobre un target en movimiento y el buscador quedaba trabado mientras el main thread componía. Cambiado a fade rápido (`duration: 0.12`) sin translate ni stagger → tappable de inmediato.
+4. **No migrados (a propósito)**: `useCalendario` (parametrizado por mes, el page controla qué mes pedir) y `useProduccion` (parametrizado por fecha + expone `setProduccion` usado directo en el page). SWR no encaja sin reestructurar esos pages y el beneficio es marginal.
+
+**Verificación:** `npm run build` verde (48 rutas, `/stock` confirmada `○ static`). `npm run lint` falla por un problema preexistente del entorno (`eslint-plugin-import` no resuelve `tsconfig-paths`), no por estos cambios. **Commit:** `6c181b2`, deployado a `main`.
+
 ### Sesión 2026-06-12 — Equipo teclado + multi-plaza OPS/checklist + stock editable apertura
 
 1. **Fix teclado en Equipo** (`turnos/page.tsx`): el teclado se cerraba al escribir el primer carácter. Causa: `MiembroFormDatos` y `PuestoFormBody` eran funciones definidas dentro de `TurnosPage` y usadas como JSX (`<MiembroFormDatos />`). React las trataba como nuevo tipo de componente en cada re-render → unmount/remount → foco perdido. Fix definitivo: extraídas como componentes **a nivel de módulo** (fuera de `TurnosPage`), reciben `form` y `setForm` como props. Referencia estable → React nunca remonta → teclado permanece abierto.

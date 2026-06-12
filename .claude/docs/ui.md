@@ -1,5 +1,20 @@
 # UI / CSS — KitchenOS
 
+## Animaciones de lista — no romper el tap (junio 2026)
+
+Animar la entrada de una lista con framer-motion `staggerChildren` + `y`-translate por ítem hace que las cards **se muevan bajo el dedo** durante toda la animación (con 20+ ítems y `staggerChildren: 0.05` son >1s). El primer tap cae sobre un target en movimiento → "hay que apretar dos veces" para abrir la card; un buscador en el mismo header también queda trabado mientras el main thread compone. Pasó en `recetario/page.tsx`.
+
+```tsx
+// ❌ target en movimiento + stagger largo
+const itemVariants = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.2 } } }
+const containerVariants = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } }
+
+// ✅ fade rápido EN su posición final, sin stagger → tappable de inmediato
+const itemVariants = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { duration: 0.12 } } }
+const containerVariants = { hidden: {}, show: { transition: { staggerChildren: 0 } } }
+```
+Regla: si una lista es interactiva (cards tappables, navegan), no le pongas translate ni stagger en la animación de entrada. Solo opacity rápida, o nada.
+
 ## Variables de color
 
 ```css

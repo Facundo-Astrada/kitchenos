@@ -114,6 +114,43 @@ useEffect(() => {
 2. `useEffect` no importado en el archivo (`useState` importado pero no `useEffect`) → agregar al import.
 3. Propiedades de tipos incorrectas (ej. `ReporteResumen.comprasMes` no existe, es `totalCompras`) → verificar el tipo real antes de escribir el context.
 
+## Cache SWR — patrón estándar para hooks "lista al montar" (junio 2026)
+
+Los hooks que cargan una lista keyed por `restaurante_id` deben usar **SWR**, no `useState + useEffect`. Sin cache, cada navegación re-consulta todo desde cero → spinner + round-trip en cada entrada a la pantalla. 14 de ~24 hooks ya están migrados (`useStock`, `useRecetas`, `useTareas`, `useChecklist`, `useProveedores`, `useMenus`, `useCategoriasProducto`, `useMerma`, `useHaccp`, `useVentas`, `usePackagingGrupos`, `usePedidos`, `useEquipo`, `useCarta`).
+
+Patrón (ver `useStock`/`useTareas` como referencia):
+```ts
+// Fetcher a NIVEL DE MÓDULO — la key embebe el restaurante_id
+async function fetchXData(key: string): Promise<T[]> {
+  const rid = key.slice('xx-'.length)
+  const supabase = createClient()            // singleton @supabase/ssr 0.9 — no recrea
+  const { data, error } = await supabase.from('tabla').select('*').eq('restaurante_id', rid)...
+  if (error) throw error
+  return data ?? []
+}
+
+export function useX() {
+  const RESTAURANTE_ID = useRestauranteId()
+  const supabase = useMemo(() => createClient(), [])
+  const swrKey = RESTAURANTE_ID ? `xx-${RESTAURANTE_ID}` : null   // null = no fetch (guard)
+  const { data: items = [], isLoading: loading, mutate } = useSWR(swrKey, fetchXData, {
+    revalidateOnFocus: false, revalidateOnReconnect: true,
+    dedupingInterval: 300_000, keepPreviousData: true,
+  })
+  // realtime → mutate(); CRUD → mutate() o mutate(optimistic, { revalidate: false })
+}
+```
+Reglas:
+1. **swrKey `null` mientras `RESTAURANTE_ID === ''`** — reemplaza el guard `if (!RID) return`.
+2. **Múltiples datasets en un hook**: o un fetcher combinado que devuelve un objeto (`useHaccp`: 5 tablas → 1 fetch), o varias keys SWR (`useEquipo`: `miembros-` + `puestos-`).
+3. **Fetchers parametrizados por fecha/mes NO encajan** (`useCalendario`, `useProduccion`, el filtro por rango de `useMerma`/`useVentas`): dejar la base en SWR y el filtro como `mutate(dataFiltrada, { revalidate: false })` imperativo, o no migrar.
+4. Reemplazar caches manuales (`_cache`/`_cartaCache` Map) por SWR — son redundantes.
+
+## Doble-tap / "hay que apretar dos veces" — causas reales (junio 2026)
+
+1. **Página que es Server Component async** (`export default async function Page()` con `await getUser()` + queries) → la ruta sale `ƒ (Dynamic)` en el build → al tocar el `<Link>` Next hace un **round-trip al server antes de transicionar** → el primer tap "no hace nada" visible → el usuario toca de nuevo. Pasó con `/stock` (único item del nav así; los demás eran `○ static` y navegaban al instante). **Fix:** si el hook ya cachea con SWR, hacer la página client estática (`export default function Page() { return <ClientView/> }`, sin `await`) → ruta `○` → navega instantáneo. Verificar en el output del build qué rutas son `ƒ` vs `○`.
+2. **Animación de entrada con translate por ítem** (framer-motion `staggerChildren` + `y: N` en `itemVariants`): con listas largas son >1s de elementos moviéndose y semi-transparentes; el primer tap cae sobre un target en movimiento (y el main thread queda ocupado componiendo, afectando inputs cercanos como un buscador). Pasó en `recetario`. Ver `ui.md` → "Animaciones de lista".
+
 ## API route que bypassea RLS
 
 `/api/recetas/save` — único endpoint con `createAdminClient()`. Cuatro modos:
