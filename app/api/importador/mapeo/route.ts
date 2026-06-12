@@ -100,7 +100,9 @@ Respondé SOLO con JSON válido, sin texto extra:
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
+        // Mapeo de columnas: tarea de texto simple y acotada → Haiku (más barato,
+        // suficiente). Falla seguro a un fallback en cada catch.
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 600,
         temperature: 0,
         messages: [{ role: 'user', content: prompt }],
