@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import ChecklistPage from '@/app/(app)/checklist/ClientView'
 import TareasPage from '@/app/(app)/tareas/ClientView'
 import { ProduccionView } from '@/app/(app)/produccion/page'
+import { useTareas } from '@/lib/hooks/useTareas'
 
 type Tab = 'produccion' | 'mise' | 'planificacion'
 
@@ -18,6 +19,8 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 // ══════════════════════════════════════════════════════════════
 export default function OperacionesPage() {
   const [tab, setTab] = useState<Tab>('produccion')
+  // useTareas es SWR (cacheado) — comparte cache con el tab Producción, costo ~0.
+  const { tareas } = useTareas()
   // Lazy-mount: cada tab se monta recién en su primera visita y de ahí en más
   // se mantiene (display:none preserva el estado). Evita disparar los ~10 hooks
   // de los 3 sub-módulos en paralelo al entrar a OPS.
@@ -34,12 +37,30 @@ export default function OperacionesPage() {
     setMounted(prev => prev.has(tab) ? prev : new Set(prev).add(tab))
   }, [tab])
 
-  // Write screen context for KitchenCoach on tab change
+  // Write screen context for KitchenCoach — OPS es el dueño del contexto
+  // (los hijos embebidos no escriben). Insights de producción para que el
+  // Coach responda "¿qué me conviene producir hoy?" con datos reales.
   useEffect(() => {
     try {
-      localStorage.setItem('kc_screen_context', JSON.stringify({ screen: 'operaciones', tab }))
+      const hoy = new Date().toISOString().split('T')[0]
+      const delDia = tareas.filter(t => t.turno_fecha === hoy && !t.parent_id)
+      const total = delDia.length
+      const listos = delDia.filter(t => t.estado === 'listo').length
+      const topCriticas = tareas
+        .filter(t => t.prioridad === 'critica' && t.estado !== 'listo')
+        .map(t => t.titulo).slice(0, 5)
+      localStorage.setItem('kc_screen_context', JSON.stringify({
+        screen: 'operaciones',
+        tab,
+        produccionTotal: total,
+        produccionListos: listos,
+        produccionPendientes: total - listos,
+        avance: total > 0 ? Math.round((listos / total) * 100) : 0,
+        topCriticas,
+      }))
     } catch { /* ignore */ }
-  }, [tab])
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [tab, tareas])
 
   // Listen for kc-set-tab event from the coach tour (y desde Planificación → Producción)
   useEffect(() => {

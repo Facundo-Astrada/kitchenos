@@ -84,6 +84,16 @@ export default function DashboardPage() {
     }
   }, [tareas, checklistItems, registros])
 
+  // Bienvenida global del Coach — solo la primera vez, con datos ya cargados.
+  // Si el restaurante está vacío, lo cubre el wizard de onboarding, no el Coach.
+  useEffect(() => {
+    if (loadingStock || loadingTareas || isEmpty) return
+    if (localStorage.getItem('kc_app_welcomed')) return
+    localStorage.setItem('kc_app_welcomed', '1')
+    const t = setTimeout(() => window.dispatchEvent(new CustomEvent('kc-welcome-app')), 1200)
+    return () => clearTimeout(t)
+  }, [loadingStock, loadingTareas, isEmpty])
+
   useEffect(() => {
     const nCritico = productos.filter(p => p.estado === 'critico').length
     const tareasCriticas = tareas.filter(t => t.prioridad === 'critica' && t.estado !== 'listo').map(t => t.titulo).slice(0, 3)

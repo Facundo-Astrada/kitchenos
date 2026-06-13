@@ -80,8 +80,12 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     localStorage.setItem('ops_modo', m)
   }
 
-  // ── Filtrar tareas del turno ──────────────────────────────────
+  // ── Screen context para Kitchen Coach ─────────────────────────
+  // Embebido dentro de OPS, el dueño del contexto es operaciones/page.tsx
+  // (escribe screen:'operaciones' para que cargue el tour cross-tab). Acá
+  // solo escribimos si la vista corre standalone, para no pisarlo.
   useEffect(() => {
+    if (embedded) return
     const topCriticas = tareas.filter(t => t.prioridad === 'critica' && t.estado !== 'listo').map(t => t.titulo).slice(0, 3)
     const { total, listos } = (() => {
       const totalHoy = tareas.filter((t) => t.turno_fecha === today && !t.parent_id)
@@ -96,7 +100,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
       topCriticas,
     }))
     return () => localStorage.removeItem('kc_screen_context')
-  }, [tareas, modo, today])
+  }, [tareas, modo, today, embedded])
 
   const { topLevel, subtareasByParent, statsHoy } = useMemo(() => {
     // Ayer = carryover de un solo día: una tarea no completada se arrastra al día

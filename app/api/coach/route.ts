@@ -7,11 +7,15 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 const hits = new Map<string, number[]>()
 
 // ── M1: snapshot de datos reales del restaurante ──────────────
-async function buildSnapshot(supabase: SupabaseClient): Promise<string> {
+async function buildSnapshot(supabase: SupabaseClient, screen?: string): Promise<string> {
   const hoy = new Date()
   const hoyStr = hoy.toISOString().split('T')[0]
   const en3dias = new Date(hoy.getTime() + 3 * 86_400_000).toISOString().split('T')[0]
+  const hace30 = new Date(hoy.getTime() - 30 * 86_400_000).toISOString().split('T')[0]
   const fmt = (n: number) => Math.round(n).toLocaleString('es-AR')
+  // Las secciones extra solo se incluyen donde son relevantes (ahorra tokens del
+  // bloque dinámico, que NO se cachea). Sin screen → se incluyen todas.
+  const wants = (screens: string[]) => !screen || screens.includes(screen)
 
   const [prodRes, vencRes, factRes] = await Promise.all([
     supabase.from('productos')
@@ -57,6 +61,47 @@ async function buildSnapshot(supabase: SupabaseClient): Promise<string> {
       .map(f => `${f.proveedor_nombre ?? 'Proveedor'} $${fmt(Number(f.total) || 0)}`).join('; '))
   }
 
+  // ── Extras según pantalla (datos que el cliente no manda en screenContext) ──
+  // Ventas — relevante para planificar producción y analizar el negocio.
+  if (wants(['ventas', 'reportes', 'dashboard', 'carta', 'operaciones'])) {
+    try {
+      const { data } = await supabase.from('ventas')
+        .select('total_ventas, cantidad_cubiertos').gte('fecha', hace30)
+      const v = (data ?? []) as Array<{ total_ventas: number | null; cantidad_cubiertos: number | null }>
+      if (v.length) {
+        const totalV = v.reduce((s, r) => s + (Number(r.total_ventas) || 0), 0)
+        const cub = v.reduce((s, r) => s + (Number(r.cantidad_cubiertos) || 0), 0)
+        lines.push(`Ventas últimos 30 días: $${fmt(totalV)} en ${v.length} días (promedio $${fmt(totalV / v.length)}/día${cub ? `, ${fmt(cub)} cubiertos` : ''}).`)
+      }
+    } catch { /* sin ventas */ }
+  }
+
+  // Merma — costo del desperdicio y su causa principal.
+  if (wants(['merma', 'reportes', 'dashboard', 'stock'])) {
+    try {
+      const { data } = await supabase.from('merma')
+        .select('costo_estimado, motivo').gte('fecha', hace30)
+      const m = (data ?? []) as Array<{ costo_estimado: number | null; motivo: string | null }>
+      if (m.length) {
+        const costo = m.reduce((s, r) => s + (Number(r.costo_estimado) || 0), 0)
+        const motivos = new Map<string, number>()
+        for (const r of m) { const k = r.motivo ?? 'otro'; motivos.set(k, (motivos.get(k) ?? 0) + 1) }
+        const top = [...motivos.entries()].sort((a, b) => b[1] - a[1])[0]
+        lines.push(`Merma últimos 30 días: $${fmt(costo)} en ${m.length} registros${top ? ` (motivo más frecuente: ${top[0]})` : ''}.`)
+      }
+    } catch { /* sin merma */ }
+  }
+
+  // Platos en 86 (no disponibles ahora mismo).
+  if (wants(['carta', 'pase', 'dashboard', 'operaciones'])) {
+    try {
+      const { data } = await supabase.from('carta_items')
+        .select('nombre').eq('disponible', false).limit(12)
+      const o = (data ?? []) as Array<{ nombre: string }>
+      if (o.length) lines.push(`Platos en 86 (no disponibles, ${o.length}): ${o.map(x => x.nombre).join(', ')}.`)
+    } catch { /* sin carta */ }
+  }
+
   if (lines.length === 0) return ''
   return `\n\n## Datos reales del restaurante (consultados en vivo, ${hoyStr}) — son la verdad, usá estos números:\n`
     + lines.map(l => '- ' + l).join('\n')
@@ -67,6 +112,39 @@ const COACH_STATIC_PROMPT = `Sos Kitchen Coach, un asistente especializado en ge
 Respondés en español rioplatense, de forma concisa y práctica.
 Conocés de food cost, mise en place, HACCP, gestión de stock y operaciones gastronómicas.
 IMPORTANTE: No usés asteriscos, markdown, negritas ni ningún símbolo de formato. Solo texto plano.
+
+## La aplicación: KitchenOS
+KitchenOS es el sistema con el que esta cocina se gestiona. El usuario puede estar recién aprendiendo a usarlo: explicáselo con claridad y, si pregunta dónde está algo, mostráselo con highlight. Sé breve y operativo, con jerga de cocina.
+
+Qué hace cada módulo:
+- Dashboard (inicio): turno propio, resumen de mi plaza, alertas de stock y accesos a los módulos.
+- Operaciones (OPS): el workspace diario. Tres tabs: Producción (qué cocinar hoy, ordenado por prioridad SP/Prioridad/Refuerzo/Check), Mise (mise en place por plaza, con el stock del cierre vs el objetivo del turno) y Planificación (armar el menú del día y eventos, y activar menús del catálogo).
+- Carta: los platos que se venden, con precio, food cost y disponibilidad (86 = agotado). Se puede importar con IA desde foto, PDF o Excel.
+- Recetario: las fichas técnicas (ingredientes, pasos, costo y porciones). El food cost real sale de vincular cada ingrediente al stock.
+- Stock (Inventario): productos con cantidad, precio y mínimos; estados crítico/bajo. Rebuild reconstruye el stock y los precios desde las facturas.
+- Facturas: historial de compras (OCR de foto/PDF/texto o import de Excel del POS), listas de precios acordados y proveedores.
+- Proveedores: directorio con contacto, días de entrega y condiciones de pago.
+- Pedidos: órdenes a proveedores (borrador → enviado → recibido).
+- Ventas: ventas diarias y cubiertos; alimentan el cálculo de food cost.
+- Reportes: análisis del período (resumen, CMV, presupuesto vs real, food cost por receta, compras por proveedor, inflación de cocina, producción).
+- Merma: registro de desperdicio con costo y motivo.
+- HACCP: temperaturas de equipos, vencimientos y limpieza (expediente para bromatología).
+- Pase: el chat de cocina del turno (mensajes por plaza, 86, urgencias).
+- Equipo y Turnos: miembros, puestos (con sus módulos habilitados) y la planilla semanal.
+- Calendario: los eventos del restaurante.
+
+Cómo se encadenan los datos (la cadena del food cost):
+Facturas traen precios → Stock (productos con precio) → se vinculan a los ingredientes del Recetario → la receta calcula su costo → la Carta usa esa receta y muestra el food cost del plato. Si falta un eslabón (producto sin precio, ingrediente sin vincular, plato sin receta), el food cost queda subvaluado.
+
+Si el usuario recién arranca y pregunta "¿por dónde empiezo?", el orden recomendado es:
+1) Cargar facturas (o importar el Excel del POS) para traer productos y precios.
+2) Revisar el Stock (usar Rebuild desde facturas si está vacío).
+3) Cargar el Recetario y vincular los ingredientes al stock.
+4) Armar la Carta y vincular cada plato a su receta.
+5) Cargar Ventas para ver el food cost real.
+El uso diario después pasa por Operaciones (producción y mise), Pase y HACCP.
+
+Cuando pregunten "¿para qué sirve X?" o "¿cómo hago Y?", respondé corto y concreto; si lo que necesita está en otra pantalla, decile a cuál ir.
 
 ## Formato de respuesta con highlight de UI
 
@@ -283,7 +361,9 @@ export async function POST(req: NextRequest) {
   // Bloque dinámico: snapshot M1 + pantalla activa + contexto de stock/tareas del cliente + M5
   let dynamicBlock = ''
   try {
-    const snapshot = await buildSnapshot(supabase)
+    const screen = (screenContext && typeof screenContext === 'object' && 'screen' in screenContext)
+      ? String((screenContext as { screen?: unknown }).screen ?? '') : undefined
+    const snapshot = await buildSnapshot(supabase, screen || undefined)
     if (snapshot) dynamicBlock += snapshot
   } catch { /* sin snapshot — seguimos */ }
 

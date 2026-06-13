@@ -24,8 +24,9 @@ interface Suggestion { label: string; action: 'tour' | 'send' }
 
 const SUGGESTIONS_BY_SCREEN: Record<string, Suggestion[]> = {
   dashboard: [
+    { label: 'Conocé KitchenOS', action: 'tour' },
+    { label: '¿Por dónde empiezo a cargar mi restaurante?', action: 'send' },
     { label: '¿Qué tengo que hacer primero hoy?', action: 'send' },
-    { label: '¿Cuántos productos están en crítico?', action: 'send' },
     { label: '¿Cómo va el mise en place?', action: 'send' },
   ],
   tareas: [
@@ -492,6 +493,20 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
     }
     window.addEventListener('kc-welcome-ops', handleWelcomeOps)
     return () => window.removeEventListener('kc-welcome-ops', handleWelcomeOps)
+  }, [toggle, sendMessage, stockCritico, tareasPendientes]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Welcome app event (primer login, desde el dashboard) ────
+  useEffect(() => {
+    function handleWelcomeApp() {
+      setTimeout(() => {
+        toggle()
+        setTimeout(() => {
+          sendMessage('Es mi primera vez en KitchenOS. Presentate en dos frases como mi Kitchen Coach y dame una lista corta de por dónde empezar a cargar mi restaurante. Ofrecé hacer un recorrido de la app.', { stockCritico, tareasPendientes })
+        }, 350)
+      }, 800)
+    }
+    window.addEventListener('kc-welcome-app', handleWelcomeApp)
+    return () => window.removeEventListener('kc-welcome-app', handleWelcomeApp)
   }, [toggle, sendMessage, stockCritico, tareasPendientes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Tour controls ──────────────────────────────────────────
