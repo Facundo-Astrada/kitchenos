@@ -46,6 +46,11 @@ export const TOURS: Record<string, TourStep[]> = {
 
   operaciones: [
     {
+      targetId: null,
+      title: 'Operaciones, tu workspace diario',
+      description: 'Acá vivís el turno: qué cocinar, el mise en place y la planificación del menú. Tocá Siguiente y te muestro las tres secciones.',
+    },
+    {
       targetId: 'ops-tab-produccion',
       title: 'Producción',
       description: 'El tablero operativo del turno. Cargás todo lo que hay que cocinar, organizás por prioridad y seguís el avance del equipo en tiempo real. Funciona como una lista de producción viva que refleja el estado real de la cocina.',
@@ -162,6 +167,11 @@ export const TOURS: Record<string, TourStep[]> = {
   ],
 
   dashboard: [
+    {
+      targetId: null,
+      title: 'Soy tu Kitchen Coach',
+      description: 'Te muestro KitchenOS en un minuto. Tocá Siguiente para recorrer el inicio. Cuando quieras, abrime con el botón naranja para preguntarme lo que sea.',
+    },
     {
       targetId: 'dashboard-turno',
       title: 'Tu turno',

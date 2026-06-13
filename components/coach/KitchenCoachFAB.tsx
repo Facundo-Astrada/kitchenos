@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useKitchenCoach } from '@/lib/hooks/useKitchenCoach'
 import { useMerma } from '@/lib/hooks/useMerma'
 import MermaBottomSheet from '@/components/merma/MermaBottomSheet'
@@ -184,13 +184,15 @@ function TourOverlay({
   }, [step, stepData?.targetId, stepData?.requireTab])
 
   if (!stepData) return null
-  const isFinal = !stepData.targetId
+  const isCenterCard = !stepData.targetId        // intro o cierre: tarjeta centrada
+  const isLastStep = step === steps.length - 1   // la última siempre es el cierre
 
-  // ── Final celebration card ──
-  if (isFinal) {
+  // ── Tarjeta centrada (fondo translúcido, sin chat detrás) ──
+  if (isCenterCard) {
+    const advance = isLastStep ? onSkip : onNext
     return (
       <div
-        onClick={onSkip}
+        onClick={advance}
         style={{
           position: 'fixed', inset: 0, zIndex: 1200,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -209,7 +211,7 @@ function TourOverlay({
           }}
         >
           <span className="material-symbols-outlined" style={{ fontSize: 52, color: '#f97316' }}>
-            celebration
+            {isLastStep ? 'celebration' : 'waving_hand'}
           </span>
           <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-1)', margin: '12px 0 10px' }}>
             {stepData.title}
@@ -217,17 +219,32 @@ function TourOverlay({
           <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.7, marginBottom: 22 }}>
             {stepData.description}
           </div>
-          <button
-            onClick={onSkip}
-            style={{
-              width: '100%', padding: '13px', borderRadius: 12,
-              background: '#f97316', border: 'none',
-              fontSize: 14, fontWeight: 700, color: '#fff',
-              cursor: 'pointer', fontFamily: 'inherit',
-            }}
-          >
-            Entendido
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {!isLastStep && (
+              <button
+                onClick={onSkip}
+                style={{
+                  flexShrink: 0, padding: '13px 16px', borderRadius: 12,
+                  background: 'var(--bg)', border: '1px solid var(--border)',
+                  fontSize: 14, fontWeight: 700, color: 'var(--text-3)',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                Saltar
+              </button>
+            )}
+            <button
+              onClick={advance}
+              style={{
+                flex: 1, padding: '13px', borderRadius: 12,
+                background: '#f97316', border: 'none',
+                fontSize: 14, fontWeight: 700, color: '#fff',
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              {isLastStep ? 'Entendido' : 'Siguiente →'}
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -481,43 +498,29 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
-  // ── Welcome OPS event ──────────────────────────────────────
-  useEffect(() => {
-    function handleWelcomeOps() {
-      setTimeout(() => {
-        toggle()
-        setTimeout(() => {
-          sendMessage('Estoy en el módulo Operaciones por primera vez. Hacé un recorrido rápido de las 3 secciones: Producción, Mise y Planificación.', { stockCritico, tareasPendientes })
-        }, 350)
-      }, 800)
-    }
-    window.addEventListener('kc-welcome-ops', handleWelcomeOps)
-    return () => window.removeEventListener('kc-welcome-ops', handleWelcomeOps)
-  }, [toggle, sendMessage, stockCritico, tareasPendientes]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Welcome app event (primer login, desde el dashboard) ────
-  useEffect(() => {
-    function handleWelcomeApp() {
-      setTimeout(() => {
-        toggle()
-        setTimeout(() => {
-          sendMessage('Es mi primera vez en KitchenOS. Presentate en dos frases como mi Kitchen Coach y dame una lista corta de por dónde empezar a cargar mi restaurante. Ofrecé hacer un recorrido de la app.', { stockCritico, tareasPendientes })
-        }, 350)
-      }, 800)
-    }
-    window.addEventListener('kc-welcome-app', handleWelcomeApp)
-    return () => window.removeEventListener('kc-welcome-app', handleWelcomeApp)
-  }, [toggle, sendMessage, stockCritico, tareasPendientes]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Tour controls ──────────────────────────────────────────
-  function startTour() {
+  // ── Tour: arranque ──────────────────────────────────────────
+  const startTour = useCallback(() => {
     const steps = getActiveTour()
     if (!steps.length) return
     setActiveTourSteps(steps)
-    close()
+    close()                                  // cierra el chat para que no tape la explicación
     setTimeout(() => setTourStep(0), 280)
-  }
+  }, [close])
 
+  // ── Welcome (primer login / primera visita a OPS) → recorrido visual ──
+  // Lanza el tour con overlay translúcido y botón "Siguiente". NO abre el
+  // chat: el texto explicativo se ve sobre la pantalla, sin el panel encima.
+  useEffect(() => {
+    function handleWelcome() { setTimeout(() => startTour(), 500) }
+    window.addEventListener('kc-welcome-ops', handleWelcome)
+    window.addEventListener('kc-welcome-app', handleWelcome)
+    return () => {
+      window.removeEventListener('kc-welcome-ops', handleWelcome)
+      window.removeEventListener('kc-welcome-app', handleWelcome)
+    }
+  }, [startTour])
+
+  // ── Tour controls ──────────────────────────────────────────
   function handleTourNext() {
     const next = tourStep + 1
     if (next >= activeTourSteps.length) {
