@@ -70,7 +70,7 @@ export const TOURS: Record<string, TourStep[]> = {
     {
       targetId: 'ops-tab-mise',
       title: 'Mise en Place',
-      description: 'Tu mise en place digital, organizado por plaza y sección. Cada ítem muestra cuánto quedó del cierre anterior y cuánto hay que producir para el turno. Al marcar algo en Mise se refleja en Producción y viceversa.',
+      description: 'Tu mise en place por plaza, con tres momentos: Apertura (qué preparar al empezar, con el stock que quedó de ayer como referencia), Cierre (registrás cuánto quedó, que será la referencia de mañana) y Rutina (tareas recurrentes de la plaza). Al marcar algo en Apertura se refleja en Producción y viceversa.',
     },
     {
       targetId: 'mise-stock-box',
@@ -94,7 +94,7 @@ export const TOURS: Record<string, TourStep[]> = {
       targetId: 'mise-tab-rutina',
       requireTab: 'mise',
       title: 'Rutinas',
-      description: 'Tareas recurrentes de la plaza: limpieza de heladera, descongelado semanal, control de fechas. Se configuran con frecuencia (diaria, semanal, mensual) y aparecen automáticamente en el día que corresponde.',
+      description: 'Tareas recurrentes propias de la plaza: limpieza de heladera, descongelado semanal, control de fechas. Se configuran con frecuencia (diaria, semanal, mensual) y se tildan por día. Ojo: las tareas que cargás en HACCP → Limpieza con sync aparecen aparte, en la sección Limpieza de Apertura y Cierre (plaza General), no en esta pestaña.',
     },
     {
       targetId: 'ops-tab-planificacion',

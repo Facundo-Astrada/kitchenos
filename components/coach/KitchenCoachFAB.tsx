@@ -72,8 +72,9 @@ const SUGGESTIONS_BY_SCREEN: Record<string, Suggestion[]> = {
   ],
   operaciones: [
     { label: 'Ver recorrido de OPS', action: 'tour' },
+    { label: '¿Cómo funciona la apertura y el cierre del mise?', action: 'send' },
+    { label: '¿Cómo se vinculan las rutinas con Limpieza?', action: 'send' },
     { label: '¿Qué me conviene producir hoy?', action: 'send' },
-    { label: '¿Cómo optimizo el mise en place?', action: 'send' },
   ],
   stock: [
     { label: 'Ver recorrido de Inventario', action: 'tour' },
