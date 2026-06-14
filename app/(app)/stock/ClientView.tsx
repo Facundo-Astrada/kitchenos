@@ -209,6 +209,10 @@ export default function StockPage() {
   const [quickSector, setQuickSector] = useState<string | null>(null)
   const [showSectorSelect, setShowSectorSelect] = useState(false)
   const [quickChangedCount, setQuickChangedCount] = useState(0)
+  // Orden congelado del stockeo en curso (ids). Se fija al iniciar para que la
+  // lista NO se reordene al guardar (cambia el estado del producto) y el botón
+  // Atrás siempre vuelva al producto correcto para corregir una carga.
+  const [quickOrder, setQuickOrder] = useState<string[]>([])
   const [showQuickSummary, setShowQuickSummary] = useState(false)
 
   // Merma
@@ -290,13 +294,17 @@ export default function StockPage() {
   }, [productos, activeTab, nCritico, nBajo, nPendiente])
 
   // Quick mode: lista filtrada por sector, críticos/bajos primero
-  const quickList = useMemo(() => {
-    const base = quickSector ? filtered.filter(p => p.categoria === quickSector) : filtered
-    return [...base].sort((a, b) => {
-      const order = { critico: 0, bajo: 1, ok: 2 }
-      return (order[a.estado as keyof typeof order] ?? 2) - (order[b.estado as keyof typeof order] ?? 2)
-    })
-  }, [filtered, quickSector])
+  const sortByEstado = useCallback((arr: ProductoConEstado[]) => {
+    const order = { critico: 0, bajo: 1, ok: 2 }
+    return [...arr].sort((a, b) =>
+      (order[a.estado as keyof typeof order] ?? 2) - (order[b.estado as keyof typeof order] ?? 2))
+  }, [])
+  // Productos del stockeo en curso, en el orden congelado pero con datos en vivo
+  // (al volver atrás muestra el valor ya guardado, para poder corregirlo).
+  const quickItems = useMemo(() => {
+    const byId = new Map(productos.map(p => [p.id, p]))
+    return quickOrder.map(id => byId.get(id)).filter(Boolean) as ProductoConEstado[]
+  }, [quickOrder, productos])
 
   function openMerma(p: ProductoConEstado) {
     setMermaPrefill({ producto_nombre: p.nombre, producto_id: p.id, unidad: p.unidad })
@@ -1157,7 +1165,7 @@ export default function StockPage() {
             <div style={{ overflowY: 'auto', flex: 1, padding: '0 16px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <button
-                onClick={() => { setQuickSector(null); setQuickIdx(0); setQuickChangedCount(0); setQuickValue(String(quickList[0]?.stock_actual ?? '')); setQuickMode(true); setShowSectorSelect(false) }}
+                onClick={() => { const list = sortByEstado(filtered); setQuickSector(null); setQuickOrder(list.map(p => p.id)); setQuickIdx(0); setQuickChangedCount(0); setQuickValue(String(list[0]?.stock_actual ?? '')); setQuickMode(true); setShowSectorSelect(false) }}
                 style={{ padding: '13px 16px', borderRadius: 12, background: 'var(--navy)', border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 10 }}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }}>inventory_2</span>
@@ -1168,7 +1176,7 @@ export default function StockPage() {
                 const criticos = filtered.filter(p => p.categoria === cat && p.estado === 'critico').length
                 return (
                   <button key={cat}
-                    onClick={() => { setQuickSector(cat); setQuickIdx(0); setQuickChangedCount(0); const list = filtered.filter(p => p.categoria === cat); setQuickValue(String(list[0]?.stock_actual ?? '')); setQuickMode(true); setShowSectorSelect(false) }}
+                    onClick={() => { const list = sortByEstado(filtered.filter(p => p.categoria === cat)); setQuickSector(cat); setQuickOrder(list.map(p => p.id)); setQuickIdx(0); setQuickChangedCount(0); setQuickValue(String(list[0]?.stock_actual ?? '')); setQuickMode(true); setShowSectorSelect(false) }}
                     style={{ padding: '12px 16px', borderRadius: 12, background: 'var(--bg)', border: '1px solid var(--border)', fontSize: 14, fontWeight: 600, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
                   >
                     <span style={{ color: 'var(--text-1)' }}>{cat}</span>
@@ -1191,12 +1199,12 @@ export default function StockPage() {
       )}
 
       {/* ── Quick stock mode ── */}
-      {quickMode && quickList.length > 0 && (() => {
-        const p = quickList[quickIdx]
+      {quickMode && quickItems.length > 0 && (() => {
+        const p = quickItems[quickIdx]
         if (!p) { setQuickMode(false); return null }
         const enteredVal = parseFloat(quickValue)
         const diff = !isNaN(enteredVal) && enteredVal !== p.stock_actual ? enteredVal - p.stock_actual : null
-        const isLast = quickIdx === quickList.length - 1
+        const isLast = quickIdx === quickItems.length - 1
 
         function saveAndNext(skip = false) {
           if (!skip) {
@@ -1209,7 +1217,7 @@ export default function StockPage() {
           if (!isLast) {
             const next = quickIdx + 1
             setQuickIdx(next)
-            setQuickValue(String(quickList[next]?.stock_actual ?? ''))
+            setQuickValue(String(quickItems[next]?.stock_actual ?? ''))
             setTimeout(() => { quickRef.current?.focus(); quickRef.current?.select() }, 30)
           } else {
             setQuickMode(false)
@@ -1231,10 +1239,10 @@ export default function StockPage() {
                     {quickSector && <div style={{ color: 'rgba(255,255,255,.5)', fontSize: 11 }}>{quickSector}</div>}
                   </div>
                 </div>
-                <span style={{ color: 'rgba(255,255,255,.5)', fontSize: 12, fontWeight: 600 }}>{quickIdx + 1}/{quickList.length}</span>
+                <span style={{ color: 'rgba(255,255,255,.5)', fontSize: 12, fontWeight: 600 }}>{quickIdx + 1}/{quickItems.length}</span>
               </div>
               <div style={{ height: 3, background: 'rgba(255,255,255,.15)', borderRadius: 99, marginTop: 10, overflow: 'hidden' }}>
-                <div style={{ height: '100%', background: '#22c55e', borderRadius: 99, width: `${((quickIdx + 1) / quickList.length) * 100}%`, transition: 'width .3s' }} />
+                <div style={{ height: '100%', background: '#22c55e', borderRadius: 99, width: `${((quickIdx + 1) / quickItems.length) * 100}%`, transition: 'width .3s' }} />
               </div>
             </div>
 
@@ -1280,11 +1288,13 @@ export default function StockPage() {
 
             <div style={{ padding: '16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', display: 'flex', gap: 8, flexShrink: 0 }}>
               <button
-                onPointerDown={e => { e.preventDefault(); if (quickIdx > 0) { const prev = quickIdx - 1; setQuickIdx(prev); setQuickValue(String(quickList[prev]?.stock_actual ?? '')); setTimeout(() => { quickRef.current?.focus(); quickRef.current?.select() }, 30) } }}
+                onPointerDown={e => { e.preventDefault(); if (quickIdx > 0) { const prev = quickIdx - 1; setQuickIdx(prev); setQuickValue(String(quickItems[prev]?.stock_actual ?? '')); setTimeout(() => { quickRef.current?.focus(); quickRef.current?.select() }, 30) } }}
                 disabled={quickIdx === 0}
-                style={{ width: 44, height: 48, borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: quickIdx > 0 ? 'pointer' : 'default', opacity: quickIdx > 0 ? 1 : 0.3 }}
+                title="Volver al producto anterior para corregir"
+                style={{ flex: 1, height: 48, borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: 'var(--text-2)', fontFamily: 'inherit', cursor: quickIdx > 0 ? 'pointer' : 'default', opacity: quickIdx > 0 ? 1 : 0.35 }}
               >
-                <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-2)' }}>chevron_left</span>
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>chevron_left</span>
+                Atrás
               </button>
               <button
                 onPointerDown={e => { e.preventDefault(); saveAndNext(true) }}
