@@ -270,6 +270,20 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const plazaRutinas = useMemo(() =>
     rutinas.filter(r => r.plaza === plaza || (plaza !== 'general' && r.plaza === 'general')),
     [rutinas, plaza])
+  // Rutinas que aplican HOY: semanales solo su día, mensuales solo su fecha,
+  // diarias (o sin día) siempre. Las de Limpieza sincronizadas desde HACCP traen
+  // dias_semana / dia_mes; las cargadas a mano sin día se muestran todos los días.
+  const plazaRutinasHoy = useMemo(() => {
+    const d = new Date(fecha + 'T12:00:00')
+    const dow = d.getDay()
+    const hoyIso = dow === 0 ? 7 : dow   // ISO 1=Lun..7=Dom
+    const hoyDiaMes = d.getDate()
+    return plazaRutinas.filter(r => {
+      if (r.dias_semana && r.dias_semana.length) return r.dias_semana.includes(hoyIso)
+      if (r.dia_mes != null) return hoyDiaMes === r.dia_mes
+      return true
+    })
+  }, [plazaRutinas, fecha])
   const rutinaRegSet = useMemo(() => {
     const s = new Set<string>()
     rutinaRegistros.forEach(r => { if (r.completado) s.add(r.rutina_id) })
@@ -736,12 +750,12 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         {/* ── RUTINA ── */}
         {!loading && tab === 'rutina' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {plazaRutinas.length === 0 && (
+            {plazaRutinasHoy.length === 0 && (
               <div style={{ padding: '40px 12px', textAlign: 'center', fontSize: 13, color: 'var(--text-3)' }}>
-                Sin tareas de rutina configuradas
+                {plazaRutinas.length === 0 ? 'Sin tareas de rutina configuradas' : 'Sin rutinas para hoy'}
               </div>
             )}
-            {plazaRutinas.map(rut => {
+            {plazaRutinasHoy.map(rut => {
               const done = rutinaRegSet.has(rut.id)
               const lastDone = daysAgo(rut.ultima_vez ?? null)
               return (

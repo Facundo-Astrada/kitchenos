@@ -507,7 +507,7 @@ export interface MisePlaceRegistro {
 // ── Rutinas de mantenimiento ──
 export type RutinaFrecuencia = 'diaria' | 'semanal' | 'quincenal' | 'mensual'
 
-// DB: checklist_rutina (id, nombre, frecuencia, plaza, restaurante_id, created_at, ultima_vez, orden)
+// DB: checklist_rutina (id, nombre, frecuencia, plaza, restaurante_id, created_at, ultima_vez, orden, dias_semana, dia_mes)
 export interface ChecklistRutina {
   id: string
   nombre: string
@@ -515,6 +515,8 @@ export interface ChecklistRutina {
   plaza: string
   ultima_vez?: string | null
   orden: number
+  dias_semana?: number[] | null  // ISO 1=Lun..7=Dom; null = todos los días
+  dia_mes?: number | null         // 1-31; rutina mensual (ej. limpieza sincronizada desde HACCP)
   restaurante_id: string
   created_at: string
 }

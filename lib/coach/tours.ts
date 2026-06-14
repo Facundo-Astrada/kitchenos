@@ -94,7 +94,7 @@ export const TOURS: Record<string, TourStep[]> = {
       targetId: 'mise-tab-rutina',
       requireTab: 'mise',
       title: 'Rutinas',
-      description: 'Tareas recurrentes propias de la plaza: limpieza de heladera, descongelado semanal, control de fechas. Se configuran con frecuencia (diaria, semanal, mensual) y se tildan por día. Ojo: las tareas que cargás en HACCP → Limpieza con sync aparecen aparte, en la sección Limpieza de Apertura y Cierre (plaza General), no en esta pestaña.',
+      description: 'Tareas recurrentes de la plaza: descongelado, control de fechas, y toda la limpieza. Cada una aparece solo el día que corresponde (las semanales su día, las mensuales su fecha, las diarias siempre). Acá se juntan las que cargás a mano y las que llegan automáticamente desde HACCP → Limpieza cuando activás "Mostrar en OPS".',
     },
     {
       targetId: 'ops-tab-planificacion',

@@ -624,7 +624,7 @@ function NuevaTareaLimpView({
           </span>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>Mostrar en OPS</div>
-            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>Aparece en el checklist de operaciones (plaza General)</div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>Aparece como rutina en el Mise de Operaciones (plaza General), el día que corresponde</div>
           </div>
         </button>
       </div>

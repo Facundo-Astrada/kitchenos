@@ -773,7 +773,7 @@ function MesCalendar({
 // RUTINAS DEL DÍA — sección colapsable para ProduccionPage
 // ══════════════════════════════════════════════════════════════
 function RutinasDia({ restauranteId, fecha }: { restauranteId: string; fecha: string }) {
-  const [rutinas, setRutinas] = useState<{ id: string; nombre: string; plaza: string; dias_semana: number[] | null }[]>([])
+  const [rutinas, setRutinas] = useState<{ id: string; nombre: string; plaza: string; dias_semana: number[] | null; dia_mes: number | null }[]>([])
   const [registros, setRegistros] = useState<Set<string>>(new Set())
   const [loadingRutinas, setLoadingRutinas] = useState(true)
   const [collapsed, setCollapsed] = useState(false)
@@ -785,7 +785,7 @@ function RutinasDia({ restauranteId, fecha }: { restauranteId: string; fecha: st
       setLoadingRutinas(true)
       const { data: rutData } = await supabase
         .from('checklist_rutina')
-        .select('id, nombre, plaza, dias_semana')
+        .select('id, nombre, plaza, dias_semana, dia_mes')
         .eq('restaurante_id', restauranteId)
         .order('orden', { ascending: true })
       const { data: regData } = await supabase
@@ -799,7 +799,7 @@ function RutinasDia({ restauranteId, fecha }: { restauranteId: string; fecha: st
       for (const r of (regData ?? []) as { rutina_id: string; completado: boolean }[]) {
         if (r.completado) completados.add(r.rutina_id)
       }
-      setRutinas((rutData ?? []) as { id: string; nombre: string; plaza: string; dias_semana: number[] | null }[])
+      setRutinas((rutData ?? []) as { id: string; nombre: string; plaza: string; dias_semana: number[] | null; dia_mes: number | null }[])
       setRegistros(completados)
       setLoadingRutinas(false)
     }
@@ -814,9 +814,12 @@ function RutinasDia({ restauranteId, fecha }: { restauranteId: string; fecha: st
     return dow === 0 ? 7 : dow
   })()
 
-  const rutinasHoy = rutinas.filter(r =>
-    r.dias_semana === null || r.dias_semana.includes(hoyIso)
-  )
+  const hoyDiaMes = new Date(fecha + 'T12:00:00').getDate()
+  const rutinasHoy = rutinas.filter(r => {
+    if (r.dias_semana && r.dias_semana.length) return r.dias_semana.includes(hoyIso)
+    if (r.dia_mes != null) return hoyDiaMes === r.dia_mes
+    return true
+  })
 
   if (loadingRutinas) return null
   if (rutinasHoy.length === 0) return null

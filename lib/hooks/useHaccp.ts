@@ -301,41 +301,33 @@ export function useHaccp() {
   // LIMPIEZA
   // -------------------------------------------------------------------------
 
-  // Crea (o reusa) el checklist_item de OPS en plaza 'general' sección 'Limpieza'
-  async function syncLimpiezaToOps(nombre: string, frecuencia: string): Promise<string | null> {
+  // Crea una RUTINA de OPS (plaza 'general') a partir de la tarea de limpieza.
+  // Aparece SOLO en la pestaña Rutina del Mise, y solo el día que corresponde
+  // (dias_semana para semanal, dia_mes para mensual; diaria/cada_turno = todos los días).
+  // checklist_item_id en haccp_limpieza guarda el id de la rutina creada.
+  async function syncLimpiezaToOps(
+    nombre: string, frecuencia: string,
+    diaSemana: number | null, diaMes: number | null,
+  ): Promise<string | null> {
     try {
-      const { data: secExist } = await supabase
-        .from('checklist_secciones')
-        .select('id')
-        .eq('restaurante_id', RESTAURANTE_ID)
-        .eq('plaza', 'general')
-        .ilike('nombre', 'Limpieza')
-        .limit(1)
-      let seccionId: string | null = secExist?.[0]?.id ?? null
-      if (!seccionId) {
-        const { data: newSec } = await supabase
-          .from('checklist_secciones')
-          .insert({ nombre: 'Limpieza', icono: 'cleaning_services', plaza: 'general', orden: 90, restaurante_id: RESTAURANTE_ID })
-          .select('id').single()
-        seccionId = newSec?.id ?? null
-      }
-
-      const { data: newItem } = await supabase
-        .from('checklist_items')
+      // HACCP usa 0=Dom..6=Sáb; checklist_rutina usa ISO 1=Lun..7=Dom.
+      const isoDia = diaSemana == null ? null : (diaSemana === 0 ? 7 : diaSemana)
+      const freqRutina = frecuencia === 'cada_turno' ? 'diaria'
+        : (frecuencia === 'semanal' || frecuencia === 'mensual') ? frecuencia
+        : 'diaria'
+      const { data: newRutina } = await supabase
+        .from('checklist_rutina')
         .insert({
           nombre,
           plaza: 'general',
-          cantidad: 1,
-          unidad: 'vez',
-          prioridad: 'chk',
-          seccion_id: seccionId,
-          seccion: 'Limpieza',
-          observacion: `Limpieza · ${frecuencia}`,
+          frecuencia: freqRutina,
+          dias_semana: freqRutina === 'semanal' && isoDia != null ? [isoDia] : null,
+          dia_mes: freqRutina === 'mensual' ? diaMes : null,
+          orden: 90,
           restaurante_id: RESTAURANTE_ID,
-          orden: 0,
         })
         .select('id').single()
-      return newItem?.id ?? null
+      return newRutina?.id ?? null
     } catch (e) {
       console.error('[useHaccp] syncLimpiezaToOps Error:', e)
       return null
@@ -348,7 +340,10 @@ export function useHaccp() {
     try {
       let checklistItemId: string | null = null
       if (datos.sync_ops) {
-        checklistItemId = await syncLimpiezaToOps(`${datos.area}: ${datos.tarea_limpieza}`, datos.frecuencia)
+        checklistItemId = await syncLimpiezaToOps(
+          `${datos.area}: ${datos.tarea_limpieza}`, datos.frecuencia,
+          datos.dia_semana ?? null, datos.dia_mes ?? null,
+        )
       }
 
       const { error } = await supabase.from('haccp_limpieza').insert({
@@ -393,7 +388,8 @@ export function useHaccp() {
     try {
       const tarea = limpieza.find(l => l.id === id)
       if (tarea?.checklist_item_id) {
-        await supabase.from('checklist_items').delete().eq('id', tarea.checklist_item_id)
+        // checklist_item_id guarda el id de la rutina OPS sincronizada
+        await supabase.from('checklist_rutina').delete().eq('id', tarea.checklist_item_id)
       }
       const { error } = await supabase.from('haccp_limpieza').delete().eq('id', id)
       if (error) throw error
