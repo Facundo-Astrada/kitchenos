@@ -7,6 +7,8 @@ import { usePermisos } from '@/lib/hooks/usePermisos'
 import { MODULO_CONFIG, MODULOS_POR_ROL, ROL_CONFIG } from '@/lib/constants'
 import type { ModuloId } from '@/lib/constants'
 import ImportadorUniversal from '@/components/importador/ImportadorUniversal'
+import ShortcutsHelp from '@/components/desktop/ShortcutsHelp'
+import { useDesktopShortcuts } from '@/lib/hooks/useDesktopShortcuts'
 import { useState } from 'react'
 
 const SECCIONES: { label: string; items: ModuloId[] }[] = [
@@ -22,6 +24,8 @@ export default function DesktopShell({ children }: { children: React.ReactNode }
   const { perfil } = useAuth()
   const { puedeVer, isAdmin } = usePermisos()
   const [showImportador, setShowImportador] = useState(false)
+
+  useDesktopShortcuts()
 
   const rol = perfil?.rol ?? 'ayudante'
   const modulosDelRol = MODULOS_POR_ROL[rol]
@@ -151,7 +155,7 @@ export default function DesktopShell({ children }: { children: React.ReactNode }
           })}
         </nav>
 
-        {/* Usuario */}
+        {/* Usuario + atajo ? */}
         {perfil && (
           <div style={{
             padding: '12px 16px 20px',
@@ -169,7 +173,7 @@ export default function DesktopShell({ children }: { children: React.ReactNode }
                   {perfil.initials}
                 </span>
               </div>
-              <div style={{ minWidth: 0 }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
                 <p style={{ color: 'white', fontSize: 13, fontWeight: 600, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {perfil.nombre}
                 </p>
@@ -177,6 +181,13 @@ export default function DesktopShell({ children }: { children: React.ReactNode }
                   {rolConfig?.label.split('·')[0].trim() ?? perfil.rol}
                 </p>
               </div>
+              <button
+                onClick={e => { e.preventDefault(); document.dispatchEvent(new CustomEvent('kos:shortcuts-help')) }}
+                title="Atajos de teclado (?)"
+                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: 'rgba(255,255,255,0.45)', fontSize: 12, fontWeight: 700, fontFamily: 'inherit' }}
+              >
+                ?
+              </button>
             </Link>
           </div>
         )}
@@ -190,6 +201,8 @@ export default function DesktopShell({ children }: { children: React.ReactNode }
       {showImportador && (
         <ImportadorUniversal onClose={() => setShowImportador(false)} />
       )}
+
+      <ShortcutsHelp />
     </div>
   )
 }

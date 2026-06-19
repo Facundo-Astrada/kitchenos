@@ -19,6 +19,51 @@ import type { MisePlaceItem, MisePlaceRegistro } from '@/types'
 const UNIDADES = ['kg', 'g', 'L', 'ml', 'unidad', 'docena', 'caja', 'bolsa', 'lata', 'botella']
 const UNIDADES_USO = ['kg', 'g', 'l', 'ml', 'unidad']
 
+// ── Paste desde Excel ──
+type PasteRow = { nombre: string; precio: number | null; stock: number | null; unidad: string | null }
+
+function parseNumAR(s: string): number | null {
+  if (!s?.trim()) return null
+  const clean = s.trim().replace(/[$\s]/g, '')
+  // Formato AR: $1.500,00 → punto=miles, coma=decimal
+  if (clean.includes('.') && clean.includes(',')) {
+    const n = parseFloat(clean.replace(/\./g, '').replace(',', '.'))
+    return isNaN(n) ? null : n
+  }
+  if (clean.includes(',') && !clean.includes('.')) {
+    const n = parseFloat(clean.replace(',', '.'))
+    return isNaN(n) ? null : n
+  }
+  const n = parseFloat(clean)
+  return isNaN(n) ? null : n
+}
+
+function parseTSV(text: string): PasteRow[] {
+  const lines = text.trim().split('\n').map(l => l.trimEnd()).filter(Boolean)
+  if (!lines.length) return []
+  const first = lines[0].split('\t')
+  const isHeader = first.some(c => /nombre|product|precio|stock|unidad|categ/i.test(c.trim()))
+  let [colN, colP, colS, colU] = [0, 1, 2, 3]
+  if (isHeader) {
+    first.forEach((h, i) => {
+      const lh = h.toLowerCase().trim()
+      if (/nombre|product|insumo/.test(lh)) colN = i
+      else if (/precio|price|costo/.test(lh)) colP = i
+      else if (/stock|cantidad|qty/.test(lh)) colS = i
+      else if (/unidad|unit/.test(lh)) colU = i
+    })
+  }
+  return lines.slice(isHeader ? 1 : 0).map(line => {
+    const c = line.split('\t')
+    return {
+      nombre: c[colN]?.trim() ?? '',
+      precio: parseNumAR(c[colP] ?? ''),
+      stock: parseNumAR(c[colS] ?? ''),
+      unidad: c[colU]?.trim() || null,
+    }
+  }).filter(r => r.nombre.length >= 2)
+}
+
 type FiltroEstado = 'all' | 'critico' | 'bajo' | 'pendiente'
 type SortMode = 'default' | 'valor_desc'
 
@@ -219,6 +264,25 @@ export default function StockPage() {
   const { registrarMerma } = useMerma()
   const [mermaOpen, setMermaOpen] = useState(false)
   const [mermaPrefill, setMermaPrefill] = useState<{ producto_nombre?: string; producto_id?: string; unidad?: string } | undefined>()
+
+  // Paste desde Excel (desktop)
+  const [pasteRows, setPasteRows] = useState<PasteRow[]>([])
+  const [pasteLoading, setPasteLoading] = useState(false)
+  const [pasteResult, setPasteResult] = useState<{ ok: number; err: number } | null>(null)
+
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      const active = document.activeElement
+      if (active && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName)) return
+      const text = e.clipboardData?.getData('text/plain') ?? ''
+      if (!text.includes('\t')) return
+      e.preventDefault()
+      const rows = parseTSV(text)
+      if (rows.length > 0) { setPasteRows(rows); setPasteResult(null) }
+    }
+    document.addEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
+  }, [])
 
   // Lista de nombres para el dropdown (combina DB + las que ya se usan en productos)
   const categoriasNombres = useMemo(() => {
@@ -934,7 +998,19 @@ export default function StockPage() {
 
       {/* ── Footer ── */}
       <div style={{ background: 'var(--surface)', borderTop: '1px solid var(--border)', padding: '7px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <span style={{ fontSize: 10, color: 'var(--text-3)' }}>✏️ Doble tap en fila para editar</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {canEdit && (
+            <button
+              data-shortcut="new"
+              onClick={openAdd}
+              style={{ display: 'flex', alignItems: 'center', gap: 3, background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', color: 'var(--text-2)', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>add</span>
+              Producto
+            </button>
+          )}
+          <span style={{ fontSize: 10, color: 'var(--text-3)' }}>Doble tap para editar · Ctrl+V para pegar Excel</span>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {totalValor > 0 && isAdmin && (
             <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-2)' }}>
@@ -1098,6 +1174,7 @@ export default function StockPage() {
             </div>
 
             <button
+              data-shortcut="save"
               onClick={handleSave}
               disabled={saving}
               style={{ marginTop: 20, width: '100%', background: 'var(--navy)', border: 'none', borderRadius: 10, padding: '13px 16px', fontSize: 14, fontWeight: 700, color: '#fff', cursor: 'pointer', opacity: saving ? 0.6 : 1, fontFamily: 'inherit' }}
@@ -1459,6 +1536,113 @@ export default function StockPage() {
                   disabled={rebuildLoading}
                   style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: '#991b1b', color: 'white', cursor: rebuildLoading ? 'wait' : 'pointer', fontWeight: 600, opacity: rebuildLoading ? 0.6 : 1 }}>
                   {rebuildLoading ? 'Procesando…' : 'Borrar y reconstruir'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Paste desde Excel ── */}
+      {pasteRows.length > 0 && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.65)', padding: 24 }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 16, width: '100%', maxWidth: 640, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(0,0,0,.5)' }}>
+
+            {/* Header */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-1)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--accent)' }}>table_view</span>
+                  Pegar desde Excel
+                </h3>
+                <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-3)' }}>
+                  {pasteRows.length} producto{pasteRows.length !== 1 ? 's' : ''} detectado{pasteRows.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+              <button onClick={() => { setPasteRows([]); setPasteResult(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', display: 'flex' }}>
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            {/* Resultado */}
+            {pasteResult && (
+              <div style={{ padding: '10px 20px', background: pasteResult.err === 0 ? 'rgba(22,163,74,.08)' : 'rgba(245,158,11,.08)', borderBottom: '1px solid var(--border)', fontSize: 13, color: pasteResult.err === 0 ? '#166534' : '#92400e', fontWeight: 600 }}>
+                {pasteResult.ok > 0 && `✓ ${pasteResult.ok} producto${pasteResult.ok !== 1 ? 's' : ''} importado${pasteResult.ok !== 1 ? 's' : ''}. `}
+                {pasteResult.err > 0 && `⚠ ${pasteResult.err} error${pasteResult.err !== 1 ? 's' : ''}.`}
+              </div>
+            )}
+
+            {/* Tabla preview */}
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: 'var(--bg)', position: 'sticky', top: 0 }}>
+                    {['Nombre', 'Precio', 'Stock', 'Unidad'].map(h => (
+                      <th key={h} style={{ padding: '8px 16px', textAlign: h === 'Nombre' || h === 'Unidad' ? 'left' : 'right', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pasteRows.map((r, i) => (
+                    <tr key={i} style={{ borderTop: '1px solid var(--border)', background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg)' }}>
+                      <td style={{ padding: '9px 16px', fontSize: 13, color: 'var(--text-1)', fontWeight: 600 }}>{r.nombre}</td>
+                      <td style={{ padding: '9px 16px', textAlign: 'right', fontSize: 12, fontFamily: "'DM Mono', monospace", color: r.precio != null ? 'var(--text-1)' : 'var(--text-3)' }}>
+                        {r.precio != null ? `$${r.precio.toLocaleString('es-AR')}` : '—'}
+                      </td>
+                      <td style={{ padding: '9px 16px', textAlign: 'right', fontSize: 12, fontFamily: "'DM Mono', monospace", color: r.stock != null ? 'var(--text-1)' : 'var(--text-3)' }}>
+                        {r.stock != null ? r.stock : '—'}
+                      </td>
+                      <td style={{ padding: '9px 16px', fontSize: 12, color: 'var(--text-2)' }}>{r.unidad ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Acciones */}
+            <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: 'var(--text-3)', flex: 1 }}>
+                Columnas: Nombre · Precio · Stock · Unidad (con o sin encabezados)
+              </span>
+              <button
+                onClick={() => { setPasteRows([]); setPasteResult(null) }}
+                style={{ padding: '9px 18px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-1)', cursor: 'pointer', fontWeight: 600, fontFamily: 'inherit', fontSize: 13 }}
+              >
+                {pasteResult ? 'Cerrar' : 'Cancelar'}
+              </button>
+              {!pasteResult && (
+                <button
+                  onClick={async () => {
+                    setPasteLoading(true)
+                    let ok = 0, err = 0
+                    for (const r of pasteRows) {
+                      try {
+                        await agregarProducto({
+                          nombre: r.nombre,
+                          categoria: '',
+                          unidad: r.unidad ?? 'kg',
+                          stock_actual: r.stock ?? 0,
+                          stock_minimo: 0,
+                          stock_critico: 0,
+                          activo: true,
+                          proveedor_id: null,
+                          precio_unitario: r.precio ?? 0,
+                          unidad_compra: null,
+                          cantidad_por_envase: null,
+                          unidad_uso: null,
+                        })
+                        ok++
+                      } catch { err++ }
+                    }
+                    setPasteResult({ ok, err })
+                    setPasteLoading(false)
+                    if (ok > 0) refetch()
+                  }}
+                  disabled={pasteLoading}
+                  style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: 'var(--navy)', color: '#fff', cursor: pasteLoading ? 'wait' : 'pointer', fontWeight: 700, fontFamily: 'inherit', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, opacity: pasteLoading ? 0.7 : 1 }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>download</span>
+                  {pasteLoading ? 'Importando…' : `Importar ${pasteRows.length} producto${pasteRows.length !== 1 ? 's' : ''}`}
                 </button>
               )}
             </div>
