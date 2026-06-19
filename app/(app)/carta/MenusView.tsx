@@ -25,7 +25,7 @@ export default function MenusView({
   return (
     <div className="scroll-body">
       {/* Header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px' }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
             <span className="material-symbols-outlined" style={{ color: '#fff', fontSize: 22 }}>arrow_back</span>

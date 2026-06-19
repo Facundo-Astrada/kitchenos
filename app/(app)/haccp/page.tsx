@@ -74,7 +74,7 @@ function Toast({ msg, onDone }: { msg: string; onDone: () => void }) {
   useEffect(() => { const t = setTimeout(onDone, 3000); return () => clearTimeout(t) }, [onDone])
   return (
     <div style={{
-      position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
+      position: 'fixed', bottom: 'var(--toast-bottom)', left: '50%', transform: 'translateX(-50%)',
       background: '#1e293b', color: '#fff', padding: '10px 20px',
       borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 100,
       boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
@@ -232,7 +232,7 @@ function RegistrarTempsView({
 
   return (
     <div style={{ paddingBottom: 90 }}>
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
@@ -337,7 +337,7 @@ function HistorialView({
 
   return (
     <div>
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
@@ -418,7 +418,7 @@ function ConfigEquiposView({
 
   return (
     <div>
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
@@ -516,7 +516,7 @@ function NuevoVencView({
 
   return (
     <div style={{ paddingBottom: 90 }}>
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
@@ -565,7 +565,7 @@ function NuevaTareaLimpView({
 
   return (
     <div style={{ paddingBottom: 90 }}>
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
@@ -816,7 +816,7 @@ export default function HaccpPage() {
     <PageTransition>
     <div className="scroll-body">
       {/* Header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px' }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ color: '#fff', fontWeight: 700, fontSize: 20 }}>Limpieza y Mantenimiento</div>

@@ -870,7 +870,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       {/* Toast */}
       {toast && (
         <div style={{
-          position: 'fixed', bottom: 90, left: 16, right: 16, zIndex: 300,
+          position: 'fixed', bottom: 'var(--toast-bottom)', left: 16, right: 16, zIndex: 300,
           background: '#22c55e', color: '#fff', borderRadius: 12,
           padding: '12px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center',
           boxShadow: '0 8px 24px rgba(34,197,94,.3)',

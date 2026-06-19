@@ -669,7 +669,7 @@ export default function ReportesPage() {
     <PageTransition>
     <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
       {/* Header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px' }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1 style={{ fontSize: 20, fontWeight: 700, color: '#fff', margin: 0 }}>Reportes</h1>
           {esAdmin && (

@@ -163,7 +163,7 @@ export default function MermaPage() {
     <div style={{ minHeight: '100dvh', background: 'var(--bg)', paddingBottom: 100 }}>
 
       {/* Header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 0' }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <h1 className="text-[22px] font-bold" style={{ color: '#fff' }}>Merma</h1>
@@ -318,7 +318,7 @@ export default function MermaPage() {
         data-coach-target="merma-fab"
         onClick={() => setSheetOpen(true)}
         className="fixed right-5 z-40 flex items-center justify-center rounded-full shadow-lg active:scale-95 transition-transform"
-        style={{ width: 56, height: 56, background: 'var(--navy)', bottom: 110 }}
+        style={{ width: 56, height: 56, background: 'var(--navy)', bottom: 'var(--fab-bottom)' }}
         aria-label="Registrar merma"
       >
         <span className="material-symbols-outlined text-[28px] text-white">add</span>

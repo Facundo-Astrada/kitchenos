@@ -1228,7 +1228,7 @@ export default function StockPage() {
 
         return (
           <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', flexShrink: 0 }}>
+            <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <button onPointerDown={e => { e.preventDefault(); setQuickMode(false) }} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
@@ -1314,7 +1314,7 @@ export default function StockPage() {
       })()}
 
       {showQuickSummary && (
-        <div style={{ position: 'fixed', bottom: 100, left: '50%', transform: 'translateX(-50%)', zIndex: 200, background: 'var(--navy)', color: '#fff', borderRadius: 12, padding: '10px 20px', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', boxShadow: '0 4px 20px rgba(0,0,0,.3)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ position: 'fixed', bottom: 'var(--toast-bottom)', left: '50%', transform: 'translateX(-50%)', zIndex: 200, background: 'var(--navy)', color: '#fff', borderRadius: 12, padding: '10px 20px', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', boxShadow: '0 4px 20px rgba(0,0,0,.3)', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>check_circle</span>
           {quickChangedCount} producto{quickChangedCount !== 1 ? 's' : ''} actualizados
         </div>

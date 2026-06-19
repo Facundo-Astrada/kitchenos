@@ -83,7 +83,7 @@ export default function OperacionesPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {/* Tab header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 0', flexShrink: 0 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 0', flexShrink: 0 }}>
         <div style={{ display: 'flex', gap: 6, paddingBottom: 10 }}>
           {TABS.map(t => (
             <button

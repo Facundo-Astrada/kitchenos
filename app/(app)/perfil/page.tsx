@@ -136,7 +136,7 @@ export default function PerfilPage() {
         className="flex items-center gap-3 px-4"
         style={{
           background: 'var(--navy, #0d1b35)',
-          paddingTop: 'env(safe-area-inset-top, 46px)',
+          paddingTop: 'max(env(safe-area-inset-top, 0px), var(--header-top))',
           paddingBottom: 12,
         }}
       >

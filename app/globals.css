@@ -3,6 +3,12 @@
 /* ── KitchenOS Design Tokens ── */
 :root {
   --bg: #f4f2ee;
+
+  /* ── Layout responsivo mobile → desktop ── */
+  --header-top: 46px;   /* top padding de nav headers (status bar iOS) */
+  --fab-bottom: 110px;  /* bottom de FABs flotantes (sobre BottomNav) */
+  --toast-bottom: 90px; /* bottom de toasts/snackbars */
+  --sidebar-w: 0px;     /* ancho del sidebar desktop */
   --surface: #ffffff;
   --navy: #1c2d4a;
   --navy-light: #2d4070;
@@ -78,6 +84,20 @@ input, textarea, [contenteditable] {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* En desktop el shell ocupa toda la pantalla (DesktopShell maneja su propio layout) */
+@media (min-width: 1024px) {
+  #shell {
+    max-width: 100%;
+  }
+
+  :root {
+    --header-top: 20px;
+    --fab-bottom: 24px;
+    --toast-bottom: 16px;
+    --sidebar-w: 224px;
+  }
 }
 
 /* ── Scroll sin scrollbar ── */

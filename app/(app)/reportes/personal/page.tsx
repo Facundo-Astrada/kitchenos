@@ -352,7 +352,7 @@ export default function PersonalReportePage() {
     <div style={{ minHeight: '100dvh', background: 'var(--bg)', paddingBottom: 120 }}>
 
       {/* Header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px' }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
             onClick={() => router.back()}

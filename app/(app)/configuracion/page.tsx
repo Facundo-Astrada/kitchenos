@@ -160,7 +160,7 @@ export default function ConfiguracionPage() {
   return (
     <div className="flex flex-col h-full" style={{ background: 'var(--bg)' }}>
       {/* Header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px' }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px' }}>
         <div className="flex items-center gap-3">
           <button onClick={() => router.back()} className="bg-transparent border-none cursor-pointer">
             <span className="material-symbols-outlined text-white" style={{ fontSize: 22 }}>arrow_back</span>

@@ -153,7 +153,7 @@ function Toast({ msg, onDone }: { msg: string; onDone: () => void }) {
   useEffect(() => { const t = setTimeout(onDone, 3000); return () => clearTimeout(t) }, [onDone])
   return (
     <div style={{
-      position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
+      position: 'fixed', bottom: 'var(--toast-bottom)', left: '50%', transform: 'translateX(-50%)',
       background: '#1e293b', color: '#fff', padding: '10px 20px',
       borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 100,
       boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
@@ -455,7 +455,7 @@ function FormView({
 
   return (
     <div style={{ paddingBottom: 100 }}>
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={onCancel} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
@@ -780,7 +780,7 @@ function FormView({
 
       {/* Save bar */}
       <div style={{
-        position: 'fixed', bottom: 82, left: 0, right: 0,
+        position: 'fixed', bottom: 0, left: 'var(--sidebar-w)', right: 0,
         background: 'var(--surface)', borderTop: '1px solid var(--border)',
         padding: '12px 16px', zIndex: 110,
       }}>
@@ -934,7 +934,7 @@ function PackagingGruposDrawer({
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'var(--bg)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
       {/* Header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
         <button
           onClick={step === 'list' ? onClose : () => setStep('list')}
           style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}
@@ -1455,7 +1455,7 @@ function DetailView({
 
   return (
     <div>
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
@@ -2137,7 +2137,7 @@ function RentabilidadView({
 
   return (
     <div>
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
@@ -3117,7 +3117,7 @@ export default function CartaPage() {
     <PageTransition>
     <div className="scroll-body">
       {/* Header */}
-      <div data-coach-target="carta-header" style={{ background: 'var(--navy)', padding: '46px 16px 14px' }}>
+      <div data-coach-target="carta-header" style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <span style={{ color: '#fff', fontWeight: 700, fontSize: 20 }}>Carta</span>
           {canEdit && (

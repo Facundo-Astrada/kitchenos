@@ -360,7 +360,7 @@ function NuevoPedidoView({
   return (
     <div style={{ paddingBottom: 100 }}>
       {/* Header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={onCancel} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
@@ -592,7 +592,7 @@ function NuevoPedidoView({
 
         {/* Total + Confirm */}
         <div style={{
-          position: 'fixed', bottom: 0, left: 0, right: 0,
+          position: 'fixed', bottom: 0, left: 'var(--sidebar-w)', right: 0,
           background: 'var(--surface)', borderTop: '1px solid var(--border)',
           padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom, 12px), 12px)',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -657,7 +657,7 @@ function DetailView({
   return (
     <div style={{ paddingBottom: 90 }}>
       {/* Header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
@@ -844,7 +844,7 @@ function RecibirView({
   return (
     <div style={{ paddingBottom: 90 }}>
       {/* Header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
@@ -913,7 +913,7 @@ function RecibirView({
 
       {/* Confirm bar */}
       <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
+        position: 'fixed', bottom: 0, left: 'var(--sidebar-w)', right: 0,
         background: 'var(--surface)', borderTop: '1px solid var(--border)',
         padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         zIndex: 50,
@@ -944,7 +944,7 @@ function Toast({ msg, onDone }: { msg: string; onDone: () => void }) {
   useEffect(() => { const t = setTimeout(onDone, 3000); return () => clearTimeout(t) }, [onDone])
   return (
     <div style={{
-      position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
+      position: 'fixed', bottom: 'var(--toast-bottom)', left: '50%', transform: 'translateX(-50%)',
       background: '#1e293b', color: '#fff', padding: '10px 20px',
       borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 100,
       boxShadow: '0 4px 12px rgba(0,0,0,0.2)',

@@ -435,7 +435,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
       {/* ── Header compacto ── */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', flexShrink: 0 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
             <button onClick={() => router.push('/recetario')} style={btnClear}>

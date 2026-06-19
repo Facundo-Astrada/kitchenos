@@ -259,7 +259,7 @@ export default function ImportadorArchivo({ tipo, restauranteId, onImportComplet
       <div className="fixed inset-0 z-[301] flex flex-col" style={{ background: 'var(--bg)', maxWidth: 520, margin: '0 auto' }}>
 
         {/* Header */}
-        <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'rgba(255,255,255,.6)' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 22 }}>arrow_back</span>
           </button>

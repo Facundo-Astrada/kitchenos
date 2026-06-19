@@ -366,7 +366,7 @@ export default function VentasPage() {
     <div style={{ minHeight: '100dvh', background: 'var(--bg)', paddingBottom: 100 }}>
 
       {/* Navy Header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px' }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px' }}>
         <h1 className="text-[22px] font-bold text-white">Ventas</h1>
         <p className="text-[13px] mt-0.5 text-white/60">Importá y analizá tus ventas diarias</p>
       </div>

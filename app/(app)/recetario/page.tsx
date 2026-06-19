@@ -336,7 +336,7 @@ export default function RecetarioPage() {
     <PageTransition>
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {/* Header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', flexShrink: 0 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button onClick={() => router.back()} style={btnClear}><span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>arrow_back</span></button>
@@ -448,7 +448,7 @@ export default function RecetarioPage() {
       </div>
 
       {/* ── Botones NUEVA RECETA + IMPORTAR FICHAS ── */}
-      <div data-coach-target="recetario-acciones" style={{ position: 'absolute', bottom: 110, left: 14, right: 14, zIndex: 10, display: 'flex', gap: 10 }}>
+      <div data-coach-target="recetario-acciones" style={{ position: 'absolute', bottom: 'var(--fab-bottom)', left: 14, right: 14, zIndex: 10, display: 'flex', gap: 10 }}>
         <button
           data-coach-target="recetario-nueva"
           onClick={() => setCreando(true)}

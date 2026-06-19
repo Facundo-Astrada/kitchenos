@@ -14,7 +14,7 @@ export function Skeleton({ className, style }: {
 
 export function SkeletonHeader({ hasSearch }: { hasSearch?: boolean }) {
   return (
-    <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', flexShrink: 0 }}>
+    <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
       <div className="animate-pulse" style={{ height: 22, width: '55%', background: 'rgba(255,255,255,.2)', borderRadius: 8, marginBottom: 6 }} />
       <div className="animate-pulse" style={{ height: 12, width: '35%', background: 'rgba(255,255,255,.12)', borderRadius: 6 }} />
       {hasSearch && (

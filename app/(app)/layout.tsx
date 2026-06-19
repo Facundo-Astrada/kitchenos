@@ -5,9 +5,11 @@ import { usePathname } from 'next/navigation'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAuth } from '@/lib/auth/context'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
+import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { createClient } from '@/lib/supabase/client' // usado en fetchCoachContext
 import BottomNav from '@/components/shell/BottomNav'
 import MoreMenu from '@/components/shell/MoreMenu'
+import DesktopShell from '@/components/shell/DesktopShell'
 import RouteGuard from '@/components/shell/RouteGuard'
 import KitchenCoachFAB from '@/components/coach/KitchenCoachFAB'
 
@@ -19,6 +21,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { perfil, loading } = useAuth()
   const restauranteId = useRestauranteId()
   const pathname = usePathname()
+  const isDesktop = useIsDesktop()
   const [stockCritico, setStockCritico] = useState<StockCriticoItem[]>([])
   const [tareasPendientes, setTareasPendientes] = useState<TareaPendienteItem[]>([])
 
@@ -83,21 +86,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     )
   }
 
+  const pageContent = (
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={pathname}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.1, ease: 'easeOut' }}
+        style={{ height: '100%' }}
+      >
+        <RouteGuard>{children}</RouteGuard>
+      </motion.div>
+    </AnimatePresence>
+  )
+
+  if (isDesktop) {
+    return (
+      <>
+        <DesktopShell>{pageContent}</DesktopShell>
+        <KitchenCoachFAB
+          stockCritico={stockCritico}
+          tareasPendientes={tareasPendientes}
+        />
+      </>
+    )
+  }
+
   return (
     <div className="relative flex flex-col h-full">
       <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={pathname}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.1, ease: 'easeOut' }}
-            style={{ height: '100%' }}
-          >
-            <RouteGuard>{children}</RouteGuard>
-          </motion.div>
-        </AnimatePresence>
+        {pageContent}
       </main>
 
       <AnimatePresence>

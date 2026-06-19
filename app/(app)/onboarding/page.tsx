@@ -249,7 +249,7 @@ export default function OnboardingPage() {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
       {/* Navy header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', color: 'white' }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', color: 'white' }}>
         <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Bienvenido a KitchenOS</h1>
         <p style={{ margin: '4px 0 0', fontSize: 13, opacity: 0.8 }}>
           Cargá tus datos en 4 pasos. Tomá los que tengas, saltá los demás.

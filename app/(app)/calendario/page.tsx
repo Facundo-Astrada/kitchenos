@@ -266,7 +266,7 @@ export default function CalendarioPage() {
     return (
       <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
         {/* Header */}
-        <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 24 }}>arrow_back</span>
@@ -456,7 +456,7 @@ export default function CalendarioPage() {
   return (
     <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
       {/* ── Header ── */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px' }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <h1 style={{ color: '#fff', fontSize: 20, fontWeight: 700, margin: 0 }}>Calendario</h1>
           <button onClick={openNewForm} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>

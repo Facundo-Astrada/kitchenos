@@ -2,7 +2,7 @@ export default function PaseLoading() {
   return (
     <div style={{ height: '100%', background: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 12px', flexShrink: 0 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 12px', flexShrink: 0 }}>
         <div className="animate-pulse" style={{ height: 20, width: '45%', background: 'rgba(255,255,255,.2)', borderRadius: 8, marginBottom: 4 }} />
         <div className="animate-pulse" style={{ height: 11, width: '30%', background: 'rgba(255,255,255,.12)', borderRadius: 6 }} />
       </div>

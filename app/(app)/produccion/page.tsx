@@ -563,7 +563,7 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
       {(view === 'crear' || view === 'editar') && (
         <>
           <div style={{
-            position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 201,
+            position: 'fixed', bottom: 0, left: 'var(--sidebar-w)', right: 0, zIndex: 201,
             background: 'var(--surface)', borderRadius: '20px 20px 0 0',
             maxHeight: '72dvh', overflowY: 'auto',
             maxWidth: 520, margin: '0 auto',

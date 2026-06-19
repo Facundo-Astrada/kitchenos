@@ -2,7 +2,7 @@ export default function MermaLoading() {
   return (
     <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
       {/* Header */}
-      <div style={{ padding: '46px 16px 14px' }}>
+      <div style={{ padding: 'var(--header-top) 16px 14px' }}>
         <div className="animate-pulse" style={{ height: 24, width: '35%', background: 'var(--border)', borderRadius: 8, marginBottom: 6 }} />
         <div className="animate-pulse" style={{ height: 12, width: '55%', background: 'var(--border)', borderRadius: 6 }} />
       </div>

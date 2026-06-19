@@ -353,7 +353,7 @@ function ConfirmView({ result, productos, proveedores, onConfirm, onCancel, savi
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', flexShrink: 0 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
         <div className="flex items-center gap-3">
           <button onClick={onCancel} className="border-none bg-transparent cursor-pointer">
             <span className="material-symbols-outlined text-[22px] text-white">arrow_back</span>
@@ -810,7 +810,7 @@ function DetailView({ factura, onBack, onStatusChange, onDelete, onUpdate }: {
   if (editing) {
     return (
       <div className="flex flex-col h-full">
-        <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', flexShrink: 0 }}>
+        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
           <div className="flex items-center gap-3">
             <button onClick={cancelEdit} className="border-none bg-transparent cursor-pointer">
               <span className="material-symbols-outlined text-[22px] text-white">close</span>
@@ -919,7 +919,7 @@ function DetailView({ factura, onBack, onStatusChange, onDelete, onUpdate }: {
 
   return (
     <div className="flex flex-col h-full">
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', flexShrink: 0 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
         <div className="flex items-center gap-3">
           <button onClick={onBack} className="border-none bg-transparent cursor-pointer">
             <span className="material-symbols-outlined text-[22px] text-white">arrow_back</span>
@@ -1211,7 +1211,7 @@ function ListasPreciosView({ showToast: toast }: { showToast: (msg: string) => v
     if (analyzing) {
       return (
         <div className="flex flex-col h-full">
-          <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', flexShrink: 0 }}>
+          <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
             <div className="flex items-center gap-3">
               <button onClick={() => setListaView('import')} className="border-none bg-transparent cursor-pointer">
                 <span className="material-symbols-outlined text-[22px] text-white">arrow_back</span>
@@ -1236,7 +1236,7 @@ function ListasPreciosView({ showToast: toast }: { showToast: (msg: string) => v
     if (listaResult) {
       return (
         <div className="flex flex-col h-full">
-          <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', flexShrink: 0 }}>
+          <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
             <div className="flex items-center gap-3">
               <button onClick={() => { setListaView('import'); setListaResult(null) }} className="border-none bg-transparent cursor-pointer">
                 <span className="material-symbols-outlined text-[22px] text-white">arrow_back</span>
@@ -1457,7 +1457,7 @@ function ListasPreciosView({ showToast: toast }: { showToast: (msg: string) => v
   if (listaView === 'import') {
     return (
       <div className="flex flex-col h-full">
-        <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', flexShrink: 0 }}>
+        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
           <div className="flex items-center gap-3">
             <button onClick={() => { setListaView('empty'); setListaImportMode(null); setTextoInput(''); setUrlInput('') }}
               className="border-none bg-transparent cursor-pointer">
@@ -1687,7 +1687,7 @@ function ManualEntryView({ onSubmit, onBack, proveedores }: {
 
   return (
     <div className="flex flex-col h-full">
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', flexShrink: 0 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
         <div className="flex items-center gap-3">
           <button onClick={onBack} className="border-none bg-transparent cursor-pointer">
             <span className="material-symbols-outlined text-[22px] text-white">arrow_back</span>
@@ -2143,7 +2143,7 @@ export default function FacturasPage() {
     if (analyzing) {
       return (
         <div className="flex flex-col h-full">
-          <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', flexShrink: 0 }}>
+          <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
             <div className="flex items-center gap-3">
               <button onClick={() => setView('import')} className="border-none bg-transparent cursor-pointer">
                 <span className="material-symbols-outlined text-[22px] text-white">arrow_back</span>
@@ -2197,7 +2197,7 @@ export default function FacturasPage() {
     return (
       <>
       <div className="flex flex-col h-full">
-        <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', flexShrink: 0 }}>
+        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
           <div className="flex items-center gap-3">
             <button onClick={() => { setView('list'); setImportMode(null); setTextoInput('') }}
               className="border-none bg-transparent cursor-pointer">
@@ -2302,7 +2302,7 @@ export default function FacturasPage() {
   if (mainTab === 'proveedores') {
     return (
       <div className="flex flex-col h-full">
-        <div style={{ background: 'var(--navy)', padding: '46px 16px 0', flexShrink: 0 }}>
+        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 0', flexShrink: 0 }}>
           <h1 className="text-white text-[18px] font-bold m-0 mb-3">Compras</h1>
           <div className="flex gap-[6px] pb-[10px]">
             {(['facturas', 'listas', 'proveedores'] as const).map(t => (
@@ -2328,7 +2328,7 @@ export default function FacturasPage() {
     return (
       <div className="flex flex-col h-full">
         {/* Header with tabs */}
-        <div style={{ background: 'var(--navy)', padding: '46px 16px 0', flexShrink: 0 }}>
+        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 0', flexShrink: 0 }}>
           <h1 className="text-white text-[18px] font-bold m-0 mb-3">Compras</h1>
 
           {/* Tab pills */}
@@ -2360,7 +2360,7 @@ export default function FacturasPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 0', flexShrink: 0 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 0', flexShrink: 0 }}>
         <div className="flex items-center justify-between mb-1">
           <h1 className="text-white text-[18px] font-bold m-0">Compras</h1>
           <div className="flex items-center gap-2">

@@ -13,11 +13,12 @@ interface PageHeaderProps {
   paddingTop?: number
 }
 
-export default function PageHeader({ title, icon, subtitle, actions, below, onBack, paddingTop = 46 }: PageHeaderProps) {
+export default function PageHeader({ title, icon, subtitle, actions, below, onBack, paddingTop }: PageHeaderProps) {
   const router = useRouter()
+  const topPad = paddingTop !== undefined ? `${paddingTop}px` : 'var(--header-top)'
 
   return (
-    <div style={{ background: 'var(--navy)', padding: `${paddingTop}px 1rem 0`, flexShrink: 0 }}>
+    <div style={{ background: 'var(--navy)', padding: `${topPad} 1rem 0`, flexShrink: 0 }}>
       <div className="ph-row" style={{ paddingBottom: below ? '0.75rem' : '1rem' }}>
         <div className="ph-title">
           {onBack !== undefined && (

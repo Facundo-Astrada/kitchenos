@@ -456,7 +456,7 @@ export default function PasePage() {
     <PageTransition>
     <div className="flex flex-col h-full">
       {/* ── Header ── */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 0', flexShrink: 0 }}>
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 0', flexShrink: 0 }}>
         <div className="flex items-center justify-between mb-2">
           <div>
             <h1 className="text-white text-[18px] font-bold m-0">Pase de Turno</h1>
@@ -610,7 +610,7 @@ export default function PasePage() {
             type={mention.type}
             filter={mention.filter}
             onSelect={handleMentionSelect}
-            position={{ bottom: 100, left: 16 }}
+            position={{ bottom: 90, left: 16 }}
             usuarios={usuariosMencion}
           />
         )}
@@ -673,7 +673,7 @@ export default function PasePage() {
       {show86 && <Sheet86 onSelect={handle86} onClose={() => setShow86(false)} />}
 
       {/* Toast */}
-      {toast && <div style={{ position: 'fixed', bottom: 90, left: 16, right: 16, zIndex: 300, background: '#22c55e', color: '#fff', borderRadius: 12, padding: '12px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center', boxShadow: '0 8px 24px rgba(34,197,94,.3)' }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 'var(--toast-bottom)', left: 16, right: 16, zIndex: 300, background: '#22c55e', color: '#fff', borderRadius: 12, padding: '12px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center', boxShadow: '0 8px 24px rgba(34,197,94,.3)' }}>{toast}</div>}
     </div>
     </PageTransition>
   )
