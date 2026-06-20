@@ -22,6 +22,7 @@ export interface CompItemOut {
   // OPS mise
   cantidad_ops?: number | null
   unidad_ops?: string | null
+  recipiente_nombre?: string | null
 }
 export interface CompPayload {
   tipo: CompModo
@@ -266,6 +267,7 @@ export default function ComposicionEditor({
           unidad: null,
           cantidad_ops: pr.opsCantidad ?? null,
           unidad_ops: pr.opsUnidad ?? null,
+          recipiente_nombre: pr.opsRecipienteNombre ?? null,
         })),
       }]
     } else {
@@ -474,6 +476,7 @@ export type PlatoItem = {
   opsSeccion?: string | null
   opsCantidad?: number | null
   opsUnidad?: string | null
+  opsRecipienteNombre?: string | null
 }
 
 function PlatoRecetasEditor({
@@ -502,6 +505,7 @@ function PlatoRecetasEditor({
   const [opsSeccion, setOpsSeccion] = useState('')
   const [opsCantidad, setOpsCantidad] = useState('1')
   const [opsUnidad, setOpsUnidad] = useState('u')
+  const [opsRecipienteNombre, setOpsRecipienteNombre] = useState('')
 
   function openOps(pr: PlatoItem) {
     if (opsPanelUid === pr._uid) { setOpsPanelUid(null); return }
@@ -510,12 +514,13 @@ function PlatoRecetasEditor({
     setOpsSeccion(pr.opsSeccion ?? '')
     setOpsCantidad(pr.opsCantidad != null ? String(pr.opsCantidad) : '1')
     setOpsUnidad(pr.opsUnidad ?? 'u')
+    setOpsRecipienteNombre(pr.opsRecipienteNombre ?? '')
   }
 
   function saveOps(uid_: number) {
     if (!opsPlaza || !opsSeccion) return
     setPlatoRecetas(prev => prev.map(pr =>
-      pr._uid === uid_ ? { ...pr, opsPlaza, opsSeccion, opsCantidad: parseFloat(opsCantidad) || 1, opsUnidad } : pr
+      pr._uid === uid_ ? { ...pr, opsPlaza, opsSeccion, opsCantidad: parseFloat(opsCantidad) || 1, opsUnidad, opsRecipienteNombre: opsRecipienteNombre.trim() || null } : pr
     ))
     setOpsPanelUid(null)
   }
@@ -586,7 +591,7 @@ function PlatoRecetasEditor({
                       )}
                       {opsConf && plazaCfg && (
                         <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: `${plazaCfg.color}18`, color: plazaCfg.color }}>
-                          OPS {plazaCfg.label} · {pr.opsCantidad ?? 1} {pr.opsUnidad ?? 'u'}
+                          {pr.opsRecipienteNombre ? `${pr.opsRecipienteNombre} ×${pr.opsCantidad ?? 1}${pr.opsUnidad ?? 'u'}` : `${pr.opsCantidad ?? 1} ${pr.opsUnidad ?? 'u'}`} · {plazaCfg.label}
                         </span>
                       )}
                     </div>
@@ -658,8 +663,16 @@ function PlatoRecetasEditor({
                           ))}
                         </div>
 
+                        {/* Recipiente */}
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Recipiente (opcional)</div>
+                        <input type="text" value={opsRecipienteNombre} onChange={e => setOpsRecipienteNombre(e.target.value)}
+                          placeholder="ej: tupper, cubeta GN, bandeja"
+                          style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)', boxSizing: 'border-box', marginBottom: 12 }} />
+
                         {/* Cantidad + unidad */}
-                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Cantidad en mise</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>
+                          {opsRecipienteNombre.trim() ? 'Capacidad del recipiente' : 'Cantidad en mise'}
+                        </div>
                         <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
                           <input type="number" value={opsCantidad} onChange={e => setOpsCantidad(e.target.value)} inputMode="decimal"
                             style={{ width: 70, padding: '8px 10px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 14, fontWeight: 700, textAlign: 'center', fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)' }} />
@@ -685,7 +698,7 @@ function PlatoRecetasEditor({
                         Guardar OPS
                       </button>
                       {pr.opsPlaza && (
-                        <button onClick={() => { setPlatoRecetas(prev => prev.map(x => x._uid === pr._uid ? { ...x, opsPlaza: null, opsSeccion: null, opsCantidad: null, opsUnidad: null } : x)); setOpsPanelUid(null) }}
+                        <button onClick={() => { setPlatoRecetas(prev => prev.map(x => x._uid === pr._uid ? { ...x, opsPlaza: null, opsSeccion: null, opsCantidad: null, opsUnidad: null, opsRecipienteNombre: null } : x)); setOpsPanelUid(null) }}
                           style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                           Quitar
                         </button>

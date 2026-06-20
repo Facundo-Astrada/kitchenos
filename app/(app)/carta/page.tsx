@@ -2875,10 +2875,12 @@ export default function CartaPage() {
               // Upsert checklist_item
               const { data: existente } = await supa.from('checklist_items').select('id')
                 .eq('restaurante_id', RESTAURANTE_ID).eq('receta_id', it.ref_id).eq('plaza', it.plaza).limit(1)
+              const recipienteNombre = it.recipiente_nombre ?? null
+              const recipienteCapacidad = recipienteNombre ? cantidadOps : null
               if (existente?.[0]) {
-                await supa.from('checklist_items').update({ cantidad: cantidadOps, unidad: it.unidad_ops ?? 'u', seccion_id: seccionId, seccion: secNombre }).eq('id', existente[0].id)
+                await supa.from('checklist_items').update({ cantidad: cantidadOps, unidad: it.unidad_ops ?? 'u', seccion_id: seccionId, seccion: secNombre, recipiente_nombre: recipienteNombre, recipiente_capacidad: recipienteCapacidad }).eq('id', existente[0].id)
               } else {
-                await supa.from('checklist_items').insert({ nombre: it.nombre, plaza: it.plaza, receta_id: it.ref_id, cantidad: cantidadOps, unidad: it.unidad_ops ?? 'u', prioridad: 'sp', seccion_id: seccionId, seccion: secNombre, restaurante_id: RESTAURANTE_ID, orden: 0 })
+                await supa.from('checklist_items').insert({ nombre: it.nombre, plaza: it.plaza, receta_id: it.ref_id, cantidad: cantidadOps, unidad: it.unidad_ops ?? 'u', prioridad: 'sp', seccion_id: seccionId, seccion: secNombre, restaurante_id: RESTAURANTE_ID, orden: 0, recipiente_nombre: recipienteNombre, recipiente_capacidad: recipienteCapacidad })
               }
             }
           }

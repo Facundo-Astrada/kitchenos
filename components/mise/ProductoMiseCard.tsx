@@ -167,13 +167,20 @@ export function ProductoMiseCard({
   const porciones = recetaInfo?.porciones ?? null
   const primaryPlaza = platoPlazo.length > 0 ? platoPlazo[0].plaza : item.plaza
 
-  async function handleCrearTarea() {
+  const tieneRecipiente = !!(item.recipiente_nombre && item.recipiente_capacidad != null)
+  const deficit = tieneRecipiente && stockDisplay !== null
+    ? Math.max(0, (item.recipiente_capacidad ?? 0) - stockDisplay)
+    : null
+
+  async function handleCrearTarea(cantidadOverride?: number) {
     if (creating) return
     setCreating(true)
     try {
-      const cantidad = hasReceta && porciones != null
-        ? porciones * multiplier
-        : freeQty !== '' ? parseFloat(freeQty) : null
+      const cantidad = cantidadOverride !== undefined
+        ? cantidadOverride
+        : hasReceta && porciones != null
+          ? porciones * multiplier
+          : freeQty !== '' ? parseFloat(freeQty) : null
 
       await onCrearTarea({
         titulo: item.nombre,
@@ -290,8 +297,8 @@ export function ProductoMiseCard({
         )}
       </div>
 
-      {/* ── Info row — solo apertura: stock editable + target ── */}
-      {!esCierre && !checked && (
+      {/* ── Info row — apertura estándar (sin recipiente) ── */}
+      {!esCierre && !checked && !tieneRecipiente && (
         <div style={{ display: 'flex', gap: 6, padding: '0 12px 10px', paddingLeft: 44 }}>
           {editingStock ? (
             <div data-coach-target="mise-stock-box" style={{
@@ -330,6 +337,100 @@ export function ProductoMiseCard({
             </div>
           )}
           <ProducirBox cantidad={item.cantidad} unidad={item.unidad} />
+        </div>
+      )}
+
+      {/* ── Info row — apertura con recipiente ── */}
+      {!esCierre && !checked && tieneRecipiente && (
+        <div style={{ padding: '0 12px 10px', paddingLeft: 44 }}>
+          {/* Recipiente chip */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 13, color: 'var(--text-3)' }}>inventory_2</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)', textTransform: 'capitalize' as const }}>
+              {item.recipiente_nombre}
+            </span>
+            <span style={{ fontSize: 10, color: 'var(--text-3)' }}>× {item.recipiente_capacidad} {item.unidad}</span>
+          </div>
+          {/* Hay ahora / falta */}
+          <div style={{ display: 'flex', gap: 6 }}>
+            {/* Editable "hay ahora" */}
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 3 }}>
+                hay ahora
+              </div>
+              {editingStock ? (
+                <input
+                  autoFocus type="number" inputMode="decimal" value={stockInput}
+                  onChange={e => setStockInput(e.target.value)}
+                  onBlur={() => {
+                    setEditingStock(false)
+                    const v = stockInput === '' ? null : parseFloat(stockInput)
+                    onUpsert(item.id, fecha, turno, { cantidad_actual: (!v && v !== 0) ? null : v })
+                  }}
+                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                  style={{
+                    width: '100%', padding: '5px 9px', borderRadius: 8, boxSizing: 'border-box',
+                    border: '1.5px solid #3b82f6', background: 'rgba(59,130,246,.08)',
+                    fontSize: 14, fontWeight: 800, color: '#3b82f6',
+                    fontFamily: "'DM Mono', monospace", outline: 'none',
+                  }}
+                />
+              ) : (
+                <div
+                  onClick={() => { setStockInput(stockDisplay?.toString() ?? ''); setEditingStock(true) }}
+                  style={{
+                    padding: '5px 9px', borderRadius: 8, cursor: 'text',
+                    background: stockDisplay === null ? 'var(--bg)' : 'rgba(148,163,184,.1)',
+                    border: `1.5px dashed ${stockDisplay === null ? 'var(--border)' : 'transparent'}`,
+                    fontSize: stockDisplay !== null ? 14 : 11, fontWeight: 800,
+                    color: stockDisplay === null ? 'var(--text-3)' : 'var(--text-1)',
+                    fontFamily: "'DM Mono', monospace", display: 'flex', alignItems: 'baseline', gap: 3,
+                  }}
+                >
+                  {stockDisplay !== null
+                    ? <>{stockDisplay}<span style={{ fontSize: 10, fontWeight: 600, marginLeft: 2 }}>{item.unidad}</span></>
+                    : 'cargar stock'}
+                </div>
+              )}
+            </div>
+            {/* Déficit */}
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 3 }}>
+                falta producir
+              </div>
+              <div style={{
+                padding: '5px 9px', borderRadius: 8,
+                background: deficit === null ? 'var(--surface)' : deficit === 0 ? 'rgba(34,197,94,.12)' : 'rgba(239,68,68,.10)',
+                border: `1px solid ${deficit === null ? 'var(--border)' : deficit === 0 ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.28)'}`,
+                fontSize: 14, fontWeight: 800,
+                color: deficit === null ? 'var(--text-3)' : deficit === 0 ? '#22c55e' : '#ef4444',
+                fontFamily: "'DM Mono', monospace", display: 'flex', alignItems: 'baseline', gap: 3,
+              }}>
+                {deficit === null
+                  ? <span style={{ fontSize: 11, fontWeight: 600 }}>—</span>
+                  : deficit === 0
+                    ? <span style={{ fontSize: 11, fontWeight: 700 }}>stock ok</span>
+                    : <>{deficit}<span style={{ fontSize: 10, fontWeight: 600, marginLeft: 2 }}>{item.unidad}</span></>}
+              </div>
+            </div>
+          </div>
+          {/* CTA rápido cuando hay déficit */}
+          {deficit !== null && deficit > 0 && (
+            <button
+              onClick={() => handleCrearTarea(deficit)}
+              disabled={creating}
+              style={{
+                marginTop: 8, width: '100%', padding: '9px 0', borderRadius: 10, border: 'none',
+                background: creating ? 'var(--border)' : 'linear-gradient(135deg, #ef4444, #f97316)',
+                color: '#fff', fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
+                cursor: creating ? 'default' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>add_task</span>
+              {creating ? 'Creando...' : `Producir ${deficit} ${item.unidad}`}
+            </button>
+          )}
         </div>
       )}
 
@@ -452,7 +553,7 @@ export function ProductoMiseCard({
 
               {/* CTA */}
               <button
-                onClick={handleCrearTarea}
+                onClick={() => handleCrearTarea()}
                 disabled={creating}
                 style={{
                   width: '100%', padding: '10px 0', borderRadius: 10, border: 'none',

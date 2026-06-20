@@ -475,7 +475,7 @@ export interface ChecklistSeccionConfig {
   created_at: string
 }
 
-// DB: checklist_items (id, plaza, seccion, nombre, cantidad, unidad, prioridad, receta_id, restaurante_id, created_at, seccion_id, ubicacion, orden)
+// DB: checklist_items (id, plaza, seccion, nombre, cantidad, unidad, prioridad, receta_id, restaurante_id, created_at, seccion_id, ubicacion, orden, recipiente_nombre, recipiente_capacidad)
 export interface MisePlaceItem {
   id: string
   plaza: string
@@ -490,6 +490,8 @@ export interface MisePlaceItem {
   orden: number
   restaurante_id: string
   created_at: string
+  recipiente_nombre?: string | null
+  recipiente_capacidad?: number | null
 }
 
 // DB: checklist_registros (id, checklist_item_id, fecha, turno, completado, cantidad_actual, usuario_id, hora_completado)
