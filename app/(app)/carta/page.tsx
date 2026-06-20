@@ -2,6 +2,7 @@
 
 import PageTransition from '@/components/PageTransition'
 import { useState, useMemo, useEffect } from 'react'
+import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { useCarta, type CategoriaCartaItem, type CartaCategoria, type CartaItemEnriquecido } from '@/lib/hooks/useCarta'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { usePermisos } from '@/lib/hooks/usePermisos'
@@ -2749,6 +2750,7 @@ export default function CartaPage() {
   const RESTAURANTE_ID = useRestauranteId()
   const { puedeEditar, isAdmin } = usePermisos()
   const canEdit = isAdmin || puedeEditar('carta')
+  const isDesktop = useIsDesktop()
 
   const [view, setView] = useState<View>('list')
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
@@ -2827,7 +2829,7 @@ export default function CartaPage() {
 
   const handleCardClick = (item: CartaItemEnriquecido) => {
     setSelectedItemId(item.id)
-    setView('detail')
+    if (!isDesktop) setView('detail')
   }
 
   // ── Editor unificado: guardar Plato / Menú / Evento ──
@@ -3255,41 +3257,125 @@ export default function CartaPage() {
         </div>
       )}
 
-      {/* Content */}
-      <div data-coach-target="carta-lista" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
-            Cargando...
-          </div>
-        ) : filtered.length === 0 ? (
+      {/* Content — en desktop: grid lista + panel detalle */}
+      <div style={isDesktop && selectedItem ? { display: 'grid', gridTemplateColumns: '1fr 380px', gap: 0, alignItems: 'start', minHeight: 0 } : undefined}>
+        {/* Lista de platos */}
+        <div data-coach-target="carta-lista" style={{ padding: 16, display: 'grid', gridTemplateColumns: isDesktop && !selectedItem ? 'repeat(2, 1fr)' : isDesktop ? '1fr' : '1fr', gap: 10 }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13, gridColumn: '1/-1' }}>
+              Cargando...
+            </div>
+          ) : filtered.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, gridColumn: '1/-1' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 40, color: 'var(--text-3)' }}>receipt_long</span>
+              <p style={{ color: 'var(--text-3)', fontSize: 13 }}>
+                {filter === 'Todas' ? 'No hay platos en la carta' : `No hay platos en ${filter}`}
+              </p>
+              <button onClick={() => setComposing({})} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--navy)', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', marginTop: 4 }}>
+                Agregar primer plato
+              </button>
+            </div>
+          ) : (
+            filtered.map(item => (
+              <div key={item.id} style={isDesktop && selectedItemId === item.id ? { outline: '2px solid var(--accent)', borderRadius: 14 } : undefined}>
+                <PlatoCard
+                  item={item}
+                  onClick={() => handleCardClick(item)}
+                  onToggle={() => toggleDisponible(item.id, !item.disponible)}
+                  isAdmin={isAdmin}
+                />
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Panel de detalle — solo desktop, cuando hay item seleccionado */}
+        {isDesktop && selectedItem && (
           <div style={{
-            textAlign: 'center', padding: 40,
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+            borderLeft: '1px solid var(--border)',
+            position: 'sticky', top: 0,
+            maxHeight: 'calc(100dvh - 0px)', overflowY: 'auto',
+            background: 'var(--surface)',
           }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 40, color: 'var(--text-3)' }}>
-              receipt_long
-            </span>
-            <p style={{ color: 'var(--text-3)', fontSize: 13 }}>
-              {filter === 'Todas' ? 'No hay platos en la carta' : `No hay platos en ${filter}`}
-            </p>
-            <button onClick={() => setComposing({})} style={{
-              padding: '8px 16px', borderRadius: 8, border: 'none',
-              background: 'var(--navy)', color: '#fff', fontWeight: 600,
-              fontSize: 13, cursor: 'pointer', marginTop: 4,
-            }}>
-              Agregar primer plato
-            </button>
+            {/* Header del panel */}
+            <div style={{ background: 'var(--navy)', padding: '16px 16px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ color: '#fff', fontWeight: 700, fontSize: 15, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedItem.nombre}</span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {canEdit && (
+                  <button onClick={() => setView('edit')} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8, padding: '6px 10px', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 15 }}>edit</span>
+                    Editar
+                  </button>
+                )}
+                <button onClick={() => setSelectedItemId(null)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 8, padding: '6px 8px', color: '#fff', cursor: 'pointer' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
+                </button>
+              </div>
+            </div>
+            {/* Contenido del panel */}
+            <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Precio + FC */}
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {isAdmin && (
+                  <div style={{ background: 'var(--bg)', borderRadius: 10, padding: '10px 14px', flex: '1 1 120px' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 3 }}>Precio venta</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--navy)' }}>${selectedItem.precio_venta.toLocaleString('es-AR')}</div>
+                  </div>
+                )}
+                {isAdmin && selectedItem.food_cost_pct != null && (
+                  <div style={{ background: fcBadge(selectedItem.food_cost_pct).bg, borderRadius: 10, padding: '10px 14px', flex: '1 1 100px' }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 3 }}>Food Cost</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: fcBadge(selectedItem.food_cost_pct).text }}>{selectedItem.food_cost_pct.toFixed(1)}%</div>
+                  </div>
+                )}
+              </div>
+              {/* Descripción */}
+              {selectedItem.descripcion && (
+                <p style={{ fontSize: 13, color: 'var(--text-2)', margin: 0, lineHeight: 1.5 }}>{selectedItem.descripcion}</p>
+              )}
+              {/* Categoría + Tags */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11, background: 'var(--bg)', color: 'var(--text-3)', padding: '3px 10px', borderRadius: 20 }}>{selectedItem.categoria}</span>
+                {(selectedItem.tags ?? []).map(tag => (
+                  <span key={tag} style={{ fontSize: 11, background: '#eef2ff', color: 'var(--accent)', padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>{tag}</span>
+                ))}
+              </div>
+              {/* Estado */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: selectedItem.disponible ? '#16a34a' : '#dc2626' }} />
+                <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{selectedItem.disponible ? 'Disponible' : 'No disponible (86\'d)'}</span>
+                <button onClick={() => toggleDisponible(selectedItem.id, !selectedItem.disponible)} style={{ marginLeft: 'auto', fontSize: 11, background: 'none', border: '1px solid var(--border)', borderRadius: 8, padding: '4px 10px', cursor: 'pointer', color: 'var(--text-2)' }}>
+                  Cambiar
+                </button>
+              </div>
+              {/* Recetas vinculadas */}
+              {(selectedItem.plato_recetas.length > 0 || selectedItem.receta) && (
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 8 }}>Recetas</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {selectedItem.plato_recetas.map(pr => (
+                      <div key={pr.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg)', borderRadius: 8, padding: '8px 10px' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--accent)', flexShrink: 0 }}>menu_book</span>
+                        <span style={{ fontSize: 13, color: 'var(--text-1)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.receta?.nombre ?? '—'}</span>
+                        <span style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0 }}>{pr.porciones} porc.</span>
+                      </div>
+                    ))}
+                    {selectedItem.receta && selectedItem.plato_recetas.length === 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg)', borderRadius: 8, padding: '8px 10px' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--accent)' }}>menu_book</span>
+                        <span style={{ fontSize: 13, color: 'var(--text-1)' }}>{selectedItem.receta.nombre}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {/* Botón ver detalle completo */}
+              <button onClick={() => setView('detail')} style={{ width: '100%', padding: '10px', borderRadius: 10, background: 'var(--navy)', color: '#fff', border: 'none', fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 17 }}>open_in_full</span>
+                Ver y gestionar completo
+              </button>
+            </div>
           </div>
-        ) : (
-          filtered.map(item => (
-            <PlatoCard
-              key={item.id}
-              item={item}
-              onClick={() => handleCardClick(item)}
-              onToggle={() => toggleDisponible(item.id, !item.disponible)}
-              isAdmin={isAdmin}
-            />
-          ))
         )}
       </div>
 

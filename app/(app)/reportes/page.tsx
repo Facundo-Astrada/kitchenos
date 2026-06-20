@@ -3,6 +3,7 @@
 import PageTransition from '@/components/PageTransition'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { useAuth } from '@/lib/auth/context'
 import {
   useReportes,
@@ -71,6 +72,7 @@ export default function ReportesPage() {
   const { perfil } = useAuth()
   const esAdmin = perfil?.rol === 'admin'
   const { loading, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchPresupuestos, savePresupuesto, fetchRendimiento } = useReportes()
+  const isDesktop = useIsDesktop()
 
   const [periodo, setPeriodo] = useState<Periodo>('mes')
   const [tab, setTab] = useState<Tab>('resumen')
@@ -247,11 +249,9 @@ export default function ReportesPage() {
     if (!resumen) return <EmptyState icon="dashboard" text="Sin datos para el período" />
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isDesktop ? 'repeat(4, 1fr)' : 'repeat(2, 1fr)', gap: 10 }}>
           <KpiCard label="Total Compras" value={resumen.totalCompras} prev={resumen.comprasAnterior} icon="payments" suffix="$" />
           <KpiCard label="Facturas" value={resumen.cantFacturas} prev={resumen.facturasAnterior} icon="receipt_long" />
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
           <KpiCard label="Productos en Stock" value={resumen.productosEnStock} icon="inventory_2" />
           <KpiCard label="Food Cost Prom." value={resumen.foodCostPromedio} icon="restaurant" suffix="%" />
         </div>
@@ -262,77 +262,49 @@ export default function ReportesPage() {
   function renderFoodCost() {
     if (!foodCostData.length) return <EmptyState icon="restaurant" text="Sin datos de food cost. Vinculá recetas a la carta." />
     const max = Math.max(...foodCostData.map(f => f.food_cost_pct))
+    const avgFc = foodCostData.reduce((s, f) => s + f.food_cost_pct, 0) / foodCostData.length
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {/* Summary */}
-        <div style={{
-          background: 'var(--surface)', borderRadius: 12, padding: 14,
-          border: '1px solid var(--border)',
-        }}>
-          <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 4 }}>Food Cost Promedio</div>
-          <div style={{
-            fontSize: 26, fontWeight: 700,
-            color: fcColor(foodCostData.reduce((s, f) => s + f.food_cost_pct, 0) / foodCostData.length),
-          }}>
-            {fmtPct(foodCostData.reduce((s, f) => s + f.food_cost_pct, 0) / foodCostData.length)}
+      <div style={isDesktop
+        ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }
+        : { display: 'flex', flexDirection: 'column', gap: 16 }
+      }>
+        {/* Left: Summary + Table */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 4 }}>Food Cost Promedio</div>
+            <div style={{ fontSize: 26, fontWeight: 700, color: fcColor(avgFc) }}>{fmtPct(avgFc)}</div>
           </div>
-        </div>
-
-        {/* Table */}
-        <div style={{
-          background: 'var(--surface)', borderRadius: 12,
-          border: '1px solid var(--border)', overflow: 'hidden',
-        }}>
-          <div style={{
-            display: 'grid', gridTemplateColumns: '1fr 70px 70px 60px',
-            padding: '10px 12px', borderBottom: '1px solid var(--border)',
-            fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase',
-          }}>
-            <span>Plato</span>
-            <span style={{ textAlign: 'right' }}>Costo</span>
-            <span style={{ textAlign: 'right' }}>Precio</span>
-            <span style={{ textAlign: 'right' }}>FC%</span>
-          </div>
-          {foodCostData.map((item, i) => (
-            <div key={i} style={{
-              display: 'grid', gridTemplateColumns: '1fr 70px 70px 60px',
-              padding: '10px 12px',
-              borderBottom: i < foodCostData.length - 1 ? '1px solid var(--border)' : 'none',
-              fontSize: 13,
-            }}>
-              <span style={{ color: 'var(--text-1)', fontWeight: 500 }}>{item.nombre}</span>
-              <span style={{ textAlign: 'right', color: 'var(--text-2)' }}>{fmtMoney(item.costo_porcion)}</span>
-              <span style={{ textAlign: 'right', color: 'var(--text-2)' }}>{fmtMoney(item.precio_venta)}</span>
-              <span style={{
-                textAlign: 'right', fontWeight: 600,
-                color: fcColor(item.food_cost_pct),
-              }}>{fmtPct(item.food_cost_pct)}</span>
+          <div style={{ background: 'var(--surface)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 70px 60px', padding: '10px 12px', borderBottom: '1px solid var(--border)', fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase' }}>
+              <span>Plato</span>
+              <span style={{ textAlign: 'right' }}>Costo</span>
+              <span style={{ textAlign: 'right' }}>Precio</span>
+              <span style={{ textAlign: 'right' }}>FC%</span>
             </div>
-          ))}
+            {foodCostData.map((item, i) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 70px 60px', padding: '10px 12px', borderBottom: i < foodCostData.length - 1 ? '1px solid var(--border)' : 'none', fontSize: 13 }}>
+                <span style={{ color: 'var(--text-1)', fontWeight: 500 }}>{item.nombre}</span>
+                <span style={{ textAlign: 'right', color: 'var(--text-2)' }}>{fmtMoney(item.costo_porcion)}</span>
+                <span style={{ textAlign: 'right', color: 'var(--text-2)' }}>{fmtMoney(item.precio_venta)}</span>
+                <span style={{ textAlign: 'right', fontWeight: 600, color: fcColor(item.food_cost_pct) }}>{fmtPct(item.food_cost_pct)}</span>
+              </div>
+            ))}
+          </div>
         </div>
-
-        {/* Bar chart */}
-        <div style={{
-          background: 'var(--surface)', borderRadius: 12, padding: 14,
-          border: '1px solid var(--border)',
-        }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 12 }}>Food Cost por plato</div>
-          <BarChart
-            items={foodCostData.map(f => ({
-              label: f.nombre,
-              value: f.food_cost_pct,
-              color: fcColor(f.food_cost_pct),
-              subLabel: fmtPct(f.food_cost_pct),
-            }))}
-            maxVal={Math.max(max, 50)}
-          />
-        </div>
-
-        {/* Legend */}
-        <div style={{ display: 'flex', gap: 16, fontSize: 11, color: 'var(--text-3)' }}>
-          <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#16a34a', marginRight: 4 }} /> &lt;30% Ideal</span>
-          <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#ca8a04', marginRight: 4 }} /> 30-35% Alerta</span>
-          <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#dc2626', marginRight: 4 }} /> &gt;35% Crítico</span>
+        {/* Right: Bar chart + Legend */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 12 }}>Food Cost por plato</div>
+            <BarChart
+              items={foodCostData.map(f => ({ label: f.nombre, value: f.food_cost_pct, color: fcColor(f.food_cost_pct), subLabel: fmtPct(f.food_cost_pct) }))}
+              maxVal={Math.max(max, 50)}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: 16, fontSize: 11, color: 'var(--text-3)' }}>
+            <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#16a34a', marginRight: 4 }} /> &lt;30% Ideal</span>
+            <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#ca8a04', marginRight: 4 }} /> 30-35% Alerta</span>
+            <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#dc2626', marginRight: 4 }} /> &gt;35% Crítico</span>
+          </div>
         </div>
       </div>
     )
@@ -345,50 +317,40 @@ export default function ReportesPage() {
     const totalGlobal = proveedores.reduce((s, p) => s + p.total, 0)
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {/* KPIs */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-          <KpiCard label="Total Compras" value={totalGlobal} icon="payments" suffix="$" />
-          <KpiCard label="Proveedores" value={proveedores.length} icon="local_shipping" />
-        </div>
-
-        {/* Bar chart */}
-        <div style={{
-          background: 'var(--surface)', borderRadius: 12, padding: 14,
-          border: '1px solid var(--border)',
-        }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 12 }}>Compras por proveedor</div>
-          <BarChart
-            items={proveedores.map(p => ({
-              label: p.proveedor,
-              value: p.total,
-              subLabel: `${fmtMoney(p.total)} (${fmtPct(p.porcentaje)})`,
-            }))}
-            maxVal={maxTotal}
-          />
-        </div>
-
-        {/* Facturas list */}
-        <div style={{
-          background: 'var(--surface)', borderRadius: 12,
-          border: '1px solid var(--border)', overflow: 'hidden',
-        }}>
-          <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>Últimas facturas</span>
+      <div style={isDesktop
+        ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }
+        : { display: 'flex', flexDirection: 'column', gap: 16 }
+      }>
+        {/* Left: KPIs + Bar chart */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <KpiCard label="Total Compras" value={totalGlobal} icon="payments" suffix="$" />
+            <KpiCard label="Proveedores" value={proveedores.length} icon="local_shipping" />
           </div>
-          {facturas.slice(0, 10).map((f, i) => (
-            <div key={f.id} style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '10px 14px',
-              borderBottom: i < Math.min(facturas.length, 10) - 1 ? '1px solid var(--border)' : 'none',
-            }}>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>{f.proveedor_nombre}</div>
-                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{f.fecha_factura ?? 'Sin fecha'}</div>
-              </div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--navy)' }}>{fmtMoney(f.total)}</div>
+          <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 12 }}>Compras por proveedor</div>
+            <BarChart
+              items={proveedores.map(p => ({ label: p.proveedor, value: p.total, subLabel: `${fmtMoney(p.total)} (${fmtPct(p.porcentaje)})` }))}
+              maxVal={maxTotal}
+            />
+          </div>
+        </div>
+        {/* Right: Facturas list */}
+        <div>
+          <div style={{ background: 'var(--surface)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
+            <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>Últimas facturas</span>
             </div>
-          ))}
+            {facturas.slice(0, isDesktop ? 20 : 10).map((f, i) => (
+              <div key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: i < Math.min(facturas.length, isDesktop ? 20 : 10) - 1 ? '1px solid var(--border)' : 'none' }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>{f.proveedor_nombre}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{f.fecha_factura ?? 'Sin fecha'}</div>
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--navy)' }}>{fmtMoney(f.total)}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     )
@@ -522,36 +484,40 @@ export default function ReportesPage() {
     const c = cmvData
     const cmvCol = c.cmvPct < 33 ? '#16a34a' : c.cmvPct <= 40 ? '#ca8a04' : '#dc2626'
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {/* CMV % hero */}
-        <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 18, border: '1px solid var(--border)', textAlign: 'center' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Costo Mercadería Vendida</div>
-          <div style={{ fontSize: 40, fontWeight: 800, color: cmvCol, lineHeight: 1 }}>{c.ventas > 0 ? fmtPct(c.cmvPct) : '—'}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>
-            {c.ventas > 0 ? (c.cmvPct < 33 ? 'Saludable' : c.cmvPct <= 40 ? 'Atención' : 'Crítico') : 'Importá ventas para el %'}
+      <div style={isDesktop
+        ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }
+        : { display: 'flex', flexDirection: 'column', gap: 16 }
+      }>
+        {/* Left: Hero + Bar chart */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 18, border: '1px solid var(--border)', textAlign: 'center' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Costo Mercadería Vendida</div>
+            <div style={{ fontSize: 40, fontWeight: 800, color: cmvCol, lineHeight: 1 }}>{c.ventas > 0 ? fmtPct(c.cmvPct) : '—'}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>
+              {c.ventas > 0 ? (c.cmvPct < 33 ? 'Saludable' : c.cmvPct <= 40 ? 'Atención' : 'Crítico') : 'Importá ventas para el %'}
+            </div>
           </div>
+          <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 12 }}>Ventas vs Costo</div>
+            <BarChart
+              items={[
+                { label: 'Ventas', value: c.ventas, color: '#16a34a', subLabel: fmtMoney(c.ventas) },
+                { label: 'Compras', value: c.compras, color: 'var(--navy)', subLabel: fmtMoney(c.compras) },
+              ]}
+              maxVal={Math.max(c.ventas, c.compras, 1)}
+            />
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
+            El CMV se calcula como compras confirmadas ÷ ventas del período. Un CMV sano en gastronomía suele estar entre 28% y 35%.
+          </p>
         </div>
-        {/* KPIs */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+        {/* Right: KPIs */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignContent: 'start' }}>
           <KpiCard label="Ventas" value={c.ventas} prev={c.ventasAnterior} icon="point_of_sale" suffix="$" />
           <KpiCard label="Compras (costo)" value={c.compras} prev={c.comprasAnterior} icon="shopping_cart" suffix="$" />
           <KpiCard label="Margen bruto" value={c.margenBruto} icon="trending_up" suffix="$" />
           <KpiCard label="Ticket promedio" value={Math.round(c.ticketPromedio)} icon="receipt" suffix="$" />
         </div>
-        {/* Ventas vs compras bar */}
-        <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 12 }}>Ventas vs Costo</div>
-          <BarChart
-            items={[
-              { label: 'Ventas', value: c.ventas, color: '#16a34a', subLabel: fmtMoney(c.ventas) },
-              { label: 'Compras', value: c.compras, color: 'var(--navy)', subLabel: fmtMoney(c.compras) },
-            ]}
-            maxVal={Math.max(c.ventas, c.compras, 1)}
-          />
-        </div>
-        <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
-          El CMV se calcula como compras confirmadas ÷ ventas del período. Un CMV sano en gastronomía suele estar entre 28% y 35%.
-        </p>
       </div>
     )
   }
@@ -736,7 +702,7 @@ export default function ReportesPage() {
       </div>
 
       {/* Content */}
-      <div data-coach-target="reportes-contenido" style={{ padding: 16 }}>
+      <div data-coach-target="reportes-contenido" style={{ padding: isDesktop ? '24px 32px' : 16 }}>
         {(loading || tabLoading) ? (
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
