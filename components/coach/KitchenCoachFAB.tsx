@@ -681,7 +681,7 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
                       <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                         <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#fff' }}>restaurant</span>
                       </div>
-                      <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '4px 12px 12px 12px', padding: '8px 12px', maxWidth: '85%', fontSize: 13, color: 'var(--text-1)', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+                      <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: '4px 12px 12px 12px', padding: '8px 12px', maxWidth: '85%', fontSize: 13, color: 'var(--text-1)', lineHeight: 1.55, whiteSpace: 'pre-wrap', userSelect: 'text', WebkitUserSelect: 'text' }}>
                         {m.content === '' ? <div className="kc-typing"><span /><span /><span /></div> : m.content}
                       </div>
                     </div>
@@ -697,7 +697,7 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
                   </>
                 )}
                 {m.role === 'user' && (
-                  <div style={{ background: '#f97316', borderRadius: '12px 4px 12px 12px', padding: '8px 12px', maxWidth: '85%', fontSize: 13, color: '#fff', lineHeight: 1.5 }}>
+                  <div style={{ background: '#f97316', borderRadius: '12px 4px 12px 12px', padding: '8px 12px', maxWidth: '85%', fontSize: 13, color: '#fff', lineHeight: 1.5, userSelect: 'text', WebkitUserSelect: 'text' }}>
                     {m.content}
                   </div>
                 )}

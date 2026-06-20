@@ -532,8 +532,9 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                       display: 'flex', alignItems: 'center',
                       padding: '10px 12px',
                       borderBottom: idx < ings.length - 1 ? '1px solid var(--border)' : 'none',
+                      borderLeft: i.cantidad === 0 ? '3px solid #ef4444' : '3px solid transparent',
                       transition: 'background .3s',
-                      background: isHighlighted ? 'rgba(245,158,11,.06)' : 'transparent',
+                      background: isHighlighted ? 'rgba(245,158,11,.06)' : (i.cantidad === 0 ? '#fef2f2' : 'transparent'),
                     }}
                   >
                     {/* Nombre — toca para editar ingrediente */}

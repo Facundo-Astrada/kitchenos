@@ -92,6 +92,26 @@ async function buildSnapshot(supabase: SupabaseClient, screen?: string): Promise
     } catch { /* sin merma */ }
   }
 
+  // Recetario — resumen y detalle de recetas cuando el usuario está en esa pantalla.
+  if (wants(['recetario'])) {
+    try {
+      const { data } = await supabase.from('recetas')
+        .select('nombre, categoria, food_cost, precio_venta, porciones, status')
+        .eq('activa', true)
+        .order('nombre', { ascending: true })
+        .limit(200)
+      const r = (data ?? []) as Array<{ nombre: string; categoria: string | null; food_cost: number | null; precio_venta: number | null; porciones: number | null; status: string | null }>
+      if (r.length) {
+        const total = r.length
+        const conFC = r.filter(x => (x.food_cost ?? 0) > 0)
+        const fcAltas = conFC.filter(x => (x.food_cost ?? 0) > 33).map(x => `${x.nombre} (FC ${Math.round(x.food_cost!)}%)`)
+        const drafts = r.filter(x => x.status === 'draft').length
+        lines.push(`Recetario: ${total} recetas${drafts > 0 ? `, ${drafts} borradores` : ''}.`)
+        if (fcAltas.length) lines.push(`Recetas con FC alto (>33%): ${fcAltas.slice(0, 5).join('; ')}.`)
+      }
+    } catch { /* sin recetas */ }
+  }
+
   // Platos en 86 (no disponibles ahora mismo).
   if (wants(['carta', 'pase', 'dashboard', 'operaciones'])) {
     try {
@@ -232,6 +252,17 @@ const COACH_TOOLS = [
     },
   },
   {
+    name: 'buscar_receta',
+    description: 'Busca recetas por nombre en el recetario del restaurante y devuelve sus ingredientes, porciones y procedimiento. Usar cuando el usuario pregunta sobre una receta específica, quiere ver una ficha técnica, o pregunta cómo se hace un plato. Si hay varias coincidencias y no es clara cuál quiere, devuelve las opciones para que el usuario elija.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        query: { type: 'string', description: 'Nombre o parte del nombre de la receta a buscar. Ej: "risotto", "brownie", "fondo oscuro".' },
+      },
+      required: ['query'],
+    },
+  },
+  {
     name: 'registrar_merma',
     description: 'Registra una merma (desperdicio) de un producto. Si el producto está en stock, descuenta la cantidad. Usar cuando el usuario reporta que se tiró/perdió/venció algo.',
     input_schema: {
@@ -331,6 +362,58 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
       }
       const costoTxt = costo > 0 ? ` Costo estimado $${Math.round(costo).toLocaleString('es-AR')}.` : ''
       return `Merma registrada: ${cantidad} ${unidad} de ${producto} (${motivo}).${costoTxt}${extra}`
+    }
+
+    if (name === 'buscar_receta') {
+      const query = String(input.query ?? '').trim()
+      if (!query) return 'Error: falta el nombre de la receta a buscar.'
+
+      const { data: coincidencias } = await supabase.from('recetas')
+        .select('id, nombre, categoria, porciones, tiempo_min, food_cost, precio_venta, procedimiento')
+        .eq('restaurante_id', restauranteId)
+        .eq('activa', true)
+        .ilike('nombre', `%${query}%`)
+        .limit(4)
+
+      if (!coincidencias || coincidencias.length === 0)
+        return `No encontré ninguna receta que coincida con "${query}". Puede que todavía no esté cargada en el recetario.`
+
+      if (coincidencias.length > 1) {
+        const lista = coincidencias.map((r: Record<string, unknown>) => `- ${r.nombre} (${r.categoria ?? 'sin categoría'})`).join('\n')
+        return `Encontré ${coincidencias.length} recetas que coinciden con "${query}":\n${lista}\n\nDecime cuál te interesa para ver la ficha completa.`
+      }
+
+      // Una sola coincidencia — devolver la ficha completa
+      const r = coincidencias[0] as Record<string, unknown>
+      const { data: ings } = await supabase.from('ingredientes')
+        .select('nombre, cantidad, unidad, costo_unitario')
+        .eq('receta_id', r.id)
+        .limit(30)
+
+      const fmtARS = (n: number) => `$${Math.round(n).toLocaleString('es-AR')}`
+      const fc = Number(r.food_cost) || 0
+      const precio = Number(r.precio_venta) || 0
+
+      let result = `Ficha técnica: ${r.nombre}\n`
+      if (r.categoria) result += `Categoría: ${r.categoria}\n`
+      if (r.porciones) result += `Porciones: ${r.porciones}\n`
+      if (r.tiempo_min) result += `Tiempo: ${r.tiempo_min} min\n`
+      if (precio > 0) result += `Precio venta: ${fmtARS(precio)}\n`
+      if (fc > 0) result += `Food cost: ${Math.round(fc)}%\n`
+
+      if (ings && ings.length > 0) {
+        result += `\nIngredientes:\n`
+        for (const ing of ings as Array<{ nombre: string; cantidad: number; unidad: string; costo_unitario: number | null }>) {
+          result += `- ${ing.nombre}: ${ing.cantidad} ${ing.unidad}\n`
+        }
+      }
+
+      if (r.procedimiento) {
+        const proc = String(r.procedimiento)
+        result += `\nPreparación:\n${proc.length > 600 ? proc.slice(0, 600) + '...' : proc}`
+      }
+
+      return result
     }
 
     return `Error: herramienta desconocida "${name}".`

@@ -78,6 +78,7 @@ input, textarea, [contenteditable] {
   position: relative;
   width: 100%;
   max-width: 420px;
+  height: 100%;
   height: 100dvh;
   margin: 0 auto;
   background: var(--bg);

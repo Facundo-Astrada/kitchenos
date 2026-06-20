@@ -139,6 +139,20 @@ export default function ComposicionEditor({
   const [nuevaSeccion, setNuevaSeccion] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // ── Estado exclusivo para modo plato (UI simplificada) ──
+  const [platoRecetas, setPlatoRecetas] = useState<{ _uid: number; ref_id: string; nombre: string; porciones: number }[]>(() => {
+    if (!inicial || inicial.modo !== 'plato') return []
+    return inicial.secciones.flatMap(s =>
+      s.items
+        .filter(it => it.tipo === 'receta' && it.ref_id)
+        .map(it => ({ _uid: it._uid ?? uid(), ref_id: it.ref_id!, nombre: it.nombre, porciones: it.cantidad ?? 1 }))
+    )
+  })
+  const [platoSearch, setPlatoSearch] = useState('')
+  const [platoShowResults, setPlatoShowResults] = useState(false)
+  const [editingPorcionUid, setEditingPorcionUid] = useState<number | null>(null)
+  const [editingPorcionVal, setEditingPorcionVal] = useState('')
+
   const esPlato = modo === 'plato'
 
   // Al cambiar a plato, colapsar secciones a una sola
@@ -155,11 +169,19 @@ export default function ComposicionEditor({
   }
 
   // Costo total vivo
-  const costoTotal = useMemo(() => items.reduce((s, it) => {
-    const fuente = it.tipo === 'receta' ? recetas : it.tipo === 'producto' ? productos : it.tipo === 'plato' ? cartaItems : null
-    const costo = fuente && it.ref_id ? (fuente.find(f => f.id === it.ref_id)?.costo ?? 0) : 0
-    return s + costo * (it.cantidad ?? 1)
-  }, 0), [items, recetas, productos, cartaItems])
+  const costoTotal = useMemo(() => {
+    if (esPlato) {
+      return platoRecetas.reduce((s, pr) => {
+        const costo = recetas.find(r => r.id === pr.ref_id)?.costo ?? 0
+        return s + costo * pr.porciones
+      }, 0)
+    }
+    return items.reduce((s, it) => {
+      const fuente = it.tipo === 'receta' ? recetas : it.tipo === 'producto' ? productos : it.tipo === 'plato' ? cartaItems : null
+      const costo = fuente && it.ref_id ? (fuente.find(f => f.id === it.ref_id)?.costo ?? 0) : 0
+      return s + costo * (it.cantidad ?? 1)
+    }, 0)
+  }, [esPlato, platoRecetas, items, recetas, productos, cartaItems])
 
   const precioN = parseFloat(precio.replace(',', '.')) || 0
   const fcPct = esPlato && precioN > 0 ? (costoTotal / precioN) * 100 : null
@@ -201,10 +223,28 @@ export default function ComposicionEditor({
   async function handleSave() {
     if (!nombre.trim()) return
     setSaving(true)
-    const secs = secciones.map(nombreSec => ({
-      nombre: nombreSec,
-      items: items.filter(it => it._seccion === nombreSec && it.nombre.trim()).map(({ _uid, _seccion, ...rest }) => rest), // eslint-disable-line @typescript-eslint/no-unused-vars
-    })).filter(s => esPlato || s.items.length > 0 || secciones.length === 1)
+    let secs
+    if (esPlato) {
+      secs = [{
+        nombre: 'Recetas',
+        items: platoRecetas.map(pr => ({
+          tipo: 'receta' as const,
+          ref_id: pr.ref_id,
+          nombre: pr.nombre,
+          prioridad: 'media' as const,
+          plaza: null,
+          seccion_mise: null,
+          usuario_asignado: null,
+          cantidad: pr.porciones,
+          unidad: null,
+        })),
+      }]
+    } else {
+      secs = secciones.map(nombreSec => ({
+        nombre: nombreSec,
+        items: items.filter(it => it._seccion === nombreSec && it.nombre.trim()).map(({ _uid, _seccion, ...rest }) => rest), // eslint-disable-line @typescript-eslint/no-unused-vars
+      })).filter(s => s.items.length > 0 || secciones.length === 1)
+    }
     try {
       await onSave({
         tipo: modo, nombre: nombre.trim(), descripcion: descripcion.trim() || null,
@@ -254,7 +294,7 @@ export default function ComposicionEditor({
           )
           return (
             <>
-              <Metric label="Ítems" value={String(items.filter(i => i.nombre.trim()).length)} />
+              <Metric label="Ítems" value={String(esPlato ? platoRecetas.length : items.filter(i => i.nombre.trim()).length)} />
               <Metric label="Costo" value={fmtMoney(costoTotal)} />
               {fcPct != null && <Metric label="Food cost" value={`${fcPct.toFixed(0)}%`} color={fcColor} />}
               {esPlato && precioN > 0 && <Metric label="Margen" value={fmtMoney(precioN - costoTotal)} color={precioN - costoTotal > 0 ? '#16a34a' : '#dc2626'} />}
@@ -302,67 +342,226 @@ export default function ComposicionEditor({
         </div>
 
         {/* ── Bloque COMPOSICIÓN ── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 2px 7px' }}>
-          <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em' }}>
-            {esPlato ? 'Componentes' : 'Composición'}
-          </span>
-          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', fontFamily: 'monospace' }}>· {items.filter(i => i.nombre.trim()).length}</span>
-          {!esPlato && <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 'auto' }}>{secciones.length} {secciones.length === 1 ? 'sección' : 'secciones'}</span>}
-        </div>
+        {esPlato ? (
+          // ── UI simplificada para modo Plato (igual que la vista de detalle) ──
+          <PlatoRecetasEditor
+            recetas={recetas}
+            platoRecetas={platoRecetas}
+            setPlatoRecetas={setPlatoRecetas}
+            costoTotal={costoTotal}
+            platoSearch={platoSearch}
+            setPlatoSearch={setPlatoSearch}
+            platoShowResults={platoShowResults}
+            setPlatoShowResults={setPlatoShowResults}
+            editingPorcionUid={editingPorcionUid}
+            setEditingPorcionUid={setEditingPorcionUid}
+            editingPorcionVal={editingPorcionVal}
+            setEditingPorcionVal={setEditingPorcionVal}
+            uid={uid}
+          />
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 2px 7px' }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em' }}>
+                Composición
+              </span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', fontFamily: 'monospace' }}>· {items.filter(i => i.nombre.trim()).length}</span>
+              <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 'auto' }}>{secciones.length} {secciones.length === 1 ? 'sección' : 'secciones'}</span>
+            </div>
 
-        {/* Secciones + ítems */}
-        {secciones.map((sec, secIdx) => {
-          const rows = items.filter(it => it._seccion === sec)
-          const isEditingSec = secEdit?.idx === secIdx
-          return (
-            <div key={`${sec}-${secIdx}`} style={{ marginBottom: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
-              {/* Header de sección (oculto si plato con sección única) */}
-              {!(esPlato && secciones.length === 1) && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
-                  {isEditingSec ? (
-                    <input value={secEdit!.val} onChange={e => setSecEdit({ idx: secIdx, val: e.target.value })} onBlur={commitSecRename} onKeyDown={e => { if (e.key === 'Enter') commitSecRename() }} autoFocus
-                      style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 13, fontWeight: 700, color: 'var(--text-1)', outline: 'none', textTransform: 'uppercase', letterSpacing: '.04em' }} />
-                  ) : (
-                    <button onClick={() => setSecEdit({ idx: secIdx, val: sec })} style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: '.04em', display: 'flex', alignItems: 'center', gap: 5 }}>
-                      {sec}<span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--text-3)' }}>edit</span>
+            {/* Secciones + ítems */}
+            {secciones.map((sec, secIdx) => {
+              const rows = items.filter(it => it._seccion === sec)
+              const isEditingSec = secEdit?.idx === secIdx
+              return (
+                <div key={`${sec}-${secIdx}`} style={{ marginBottom: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+                    {isEditingSec ? (
+                      <input value={secEdit!.val} onChange={e => setSecEdit({ idx: secIdx, val: e.target.value })} onBlur={commitSecRename} onKeyDown={e => { if (e.key === 'Enter') commitSecRename() }} autoFocus
+                        style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 13, fontWeight: 700, color: 'var(--text-1)', outline: 'none', textTransform: 'uppercase', letterSpacing: '.04em' }} />
+                    ) : (
+                      <button onClick={() => setSecEdit({ idx: secIdx, val: sec })} style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: '.04em', display: 'flex', alignItems: 'center', gap: 5 }}>
+                        {sec}<span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--text-3)' }}>edit</span>
+                      </button>
+                    )}
+                    <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 700, fontFamily: 'monospace' }}>{rows.length}</span>
+                    <button onClick={() => removeSeccion(sec)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)', display: 'flex' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
                     </button>
-                  )}
-                  <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 700, fontFamily: 'monospace' }}>{rows.length}</span>
-                  <button onClick={() => removeSeccion(sec)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)', display: 'flex' }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
+                  </div>
+
+                  {rows.map(it => (
+                    <ItemRowInline key={it._uid} item={it}
+                      expanded={expandedUid === it._uid}
+                      onToggle={() => setExpandedUid(expandedUid === it._uid ? null : it._uid)}
+                      onChange={patch => updateItem(it._uid, patch)}
+                      onRemove={() => removeItem(it._uid)}
+                      recetas={recetas} productos={productos} cartaItems={cartaItems}
+                      miembros={safeMiembros} plazas={plazas} esPlato={false}
+                      miseSecciones={miseSecciones}
+                    />
+                  ))}
+
+                  <button onClick={() => addItem(sec)}
+                    style={{ width: '100%', padding: '9px', background: 'none', border: 'none', borderTop: rows.length > 0 ? '1px solid var(--border)' : 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
+                    Agregar a {sec}
                   </button>
                 </div>
-              )}
+              )
+            })}
 
-              {/* Ítems inline expandibles */}
-              {rows.map(it => (
-                <ItemRowInline key={it._uid} item={it}
-                  expanded={expandedUid === it._uid}
-                  onToggle={() => setExpandedUid(expandedUid === it._uid ? null : it._uid)}
-                  onChange={patch => updateItem(it._uid, patch)}
-                  onRemove={() => removeItem(it._uid)}
-                  recetas={recetas} productos={productos} cartaItems={cartaItems}
-                  miembros={safeMiembros} plazas={plazas} esPlato={esPlato}
-                  miseSecciones={miseSecciones}
-                />
-              ))}
-
-              <button onClick={() => addItem(sec)}
-                style={{ width: '100%', padding: '9px', background: 'none', border: 'none', borderTop: rows.length > 0 ? '1px solid var(--border)' : 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
-                {esPlato ? 'Agregar componente' : `Agregar a ${sec}`}
+            <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+              <input value={nuevaSeccion} onChange={e => setNuevaSeccion(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addSeccion() }} placeholder="Nueva sección (ej: Bebidas)" style={{ ...inp, flex: 1 }} />
+              <button onClick={addSeccion} disabled={!nuevaSeccion.trim()} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: nuevaSeccion.trim() ? 'var(--navy)' : 'var(--border)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: nuevaSeccion.trim() ? 'pointer' : 'default', fontFamily: 'inherit', display: 'flex', alignItems: 'center' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
               </button>
             </div>
-          )
-        })}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
 
-        {/* Agregar sección (no en plato) */}
-        {!esPlato && (
-          <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-            <input value={nuevaSeccion} onChange={e => setNuevaSeccion(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addSeccion() }} placeholder="Nueva sección (ej: Bebidas)" style={{ ...inp, flex: 1 }} />
-            <button onClick={addSeccion} disabled={!nuevaSeccion.trim()} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: nuevaSeccion.trim() ? 'var(--navy)' : 'var(--border)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: nuevaSeccion.trim() ? 'pointer' : 'default', fontFamily: 'inherit', display: 'flex', alignItems: 'center' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
-            </button>
+// ════════════════════════════════════════════════════════════
+// PLATO RECETAS EDITOR — UI simplificada idéntica al detalle
+// ════════════════════════════════════════════════════════════
+function PlatoRecetasEditor({
+  recetas, platoRecetas, setPlatoRecetas, costoTotal,
+  platoSearch, setPlatoSearch, platoShowResults, setPlatoShowResults,
+  editingPorcionUid, setEditingPorcionUid, editingPorcionVal, setEditingPorcionVal, uid,
+}: {
+  recetas: RefConCosto[]
+  platoRecetas: { _uid: number; ref_id: string; nombre: string; porciones: number }[]
+  setPlatoRecetas: React.Dispatch<React.SetStateAction<{ _uid: number; ref_id: string; nombre: string; porciones: number }[]>>
+  costoTotal: number
+  platoSearch: string
+  setPlatoSearch: (v: string) => void
+  platoShowResults: boolean
+  setPlatoShowResults: (v: boolean) => void
+  editingPorcionUid: number | null
+  setEditingPorcionUid: (v: number | null) => void
+  editingPorcionVal: string
+  setEditingPorcionVal: (v: string) => void
+  uid: () => number
+}) {
+  const linkedIds = new Set(platoRecetas.map(pr => pr.ref_id))
+  const searchResults = useMemo(() => {
+    if (!platoSearch.trim()) return []
+    const q = platoSearch.toLowerCase()
+    return recetas.filter(r => !linkedIds.has(r.id) && r.nombre.toLowerCase().includes(q)).slice(0, 12)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [platoSearch, recetas, platoRecetas])
+
+  function agregarReceta(r: RefConCosto) {
+    setPlatoRecetas(prev => [...prev, { _uid: uid(), ref_id: r.id, nombre: r.nombre, porciones: 1 }])
+    setPlatoSearch('')
+    setPlatoShowResults(false)
+  }
+
+  function savePorcion(u: number) {
+    const val = parseFloat(editingPorcionVal.replace(',', '.'))
+    if (!isNaN(val) && val > 0) {
+      setPlatoRecetas(prev => prev.map(pr => pr._uid === u ? { ...pr, porciones: val } : pr))
+    }
+    setEditingPorcionUid(null)
+  }
+
+  const headLbl: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '.06em' }
+
+  return (
+    <div>
+      <div style={{ marginBottom: 8 }}>
+        <span style={headLbl}>Recetas del plato</span>
+      </div>
+
+      {/* Lista de recetas vinculadas */}
+      {platoRecetas.length > 0 && (
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', marginBottom: 10 }}>
+          {platoRecetas.map((pr, idx) => {
+            const rec = recetas.find(r => r.id === pr.ref_id)
+            return (
+              <div key={pr._uid} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: idx < platoRecetas.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)', flexShrink: 0 }}>menu_book</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {pr.nombre}
+                  </div>
+                  {rec && rec.costo > 0 && (
+                    <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmtMoney(rec.costo)}</div>
+                  )}
+                </div>
+                {/* Porciones editable */}
+                {editingPorcionUid === pr._uid ? (
+                  <input
+                    autoFocus
+                    type="number"
+                    value={editingPorcionVal}
+                    onChange={e => setEditingPorcionVal(e.target.value)}
+                    onBlur={() => savePorcion(pr._uid)}
+                    onKeyDown={e => { if (e.key === 'Enter') savePorcion(pr._uid); if (e.key === 'Escape') setEditingPorcionUid(null) }}
+                    style={{ width: 52, textAlign: 'center', fontSize: 13, fontWeight: 700, border: '1.5px solid var(--accent)', borderRadius: 8, padding: '3px 4px', background: 'var(--surface)', color: 'var(--navy)', outline: 'none' }}
+                  />
+                ) : (
+                  <button
+                    onClick={() => { setEditingPorcionUid(pr._uid); setEditingPorcionVal(String(pr.porciones)) }}
+                    title="Tap para editar porciones"
+                    style={{ display: 'flex', alignItems: 'center', gap: 4, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)', padding: '4px 8px', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}
+                  >
+                    {pr.porciones % 1 === 0 ? pr.porciones : pr.porciones.toFixed(1)}
+                    <span className="material-symbols-outlined" style={{ fontSize: 12, color: 'var(--text-3)' }}>edit</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setPlatoRecetas(prev => prev.filter(x => x._uid !== pr._uid))}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-3)', flexShrink: 0 }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+                </button>
+              </div>
+            )
+          })}
+          {costoTotal > 0 && (
+            <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', background: 'rgba(0,0,0,.02)' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>Costo recetas</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy)' }}>{fmtMoney(costoTotal)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Buscador — siempre visible */}
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+        <div style={{ position: 'relative' }}>
+          <span className="material-symbols-outlined" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 18, color: 'var(--text-3)', pointerEvents: 'none' }}>search</span>
+          <input
+            value={platoSearch}
+            onChange={e => { setPlatoSearch(e.target.value); setPlatoShowResults(true) }}
+            onFocus={() => setPlatoShowResults(true)}
+            onBlur={() => setTimeout(() => setPlatoShowResults(false), 150)}
+            placeholder="Buscar receta o insumo de stock..."
+            style={{ width: '100%', padding: '12px 12px 12px 40px', border: 'none', background: 'transparent', fontSize: 13, color: 'var(--text-1)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+          />
+        </div>
+        {platoShowResults && searchResults.length > 0 && (
+          <div style={{ borderTop: '1px solid var(--border)' }}>
+            {searchResults.map(r => (
+              <button
+                key={r.id}
+                onMouseDown={e => { e.preventDefault(); agregarReceta(r) }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 12px', textAlign: 'left', border: 'none', borderBottom: '1px solid var(--border)', background: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)', flexShrink: 0 }}>menu_book</span>
+                <span style={{ flex: 1, fontSize: 13, color: 'var(--text-1)' }}>{r.nombre}</span>
+                {r.costo > 0 && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmtMoney(r.costo)}</span>}
+              </button>
+            ))}
+          </div>
+        )}
+        {platoShowResults && platoSearch.trim().length > 0 && searchResults.length === 0 && (
+          <div style={{ padding: '12px', fontSize: 12, color: 'var(--text-3)', textAlign: 'center' }}>
+            Sin resultados para &quot;{platoSearch}&quot;
           </div>
         )}
       </div>
