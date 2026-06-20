@@ -13,7 +13,7 @@ import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import { createClient } from '@/lib/supabase/client'
 import { useMenus, type MenuConPreparaciones } from '@/lib/hooks/useMenus'
 import MenusView from './MenusView'
-import ComposicionEditor, { type CompPayload, type CompInicial } from './ComposicionEditor'
+import ComposicionEditor, { type CompPayload, type CompInicial, PLAZAS_OPS, SECCIONES_OPS } from './ComposicionEditor'
 // ── Helpers ─────────────────────────────────────────────
 const fmtMoney = (n: number) =>
   n > 0 ? `$${n.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—'
@@ -2847,12 +2847,39 @@ export default function CartaPage() {
         const compItems = payload.secciones.flatMap(s => s.items)
         const supa = createClient()
         for (const it of compItems) {
-          if (it.tipo === 'receta' && it.ref_id) {
-            await agregarPlatoReceta(newId, it.ref_id, it.cantidad ?? 1)
-            if (it.plaza) {
+          if ((it.tipo === 'receta' || it.tipo === 'producto') && it.ref_id) {
+            if (it.tipo === 'receta') await agregarPlatoReceta(newId, it.ref_id, it.cantidad ?? 1)
+            // Guardar plaza + OPS en plato_recetas
+            if (it.plaza || it.cantidad_ops != null) {
               await supa.from('plato_recetas')
-                .update({ plaza: it.plaza })
+                .update({ plaza: it.plaza ?? null, cantidad_ops: it.cantidad_ops ?? null, unidad_ops: it.unidad_ops ?? null })
                 .eq('plato_id', newId).eq('receta_id', it.ref_id)
+            }
+            // Si tiene OPS configurado: upsert checklist_items
+            if (it.plaza && it.seccion_mise && it.ref_id && RESTAURANTE_ID) {
+              const secCfg = SECCIONES_OPS.find(s => s.id === it.seccion_mise)
+              const secNombre = secCfg?.label ?? it.seccion_mise
+              const secIcono = secCfg?.icono ?? 'inventory_2'
+              const secOrden = SECCIONES_OPS.findIndex(s => s.id === it.seccion_mise)
+              const cantidadOps = it.cantidad_ops ?? 1
+              // Buscar o crear sección checklist
+              const { data: secExistente } = await supa.from('checklist_secciones').select('id')
+                .eq('restaurante_id', RESTAURANTE_ID).eq('plaza', it.plaza).ilike('nombre', secNombre).limit(1)
+              let seccionId: string | null = secExistente?.[0]?.id ?? null
+              if (!seccionId) {
+                const { data: newSec } = await supa.from('checklist_secciones')
+                  .insert({ nombre: secNombre, icono: secIcono, plaza: it.plaza, orden: secOrden, restaurante_id: RESTAURANTE_ID })
+                  .select('id').single()
+                seccionId = newSec?.id ?? null
+              }
+              // Upsert checklist_item
+              const { data: existente } = await supa.from('checklist_items').select('id')
+                .eq('restaurante_id', RESTAURANTE_ID).eq('receta_id', it.ref_id).eq('plaza', it.plaza).limit(1)
+              if (existente?.[0]) {
+                await supa.from('checklist_items').update({ cantidad: cantidadOps, unidad: it.unidad_ops ?? 'u', seccion_id: seccionId, seccion: secNombre }).eq('id', existente[0].id)
+              } else {
+                await supa.from('checklist_items').insert({ nombre: it.nombre, plaza: it.plaza, receta_id: it.ref_id, cantidad: cantidadOps, unidad: it.unidad_ops ?? 'u', prioridad: 'sp', seccion_id: seccionId, seccion: secNombre, restaurante_id: RESTAURANTE_ID, orden: 0 })
+              }
             }
           }
         }

@@ -19,6 +19,9 @@ export interface CompItemOut {
   usuario_asignado: string | null
   cantidad: number | null
   unidad: string | null
+  // OPS mise
+  cantidad_ops?: number | null
+  unidad_ops?: string | null
 }
 export interface CompPayload {
   tipo: CompModo
@@ -46,6 +49,22 @@ export interface CompInicial {
 
 // ── Constantes ──────────────────────────────────────────────
 const PLAZAS_BASE = ['parrilla', 'fríos', 'calientes', 'pase', 'pastelería']
+export const PLAZAS_OPS = [
+  { id: 'general',    label: 'General',     color: '#6b7280' },
+  { id: 'parrilla',   label: 'Parrilla',    color: '#ef4444' },
+  { id: 'frios',      label: 'Fríos',       color: '#0ea5e9' },
+  { id: 'calientes',  label: 'Calientes',   color: '#f97316' },
+  { id: 'pase',       label: 'Pase',        color: '#8b5cf6' },
+  { id: 'pasteleria', label: 'Pastelería',  color: '#ec4899' },
+  { id: 'panaderia',  label: 'Panadería',   color: '#84cc16' },
+]
+export const SECCIONES_OPS = [
+  { id: 'heladera',   label: 'Heladera',       icono: 'kitchen' },
+  { id: 'secos',      label: 'Secos / Tuppers', icono: 'inventory_2' },
+  { id: 'congelados', label: 'Congelados',      icono: 'severe_cold' },
+  { id: 'estacion',   label: 'Estación',        icono: 'countertops' },
+]
+const UNIDADES_OPS = ['u', 'kg', 'g', 'l', 'ml', 'pax', 'porc', 'bandeja']
 const DEFAULT_SECCIONES = ['Entradas', 'Principales', 'Postres']
 
 const PRIORIDADES: { id: CompPrioridad; label: string; sublabel: string; color: string; bg: string }[] = [
@@ -137,12 +156,22 @@ export default function ComposicionEditor({
   const [saving, setSaving] = useState(false)
 
   // ── Estado exclusivo para modo plato (UI simplificada) ──
-  const [platoRecetas, setPlatoRecetas] = useState<{ _uid: number; ref_id: string; nombre: string; porciones: number; tipo: 'receta' | 'producto' }[]>(() => {
+  const [platoRecetas, setPlatoRecetas] = useState<PlatoItem[]>(() => {
     if (!inicial || inicial.modo !== 'plato') return []
     return inicial.secciones.flatMap(s =>
       s.items
         .filter(it => (it.tipo === 'receta' || it.tipo === 'producto') && it.ref_id)
-        .map(it => ({ _uid: it._uid ?? uid(), ref_id: it.ref_id!, nombre: it.nombre, porciones: it.cantidad ?? 1, tipo: (it.tipo as 'receta' | 'producto') }))
+        .map(it => ({
+          _uid: it._uid ?? uid(),
+          ref_id: it.ref_id!,
+          nombre: it.nombre,
+          porciones: it.cantidad ?? 1,
+          tipo: it.tipo as 'receta' | 'producto',
+          opsPlaza: it.plaza ?? null,
+          opsSeccion: it.seccion_mise ?? null,
+          opsCantidad: it.cantidad_ops ?? null,
+          opsUnidad: it.unidad_ops ?? null,
+        }))
     )
   })
   const [platoSearch, setPlatoSearch] = useState('')
@@ -230,11 +259,13 @@ export default function ComposicionEditor({
           ref_id: pr.ref_id,
           nombre: pr.nombre,
           prioridad: 'media' as const,
-          plaza: null,
-          seccion_mise: null,
+          plaza: pr.opsPlaza ?? null,
+          seccion_mise: pr.opsSeccion ?? null,
           usuario_asignado: null,
           cantidad: pr.porciones,
           unidad: null,
+          cantidad_ops: pr.opsCantidad ?? null,
+          unidad_ops: pr.opsUnidad ?? null,
         })),
       }]
     } else {
@@ -432,7 +463,18 @@ export default function ComposicionEditor({
 // ════════════════════════════════════════════════════════════
 // PLATO RECETAS EDITOR — UI simplificada idéntica al detalle
 // ════════════════════════════════════════════════════════════
-type PlatoItem = { _uid: number; ref_id: string; nombre: string; porciones: number; tipo: 'receta' | 'producto' }
+export type PlatoItem = {
+  _uid: number
+  ref_id: string
+  nombre: string
+  porciones: number
+  tipo: 'receta' | 'producto'
+  // OPS mise (null = no configurado)
+  opsPlaza?: string | null
+  opsSeccion?: string | null
+  opsCantidad?: number | null
+  opsUnidad?: string | null
+}
 
 function PlatoRecetasEditor({
   recetas, productos, platoRecetas, setPlatoRecetas, costoTotal,
@@ -454,6 +496,30 @@ function PlatoRecetasEditor({
   setEditingPorcionVal: (v: string) => void
   uid: () => number
 }) {
+  // OPS panel local — abre/cierra por _uid de la fila
+  const [opsPanelUid, setOpsPanelUid] = useState<number | null>(null)
+  const [opsPlaza, setOpsPlaza] = useState('')
+  const [opsSeccion, setOpsSeccion] = useState('')
+  const [opsCantidad, setOpsCantidad] = useState('1')
+  const [opsUnidad, setOpsUnidad] = useState('u')
+
+  function openOps(pr: PlatoItem) {
+    if (opsPanelUid === pr._uid) { setOpsPanelUid(null); return }
+    setOpsPanelUid(pr._uid)
+    setOpsPlaza(pr.opsPlaza ?? '')
+    setOpsSeccion(pr.opsSeccion ?? '')
+    setOpsCantidad(pr.opsCantidad != null ? String(pr.opsCantidad) : '1')
+    setOpsUnidad(pr.opsUnidad ?? 'u')
+  }
+
+  function saveOps(uid_: number) {
+    if (!opsPlaza || !opsSeccion) return
+    setPlatoRecetas(prev => prev.map(pr =>
+      pr._uid === uid_ ? { ...pr, opsPlaza, opsSeccion, opsCantidad: parseFloat(opsCantidad) || 1, opsUnidad } : pr
+    ))
+    setOpsPanelUid(null)
+  }
+
   const linkedIds = new Set(platoRecetas.map(pr => pr.ref_id))
 
   type SearchResult = { tipo: 'receta' | 'producto'; id: string; nombre: string; costo: number }
@@ -462,7 +528,7 @@ function PlatoRecetasEditor({
     const q = platoSearch.toLowerCase()
     return [
       ...recetas.filter(r => !linkedIds.has(r.id) && r.nombre.toLowerCase().includes(q)).slice(0, 8).map(r => ({ tipo: 'receta' as const, id: r.id, nombre: r.nombre, costo: r.costo })),
-      ...productos.filter(p => !linkedIds.has(p.id) && p.nombre.toLowerCase().includes(p.nombre.toLowerCase()) && p.nombre.toLowerCase().includes(q)).slice(0, 6).map(p => ({ tipo: 'producto' as const, id: p.id, nombre: p.nombre, costo: p.costo })),
+      ...productos.filter(p => !linkedIds.has(p.id) && p.nombre.toLowerCase().includes(q)).slice(0, 6).map(p => ({ tipo: 'producto' as const, id: p.id, nombre: p.nombre, costo: p.costo })),
     ].slice(0, 12)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [platoSearch, recetas, productos, platoRecetas])
@@ -501,45 +567,136 @@ function PlatoRecetasEditor({
             const cfg = TIPO_CFG[pr.tipo]
             const fuente = pr.tipo === 'producto' ? productos : recetas
             const item = fuente.find(r => r.id === pr.ref_id)
+            const opsActiva = opsPanelUid === pr._uid
+            const opsConf = pr.opsPlaza && pr.opsSeccion
+            const plazaCfg = PLAZAS_OPS.find(p => p.id === pr.opsPlaza)
+
             return (
-              <div key={pr._uid} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px', borderBottom: idx < platoRecetas.length - 1 ? '1px solid var(--border)' : 'none', background: idx % 2 === 1 ? 'rgba(0,0,0,.01)' : 'transparent' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 17, color: cfg.color, flexShrink: 0 }}>{cfg.icon}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {pr.nombre}
+              <div key={pr._uid}>
+                {/* Fila principal */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px', borderBottom: (idx < platoRecetas.length - 1 || opsActiva) ? '1px solid var(--border)' : 'none', background: idx % 2 === 1 ? 'rgba(0,0,0,.01)' : 'transparent' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 17, color: cfg.color, flexShrink: 0 }}>{cfg.icon}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {pr.nombre}
+                    </div>
+                    <div style={{ display: 'flex', gap: 5, marginTop: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+                      {item && item.costo > 0 && (
+                        <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmtMoney(item.costo)}</span>
+                      )}
+                      {opsConf && plazaCfg && (
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: `${plazaCfg.color}18`, color: plazaCfg.color }}>
+                          OPS {plazaCfg.label} · {pr.opsCantidad ?? 1} {pr.opsUnidad ?? 'u'}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  {item && item.costo > 0 && (
-                    <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmtMoney(item.costo)}</div>
+
+                  {/* Stock estándar */}
+                  {editingPorcionUid === pr._uid ? (
+                    <input autoFocus type="number" value={editingPorcionVal}
+                      onChange={e => setEditingPorcionVal(e.target.value)}
+                      onBlur={() => saveStock(pr._uid)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveStock(pr._uid); if (e.key === 'Escape') setEditingPorcionUid(null) }}
+                      style={{ width: 64, textAlign: 'center', fontSize: 13, fontWeight: 700, border: '1.5px solid var(--accent)', borderRadius: 8, padding: '4px 6px', background: 'var(--surface)', color: 'var(--navy)', outline: 'none' }}
+                    />
+                  ) : (
+                    <button onClick={() => { setEditingPorcionUid(pr._uid); setEditingPorcionVal(String(pr.porciones)) }}
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)', padding: '4px 9px', cursor: 'pointer', minWidth: 42 }}>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', fontFamily: 'monospace', lineHeight: 1 }}>
+                        {pr.porciones % 1 === 0 ? pr.porciones : pr.porciones.toFixed(1)}
+                      </span>
+                      <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 600, lineHeight: 1 }}>stock est.</span>
+                    </button>
                   )}
-                </div>
-                {/* Stock estándar editable */}
-                {editingPorcionUid === pr._uid ? (
-                  <input
-                    autoFocus
-                    type="number"
-                    value={editingPorcionVal}
-                    onChange={e => setEditingPorcionVal(e.target.value)}
-                    onBlur={() => saveStock(pr._uid)}
-                    onKeyDown={e => { if (e.key === 'Enter') saveStock(pr._uid); if (e.key === 'Escape') setEditingPorcionUid(null) }}
-                    style={{ width: 64, textAlign: 'center', fontSize: 13, fontWeight: 700, border: '1.5px solid var(--accent)', borderRadius: 8, padding: '4px 6px', background: 'var(--surface)', color: 'var(--navy)', outline: 'none' }}
-                  />
-                ) : (
-                  <button
-                    onClick={() => { setEditingPorcionUid(pr._uid); setEditingPorcionVal(String(pr.porciones)) }}
-                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)', padding: '4px 9px', cursor: 'pointer', minWidth: 42 }}
-                  >
-                    <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', fontFamily: 'monospace', lineHeight: 1 }}>
-                      {pr.porciones % 1 === 0 ? pr.porciones : pr.porciones.toFixed(1)}
-                    </span>
-                    <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 600, lineHeight: 1 }}>stock est.</span>
+
+                  {/* Botón OPS */}
+                  <button onClick={() => openOps(pr)}
+                    title="Asignar a OPS / Mise"
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '4px 7px', background: opsActiva ? '#eef2ff' : opsConf ? `${plazaCfg?.color ?? 'var(--accent)'}15` : 'var(--bg)', color: opsActiva ? 'var(--accent)' : opsConf ? (plazaCfg?.color ?? 'var(--accent)') : 'var(--text-3)', cursor: 'pointer', flexShrink: 0 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>restaurant_menu</span>
+                    <span style={{ fontSize: 8, fontWeight: 800, lineHeight: 1 }}>OPS</span>
                   </button>
+
+                  <button onClick={() => setPlatoRecetas(prev => prev.filter(x => x._uid !== pr._uid))}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-3)', flexShrink: 0 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+                  </button>
+                </div>
+
+                {/* Panel OPS inline */}
+                {opsActiva && (
+                  <div style={{ padding: '12px 14px', borderBottom: idx < platoRecetas.length - 1 ? '1px solid var(--border)' : 'none', background: '#f8faff' }}>
+                    {/* Plazas */}
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Plaza de producción</div>
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
+                      {PLAZAS_OPS.map(p => (
+                        <button key={p.id} onClick={() => { setOpsPlaza(opsPlaza === p.id ? '' : p.id); setOpsSeccion('') }}
+                          style={{ padding: '5px 11px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                            background: opsPlaza === p.id ? `${p.color}18` : 'var(--surface)',
+                            color: opsPlaza === p.id ? p.color : 'var(--text-3)',
+                            outline: opsPlaza === p.id ? `1.5px solid ${p.color}50` : '1px solid var(--border)' }}>
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {opsPlaza && (
+                      <>
+                        {/* Secciones mise */}
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Sección del mise</div>
+                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
+                          {SECCIONES_OPS.map(s => (
+                            <button key={s.id} onClick={() => setOpsSeccion(opsSeccion === s.id ? '' : s.id)}
+                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                                background: opsSeccion === s.id ? 'rgba(67,97,160,.12)' : 'var(--surface)',
+                                color: opsSeccion === s.id ? 'var(--accent)' : 'var(--text-3)',
+                                outline: opsSeccion === s.id ? '1.5px solid rgba(67,97,160,.3)' : '1px solid var(--border)' }}>
+                              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>{s.icono}</span>
+                              {s.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Cantidad + unidad */}
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Cantidad en mise</div>
+                        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                          <input type="number" value={opsCantidad} onChange={e => setOpsCantidad(e.target.value)} inputMode="decimal"
+                            style={{ width: 70, padding: '8px 10px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 14, fontWeight: 700, textAlign: 'center', fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)' }} />
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            {UNIDADES_OPS.map(u => (
+                              <button key={u} onClick={() => setOpsUnidad(u)}
+                                style={{ padding: '6px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                                  background: opsUnidad === u ? 'var(--navy)' : 'var(--surface)',
+                                  color: opsUnidad === u ? '#fff' : 'var(--text-3)',
+                                  outline: opsUnidad === u ? 'none' : '1px solid var(--border)' }}>
+                                {u}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Guardar / cancelar */}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => saveOps(pr._uid)} disabled={!opsPlaza || !opsSeccion}
+                        style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: opsPlaza && opsSeccion ? 'var(--navy)' : 'var(--border)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: opsPlaza && opsSeccion ? 'pointer' : 'default', fontFamily: 'inherit' }}>
+                        Guardar OPS
+                      </button>
+                      {pr.opsPlaza && (
+                        <button onClick={() => { setPlatoRecetas(prev => prev.map(x => x._uid === pr._uid ? { ...x, opsPlaza: null, opsSeccion: null, opsCantidad: null, opsUnidad: null } : x)); setOpsPanelUid(null) }}
+                          style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          Quitar
+                        </button>
+                      )}
+                      <button onClick={() => setOpsPanelUid(null)}
+                        style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-3)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
                 )}
-                <button
-                  onClick={() => setPlatoRecetas(prev => prev.filter(x => x._uid !== pr._uid))}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-3)', flexShrink: 0 }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
-                </button>
               </div>
             )
           })}
@@ -575,11 +732,8 @@ function PlatoRecetasEditor({
             {searchResults.map((r, idx) => {
               const cfg = TIPO_CFG[r.tipo]
               return (
-                <button
-                  key={`${r.tipo}-${r.id}`}
-                  onMouseDown={e => { e.preventDefault(); agregarItem(r) }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 12px', textAlign: 'left', border: 'none', borderBottom: idx < searchResults.length - 1 ? '1px solid var(--border)' : 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
-                >
+                <button key={`${r.tipo}-${r.id}`} onMouseDown={e => { e.preventDefault(); agregarItem(r) }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 12px', textAlign: 'left', border: 'none', borderBottom: idx < searchResults.length - 1 ? '1px solid var(--border)' : 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
                   <span className="material-symbols-outlined" style={{ fontSize: 16, color: cfg.color, flexShrink: 0 }}>{cfg.icon}</span>
                   <span style={{ flex: 1, fontSize: 13, color: 'var(--text-1)' }}>{r.nombre}</span>
                   <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: cfg.bg, color: cfg.color, flexShrink: 0 }}>{cfg.label}</span>
