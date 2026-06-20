@@ -344,12 +344,17 @@ export function ProductoMiseCard({
       {!esCierre && !checked && tieneRecipiente && (
         <div style={{ padding: '0 12px 10px', paddingLeft: 44 }}>
           {/* Recipiente chip */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8, flexWrap: 'wrap' as const }}>
             <span className="material-symbols-outlined" style={{ fontSize: 13, color: 'var(--text-3)' }}>inventory_2</span>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)', textTransform: 'capitalize' as const }}>
               {item.recipiente_nombre}
             </span>
-            <span style={{ fontSize: 10, color: 'var(--text-3)' }}>× {item.recipiente_capacidad} {item.unidad}</span>
+            <span style={{ fontSize: 10, color: 'var(--text-3)' }}>× {item.recipiente_capacidad} porc</span>
+            {item.peso_porcion != null && (
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(67,97,160,.1)', color: 'var(--accent)' }}>
+                {item.peso_porcion}g c/u
+              </span>
+            )}
           </div>
           {/* Hay ahora / falta */}
           <div style={{ display: 'flex', gap: 6 }}>
@@ -428,7 +433,7 @@ export function ProductoMiseCard({
               }}
             >
               <span className="material-symbols-outlined" style={{ fontSize: 14 }}>add_task</span>
-              {creating ? 'Creando...' : `Producir ${deficit} ${item.unidad}`}
+              {creating ? 'Creando...' : `Producir ${deficit} porc${item.peso_porcion ? ` (${Math.round(deficit * item.peso_porcion)}g)` : ''}`}
             </button>
           )}
         </div>
