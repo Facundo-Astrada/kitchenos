@@ -24,6 +24,7 @@ export interface CompItemOut {
   unidad_ops?: string | null
   recipiente_nombre?: string | null
   peso_porcion?: number | null
+  peso_porcion_unidad?: string | null
 }
 export interface CompPayload {
   tipo: CompModo
@@ -270,6 +271,7 @@ export default function ComposicionEditor({
           unidad_ops: pr.opsUnidad ?? null,
           recipiente_nombre: pr.opsRecipienteNombre ?? null,
           peso_porcion: pr.opsPesoPorcion ?? null,
+          peso_porcion_unidad: pr.opsPesoPorcionUnidad ?? null,
         })),
       }]
     } else {
@@ -480,6 +482,7 @@ export type PlatoItem = {
   opsUnidad?: string | null
   opsRecipienteNombre?: string | null
   opsPesoPorcion?: number | null
+  opsPesoPorcionUnidad?: string | null
 }
 
 function PlatoRecetasEditor({
@@ -510,24 +513,40 @@ function PlatoRecetasEditor({
   const [opsUnidad, setOpsUnidad] = useState('u')
   const [opsRecipienteNombre, setOpsRecipienteNombre] = useState('')
   const [opsPesoPorcion, setOpsPesoPorcion] = useState('')
+  const [opsPesoPorcionUnidad, setOpsPesoPorcionUnidad] = useState('g')
 
   function openOps(pr: PlatoItem) {
     if (opsPanelUid === pr._uid) { setOpsPanelUid(null); return }
     setOpsPanelUid(pr._uid)
     setOpsPlaza(pr.opsPlaza ?? '')
     setOpsSeccion(pr.opsSeccion ?? '')
-    setOpsCantidad(pr.opsCantidad != null ? String(pr.opsCantidad) : '1')
-    setOpsUnidad(pr.opsUnidad ?? 'u')
+    setOpsCantidad(pr.opsCantidad != null ? String(pr.opsCantidad) : '')
+    setOpsUnidad(pr.opsUnidad ?? 'g')
     setOpsRecipienteNombre(pr.opsRecipienteNombre ?? '')
     setOpsPesoPorcion(pr.opsPesoPorcion != null ? String(pr.opsPesoPorcion) : '')
+    setOpsPesoPorcionUnidad(pr.opsPesoPorcionUnidad ?? 'g')
   }
 
   function saveOps(uid_: number) {
     if (!opsPlaza || !opsSeccion) return
     const recipNombre = opsRecipienteNombre.trim() || null
     const pesoPorcion = recipNombre && opsPesoPorcion ? parseFloat(opsPesoPorcion) || null : null
+    const pesoPorcionUnidad = pesoPorcion ? opsPesoPorcionUnidad : null
+    // Calcular porciones reales para mise: si capacidad y porcion estan en gramos → dividir
+    const capVal = parseFloat(opsCantidad) || 0
+    const porVal = pesoPorcion ?? 0
+    const toG = (v: number, u: string) => u === 'kg' ? v * 1000 : u === 'g' ? v : null
+    const capG = toG(capVal, opsUnidad)
+    const porG = toG(porVal, opsPesoPorcionUnidad)
+    const porcionesCalculadas = capG !== null && porG !== null && porG > 0
+      ? Math.round(capG / porG)
+      : null
+    // opsCantidad guardado: si capacidad es porc/u usamos directo; si es peso usamos porciones calculadas
+    const cantidadFinal = (['porc', 'u', 'pax'].includes(opsUnidad))
+      ? capVal
+      : (porcionesCalculadas ?? capVal)
     setPlatoRecetas(prev => prev.map(pr =>
-      pr._uid === uid_ ? { ...pr, opsPlaza, opsSeccion, opsCantidad: parseFloat(opsCantidad) || 1, opsUnidad, opsRecipienteNombre: recipNombre, opsPesoPorcion: pesoPorcion } : pr
+      pr._uid === uid_ ? { ...pr, opsPlaza, opsSeccion, opsCantidad: cantidadFinal, opsUnidad, opsRecipienteNombre: recipNombre, opsPesoPorcion: pesoPorcion, opsPesoPorcionUnidad: pesoPorcionUnidad } : pr
     ))
     setOpsPanelUid(null)
   }
@@ -599,7 +618,7 @@ function PlatoRecetasEditor({
                       {opsConf && plazaCfg && (
                         <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: `${plazaCfg.color}18`, color: plazaCfg.color }}>
                           {pr.opsRecipienteNombre
-                            ? `${pr.opsRecipienteNombre} ×${pr.opsCantidad ?? 1}porc${pr.opsPesoPorcion ? ` (${pr.opsPesoPorcion}g c/u)` : ''}`
+                            ? `${pr.opsRecipienteNombre} ×${pr.opsCantidad ?? 1}porc${pr.opsPesoPorcion ? ` (${pr.opsPesoPorcion}${pr.opsPesoPorcionUnidad ?? 'g'} c/u)` : ''}`
                             : `${pr.opsCantidad ?? 1} ${pr.opsUnidad ?? 'u'}`} · {plazaCfg.label}
                         </span>
                       )}
@@ -680,10 +699,11 @@ function PlatoRecetasEditor({
 
                         {/* Cantidad + unidad */}
                         <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>
-                          {opsRecipienteNombre.trim() ? 'Porciones por recipiente' : 'Cantidad en mise'}
+                          {opsRecipienteNombre.trim() ? 'Porciones/peso recipiente lleno' : 'Cantidad en mise'}
                         </div>
-                        <div style={{ display: 'flex', gap: 6, marginBottom: opsRecipienteNombre.trim() ? 12 : 12 }}>
+                        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
                           <input type="number" value={opsCantidad} onChange={e => setOpsCantidad(e.target.value)} inputMode="decimal"
+                            placeholder="0"
                             style={{ width: 70, padding: '8px 10px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 14, fontWeight: 700, textAlign: 'center', fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)' }} />
                           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                             {UNIDADES_OPS.map(u => (
@@ -698,25 +718,49 @@ function PlatoRecetasEditor({
                           </div>
                         </div>
 
-                        {/* Peso por porción — solo cuando hay recipiente */}
-                        {opsRecipienteNombre.trim() && (
-                          <>
-                            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>
-                              Peso por porción (g)
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                              <input type="number" value={opsPesoPorcion} onChange={e => setOpsPesoPorcion(e.target.value)} inputMode="decimal"
-                                placeholder="ej: 110"
-                                style={{ width: 90, padding: '8px 10px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 14, fontWeight: 700, textAlign: 'center', fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)' }} />
-                              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>g / porción</span>
-                              {opsCantidad && opsPesoPorcion && (
-                                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', marginLeft: 'auto' }}>
-                                  = {Math.round(parseFloat(opsCantidad) * parseFloat(opsPesoPorcion))}g total
-                                </span>
-                              )}
-                            </div>
-                          </>
-                        )}
+                        {/* Tamaño de porción — solo cuando hay recipiente */}
+                        {opsRecipienteNombre.trim() && (() => {
+                          const capVal = parseFloat(opsCantidad) || 0
+                          const porVal = parseFloat(opsPesoPorcion) || 0
+                          const toG = (v: number, u: string) => u === 'kg' ? v * 1000 : u === 'g' ? v : null
+                          const capG = toG(capVal, opsUnidad)
+                          const porG = toG(porVal, opsPesoPorcionUnidad)
+                          const porcionesAuto = capG !== null && porG !== null && porG > 0 ? Math.round(capG / porG) : null
+                          const UNIDADES_PORCION = ['g', 'kg', 'u', 'porc', 'ml', 'l']
+                          return (
+                            <>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>
+                                Tamaño por porción
+                              </div>
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
+                                <input type="number" value={opsPesoPorcion} onChange={e => setOpsPesoPorcion(e.target.value)} inputMode="decimal"
+                                  placeholder="ej: 110"
+                                  style={{ width: 70, padding: '8px 10px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 14, fontWeight: 700, textAlign: 'center', fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)' }} />
+                                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                  {UNIDADES_PORCION.map(u => (
+                                    <button key={u} onClick={() => setOpsPesoPorcionUnidad(u)}
+                                      style={{ padding: '6px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                                        background: opsPesoPorcionUnidad === u ? '#4361a0' : 'var(--surface)',
+                                        color: opsPesoPorcionUnidad === u ? '#fff' : 'var(--text-3)',
+                                        outline: opsPesoPorcionUnidad === u ? 'none' : '1px solid var(--border)' }}>
+                                      {u}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              {/* Resultado calculado */}
+                              {porcionesAuto !== null && opsCantidad && opsPesoPorcion ? (
+                                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', marginBottom: 12, paddingLeft: 2 }}>
+                                  = {porcionesAuto} porciones por recipiente
+                                </div>
+                              ) : opsCantidad && opsPesoPorcion ? (
+                                <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 12, paddingLeft: 2 }}>
+                                  {capVal} {opsUnidad} · {porVal} {opsPesoPorcionUnidad} / porción
+                                </div>
+                              ) : <div style={{ marginBottom: 12 }} />}
+                            </>
+                          )
+                        })()}
                       </>
                     )}
 
@@ -727,7 +771,7 @@ function PlatoRecetasEditor({
                         Guardar OPS
                       </button>
                       {pr.opsPlaza && (
-                        <button onClick={() => { setPlatoRecetas(prev => prev.map(x => x._uid === pr._uid ? { ...x, opsPlaza: null, opsSeccion: null, opsCantidad: null, opsUnidad: null, opsRecipienteNombre: null, opsPesoPorcion: null } : x)); setOpsPanelUid(null) }}
+                        <button onClick={() => { setPlatoRecetas(prev => prev.map(x => x._uid === pr._uid ? { ...x, opsPlaza: null, opsSeccion: null, opsCantidad: null, opsUnidad: null, opsRecipienteNombre: null, opsPesoPorcion: null, opsPesoPorcionUnidad: null } : x)); setOpsPanelUid(null) }}
                           style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                           Quitar
                         </button>

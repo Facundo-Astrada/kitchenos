@@ -352,7 +352,7 @@ export function ProductoMiseCard({
             <span style={{ fontSize: 10, color: 'var(--text-3)' }}>× {item.recipiente_capacidad} porc</span>
             {item.peso_porcion != null && (
               <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(67,97,160,.1)', color: 'var(--accent)' }}>
-                {item.peso_porcion}g c/u
+                {item.peso_porcion}{item.peso_porcion_unidad ?? 'g'} c/u
               </span>
             )}
           </div>
@@ -433,7 +433,7 @@ export function ProductoMiseCard({
               }}
             >
               <span className="material-symbols-outlined" style={{ fontSize: 14 }}>add_task</span>
-              {creating ? 'Creando...' : `Producir ${deficit} porc${item.peso_porcion ? ` (${Math.round(deficit * item.peso_porcion)}g)` : ''}`}
+              {creating ? 'Creando...' : `Producir ${deficit} porc${item.peso_porcion ? ` (${Math.round(deficit * item.peso_porcion)}${item.peso_porcion_unidad ?? 'g'})` : ''}`}
             </button>
           )}
         </div>

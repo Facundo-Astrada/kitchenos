@@ -2878,10 +2878,11 @@ export default function CartaPage() {
               const recipienteNombre = it.recipiente_nombre ?? null
               const recipienteCapacidad = recipienteNombre ? cantidadOps : null
               const pesoPorcion = it.peso_porcion ?? null
+              const pesoPorcionUnidad = it.peso_porcion_unidad ?? null
               if (existente?.[0]) {
-                await supa.from('checklist_items').update({ cantidad: cantidadOps, unidad: it.unidad_ops ?? 'u', seccion_id: seccionId, seccion: secNombre, recipiente_nombre: recipienteNombre, recipiente_capacidad: recipienteCapacidad, peso_porcion: pesoPorcion }).eq('id', existente[0].id)
+                await supa.from('checklist_items').update({ cantidad: cantidadOps, unidad: it.unidad_ops ?? 'u', seccion_id: seccionId, seccion: secNombre, recipiente_nombre: recipienteNombre, recipiente_capacidad: recipienteCapacidad, peso_porcion: pesoPorcion, peso_porcion_unidad: pesoPorcionUnidad }).eq('id', existente[0].id)
               } else {
-                await supa.from('checklist_items').insert({ nombre: it.nombre, plaza: it.plaza, receta_id: it.ref_id, cantidad: cantidadOps, unidad: it.unidad_ops ?? 'u', prioridad: 'sp', seccion_id: seccionId, seccion: secNombre, restaurante_id: RESTAURANTE_ID, orden: 0, recipiente_nombre: recipienteNombre, recipiente_capacidad: recipienteCapacidad, peso_porcion: pesoPorcion })
+                await supa.from('checklist_items').insert({ nombre: it.nombre, plaza: it.plaza, receta_id: it.ref_id, cantidad: cantidadOps, unidad: it.unidad_ops ?? 'u', prioridad: 'sp', seccion_id: seccionId, seccion: secNombre, restaurante_id: RESTAURANTE_ID, orden: 0, recipiente_nombre: recipienteNombre, recipiente_capacidad: recipienteCapacidad, peso_porcion: pesoPorcion, peso_porcion_unidad: pesoPorcionUnidad })
               }
             }
           }

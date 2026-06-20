@@ -493,6 +493,7 @@ export interface MisePlaceItem {
   recipiente_nombre?: string | null
   recipiente_capacidad?: number | null
   peso_porcion?: number | null
+  peso_porcion_unidad?: string | null
 }
 
 // DB: checklist_registros (id, checklist_item_id, fecha, turno, completado, cantidad_actual, usuario_id, hora_completado)
