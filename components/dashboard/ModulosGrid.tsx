@@ -13,6 +13,27 @@ const GRID_MODULOS: ModuloId[] = [
   'pase', 'produccion', 'turnos', 'ventas', 'merma', 'equipo', 'configuracion',
 ]
 
+// Color único por módulo: [background, iconColor]
+const MODULO_COLORS: Partial<Record<ModuloId, [string, string]>> = {
+  operaciones: ['#e8f4fd', '#0369a1'],
+  recetario:   ['#ecfdf5', '#059669'],
+  stock:       ['#fffbeb', '#d97706'],
+  pedidos:     ['#fff7ed', '#ea580c'],
+  carta:       ['#fdf4ff', '#9333ea'],
+  facturas:    ['#f0fdf4', '#16a34a'],
+  proveedores: ['#eff6ff', '#2563eb'],
+  calendario:  ['#f5f3ff', '#7c3aed'],
+  reportes:    ['#fefce8', '#ca8a04'],
+  haccp:       ['#f0fdfa', '#0d9488'],
+  pase:        ['#eef2ff', '#4f46e5'],
+  produccion:  ['#fff1f2', '#e11d48'],
+  turnos:      ['#f0f9ff', '#0284c7'],
+  ventas:      ['#faf5ff', '#a21caf'],
+  merma:       ['#fef2f2', '#dc2626'],
+  equipo:      ['#e8f0fe', '#1d4ed8'],
+  configuracion: ['#f8fafc', '#475569'],
+}
+
 interface ModulosGridProps {
   rol: Rol
 }
@@ -34,39 +55,56 @@ export default function ModulosGrid({ rol }: ModulosGridProps) {
   return (
     <div style={{ padding: '4px 16px 4px' }}>
       <div
-        className="text-[11px] font-bold uppercase tracking-[.08em] mb-2"
-        style={{ color: 'var(--text-2)' }}
+        className="text-[11px] font-bold uppercase tracking-[.08em] mb-3"
+        style={{ color: 'var(--text-3)' }}
       >
         Módulos
       </div>
 
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-4 gap-3">
         {modulos.map((moduloId) => {
           const modulo = MODULO_CONFIG[moduloId as ModuloId]
           if (!modulo) return null
+          const [bg, iconColor] = MODULO_COLORS[moduloId] ?? ['var(--surface)', 'var(--navy)']
           return (
             <Link
               key={moduloId}
               href={modulo.href}
-              className="flex flex-col items-center gap-[6px] cursor-pointer"
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, textDecoration: 'none' }}
             >
               <div
-                className="w-[52px] h-[52px] rounded-[14px] flex items-center justify-center transition-transform active:scale-[.92]"
                 style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  color: 'var(--navy)',
+                  width: 56, height: 56,
+                  borderRadius: 16,
+                  background: bg,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'transform 0.12s, box-shadow 0.12s',
+                  boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'scale(1.06)'
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,.1)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'scale(1)'
+                  e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,.06)'
                 }}
               >
-                <span className="material-symbols-outlined text-[24px]">
+                <span
+                  className="material-symbols-outlined"
+                  style={{ fontSize: 26, color: iconColor }}
+                >
                   {modulo.icon}
                 </span>
               </div>
               <span
-                className="text-[9px] font-semibold text-center leading-tight tracking-[.02em]"
-                style={{ color: 'var(--navy)' }}
+                style={{
+                  fontSize: 10, fontWeight: 600, textAlign: 'center',
+                  lineHeight: 1.2, color: 'var(--text-2)',
+                  maxWidth: 64,
+                }}
               >
-                {modulo.label.split(' ')[0]}
+                {modulo.label}
               </span>
             </Link>
           )
