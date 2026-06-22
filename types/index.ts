@@ -496,6 +496,26 @@ export interface MisePlaceItem {
   peso_porcion_unidad?: string | null
 }
 
+// ── Espacios físicos (mesa de trabajo) ───────────────────────
+// DB: espacios (id, restaurante_id, nombre, icono, orden, created_at)
+export interface Espacio {
+  id: string
+  restaurante_id: string
+  nombre: string
+  icono: string
+  orden: number
+  created_at: string
+}
+
+// DB: espacio_plazas (id, restaurante_id, espacio_id, plaza_key, orden) — qué plazas fijas pertenecen a un espacio
+export interface EspacioPlaza {
+  id: string
+  restaurante_id: string
+  espacio_id: string
+  plaza_key: Plaza
+  orden: number
+}
+
 // DB: checklist_registros (id, checklist_item_id, fecha, turno, completado, cantidad_actual, usuario_id, hora_completado)
 export interface MisePlaceRegistro {
   id: string

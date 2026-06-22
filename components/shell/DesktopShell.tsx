@@ -12,7 +12,7 @@ import { useDesktopShortcuts } from '@/lib/hooks/useDesktopShortcuts'
 import { useState } from 'react'
 
 const SECCIONES: { label: string; items: ModuloId[] }[] = [
-  { label: 'Operaciones', items: ['home', 'operaciones', 'tareas', 'pase', 'checklist'] },
+  { label: 'Operaciones', items: ['home', 'operaciones', 'espacios', 'tareas', 'pase', 'checklist'] },
   { label: 'Cocina', items: ['recetario', 'carta', 'produccion'] },
   { label: 'Insumos', items: ['stock', 'facturas', 'pedidos', 'proveedores', 'merma'] },
   { label: 'Gestión', items: ['reportes', 'ventas', 'haccp', 'calendario', 'turnos'] },

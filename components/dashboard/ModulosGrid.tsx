@@ -10,7 +10,7 @@ import ImportadorUniversal from '@/components/importador/ImportadorUniversal'
 
 // Todos los módulos que pueden aparecer en el grid
 const GRID_MODULOS: ModuloId[] = [
-  'operaciones', 'recetario', 'stock', 'pedidos', 'carta',
+  'operaciones', 'espacios', 'recetario', 'stock', 'pedidos', 'carta',
   'facturas', 'proveedores', 'calendario', 'reportes', 'haccp',
   'pase', 'produccion', 'turnos', 'ventas', 'merma', 'equipo', 'configuracion',
 ]
@@ -18,6 +18,7 @@ const GRID_MODULOS: ModuloId[] = [
 // Color único por módulo: [background, iconColor]
 const MODULO_COLORS: Partial<Record<ModuloId, [string, string]>> = {
   operaciones: ['#e8f4fd', '#0369a1'],
+  espacios:    ['#eef2ff', '#4f46e5'],
   recetario:   ['#ecfdf5', '#059669'],
   stock:       ['#fffbeb', '#d97706'],
   pedidos:     ['#fff7ed', '#ea580c'],

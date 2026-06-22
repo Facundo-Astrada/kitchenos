@@ -207,7 +207,7 @@ export function useChecklist() {
     }
   }
 
-  async function actualizarItem(id: string, datos: Partial<{ prioridad: MisePrioridad; nombre: string; cantidad: number; unidad: string; ubicacion: string | null; seccion_id: string }>) {
+  async function actualizarItem(id: string, datos: Partial<{ prioridad: MisePrioridad; nombre: string; cantidad: number; unidad: string; ubicacion: string | null; seccion_id: string; plaza: Plaza; seccion: string }>) {
     mutateConfig(
       (prev) => prev ? { ...prev, items: prev.items.map(i => i.id === id ? { ...i, ...datos } : i) } : prev,
       { revalidate: false }
@@ -251,7 +251,7 @@ export function useChecklist() {
   }
 
   // ── Rutinas CRUD ──
-  async function agregarRutina(datos: { nombre: string; plaza: Plaza; frecuencia: RutinaFrecuencia; orden?: number }) {
+  async function agregarRutina(datos: { nombre: string; plaza: Plaza; frecuencia: RutinaFrecuencia; orden?: number; dias_semana?: number[] | null; dia_mes?: number | null }) {
     try {
       const { error } = await supabase.from('checklist_rutina').insert({
         ...datos, orden: datos.orden ?? 0, restaurante_id: RESTAURANTE_ID,
