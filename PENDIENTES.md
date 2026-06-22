@@ -87,14 +87,7 @@ Desde `/turnos` tab Puestos → ficha del puesto → "Exportar legajo". PDF con 
 **Status:** ⏳ Pendiente.
 
 ### 15. Versión web desktop
-Rediseñar las vistas principales para pantalla grande. La DB, hooks y API routes ya existen — solo es UI.
-- Sidebar fijo de navegación (reemplaza BottomNav en desktop)
-- Dashboard: widgets en grilla 2-3 columnas
-- Tablas con más columnas visibles (Facturas, Stock, Recetario, Turnos)
-- Layouts responsive con breakpoints `md:` y `lg:` de Tailwind
-- Usar plugin `frontend-design` para evitar look genérico de IA
-- Mismo proyecto Next.js, mismas rutas, deploy único en Vercel
-**Status:** ⏳ Pendiente — arrancar cuando se resuelvan los ítems 🟠 Alto.
+**Status:** ✅ Resuelto — ver sesiones 22 jun 2026.
 
 ### 16. Tests
 - Vitest + Testing Library para hooks (mock del cliente Supabase).
@@ -111,6 +104,7 @@ Los scripts de `scripts/*.mjs` tienen el `SUPABASE_MANAGEMENT_TOKEN` en texto pl
 
 | # | Descripción | Cuándo |
 |---|---|---|
+| Versión web desktop completa (Fase 1 + Fase 2) | Sidebar 224px navy con secciones, `useIsDesktop()` SSR-safe, Reportes 4-col KPI + side-by-side sections, Carta 2-col grid + panel detalle 380px, Stock tabla con Categoría, Facturas tabla 7 columnas, HACCP grid 2 col. ModulosGrid con 17 paletas de color por módulo. Tile "Importar" en home. | 22 jun 2026 |
 | Performance: cache SWR en 10 hooks + fix doble-tap (stock nav + recetario) | 14 hooks ahora cachean cross-navegación (eran 4): `useProveedores`, `useMenus`, `useCategoriasProducto`, `useMerma`, `useHaccp` (5 fetches→1 combinado), `useVentas`, `usePackagingGrupos`, `usePedidos`, `useEquipo` (miembros+puestos), `useCarta` — se sumaron a stock/recetas/tareas/checklist. Re-entrar a una pantalla muestra data cacheada al instante + revalida en background (antes: spinner + refetch completo). **Doble-tap:** `/stock` pasó de Server Component async (`ƒ dynamic`, round-trip al server antes de navegar) a client estático (`○`) → navega al instante como las demás. Recetario: quitado `y`-translate + `staggerChildren` de la lista (las cards se movían >1s bajo el dedo) → tappable de inmediato. `useCalendario`/`useProduccion` quedan sin SWR (parametrizados por fecha/mes). | 12 junio 2026 |
 | Equipo: teclado se cerraba al tipear + multi-plaza OPS | `turnos/page.tsx`: `MiembroFormDatos` y `PuestoFormBody` eran funciones internas de `TurnosPage` usadas como JSX → React las remontaba en cada re-render → foco perdido → teclado cerrado. Fix: extraídas a nivel de módulo (fuera del componente). Multi-plaza: selector de puesto ya no resetea plazas seleccionadas; plaza_asignada guarda comma-separated (`"pasteleria,frios"`). | 12 junio 2026 |
 | Checklist: selector de plazas para usuarios con varias plazas asignadas | `plaza_asignada` expuesto en `PerfilAuth`. `ClientView.tsx` filtra el grid al subset de plazas del usuario (+ general) cuando tiene ≥2 asignadas. Tabs inline en el header del checklist para cambiar entre sus plazas. | 12 junio 2026 |

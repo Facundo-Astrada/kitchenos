@@ -100,6 +100,23 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 
 ## 4. Implementado en Últimas Sesiones
 
+### Sesión 2026-06-22 — Versión web desktop completa (Fase 1 + Fase 2) + estética módulos + tile Importar
+
+1. **Fase 1 — DesktopShell** (`components/shell/DesktopShell.tsx`): sidebar 224px fijo, navy, secciones colapsables (Operaciones / Insumos / Gestión / Análisis / Herramientas), logo KitchenOS, nav items con iconos, botón "Importar datos", botón "Kitchen Coach". `useIsDesktop()` hook SSR-safe (empieza `false`, se actualiza post-mount vía `window.matchMedia('(min-width: 1024px)')`). En mobile sigue el BottomNav.
+
+2. **Fase 2 — Layouts desktop por módulo:**
+   - **Reportes** (`reportes/page.tsx`): KPI grid 4 columnas, FoodCost / Compras / CMV en layout side-by-side (izquierda: resumen/gráfico; derecha: tabla/KPIs). Padding 24px 32px.
+   - **Carta** (`carta/page.tsx`): grid 2 columnas de platos en desktop; al seleccionar aparece panel detalle inline 380px (nombre, precio, FC badge, descripción, tags, recetas vinculadas, toggle estado). Click en desktop solo selecciona; en mobile navega.
+   - **Stock** (`stock/ClientView.tsx`): columna "Categoría" en tabla solo desktop. Admin ve también columna "Valor".
+   - **Facturas** (`facturas/page.tsx`): tabla 7 columnas en desktop con zebra + hover. Mobile mantiene cards.
+   - **HACCP** (`haccp/page.tsx`): grid 2 columnas para equipos y para vencimientos.
+
+3. **ModulosGrid estética** (`components/dashboard/ModulosGrid.tsx`): 17 paletas de color únicas por módulo (fondo pastel + ícono en color fuerte). Tiles 56×56, sin borde, `boxShadow` suave. Hover `scale(1.06)`. Label completo (antes solo la primera palabra).
+
+4. **Tile "Importar" en home** (`components/dashboard/ModulosGrid.tsx`): botón "Importar" como primer tile del grid (ícono `upload_file`, fondo `#e0f2fe`). Abre `ImportadorUniversal` con state interno. Antes solo accesible desde sidebar o "Más".
+
+**Commits:** `c32cff2` (Fase 1+2) · `e63b988` (tile Importar), deployados a `main`.
+
 ### Sesión 2026-06-12 (tarde) — Performance: cache SWR en 10 hooks + fix doble-tap
 
 Reporte de Facundo: la app se sentía lenta al cambiar de pantalla, y algunos botones necesitaban doble tap (nav de Stock, y en Recetario al tocar una receta o el buscador).
