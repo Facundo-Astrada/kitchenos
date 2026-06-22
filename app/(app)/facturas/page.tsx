@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { useFacturas } from '@/lib/hooks/useFacturas'
 import { useStock } from '@/lib/hooks/useStock'
 import { useProveedores } from '@/lib/hooks/useProveedores'
@@ -1875,6 +1876,7 @@ export default function FacturasPage() {
   const { facturas, loading, crearFactura, actualizarFactura, actualizarStatus, eliminarFactura, fetchItems, fetchFacturas, hasMore, fetchMore, totalCount } = useFacturas()
   const { productos, refetch: refetchStock } = useStock()
   const { proveedores } = useProveedores()
+  const isDesktop = useIsDesktop()
   const [mainTab, setMainTab] = useState<MainTab>('facturas')
   const [view, setView] = useState<View>('list')
 
@@ -2418,36 +2420,77 @@ export default function FacturasPage() {
       </div>
 
       {/* List */}
-      <div data-coach-target="facturas-lista" className="flex-1 overflow-y-auto p-4">
+      <div data-coach-target="facturas-lista" className="flex-1 overflow-y-auto" style={{ padding: isDesktop ? '0 0 8px' : '16px' }}>
         {loading ? (
           <div className="flex items-center justify-center h-32">
             <span className="text-[13px]" style={{ color: 'var(--text-3)' }}>Cargando...</span>
           </div>
         ) : facturasFiltradas.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-40 gap-2">
-            <span className="material-symbols-outlined text-[40px]" style={{ color: 'var(--text-3)' }}>
-              description
-            </span>
+            <span className="material-symbols-outlined text-[40px]" style={{ color: 'var(--text-3)' }}>description</span>
             <p className="text-[13px] font-medium" style={{ color: 'var(--text-3)' }}>Sin facturas</p>
-            <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-              Carga tu primera factura con IA
-            </p>
+            <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>Carga tu primera factura con IA</p>
           </div>
+        ) : isDesktop ? (
+          /* ── Desktop: tabla horizontal ── */
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Proveedor</th>
+                <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Fecha</th>
+                <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em' }}>N° Factura</th>
+                <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Tipo</th>
+                <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Pago</th>
+                <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Total</th>
+                <th style={{ padding: '10px 16px', textAlign: 'center', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {facturasFiltradas.map((f, i) => {
+                const st = STATUS_CONFIG[f.status as FacturaStatus] || STATUS_CONFIG.pendiente
+                return (
+                  <tr
+                    key={f.id}
+                    onClick={() => { setSelectedFactura(f); setView('detail') }}
+                    style={{
+                      borderBottom: '1px solid var(--border)',
+                      background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg)',
+                      cursor: 'pointer',
+                      transition: 'background .1s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(67,97,160,.07)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'var(--surface)' : 'var(--bg)')}
+                  >
+                    <td style={{ padding: '11px 16px', fontSize: 13, fontWeight: 600, color: 'var(--text-1)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.proveedor_nombre}</td>
+                    <td style={{ padding: '11px 12px', fontSize: 12, color: 'var(--text-2)', whiteSpace: 'nowrap' }}>{fmtFecha(f.fecha_factura)}</td>
+                    <td style={{ padding: '11px 12px', fontSize: 12, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace' " }}>{f.numero_factura ?? '—'}</td>
+                    <td style={{ padding: '11px 12px', fontSize: 12, color: 'var(--text-2)' }}>{TIPO_LABELS[f.tipo_factura as TipoFactura] || f.tipo_factura}</td>
+                    <td style={{ padding: '11px 12px', fontSize: 12, color: 'var(--text-2)' }}>{f.condicion_pago === 'cuenta_corriente' ? 'Cta. cte.' : 'Contado'}</td>
+                    <td style={{ padding: '11px 16px', fontSize: 14, fontWeight: 700, color: 'var(--navy)', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt(f.total)}</td>
+                    <td style={{ padding: '11px 16px', textAlign: 'center' }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 5, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>{st.label}</span>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         ) : (
+          /* ── Mobile: cards ── */
           <>
             {facturasFiltradas.map(f => (
               <FacturaCard key={f.id} f={f} onClick={() => { setSelectedFactura(f); setView('detail') }} />
             ))}
-            {hasMore && filtro === 'todas' && (
-              <button
-                onClick={fetchMore}
-                className="w-full py-3 mt-2 rounded-[10px] border-none cursor-pointer text-[13px] font-semibold"
-                style={{ background: 'var(--bg)', color: 'var(--accent)', border: '1px solid var(--border)' }}
-              >
-                Cargar más facturas ({totalCount - facturas.length} restantes)
-              </button>
-            )}
           </>
+        )}
+        {hasMore && filtro === 'todas' && (
+          <button
+            onClick={fetchMore}
+            className="w-full py-3 mt-2 rounded-[10px] border-none cursor-pointer text-[13px] font-semibold"
+            style={{ background: 'var(--bg)', color: 'var(--accent)', border: '1px solid var(--border)', margin: isDesktop ? '8px 0 0' : undefined }}
+          >
+            Cargar más facturas ({totalCount - facturas.length} restantes)
+          </button>
         )}
       </div>
 

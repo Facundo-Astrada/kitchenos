@@ -15,6 +15,7 @@ import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import ImportadorArchivo, { UndoBanner } from '@/components/importador/ImportadorArchivo'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import type { MisePlaceItem, MisePlaceRegistro } from '@/types'
+import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 
 const UNIDADES = ['kg', 'g', 'L', 'ml', 'unidad', 'docena', 'caja', 'bolsa', 'lata', 'botella']
 const UNIDADES_USO = ['kg', 'g', 'l', 'ml', 'unidad']
@@ -136,6 +137,7 @@ export default function StockPage() {
   const { categorias, agregarCategoria } = useCategoriasProducto()
   const { puedeEditar, puedeEliminar, isAdmin } = usePermisos()
   const canEdit = isAdmin || puedeEditar('stock')
+  const isDesktop = useIsDesktop()
 
   // ── Tabs ──
   const [activeTab, setActiveTab] = useState<'insumos' | 'producciones'>('insumos')
@@ -867,15 +869,19 @@ export default function StockPage() {
           <colgroup>
             <col style={{ width: 26 }} />
             <col />
-            <col style={{ width: 62 }} />
-            <col style={{ width: 68 }} />
+            {isDesktop && <col style={{ width: 140 }} />}
+            {isDesktop && isAdmin && <col style={{ width: 80 }} />}
+            {!isDesktop && <col style={{ width: 62 }} />}
+            <col style={{ width: isDesktop ? 84 : 68 }} />
             <col style={{ width: 52 }} />
           </colgroup>
           <thead>
             <tr>
               <th style={thStyle}>#</th>
               <th style={{ ...thStyle, textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Producto</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>Precio</th>
+              {isDesktop && <th style={{ ...thStyle, textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Categoría</th>}
+              {isDesktop && isAdmin && <th style={{ ...thStyle, textAlign: 'right' }}>Precio</th>}
+              {!isDesktop && <th style={{ ...thStyle, textAlign: 'right' }}>Precio</th>}
               <th style={{ ...thStyle, background: 'rgba(255,255,255,.07)', color: 'rgba(255,255,255,.9)' }}>Stock</th>
               <th style={thStyle}>Estado</th>
             </tr>
@@ -908,8 +914,10 @@ export default function StockPage() {
             <colgroup>
               <col style={{ width: 26 }} />
               <col />
-              <col style={{ width: 62 }} />
-              <col style={{ width: 68 }} />
+              {isDesktop && <col style={{ width: 140 }} />}
+              {isDesktop && isAdmin && <col style={{ width: 80 }} />}
+              {!isDesktop && <col style={{ width: 62 }} />}
+              <col style={{ width: isDesktop ? 84 : 68 }} />
               <col style={{ width: 52 }} />
             </colgroup>
             <tbody>
@@ -935,9 +943,9 @@ export default function StockPage() {
                         <div>
                           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', lineHeight: 1.2 }}>{p.nombre}</div>
                           <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>
-                            {p.categoria} · {p.unidad_uso ?? p.unidad}
+                            {!isDesktop && `${p.categoria} · `}{p.unidad_uso ?? p.unidad}
                           </div>
-                          {val > 0 && isAdmin && (
+                          {val > 0 && isAdmin && !isDesktop && (
                             <div style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700, marginTop: 1, fontFamily: "'DM Mono', monospace" }}>
                               {fmtValor(val)}
                             </div>
@@ -952,6 +960,15 @@ export default function StockPage() {
                         </button>
                       </div>
                     </td>
+                    {/* Categoría — solo desktop */}
+                    {isDesktop && (
+                      <td style={{ padding: '8px 8px' }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{p.categoria || '—'}</span>
+                        {val > 0 && isAdmin && (
+                          <div style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700, marginTop: 1, fontFamily: "'DM Mono', monospace" }}>{fmtValor(val)}</div>
+                        )}
+                      </td>
+                    )}
                     {isAdmin && (
                     <td style={{ padding: '8px 4px', textAlign: 'right' }}>
                       <span style={{ fontSize: 10, fontWeight: 500, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', opacity: 0.7 }}>

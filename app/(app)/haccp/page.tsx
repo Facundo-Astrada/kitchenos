@@ -5,6 +5,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useHaccp, type HaccpEquipo, type HaccpTemperatura, type HaccpVencimiento, type HaccpLimpieza } from '@/lib/hooks/useHaccp'
 import { useMerma } from '@/lib/hooks/useMerma'
 import { usePermisos } from '@/lib/hooks/usePermisos'
+import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 
 // ── Helpers ─────────────────────────────────────────────
 const fmtDate = (d: string | null) => {
@@ -665,6 +666,7 @@ export default function HaccpPage() {
   } = useHaccp()
   const { registrarMerma } = useMerma()
   const { isAdmin } = usePermisos()
+  const isDesktop = useIsDesktop()
 
   const [view, setView] = useState<View>('main')
   const [tab, setTab] = useState<Tab>('temperaturas')
@@ -888,6 +890,7 @@ export default function HaccpPage() {
                 )}
               </div>
 
+              <div style={isDesktop ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 } : { display: 'contents' }}>
               {equipos.filter(e => e.activo).map(e => {
                 const t = latestTemps[e.id]
                 const ok = t ? t.dentro_rango : true
@@ -926,6 +929,7 @@ export default function HaccpPage() {
                   </button>
                 )
               })}
+              </div>
             </div>
           )}
 
@@ -945,7 +949,9 @@ export default function HaccpPage() {
                 <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
                   No hay productos con vencimiento registrado
                 </div>
-              ) : vencimientos.map(v => {
+              ) : (
+              <div style={isDesktop ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 } : { display: 'contents' }}>
+              {vencimientos.map(v => {
                 const days = daysUntil(v.fecha_vencimiento)
                 const c = vencColor(days, v.status)
                 const statusLabel = v.status === 'descartado' ? 'Descartado'
@@ -995,6 +1001,8 @@ export default function HaccpPage() {
                   </div>
                 )
               })}
+              </div>
+              )}
             </div>
           )}
 
