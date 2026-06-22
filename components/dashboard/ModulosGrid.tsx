@@ -1,10 +1,12 @@
 'use client'
 
 import Link from 'next/link'
+import { useState } from 'react'
 import { MODULOS_POR_ROL, MODULO_CONFIG, NAV_ITEMS } from '@/lib/constants'
 import type { ModuloId } from '@/lib/constants'
 import type { Rol } from '@/types'
 import { usePermisos } from '@/lib/hooks/usePermisos'
+import ImportadorUniversal from '@/components/importador/ImportadorUniversal'
 
 // Todos los módulos que pueden aparecer en el grid
 const GRID_MODULOS: ModuloId[] = [
@@ -40,6 +42,7 @@ interface ModulosGridProps {
 
 export default function ModulosGrid({ rol }: ModulosGridProps) {
   const { puedeVer, isAdmin, loading } = usePermisos()
+  const [showImportador, setShowImportador] = useState(false)
 
   const fallback = new Set<string>(MODULOS_POR_ROL[rol] ?? [])
 
@@ -53,6 +56,7 @@ export default function ModulosGrid({ rol }: ModulosGridProps) {
   if (modulos.length === 0) return null
 
   return (
+    <>
     <div style={{ padding: '4px 16px 4px' }}>
       <div
         className="text-[11px] font-bold uppercase tracking-[.08em] mb-3"
@@ -62,6 +66,29 @@ export default function ModulosGrid({ rol }: ModulosGridProps) {
       </div>
 
       <div className="grid grid-cols-4 gap-3">
+        {/* Tile "Importar datos" */}
+        <button
+          onClick={() => setShowImportador(true)}
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+        >
+          <div
+            style={{
+              width: 56, height: 56, borderRadius: 16,
+              background: '#e0f2fe',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'transform 0.12s, box-shadow 0.12s',
+              boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.06)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,.1)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,.06)' }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 26, color: '#0369a1' }}>upload_file</span>
+          </div>
+          <span style={{ fontSize: 10, fontWeight: 600, textAlign: 'center', lineHeight: 1.2, color: 'var(--text-2)', maxWidth: 64 }}>
+            Importar
+          </span>
+        </button>
+
         {modulos.map((moduloId) => {
           const modulo = MODULO_CONFIG[moduloId as ModuloId]
           if (!modulo) return null
@@ -111,5 +138,10 @@ export default function ModulosGrid({ rol }: ModulosGridProps) {
         })}
       </div>
     </div>
+
+    {showImportador && (
+      <ImportadorUniversal onClose={() => setShowImportador(false)} />
+    )}
+    </>
   )
 }
