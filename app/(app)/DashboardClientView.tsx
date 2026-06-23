@@ -183,11 +183,14 @@ export default function DashboardPage() {
             {criticos.length > 0 && (
               <div data-coach-target="dashboard-stock">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--text-3)' }}>Stock crítico</p>
+                  <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--text-3)' }}>
+                    Stock crítico
+                    {criticos.length > 12 && <span style={{ fontWeight: 400, marginLeft: 6, color: 'var(--text-3)' }}>· {criticos.length} productos</span>}
+                  </p>
                   <Link href="/stock" style={{ fontSize: 11, fontWeight: 700, color: 'var(--navy)', textDecoration: 'none' }}>Ver inventario →</Link>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
-                  {criticos.map(p => {
+                  {criticos.slice(0, 12).map(p => {
                     const esCrit = getEstadoStock(p.stock_actual, p.stock_minimo, p.stock_critico) === 'critico'
                     return (
                       <Link key={p.id} href="/stock" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, background: esCrit ? '#fef2f2' : '#fffbeb', border: `1px solid ${esCrit ? '#fecaca' : '#fde68a'}`, textDecoration: 'none' }}>
