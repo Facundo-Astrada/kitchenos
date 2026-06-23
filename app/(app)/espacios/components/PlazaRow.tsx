@@ -74,7 +74,7 @@ export default function PlazaRow(props: Props) {
       </div>
 
       {open && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 10px 10px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8, padding: '0 10px 10px' }}>
           {secciones.length === 0 && itemsBySeccion.sinSeccion.length === 0 && (
             <div style={{ padding: '4px 4px 4px' }}>
               <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>Esta plaza no tiene secciones todavía.</p>

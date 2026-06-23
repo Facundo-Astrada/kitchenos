@@ -180,7 +180,7 @@ export default function EspaciosClientView() {
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: 20 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {espacios.map(espacio => {
             const plazasDelEspacio = espacioPlazas.filter(ep => ep.espacio_id === espacio.id)
             return (

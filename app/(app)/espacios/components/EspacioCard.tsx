@@ -154,7 +154,7 @@ export default function EspacioCard(props: Props) {
 
       {/* Plazas */}
       {open && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '0 12px 12px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 10, padding: '0 12px 12px' }}>
           {plazasDelEspacio.length === 0 && (
             <p style={{ fontSize: 12, color: 'var(--text-3)', padding: '0 2px' }}>
               Sin plazas asignadas. Usá el botón <span className="material-symbols-outlined" style={{ fontSize: 12, verticalAlign: 'middle' }}>add_box</span> para agregar.
