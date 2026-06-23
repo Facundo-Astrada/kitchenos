@@ -13,6 +13,7 @@ interface DashboardHeaderProps {
   miseTotal?: number
   tareasCompletadas?: number
   tareasTotal?: number
+  desktop?: boolean
 }
 
 export default function DashboardHeader({
@@ -23,6 +24,7 @@ export default function DashboardHeader({
   miseTotal = 0,
   tareasCompletadas = 0,
   tareasTotal = 0,
+  desktop = false,
 }: DashboardHeaderProps) {
   const { theme, toggle: toggleTheme } = useTheme()
   const rolConfig = ROL_CONFIG[perfil.rol]
@@ -31,7 +33,7 @@ export default function DashboardHeader({
   return (
     <div
       className="flex-shrink-0"
-      style={{ background: 'var(--navy)', padding: '48px 16px 14px' }}
+      style={{ background: 'var(--navy)', padding: desktop ? '14px 24px' : '48px 16px 14px' }}
     >
       {/* Fila superior: usuario + botones */}
       <div className="flex items-center justify-between mb-3">

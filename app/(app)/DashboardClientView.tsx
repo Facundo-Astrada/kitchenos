@@ -13,10 +13,13 @@ import WelcomeDashboard from '@/components/dashboard/WelcomeDashboard'
 import { useStock } from '@/lib/hooks/useStock'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { useChecklist } from '@/lib/hooks/useChecklist'
+import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
+import { getEstadoStock } from '@/lib/utils'
 import type { Perfil, Rol } from '@/types'
 
 export default function DashboardPage() {
   const { perfil: authPerfil } = useAuth()
+  const isDesktop = useIsDesktop()
   const [turnoActivo, setTurnoActivo] = useState<string | null>(null)
   const [showCierre, setShowCierre] = useState(false)
   const [showNotif, setShowNotif] = useState(false)
@@ -110,11 +113,23 @@ export default function DashboardPage() {
     return () => localStorage.removeItem('kc_screen_context')
   }, [productos, tareas, turnoActivo, miseStats, tareasStats])
 
+  const turnoDisplay = turnoActivo ? (() => {
+    const diff = Math.floor((Date.now() - new Date(turnoActivo).getTime()) / 60000)
+    const h = Math.floor(diff / 60); const m = diff % 60
+    return h > 0 ? `${h}h ${m}m` : `${m}m`
+  })() : null
+
+  const criticos = productos.filter(p => {
+    const est = getEstadoStock(p.stock_actual, p.stock_minimo, p.stock_critico)
+    return est === 'critico' || est === 'bajo'
+  })
+
   return (
     <PageTransition>
     <div className="flex flex-col h-full">
       <DashboardHeader
         perfil={perfil}
+        desktop={isDesktop}
         onOpenNotifications={() => setShowNotif(true)}
         notifCount={productos.filter(p => p.estado === 'critico').length}
         miseCompletados={miseStats.completados}
@@ -127,7 +142,71 @@ export default function DashboardPage() {
         <div className="scroll-body screen-enter" style={{ paddingTop: 0 }}>
           <WelcomeDashboard nombre={authPerfil?.nombre ?? 'Chef'} />
         </div>
+      ) : isDesktop ? (
+        /* ── DESKTOP LAYOUT ─────────────────────────────── */
+        <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+
+          {/* Panel izquierdo: turno + pase + plaza */}
+          <div style={{ borderRight: '1px solid var(--border)', overflowY: 'auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Turno */}
+            <div data-coach-target="dashboard-turno">
+              {!turnoActivo ? (
+                <button onClick={iniciarTurno} style={{ width: '100%', padding: '12px 14px', borderRadius: 12, background: 'linear-gradient(135deg, var(--navy), #4361a0)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, color: '#fff', fontFamily: 'inherit' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 20 }}>play_circle</span>
+                  <div style={{ flex: 1, textAlign: 'left' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>Iniciar turno</div>
+                    <div style={{ fontSize: 10, opacity: 0.7 }}>Registrá tu entrada</div>
+                  </div>
+                </button>
+              ) : (
+                <button onClick={cerrarTurno} style={{ width: '100%', padding: '12px 14px', borderRadius: 12, background: 'var(--surface)', border: '1px solid var(--border)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'inherit' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#ef4444' }}>stop_circle</span>
+                  <div style={{ flex: 1, textAlign: 'left' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Turno activo</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-3)' }}>desde {new Date(turnoActivo).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</div>
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy)', background: 'rgba(67,97,160,.1)', padding: '3px 8px', borderRadius: 7 }}>{turnoDisplay}</span>
+                </button>
+              )}
+            </div>
+
+            <div data-coach-target="dashboard-pase"><PasePreview puedeEscribir={puedeEscribir} /></div>
+            <div data-coach-target="dashboard-plaza"><MiPlaza rol={rol} completados={plazaStats.completados} total={plazaStats.total} /></div>
+          </div>
+
+          {/* Panel derecho: módulos + stock */}
+          <div style={{ overflowY: 'auto', padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 28 }}>
+            <div data-coach-target="dashboard-modulos">
+              <ModulosGrid rol={rol} desktop />
+            </div>
+
+            {criticos.length > 0 && (
+              <div data-coach-target="dashboard-stock">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--text-3)' }}>Stock crítico</p>
+                  <Link href="/stock" style={{ fontSize: 11, fontWeight: 700, color: 'var(--navy)', textDecoration: 'none' }}>Ver inventario →</Link>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+                  {criticos.map(p => {
+                    const esCrit = getEstadoStock(p.stock_actual, p.stock_minimo, p.stock_critico) === 'critico'
+                    return (
+                      <Link key={p.id} href="/stock" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, background: esCrit ? '#fef2f2' : '#fffbeb', border: `1px solid ${esCrit ? '#fecaca' : '#fde68a'}`, textDecoration: 'none' }}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: esCrit ? '#ef4444' : '#f59e0b', flexShrink: 0 }} />
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{ fontSize: 12, fontWeight: 700, color: esCrit ? '#991b1b' : '#92400e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</p>
+                          <p style={{ fontSize: 11, color: esCrit ? '#ef4444' : '#f59e0b' }}>{p.stock_actual} / {p.stock_minimo} {p.unidad}</p>
+                        </div>
+                        <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 800, textTransform: 'uppercase', padding: '2px 6px', borderRadius: 5, background: esCrit ? '#ef4444' : '#f59e0b', color: '#fff', flexShrink: 0 }}>{esCrit ? 'CRIT' : 'BAJO'}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       ) : (
+        /* ── MOBILE LAYOUT (sin cambios) ──────────────────── */
         <div className="scroll-body screen-enter" style={{ paddingTop: 0 }}>
           {/* Turno card */}
           <div data-coach-target="dashboard-turno" style={{ padding: '8px 16px 0' }}>

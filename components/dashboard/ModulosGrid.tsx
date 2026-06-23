@@ -39,9 +39,10 @@ const MODULO_COLORS: Partial<Record<ModuloId, [string, string]>> = {
 
 interface ModulosGridProps {
   rol: Rol
+  desktop?: boolean
 }
 
-export default function ModulosGrid({ rol }: ModulosGridProps) {
+export default function ModulosGrid({ rol, desktop = false }: ModulosGridProps) {
   const { puedeVer, isAdmin, loading } = usePermisos()
   const [showImportador, setShowImportador] = useState(false)
 
@@ -55,6 +56,52 @@ export default function ModulosGrid({ rol }: ModulosGridProps) {
   })
 
   if (modulos.length === 0) return null
+
+  if (desktop) {
+    return (
+      <>
+      <div>
+        <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--text-3)', marginBottom: 12 }}>Módulos</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
+          {/* Importar */}
+          <button
+            onClick={() => setShowImportador(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 14, background: '#e0f2fe', border: '1px solid #bae6fd', cursor: 'pointer', textAlign: 'left', transition: 'box-shadow 0.15s, transform 0.15s', fontFamily: 'inherit' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 6px 16px rgba(0,0,0,.1)' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ''; (e.currentTarget as HTMLElement).style.boxShadow = '' }}
+          >
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#0369a1' }}>upload_file</span>
+            </div>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#0c4a6e', lineHeight: 1.2 }}>Importar</span>
+          </button>
+
+          {modulos.map((moduloId) => {
+            const modulo = MODULO_CONFIG[moduloId as ModuloId]
+            if (!modulo) return null
+            const [bg, iconColor] = MODULO_COLORS[moduloId] ?? ['var(--surface)', 'var(--navy)']
+            const borderColor = bg.replace(')', ', .4)').replace('rgb(', 'rgba(').replace('#', '')
+            return (
+              <Link
+                key={moduloId}
+                href={modulo.href}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 14, background: bg, border: `1px solid ${bg}`, cursor: 'pointer', textDecoration: 'none', transition: 'box-shadow 0.15s, transform 0.15s' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 6px 16px rgba(0,0,0,.1)' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ''; (e.currentTarget as HTMLElement).style.boxShadow = '' }}
+              >
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 20, color: iconColor }}>{modulo.icon}</span>
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1.2 }}>{modulo.label}</span>
+              </Link>
+            )
+          })}
+        </div>
+      </div>
+      {showImportador && <ImportadorUniversal onClose={() => setShowImportador(false)} />}
+      </>
+    )
+  }
 
   return (
     <>
