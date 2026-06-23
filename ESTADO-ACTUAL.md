@@ -19,7 +19,7 @@
 | 5 | **Pedidos** | `/pedidos` | Funcional | CRUD, items con precios, estados (borrador/enviado/recibido/parcial), productos frecuentes como chips, búsqueda predictiva, WhatsApp y PDF, recepción parcial. |
 | 6 | **Proveedores** | `/proveedores` | Funcional | CRUD, CUIT, teléfono, días entrega, rubro, historial facturas por proveedor, **auto-creación** desde facturas con IA. |
 | 7 | **Facturas** | `/facturas` | Funcional | Carga con items, tipos A/B/C/X/remito/ticket, **OCR con IA** (Claude Sonnet 4.6) que detecta proveedor/items/total, detección de variaciones de precio, historial, condición de pago. |
-| 8 | **Carta** | `/carta` | Funcional | Items vinculados a recetas, food cost preview coloreado, 86, categorías **dinámicas por restaurante** (`carta_categorias`), vincular/cambiar receta inline (search siempre visible, porciones editables con tap), export PDF. **Tags dietarios** toggleables. **Importar con IA**. **Crear receta borrador** desde búsqueda. **Vincular productos de stock** en la misma búsqueda (crea stub receta draft con el producto como ingrediente). **Asignar a OPS**: `plato_recetas.cantidad_ops+unidad_ops` → checklist_item.cantidad = suma de todas las contribuciones del mismo receta_id+plaza (no reemplaza). Precio y food cost visible **solo para admin**. **KitchenCoach integrado**. |
+| 8 | **Carta** | `/carta` | Funcional | Items vinculados a recetas, food cost preview coloreado, 86, categorías **dinámicas por restaurante** (`carta_categorias`), vincular/cambiar receta inline (search siempre visible, porciones editables con tap), export PDF. **Tags dietarios** toggleables. **Importar con IA**. **Crear receta borrador** desde búsqueda. **Vincular productos de stock** en la misma búsqueda. **Asignar a OPS**: plato_recetas.cantidad_ops+unidad_ops → checklist_item (suma de contribuciones). **Recipientes en OPS**: se configura recipiente (nombre, capacidad, peso_porcion) → mise muestra déficit + CTA "Producir X porc". Panel OPS idéntico en creación y en vista detalle. **Crear idea en recetario** desde buscador de componentes sin resultados. Precio y food cost visible **solo para admin**. **KitchenCoach integrado**. |
 | 9 | **Checklist / Mise en Place** | `/checklist` | Funcional | Mise en place por plaza, items SP/P/REF/OK, cantidades color-coded, registros diarios, rutinas con frecuencia. Drag long-press entre secciones. **Plaza General**: items/secciones/rutinas con `plaza='general'` aparecen en TODAS las plazas al tope — para tareas que cualquiera puede cubrir (rutinas de limpieza, mise compartido, etc.). |
 | 10 | **Pase de Turno** | `/pase` | Funcional | Chat continuo entre turnos, grouping por emisor (sin avatar repetido), prioridades, crear tarea desde mensaje, realtime. |
 | 11 | **HACCP / Limpieza** | `/haccp` | Funcional | 3 tabs: Temperaturas, Vencimientos (color coding por días), **Limpieza** (sub-tabs Lista/Calendario; crear tarea con día + frecuencia; sync a OPS checklist plaza General). Export PDF para Bromatología. |
@@ -27,6 +27,7 @@
 | 13 | **Calendario** | `/calendario` | Funcional | Vista mensual + semanal por horas, eventos con iconos/colores, entregas de pedidos auto-integradas, CRUD eventos, recurrencia. |
 | 14 | **Turnos / Equipo** | `/turnos` | Funcional | 3 tabs: Equipo (form 2 pasos datos→puesto, ficha con overrides de módulos), Turnos (grilla semanal), Puestos (toggles de módulos reales, nivel badge, plaza OPS, template picker con 8 puestos comunes). **Sistema de puestos**: cada puesto define `nivel` (admin/sous_chef/cocinero/bachero) + `plaza_default` + `modulos_visibles[]`. Overrides por persona (`modulos_extra`, `modulos_restringidos`). DB: `puestos.nivel+plaza_default`, `equipo_miembros.modulos_extra+restringidos`. |
 | 15 | **Producción / Planificación** | `/produccion` | Funcional | Planilla de producción del día. **Calendario mensual** con dots indicadores (verde = activo, naranja = evento/tag). **Multi-select** para activar N días con nombre de menú opcional (`menu_tag`). Soporte multi-menú en mismo día con filtro chips. Asignación a miembros, badges P1/P2/P3. |
+| 25 | **Mesa de Trabajo** | `/espacios` | BETA (desktop) | Board anidado: Espacios físicos → Plazas (7 fijas) → Secciones → Producciones (`checklist_items`). Drag cross-plaza. **Panel OPS** al clickear una producción: nombre editable, prioridad (SP/P/REF/OK), plaza con colores, sección, cantidad+unidad, recipiente (optional), porciones/peso recipiente lleno, tamaño por porción con cálculo automático "= N porciones". Autocomplete de recipiente desde historial del restaurante. Limpieza por scope espacio/plaza/sección. Solo desktop (`useIsDesktop()`); mobile muestra mensaje amigable. |
 | 24 | **OPS — Workspace diario** | `/operaciones` | Funcional | **Única puerta de entrada** al trabajo diario. **3 tabs**: Producción · Mise · Planificación (deep-link `?tab=`). Producción: secciones con sublabels (SP·Super Prioridad, P·Prioridad, REF·Refuerzo), toggle Carta/Menú con subtítulo, QuickAdd con sugerencias de receta (≥3 chars). Checklist: auto-select plaza por rol, progreso por plaza en grid. **`/tareas`, `/checklist`, `/produccion` redirigen acá** (rutas viejas; la vista vive embebida). |
 | ~~23~~ | ~~OPS — Ingeniería de Menú~~ | ~~`/ingenieria-menu`~~ | **Eliminado (2 jun 2026)** | Página y referencias en `constants.ts` removidas. Los tipos `CategoriaPlato`/`PlatoComponente` y la lógica `sync_ops` de `plato_componentes` se mantienen (los usa Producción). |
 | 16 | **Merma** | `/merma` | Funcional | Bottom sheet desde dashboard y módulo propio, 8 motivos con iconos, turno, plaza, costo estimado. |
@@ -37,7 +38,7 @@
 | 21 | **Modo Servicio** | En dashboard | Parcial | UI existe (`components/dashboard/ModoServicio.tsx`) pero **sin conectar a datos reales** — ver DECISIONES.md, se decidió diferir / descartar. |
 | 22 | **Ventas** | `/ventas` | Funcional | Importación desde Excel/CSV (xlsx) y texto libre con IA (Haiku). Pantalla de revisión editable antes de guardar. Tab Resumen con KPIs y lista de ventas con detalle de items. Requiere migración SQL (`ventas` + `ventas_items`). |
 
-**Resumen:** 24 módulos funcionales, 1 parcial (modo servicio), 0 críticos pendientes.
+**Resumen:** 25 módulos funcionales, 1 parcial (modo servicio), 0 críticos pendientes.
 
 ---
 
@@ -72,7 +73,7 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 ### Merma (1)
 `merma`
 
-**Total: 29 tablas** con RLS habilitado. Aislamiento multi-tenant real via `mi_restaurante_id()`. Todas las políticas UPDATE tienen `WITH CHECK` explícito. Listo para multi-tenant.
+**Total: 31 tablas** con RLS habilitado. Aislamiento multi-tenant real via `mi_restaurante_id()`. Todas las políticas UPDATE tienen `WITH CHECK` explícito. Listo para multi-tenant.
 
 ---
 
@@ -99,6 +100,24 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 ---
 
 ## 4. Implementado en Últimas Sesiones
+
+### Sesión 2026-06-23 — Mesa de Trabajo: panel OPS editable + recipientes + autocomplete
+
+1. **Panel editable slide-over** (`ItemEditPanel.tsx`): al hacer click en una producción de la Mesa de Trabajo se abre un panel desde la derecha (animación slideInRight). Campos: nombre editable inline, prioridad (SP/P/REF/OK con colores), plaza de producción (pills con colores por plaza), sección del mise (pills con iconos de la plaza seleccionada). Guarda vía `actualizarItem` con soporte cross-plaza (actualiza `plaza` + `seccion_id` en un solo UPDATE). Pre-fill desde el item existente.
+
+2. **Campos OPS completos** — misma lógica que Carta: recipiente (texto libre, opcional), "Porciones/peso recipiente lleno" (label cambia si hay recipiente), "Tamaño por porción" con unidades (`g/kg/ml/l/u/porc`), cálculo automático reactivo "= N porciones por recipiente" (`toG(capG, u) / toG(porG, u)`). Guarda `recipiente_nombre`, `recipiente_capacidad` (siempre en porciones), `peso_porcion`, `peso_porcion_unidad` en `checklist_items`. `actualizarItem` extendido para aceptar estos campos.
+
+3. **Texto predictivo de recipiente**: `<datalist id="recipientes-sugerencias">` nativo con valores únicos de `checklist_items.recipiente_nombre` del restaurante (computado en `ClientView` vía `useMemo`, ordenado alfabéticamente). Sin storage extra — crece automáticamente con el uso y es compartido entre todos los usuarios del restaurante.
+
+4. **Dashboard desktop stock crítico**: limitado a `criticos.slice(0, 12)` (2 filas de 6) con badge que indica cuántos quedan fuera.
+
+**Commits:** `97fc9bd` (panel base) · `58db886` (recipientes + porciones) · `9f559ab` (autocomplete), deployados a `main`.
+
+### Sesión 2026-06-22 (tarde) — OPS recetario: recipientes + crear idea desde carta
+
+1. **Panel OPS en vista detalle de platos** (`carta/page.tsx`): actualizado para ser idéntico al panel de creación. Agrega: campo Recipiente (texto libre), "Porciones/peso recipiente lleno" con selector de unidades como pills (g/kg/porc/u/ml/l), "Tamaño por porción" con su propio selector, autocálculo "= X porciones por recipiente" cuando ambos campos son en peso. Al abrir el panel carga el recipiente/peso existente desde `checklist_items` vía fetch async. Botón "Quitar" para remover config OPS. Guarda `recipiente_nombre`, `recipiente_capacidad`, `peso_porcion`, `peso_porcion_unidad` al upsert de `checklist_items`.
+
+2. **Crear idea en recetario desde búsqueda de componentes** (`ComposicionEditor.tsx`): en el buscador del plato, cuando no hay resultados aparece botón dashed "Crear X como idea en recetario". Llama `/api/recetas/save` con `status: 'draft'` y el nombre escrito, y vincula la receta nueva al plato automáticamente. Usa `onMouseDown + e.preventDefault()` para que no interfiera con el `onBlur` del input.
 
 ### Sesión 2026-06-22 — Versión web desktop completa (Fase 1 + Fase 2) + estética módulos + tile Importar
 
