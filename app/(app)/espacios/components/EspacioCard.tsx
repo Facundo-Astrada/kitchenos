@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { Espacio, EspacioPlaza, ChecklistSeccionConfig, MisePlaceItem, Plaza } from '@/types'
+import type { Espacio, EspacioPlaza, ChecklistSeccionConfig, MisePlaceItem, Plaza, MisePrioridad } from '@/types'
 import { PLAZAS_FIJAS, PLAZA_LABELS } from '@/lib/constants'
 import PlazaRow from './PlazaRow'
 
@@ -31,6 +31,7 @@ interface Props {
   onAddItem: (seccion: ChecklistSeccionConfig) => void
   onDeleteSeccion: (id: string) => void
   onDeleteItem: (id: string) => void
+  onEditItem: (item: MisePlaceItem) => void
   onLimpieza: (scope: { type: 'espacio' | 'plaza' | 'seccion'; plazas: Plaza[]; nombre: string }) => void
 }
 
@@ -40,7 +41,7 @@ export default function EspacioCard(props: Props) {
     overSecId, registerDropZone, draggingId,
     onDragStart, onDragMove, onDragEnd,
     onActualizar, onEliminar, onAsignarPlaza, onQuitarPlaza,
-    onAddSeccion, onSeedSecciones, onAddItem, onDeleteSeccion, onDeleteItem, onLimpieza,
+    onAddSeccion, onSeedSecciones, onAddItem, onDeleteSeccion, onDeleteItem, onEditItem, onLimpieza,
   } = props
 
   const [open, setOpen] = useState(true)
@@ -183,6 +184,7 @@ export default function EspacioCard(props: Props) {
                 onAddItem={onAddItem}
                 onDeleteSeccion={onDeleteSeccion}
                 onDeleteItem={onDeleteItem}
+                onEditItem={onEditItem}
                 onLimpieza={(scope) => onLimpieza({ ...scope, plazas: [plaza] })}
               />
             )

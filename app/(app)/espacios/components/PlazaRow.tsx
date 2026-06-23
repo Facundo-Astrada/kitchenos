@@ -22,13 +22,14 @@ interface Props {
   onAddItem: (seccion: ChecklistSeccionConfig) => void
   onDeleteSeccion: (id: string) => void
   onDeleteItem: (id: string) => void
+  onEditItem: (item: MisePlaceItem) => void
   onLimpieza: (scope: { type: 'plaza' | 'seccion'; plaza: Plaza; nombre: string }) => void
 }
 
 export default function PlazaRow(props: Props) {
   const { plaza, espacioPlazaId, secciones, items, overSecId, registerDropZone,
     draggingId, onDragStart, onDragMove, onDragEnd,
-    onQuitarPlaza, onAddSeccion, onSeedSecciones, onAddItem, onDeleteSeccion, onDeleteItem, onLimpieza } = props
+    onQuitarPlaza, onAddSeccion, onSeedSecciones, onAddItem, onDeleteSeccion, onDeleteItem, onEditItem, onLimpieza } = props
   const [open, setOpen] = useState(true)
 
   const seccionIds = useMemo(() => new Set(secciones.map(s => s.id)), [secciones])
@@ -101,6 +102,7 @@ export default function PlazaRow(props: Props) {
               onAddItem={onAddItem}
               onDeleteSeccion={onDeleteSeccion}
               onDeleteItem={onDeleteItem}
+              onEditItem={onEditItem}
               onLimpieza={() => onLimpieza({ type: 'seccion', plaza, nombre: sec.nombre })}
             />
           ))}
@@ -118,6 +120,7 @@ export default function PlazaRow(props: Props) {
               onAddItem={() => {}}
               onDeleteSeccion={() => {}}
               onDeleteItem={onDeleteItem}
+              onEditItem={onEditItem}
               onLimpieza={() => {}}
             />
           )}

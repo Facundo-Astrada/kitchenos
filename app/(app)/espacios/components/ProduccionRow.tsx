@@ -17,9 +17,10 @@ interface Props {
   onDragMove: (x: number, y: number) => void
   onDragEnd: () => void
   onDelete: (id: string) => void
+  onEdit: (item: MisePlaceItem) => void
 }
 
-export default function ProduccionRow({ item, isDragging, onDragStart, onDragMove, onDragEnd, onDelete }: Props) {
+export default function ProduccionRow({ item, isDragging, onDragStart, onDragMove, onDragEnd, onDelete, onEdit }: Props) {
   const start = useRef<{ x: number; y: number } | null>(null)
   const active = useRef(false)
   const prio = PRIO_CFG[item.prioridad] ?? PRIO_CFG.chk
@@ -47,9 +48,12 @@ export default function ProduccionRow({ item, isDragging, onDragStart, onDragMov
     if (e.currentTarget.hasPointerCapture?.(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId)
     }
-    if (active.current) onDragEnd()
+    const wasDragging = active.current
+    if (wasDragging) onDragEnd()
     start.current = null
     active.current = false
+    // Si no hubo drag real, es un click → abrir panel
+    if (!wasDragging) onEdit(item)
   }
 
   return (
@@ -63,10 +67,13 @@ export default function ProduccionRow({ item, isDragging, onDragStart, onDragMov
         padding: '7px 10px', borderRadius: 8,
         background: 'var(--surface)',
         border: '1px solid var(--border)',
-        cursor: 'grab',
+        cursor: isDragging ? 'grabbing' : 'pointer',
         opacity: isDragging ? 0.35 : 1,
         touchAction: 'none', userSelect: 'none',
+        transition: 'background 0.1s, border-color 0.1s',
       }}
+      onMouseEnter={e => { if (!isDragging) { (e.currentTarget as HTMLElement).style.background = 'var(--bg)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)' } }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'var(--surface)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)' }}
     >
       <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)', flexShrink: 0 }}>drag_indicator</span>
       <span style={{

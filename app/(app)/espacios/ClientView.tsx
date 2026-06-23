@@ -4,9 +4,10 @@ import { useRef, useState, useCallback, useMemo, useEffect } from 'react'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { useEspacios } from '@/lib/hooks/useEspacios'
 import { useChecklist } from '@/lib/hooks/useChecklist'
-import type { MisePlaceItem, ChecklistSeccionConfig, Plaza, RutinaFrecuencia } from '@/types'
+import type { MisePlaceItem, ChecklistSeccionConfig, Plaza, RutinaFrecuencia, MisePrioridad } from '@/types'
 import EspacioCard from './components/EspacioCard'
 import LimpiezaPanel from './components/LimpiezaPanel'
+import ItemEditPanel from './components/ItemEditPanel'
 
 const DEFAULT_SECCIONES_BOARD = [
   { nombre: 'Heladera',       icono: 'kitchen',     orden: 0 },
@@ -30,6 +31,15 @@ export default function EspaciosClientView() {
 
   // ── Limpieza panel ──
   const [limpiezaScope, setLimpiezaScope] = useState<LimpiezaScope | null>(null)
+
+  // ── Item edit panel ──
+  const [editingItem, setEditingItem] = useState<MisePlaceItem | null>(null)
+
+  const handleGuardarItem = useCallback(async (id: string, datos: {
+    nombre: string; plaza: Plaza; seccion_id: string; cantidad: number; unidad: string; prioridad: MisePrioridad
+  }) => {
+    await actualizarItem(id, datos)
+  }, [actualizarItem])
 
   // ── Agregar espacio ──
   const [showNuevoEspacio, setShowNuevoEspacio] = useState(false)
@@ -206,6 +216,7 @@ export default function EspaciosClientView() {
                 onAddItem={(sec) => setAddItemTarget(sec)}
                 onDeleteSeccion={eliminarSeccion}
                 onDeleteItem={eliminarItem}
+                onEditItem={setEditingItem}
                 onLimpieza={setLimpiezaScope}
               />
             )
@@ -312,6 +323,16 @@ export default function EspaciosClientView() {
             await agregarRutina(datos)
           }}
           onEliminarRutina={eliminarRutina}
+        />
+      )}
+
+      {/* Panel editar producción */}
+      {editingItem && (
+        <ItemEditPanel
+          item={editingItem}
+          secciones={secciones}
+          onClose={() => setEditingItem(null)}
+          onGuardar={handleGuardarItem}
         />
       )}
     </div>

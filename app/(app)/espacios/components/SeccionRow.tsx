@@ -17,13 +17,14 @@ interface Props {
   onAddItem: (seccion: ChecklistSeccionConfig) => void
   onDeleteSeccion: (id: string) => void
   onDeleteItem: (id: string) => void
+  onEditItem: (item: MisePlaceItem) => void
   onLimpieza: () => void
 }
 
 export default function SeccionRow({
   seccion, plaza, items, isDropTarget, registerDropZone,
   draggingId, onDragStart, onDragMove, onDragEnd,
-  onAddItem, onDeleteSeccion, onDeleteItem, onLimpieza,
+  onAddItem, onDeleteSeccion, onDeleteItem, onEditItem, onLimpieza,
 }: Props) {
   const [open, setOpen] = useState(true)
   const droppable = !!seccion
@@ -83,6 +84,7 @@ export default function SeccionRow({
               onDragMove={onDragMove}
               onDragEnd={onDragEnd}
               onDelete={onDeleteItem}
+              onEdit={onEditItem}
             />
           ))}
         </div>
