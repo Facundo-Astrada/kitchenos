@@ -35,6 +35,10 @@ export default function EspaciosClientView() {
   // ── Item edit panel ──
   const [editingItem, setEditingItem] = useState<MisePlaceItem | null>(null)
 
+  const recipientesUsados = useMemo(() =>
+    [...new Set(items.map(i => i.recipiente_nombre).filter((r): r is string => !!r))].sort()
+  , [items])
+
   const handleGuardarItem = useCallback(async (id: string, datos: {
     nombre: string; plaza: Plaza; seccion_id: string; cantidad: number; unidad: string; prioridad: MisePrioridad
     recipiente_nombre: string | null; recipiente_capacidad: number | null; peso_porcion: number | null; peso_porcion_unidad: string | null
@@ -332,6 +336,7 @@ export default function EspaciosClientView() {
         <ItemEditPanel
           item={editingItem}
           secciones={secciones}
+          sugerenciasRecipiente={recipientesUsados}
           onClose={() => setEditingItem(null)}
           onGuardar={handleGuardarItem}
         />

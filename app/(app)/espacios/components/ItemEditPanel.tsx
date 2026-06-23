@@ -41,11 +41,12 @@ interface GuardarDatos {
 interface Props {
   item: MisePlaceItem
   secciones: ChecklistSeccionConfig[]
+  sugerenciasRecipiente: string[]
   onClose: () => void
   onGuardar: (id: string, datos: GuardarDatos) => Promise<void>
 }
 
-export default function ItemEditPanel({ item, secciones, onClose, onGuardar }: Props) {
+export default function ItemEditPanel({ item, secciones, sugerenciasRecipiente, onClose, onGuardar }: Props) {
   const [nombre,    setNombre]    = useState(item.nombre)
   const [plaza,     setPlaza]     = useState<Plaza>(item.plaza as Plaza)
   const [seccionId, setSeccionId] = useState(item.seccion_id ?? '')
@@ -219,6 +220,7 @@ export default function ItemEditPanel({ item, secciones, onClose, onGuardar }: P
           {/* Recipiente */}
           <Section label="Recipiente (opcional)">
             <input
+              list="recipientes-sugerencias"
               value={recipienteNombre}
               onChange={e => setRecipienteNombre(e.target.value)}
               placeholder="ej: tupper, cubeta GN 1/2, bandeja…"
@@ -229,6 +231,11 @@ export default function ItemEditPanel({ item, secciones, onClose, onGuardar }: P
                 outline: 'none', boxSizing: 'border-box',
               }}
             />
+            {sugerenciasRecipiente.length > 0 && (
+              <datalist id="recipientes-sugerencias">
+                {sugerenciasRecipiente.map(s => <option key={s} value={s} />)}
+              </datalist>
+            )}
           </Section>
 
           {/* Cantidad / Porciones por recipiente */}
