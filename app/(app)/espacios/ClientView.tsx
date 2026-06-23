@@ -37,6 +37,7 @@ export default function EspaciosClientView() {
 
   const handleGuardarItem = useCallback(async (id: string, datos: {
     nombre: string; plaza: Plaza; seccion_id: string; cantidad: number; unidad: string; prioridad: MisePrioridad
+    recipiente_nombre: string | null; recipiente_capacidad: number | null; peso_porcion: number | null; peso_porcion_unidad: string | null
   }) => {
     await actualizarItem(id, datos)
   }, [actualizarItem])
