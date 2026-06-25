@@ -21,6 +21,7 @@
 | `turnos_personal` | **NO EXISTE** — el `layout.tsx` tenía un banner de clock-in que consultaba esta tabla. La tabla nunca se creó. Usar únicamente `localStorage('kitchenos_turno')` del dashboard para tracking de turno. | (detectado junio 2026) |
 | `checklist_items` | `seccion_id` (FK a `checklist_secciones`), `seccion` (texto legacy) | usar `seccion_id` para lookups |
 | `checklist_items` | `plaza = 'general'` — aparece en el checklist de TODAS las plazas, no solo la propia | (distinguir de plazas específicas) |
+| `checklist_items` | `recipiente_nombre TEXT NULL` — nombre del recipiente (tupper, cubeta GN, etc.). `recipiente_capacidad NUMERIC NULL` — capacidad en porciones (siempre en porc, aunque el usuario haya cargado en g/kg se convierte). `peso_porcion NUMERIC NULL` + `peso_porcion_unidad TEXT NULL` — peso/tamaño de 1 porción (puede ser en g, kg, ml, l, u, porc). Si ambos están en peso, `recipiente_capacidad = Math.round(capG / porG)`. Usados por `ProductoMiseCard` para calcular déficit y CTA "Producir X porc (Yg)". | (agregado jun 2026 — sistema de recipientes en mise) |
 | `produccion_diaria` | `menu_tag TEXT NULL` — null = menú base del día, string = nombre de evento/menú específico | (no existía antes de mayo 2026) |
 | `carta_items` | `tags TEXT[] DEFAULT '{}'` — dietarios: `'s/tacc'`, `'vegano'`, `'vegetariano'`, `'keto'`, `'picante'`, `'sin lactosa'` | (agregado mayo 2026) |
 | `carta_categorias` | tabla nueva: `id, nombre, icono, orden, restaurante_id` — categorías dinámicas por restaurante | no usar `CATEGORIAS` hardcodeado en código |

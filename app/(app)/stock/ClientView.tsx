@@ -4,6 +4,7 @@ import PageTransition from '@/components/PageTransition'
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
+import { useRecetas } from '@/lib/hooks/useRecetas'
 import { useCategoriasProducto } from '@/lib/hooks/useCategoriasProducto'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import PageHeader from '@/components/shell/PageHeader'
@@ -65,7 +66,8 @@ function parseTSV(text: string): PasteRow[] {
   }).filter(r => r.nombre.length >= 2)
 }
 
-type FiltroEstado = 'all' | 'critico' | 'bajo' | 'pendiente'
+type FiltroEstado = 'all' | 'critico' | 'bajo' | 'pendiente' | 'inmovil'
+const INMOVIL_DIAS = 60
 type SortMode = 'default' | 'valor_desc'
 
 interface FormData {
@@ -80,6 +82,9 @@ interface FormData {
   unidad_compra: string
   cantidad_por_envase: string
   unidad_uso: string
+  // producción interna (opcional)
+  es_produccion: boolean
+  receta_id: string
 }
 
 const FORM_EMPTY: FormData = {
@@ -93,6 +98,8 @@ const FORM_EMPTY: FormData = {
   unidad_compra: '',
   cantidad_por_envase: '',
   unidad_uso: '',
+  es_produccion: false,
+  receta_id: '',
 }
 
 function fmtPrecio(n: number) {
@@ -134,6 +141,7 @@ export default function StockPage() {
   const router = useRouter()
   const RESTAURANTE_ID = useRestauranteId()
   const { productos, loading, error, actualizarStock, agregarProducto, actualizarProducto, eliminarProducto, refetch } = useStock()
+  const { recetas } = useRecetas()
   const { categorias, agregarCategoria } = useCategoriasProducto()
   const { puedeEditar, puedeEliminar, isAdmin } = usePermisos()
   const canEdit = isAdmin || puedeEditar('stock')
@@ -256,6 +264,78 @@ export default function StockPage() {
   const [quickSector, setQuickSector] = useState<string | null>(null)
   const [showSectorSelect, setShowSectorSelect] = useState(false)
   const [quickChangedCount, setQuickChangedCount] = useState(0)
+
+  // ── Sugerir mínimos (Feature 2) ──
+  type Sugerencia = { id: string; nombre: string; unidad: string; entregas: number; sugerido_minimo: number; sugerido_critico: number }
+  const [showSugerir, setShowSugerir] = useState(false)
+  const [sugLoading, setSugLoading] = useState(false)
+  const [sugerencias, setSugerencias] = useState<Sugerencia[]>([])
+  const [sugSelected, setSugSelected] = useState<Set<string>>(new Set())
+  const [sugApplying, setSugApplying] = useState(false)
+  const [sugToast, setSugToast] = useState<string | null>(null)
+
+  async function abrirSugerir() {
+    setShowSugerir(true)
+    setSugLoading(true)
+    setSugerencias([])
+    try {
+      const res = await fetch('/api/stock/sugerir-minimos', { method: 'POST' })
+      const data = await res.json()
+      const list: Sugerencia[] = data.sugerencias ?? []
+      setSugerencias(list)
+      setSugSelected(new Set(list.map(s => s.id)))
+    } catch {
+      setSugerencias([])
+    }
+    setSugLoading(false)
+  }
+
+  async function aplicarSugerencias() {
+    setSugApplying(true)
+    try {
+      const elegidas = sugerencias.filter(s => sugSelected.has(s.id))
+      for (const s of elegidas) {
+        await actualizarProducto(s.id, { stock_minimo: s.sugerido_minimo, stock_critico: s.sugerido_critico })
+      }
+      setShowSugerir(false)
+      setSugToast(`${elegidas.length} producto${elegidas.length !== 1 ? 's' : ''} con mínimo sugerido`)
+      setTimeout(() => setSugToast(null), 3000)
+      refetch()
+    } catch { /* noop */ }
+    setSugApplying(false)
+  }
+
+  // ── Stock inmóvil (Feature 3) — última compra por producto (precio_historial) ──
+  const [inmovilMap, setInmovilMap] = useState<Map<string, string>>(new Map())
+  const [inmovilLoaded, setInmovilLoaded] = useState(false)
+
+  const cargarInmovil = useCallback(async () => {
+    if (!RESTAURANTE_ID) return
+    const supabase = createClient()
+    const { data } = await supabase
+      .from('precio_historial')
+      .select('producto_id, fecha')
+      .eq('restaurante_id', RESTAURANTE_ID)
+      .order('fecha', { ascending: false })
+    const m = new Map<string, string>()
+    for (const r of (data ?? []) as { producto_id: string | null; fecha: string }[]) {
+      if (r.producto_id && !m.has(r.producto_id)) m.set(r.producto_id, String(r.fecha).slice(0, 10))
+    }
+    setInmovilMap(m)
+    setInmovilLoaded(true)
+  }, [RESTAURANTE_ID])
+
+  useEffect(() => {
+    if (estadoFilter === 'inmovil' && !inmovilLoaded) cargarInmovil()
+  }, [estadoFilter, inmovilLoaded, cargarInmovil])
+
+  const esInmovil = useCallback((p: ProductoConEstado): boolean => {
+    if (p.stock_actual <= 0) return false
+    const last = inmovilMap.get(p.id) ?? (p.created_at ? p.created_at.slice(0, 10) : null)
+    if (!last) return false
+    const dias = (Date.now() - new Date(last + 'T12:00').getTime()) / 86_400_000
+    return dias >= INMOVIL_DIAS
+  }, [inmovilMap])
   // Orden congelado del stockeo en curso (ids). Se fija al iniciar para que la
   // lista NO se reordene al guardar (cambia el estado del producto) y el botón
   // Atrás siempre vuelva al producto correcto para corregir una carga.
@@ -305,6 +385,8 @@ export default function StockPage() {
     let list = productos
     if (estadoFilter === 'pendiente') {
       list = productos.filter(p => p.stock_actual === 0 && p.precio_unitario === 0)
+    } else if (estadoFilter === 'inmovil') {
+      list = inmovilLoaded ? productos.filter(esInmovil) : []
     } else if (estadoFilter !== 'all') {
       list = list.filter(p => p.estado === estadoFilter)
     }
@@ -317,7 +399,12 @@ export default function StockPage() {
       list = [...list].sort((a, b) => valorStock(b) - valorStock(a))
     }
     return list
-  }, [productos, estadoFilter, catFilter, search, sortMode])
+  }, [productos, estadoFilter, catFilter, search, sortMode, esInmovil, inmovilLoaded])
+
+  const totalDormido = useMemo(
+    () => estadoFilter === 'inmovil' ? filtered.reduce((s, p) => s + valorStock(p), 0) : 0,
+    [estadoFilter, filtered]
+  )
 
   const totalValor = useMemo(() =>
     filtered.reduce((acc, p) => acc + valorStock(p), 0),
@@ -414,6 +501,8 @@ export default function StockPage() {
       unidad_compra: p.unidad_compra ?? '',
       cantidad_por_envase: p.cantidad_por_envase != null ? String(p.cantidad_por_envase) : '',
       unidad_uso: p.unidad_uso ?? '',
+      es_produccion: !!p.es_produccion,
+      receta_id: p.receta_id ?? '',
     })
     setShowUnidadCompra(!!(p.unidad_compra || p.cantidad_por_envase))
     setFormError(null)
@@ -438,6 +527,8 @@ export default function StockPage() {
         unidad_compra: showUnidadCompra && form.unidad_compra.trim() ? form.unidad_compra.trim() : null,
         cantidad_por_envase: showUnidadCompra && form.cantidad_por_envase ? parseFloat(form.cantidad_por_envase) || null : null,
         unidad_uso: showUnidadCompra && form.unidad_uso ? form.unidad_uso : null,
+        es_produccion: form.es_produccion,
+        receta_id: form.es_produccion && form.receta_id ? form.receta_id : null,
       }
       if (editingProducto) {
         await actualizarProducto(editingProducto.id, datos)
@@ -580,6 +671,16 @@ export default function StockPage() {
                 <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.07em' }}>Pendiente</span>
               </button>
             )}
+            {isAdmin && (
+              <button
+                onClick={() => setEstadoFilter(f => f === 'inmovil' ? 'all' : 'inmovil')}
+                title={`Productos con stock pero sin compras hace +${INMOVIL_DIAS} días`}
+                style={{ background: estadoFilter === 'inmovil' ? 'rgba(139,92,246,.35)' : 'rgba(139,92,246,.15)', border: `1px solid ${estadoFilter === 'inmovil' ? 'rgba(139,92,246,.6)' : 'rgba(139,92,246,.3)'}`, borderRadius: 8, padding: '5px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#c4b5fd' }}>hourglass_empty</span>
+                <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.07em' }}>Inmóvil</span>
+              </button>
+            )}
             <ActionButton icon="table_view" label="Excel" variant="secondary" onClick={exportXLSX} />
             <ActionButton icon="picture_as_pdf" label="PDF" variant="secondary" onClick={exportPDF} />
             <button
@@ -590,6 +691,16 @@ export default function StockPage() {
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>upload_file</span>
               Importar
             </button>
+            {isAdmin && (
+              <button
+                onClick={abrirSugerir}
+                title="Sugerir stock mínimo y crítico desde la frecuencia de compra"
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, background: 'rgba(255,255,255,.15)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>tune</span>
+                Sugerir mínimos
+              </button>
+            )}
             <button
               data-coach-target="stock-rebuild"
               onClick={async () => {
@@ -893,6 +1004,23 @@ export default function StockPage() {
       {/* ── Scrollable body (insumos) ── */}
       {activeTab === 'insumos' && (
       <div data-coach-target="stock-lista" style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        {estadoFilter === 'inmovil' && (
+          <div style={{ margin: '8px 12px 0', padding: '12px 14px', background: 'rgba(139,92,246,.08)', border: '1px solid rgba(139,92,246,.3)', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#8b5cf6', flexShrink: 0 }}>hourglass_empty</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
+                {!inmovilLoaded ? 'Analizando movimientos…'
+                  : filtered.length === 0 ? 'Sin capital dormido'
+                  : `${fmtValor(totalDormido)} en stock inmóvil`}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 2 }}>
+                {!inmovilLoaded ? 'Revisando últimas compras de cada producto'
+                  : filtered.length === 0 ? `Todo tu stock rotó en los últimos ${INMOVIL_DIAS} días`
+                  : `${filtered.length} producto${filtered.length !== 1 ? 's' : ''} con stock pero sin comprarse hace +${INMOVIL_DIAS} días`}
+              </div>
+            </div>
+          </div>
+        )}
         {loading ? (
           <div style={{ padding: '48px 24px', textAlign: 'center' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 28, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>hourglass_empty</span>
@@ -941,7 +1069,14 @@ export default function StockPage() {
                     <td style={{ padding: '8px 8px' }}>
                       <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between' }}>
                         <div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', lineHeight: 1.2 }}>{p.nombre}</div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', lineHeight: 1.2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {p.nombre}
+                            {p.es_produccion && (
+                              <span style={{ fontSize: 8.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', padding: '1px 5px', borderRadius: 4, background: 'rgba(16,185,129,.12)', color: '#10b981', flexShrink: 0 }}>
+                                Producción
+                              </span>
+                            )}
+                          </div>
                           <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>
                             {!isDesktop && `${p.categoria} · `}{p.unidad_uso ?? p.unidad}
                           </div>
@@ -1117,11 +1252,83 @@ export default function StockPage() {
               </div>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ ...lblStyle, color: 'var(--navy)' }}>Precio unitario ($)</span>
+                <span style={{ ...lblStyle, color: 'var(--navy)' }}>
+                  {form.es_produccion ? 'Costo unitario ($) — desde receta' : 'Precio unitario ($)'}
+                </span>
                 <input type="number" min="0" step="0.01" value={form.precio_unitario} onChange={e => setForm(f => ({ ...f, precio_unitario: e.target.value }))}
                   placeholder="0"
                   style={{ ...inputStyle, borderColor: 'rgba(28,45,74,.3)' }} />
               </label>
+
+              {/* ── Producción interna ── */}
+              <div style={{ background: form.es_produccion ? 'rgba(16,185,129,.06)' : 'var(--bg)', border: `1px solid ${form.es_produccion ? 'rgba(16,185,129,.3)' : 'var(--border)'}`, borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={form.es_produccion}
+                    onChange={e => setForm(f => ({ ...f, es_produccion: e.target.checked, receta_id: e.target.checked ? f.receta_id : '' }))}
+                    style={{ width: 18, height: 18, accentColor: '#10b981', flexShrink: 0 }}
+                  />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Producción interna</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Caldo, masa, fondo, salsa base — se produce, no se compra</div>
+                  </div>
+                </label>
+
+                {form.es_produccion && (() => {
+                  const recetaSel = recetas.find(r => r.id === form.receta_id)
+                  const costoPorc = recetaSel ? recetaSel.food_cost.costo_porcion : 0
+                  return (
+                    <>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span style={lblStyle}>Receta de origen</span>
+                        <select
+                          value={form.receta_id}
+                          onChange={e => {
+                            const r = recetas.find(x => x.id === e.target.value)
+                            const c = r ? r.food_cost.costo_porcion : 0
+                            setForm(f => ({
+                              ...f,
+                              receta_id: e.target.value,
+                              // El costo se toma de la receta (costo por porción)
+                              precio_unitario: c > 0 ? String(Math.round(c * 100) / 100) : f.precio_unitario,
+                            }))
+                          }}
+                          style={{ ...inputStyle, appearance: 'auto', cursor: 'pointer' }}
+                        >
+                          <option value="">Elegir receta…</option>
+                          {recetas.map(r => (
+                            <option key={r.id} value={r.id}>{r.nombre}</option>
+                          ))}
+                        </select>
+                      </label>
+                      {recetaSel && (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--surface)', borderRadius: 8, padding: '8px 10px' }}>
+                          <span style={{ fontSize: 11, color: 'var(--text-2)' }}>
+                            Costo desde receta ({recetaSel.porciones ?? 1} porc.)
+                          </span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#10b981' }}>
+                            {fmtPrecio(costoPorc)}/porción
+                          </span>
+                        </div>
+                      )}
+                      {form.receta_id && (
+                        <button
+                          onClick={() => {
+                            const r = recetas.find(x => x.id === form.receta_id)
+                            const c = r ? r.food_cost.costo_porcion : 0
+                            if (c > 0) setForm(f => ({ ...f, precio_unitario: String(Math.round(c * 100) / 100) }))
+                          }}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'none', border: '1px solid rgba(16,185,129,.4)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#10b981', fontFamily: 'inherit' }}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: 15 }}>refresh</span>
+                          Recalcular costo desde la receta
+                        </button>
+                      )}
+                    </>
+                  )
+                })()}
+              </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1411,6 +1618,77 @@ export default function StockPage() {
         <div style={{ position: 'fixed', bottom: 'var(--toast-bottom)', left: '50%', transform: 'translateX(-50%)', zIndex: 200, background: 'var(--navy)', color: '#fff', borderRadius: 12, padding: '10px 20px', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', boxShadow: '0 4px 20px rgba(0,0,0,.3)', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>check_circle</span>
           {quickChangedCount} producto{quickChangedCount !== 1 ? 's' : ''} actualizados
+        </div>
+      )}
+
+      {sugToast && (
+        <div style={{ position: 'fixed', bottom: 'var(--toast-bottom)', left: '50%', transform: 'translateX(-50%)', zIndex: 200, background: '#10b981', color: '#fff', borderRadius: 12, padding: '10px 20px', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', boxShadow: '0 4px 20px rgba(0,0,0,.3)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>check_circle</span>
+          {sugToast}
+        </div>
+      )}
+
+      {/* ── Modal: Sugerir mínimos ── */}
+      {showSugerir && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,.6)' }}
+          onClick={() => !sugApplying && setShowSugerir(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: 16, width: '100%', maxWidth: 520, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(0,0,0,.4)' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>Sugerir mínimos</h3>
+                <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-3)' }}>Calculado desde la frecuencia y cantidad de compra</p>
+              </div>
+              <button onClick={() => !sugApplying && setShowSugerir(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-2)' }}>
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div style={{ overflow: 'auto', flex: 1, padding: sugLoading || sugerencias.length === 0 ? 24 : '8px 12px' }}>
+              {sugLoading ? (
+                <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-2)', fontSize: 13 }}>Analizando compras…</div>
+              ) : sugerencias.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-3)', fontSize: 13 }}>
+                  No hay suficientes compras repetidas para sugerir mínimos. Cargá más facturas (al menos 2 entregas por producto) y volvé a intentar.
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px 8px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)' }}>
+                    <span>{sugSelected.size} de {sugerencias.length} seleccionados</span>
+                    <button onClick={() => setSugSelected(sugSelected.size === sugerencias.length ? new Set() : new Set(sugerencias.map(s => s.id)))}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: 11, fontWeight: 700, fontFamily: 'inherit' }}>
+                      {sugSelected.size === sugerencias.length ? 'Ninguno' : 'Todos'}
+                    </button>
+                  </div>
+                  {sugerencias.map(s => {
+                    const sel = sugSelected.has(s.id)
+                    return (
+                      <button key={s.id} onClick={() => setSugSelected(prev => { const n = new Set(prev); if (n.has(s.id)) n.delete(s.id); else n.add(s.id); return n })}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '9px 10px', background: 'none', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        <input type="checkbox" checked={sel} readOnly style={{ width: 16, height: 16, accentColor: 'var(--navy)', flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.nombre}</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{s.entregas} entregas registradas</div>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(245,158,11,.95)' }}>mín {s.sugerido_minimo} {s.unidad}</div>
+                          <div style={{ fontSize: 10, color: 'rgba(239,68,68,.9)' }}>crít {s.sugerido_critico} {s.unidad}</div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </>
+              )}
+            </div>
+
+            {sugerencias.length > 0 && (
+              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
+                <button onClick={aplicarSugerencias} disabled={sugApplying || sugSelected.size === 0}
+                  style={{ width: '100%', background: 'var(--navy)', border: 'none', borderRadius: 10, padding: '12px 16px', fontSize: 14, fontWeight: 700, color: '#fff', cursor: 'pointer', opacity: (sugApplying || sugSelected.size === 0) ? 0.6 : 1, fontFamily: 'inherit' }}>
+                  {sugApplying ? 'Aplicando…' : `Aplicar a ${sugSelected.size} producto${sugSelected.size !== 1 ? 's' : ''}`}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

@@ -15,7 +15,40 @@ import { useTareas } from '@/lib/hooks/useTareas'
 import { useChecklist } from '@/lib/hooks/useChecklist'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { getEstadoStock } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
 import type { Perfil, Rol } from '@/types'
+
+// KPI "Cuentas por pagar" — solo admin, oculto si no hay deuda. Query liviana propia.
+function CuentasPorPagarCard({ restauranteId }: { restauranteId: string }) {
+  const [data, setData] = useState<{ total: number; count: number } | null>(null)
+  useEffect(() => {
+    if (!restauranteId) return
+    let cancel = false
+    ;(async () => {
+      const supabase = createClient()
+      const { data: rows } = await supabase.from('facturas').select('total, condicion_pago, status')
+        .eq('restaurante_id', restauranteId)
+        .in('condicion_pago', ['cuenta_corriente', '30dias', '60dias'])
+        .neq('status', 'pagada')
+      if (cancel) return
+      const list = (rows ?? []) as { total: number | null }[]
+      setData({ total: list.reduce((s, f) => s + (f.total ?? 0), 0), count: list.length })
+    })()
+    return () => { cancel = true }
+  }, [restauranteId])
+  if (!data || data.count === 0) return null
+  const fmt = (n: number) => n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
+  return (
+    <Link href="/facturas" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 14, background: '#fffbeb', border: '1px solid #fde68a', textDecoration: 'none' }}>
+      <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#92400e' }}>account_balance_wallet</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e' }}>Cuentas por pagar</div>
+        <div style={{ fontSize: 11, color: '#b45309' }}>{data.count} factura{data.count !== 1 ? 's' : ''} a crédito</div>
+      </div>
+      <div style={{ fontSize: 15, fontWeight: 800, color: '#92400e', whiteSpace: 'nowrap' }}>{fmt(data.total)}</div>
+    </Link>
+  )
+}
 
 export default function DashboardPage() {
   const { perfil: authPerfil } = useAuth()
@@ -170,6 +203,7 @@ export default function DashboardPage() {
               )}
             </div>
 
+            {rol === 'admin' && <CuentasPorPagarCard restauranteId={perfil.restaurante_id} />}
             <div data-coach-target="dashboard-pase"><PasePreview puedeEscribir={puedeEscribir} /></div>
             <div data-coach-target="dashboard-plaza"><MiPlaza rol={rol} completados={plazaStats.completados} total={plazaStats.total} /></div>
           </div>
@@ -263,6 +297,9 @@ export default function DashboardPage() {
             )}
           </div>
 
+          {rol === 'admin' && (
+            <div style={{ padding: '8px 16px 0' }}><CuentasPorPagarCard restauranteId={perfil.restaurante_id} /></div>
+          )}
           <div data-coach-target="dashboard-pase"><PasePreview puedeEscribir={puedeEscribir} /></div>
           <div data-coach-target="dashboard-plaza"><MiPlaza rol={rol} completados={plazaStats.completados} total={plazaStats.total} /></div>
           <div data-coach-target="dashboard-stock"><StockCriticoSection productos={productos} /></div>

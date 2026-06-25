@@ -100,7 +100,7 @@ export interface FoodCostCalc {
 // ── Facturas ────────────────────────────────────────────────
 export type TipoFactura = 'A' | 'B' | 'C' | 'X' | 'remito' | 'ticket'
 export type CondicionPago = 'contado' | '30dias' | '60dias' | 'cuenta_corriente'
-export type FacturaStatus = 'pendiente' | 'confirmada' | 'observada'
+export type FacturaStatus = 'pendiente' | 'confirmada' | 'observada' | 'pagada'
 
 // DB: factura_items (id, factura_id, producto_nombre, producto_id, cantidad, unidad, precio_unitario, alicuota_iva, subtotal, precio_anterior, created_at)
 export interface FacturaItem {
@@ -135,6 +135,7 @@ export interface Factura {
   status?: string | null
   notas?: string | null
   usuario_id?: string | null
+  pedido_id?: string | null
   created_at: string
 }
 
@@ -178,6 +179,8 @@ export interface Producto {
   stock_critico: number
   precio_unitario: number
   proveedor_id?: string | null
+  es_produccion?: boolean | null
+  receta_id?: string | null
   restaurante_id: string
   activo: boolean
   created_at: string

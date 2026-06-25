@@ -470,7 +470,7 @@ function CoachOverlay({
 export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: KitchenCoachFABProps) {
   const {
     messages, loading, error, isOpen, highlight, overlayText,
-    toggle, close, sendMessage, clearMessages, clearHighlight, clearOverlayText,
+    toggle, open, close, sendMessage, clearMessages, clearHighlight, clearOverlayText,
   } = useKitchenCoach()
 
   const [input, setInput] = useState('')
@@ -520,6 +520,29 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
       window.removeEventListener('kc-welcome-app', handleWelcome)
     }
   }, [startTour])
+
+  // ── Prefill: abre el chat con texto precargado en el input ──
+  // Lo usa el onboarding (paso "Dictarle al Coach"): dispatch de
+  //   window.dispatchEvent(new CustomEvent('kc-prefill', { detail: { text } }))
+  // No envía el mensaje solo — deja el texto listo para que el usuario edite/mande.
+  useEffect(() => {
+    function handlePrefill(e: Event) {
+      const detail = (e as CustomEvent).detail as { text?: string } | undefined
+      if (!detail?.text) return
+      open()
+      setInput(detail.text)
+      setTimeout(() => {
+        const ta = textareaRef.current
+        if (ta) {
+          ta.focus()
+          ta.style.height = 'auto'
+          ta.style.height = Math.min(ta.scrollHeight, 96) + 'px'
+        }
+      }, 320)
+    }
+    window.addEventListener('kc-prefill', handlePrefill)
+    return () => window.removeEventListener('kc-prefill', handlePrefill)
+  }, [open])
 
   // ── Tour controls ──────────────────────────────────────────
   function handleTourNext() {

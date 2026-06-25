@@ -1213,8 +1213,11 @@ function DetailView({
   const [opsPanel, setOpsPanel] = useState<string | null>(null) // plato_receta_id
   const [opsPlaza, setOpsPlaza] = useState('')
   const [opsSeccion, setOpsSeccion] = useState('')
-  const [opsCantidad, setOpsCantidad] = useState('1')
-  const [opsUnidad, setOpsUnidad] = useState('u')
+  const [opsCantidad, setOpsCantidad] = useState('')
+  const [opsUnidad, setOpsUnidad] = useState('g')
+  const [opsRecipienteNombre, setOpsRecipienteNombre] = useState('')
+  const [opsPesoPorcion, setOpsPesoPorcion] = useState('')
+  const [opsPesoPorcionUnidad, setOpsPesoPorcionUnidad] = useState('g')
   const [opsSaving, setOpsSaving] = useState(false)
   // Draft recipe creation
   const [creatingDraft, setCreatingDraft] = useState(false)
@@ -1272,7 +1275,20 @@ function DetailView({
     if (!opsPlaza || !opsSeccion || opsSaving) return
     setOpsSaving(true)
     try {
-      const miCantidad = parseFloat(opsCantidad) || 1
+      const capVal = parseFloat(opsCantidad) || 0
+
+      // Calcular porciones finales (si capacidad está en peso → dividir por tamaño porción)
+      const porVal = parseFloat(opsPesoPorcion) || 0
+      const toG = (v: number, u: string) => u === 'kg' ? v * 1000 : u === 'g' ? v : null
+      const capG = toG(capVal, opsUnidad)
+      const porG = toG(porVal, opsPesoPorcionUnidad)
+      const porcionesCalculadas = capG !== null && porG !== null && porG > 0 ? Math.round(capG / porG) : null
+      const miCantidad = (['porc', 'u', 'pax'].includes(opsUnidad)) ? capVal : (porcionesCalculadas ?? capVal)
+
+      const recipienteNombre = opsRecipienteNombre.trim() || null
+      const pesoPorcion = recipienteNombre && opsPesoPorcion ? parseFloat(opsPesoPorcion) || null : null
+      const pesoPorcionUnidad = pesoPorcion ? opsPesoPorcionUnidad : null
+      const recipienteCapacidad = recipienteNombre ? miCantidad : null
 
       // 1. Guardar plaza + contribución de ESTE plato en plato_recetas
       await supabaseDV.from('plato_recetas')
@@ -1280,7 +1296,6 @@ function DetailView({
         .eq('id', pr.id)
 
       // 2. Sumar TODAS las contribuciones de esta receta en esta plaza
-      //    (RLS filtra por restaurante vía carta_items)
       const { data: todasContribuciones } = await supabaseDV
         .from('plato_recetas')
         .select('cantidad_ops')
@@ -1312,7 +1327,7 @@ function DetailView({
         seccionId = newSec?.id ?? null
       }
 
-      // 4. Upsert checklist_item con la SUMA de todas las contribuciones
+      // 4. Upsert checklist_item con la SUMA de contribuciones + recipiente/peso
       const nombre = pr.receta?.nombre ?? search
       const { data: existente } = await supabaseDV
         .from('checklist_items')
@@ -1328,6 +1343,10 @@ function DetailView({
           unidad: opsUnidad,
           seccion_id: seccionId,
           seccion: secNombre,
+          recipiente_nombre: recipienteNombre,
+          recipiente_capacidad: recipienteCapacidad,
+          peso_porcion: pesoPorcion,
+          peso_porcion_unidad: pesoPorcionUnidad,
         }).eq('id', existente[0].id)
       } else {
         await supabaseDV.from('checklist_items').insert({
@@ -1341,6 +1360,10 @@ function DetailView({
           seccion: secNombre,
           restaurante_id: restauranteId,
           orden: 0,
+          recipiente_nombre: recipienteNombre,
+          recipiente_capacidad: recipienteCapacidad,
+          peso_porcion: pesoPorcion,
+          peso_porcion_unidad: pesoPorcionUnidad,
         })
       }
       setOpsPanel(null)
@@ -1631,11 +1654,14 @@ function DetailView({
                       {pr.costo_calculado > 0 && (
                         <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmtMoney(pr.costo_calculado)}</span>
                       )}
-                      {pr.plaza && pr.cantidad_ops != null && (
-                        <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#eef2ff', color: 'var(--accent)' }}>
-                          OPS {pr.plaza}: {pr.cantidad_ops} {pr.unidad_ops ?? 'u'}
-                        </span>
-                      )}
+                      {pr.plaza && pr.cantidad_ops != null && (() => {
+                        const plazaCfg = PLAZAS_OPS.find(p => p.id === pr.plaza)
+                        return (
+                          <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: `${plazaCfg?.color ?? '#4361a0'}18`, color: plazaCfg?.color ?? 'var(--accent)' }}>
+                            {pr.cantidad_ops} {pr.unidad_ops ?? 'u'} · {plazaCfg?.label ?? pr.plaza}
+                          </span>
+                        )
+                      })()}
                     </div>
                   </div>
                   {/* Porciones: click para editar directo */}
@@ -1670,14 +1696,27 @@ function DetailView({
                   )}
                   {/* → OPS button */}
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (opsPanel === pr.id) { setOpsPanel(null); return }
                       setOpsPanel(pr.id)
-                      // Prefill con valores guardados del plato_receta
                       setOpsPlaza(pr.plaza ?? '')
                       setOpsSeccion('')
-                      setOpsCantidad(pr.cantidad_ops != null ? String(pr.cantidad_ops) : '1')
-                      setOpsUnidad(pr.unidad_ops ?? 'u')
+                      setOpsCantidad(pr.cantidad_ops != null ? String(pr.cantidad_ops) : '')
+                      setOpsUnidad(pr.unidad_ops ?? 'g')
+                      setOpsRecipienteNombre('')
+                      setOpsPesoPorcion('')
+                      setOpsPesoPorcionUnidad('g')
+                      // Prefill recipiente/peso desde checklist_items si ya existe
+                      if (pr.receta_id && pr.plaza) {
+                        const { data } = await supabaseDV.from('checklist_items')
+                          .select('recipiente_nombre, recipiente_capacidad, peso_porcion, peso_porcion_unidad, unidad')
+                          .eq('receta_id', pr.receta_id).eq('plaza', pr.plaza).limit(1)
+                        if (data?.[0]) {
+                          setOpsRecipienteNombre(data[0].recipiente_nombre ?? '')
+                          setOpsPesoPorcion(data[0].peso_porcion != null ? String(data[0].peso_porcion) : '')
+                          setOpsPesoPorcionUnidad(data[0].peso_porcion_unidad ?? 'g')
+                        }
+                      }
                     }}
                     title="Asignar a OPS"
                     style={{
@@ -1700,97 +1739,145 @@ function DetailView({
                 </div>
                 {/* OPS panel inline */}
                 {opsPanel === pr.id && (
-                  <div style={{ padding: '10px 12px 12px', borderTop: '1px solid var(--border)', background: '#f8faff' }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
-                      Plaza de producción
-                    </div>
-                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 10 }}>
+                  <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', background: '#f8faff' }}>
+                    {/* Plaza */}
+                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Plaza de producción</div>
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
                       {PLAZAS_OPS.map(p => (
-                        <button
-                          key={p.id}
-                          onClick={() => { setOpsPlaza(opsPlaza === p.id ? '' : p.id); setOpsSeccion('') }}
-                          style={{
-                            padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                            fontSize: 11, fontWeight: 700,
-                            background: opsPlaza === p.id ? `${p.color}18` : 'var(--surface)',
-                            color: opsPlaza === p.id ? p.color : 'var(--text-3)',
-                            outline: opsPlaza === p.id ? `1.5px solid ${p.color}50` : 'none',
-                          }}
-                        >{p.label}</button>
+                        <button key={p.id} onClick={() => { setOpsPlaza(opsPlaza === p.id ? '' : p.id); setOpsSeccion('') }}
+                          style={{ padding: '5px 11px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                            background: opsPlaza === p.id ? `${p.color}18` : 'var(--surface)', color: opsPlaza === p.id ? p.color : 'var(--text-3)',
+                            outline: opsPlaza === p.id ? `1.5px solid ${p.color}50` : '1px solid var(--border)' }}>
+                          {p.label}
+                        </button>
                       ))}
                     </div>
+
                     {opsPlaza && (
                       <>
-                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
-                          Sección en Apertura / Cierre
-                        </div>
-                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 10 }}>
+                        {/* Sección mise */}
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Sección del mise</div>
+                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
                           {SECCIONES_OPS.map(s => (
-                            <button
-                              key={s.id}
-                              onClick={() => setOpsSeccion(opsSeccion === s.id ? '' : s.id)}
-                              style={{
-                                display: 'flex', alignItems: 'center', gap: 4,
-                                padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                                fontSize: 11, fontWeight: 700,
-                                background: opsSeccion === s.id ? '#4361a018' : 'var(--surface)',
-                                color: opsSeccion === s.id ? 'var(--accent)' : 'var(--text-3)',
-                                outline: opsSeccion === s.id ? '1.5px solid #4361a050' : 'none',
-                              }}
-                            >
+                            <button key={s.id} onClick={() => setOpsSeccion(opsSeccion === s.id ? '' : s.id)}
+                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                                background: opsSeccion === s.id ? 'rgba(67,97,160,.12)' : 'var(--surface)', color: opsSeccion === s.id ? 'var(--accent)' : 'var(--text-3)',
+                                outline: opsSeccion === s.id ? '1.5px solid rgba(67,97,160,.3)' : '1px solid var(--border)' }}>
                               <span className="material-symbols-outlined" style={{ fontSize: 13 }}>{s.icono}</span>
                               {s.label}
                             </button>
                           ))}
                         </div>
+
+                        {/* Recipiente */}
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Recipiente (opcional)</div>
+                        <input type="text" value={opsRecipienteNombre}
+                          onChange={e => { setOpsRecipienteNombre(e.target.value); if (!e.target.value.trim()) setOpsPesoPorcion('') }}
+                          placeholder="ej: tupper, cubeta GN, bandeja"
+                          style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)', boxSizing: 'border-box', marginBottom: 12 }} />
+
+                        {/* Porciones/peso recipiente lleno */}
+                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>
+                          {opsRecipienteNombre.trim() ? 'Porciones/peso recipiente lleno' : 'Cantidad en mise'}
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                          <input type="number" value={opsCantidad} onChange={e => setOpsCantidad(e.target.value)} inputMode="decimal" placeholder="0"
+                            style={{ width: 70, padding: '8px 10px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 14, fontWeight: 700, textAlign: 'center', fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)' }} />
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            {UNIDADES_OPS.map(u => (
+                              <button key={u} onClick={() => setOpsUnidad(u)}
+                                style={{ padding: '6px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                                  background: opsUnidad === u ? 'var(--navy)' : 'var(--surface)', color: opsUnidad === u ? '#fff' : 'var(--text-3)',
+                                  outline: opsUnidad === u ? 'none' : '1px solid var(--border)' }}>
+                                {u}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Tamaño por porción — solo cuando hay recipiente */}
+                        {opsRecipienteNombre.trim() && (() => {
+                          const capVal = parseFloat(opsCantidad) || 0
+                          const porVal = parseFloat(opsPesoPorcion) || 0
+                          const toG2 = (v: number, u: string) => u === 'kg' ? v * 1000 : u === 'g' ? v : null
+                          const capG = toG2(capVal, opsUnidad)
+                          const porG = toG2(porVal, opsPesoPorcionUnidad)
+                          const porcionesAuto = capG !== null && porG !== null && porG > 0 ? Math.round(capG / porG) : null
+                          const UNIDADES_PORCION = ['g', 'kg', 'u', 'porc', 'ml', 'l']
+                          return (
+                            <>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Tamaño por porción</div>
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
+                                <input type="number" value={opsPesoPorcion} onChange={e => setOpsPesoPorcion(e.target.value)} inputMode="decimal" placeholder="ej: 110"
+                                  style={{ width: 70, padding: '8px 10px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 14, fontWeight: 700, textAlign: 'center', fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)' }} />
+                                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                  {UNIDADES_PORCION.map(u => (
+                                    <button key={u} onClick={() => setOpsPesoPorcionUnidad(u)}
+                                      style={{ padding: '6px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                                        background: opsPesoPorcionUnidad === u ? '#4361a0' : 'var(--surface)', color: opsPesoPorcionUnidad === u ? '#fff' : 'var(--text-3)',
+                                        outline: opsPesoPorcionUnidad === u ? 'none' : '1px solid var(--border)' }}>
+                                      {u}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              {porcionesAuto !== null && opsCantidad && opsPesoPorcion ? (
+                                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', marginBottom: 12, paddingLeft: 2 }}>
+                                  = {porcionesAuto} porciones por recipiente
+                                </div>
+                              ) : opsCantidad && opsPesoPorcion ? (
+                                <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 12, paddingLeft: 2 }}>
+                                  {capVal} {opsUnidad} · {porVal} {opsPesoPorcionUnidad} / porción
+                                </div>
+                              ) : <div style={{ marginBottom: 12 }} />}
+                            </>
+                          )
+                        })()}
+
+                        {/* Indicador de suma si hay otras contribuciones */}
+                        {(() => {
+                          const otrasCantidad = item.plato_recetas
+                            .filter(otro => otro.receta_id === pr.receta_id && otro.id !== pr.id && otro.plaza === opsPlaza && otro.cantidad_ops != null)
+                            .reduce((s, o) => s + (o.cantidad_ops ?? 0), 0)
+                          const miVal = parseFloat(opsCantidad) || 0
+                          if (otrasCantidad > 0) return (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: '#eef2ff', borderRadius: 8, marginBottom: 10 }}>
+                              <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent)' }}>functions</span>
+                              <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>
+                                Total OPS: <b>{otrasCantidad + miVal} {opsUnidad}</b> ({otrasCantidad} otros + {miVal} este)
+                              </span>
+                            </div>
+                          )
+                          return null
+                        })()}
                       </>
                     )}
-                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
-                      Cantidad para este plato
+
+                    {/* Guardar / Quitar */}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button onClick={() => handleGuardarOPS(pr)} disabled={!opsPlaza || !opsSeccion || opsSaving}
+                        style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none',
+                          background: opsPlaza && opsSeccion && !opsSaving ? 'var(--navy)' : 'var(--border)',
+                          color: '#fff', fontWeight: 700, fontSize: 12, cursor: opsPlaza && opsSeccion ? 'pointer' : 'default',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                          {opsSaving ? 'progress_activity' : 'checklist'}
+                        </span>
+                        {opsSaving ? 'Guardando…' : 'Guardar en mise'}
+                      </button>
+                      {pr.plaza && (
+                        <button onClick={async () => {
+                          await supabaseDV.from('plato_recetas').update({ plaza: null, cantidad_ops: null, unidad_ops: null }).eq('id', pr.id)
+                          setOpsPanel(null)
+                        }} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                          Quitar
+                        </button>
+                      )}
+                      <button onClick={() => setOpsPanel(null)}
+                        style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-3)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        Cancelar
+                      </button>
                     </div>
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                      <input
-                        type="number" value={opsCantidad}
-                        onChange={e => setOpsCantidad(e.target.value)}
-                        style={{ width: 70, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, background: 'var(--surface)' }}
-                      />
-                      <select value={opsUnidad} onChange={e => setOpsUnidad(e.target.value)}
-                        style={{ flex: 1, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, background: 'var(--surface)' }}>
-                        {UNIDADES_OPS.map(u => <option key={u} value={u}>{u}</option>)}
-                      </select>
-                    </div>
-                    {/* Indicador de suma si hay otras contribuciones */}
-                    {(() => {
-                      const otrasCantidad = item.plato_recetas
-                        .filter(otro => otro.receta_id === pr.receta_id && otro.id !== pr.id && otro.plaza === opsPlaza && otro.cantidad_ops != null)
-                        .reduce((s, o) => s + (o.cantidad_ops ?? 0), 0)
-                      const miVal = parseFloat(opsCantidad) || 0
-                      const total = otrasCantidad + miVal
-                      if (otrasCantidad > 0) return (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: '#eef2ff', borderRadius: 8, marginBottom: 8 }}>
-                          <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent)' }}>functions</span>
-                          <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>
-                            Total en OPS: <b>{total} {opsUnidad}</b> ({otrasCantidad} de otros platos + {miVal} de este)
-                          </span>
-                        </div>
-                      )
-                      return null
-                    })()}
-                    <button
-                      onClick={() => handleGuardarOPS(pr)}
-                      disabled={!opsPlaza || !opsSeccion || opsSaving}
-                      style={{
-                        width: '100%', padding: '9px', borderRadius: 10, border: 'none',
-                        background: opsPlaza && opsSeccion && !opsSaving ? 'var(--navy)' : 'var(--border)',
-                        color: '#fff', fontWeight: 700, fontSize: 12, cursor: opsPlaza && opsSeccion ? 'pointer' : 'default',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                      }}
-                    >
-                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
-                        {opsSaving ? 'progress_activity' : 'checklist'}
-                      </span>
-                      {opsSaving ? 'Guardando…' : 'Guardar en mise en place'}
-                    </button>
                   </div>
                 )}
                 </div>

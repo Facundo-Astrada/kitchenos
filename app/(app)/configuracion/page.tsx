@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { useAuth } from '@/lib/auth/context'
+import { resetOnboardingDone } from '@/lib/hooks/useOnboardingProgress'
 import type { EquipoMiembro, RolPermiso } from '@/types'
 import { ROLES_DISPONIBLES, PLAZAS_DISPONIBLES, TODOS_LOS_MODULOS } from '@/types'
 
@@ -17,8 +18,14 @@ export default function ConfiguracionPage() {
   const router = useRouter()
   const RESTAURANTE_ID = useRestauranteId()
   const { isAdmin, allPermisos, fetchPermisos } = usePermisos()
-  const { perfil } = useAuth()
+  const { perfil, user } = useAuth()
   const [supabase] = useState(() => createClient())
+
+  function abrirGuiaInicio() {
+    // Reabrir el onboarding aunque ya esté marcado como completado
+    resetOnboardingDone(user?.id)
+    router.push('/onboarding')
+  }
 
   const [tab, setTab] = useState<Tab>('equipo')
   const [miembros, setMiembros] = useState<EquipoMiembro[]>([])
@@ -165,10 +172,18 @@ export default function ConfiguracionPage() {
           <button onClick={() => router.back()} className="bg-transparent border-none cursor-pointer">
             <span className="material-symbols-outlined text-white" style={{ fontSize: 22 }}>arrow_back</span>
           </button>
-          <div>
+          <div className="flex-1">
             <h1 className="text-lg font-bold text-white">Configuración</h1>
             <p className="text-[11px] text-white/60">Equipo y permisos por rol</p>
           </div>
+          <button
+            onClick={abrirGuiaInicio}
+            className="flex items-center gap-1.5 cursor-pointer"
+            style={{ background: 'rgba(255,255,255,.16)', border: 'none', borderRadius: 999, padding: '6px 12px', color: '#fff', fontSize: 12, fontWeight: 700 }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>rocket_launch</span>
+            Guía de inicio
+          </button>
         </div>
       </div>
 

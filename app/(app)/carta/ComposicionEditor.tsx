@@ -115,6 +115,18 @@ export default function ComposicionEditor({
 }) {
   const RESTAURANTE_ID = useRestauranteId()
 
+  async function crearIdeaReceta(nombre: string): Promise<string> {
+    if (!RESTAURANTE_ID) throw new Error('Sin sesión')
+    const res = await fetch('/api/recetas/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ receta: { nombre: nombre.trim(), status: 'draft', activa: true, restaurante_id: RESTAURANTE_ID, porciones: 1 } }),
+    })
+    const json = await res.json()
+    if (!res.ok) throw new Error(json.error || 'Error al crear receta')
+    return json.id as string
+  }
+
   // Secciones de mise (checklist_secciones) para rutear cada preparación
   const [miseSecciones, setMiseSecciones] = useState<{ plaza: string; nombre: string }[]>([])
   useEffect(() => {
@@ -400,6 +412,7 @@ export default function ComposicionEditor({
             editingPorcionVal={editingPorcionVal}
             setEditingPorcionVal={setEditingPorcionVal}
             uid={uid}
+            onCrearIdea={crearIdeaReceta}
           />
         ) : (
           <>
@@ -489,6 +502,7 @@ function PlatoRecetasEditor({
   recetas, productos, platoRecetas, setPlatoRecetas, costoTotal,
   platoSearch, setPlatoSearch, platoShowResults, setPlatoShowResults,
   editingPorcionUid, setEditingPorcionUid, editingPorcionVal, setEditingPorcionVal, uid,
+  onCrearIdea,
 }: {
   recetas: RefConCosto[]
   productos: RefConCosto[]
@@ -504,7 +518,9 @@ function PlatoRecetasEditor({
   editingPorcionVal: string
   setEditingPorcionVal: (v: string) => void
   uid: () => number
+  onCrearIdea: (nombre: string) => Promise<string>
 }) {
+  const [creandoIdea, setCreandoIdea] = useState(false)
   // OPS panel local — abre/cierra por _uid de la fila
   const [opsPanelUid, setOpsPanelUid] = useState<number | null>(null)
   const [opsPlaza, setOpsPlaza] = useState('')
@@ -568,6 +584,20 @@ function PlatoRecetasEditor({
     setPlatoRecetas(prev => [...prev, { _uid: uid(), ref_id: r.id, nombre: r.nombre, porciones: 1, tipo: r.tipo }])
     setPlatoSearch('')
     setPlatoShowResults(false)
+  }
+
+  async function agregarIdea() {
+    const nombre = platoSearch.trim()
+    if (!nombre || creandoIdea) return
+    setCreandoIdea(true)
+    try {
+      const id = await onCrearIdea(nombre)
+      setPlatoRecetas(prev => [...prev, { _uid: uid(), ref_id: id, nombre, porciones: 1, tipo: 'receta' }])
+      setPlatoSearch('')
+      setPlatoShowResults(false)
+    } finally {
+      setCreandoIdea(false)
+    }
   }
 
   function saveStock(u: number) {
@@ -830,8 +860,22 @@ function PlatoRecetasEditor({
           </div>
         )}
         {platoShowResults && platoSearch.trim().length > 0 && searchResults.length === 0 && (
-          <div style={{ padding: '12px', fontSize: 12, color: 'var(--text-3)', textAlign: 'center' }}>
-            Sin resultados para &quot;{platoSearch}&quot;
+          <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
+              Sin resultados para &quot;<b>{platoSearch}</b>&quot;
+            </div>
+            <button
+              onMouseDown={e => { e.preventDefault(); agregarIdea() }}
+              disabled={creandoIdea}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                padding: '9px 14px', borderRadius: 10, border: '1.5px dashed var(--accent)',
+                background: 'rgba(67,97,160,.06)', color: 'var(--accent)', fontSize: 12, fontWeight: 700,
+                cursor: creandoIdea ? 'default' : 'pointer', fontFamily: 'inherit', opacity: creandoIdea ? .6 : 1 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                {creandoIdea ? 'progress_activity' : 'add_circle'}
+              </span>
+              {creandoIdea ? 'Creando…' : `Crear "${platoSearch}" como idea en recetario`}
+            </button>
           </div>
         )}
       </div>

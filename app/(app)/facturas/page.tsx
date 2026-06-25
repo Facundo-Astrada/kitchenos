@@ -5,6 +5,7 @@ import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { useFacturas } from '@/lib/hooks/useFacturas'
 import { useStock } from '@/lib/hooks/useStock'
 import { useProveedores } from '@/lib/hooks/useProveedores'
+import { usePedidos } from '@/lib/hooks/usePedidos'
 import ProveedoresPage from '@/app/(app)/proveedores/page'
 import ImageCropModal from '@/components/ui/ImageCropModal'
 import BulkUploadDrawer from '@/components/facturas/BulkUploadDrawer'
@@ -13,6 +14,7 @@ import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import { createClient } from '@/lib/supabase/client'
 import type {
   Factura, FacturaItem, FacturaStatus, TipoFactura, CondicionPago,
+  Pedido, PedidoItem,
 } from '@/types'
 
 // ── Weight unit helpers ──────────────────────────────────────
@@ -75,6 +77,13 @@ const STATUS_CONFIG: Record<FacturaStatus, { bg: string; color: string; label: s
   confirmada: { bg: '#dcfce7', color: '#166534', label: 'Confirmada' },
   pendiente: { bg: '#fef9c3', color: '#854d0e', label: 'Pendiente' },
   observada: { bg: '#fef2f2', color: '#991b1b', label: 'Observada' },
+  pagada: { bg: '#dbeafe', color: '#1e40af', label: 'Pagada' },
+}
+
+// Una factura está "por pagar" si es a crédito y todavía no se marcó pagada.
+const COND_A_CREDITO = new Set(['cuenta_corriente', '30dias', '60dias'])
+function esPorPagar(f: Factura): boolean {
+  return COND_A_CREDITO.has(String(f.condicion_pago ?? '')) && f.status !== 'pagada'
 }
 
 const TIPO_LABELS: Record<TipoFactura, string> = {
@@ -300,6 +309,22 @@ function ConfirmView({ result, productos, proveedores, onConfirm, onCancel, savi
     return proveedores.filter(p => p.nombre.toLowerCase().includes(q)).slice(0, 6)
   }, [provSearch, data.proveedor_nombre, proveedores])
 
+  // Resumen de alzas de precio significativas (>15% vs compra anterior)
+  const ALERTA_VARIACION = 15
+  const alzas = useMemo(() => {
+    return data.items
+      .map(it => {
+        const va = it.precio_anterior && it.precio_anterior > 0
+          ? ((it.precio_unitario - it.precio_anterior) / it.precio_anterior) * 100
+          : null
+        return va !== null && va >= ALERTA_VARIACION
+          ? { nombre: it.producto_nombre, va, antes: it.precio_anterior!, ahora: it.precio_unitario }
+          : null
+      })
+      .filter((x): x is { nombre: string; va: number; antes: number; ahora: number } => x !== null)
+      .sort((a, b) => b.va - a.va)
+  }, [data.items])
+
   function updateItem(idx: number, field: string, value: unknown) {
     setData(prev => ({
       ...prev,
@@ -391,6 +416,36 @@ function ConfirmView({ result, productos, proveedores, onConfirm, onCancel, savi
                 )}
                 <div className="text-[10px] mt-2 opacity-70" style={{ color: '#92400e' }}>
                   Estos conceptos no se cargarán como compras. Configurá los nombres internos desde el botón de privacidad en Facturas.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Alerta de variación de precio — alzas significativas */}
+        {alzas.length > 0 && (
+          <div className="mx-4 mt-4 rounded-[12px] p-3" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
+            <div className="flex items-start gap-2">
+              <span className="material-symbols-outlined text-[18px]" style={{ color: '#b91c1c' }}>trending_up</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[12px] font-bold" style={{ color: '#b91c1c' }}>
+                  {alzas.length === 1 ? '1 producto subió' : `${alzas.length} productos subieron`} de precio
+                </div>
+                <div className="mt-1 flex flex-col gap-1">
+                  {alzas.slice(0, 5).map((a, i) => (
+                    <div key={i} className="text-[11px] flex items-center justify-between gap-2" style={{ color: '#991b1b' }}>
+                      <span className="truncate">{a.nombre}</span>
+                      <span className="font-bold whitespace-nowrap">
+                        {fmt(a.antes)} → {fmt(a.ahora)} <span style={{ color: '#dc2626' }}>+{a.va.toFixed(0)}%</span>
+                      </span>
+                    </div>
+                  ))}
+                  {alzas.length > 5 && (
+                    <div className="text-[10px]" style={{ color: '#b91c1c', opacity: 0.7 }}>+{alzas.length - 5} más</div>
+                  )}
+                </div>
+                <div className="text-[10px] mt-2 opacity-70" style={{ color: '#991b1b' }}>
+                  Revisá que los precios sean correctos antes de confirmar. Podés ajustarlos tocando el lápiz en cada producto.
                 </div>
               </div>
             </div>
@@ -710,13 +765,176 @@ function Field({ label, value, onChange, type = 'text' }: {
   )
 }
 
+// ── Reconciliación factura ↔ pedido ──────────────────────────
+function ReconciliacionPedido({ factura, facturaItems, onVincular }: {
+  factura: Factura
+  facturaItems: FacturaItem[]
+  onVincular: (pedidoId: string | null) => Promise<void>
+}) {
+  const { pedidos, fetchItems: fetchPedidoItems } = usePedidos()
+  const [picking, setPicking] = useState(false)
+  const [pedidoItems, setPedidoItems] = useState<PedidoItem[]>([])
+  const [busy, setBusy] = useState(false)
+
+  const pedidoVinculado = useMemo(
+    () => pedidos.find(p => p.id === factura.pedido_id) ?? null,
+    [pedidos, factura.pedido_id]
+  )
+
+  // Pedidos del mismo proveedor, más recientes primero
+  const pedidosProveedor = useMemo(() => {
+    const prov = normalizeName(factura.proveedor_nombre)
+    return pedidos
+      .filter(p => normalizeName(p.proveedor_nombre ?? '') === prov || !prov)
+      .slice(0, 12)
+  }, [pedidos, factura.proveedor_nombre])
+
+  useEffect(() => {
+    if (!factura.pedido_id) { setPedidoItems([]); return }
+    let cancel = false
+    fetchPedidoItems(factura.pedido_id).then(items => { if (!cancel) setPedidoItems(items) })
+    return () => { cancel = true }
+  }, [factura.pedido_id, fetchPedidoItems])
+
+  // Comparar items facturados vs pedidos (match por nombre normalizado)
+  const comparacion = useMemo(() => {
+    if (!factura.pedido_id) return null
+    const pedMap = new Map(pedidoItems.map(p => [normalizeName(p.producto_nombre), p]))
+    const usados = new Set<string>()
+    const filas = facturaItems.map(fi => {
+      const key = normalizeName(fi.producto_nombre)
+      const pi = pedMap.get(key)
+      if (pi) usados.add(key)
+      const precioPed = pi?.precio_estimado ?? 0
+      const difPrecio = precioPed > 0
+        ? ((fi.precio_unitario - precioPed) / precioPed) * 100 : null
+      const difCant = pi ? fi.cantidad - pi.cantidad : null
+      return { nombre: fi.producto_nombre, pi, fi, difPrecio, difCant }
+    })
+    const faltantes = pedidoItems.filter(p => !usados.has(normalizeName(p.producto_nombre)))
+    return { filas, faltantes }
+  }, [factura.pedido_id, pedidoItems, facturaItems])
+
+  async function vincular(pedidoId: string | null) {
+    setBusy(true)
+    try { await onVincular(pedidoId); setPicking(false) }
+    catch { /* error manejado en el padre */ }
+    setBusy(false)
+  }
+
+  return (
+    <div className="mt-4">
+      <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-3)' }}>
+        Pedido vinculado
+      </div>
+
+      {!pedidoVinculado && !picking && (
+        <button onClick={() => setPicking(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', justifyContent: 'center', background: 'none', border: '1px dashed var(--border)', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', fontSize: 12, color: 'var(--text-2)', fontFamily: 'inherit' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>link</span>
+          Vincular a un pedido
+        </button>
+      )}
+
+      {picking && (
+        <div className="rounded-[10px] p-2" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+          {pedidosProveedor.length === 0 ? (
+            <div className="text-[12px] p-2" style={{ color: 'var(--text-3)' }}>No hay pedidos de este proveedor.</div>
+          ) : pedidosProveedor.map(p => (
+            <button key={p.id} disabled={busy} onClick={() => vincular(p.id)}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', textAlign: 'left', padding: '8px 10px', background: 'none', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit' }}>
+              <span className="text-[12px]" style={{ color: 'var(--text-1)' }}>
+                {p.proveedor_nombre} · {fmtFecha(p.fecha_pedido ?? null)}
+              </span>
+              <span className="text-[12px] font-bold" style={{ color: 'var(--navy)' }}>{fmt(p.total_estimado ?? 0)}</span>
+            </button>
+          ))}
+          <button onClick={() => setPicking(false)} className="text-[11px] mt-1" style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', fontFamily: 'inherit', padding: '6px 4px' }}>
+            Cancelar
+          </button>
+        </div>
+      )}
+
+      {pedidoVinculado && (
+        <div className="rounded-[12px] p-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="material-symbols-outlined text-[18px]" style={{ color: '#10b981' }}>receipt_long</span>
+              <div className="min-w-0">
+                <div className="text-[12px] font-bold truncate" style={{ color: 'var(--text-1)' }}>
+                  Pedido del {fmtFecha(pedidoVinculado.fecha_pedido ?? null)}
+                </div>
+                <div className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                  Estimado {fmt(pedidoVinculado.total_estimado ?? 0)} → Facturado {fmt(factura.total)}
+                </div>
+              </div>
+            </div>
+            <button onClick={() => vincular(null)} disabled={busy} className="bg-transparent border-none cursor-pointer" title="Desvincular">
+              <span className="material-symbols-outlined text-[18px]" style={{ color: 'var(--text-3)' }}>link_off</span>
+            </button>
+          </div>
+
+          {comparacion && (
+            <div className="mt-1">
+              {comparacion.filas.map((row, i) => (
+                <div key={i} className="flex items-center justify-between py-[6px]" style={{ borderTop: '1px solid var(--border)' }}>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[12px] font-medium truncate" style={{ color: 'var(--text-1)' }}>{row.nombre}</div>
+                    {!row.pi ? (
+                      <div className="text-[10px] font-semibold" style={{ color: '#3b82f6' }}>No estaba en el pedido</div>
+                    ) : (
+                      <div className="text-[10px]" style={{ color: 'var(--text-3)' }}>
+                        Pedido: {row.pi.cantidad} {row.pi.unidad ?? ''} × {fmt(row.pi.precio_estimado ?? 0)}
+                      </div>
+                    )}
+                  </div>
+                  {row.pi && (
+                    <div className="text-right ml-2">
+                      {row.difCant !== null && row.difCant !== 0 && (
+                        <div className="text-[10px] font-bold" style={{ color: '#f59e0b' }}>
+                          {row.difCant > 0 ? '+' : ''}{row.difCant} {row.fi.unidad}
+                        </div>
+                      )}
+                      {row.difPrecio !== null && Math.abs(row.difPrecio) >= 1 && (
+                        <div className="text-[10px] font-bold" style={{ color: row.difPrecio > 5 ? '#ef4444' : row.difPrecio < -1 ? '#10b981' : 'var(--text-3)' }}>
+                          {row.difPrecio > 0 ? '+' : ''}{row.difPrecio.toFixed(0)}% precio
+                        </div>
+                      )}
+                      {(row.difCant === null || row.difCant === 0) && (row.difPrecio === null || Math.abs(row.difPrecio) < 1) && (
+                        <span className="material-symbols-outlined text-[16px]" style={{ color: '#10b981' }}>check</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {comparacion.faltantes.length > 0 && (
+                <div className="mt-2 rounded-[8px] p-2" style={{ background: '#fffbeb', border: '1px solid #fde68a' }}>
+                  <div className="text-[10px] font-bold mb-1" style={{ color: '#92400e' }}>
+                    Pedido pero no facturado ({comparacion.faltantes.length})
+                  </div>
+                  {comparacion.faltantes.map(p => (
+                    <div key={p.id} className="text-[11px]" style={{ color: '#92400e' }}>
+                      {p.producto_nombre} — {p.cantidad} {p.unidad}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Detail View ──────────────────────────────────────────────
-function DetailView({ factura, onBack, onStatusChange, onDelete, onUpdate }: {
+function DetailView({ factura, onBack, onStatusChange, onDelete, onUpdate, onVincularPedido }: {
   factura: Factura
   onBack: () => void
   onStatusChange: (status: FacturaStatus) => void
   onDelete: () => void
   onUpdate?: (data: Partial<Factura>, items: { producto_nombre: string; producto_id?: string | null; cantidad: number; unidad: string; precio_unitario: number; alicuota_iva: number; subtotal: number; precio_anterior?: number | null }[]) => Promise<void>
+  onVincularPedido?: (pedidoId: string | null) => Promise<void>
 }) {
   const { fetchItems } = useFacturas()
   const [items, setItems] = useState<FacturaItem[]>([])
@@ -983,6 +1201,11 @@ function DetailView({ factura, onBack, onStatusChange, onDelete, onUpdate }: {
           )
         })}
 
+        {/* Reconciliación con pedido */}
+        {onVincularPedido && (
+          <ReconciliacionPedido factura={factura} facturaItems={items} onVincular={onVincularPedido} />
+        )}
+
         {/* Notas */}
         {factura.notas && (
           <div className="mt-3 rounded-[10px] p-3" style={{ background: 'var(--bg)' }}>
@@ -991,9 +1214,36 @@ function DetailView({ factura, onBack, onStatusChange, onDelete, onUpdate }: {
           </div>
         )}
 
+        {/* Cuenta por pagar — marcar pagada */}
+        {COND_A_CREDITO.has(String(factura.condicion_pago ?? '')) && (
+          <div className="mt-4 rounded-[12px] p-3 flex items-center gap-3" style={{
+            background: factura.status === 'pagada' ? '#eff6ff' : '#fffbeb',
+            border: `1px solid ${factura.status === 'pagada' ? '#bfdbfe' : '#fde68a'}`,
+          }}>
+            <span className="material-symbols-outlined text-[20px]" style={{ color: factura.status === 'pagada' ? '#1e40af' : '#92400e' }}>
+              {factura.status === 'pagada' ? 'check_circle' : 'schedule'}
+            </span>
+            <div className="flex-1">
+              <div className="text-[12px] font-bold" style={{ color: factura.status === 'pagada' ? '#1e40af' : '#92400e' }}>
+                {factura.status === 'pagada' ? 'Pagada' : `Por pagar — ${fmt(factura.total)}`}
+              </div>
+              <div className="text-[10px]" style={{ color: factura.status === 'pagada' ? '#1e40af' : '#92400e', opacity: 0.7 }}>
+                {factura.condicion_pago === 'cuenta_corriente' ? 'Cuenta corriente' : factura.condicion_pago}
+              </div>
+            </div>
+            <button onClick={() => onStatusChange(factura.status === 'pagada' ? 'confirmada' : 'pagada')}
+              className="py-[8px] px-3 rounded-[8px] border-none cursor-pointer text-[12px] font-bold"
+              style={factura.status === 'pagada'
+                ? { background: 'var(--bg)', color: 'var(--text-2)', border: '1px solid var(--border)' }
+                : { background: '#1e40af', color: '#fff' }}>
+              {factura.status === 'pagada' ? 'Marcar pendiente' : 'Marcar pagada'}
+            </button>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex gap-2 mt-4">
-          {factura.status !== 'confirmada' && (
+          {factura.status !== 'confirmada' && factura.status !== 'pagada' && (
             <button onClick={() => onStatusChange('confirmada')}
               className="flex-1 py-[10px] rounded-[10px] border-none cursor-pointer text-[12px] font-bold text-white"
               style={{ background: '#10b981' }}>
@@ -1873,7 +2123,7 @@ function ManualEntryView({ onSubmit, onBack, proveedores }: {
 
 // ── Main Page ────────────────────────────────────────────────
 export default function FacturasPage() {
-  const { facturas, loading, crearFactura, actualizarFactura, actualizarStatus, eliminarFactura, fetchItems, fetchFacturas, hasMore, fetchMore, totalCount } = useFacturas()
+  const { facturas, loading, crearFactura, actualizarFactura, actualizarStatus, eliminarFactura, fetchItems, fetchFacturas, hasMore, fetchMore, totalCount, fetchPorPagar, vincularPedido } = useFacturas()
   const { productos, refetch: refetchStock } = useStock()
   const { proveedores } = useProveedores()
   const isDesktop = useIsDesktop()
@@ -1894,7 +2144,9 @@ export default function FacturasPage() {
   const [analyzing, setAnalyzing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
-  const [filtro, setFiltro] = useState<'todas' | 'semana' | 'mes'>('todas')
+  const [filtro, setFiltro] = useState<'todas' | 'semana' | 'mes' | 'por_pagar'>('todas')
+  const [porPagar, setPorPagar] = useState<Factura[]>([])
+  const [porPagarLoading, setPorPagarLoading] = useState(false)
   const [selectedFactura, setSelectedFactura] = useState<Factura | null>(null)
   const [textoInput, setTextoInput] = useState('')
   const [cropSrc, setCropSrc] = useState<string | null>(null)
@@ -1947,6 +2199,32 @@ export default function FacturasPage() {
     const proveedores = new Set(ff.map(f => f.proveedor_nombre)).size
     return { total, count: ff.length, proveedores }
   }, [facturasFiltradas])
+
+  // Cargar cuentas por pagar al activar el filtro (y al cambiar facturas: marcar pagada, nueva factura)
+  const recargarPorPagar = useCallback(async () => {
+    setPorPagarLoading(true)
+    setPorPagar(await fetchPorPagar())
+    setPorPagarLoading(false)
+  }, [fetchPorPagar])
+
+  useEffect(() => {
+    if (filtro === 'por_pagar') recargarPorPagar()
+  }, [filtro, facturas, recargarPorPagar])
+
+  // Agrupar cuentas por pagar por proveedor
+  const porPagarGrupos = useMemo(() => {
+    const map = new Map<string, { proveedor: string; total: number; facturas: Factura[] }>()
+    for (const f of porPagar) {
+      const key = f.proveedor_nombre || 'Sin proveedor'
+      const g = map.get(key) ?? { proveedor: key, total: 0, facturas: [] }
+      g.total += f.total
+      g.facturas.push(f)
+      map.set(key, g)
+    }
+    return Array.from(map.values()).sort((a, b) => b.total - a.total)
+  }, [porPagar])
+
+  const totalPorPagar = useMemo(() => porPagar.reduce((s, f) => s + f.total, 0), [porPagar])
 
   useEffect(() => {
     const pendientes = facturas.filter(f => f.status === 'pendiente')
@@ -2135,6 +2413,15 @@ export default function FacturasPage() {
           await actualizarFactura(selectedFactura.id, data, items)
           setSelectedFactura({ ...selectedFactura, ...data })
           showToast('Factura actualizada')
+        }}
+        onVincularPedido={async (pedidoId) => {
+          try {
+            await vincularPedido(selectedFactura.id, pedidoId)
+            setSelectedFactura({ ...selectedFactura, pedido_id: pedidoId })
+            showToast(pedidoId ? '✓ Pedido vinculado' : 'Pedido desvinculado')
+          } catch {
+            showToast('Error al vincular — ¿aplicaste la migración pedido_id?')
+          }
         }}
       />
     )
@@ -2396,14 +2683,20 @@ export default function FacturasPage() {
         </div>
 
         {/* Period summary */}
-        <p className="text-white/70 text-[11px] m-0 mb-3">
-          {filtro === 'semana' ? 'Esta semana' : filtro === 'mes' ? 'Este mes' : 'Total'}:
-          {' '}{fmt(resumen.total)} en {filtro === 'todas' && totalCount > resumen.count ? `${totalCount} facturas (${resumen.count} cargadas)` : `${resumen.count} facturas de ${resumen.proveedores} proveedores`}
-        </p>
+        {filtro === 'por_pagar' ? (
+          <p className="text-white/70 text-[11px] m-0 mb-3">
+            Adeudado: {fmt(totalPorPagar)} en {porPagar.length} factura{porPagar.length !== 1 ? 's' : ''} a crédito · {porPagarGrupos.length} proveedor{porPagarGrupos.length !== 1 ? 'es' : ''}
+          </p>
+        ) : (
+          <p className="text-white/70 text-[11px] m-0 mb-3">
+            {filtro === 'semana' ? 'Esta semana' : filtro === 'mes' ? 'Este mes' : 'Total'}:
+            {' '}{fmt(resumen.total)} en {filtro === 'todas' && totalCount > resumen.count ? `${totalCount} facturas (${resumen.count} cargadas)` : `${resumen.count} facturas de ${resumen.proveedores} proveedores`}
+          </p>
+        )}
 
         {/* Filter pills */}
         <div data-coach-target="facturas-filtros" className="flex gap-[6px] pb-[10px]">
-          {([['todas', 'Todas'], ['semana', 'Esta semana'], ['mes', 'Este mes']] as const).map(([id, label]) => (
+          {([['todas', 'Todas'], ['semana', 'Esta semana'], ['mes', 'Este mes'], ['por_pagar', 'Por pagar']] as const).map(([id, label]) => (
             <button
               key={id}
               onClick={() => setFiltro(id)}
@@ -2425,6 +2718,41 @@ export default function FacturasPage() {
           <div className="flex items-center justify-center h-32">
             <span className="text-[13px]" style={{ color: 'var(--text-3)' }}>Cargando...</span>
           </div>
+        ) : filtro === 'por_pagar' ? (
+          porPagarLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <span className="text-[13px]" style={{ color: 'var(--text-3)' }}>Cargando...</span>
+            </div>
+          ) : porPagar.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-40 gap-2" style={{ padding: 16 }}>
+              <span className="material-symbols-outlined text-[40px]" style={{ color: '#10b981' }}>task_alt</span>
+              <p className="text-[13px] font-medium" style={{ color: 'var(--text-2)' }}>No hay facturas por pagar</p>
+              <p className="text-[11px] text-center" style={{ color: 'var(--text-3)' }}>Las compras a crédito (cuenta corriente, 30/60 días) sin pagar aparecen acá</p>
+            </div>
+          ) : (
+            <div style={{ padding: isDesktop ? '12px 16px' : 0 }}>
+              {/* Total adeudado */}
+              <div className="rounded-[14px] p-4 mb-3" style={{ background: 'var(--navy)', color: '#fff' }}>
+                <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ opacity: 0.7 }}>Total adeudado</div>
+                <div className="text-[26px] font-bold mt-1">{fmt(totalPorPagar)}</div>
+                <div className="text-[11px] mt-1" style={{ opacity: 0.7 }}>
+                  {porPagar.length} factura{porPagar.length !== 1 ? 's' : ''} a crédito · {porPagarGrupos.length} proveedor{porPagarGrupos.length !== 1 ? 'es' : ''}
+                </div>
+              </div>
+              {/* Grupos por proveedor */}
+              {porPagarGrupos.map(g => (
+                <div key={g.proveedor} className="mb-3">
+                  <div className="flex items-center justify-between px-1 mb-1">
+                    <div className="text-[13px] font-bold truncate" style={{ color: 'var(--text-1)' }}>{g.proveedor}</div>
+                    <div className="text-[13px] font-bold whitespace-nowrap ml-2" style={{ color: 'var(--navy)' }}>{fmt(g.total)}</div>
+                  </div>
+                  {g.facturas.map(f => (
+                    <FacturaCard key={f.id} f={f} onClick={() => { setSelectedFactura(f); setView('detail') }} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          )
         ) : facturasFiltradas.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-40 gap-2">
             <span className="material-symbols-outlined text-[40px]" style={{ color: 'var(--text-3)' }}>description</span>

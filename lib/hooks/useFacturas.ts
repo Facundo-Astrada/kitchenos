@@ -401,6 +401,39 @@ export function useFacturas() {
     }
   }, [fetchFacturas, supabase])
 
+  // Todas las facturas a crédito todavía no pagadas (sin paginar — para "Cuentas por pagar")
+  const fetchPorPagar = useCallback(async (): Promise<Factura[]> => {
+    if (!RESTAURANTE_ID) return []
+    try {
+      const { data, error } = await supabase.from('facturas').select('*')
+        .eq('restaurante_id', RESTAURANTE_ID)
+        .in('condicion_pago', ['cuenta_corriente', '30dias', '60dias'])
+        .neq('status', 'pagada')
+        .order('fecha_factura', { ascending: true })
+      if (error) throw error
+      return (data ?? []) as Factura[]
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al cargar cuentas por pagar'
+      console.error('[useFacturas] fetchPorPagar Error:', msg)
+      return []
+    }
+  }, [RESTAURANTE_ID, supabase])
+
+  // Vincular (o desvincular) una factura con un pedido — reconciliación
+  const vincularPedido = useCallback(async (facturaId: string, pedidoId: string | null) => {
+    try {
+      const { error } = await supabase.from('facturas').update({ pedido_id: pedidoId }).eq('id', facturaId)
+      if (error) throw error
+      await fetchFacturas(true)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message
+        : (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message)
+        : 'Error al vincular pedido'
+      console.error('[useFacturas] vincularPedido Error:', msg)
+      throw new Error(msg)
+    }
+  }, [fetchFacturas, supabase])
+
   const fetchHistorialPrecios = useCallback(async (productoId: string): Promise<PrecioHistorial[]> => {
     try {
       const { data, error } = await supabase.from('precio_historial').select('*')
@@ -429,5 +462,6 @@ export function useFacturas() {
     hasMore, fetchMore, totalCount,
     fetchFacturas, fetchItems, crearFactura,
     actualizarFactura, actualizarStatus, eliminarFactura, fetchHistorialPrecios,
+    fetchPorPagar, vincularPedido,
   }
 }
