@@ -242,3 +242,68 @@ Al armar un plato, si buscás un componente que no existe como receta, lo creás
 **3 · Sugerir precio de venta.** En el detalle, dado un **food cost objetivo** (ej. 30%), sugiere el precio de venta del plato y permite aplicarlo con un toque. Clave para reajustar la carta rápido en contexto inflacionario.
 
 ---
+
+## 4 · CARTA
+
+**Es la capa que junta todo y mira al cliente.** Si el recetario calcula cuánto cuesta un plato, la Carta define **a cuánto lo vendés, cómo se agrupa y si está disponible**. Es donde el food cost se vuelve decisión de precio, y el puente entre la cocina (recetas, OPS) y el salón. Jerarquía: ingrediente → receta → **plato** → menú.
+
+---
+
+### Cómo cargarla
+
+**Camino 1 — Importar con IA** *(el más rápido)*
+
+`/carta` → **Importar** → foto de la carta impresa, PDF, Excel/CSV o texto. La IA extrae **nombre, componentes, porciones, precio y tags dietarios** (S/TACC, vegano, vegetariano, keto, picante, sin lactosa).
+
+- 💡 En el preview cada componente se vincula a una receta/producto/producción con auto-match; lo que no matchea se crea como borrador.
+- 💡 Al confirmar crea los platos (`carta_items`) y los vínculos a recetas (`plato_recetas`).
+
+**Camino 2 — Crear plato a mano** *(editor unificado)*
+
+**+ Nuevo** → nombre, precio, categoría, tags y composición (buscador de recetas/productos/platos). El **food cost se calcula en vivo**.
+
+**Camino 3 — Menús y eventos**
+
+El mismo editor crea Menús fijos o Eventos: preparaciones por curso, con plaza, prioridad y cantidad. Es lo que se "activa" en Planificación para producir. Categorías dinámicas por restaurante.
+
+---
+
+### Cómo impacta en la app
+
+| Módulo | Qué pasa |
+|---|---|
+| **Recetario** | Cada plato lee el food cost de sus recetas; un cambio de costo se refleja solo. |
+| **OPS / Mise** | Asignar un componente a OPS crea/actualiza el ítem de mise por plaza. |
+| **Planificación → Producción** | Activar un menú genera las tareas de producción del día. |
+| **Pase / Servicio** | El 86 comunica al equipo qué plato no sale. |
+| **Reportes / Ventas** | El precio de venta es la base de CMV, margen y ticket promedio. |
+
+---
+
+### Qué soluciona en la realidad
+
+**Para el dueño / administrador**
+- Ver food cost y margen de cada plato al lado de su precio, y decidir con datos.
+- Subir la carta entera con una foto, sin tipear decenas de platos.
+- Saber qué platos rinden y cuáles repensar.
+
+**Para el chef / encargado**
+- Marcar 86 al instante y que todo el equipo lo vea.
+- Carta siempre sincronizada con lo que la cocina puede producir.
+
+**Para el comensal / salón**
+- Carta clara, con tags dietarios y sin platos que "no hay".
+
+---
+
+### Valor adicional
+
+> Las tres viven en **Carta → Rentabilidad** (admin), como tabs.
+
+**1 · Ingeniería de menú (matriz).** Cruza **ventas** (popularidad) × **margen** (rentabilidad) y clasifica cada plato en **Estrella / Caballo / Puzzle / Perro**, con recomendación por cuadrante (mantener, reprecio, promocionar, sacar). Sin ventas cargadas, clasifica solo por rentabilidad.
+
+**2 · Reprecio por inflación (en lote).** Definís un food cost objetivo; lista los platos que se pasaron y sugiere el **nuevo precio** para volver a la meta. Seleccionás y aplicás de a uno o todos juntos.
+
+**3 · Salud de la carta.** Agrupa los platos a revisar: **sin receta vinculada**, **margen negativo**, **en 86** y **sin categoría**, con acceso directo a cada uno.
+
+---

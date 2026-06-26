@@ -8,6 +8,7 @@ import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { useRecetas, type RecetaConCosto } from '@/lib/hooks/useRecetas'
 import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
+import { useVentas } from '@/lib/hooks/useVentas'
 import { usePackagingGrupos, type PackagingGrupo } from '@/lib/hooks/usePackagingGrupos'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import { createClient } from '@/lib/supabase/client'
@@ -2208,63 +2209,153 @@ function DetailView({
 }
 
 // ── Rentabilidad View ───────────────────────────────────
+type RentTab = 'lista' | 'ingenieria' | 'reprecio' | 'salud'
+
 function RentabilidadView({
   items,
+  ventas,
   onBack,
   isAdmin = false,
+  actualizarItem,
+  onOpenPlato,
+  showToast,
 }: {
   items: CartaItemEnriquecido[]
+  ventas: { items?: { nombre_plato: string; cantidad: number }[] | null }[]
   onBack: () => void
   isAdmin?: boolean
+  actualizarItem: (id: string, datos: { precio_venta?: number }) => Promise<void>
+  onOpenPlato: (id: string) => void
+  showToast: (msg: string) => void
 }) {
+  const [tab, setTab] = useState<RentTab>('lista')
+
+  const norm = (s: string) => s.toLowerCase().trim().replace(/\s+/g, ' ')
+
   const sorted = useMemo(() =>
-    items
-      .filter(i => i.food_cost_pct != null)
-      .sort((a, b) => (a.food_cost_pct ?? 0) - (b.food_cost_pct ?? 0))
+    items.filter(i => i.food_cost_pct != null).sort((a, b) => (a.food_cost_pct ?? 0) - (b.food_cost_pct ?? 0))
   , [items])
+
+  // Popularidad por plato desde ventas
+  const ventasMap = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const v of ventas) for (const it of (v.items ?? [])) {
+      m.set(norm(it.nombre_plato), (m.get(norm(it.nombre_plato)) ?? 0) + (it.cantidad ?? 0))
+    }
+    return m
+  }, [ventas])
+
+  // ── Feature 1: Ingeniería de menú ──
+  const ing = useMemo(() => {
+    const base = items
+      .filter(i => i.food_cost_pct != null && i.margen_bruto != null)
+      .map(i => ({ item: i, pop: ventasMap.get(norm(i.nombre)) ?? 0, margin: i.margen_bruto ?? 0 }))
+    const conVentas = base.some(x => x.pop > 0)
+    const avgPop = base.length ? base.reduce((s, x) => s + x.pop, 0) / base.length : 0
+    const avgMargin = base.length ? base.reduce((s, x) => s + x.margin, 0) / base.length : 0
+    const estrella: typeof base = [], caballo: typeof base = [], puzzle: typeof base = [], perro: typeof base = []
+    for (const x of base) {
+      const ph = x.pop >= avgPop, mh = x.margin >= avgMargin
+      if (ph && mh) estrella.push(x)
+      else if (ph && !mh) caballo.push(x)
+      else if (!ph && mh) puzzle.push(x)
+      else perro.push(x)
+    }
+    return { conVentas, hayDatos: base.length > 0, estrella, caballo, puzzle, perro }
+  }, [items, ventasMap])
+
+  // ── Feature 2: Reprecio por inflación ──
+  const [targetFC, setTargetFC] = useState('32')
+  const [sel, setSel] = useState<Set<string>>(new Set())
+  const [aplicando, setAplicando] = useState(false)
+  const reprecio = useMemo(() => {
+    const t = parseFloat(targetFC.replace(',', '.'))
+    if (!(t > 0)) return []
+    return items
+      .filter(i => i.food_cost_pct != null && (i.food_cost_pct ?? 0) > t && (i.costo_porcion ?? 0) > 0)
+      .map(i => ({ item: i, sugerido: Math.round((i.costo_porcion ?? 0) / (t / 100)) }))
+      .sort((a, b) => (b.item.food_cost_pct ?? 0) - (a.item.food_cost_pct ?? 0))
+  }, [items, targetFC])
+  const reprecioKey = reprecio.map(r => r.item.id).join(',')
+  useEffect(() => { setSel(new Set(reprecio.map(r => r.item.id))) }, [reprecioKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  async function aplicarReprecio() {
+    const elegidos = reprecio.filter(r => sel.has(r.item.id))
+    if (elegidos.length === 0) return
+    setAplicando(true)
+    try {
+      for (const r of elegidos) await actualizarItem(r.item.id, { precio_venta: r.sugerido })
+      showToast(`${elegidos.length} precio${elegidos.length !== 1 ? 's' : ''} actualizado${elegidos.length !== 1 ? 's' : ''}`)
+    } catch { showToast('Error al aplicar precios') }
+    setAplicando(false)
+  }
+
+  // ── Feature 3: Salud de la carta ──
+  const salud = useMemo(() => {
+    const sinReceta = items.filter(i => !i.receta_id && i.plato_recetas.length === 0)
+    const margenNeg = items.filter(i => i.margen_bruto != null && (i.margen_bruto ?? 0) < 0)
+    const en86 = items.filter(i => !i.disponible)
+    const sinCategoria = items.filter(i => !i.categoria || !i.categoria.trim())
+    return { sinReceta, margenNeg, en86, sinCategoria, total: sinReceta.length + margenNeg.length + en86.length + sinCategoria.length }
+  }, [items])
+
+  const QUAD = {
+    estrella: { label: 'Estrellas', color: '#16a34a', icon: 'star', rec: 'Populares y rentables — destacalas en la carta' },
+    caballo: { label: 'Caballos', color: '#f59e0b', icon: 'trending_up', rec: 'Se venden mucho pero rinden poco — subí precio o bajá costo' },
+    puzzle: { label: 'Puzzles', color: '#3b82f6', icon: 'extension', rec: 'Rentables pero poco vendidos — promocioná o reubicá' },
+    perro: { label: 'Perros', color: '#ef4444', icon: 'trending_down', rec: 'Ni populares ni rentables — considerá sacarlos' },
+  } as const
+
+  const TABS: { id: RentTab; label: string }[] = [
+    { id: 'lista', label: 'Lista' },
+    { id: 'ingenieria', label: 'Ingeniería' },
+    { id: 'reprecio', label: 'Reprecio' },
+    { id: 'salud', label: `Salud${salud.total > 0 ? ` (${salud.total})` : ''}` },
+  ]
 
   return (
     <div>
-      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
-          <span className="material-symbols-outlined">arrow_back</span>
-        </button>
-        <span style={{ color: '#fff', fontWeight: 700, fontSize: 17 }}>Rentabilidad</span>
-        <div style={{ flex: 1 }} />
-        {isAdmin && (
-        <button onClick={() => exportRentabilidadPDF(items, isAdmin)} style={{
-          background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8,
-          padding: '6px 12px', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-          display: 'flex', alignItems: 'center', gap: 4,
-        }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>picture_as_pdf</span>
-          PDF
-        </button>
-        )}
+      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 12 }}>
+          <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
+            <span className="material-symbols-outlined">arrow_back</span>
+          </button>
+          <span style={{ color: '#fff', fontWeight: 700, fontSize: 17 }}>Rentabilidad</span>
+          <div style={{ flex: 1 }} />
+          {isAdmin && tab === 'lista' && (
+            <button onClick={() => exportRentabilidadPDF(items, isAdmin)} style={{
+              background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8,
+              padding: '6px 12px', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>picture_as_pdf</span>
+              PDF
+            </button>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 4, overflowX: 'auto', scrollbarWidth: 'none' }}>
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
+              padding: '8px 12px', border: 'none', background: 'none', cursor: 'pointer',
+              fontSize: 12.5, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap',
+              color: tab === t.id ? '#fff' : 'rgba(255,255,255,.5)',
+              borderBottom: tab === t.id ? '2px solid #fff' : '2px solid transparent',
+            }}>{t.label}</button>
+          ))}
+        </div>
       </div>
 
-      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {sorted.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
-            Vincula recetas a los platos para ver rentabilidad
-          </div>
-        ) : (
-          sorted.map((item, i) => {
+      {/* ── Tab: Lista ── */}
+      {tab === 'lista' && (
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {sorted.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
+              Vinculá recetas a los platos para ver rentabilidad
+            </div>
+          ) : sorted.map((item, i) => {
             const fc = fcBadge(item.food_cost_pct ?? 0)
             return (
-              <div key={item.id} style={{
-                background: 'var(--surface)', border: '1px solid var(--border)',
-                borderRadius: 10, padding: '12px 14px',
-                display: 'flex', alignItems: 'center', gap: 12,
-              }}>
-                <div style={{
-                  width: 28, height: 28, borderRadius: 8,
-                  background: fc.bg, color: fc.text,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 12, fontWeight: 700, flexShrink: 0,
-                }}>
-                  {i + 1}
-                </div>
+              <div key={item.id} onClick={() => onOpenPlato(item.id)} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: fc.bg, color: fc.text, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{i + 1}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-1)' }}>{item.nombre}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', gap: 8 }}>
@@ -2273,20 +2364,128 @@ function RentabilidadView({
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{
-                    fontSize: 14, fontWeight: 700, color: fc.text,
-                  }}>
-                    {(item.food_cost_pct ?? 0).toFixed(1)}%
-                  </div>
-                  <div style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>
-                    {fmtMoney(item.margen_bruto ?? 0)}
-                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: fc.text }}>{(item.food_cost_pct ?? 0).toFixed(1)}%</div>
+                  <div style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>{fmtMoney(item.margen_bruto ?? 0)}</div>
                 </div>
               </div>
             )
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
+
+      {/* ── Tab: Ingeniería de menú ── */}
+      {tab === 'ingenieria' && (
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {!ing.hayDatos ? (
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
+              Vinculá recetas (para el margen) y cargá ventas (para la popularidad) para clasificar tu carta.
+            </div>
+          ) : (
+            <>
+              {!ing.conVentas && (
+                <div style={{ background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.3)', borderRadius: 10, padding: '10px 12px', fontSize: 11.5, color: '#92400e', lineHeight: 1.5 }}>
+                  Sin ventas cargadas: la clasificación es solo por rentabilidad. Cargá ventas para cruzar con popularidad.
+                </div>
+              )}
+              {(['estrella', 'caballo', 'puzzle', 'perro'] as const).map(q => {
+                const meta = QUAD[q]
+                const lista = ing[q]
+                if (lista.length === 0) return null
+                return (
+                  <div key={q} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 18, color: meta.color }}>{meta.icon}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{meta.label}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-3)' }}>({lista.length})</span>
+                    </div>
+                    <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-3)', borderBottom: '1px solid var(--border)' }}>{meta.rec}</div>
+                    {lista.sort((a, b) => b.pop - a.pop).map(x => (
+                      <button key={x.item.id} onClick={() => onOpenPlato(x.item.id)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '9px 12px', background: 'none', border: 'none', borderTop: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.item.nombre}</span>
+                        <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{x.pop} vend.</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#059669', fontFamily: "'DM Mono', monospace" }}>{fmtMoney(x.margin)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )
+              })}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Reprecio por inflación ── */}
+      {tab === 'reprecio' && (
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>Food cost objetivo</span>
+            <input type="text" inputMode="decimal" value={targetFC} onChange={e => setTargetFC(e.target.value.replace(/[^0-9.,]/g, ''))}
+              style={{ width: 56, border: '1px solid var(--border)', background: 'var(--surface)', borderRadius: 8, padding: '6px 8px', fontSize: 14, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: 'var(--text-1)', textAlign: 'center', outline: 'none' }} />
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)' }}>%</span>
+          </div>
+          {reprecio.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
+              Ningún plato supera el food cost objetivo. 👌
+            </div>
+          ) : (
+            <>
+              {reprecio.map(r => {
+                const checked = sel.has(r.item.id)
+                return (
+                  <button key={r.item.id} onClick={() => setSel(p => { const n = new Set(p); if (n.has(r.item.id)) n.delete(r.item.id); else n.add(r.item.id); return n })}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    <input type="checkbox" checked={checked} readOnly style={{ width: 16, height: 16, accentColor: 'var(--navy)', flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.item.nombre}</div>
+                      <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>FC {(r.item.food_cost_pct ?? 0).toFixed(0)}%</div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy)', fontFamily: "'DM Mono', monospace" }}>{fmtMoney(r.item.precio_venta)} → {fmtMoney(r.sugerido)}</div>
+                    </div>
+                  </button>
+                )
+              })}
+              <button onClick={aplicarReprecio} disabled={aplicando || sel.size === 0}
+                style={{ width: '100%', background: 'var(--navy)', border: 'none', borderRadius: 10, padding: '13px', fontSize: 14, fontWeight: 700, color: '#fff', cursor: 'pointer', opacity: (aplicando || sel.size === 0) ? 0.6 : 1, fontFamily: 'inherit' }}>
+                {aplicando ? 'Aplicando…' : `Aplicar a ${sel.size} plato${sel.size !== 1 ? 's' : ''}`}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Salud de la carta ── */}
+      {tab === 'salud' && (
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {salud.total === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
+              Tu carta está sana. 🎉
+            </div>
+          ) : ([
+            { key: 'sinReceta', label: 'Sin receta vinculada', hint: 'food cost desconocido — vinculá una receta', color: 'var(--text-3)', list: salud.sinReceta },
+            { key: 'margenNeg', label: 'Margen negativo', hint: 'el costo supera al precio — perdés plata', color: '#ef4444', list: salud.margenNeg },
+            { key: 'en86', label: 'En 86 (no disponible)', hint: 'revisá si vuelve a la carta o se saca', color: '#f59e0b', list: salud.en86 },
+            { key: 'sinCategoria', label: 'Sin categoría', hint: 'asignale una para que aparezca agrupado', color: 'var(--text-3)', list: salud.sinCategoria },
+          ] as const).filter(g => g.list.length > 0).map(g => (
+            <div key={g.key} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: g.color, flexShrink: 0 }} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{g.label}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>({g.list.length})</span>
+              </div>
+              <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-3)' }}>{g.hint}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 12px 12px' }}>
+                {g.list.slice(0, 16).map(it => (
+                  <button key={it.id} onClick={() => onOpenPlato(it.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 999, padding: '4px 10px', fontSize: 11, fontWeight: 600, color: 'var(--text-1)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    {it.nombre}
+                  </button>
+                ))}
+                {g.list.length > 16 && <span style={{ fontSize: 10, color: 'var(--text-3)', alignSelf: 'center' }}>+{g.list.length - 16} más</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -2831,6 +3030,7 @@ export default function CartaPage() {
   const { items, loading, fetchItems, crearItem, actualizarItem, actualizarTags, toggleDisponible, eliminarItem, duplicarItem, agregarPlatoReceta, actualizarPlatoReceta, eliminarPlatoReceta, agregarPlatoPackaging, eliminarPlatoPackaging, categorias } = useCarta()
   const { recetas } = useRecetas()
   const { productos } = useStock()
+  const { ventas } = useVentas()
   const { grupos, crearGrupo, eliminarGrupo, aplicarGrupoAPlatos } = usePackagingGrupos()
   const { crearMenu, actualizarMenu } = useMenus()
 
@@ -3122,7 +3322,15 @@ export default function CartaPage() {
   if (view === 'rentabilidad') {
     return (
       <>
-        <RentabilidadView items={items} onBack={() => setView('list')} isAdmin={isAdmin} />
+        <RentabilidadView
+          items={items}
+          ventas={ventas}
+          onBack={() => setView('list')}
+          isAdmin={isAdmin}
+          actualizarItem={actualizarItem}
+          onOpenPlato={(pid) => { setSelectedItemId(pid); setView('detail') }}
+          showToast={setToast}
+        />
         {toast && <Toast msg={toast} onDone={() => setToast('')} />}
       </>
     )
