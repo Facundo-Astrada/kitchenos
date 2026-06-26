@@ -4,13 +4,14 @@
 |---|---|---|
 | `productos` | `stock_actual`, `stock_minimo`, `stock_critico` | `cantidad` |
 | `productos` | `precio_unitario` | `precio` |
+| `productos` | `es_produccion BOOLEAN DEFAULT false` + `receta_id UUID NULL` (FK recetas, ON DELETE SET NULL) — producción interna (caldo/masa/fondo): el costo se toma de la receta vinculada (`food_cost.costo_porcion`), no de factura. Badge "Producción" en stock. | (agregado jun 2026) |
 | `tareas` | `status` (`'pendiente'|'en_proceso'|'completada'`) | `completada` (bool) |
 | `tareas` | `fecha_limite` | `fecha_vencimiento` |
 | `recetas` | `activa` (bool, soft-delete), `status` (`'published'|'draft'`) | `deleted`, `activo` |
 | `recetas` | `tiempo_min` (int) | `tiempo_minutos` |
 | `ingredientes` | `producto_id` (FK), `costo_unitario`, `unidad_costo` | (sin FK = no link) |
 | `turnos` | UNIQUE (`miembro_id`, `fecha`) — hacer upsert | insert directo |
-| `facturas` | `condicion_pago` (`'contado'|'cuenta_corriente'`), `status` (`'pagada'|'pendiente'|'confirmada'|'observada'`) | — |
+| `facturas` | `condicion_pago` (`'contado'|'cuenta_corriente'|'30dias'|'60dias'`), `status` (`'pagada'|'pendiente'|'confirmada'|'observada'`). **"Por pagar"** = condicion_pago a crédito (cuenta_corriente/30dias/60dias) ∧ status≠pagada (`esPorPagar` en `facturas/page.tsx`). `pedido_id UUID NULL` (FK pedidos, ON DELETE SET NULL, jun 2026) — reconciliación factura↔pedido. | — |
 | `factura_items` | `producto_nombre` (text, no FK), `precio_unitario` por unidad | (sin link directo a productos) |
 | `plato_componentes` | `plaza`, `cantidad_diaria`, `unidad`, `sync_ops BOOLEAN DEFAULT false` — solo sincroniza al checklist si es `true` | (sync_ops agregado mayo 2026) |
 | `plato_plazas` | `plato_id` = `receta_id` (no es `plato_compuesto_id`), `ingredientes text[]` | `receta_id` (la columna se llama `plato_id`) |

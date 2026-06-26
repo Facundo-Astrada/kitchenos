@@ -101,6 +101,33 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 
 ## 4. Implementado en Últimas Sesiones
 
+### Sesión 2026-06-24/25 — Etapa 1 carga de datos: 15 valores adicionales (Facturas/Stock/Recetario/Carta/Ventas)
+
+Definición + implementación de "valores adicionales" para las 5 funciones de carga de gestión. Documentadas en `docs/funciones-carga-datos.md` (cómo cargar · impacto · qué soluciona · valor adicional por función).
+
+1. **Facturas** (`useFacturas`, `facturas/page.tsx`, `DashboardClientView`):
+   - **Alerta de variación de precio**: banner al confirmar (OCR/masiva) con las alzas ≥15% vs compra anterior.
+   - **Cuentas por pagar**: status `'pagada'` (nuevo en `FacturaStatus`), filtro "Por pagar" agrupado por proveedor (`fetchPorPagar` trae todas las a-crédito impagas, sin paginar), botón "Marcar pagada" en detalle, KPI en dashboard (admin). `esPorPagar` = condicion_pago ∈ (cuenta_corriente/30dias/60dias) ∧ status≠pagada.
+   - **Reconciliación factura↔pedido**: columna `facturas.pedido_id` (migración), `vincularPedido`, componente `ReconciliacionPedido` (elegir pedido del mismo proveedor + comparación ítem por ítem: cantidad/precio, faltantes).
+2. **Stock** (`useStock`, `stock/ClientView.tsx`, `/api/stock/sugerir-minimos`):
+   - **Producciones internas**: `productos.es_produccion` + `productos.receta_id` (migración). Toggle + selector de receta en el form; el costo se toma de `food_cost.costo_porcion`. Badge "Producción" en la lista.
+   - **Sugerir mínimos**: API route que analiza `factura_items` (frecuencia + cantidad por entrega) → sugiere stock_minimo/critico para productos sin umbral (≥2 entregas). Modal preview + aplicar.
+   - **Stock inmóvil**: filtro "Inmóvil" + banner de capital dormido. Última compra desde `precio_historial` (fallback `created_at`); inmóvil = stock>0 ∧ sin compra hace ≥60 días.
+3. **Recetario** (`recetario/[id]/page.tsx`, `recetario/page.tsx`):
+   - **Escalado por porciones**: control "Producir N porciones" que setea `scaleFactor` (reusa el escalado por doble-tap existente).
+   - **Salud del recetario**: panel en la lista (admin) — costeo incompleto / food cost crítico / sin precio, con acceso directo.
+   - **Sugerir precio de venta**: en Food Cost del detalle, precio para un FC objetivo + aplicar.
+4. **Carta** (`carta/page.tsx` → `RentabilidadView` reescrito a 4 tabs):
+   - **Ingeniería de menú**: matriz popularidad (ventas) × rentabilidad (margen) → Estrella/Caballo/Puzzle/Perro con recomendación.
+   - **Reprecio por inflación**: FC objetivo → precio sugerido por plato, aplicar en lote.
+   - **Salud de la carta**: sin receta / margen negativo / en 86 / sin categoría.
+5. **Ventas** (`ventas/page.tsx`):
+   - **Ranking/mix de platos**: tab Platos con % de facturación (top verde, cola rojo) + unidades.
+   - **Food cost teórico**: platos vendidos × costo de receta → FC% teórico + cobertura (card en Resumen).
+   - **Cierre rápido + alerta de días sin cargar**.
+
+**Migraciones aplicadas en prod** (token de management renovado en `.env.local`): `20260624_factura_pedido_link.sql`, `20260624_productos_produccion_interna.sql`. **Commits:** `eb6750d` (facturas+stock) · `909652a` (recetario) · `4300158` (carta) · `0968806` (ventas). Build verde, deployados a `main`.
+
 ### Sesión 2026-06-23 — Mesa de Trabajo: panel OPS editable + recipientes + autocomplete
 
 1. **Panel editable slide-over** (`ItemEditPanel.tsx`): al hacer click en una producción de la Mesa de Trabajo se abre un panel desde la derecha (animación slideInRight). Campos: nombre editable inline, prioridad (SP/P/REF/OK con colores), plaza de producción (pills con colores por plaza), sección del mise (pills con iconos de la plaza seleccionada). Guarda vía `actualizarItem` con soporte cross-plaza (actualiza `plaza` + `seccion_id` en un solo UPDATE). Pre-fill desde el item existente.
