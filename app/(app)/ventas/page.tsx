@@ -3,7 +3,10 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { useVentas, type NuevaVenta } from '@/lib/hooks/useVentas'
+import { useCarta } from '@/lib/hooks/useCarta'
 import type { Venta, VentaItem, OrigenVenta } from '@/types'
+
+const normName = (s: string) => s.toLowerCase().trim().replace(/\s+/g, ' ')
 
 // ── Helpers ─────────────────────────────────────────────────
 
@@ -121,7 +124,8 @@ Total del día $144.700`,
 
 export default function VentasPage() {
   const { ventas, loading, error, agregarVenta, eliminarVenta, fetchVentas } = useVentas()
-  const [tab, setTab] = useState<'resumen' | 'importar'>('resumen')
+  const { items: cartaItems } = useCarta()
+  const [tab, setTab] = useState<'resumen' | 'platos' | 'importar'>('resumen')
   const [periodo, setPeriodo] = useState<Periodo>('mes')
   const [ventaDetalle, setVentaDetalle] = useState<Venta | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -134,6 +138,13 @@ export default function VentasPage() {
   const [importing, setImporting] = useState(false)
   const [saving, setSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Cierre rápido (Feature 3)
+  const [showQuick, setShowQuick] = useState(false)
+  const [quickFecha, setQuickFecha] = useState(fmtDate(new Date()))
+  const [quickTotal, setQuickTotal] = useState('')
+  const [quickCubiertos, setQuickCubiertos] = useState('')
+  const [quickSaving, setQuickSaving] = useState(false)
 
   // ── Periodo change ──────────────────────────────────────
   const handlePeriodo = useCallback((p: Periodo) => {
@@ -159,6 +170,76 @@ export default function VentasPage() {
 
     return { totalVentas, totalCubiertos, promedioDiario, topPlato }
   }, [ventas])
+
+  // ── Feature 1: Ranking / mix de platos vendidos ──
+  const platosRank = useMemo(() => {
+    const map = new Map<string, { nombre: string; cantidad: number; revenue: number }>()
+    for (const v of ventas) for (const it of (v.items ?? [])) {
+      const key = normName(it.nombre_plato)
+      const g = map.get(key) ?? { nombre: it.nombre_plato, cantidad: 0, revenue: 0 }
+      g.cantidad += it.cantidad
+      g.revenue += (it.subtotal ?? it.cantidad * it.precio_unitario)
+      map.set(key, g)
+    }
+    const arr = Array.from(map.values()).sort((a, b) => b.revenue - a.revenue)
+    const totalRev = arr.reduce((s, x) => s + x.revenue, 0)
+    return { arr, totalRev }
+  }, [ventas])
+
+  // ── Feature 2: Food cost teórico del período ──
+  const fcTeorico = useMemo(() => {
+    const costMap = new Map<string, number>()
+    for (const ci of cartaItems) if (ci.costo_porcion != null) costMap.set(normName(ci.nombre), ci.costo_porcion)
+    let costo = 0, ventasMatch = 0, totalItems = 0, matchedItems = 0
+    for (const v of ventas) for (const it of (v.items ?? [])) {
+      totalItems++
+      const c = costMap.get(normName(it.nombre_plato))
+      if (c != null) {
+        matchedItems++
+        costo += c * it.cantidad
+        ventasMatch += (it.subtotal ?? it.cantidad * it.precio_unitario)
+      }
+    }
+    const fcPct = ventasMatch > 0 ? (costo / ventasMatch) * 100 : null
+    const cobertura = totalItems > 0 ? Math.round((matchedItems / totalItems) * 100) : 0
+    return { costo, fcPct, cobertura, hayItems: totalItems > 0, hayCosto: costMap.size > 0 }
+  }, [ventas, cartaItems])
+
+  // ── Feature 3: días del mes sin ventas cargadas ──
+  const diasFaltantes = useMemo(() => {
+    if (periodo !== 'mes') return [] as string[]
+    const hoy = new Date()
+    const loaded = new Set(ventas.map(v => v.fecha))
+    const out: string[] = []
+    for (let d = 1; d <= hoy.getDate(); d++) {
+      const ds = fmtDate(new Date(hoy.getFullYear(), hoy.getMonth(), d))
+      if (!loaded.has(ds)) out.push(ds)
+    }
+    return out
+  }, [periodo, ventas])
+
+  async function handleQuickSave() {
+    const total = Number(quickTotal)
+    if (!(total > 0)) return
+    setQuickSaving(true)
+    try {
+      await agregarVenta({
+        fecha: quickFecha,
+        origen: 'manual',
+        total_ventas: total,
+        cantidad_cubiertos: quickCubiertos ? Number(quickCubiertos) : null,
+        notas: 'Cierre rápido',
+      })
+      showToast('Cierre guardado')
+      setQuickTotal(''); setQuickCubiertos(''); setShowQuick(false)
+      const { desde, hasta } = getRango(periodo)
+      fetchVentas(desde, hasta)
+    } catch (e: unknown) {
+      showToast('Error al guardar: ' + (e instanceof Error ? e.message : 'desconocido'))
+    } finally {
+      setQuickSaving(false)
+    }
+  }
 
   useEffect(() => {
     localStorage.setItem('kc_screen_context', JSON.stringify({
@@ -376,7 +457,7 @@ export default function VentasPage() {
         className="flex"
         style={{ background: 'var(--navy)', paddingBottom: 12, paddingLeft: 16, paddingRight: 16, gap: 8 }}
       >
-        {(['resumen', 'importar'] as const).map(t => (
+        {(['resumen', 'platos', 'importar'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -386,7 +467,7 @@ export default function VentasPage() {
               color: tab === t ? '#fff' : 'rgba(255,255,255,0.55)',
             }}
           >
-            {t === 'resumen' ? 'Resumen' : 'Importar'}
+            {t === 'resumen' ? 'Resumen' : t === 'platos' ? 'Platos' : 'Importar'}
           </button>
         ))}
       </div>
@@ -419,6 +500,72 @@ export default function VentasPage() {
             <StatCard icon="trending_up" label="Prom. diario" value={fmtPrecio(stats.promedioDiario)} color="#f97316" />
             <StatCard icon="star" label="Top plato" value={stats.topPlato ?? '—'} color="#ec4899" />
           </div>
+
+          {/* ── Feature 3: Cierre rápido + alerta de días sin cargar ── */}
+          <div className="px-4 pb-2">
+            {!showQuick ? (
+              <button
+                onClick={() => setShowQuick(true)}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold"
+                style={{ background: 'var(--navy)', color: '#fff' }}
+              >
+                <span className="material-symbols-outlined text-[18px]">bolt</span>
+                Cargar cierre del día
+              </button>
+            ) : (
+              <div className="rounded-xl p-3 flex flex-col gap-2" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                <div className="flex items-center justify-between">
+                  <p className="text-[13px] font-semibold" style={{ color: 'var(--text-1)' }}>Cierre rápido</p>
+                  <button onClick={() => setShowQuick(false)} className="material-symbols-outlined text-[18px]" style={{ color: 'var(--text-2)', background: 'none', border: 'none', cursor: 'pointer' }}>close</button>
+                </div>
+                <div className="flex gap-2">
+                  <input type="date" value={quickFecha} onChange={e => setQuickFecha(e.target.value)}
+                    className="flex-1 px-2 py-1.5 rounded-lg text-[13px] focus:outline-none" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-1)' }} />
+                  <input type="number" inputMode="decimal" value={quickTotal} onChange={e => setQuickTotal(e.target.value)} placeholder="Total $"
+                    className="flex-1 px-2 py-1.5 rounded-lg text-[13px] focus:outline-none" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-1)' }} />
+                  <input type="number" inputMode="numeric" value={quickCubiertos} onChange={e => setQuickCubiertos(e.target.value)} placeholder="Cub."
+                    className="w-16 px-2 py-1.5 rounded-lg text-[13px] focus:outline-none" style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-1)' }} />
+                </div>
+                <button onClick={handleQuickSave} disabled={quickSaving || !(Number(quickTotal) > 0)}
+                  className="py-2 rounded-lg text-[13px] font-semibold" style={{ background: 'var(--accent)', color: '#fff', opacity: (quickSaving || !(Number(quickTotal) > 0)) ? 0.6 : 1 }}>
+                  {quickSaving ? 'Guardando…' : 'Guardar cierre'}
+                </button>
+              </div>
+            )}
+            {diasFaltantes.length > 0 && (
+              <div className="mt-2 flex items-start gap-2 rounded-xl p-2.5" style={{ background: '#fffbeb', border: '1px solid #fde68a' }}>
+                <span className="material-symbols-outlined text-[18px]" style={{ color: '#92400e' }}>event_busy</span>
+                <p className="text-[12px]" style={{ color: '#92400e', lineHeight: 1.4 }}>
+                  <b>{diasFaltantes.length} día{diasFaltantes.length !== 1 ? 's' : ''}</b> de este mes sin ventas cargadas. Con huecos, el CMV y el ticket promedio se distorsionan.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* ── Feature 2: Food cost teórico del período ── */}
+          {fcTeorico.hayItems && fcTeorico.hayCosto && fcTeorico.fcPct != null && (
+            <div className="px-4 pb-3">
+              <div className="rounded-xl p-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-2)' }}>Food cost teórico</p>
+                    <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-3)' }}>según el costo de receta de lo vendido</p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[20px] font-bold" style={{ color: fcTeorico.fcPct >= 35 ? '#ef4444' : fcTeorico.fcPct >= 30 ? '#f59e0b' : '#16a34a' }}>
+                      {fcTeorico.fcPct.toFixed(1)}%
+                    </div>
+                    <div className="text-[11px]" style={{ color: 'var(--text-2)' }}>costo mercadería {fmtPrecio(fcTeorico.costo)}</div>
+                  </div>
+                </div>
+                {fcTeorico.cobertura < 80 && (
+                  <p className="text-[10px] mt-2" style={{ color: 'var(--text-3)' }}>
+                    Calculado sobre el {fcTeorico.cobertura}% de los platos vendidos (el resto no tiene receta costeada). Vinculá recetas para mayor precisión.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Loading */}
           {loading && (
@@ -565,6 +712,65 @@ export default function VentasPage() {
                         </div>
                       </div>
                     )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── TAB PLATOS (ranking / mix) ──────────────────── */}
+      {tab === 'platos' && (
+        <>
+          <div className="flex gap-2 px-4 pt-4 pb-3">
+            {PERIODOS.map(p => (
+              <button key={p.value} onClick={() => handlePeriodo(p.value)}
+                className="text-[13px] font-medium px-3.5 py-1.5 rounded-full transition-colors"
+                style={{ background: periodo === p.value ? 'var(--navy)' : 'var(--surface)', color: periodo === p.value ? '#fff' : 'var(--text-2)', border: `1px solid ${periodo === p.value ? 'var(--navy)' : 'var(--border)'}` }}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          {platosRank.arr.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+              <span className="material-symbols-outlined text-[48px] mb-3" style={{ color: 'var(--border)' }}>restaurant</span>
+              <p className="text-[15px] font-medium" style={{ color: 'var(--text-1)' }}>Sin platos vendidos</p>
+              <p className="text-[13px] mt-1" style={{ color: 'var(--text-2)' }}>
+                Importá ventas con el detalle de platos (no solo el total) para ver el ranking
+              </p>
+            </div>
+          ) : (
+            <div className="px-4 flex flex-col gap-2">
+              <div className="flex items-center justify-between pb-1">
+                <p className="text-[12px] font-semibold" style={{ color: 'var(--text-2)' }}>{platosRank.arr.length} platos · ordenados por facturación</p>
+              </div>
+              {platosRank.arr.map((p, i) => {
+                const pct = platosRank.totalRev > 0 ? (p.revenue / platosRank.totalRev) * 100 : 0
+                const esTop = i < 3
+                const esCola = i >= platosRank.arr.length - 3 && platosRank.arr.length > 6
+                return (
+                  <div key={p.nombre} className="rounded-xl p-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-center rounded-lg shrink-0 text-[12px] font-bold"
+                        style={{ width: 26, height: 26, background: esTop ? '#16a34a18' : esCola ? '#ef444418' : 'var(--bg)', color: esTop ? '#16a34a' : esCola ? '#ef4444' : 'var(--text-2)' }}>
+                        {i + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[13px] font-semibold truncate" style={{ color: 'var(--text-1)' }}>{p.nombre}</span>
+                          <span className="text-[13px] font-bold shrink-0" style={{ color: 'var(--navy)' }}>{fmtPrecio(p.revenue)}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg)' }}>
+                            <div style={{ width: `${pct}%`, height: '100%', background: esTop ? '#16a34a' : esCola ? '#ef4444' : 'var(--accent)' }} />
+                          </div>
+                          <span className="text-[11px] shrink-0" style={{ color: 'var(--text-2)' }}>{pct.toFixed(0)}%</span>
+                          <span className="text-[11px] shrink-0" style={{ color: 'var(--text-3)' }}>· {p.cantidad} u</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )
               })}

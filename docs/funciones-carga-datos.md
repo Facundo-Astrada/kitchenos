@@ -307,3 +307,66 @@ El mismo editor crea Menús fijos o Eventos: preparaciones por curso, con plaza,
 **3 · Salud de la carta.** Agrupa los platos a revisar: **sin receta vinculada**, **margen negativo**, **en 86** y **sin categoría**, con acceso directo a cada uno.
 
 ---
+
+## 5 · VENTAS
+
+**Es el dato que cierra el círculo de la gestión.** Facturas/Stock/Recetario/Carta responden "cuánto cuesta y a cuánto vendo"; **Ventas responde "cuánto vendí de verdad"**. Transforma los food cost teóricos en rentabilidad real: con ventas cargadas, KitchenOS sabe tu CMV, tu ticket promedio y qué platos se mueven.
+
+---
+
+### Cómo cargarlas
+
+**Camino 1 — Importar desde tu POS** *(lo más común)*
+
+`/ventas` → **Importar** → Excel/CSV del cierre. Lee el total y, si está el detalle, los platos vendidos con cantidad y precio. Revisión editable antes de guardar.
+
+- 💡 Usá el reporte de **"productos vendidos"** (no solo el total): así se carga el mix y se desbloquea la ingeniería de menú.
+- 💡 Cargá por período cerrado (día/semana/mes); agrupa por fecha.
+
+**Camino 2 — Pegar texto / dictar (IA)**
+
+Pegás el texto del cierre o de WhatsApp y la IA (Haiku) lo estructura: total, cubiertos y platos.
+
+**Camino 3 — Cierre rápido / manual**
+
+Botón **"Cargar cierre del día"** en Resumen: fecha + total + cubiertos en un toque. Para el cierre simple de cada noche.
+
+---
+
+### Cómo impacta en la app
+
+| Módulo | Qué pasa |
+|---|---|
+| **Reportes → CMV** | Ventas × compras del período → costo de mercadería y food cost real. |
+| **Reportes → Presupuesto vs Real** | Ventas reales vs objetivo. |
+| **Carta → Ingeniería de menú** | Los platos vendidos dan la popularidad que clasifica cada plato. |
+| **Reportes → Rendimiento** | Ticket promedio, cubiertos, evolución. |
+
+---
+
+### Qué soluciona en la realidad
+
+**Para el dueño / administrador**
+- Food cost real del mes (no el teórico): cuánto de cada $100 vendido se fue en mercadería.
+- Ticket promedio y su evolución.
+- Qué platos sostienen la facturación y cuáles casi no se venden.
+
+**Para el chef / encargado**
+- Saber qué se vende para producir acorde.
+- Justificar decisiones de carta con números.
+
+**Para el emprendedor**
+- Foto clara de ingresos vs costos sin planillas.
+- Medir si una promo o un cambio de precio funcionó.
+
+---
+
+### Valor adicional
+
+**1 · Ranking / mix de platos vendidos.** Tab **Platos**: los más y menos vendidos del período con su **% de participación** sobre la facturación (top en verde, cola en rojo). La popularidad vista desde Ventas.
+
+**2 · Food cost teórico del período.** Card en Resumen: cruza los **platos vendidos × el costo de su receta** → cuánto deberías haber gastado en mercadería y el **food cost % teórico**. Comparado con tus compras reales (CMV) revela la fuga (merma, porciones, robo). Indica la cobertura (% de platos con receta costeada).
+
+**3 · Cierre diario rápido + alerta de días sin cargar.** Carga del total del día en un toque, y aviso de **cuántos días del mes quedaron sin ventas** — porque con huecos el CMV y el ticket promedio mienten.
+
+---
