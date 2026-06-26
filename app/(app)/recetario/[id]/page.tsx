@@ -200,6 +200,13 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
   // Food cost collapsible
   const [fcOpen, setFcOpen] = useState(false)
 
+  // Escalado por porciones (Feature 1) + precio sugerido (Feature 3)
+  const [prodPorc, setProdPorc] = useState('')
+  const [targetFC, setTargetFC] = useState('30')
+  useEffect(() => {
+    if (receta && prodPorc === '') setProdPorc(String(receta.porciones ?? ''))
+  }, [receta, prodPorc])
+
   // Focus edit input when editing
   useEffect(() => {
     if (editingIngId && editInputRef.current) {
@@ -285,6 +292,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
     const ratio = newVal / (ing.cantidad) // ratio against original (unscaled)
     setScaleFactor(ratio)
     setScaleRefIng(ing.nombre)
+    setProdPorc(String(Math.round((receta?.porciones ?? 0) * ratio * 100) / 100))
     setEditingIngId(null)
 
     // Highlight all ingredients
@@ -298,6 +306,18 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
     setScaleFactor(1)
     setScaleRefIng(null)
     setHighlightedIds(new Set())
+    setProdPorc(String(receta?.porciones ?? ''))
+  }
+
+  // Escalar a N porciones (Feature 1)
+  function escalarAPorciones(valor: string) {
+    setProdPorc(valor)
+    const n = parseFloat(valor.replace(',', '.'))
+    const base = receta?.porciones ?? 0
+    if (n > 0 && base > 0) {
+      setScaleFactor(n / base)
+      setScaleRefIng(null) // usa el control de porciones, no el aviso de doble-tap
+    }
   }
 
   // ── Ingrediente handlers ──
@@ -469,6 +489,31 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
 
       {/* ── Body: scroll continuo ── */}
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 0 80px' }}>
+
+        {/* Escalado por porciones (rendimiento dinámico) */}
+        {(receta.porciones ?? 0) > 0 && (
+          <div style={{ margin: '10px 14px 0', padding: '10px 12px', borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'var(--accent)' }}>scale</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>Producir</span>
+            <input
+              type="text" inputMode="decimal"
+              value={prodPorc}
+              onChange={e => escalarAPorciones(e.target.value.replace(/[^0-9.,]/g, ''))}
+              style={{ width: 64, border: '1px solid var(--border)', background: 'var(--bg)', borderRadius: 8, padding: '5px 8px', fontSize: 14, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: 'var(--text-1)', textAlign: 'center', outline: 'none' }}
+            />
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)' }}>
+              porciones {scaleFactor !== 1 && `· ×${scaleFactor.toFixed(2)}`}
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 'auto' }}>
+              receta base: {receta.porciones} porc.
+            </span>
+            {scaleFactor !== 1 && (
+              <button onClick={resetScale} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px', fontSize: 10, fontWeight: 700, color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                Original
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Aviso de escala ajustada */}
         {scaleFactor !== 1 && scaleRefIng && (
@@ -723,6 +768,36 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
 
           {fcOpen && (
             <div style={{ background: 'var(--surface)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
+              {/* Sugerir precio de venta por food cost objetivo */}
+              {receta.food_cost.costo_porcion > 0 && (() => {
+                const tfc = parseFloat(targetFC.replace(',', '.'))
+                const sugerido = tfc > 0 ? receta.food_cost.costo_porcion / (tfc / 100) : 0
+                return (
+                  <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', background: 'rgba(67,97,160,.04)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>Precio sugerido para FC</span>
+                      <input
+                        type="text" inputMode="decimal"
+                        value={targetFC}
+                        onChange={e => setTargetFC(e.target.value.replace(/[^0-9.,]/g, ''))}
+                        style={{ width: 48, border: '1px solid var(--border)', background: 'var(--bg)', borderRadius: 6, padding: '3px 6px', fontSize: 12, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: 'var(--text-1)', textAlign: 'center', outline: 'none' }}
+                      />
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)' }}>%</span>
+                      <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--navy)', fontFamily: "'DM Mono', monospace", marginLeft: 'auto' }}>
+                        ${sugerido.toFixed(0)}
+                      </span>
+                    </div>
+                    {sugerido > 0 && Math.abs(sugerido - (receta.precio_venta ?? 0)) >= 1 && (
+                      <button
+                        onClick={() => actualizarReceta(id, { precio_venta: Math.round(sugerido) })}
+                        style={{ marginTop: 8, width: '100%', background: 'var(--navy)', border: 'none', borderRadius: 8, padding: '8px', fontSize: 11, fontWeight: 700, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}
+                      >
+                        {(receta.precio_venta ?? 0) > 0 ? `Cambiar precio: $${(receta.precio_venta ?? 0).toFixed(0)} → $${sugerido.toFixed(0)}` : `Usar como precio de venta: $${sugerido.toFixed(0)}`}
+                      </button>
+                    )}
+                  </div>
+                )
+              })()}
               {/* Summary row */}
               {(receta.precio_venta ?? 0) > 0 && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 0, borderBottom: '1px solid var(--border)' }}>

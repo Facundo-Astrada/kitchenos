@@ -270,6 +270,19 @@ export default function RecetarioPage() {
 
   const nAlertas = useMemo(() => recetasPublicadas.filter(r => r.food_cost.food_cost_pct >= FC_ALERT_HIGH).length, [recetasPublicadas])
 
+  // ── Salud del recetario (Feature 2) ──
+  const [saludOpen, setSaludOpen] = useState(false)
+  const salud = useMemo(() => {
+    const costeoIncompleto = recetasPublicadas.filter(r => {
+      const prodIngs = (r.ingredientes ?? []).filter(i => i.tipo !== 'subreceta')
+      if (prodIngs.length === 0) return false
+      return prodIngs.some(i => !i.producto_id || !((i.costo_unitario ?? 0) > 0))
+    })
+    const fcCritico = recetasPublicadas.filter(r => (r.precio_venta ?? 0) > 0 && r.food_cost.food_cost_pct >= FC_ALERT_HIGH)
+    const sinPrecio = recetasPublicadas.filter(r => (r.precio_venta ?? 0) === 0)
+    return { costeoIncompleto, fcCritico, sinPrecio, total: costeoIncompleto.length + fcCritico.length + sinPrecio.length }
+  }, [recetasPublicadas])
+
   useEffect(() => {
     // Insights accionables para Kitchen Coach
     const fcAlto = recetasPublicadas
@@ -407,6 +420,44 @@ export default function RecetarioPage() {
 
       {/* Body */}
       <div data-coach-target="recetario-lista" style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 14px 80px' }}>
+        {/* Salud del recetario */}
+        {tab === 'recetas' && isAdmin && !loading && salud.total > 0 && (
+          <div style={{ marginBottom: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+            <button onClick={() => setSaludOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '11px 12px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#f59e0b' }}>health_and_safety</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Salud del recetario</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: '#f59e0b', borderRadius: 99, padding: '1px 7px' }}>{salud.total}</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)', marginLeft: 'auto', transform: saludOpen ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform .2s' }}>expand_more</span>
+            </button>
+            {saludOpen && (
+              <div style={{ borderTop: '1px solid var(--border)' }}>
+                {([
+                  { key: 'costeoIncompleto', label: 'Costeo incompleto', hint: 'ingredientes sin vincular o sin costo — subvalúan el food cost', color: '#f59e0b', items: salud.costeoIncompleto },
+                  { key: 'fcCritico', label: 'Food cost crítico (>35%)', hint: 'poco margen — revisá precio o receta', color: '#ef4444', items: salud.fcCritico },
+                  { key: 'sinPrecio', label: 'Sin precio de venta', hint: 'no se puede calcular el food cost', color: 'var(--text-3)', items: salud.sinPrecio },
+                ] as const).filter(g => g.items.length > 0).map(g => (
+                  <div key={g.key} style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: g.color, flexShrink: 0 }} />
+                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>{g.label}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-3)' }}>({g.items.length})</span>
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 8 }}>{g.hint}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {g.items.slice(0, 12).map(r => (
+                        <button key={r.id} onClick={() => router.push(`/recetario/${r.id}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 999, padding: '4px 10px', fontSize: 11, fontWeight: 600, color: 'var(--text-1)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                          {r.nombre}
+                          {g.key === 'fcCritico' && <span style={{ fontSize: 10, fontWeight: 800, color: '#ef4444', fontFamily: "'DM Mono', monospace" }}>{r.food_cost.food_cost_pct.toFixed(0)}%</span>}
+                        </button>
+                      ))}
+                      {g.items.length > 12 && <span style={{ fontSize: 10, color: 'var(--text-3)', alignSelf: 'center' }}>+{g.items.length - 12} más</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {loading ? (
           <EmptyMsg icon="hourglass_empty" text="Cargando recetas…" />
         ) : error ? (

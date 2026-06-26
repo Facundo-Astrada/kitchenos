@@ -171,3 +171,74 @@ Si ya cargaste facturas, el stock **ya existe**: cada producto facturado se cre�
 **3 · Alerta de stock inmóvil (capital dormido).** Detecta productos **sin compras hace mucho** que todavía tienen stock → "Tenés $X parados en productos que no rotan". Filtro "Inmóvil" + banner con el total, para no sobre-comprar y detectar mercadería por vencer.
 
 ---
+
+## 3 · RECETARIO
+
+**Es el tercer dato de gestión, y el que convierte el stock en rentabilidad.** Con los productos costeados (de las facturas), el recetario calcula **cuánto cuesta cada plato** y, contra el precio de venta, su **food cost**. Sin recetas, KitchenOS sabe qué comprás; con recetas, sabe si ganás plata con cada plato.
+
+---
+
+### Cómo cargarlo
+
+Cuatro caminos, combinables.
+
+**Camino 1 — Importar fichas técnicas con IA** *(el más rápido)*
+
+`/recetario` → **Importar** (admin) → foto, PDF o texto de la ficha técnica. La IA extrae **nombre, ingredientes con cantidad y unidad, procedimiento y porciones**. Soporta varias fichas a la vez.
+
+- 💡 Texto plano → Haiku (rápido); fotos/PDF/multi-ficha → Sonnet (preciso).
+- 💡 Después de importar, intenta **vincular cada ingrediente a un producto del stock** para traer el costo real. Los que no matchean quedan marcados.
+
+**Camino 2 — Carga manual**
+
+**FAB +** → nombre, porciones, precio de venta, ingredientes (buscador trae productos del stock) y procedimiento. El food cost se calcula en vivo.
+
+**Camino 3 — Ideas (borradores) → completar con IA**
+
+Tab **Ideas**: anotás el nombre de un plato. Después, **"Completar con IA"** → dictás o pegás ingredientes y pasos → la IA enriquece la receta existente.
+
+**Camino 4 — Desde la Carta**
+
+Al armar un plato, si buscás un componente que no existe como receta, lo creás como **idea/borrador** ahí mismo y queda vinculado.
+
+---
+
+### Cómo impacta en la app
+
+| Módulo | Qué pasa |
+|---|---|
+| **Carta** | El food cost de cada plato sale de las recetas que lo componen. |
+| **Stock** | Los ingredientes vinculados leen el precio del producto; una producción interna toma su costo de la receta. |
+| **OPS / Mise** | Las recetas vinculadas a un plato definen qué se produce y en qué cantidad por plaza. |
+| **Pase / Tareas** | Una receta se puede mandar a producir como tarea. |
+| **Reportes** | Food cost promedio, recetas más caras, evolución del costo por inflación. |
+
+---
+
+### Qué soluciona en la realidad
+
+**Para el dueño / administrador**
+- Food cost real de cada plato, no estimado (sale de los precios de las facturas).
+- Ver al instante qué recetas se volvieron no rentables cuando suben los insumos.
+- Estandarizar: que el plato salga igual lo haga quien lo haga.
+
+**Para el chef / cocinero**
+- Todas las fichas técnicas en el celular, no en una carpeta que se moja.
+- Escalar una receta a la cantidad a producir sin recalcular a mano.
+- Cargar recetas sin ser experto en planillas: foto y listo.
+
+**Para el emprendedor**
+- Poner precios con fundamento (food cost) en vez de "a ojo".
+- Detectar qué plato conviene empujar y cuál hace perder plata.
+
+---
+
+### Valor adicional
+
+**1 · Escalado de receta (rendimiento dinámico).** Control **"Producir N porciones"** en el detalle: las cantidades de cada ingrediente se recalculan al instante (también vía doble-tap sobre un peso). Para producir 80 porciones de salsa sin calculadora.
+
+**2 · Salud del recetario.** Panel en la lista (admin) que detecta y agrupa las recetas con **costeo incompleto** (ingredientes sin vincular o sin costo), **food cost crítico (>35%)** y **sin precio de venta**, con acceso directo a cada una para corregir.
+
+**3 · Sugerir precio de venta.** En el detalle, dado un **food cost objetivo** (ej. 30%), sugiere el precio de venta del plato y permite aplicarlo con un toque. Clave para reajustar la carta rápido en contexto inflacionario.
+
+---
