@@ -23,39 +23,82 @@ export interface PlanillaItem {
   confianza: 'exacto' | 'parcial' | 'nuevo'
 }
 
-// ── Haiku prompt ───────────────────────────────────────────────
+// ── Prompt (por hoja individual) ───────────────────────────────
 
-const HAIKU_SYSTEM = `Sos un sistema de extracción de datos de inventario para restaurantes argentinos.
+const SHEET_SYSTEM = `Sos un extractor de datos de inventario para restaurantes argentinos.
+Recibís el contenido de UNA HOJA de una planilla de stock (Google Sheets/Excel exportado).
+El formato puede ser caótico: headers de colores, sub-tablas por proveedor, filas vacías.
 
-Recibís el contenido de planillas de stock exportadas (Google Sheets/Excel). Pueden tener múltiples hojas y formatos caóticos: headers con colores, sub-tablas por proveedor, filas vacías, secciones mixtas.
+Tu tarea: extraé TODOS los productos de esa hoja.
 
-Tu tarea: extraé TODOS los productos con sus valores de stock.
+REGLAS:
+- Ignorá filas de encabezado de columnas ("Stock actual", "Mínimo", "Pedir", "Producto", etc.)
+- Ignorá filas de sección/proveedor (solo texto, sin números)
+- Ignorá filas vacías
+- Nombre con unidad entre paréntesis: "Aceite barbieri (litros)" → nombre:"Aceite barbieri", unidad:"litros"
+- "Actual" / "Stock actual" → stock_actual
+- "Mínimo" / "Min" → stock_minimo
+- "Crítico" → stock_critico (null si no existe)
+- "Pedir" → IGNORAR
+- Números en formato AR: 12,5 → 12.5; 1.200 → 1200
 
-REGLAS DE EXTRACCIÓN:
-- Ignorá filas que son solo encabezados de columna (contienen "Stock actual", "Mínimo", "Pedir", "Producto" sin números)
-- Ignorá filas de sección/proveedor (solo texto, sin valores numéricos)
-- Ignorá filas completamente vacías
-- El nombre puede incluir la unidad entre paréntesis: "Aceite barbieri (litros)" → nombre:"Aceite barbieri", unidad:"litros"
-- Si no hay unidad explícita en el nombre, intentá inferirla del contexto (ej: si dice "kg" en otra columna)
-- Columna "Actual" o "Stock actual" → stock_actual
-- Columna "Mínimo" o "Stock mínimo" o "Min" → stock_minimo
-- Columna "Crítico" o "Stock crítico" → stock_critico (puede no existir → null)
-- Columna "Pedir" → IGNORAR (es diferencia, no es stock)
-- Los números pueden estar en formato argentino: 12,5 = 12.5; 1.200 = 1200
+Respondé SOLO con JSON, sin texto ni backticks:
+{"items":[{"nombre":"...","unidad":"kg|l|ml|g|unidades|etc o null","stock_actual":número_o_null,"stock_minimo":número_o_null,"stock_critico":número_o_null}]}`
 
-Respondé ÚNICAMENTE con JSON válido, sin texto adicional, sin backticks, sin markdown:
-{
-  "items": [
-    {
-      "nombre": "nombre del producto sin unidad entre paréntesis",
-      "unidad": "kg|litros|l|unidades|u|g|ml|etc — null si no se puede determinar",
-      "stock_actual": número o null,
-      "stock_minimo": número o null,
-      "stock_critico": número o null,
-      "hoja": "nombre de la hoja"
+type ExtractedItem = {
+  nombre: string
+  unidad: string | null
+  stock_actual: number | null
+  stock_minimo: number | null
+  stock_critico: number | null
+  hoja: string
+}
+
+async function extractSheetItems(sheet: SheetData, apiKey: string): Promise<ExtractedItem[]> {
+  const text = sheet.rows
+    .slice(0, 400)
+    .map(r => r.map(c => String(c ?? '').trim()).join('\t'))
+    .filter(line => line.replace(/[\t\s]/g, '').length > 0)
+    .join('\n')
+
+  if (!text.trim()) return []
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 4096,
+        system: SHEET_SYSTEM,
+        messages: [{ role: 'user', content: `HOJA "${sheet.nombre}":\n${text}` }],
+      }),
+    })
+
+    if (!resp.ok) {
+      console.warn(`[import-planilla] hoja "${sheet.nombre}" error ${resp.status}`)
+      return []
     }
-  ]
-}`
+
+    const data = await resp.json()
+    const content = (data.content?.[0]?.text ?? '') as string
+    const jsonMatch = content.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) return []
+
+    const parsed = JSON.parse(jsonMatch[0])
+    return (parsed.items ?? []).map((item: Omit<ExtractedItem, 'hoja'>) => ({
+      ...item,
+      hoja: sheet.nombre,
+    }))
+  } catch {
+    console.warn(`[import-planilla] hoja "${sheet.nombre}" falló silenciosamente`)
+    return []
+  }
+}
 
 // ── Fuzzy match ────────────────────────────────────────────────
 
@@ -165,74 +208,22 @@ export async function POST(req: NextRequest) {
   const sheets: SheetData[] = body.sheets ?? []
   if (!sheets.length) return NextResponse.json({ error: 'Sin hojas' }, { status: 400 })
 
-  // Convert to text for Sonnet — max 300 rows per sheet, max 15 sheets
-  // Skip rows that are fully empty or contain only tab characters
-  const textData = sheets
-    .slice(0, 15)
-    .map(s => {
-      const text = s.rows
-        .slice(0, 300)
-        .map(r => r.map(c => String(c ?? '').trim()).join('\t'))
-        .filter(line => line.replace(/[\t\s]/g, '').length > 0)
-        .join('\n')
-      return `=== HOJA: ${s.nombre} ===\n${text}`
-    })
-    .join('\n\n')
-
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return NextResponse.json({ error: 'Sin API key de IA' }, { status: 500 })
 
-  let extracted: Array<{
-    nombre: string
-    unidad: string | null
-    stock_actual: number | null
-    stock_minimo: number | null
-    stock_critico: number | null
-    hoja: string
-  }> = []
+  // Procesar cada hoja en paralelo — cada llamada IA es pequeña, nunca se trunca
+  const BATCH = 5 // max paralelas simultáneas para no saturar rate limit
+  const allSheets = sheets.slice(0, 15)
+  let extracted: ExtractedItem[] = []
 
-  try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 8192,
-        system: HAIKU_SYSTEM,
-        messages: [{ role: 'user', content: textData }],
-      }),
-    })
-
-    if (!resp.ok) {
-      const errText = await resp.text()
-      console.error('[stock/import-planilla] API error:', resp.status, errText)
-      return NextResponse.json({ error: `Error IA (${resp.status}): ${errText.slice(0, 200)}` }, { status: 500 })
-    }
-
-    const data = await resp.json()
-    const content = (data.content?.[0]?.text ?? '') as string
-
-    // Robust JSON extraction: find the first { ... } block even if there's surrounding text
-    const jsonMatch = content.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      console.error('[stock/import-planilla] No JSON in response. Raw:', content.slice(0, 500))
-      return NextResponse.json({ error: `IA no devolvió JSON válido. Respuesta: ${content.slice(0, 150)}` }, { status: 422 })
-    }
-
-    const parsed = JSON.parse(jsonMatch[0])
-    extracted = parsed.items ?? []
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    console.error('[stock/import-planilla] Error:', msg)
-    return NextResponse.json({ error: `Error al interpretar la planilla: ${msg}` }, { status: 500 })
+  for (let i = 0; i < allSheets.length; i += BATCH) {
+    const batch = allSheets.slice(i, i + BATCH)
+    const results = await Promise.all(batch.map(s => extractSheetItems(s, apiKey)))
+    extracted.push(...results.flat())
   }
 
   if (!extracted.length) {
-    return NextResponse.json({ error: 'No se encontraron productos en el archivo' }, { status: 422 })
+    return NextResponse.json({ error: 'No se encontraron productos en ninguna hoja del archivo' }, { status: 422 })
   }
 
   // Fuzzy match against existing products
