@@ -5,6 +5,7 @@ import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth/context'
 import DashboardHeader from '@/components/dashboard/DashboardHeader'
+import IngresosBanner from '@/components/pedidos/IngresosBanner'
 import PasePreview from '@/components/dashboard/PasePreview'
 import MiPlaza from '@/components/dashboard/MiPlaza'
 import StockCriticoSection from '@/components/dashboard/StockCriticoSection'
@@ -210,6 +211,7 @@ export default function DashboardPage() {
 
           {/* Panel derecho: módulos + stock */}
           <div style={{ overflowY: 'auto', padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 28 }}>
+            {rol === 'admin' && <IngresosBanner embedded />}
             <div data-coach-target="dashboard-modulos">
               <ModulosGrid rol={rol} desktop />
             </div>
@@ -245,6 +247,7 @@ export default function DashboardPage() {
       ) : (
         /* ── MOBILE LAYOUT (sin cambios) ──────────────────── */
         <div className="scroll-body screen-enter" style={{ paddingTop: 0 }}>
+          {rol === 'admin' && <div style={{ padding: '8px 16px 0' }}><IngresosBanner embedded /></div>}
           {/* Turno card */}
           <div data-coach-target="dashboard-turno" style={{ padding: '8px 16px 0' }}>
             {!turnoActivo ? (

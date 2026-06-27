@@ -10,6 +10,7 @@ import type { Pedido, PedidoItem, EstadoPedido, Proveedor } from '@/types'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import PageHeader from '@/components/shell/PageHeader'
 import ActionButton from '@/components/shell/ActionButton'
+import IngresosBanner from '@/components/pedidos/IngresosBanner'
 
 // ── Helpers ─────────────────────────────────────────────
 const fmtDate = (d: string | null) => {
@@ -19,6 +20,12 @@ const fmtDate = (d: string | null) => {
 }
 const fmtMoney = (n: number) =>
   n > 0 ? `$${n.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—'
+
+// Rango de entrega: "28 jun" si desde=hasta, "28 jun – 30 jun" si difieren
+const fmtRangoEntrega = (desde?: string | null, hasta?: string | null): string => {
+  if (desde && hasta && desde !== hasta) return `${fmtDate(desde)} – ${fmtDate(hasta)}`
+  return fmtDate(desde ?? hasta ?? null)
+}
 
 const STATUS_COLORS: Record<EstadoPedido, { bg: string; text: string; label: string }> = {
   borrador: { bg: '#e8e8e8', text: '#666', label: 'Borrador' },
@@ -146,7 +153,9 @@ function PedidoCard({ pedido, onClick, onWhatsApp, onPDF }: {
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
             <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
               {fmtDate(pedido.fecha_pedido)}
-              {pedido.fecha_entrega_esperada && ` → ${fmtDate(pedido.fecha_entrega_esperada)}`}
+              {(pedido.entrega_desde || pedido.entrega_hasta)
+                ? ` · llega ${fmtRangoEntrega(pedido.entrega_desde, pedido.entrega_hasta)}`
+                : pedido.fecha_entrega_esperada ? ` → ${fmtDate(pedido.fecha_entrega_esperada)}` : ''}
             </span>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy)' }}>
               {fmtMoney(pedido.total_estimado ?? 0)}
@@ -641,10 +650,16 @@ function DetailView({
   items: PedidoItem[]
   proveedor: Proveedor | undefined
   onBack: () => void
-  onEnviar: () => void
+  onEnviar: (desde: string, hasta: string) => void
   onRecibir: () => void
   onEliminar: () => void
 }) {
+  const hoyISO = new Date().toISOString().slice(0, 10)
+  const en2dias = new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10)
+  const [mostrarEnvio, setMostrarEnvio] = useState(false)
+  const [envDesde, setEnvDesde] = useState(hoyISO)
+  const [envHasta, setEnvHasta] = useState(en2dias)
+
   const handleWhatsApp = () => {
     const text = encodeURIComponent(buildWhatsAppText(pedido, items))
     const phone = proveedor?.telefono?.replace(/\D/g, '') || ''
@@ -665,7 +680,9 @@ function DetailView({
           <div style={{ color: '#fff', fontWeight: 700, fontSize: 17 }}>{pedido.proveedor_nombre}</div>
           <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>
             {fmtDate(pedido.fecha_pedido)}
-            {pedido.fecha_entrega_esperada && ` - Entrega: ${fmtDate(pedido.fecha_entrega_esperada)}`}
+            {(pedido.entrega_desde || pedido.entrega_hasta)
+              ? ` · Llega: ${fmtRangoEntrega(pedido.entrega_desde, pedido.entrega_hasta)}`
+              : pedido.fecha_entrega_esperada ? ` · Entrega: ${fmtDate(pedido.fecha_entrega_esperada)}` : ''}
           </div>
         </div>
         <StatusBadge status={pedido.status as EstadoPedido} />
@@ -761,8 +778,8 @@ function DetailView({
 
         {/* Status actions */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-          {pedido.status === 'borrador' && (
-            <button onClick={onEnviar} style={{
+          {pedido.status === 'borrador' && !mostrarEnvio && (
+            <button onClick={() => setMostrarEnvio(true)} style={{
               padding: '12px', borderRadius: 10,
               background: '#1d4ed8', color: '#fff', border: 'none',
               fontWeight: 700, fontSize: 14, cursor: 'pointer',
@@ -771,6 +788,51 @@ function DetailView({
               <span className="material-symbols-outlined" style={{ fontSize: 18 }}>send</span>
               Marcar como enviado
             </button>
+          )}
+          {pedido.status === 'borrador' && mostrarEnvio && (
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#1d4ed8' }}>local_shipping</span>
+                ¿En qué rango debería llegar?
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <label style={{ flex: 1, fontSize: 11, color: 'var(--text-2)', fontWeight: 600 }}>
+                  Desde
+                  <input type="date" value={envDesde} onChange={e => setEnvDesde(e.target.value)}
+                    style={{ width: '100%', boxSizing: 'border-box', marginTop: 4, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', fontSize: 13, fontFamily: 'inherit' }} />
+                </label>
+                <label style={{ flex: 1, fontSize: 11, color: 'var(--text-2)', fontWeight: 600 }}>
+                  Hasta
+                  <input type="date" value={envHasta} min={envDesde} onChange={e => setEnvHasta(e.target.value)}
+                    style={{ width: '100%', boxSizing: 'border-box', marginTop: 4, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', fontSize: 13, fontFamily: 'inherit' }} />
+                </label>
+              </div>
+              {/* Atajos rápidos */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {[
+                  { label: 'Hoy', d: 0, h: 0 },
+                  { label: '1-2 días', d: 1, h: 2 },
+                  { label: '3-5 días', d: 3, h: 5 },
+                  { label: 'Próx. semana', d: 7, h: 9 },
+                ].map(opt => (
+                  <button key={opt.label}
+                    onClick={() => {
+                      setEnvDesde(new Date(Date.now() + opt.d * 864e5).toISOString().slice(0, 10))
+                      setEnvHasta(new Date(Date.now() + opt.h * 864e5).toISOString().slice(0, 10))
+                    }}
+                    style={{ padding: '5px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-2)', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => onEnviar(envDesde, envHasta)} style={{
+                padding: '12px', borderRadius: 10, background: '#1d4ed8', color: '#fff', border: 'none',
+                fontWeight: 700, fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>send</span>
+                Confirmar envío
+              </button>
+            </div>
           )}
           {(pedido.status === 'enviado' || pedido.status === 'parcial') && (
             <button onClick={onRecibir} style={{
@@ -959,7 +1021,7 @@ type View = 'list' | 'nuevo' | 'detail' | 'recibir'
 
 export default function PedidosPage() {
   const RESTAURANTE_ID = useRestauranteId()
-  const { pedidos, loading, crearPedido, actualizarStatus, recibirPedido, eliminarPedido, fetchItems } = usePedidos()
+  const { pedidos, loading, crearPedido, enviarPedido, recibirPedido, eliminarPedido, fetchItems } = usePedidos()
   const { proveedores } = useProveedores()
 
   const [view, setView] = useState<View>('list')
@@ -1002,10 +1064,10 @@ export default function PedidosPage() {
     return id
   }
 
-  const handleEnviar = async () => {
+  const handleEnviar = async (desde: string, hasta: string) => {
     if (!selectedPedido) return
-    await actualizarStatus(selectedPedido.id, 'enviado')
-    setToast('Pedido marcado como enviado')
+    await enviarPedido(selectedPedido.id, desde || null, hasta || null)
+    setToast('Pedido enviado — esperando entrega')
     setView('list')
   }
 
@@ -1117,6 +1179,7 @@ export default function PedidosPage() {
 
       {/* Content */}
       <div data-coach-target="pedidos-lista" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <IngresosBanner embedded />
         {loading ? (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
             Cargando...
