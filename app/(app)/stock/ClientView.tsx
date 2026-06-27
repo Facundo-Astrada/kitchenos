@@ -14,6 +14,9 @@ import { useMerma } from '@/lib/hooks/useMerma'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import ImportadorArchivo, { UndoBanner } from '@/components/importador/ImportadorArchivo'
+import CarritoCompras, { type CartItem } from '@/components/stock/CarritoCompras'
+import { usePedidos } from '@/lib/hooks/usePedidos'
+import { useProveedores } from '@/lib/hooks/useProveedores'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import type { MisePlaceItem, MisePlaceRegistro } from '@/types'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
@@ -143,6 +146,8 @@ export default function StockPage() {
   const { productos, loading, error, actualizarStock, agregarProducto, actualizarProducto, eliminarProducto, refetch } = useStock()
   const { recetas } = useRecetas()
   const { categorias, agregarCategoria } = useCategoriasProducto()
+  const { crearPedido } = usePedidos()
+  const { proveedores } = useProveedores()
   const { puedeEditar, puedeEliminar, isAdmin } = usePermisos()
   const canEdit = isAdmin || puedeEditar('stock')
   const isDesktop = useIsDesktop()
@@ -313,6 +318,72 @@ export default function StockPage() {
       setPlanillaStage('preview')
     }
   }
+
+  // ── Carrito de compras ───────────────────────────────────────
+  const [cart, setCart] = useState<CartItem[]>([])
+  const [cartOpen, setCartOpen] = useState(false)
+
+  const addToCart = useCallback((p: ProductoConEstado) => {
+    setCart(prev => {
+      if (prev.some(it => it.producto_id === p.id)) return prev // ya está
+      // Cantidad sugerida: lo que falta para llegar al mínimo (o 1)
+      const sugerida = Math.max(1, +(p.stock_minimo - p.stock_actual).toFixed(2))
+      return [...prev, {
+        producto_id: p.id,
+        nombre: p.nombre,
+        unidad: p.unidad_compra ?? p.unidad,
+        precio_unitario: p.precio_unitario ?? 0,
+        proveedor_id: p.proveedor_id ?? null,
+        cantidad: sugerida,
+      }]
+    })
+    setCartOpen(true)
+  }, [])
+
+  const updateCartQty = useCallback((id: string, cantidad: number) => {
+    setCart(prev => cantidad <= 0
+      ? prev.filter(it => it.producto_id !== id)
+      : prev.map(it => it.producto_id === id ? { ...it, cantidad } : it))
+  }, [])
+
+  const removeFromCart = useCallback((id: string) => {
+    setCart(prev => prev.filter(it => it.producto_id !== id))
+  }, [])
+
+  const confirmarPedidos = useCallback(async (notas: string) => {
+    if (!cart.length) return
+    // Agrupar por proveedor → un pedido por proveedor
+    const grupos = new Map<string, CartItem[]>()
+    for (const it of cart) {
+      const key = it.proveedor_id ?? '__sin__'
+      if (!grupos.has(key)) grupos.set(key, [])
+      grupos.get(key)!.push(it)
+    }
+    try {
+      for (const [key, items] of grupos.entries()) {
+        const prov = key === '__sin__' ? null : proveedores.find(p => p.id === key)
+        await crearPedido({
+          proveedor_id: prov?.id ?? null,
+          proveedor_nombre: prov?.nombre ?? 'Sin proveedor',
+          notas: notas || null,
+          items: items.map(it => ({
+            producto_nombre: it.nombre,
+            producto_id: it.producto_id,
+            cantidad: it.cantidad,
+            unidad: it.unidad,
+            precio_estimado: it.precio_unitario,
+          })),
+        })
+      }
+      setCart([])
+      setCartOpen(false)
+      setSugToast(`${grupos.size === 1 ? 'Pedido creado' : `${grupos.size} pedidos creados`} en borrador`)
+      setTimeout(() => setSugToast(null), 2800)
+    } catch (e) {
+      setSugToast('Error al crear pedido: ' + (e instanceof Error ? e.message : 'desconocido'))
+      setTimeout(() => setSugToast(null), 3500)
+    }
+  }, [cart, proveedores, crearPedido])
 
   // Nueva categoría modal
   const [newCatModal, setNewCatModal] = useState(false)
@@ -1172,13 +1243,29 @@ export default function StockPage() {
                             </div>
                           )}
                         </div>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); openMerma(p) }}
-                          title="Registrar merma"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, marginTop: -2 }}
-                        >
-                          <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)' }}>delete_sweep</span>
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                          {isAdmin && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); addToCart(p) }}
+                              aria-label="Agregar al carrito de compras"
+                              title="Agregar al pedido"
+                              disabled={cart.some(it => it.producto_id === p.id)}
+                              style={{ background: 'none', border: 'none', cursor: cart.some(it => it.producto_id === p.id) ? 'default' : 'pointer', padding: 2, marginTop: -2, opacity: cart.some(it => it.producto_id === p.id) ? 1 : 0.85 }}
+                            >
+                              <span className="material-symbols-outlined" style={{ fontSize: 17, color: cart.some(it => it.producto_id === p.id) ? 'var(--accent)' : (p.estado === 'critico' || p.estado === 'bajo') ? 'var(--accent)' : 'var(--text-3)' }}>
+                                {cart.some(it => it.producto_id === p.id) ? 'shopping_cart' : 'add_shopping_cart'}
+                              </span>
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); openMerma(p) }}
+                            aria-label="Registrar merma"
+                            title="Registrar merma"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, marginTop: -2 }}
+                          >
+                            <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)' }}>delete_sweep</span>
+                          </button>
+                        </div>
                       </div>
                     </td>
                     {/* Categoría — solo desktop */}
@@ -2030,6 +2117,20 @@ export default function StockPage() {
           </div>
         </div>
       )}
+      {/* ── Carrito de compras ── */}
+      {isAdmin && (
+        <CarritoCompras
+          cart={cart}
+          proveedores={proveedores}
+          onUpdateQty={updateCartQty}
+          onRemove={removeFromCart}
+          onClear={() => { setCart([]); setCartOpen(false) }}
+          onConfirm={confirmarPedidos}
+          open={cartOpen}
+          onToggle={setCartOpen}
+        />
+      )}
+
       {/* ── File input planilla (siempre montado) ── */}
       <input
         ref={planillaFileRef}
