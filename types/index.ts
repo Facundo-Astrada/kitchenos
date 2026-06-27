@@ -323,6 +323,8 @@ export interface Pedido {
   proveedor_nombre?: string | null
   fecha_pedido: string
   fecha_entrega_esperada?: string | null
+  entrega_desde?: string | null
+  entrega_hasta?: string | null
   status: string
   notas?: string | null
   total_estimado?: number | null

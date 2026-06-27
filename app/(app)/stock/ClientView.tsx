@@ -215,6 +215,18 @@ export default function StockPage() {
   const [editValue, setEditValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Inline edit de umbrales (mínimo / crítico)
+  const [editThr, setEditThr] = useState<{ id: string; min: string; crit: string } | null>(null)
+  const guardarUmbrales = useCallback(async () => {
+    if (!editThr) return
+    const min = parseFloat(editThr.min) || 0
+    const crit = parseFloat(editThr.crit) || 0
+    try {
+      await actualizarProducto(editThr.id, { stock_minimo: min, stock_critico: crit })
+    } catch { /* noop */ }
+    setEditThr(null)
+  }, [editThr, actualizarProducto])
+
   // Add/edit modal
   const [modalOpen, setModalOpen] = useState(false)
   const [editingProducto, setEditingProducto] = useState<ProductoConEstado | null>(null)
@@ -1135,23 +1147,21 @@ export default function StockPage() {
       <div style={{ background: 'var(--navy)', flexShrink: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <colgroup>
-            <col style={{ width: 26 }} />
             <col />
             {isDesktop && <col style={{ width: 140 }} />}
-            {isDesktop && isAdmin && <col style={{ width: 80 }} />}
-            {!isDesktop && <col style={{ width: 62 }} />}
-            <col style={{ width: isDesktop ? 84 : 68 }} />
-            <col style={{ width: 52 }} />
+            {isAdmin && <col style={{ width: isDesktop ? 80 : 64 }} />}
+            <col style={{ width: isDesktop ? 100 : 86 }} />
+            <col style={{ width: 56 }} />
+            {isAdmin && <col style={{ width: 50 }} />}
           </colgroup>
           <thead>
             <tr>
-              <th style={thStyle}>#</th>
-              <th style={{ ...thStyle, textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Producto</th>
+              <th style={{ ...thStyle, textAlign: 'left', paddingLeft: 12, color: 'rgba(255,255,255,.7)' }}>Producto</th>
               {isDesktop && <th style={{ ...thStyle, textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Categoría</th>}
-              {isDesktop && isAdmin && <th style={{ ...thStyle, textAlign: 'right' }}>Precio</th>}
-              {!isDesktop && <th style={{ ...thStyle, textAlign: 'right' }}>Precio</th>}
+              {isAdmin && <th style={{ ...thStyle, textAlign: 'right', paddingRight: 8 }}>Precio</th>}
               <th style={{ ...thStyle, background: 'rgba(255,255,255,.07)', color: 'rgba(255,255,255,.9)' }}>Stock</th>
               <th style={thStyle}>Estado</th>
+              {isAdmin && <th style={thStyle} aria-label="Acciones"></th>}
             </tr>
           </thead>
         </table>
@@ -1197,13 +1207,12 @@ export default function StockPage() {
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: 26 }} />
               <col />
               {isDesktop && <col style={{ width: 140 }} />}
-              {isDesktop && isAdmin && <col style={{ width: 80 }} />}
-              {!isDesktop && <col style={{ width: 62 }} />}
-              <col style={{ width: isDesktop ? 84 : 68 }} />
-              <col style={{ width: 52 }} />
+              {isAdmin && <col style={{ width: isDesktop ? 80 : 64 }} />}
+              <col style={{ width: isDesktop ? 100 : 86 }} />
+              <col style={{ width: 56 }} />
+              {isAdmin && <col style={{ width: 50 }} />}
             </colgroup>
             <tbody>
               {filtered.map((p, i) => {
@@ -1220,51 +1229,20 @@ export default function StockPage() {
                       cursor: canEdit ? 'pointer' : 'default',
                     }}
                   >
-                    <td style={{ padding: '11px 4px', fontSize: 10, color: 'var(--text-3)', textAlign: 'center', fontFamily: "'DM Mono', monospace" }}>
-                      {i + 1}
-                    </td>
-                    <td style={{ padding: '11px 8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: 8 }}>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)', lineHeight: 1.25, display: 'flex', alignItems: 'center', gap: 6 }}>
-                            {p.nombre}
-                            {p.es_produccion && (
-                              <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', padding: '1px 5px', borderRadius: 4, background: 'rgba(16,185,129,.12)', color: '#10b981', flexShrink: 0 }}>
-                                Producción
-                              </span>
-                            )}
-                          </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>
-                            {!isDesktop && `${p.categoria} · `}{p.unidad_uso ?? p.unidad}
-                          </div>
-                          {val > 0 && isAdmin && !isDesktop && (
-                            <div style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700, marginTop: 1, fontFamily: "'DM Mono', monospace" }}>
-                              {fmtValor(val)}
-                            </div>
+                    {/* Producto */}
+                    <td style={{ padding: '11px 8px 11px 12px' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)', lineHeight: 1.25, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {p.nombre}
+                          {p.es_produccion && (
+                            <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', padding: '1px 5px', borderRadius: 4, background: 'rgba(16,185,129,.12)', color: '#10b981', flexShrink: 0 }}>
+                              Producción
+                            </span>
                           )}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-                          {isAdmin && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); addToCart(p) }}
-                              aria-label="Agregar al carrito de compras"
-                              title="Agregar al pedido"
-                              disabled={cart.some(it => it.producto_id === p.id)}
-                              style={{ background: 'none', border: 'none', cursor: cart.some(it => it.producto_id === p.id) ? 'default' : 'pointer', padding: 2, marginTop: -2, opacity: cart.some(it => it.producto_id === p.id) ? 1 : 0.85 }}
-                            >
-                              <span className="material-symbols-outlined" style={{ fontSize: 17, color: cart.some(it => it.producto_id === p.id) ? 'var(--accent)' : (p.estado === 'critico' || p.estado === 'bajo') ? 'var(--accent)' : 'var(--text-3)' }}>
-                                {cart.some(it => it.producto_id === p.id) ? 'shopping_cart' : 'add_shopping_cart'}
-                              </span>
-                            </button>
-                          )}
-                          <button
-                            onClick={(e) => { e.stopPropagation(); openMerma(p) }}
-                            aria-label="Registrar merma"
-                            title="Registrar merma"
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, marginTop: -2 }}
-                          >
-                            <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)' }}>delete_sweep</span>
-                          </button>
+                        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>
+                          {!isDesktop && `${p.categoria} · `}{p.unidad_uso ?? p.unidad}
+                          {val > 0 && isAdmin && !isDesktop && <span style={{ color: 'var(--accent)', fontWeight: 700, marginLeft: 6, fontFamily: "'DM Mono', monospace" }}>{fmtValor(val)}</span>}
                         </div>
                       </div>
                     </td>
@@ -1277,14 +1255,16 @@ export default function StockPage() {
                         )}
                       </td>
                     )}
+                    {/* Precio */}
                     {isAdmin && (
-                    <td style={{ padding: '11px 4px', textAlign: 'right' }}>
+                    <td style={{ padding: '11px 8px 11px 4px', textAlign: 'right' }}>
                       <span style={{ fontSize: 12, fontWeight: 500, fontFamily: "'DM Mono', monospace", color: 'var(--text-2)' }}>
                         {fmtPrecio(p.precio_unitario)}
                       </span>
                     </td>
                     )}
-                    <td style={{ padding: '11px 4px', textAlign: 'center', background: 'color-mix(in srgb, var(--accent) 6%, transparent)' }}>
+                    {/* Stock + umbrales editables */}
+                    <td style={{ padding: '8px 4px', textAlign: 'center', background: 'color-mix(in srgb, var(--accent) 6%, transparent)' }}>
                       {editingId === p.id ? (
                         <input
                           ref={inputRef}
@@ -1300,18 +1280,74 @@ export default function StockPage() {
                         />
                       ) : (
                         <button
-                          onDoubleClick={e => { e.stopPropagation(); startEdit(p) }}
-                          title="Doble tap para editar"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 15, fontWeight: 800, fontFamily: "'DM Mono', monospace", color: p.estado === 'critico' ? '#dc2626' : p.estado === 'bajo' ? '#d97706' : 'var(--text-1)' }}
+                          onClick={e => { if (canEdit) { e.stopPropagation(); startEdit(p) } }}
+                          title="Tocá para editar stock"
+                          style={{ background: 'none', border: 'none', cursor: canEdit ? 'pointer' : 'default', padding: '0 4px', fontSize: 16, fontWeight: 800, fontFamily: "'DM Mono', monospace", color: p.estado === 'critico' ? '#dc2626' : p.estado === 'bajo' ? '#d97706' : 'var(--text-1)' }}
                         >
                           {p.stock_actual}
                           <span style={{ fontSize: 9, fontWeight: 400, color: 'var(--text-3)', marginLeft: 2 }}>{p.unidad_uso ?? p.unidad}</span>
                         </button>
                       )}
+                      {/* Mín / Crít editable */}
+                      {editThr?.id === p.id ? (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, marginTop: 4 }} onClick={e => e.stopPropagation()}>
+                          <input
+                            type="number" value={editThr.min} autoFocus
+                            onChange={e => setEditThr(t => t && { ...t, min: e.target.value })}
+                            onKeyDown={e => { if (e.key === 'Enter') guardarUmbrales(); if (e.key === 'Escape') setEditThr(null) }}
+                            style={{ width: 30, textAlign: 'center', fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--bg)', color: '#d97706', border: '1px solid var(--border)', borderRadius: 5, padding: '2px 1px', outline: 'none' }}
+                          />
+                          <input
+                            type="number" value={editThr.crit}
+                            onChange={e => setEditThr(t => t && { ...t, crit: e.target.value })}
+                            onKeyDown={e => { if (e.key === 'Enter') guardarUmbrales(); if (e.key === 'Escape') setEditThr(null) }}
+                            style={{ width: 30, textAlign: 'center', fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--bg)', color: '#dc2626', border: '1px solid var(--border)', borderRadius: 5, padding: '2px 1px', outline: 'none' }}
+                          />
+                          <button onClick={guardarUmbrales} aria-label="Guardar umbrales" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#10b981' }}>check_circle</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={e => { if (canEdit) { e.stopPropagation(); setEditThr({ id: p.id, min: String(p.stock_minimo ?? 0), crit: String(p.stock_critico ?? 0) }) } }}
+                          title="Tocá para editar mínimo y crítico"
+                          aria-label="Editar mínimo y crítico"
+                          style={{ background: 'none', border: 'none', cursor: canEdit ? 'pointer' : 'default', padding: '1px 2px', marginTop: 3, fontSize: 9.5, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', display: 'block', margin: '3px auto 0', whiteSpace: 'nowrap' }}
+                        >
+                          mín <b style={{ color: '#d97706' }}>{p.stock_minimo ?? 0}</b> · crít <b style={{ color: '#dc2626' }}>{p.stock_critico ?? 0}</b>
+                        </button>
+                      )}
                     </td>
+                    {/* Estado */}
                     <td style={{ padding: '11px 4px', textAlign: 'center' }}>
                       {estadoBadge(p)}
                     </td>
+                    {/* Acciones */}
+                    {isAdmin && (
+                    <td style={{ padding: '11px 4px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); addToCart(p) }}
+                          aria-label="Agregar al carrito de compras"
+                          title="Agregar al pedido"
+                          disabled={cart.some(it => it.producto_id === p.id)}
+                          style={{ background: 'none', border: 'none', cursor: cart.some(it => it.producto_id === p.id) ? 'default' : 'pointer', padding: 0, display: 'flex' }}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: 19, color: cart.some(it => it.producto_id === p.id) ? 'var(--accent)' : (p.estado === 'critico' || p.estado === 'bajo') ? 'var(--accent)' : 'var(--text-3)' }}>
+                            {cart.some(it => it.producto_id === p.id) ? 'shopping_cart' : 'add_shopping_cart'}
+                          </span>
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openMerma(p) }}
+                          aria-label="Registrar merma"
+                          title="Registrar merma"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'var(--text-3)' }}>delete_sweep</span>
+                        </button>
+                      </div>
+                    </td>
+                    )}
                   </tr>
                 )
               })}

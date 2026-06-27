@@ -142,6 +142,24 @@ export function usePedidos() {
     }
   }, [fetchPedidos, supabase])
 
+  // Enviar pedido con rango de entrega esperado (desde-hasta)
+  const enviarPedido = useCallback(async (id: string, entregaDesde: string | null, entregaHasta: string | null) => {
+    try {
+      const { error } = await supabase.from('pedidos').update({
+        status: 'enviado',
+        entrega_desde: entregaDesde,
+        entrega_hasta: entregaHasta,
+        fecha_entrega_esperada: entregaDesde, // compat con la fecha única previa
+      }).eq('id', id)
+      if (error) throw error
+      await fetchPedidos()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al enviar el pedido'
+      console.error('[usePedidos] enviarPedido Error:', msg)
+      throw new Error(msg)
+    }
+  }, [fetchPedidos, supabase])
+
   const marcarItemRecibido = useCallback(async (itemId: string, recibido: boolean, cantidadRecibida?: number) => {
     try {
       const { error } = await supabase.from('pedido_items').update({
@@ -229,7 +247,7 @@ export function usePedidos() {
   return {
     pedidos, loading, error,
     fetchPedidos, fetchItems, fetchProductosProveedor,
-    crearPedido, actualizarStatus, marcarItemRecibido,
+    crearPedido, actualizarStatus, enviarPedido, marcarItemRecibido,
     recibirPedido, eliminarPedido,
   }
 }
