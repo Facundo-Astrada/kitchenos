@@ -120,6 +120,160 @@ Total del día $144.700`,
   },
 ]
 
+// ── Excel parsing helpers ────────────────────────────────────
+
+function normalizeHdr(s: string): string {
+  return String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim()
+}
+
+const HDR_NOMBRE = ['plato', 'nombre', 'item', 'producto', 'descripcion', 'articulo', 'concepto', 'detalle', 'comida', 'bebida']
+const HDR_CANTIDAD = ['cant', 'qty', 'unid', 'cantidad', 'vendido', 'porcion']
+const HDR_PRECIO = ['precio', 'unit', 'valor', 'tarifa', 'unitario']
+const HDR_TOTAL = ['total', 'subtotal', 'monto']
+const HDR_FECHA = ['fecha', 'date', 'dia']
+
+function hdrMatch(cell: string, keys: string[]): boolean {
+  const n = normalizeHdr(cell)
+  return keys.some(k => n.includes(k))
+}
+
+function looksLikeCodes(values: string[]): boolean {
+  const nonEmpty = values.filter(v => v.trim() !== '')
+  if (nonEmpty.length < 2) return false
+  const codeCount = nonEmpty.filter(v => /^[\d\s\-\.]+$/.test(v.trim()) || v.trim().length < 3).length
+  return codeCount / nonEmpty.length > 0.6
+}
+
+interface ParseResult {
+  venta?: ParsedVenta
+  error?: string
+  warnings?: string[]
+}
+
+function parseSheetData(workbook: XLSX.WorkBook, sheetName: string, fileName: string): ParseResult {
+  const sheet = workbook.Sheets[sheetName]
+  if (!sheet) return { error: `Hoja "${sheetName}" no encontrada.` }
+
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][]
+  if (rows.length < 2) return { error: 'La hoja está vacía o tiene muy pocas filas.' }
+
+  // Detectar fila de encabezado (primeras 8 filas)
+  let headerIdx = -1
+  let headerNorm: string[] = []
+  for (let i = 0; i < Math.min(8, rows.length); i++) {
+    const norm = rows[i].map(c => normalizeHdr(String(c)))
+    if (HDR_NOMBRE.some(k => norm.some(h => h.includes(k))) ||
+        HDR_CANTIDAD.some(k => norm.some(h => h.includes(k)))) {
+      headerIdx = i
+      headerNorm = norm
+      break
+    }
+  }
+
+  // Índices de columnas
+  let colNombre = headerNorm.findIndex(h => hdrMatch(h, HDR_NOMBRE))
+  const colCantidad = headerNorm.findIndex(h => hdrMatch(h, HDR_CANTIDAD))
+  const colPrecio = headerNorm.findIndex(h => hdrMatch(h, HDR_PRECIO))
+  const colTotal = headerNorm.findIndex(h => hdrMatch(h, HDR_TOTAL))
+  const colFecha = headerNorm.findIndex(h => hdrMatch(h, HDR_FECHA))
+
+  const dataStart = headerIdx >= 0 ? headerIdx + 1 : 0
+  const dataRows = rows.slice(dataStart).filter(r => r.some(c => c !== '' && c !== null && c !== undefined))
+
+  if (dataRows.length === 0) return { error: 'No se encontraron filas de datos en la hoja.' }
+
+  const warnings: string[] = []
+
+  // Si la columna de nombre parece contener códigos, buscar una mejor
+  if (colNombre >= 0) {
+    const nameVals = dataRows.map(r => String(r[colNombre] ?? ''))
+    if (looksLikeCodes(nameVals)) {
+      const colCount = Math.max(...rows.map(r => r.length))
+      let bestCol = -1
+      let bestAvgLen = 0
+      for (let ci = 0; ci < colCount; ci++) {
+        if ([colNombre, colCantidad, colPrecio, colTotal, colFecha].includes(ci)) continue
+        const vals = dataRows.map(r => String(r[ci] ?? ''))
+        if (!looksLikeCodes(vals)) {
+          const nonEmpty = vals.filter(v => v.trim())
+          const avg = nonEmpty.reduce((s, v) => s + v.length, 0) / Math.max(1, nonEmpty.length)
+          if (avg > bestAvgLen) { bestAvgLen = avg; bestCol = ci }
+        }
+      }
+      if (bestCol >= 0) {
+        const oldH = String(headerIdx >= 0 ? rows[headerIdx][colNombre] ?? `col ${colNombre + 1}` : `col ${colNombre + 1}`)
+        const newH = String(headerIdx >= 0 ? rows[headerIdx][bestCol] ?? `col ${bestCol + 1}` : `col ${bestCol + 1}`)
+        warnings.push(`"${oldH}" tenía códigos numéricos — usamos "${newH}" como nombre del plato.`)
+        colNombre = bestCol
+      } else {
+        warnings.push('La columna de nombre parece tener códigos. Revisá el mapeo de columnas en el archivo.')
+      }
+    }
+  }
+
+  // Parsear filas
+  const items: ItemDetectado[] = []
+  let total = 0
+  let fecha = fmtDate(new Date())
+
+  for (const row of dataRows) {
+    // Fecha
+    if (colFecha >= 0 && row[colFecha]) {
+      const raw = row[colFecha]
+      if (typeof raw === 'number') {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const d = (XLSX.SSF as any).parse_date_code(raw)
+          if (d) fecha = fmtDate(new Date(d.y, d.m - 1, d.d))
+        } catch { /* ignorar */ }
+      } else {
+        const p = new Date(String(raw))
+        if (!isNaN(p.getTime())) fecha = fmtDate(p)
+      }
+    }
+
+    const nombre = (colNombre >= 0 ? String(row[colNombre] ?? '') : String(row[0] ?? '')).trim()
+    const cantRaw = colCantidad >= 0 ? row[colCantidad] : row[1]
+    const precioRaw = colPrecio >= 0 ? row[colPrecio] : row[2]
+    const totalRaw = colTotal >= 0 ? row[colTotal] : null
+
+    // Saltar filas con nombre vacío o solo numérico
+    if (!nombre || /^[\d\s\-\.]+$/.test(nombre)) continue
+
+    const parseNum = (v: unknown) =>
+      Number(String(v ?? '').replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0
+    const cantidad = Math.max(1, Number(String(cantRaw ?? '').replace(',', '.')) || 1)
+    const precio = parseNum(precioRaw)
+    const sub = parseNum(totalRaw)
+
+    if (precio > 0 || sub > 0) {
+      items.push({
+        nombre_plato: nombre,
+        cantidad,
+        precio_unitario: precio > 0 ? precio : sub / cantidad,
+      })
+      total += sub > 0 ? sub : precio * cantidad
+    }
+  }
+
+  if (items.length === 0) {
+    if (headerIdx < 0) {
+      return {
+        error: 'No se detectó un encabezado. El archivo necesita columnas "Nombre/Plato", "Cantidad" y "Precio".',
+      }
+    }
+    const detected = headerNorm.filter(h => h.trim()).slice(0, 6).join(', ')
+    return {
+      error: `Encabezado detectado pero sin platos con precio. Columnas encontradas: ${detected}. Verificá que el archivo tenga precios.`,
+    }
+  }
+
+  return {
+    venta: { fecha, total, cantidad_cubiertos: null, notas: `Importado desde ${fileName}`, items },
+    warnings: warnings.length > 0 ? warnings : undefined,
+  }
+}
+
 // ── Component ───────────────────────────────────────────────
 
 export default function VentasPage() {
@@ -138,6 +292,9 @@ export default function VentasPage() {
   const [importing, setImporting] = useState(false)
   const [saving, setSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [parsedWorkbook, setParsedWorkbook] = useState<XLSX.WorkBook | null>(null)
+  const [pendingFileName, setPendingFileName] = useState('')
+  const [importWarnings, setImportWarnings] = useState<string[]>([])
 
   // Cierre rápido (Feature 3)
   const [showQuick, setShowQuick] = useState(false)
@@ -273,108 +430,33 @@ export default function VentasPage() {
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
+    if (fileInputRef.current) fileInputRef.current.value = ''
 
     const reader = new FileReader()
     reader.onload = (ev) => {
       try {
         const data = new Uint8Array(ev.target?.result as ArrayBuffer)
         const workbook = XLSX.read(data, { type: 'array' })
-        const sheetName = workbook.SheetNames[0]
-        const sheet = workbook.Sheets[sheetName]
-        const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
 
-        const items: ItemDetectado[] = []
-        let total = 0
-        let fecha = fmtDate(new Date())
-
-        // Try to detect header row with: plato/plato, cantidad/cant, precio
-        let dataStartRow = 0
-        const headerKeywords = ['plato', 'nombre', 'item', 'producto', 'descripcion', 'descripción']
-        for (let i = 0; i < Math.min(5, rows.length); i++) {
-          const row = rows[i].map(c => String(c).toLowerCase())
-          if (headerKeywords.some(k => row.some(cell => cell.includes(k)))) {
-            dataStartRow = i + 1
-            break
-          }
+        if (workbook.SheetNames.length > 1) {
+          // Múltiples hojas: mostrar selector
+          setParsedWorkbook(workbook)
+          setPendingFileName(file.name)
+          setModoImport('excel')
+        } else {
+          // Una sola hoja: parsear directo
+          const result = parseSheetData(workbook, workbook.SheetNames[0], file.name)
+          if (result.error) { showToast(result.error); return }
+          setImportWarnings(result.warnings ?? [])
+          setModoImport('excel')
+          setParsedVenta(result.venta!)
         }
-
-        // Find column indices from header
-        const headerRow = rows[dataStartRow - 1]?.map(c => String(c).toLowerCase()) ?? []
-        const colNombre = headerRow.findIndex(c => c.includes('plato') || c.includes('nombre') || c.includes('item') || c.includes('producto') || c.includes('descripci'))
-        const colCantidad = headerRow.findIndex(c => c.includes('cant') || c.includes('qty') || c.includes('unid'))
-        const colPrecio = headerRow.findIndex(c => c.includes('precio') || c.includes('unit') || c.includes('valor'))
-        const colFecha = headerRow.findIndex(c => c.includes('fecha') || c.includes('date'))
-        const colTotal = headerRow.findIndex(c => c.includes('total') || c.includes('importe') || c.includes('subtotal'))
-
-        for (let i = dataStartRow; i < rows.length; i++) {
-          const row = rows[i]
-          if (!row || row.every(c => c === '' || c === null || c === undefined)) continue
-
-          // Try to extract fecha from the row if column found
-          if (colFecha >= 0 && row[colFecha]) {
-            const rawFecha = row[colFecha]
-            if (typeof rawFecha === 'number') {
-              // Excel serial date
-              const excelDate = XLSX.SSF.parse_date_code(rawFecha)
-              if (excelDate) {
-                const d = new Date(excelDate.y, excelDate.m - 1, excelDate.d)
-                fecha = fmtDate(d)
-              }
-            } else {
-              const parsed = new Date(String(rawFecha))
-              if (!isNaN(parsed.getTime())) {
-                fecha = fmtDate(parsed)
-              }
-            }
-          }
-
-          const nombre = colNombre >= 0 ? String(row[colNombre] ?? '').trim() : String(row[0] ?? '').trim()
-          const cantRaw = colCantidad >= 0 ? row[colCantidad] : row[1]
-          const precioRaw = colPrecio >= 0 ? row[colPrecio] : row[2]
-          const totalRaw = colTotal >= 0 ? row[colTotal] : null
-
-          if (!nombre) continue
-
-          const cantidad = Number(String(cantRaw).replace(',', '.')) || 1
-          const precio = Number(String(precioRaw).replace(',', '.').replace(/[^0-9.]/g, '')) || 0
-          const subtotal = totalRaw ? Number(String(totalRaw).replace(',', '.').replace(/[^0-9.]/g, '')) : 0
-
-          if (nombre && (precio > 0 || subtotal > 0)) {
-            items.push({
-              nombre_plato: nombre,
-              cantidad,
-              precio_unitario: precio > 0 ? precio : (subtotal / cantidad),
-            })
-            total += subtotal > 0 ? subtotal : precio * cantidad
-          }
-        }
-
-        // If no structured columns, treat as list of names
-        if (items.length === 0) {
-          rows.slice(dataStartRow).forEach(row => {
-            const nombre = String(row[0] ?? '').trim()
-            if (nombre) {
-              items.push({ nombre_plato: nombre, cantidad: 1, precio_unitario: 0 })
-            }
-          })
-        }
-
-        setModoImport('excel')
-        setParsedVenta({
-          fecha,
-          total,
-          cantidad_cubiertos: null,
-          notas: `Importado desde ${file.name}`,
-          items,
-        })
       } catch (err) {
         console.error('[VentasPage] Excel parse error:', err)
-        showToast('Error al procesar el archivo')
+        showToast('Error al procesar el archivo. Verificá que sea un .xlsx, .xls o .csv válido.')
       }
     }
     reader.readAsArrayBuffer(file)
-    // Reset input so same file can be re-selected
-    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   // ── IA import ───────────────────────────────────────────
@@ -441,6 +523,9 @@ export default function VentasPage() {
     setParsedVenta(null)
     setModoImport(null)
     setTextoRaw('')
+    setParsedWorkbook(null)
+    setPendingFileName('')
+    setImportWarnings([])
   }
 
   // ── Render ───────────────────────────────────────────────
@@ -800,6 +885,21 @@ export default function VentasPage() {
               onSave={handleGuardar}
               onCancel={resetImport}
               saving={saving}
+              warnings={importWarnings}
+            />
+          ) : parsedWorkbook ? (
+            /* Selector de hojas */
+            <SheetPicker
+              sheetNames={parsedWorkbook.SheetNames}
+              fileName={pendingFileName}
+              onSelect={(sheetName) => {
+                const result = parseSheetData(parsedWorkbook, sheetName, pendingFileName)
+                if (result.error) { showToast(result.error); return }
+                setImportWarnings(result.warnings ?? [])
+                setParsedVenta(result.venta!)
+                setParsedWorkbook(null)
+              }}
+              onCancel={resetImport}
             />
           ) : (
             <>
@@ -852,6 +952,19 @@ export default function VentasPage() {
                       </p>
                     </div>
                   </button>
+
+                  {/* Formato esperado */}
+                  <div className="rounded-xl p-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--text-2)' }}>
+                      Columnas que reconoce el Excel
+                    </p>
+                    <div className="rounded-lg p-2 text-[11px] font-mono" style={{ background: 'var(--bg)', color: 'var(--text-2)' }}>
+                      <p>Nombre/Plato | Cantidad | Precio | Total | Fecha</p>
+                    </div>
+                    <p className="text-[11px] mt-1.5" style={{ color: 'var(--text-3)' }}>
+                      Mínimo necesario: nombre del plato + precio. Si el archivo tiene varias hojas, vas a poder elegir cuál usar.
+                    </p>
+                  </div>
 
                 </div>
               )}
@@ -963,6 +1076,64 @@ function StatCard({ icon, label, value, color }: { icon: string; label: string; 
   )
 }
 
+// ── SheetPicker ───────────────────────────────────────────────
+
+function SheetPicker({
+  sheetNames,
+  fileName,
+  onSelect,
+  onCancel,
+}: {
+  sheetNames: string[]
+  fileName: string
+  onSelect: (name: string) => void
+  onCancel: () => void
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onCancel}
+          className="flex items-center justify-center rounded-lg"
+          style={{ width: 32, height: 32, background: 'var(--surface)', border: '1px solid var(--border)' }}
+        >
+          <span className="material-symbols-outlined text-[18px]" style={{ color: 'var(--text-2)' }}>arrow_back</span>
+        </button>
+        <p className="text-[15px] font-semibold" style={{ color: 'var(--text-1)' }}>Elegir hoja</p>
+      </div>
+
+      <div className="rounded-xl p-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+        <p className="text-[13px]" style={{ color: 'var(--text-2)' }}>
+          <b>{fileName}</b> tiene {sheetNames.length} hojas. ¿Cuál contiene las ventas?
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {sheetNames.map((name, i) => (
+          <button
+            key={name}
+            onClick={() => onSelect(name)}
+            className="flex items-center gap-3 p-4 rounded-xl text-left transition-colors active:scale-[.98]"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+          >
+            <div
+              className="flex items-center justify-center rounded-lg shrink-0"
+              style={{ width: 40, height: 40, background: 'var(--accent)18', color: 'var(--accent)' }}
+            >
+              <span className="material-symbols-outlined text-[20px]">table_chart</span>
+            </div>
+            <div className="flex-1">
+              <p className="text-[14px] font-semibold" style={{ color: 'var(--text-1)' }}>{name}</p>
+              <p className="text-[12px]" style={{ color: 'var(--text-2)' }}>Hoja {i + 1}</p>
+            </div>
+            <span className="material-symbols-outlined text-[18px]" style={{ color: 'var(--text-2)' }}>chevron_right</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── ConfirmScreen ─────────────────────────────────────────────
 
 interface ConfirmScreenProps {
@@ -970,9 +1141,10 @@ interface ConfirmScreenProps {
   onSave: (overrides: Partial<ParsedVenta>) => Promise<void>
   onCancel: () => void
   saving: boolean
+  warnings?: string[]
 }
 
-function ConfirmScreen({ parsed, onSave, onCancel, saving }: ConfirmScreenProps) {
+function ConfirmScreen({ parsed, onSave, onCancel, saving, warnings }: ConfirmScreenProps) {
   const [fecha, setFecha] = useState(parsed.fecha)
   const [total, setTotal] = useState(String(parsed.total))
   const [cubiertos, setCubiertos] = useState(String(parsed.cantidad_cubiertos ?? ''))
@@ -1017,6 +1189,18 @@ function ConfirmScreen({ parsed, onSave, onCancel, saving }: ConfirmScreenProps)
         </button>
         <p className="text-[15px] font-semibold" style={{ color: 'var(--text-1)' }}>Revisar antes de guardar</p>
       </div>
+
+      {/* Warnings */}
+      {warnings && warnings.length > 0 && (
+        <div className="rounded-xl p-3 flex flex-col gap-1.5" style={{ background: '#fffbeb', border: '1px solid #fde68a' }}>
+          {warnings.map((w, i) => (
+            <div key={i} className="flex items-start gap-2">
+              <span className="material-symbols-outlined text-[16px] shrink-0 mt-0.5" style={{ color: '#92400e' }}>warning</span>
+              <p className="text-[12px]" style={{ color: '#92400e' }}>{w}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Fields */}
       <div className="flex flex-col gap-3">
