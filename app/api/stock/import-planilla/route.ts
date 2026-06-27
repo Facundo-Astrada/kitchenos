@@ -165,14 +165,15 @@ export async function POST(req: NextRequest) {
   const sheets: SheetData[] = body.sheets ?? []
   if (!sheets.length) return NextResponse.json({ error: 'Sin hojas' }, { status: 400 })
 
-  // Convert to text for Haiku — max 400 rows per sheet, max 15 sheets
+  // Convert to text for Sonnet — max 300 rows per sheet, max 15 sheets
+  // Skip rows that are fully empty or contain only tab characters
   const textData = sheets
     .slice(0, 15)
     .map(s => {
-      const limitedRows = s.rows.slice(0, 400)
-      const text = limitedRows
+      const text = s.rows
+        .slice(0, 300)
         .map(r => r.map(c => String(c ?? '').trim()).join('\t'))
-        .filter(line => line.replace(/\t+/g, '').length > 0) // skip fully empty rows
+        .filter(line => line.replace(/[\t\s]/g, '').length > 0)
         .join('\n')
       return `=== HOJA: ${s.nombre} ===\n${text}`
     })
@@ -199,7 +200,7 @@ export async function POST(req: NextRequest) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'claude-sonnet-4-6',
         max_tokens: 8192,
         system: HAIKU_SYSTEM,
         messages: [{ role: 'user', content: textData }],
@@ -208,18 +209,26 @@ export async function POST(req: NextRequest) {
 
     if (!resp.ok) {
       const errText = await resp.text()
-      console.error('[stock/import-planilla] Haiku error:', resp.status, errText)
-      return NextResponse.json({ error: `Error IA (${resp.status})` }, { status: 500 })
+      console.error('[stock/import-planilla] API error:', resp.status, errText)
+      return NextResponse.json({ error: `Error IA (${resp.status}): ${errText.slice(0, 200)}` }, { status: 500 })
     }
 
     const data = await resp.json()
     const content = (data.content?.[0]?.text ?? '') as string
-    const clean = content.replace(/```json?\n?/gi, '').replace(/```/g, '').trim()
-    const parsed = JSON.parse(clean)
+
+    // Robust JSON extraction: find the first { ... } block even if there's surrounding text
+    const jsonMatch = content.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      console.error('[stock/import-planilla] No JSON in response. Raw:', content.slice(0, 500))
+      return NextResponse.json({ error: `IA no devolvió JSON válido. Respuesta: ${content.slice(0, 150)}` }, { status: 422 })
+    }
+
+    const parsed = JSON.parse(jsonMatch[0])
     extracted = parsed.items ?? []
   } catch (e) {
-    console.error('[stock/import-planilla] Error:', e)
-    return NextResponse.json({ error: 'Error al interpretar la planilla con IA' }, { status: 500 })
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('[stock/import-planilla] Error:', msg)
+    return NextResponse.json({ error: `Error al interpretar la planilla: ${msg}` }, { status: 500 })
   }
 
   if (!extracted.length) {
