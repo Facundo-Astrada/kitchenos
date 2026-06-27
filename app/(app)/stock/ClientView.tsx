@@ -236,6 +236,84 @@ export default function StockPage() {
     ingredientes_vinculados: number
   } | null>(null)
 
+  // ── Planilla import ──────────────────────────────────────────
+  type PlanillaConfianza = 'exacto' | 'parcial' | 'nuevo'
+  type PlanillaStage = 'loading' | 'preview' | 'saving' | 'done'
+  interface PlanillaItemUI {
+    nombre: string
+    unidad: string | null
+    stock_actual: number | null
+    stock_minimo: number | null
+    stock_critico: number | null
+    hoja: string
+    producto_id: string | null
+    producto_nombre: string | null
+    producto_unidad: string | null
+    confianza: PlanillaConfianza
+    selected: boolean
+  }
+  const [showPlanillaImport, setShowPlanillaImport] = useState(false)
+  const [planillaStage, setPlanillaStage] = useState<PlanillaStage>('loading')
+  const [planillaItems, setPlanillaItems] = useState<PlanillaItemUI[]>([])
+  const [planillaError, setPlanillaError] = useState<string | null>(null)
+  const [planillaResult, setPlanillaResult] = useState<{ updated: number; created: number } | null>(null)
+  const [planillaFilter, setPlanillaFilter] = useState<'todos' | 'actualizar' | 'nuevo'>('todos')
+  const planillaFileRef = useRef<HTMLInputElement>(null)
+
+  async function handlePlanillaFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setShowPlanillaImport(true)
+    setPlanillaStage('loading')
+    setPlanillaError(null)
+    setPlanillaResult(null)
+    setPlanillaItems([])
+    try {
+      const XLSX = await import('xlsx')
+      const buffer = await file.arrayBuffer()
+      const wb = XLSX.read(new Uint8Array(buffer), { type: 'array' })
+      const sheets = wb.SheetNames.map((nombre: string) => {
+        const ws = wb.Sheets[nombre]
+        const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' }) as unknown[][]
+        return { nombre, rows: rows.map(r => (r as unknown[]).map(c => String(c ?? ''))) }
+      })
+      const res = await fetch('/api/stock/import-planilla', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'preview', sheets }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error ?? `Error ${res.status}`)
+      setPlanillaItems((data.items as PlanillaItemUI[]).map(item => ({ ...item, selected: true })))
+      setPlanillaFilter('todos')
+      setPlanillaStage('preview')
+    } catch (err) {
+      setPlanillaError(err instanceof Error ? err.message : 'Error al procesar el archivo')
+    }
+  }
+
+  async function handlePlanillaGuardar() {
+    const selected = planillaItems.filter(i => i.selected)
+    if (!selected.length) return
+    setPlanillaStage('saving')
+    try {
+      const res = await fetch('/api/stock/import-planilla', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'apply', items: selected }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Error al guardar')
+      setPlanillaResult({ updated: data.updated, created: data.created })
+      setPlanillaStage('done')
+      refetch()
+    } catch (err) {
+      setPlanillaError(err instanceof Error ? err.message : 'Error al guardar')
+      setPlanillaStage('preview')
+    }
+  }
+
   // Nueva categoría modal
   const [newCatModal, setNewCatModal] = useState(false)
   const [newCatNombre, setNewCatNombre] = useState('')
@@ -690,6 +768,14 @@ export default function StockPage() {
             >
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>upload_file</span>
               Importar
+            </button>
+            <button
+              onClick={() => planillaFileRef.current?.click()}
+              title="Importar planilla de stock (Excel con múltiples hojas)"
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, background: 'rgba(255,255,255,.15)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>table_chart</span>
+              Planilla
             </button>
             {isAdmin && (
               <button
@@ -1941,6 +2027,210 @@ export default function StockPage() {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+      {/* ── File input planilla (siempre montado) ── */}
+      <input
+        ref={planillaFileRef}
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        className="hidden"
+        onChange={handlePlanillaFile}
+      />
+
+      {/* ── Modal import planilla de stock ── */}
+      {showPlanillaImport && (
+        <div
+          onClick={() => { if (planillaStage !== 'saving') setShowPlanillaImport(false) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', zIndex: 300, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background: 'var(--bg)', borderRadius: '20px 20px 0 0', maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}
+          >
+            {/* Header del modal */}
+            <div style={{ padding: '20px 16px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--accent)' }}>table_chart</span>
+                  <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>Importar planilla de stock</p>
+                </div>
+                {planillaStage !== 'saving' && (
+                  <button onClick={() => setShowPlanillaImport(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-2)', display: 'flex' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 22 }}>close</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Contenido */}
+            <div style={{ overflowY: 'auto', flex: 1, padding: '16px' }}>
+
+              {/* ── Estado: loading / error ── */}
+              {(planillaStage === 'loading' || planillaStage === 'saving') && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '40px 0' }}>
+                  {planillaError ? (
+                    <>
+                      <span className="material-symbols-outlined" style={{ fontSize: 48, color: '#ef4444' }}>error</span>
+                      <p style={{ color: 'var(--text-1)', fontWeight: 600, textAlign: 'center' }}>{planillaError}</p>
+                      <button onClick={() => { setPlanillaError(null); planillaFileRef.current?.click() }} style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: 'var(--accent)', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+                        Elegir otro archivo
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined animate-spin" style={{ fontSize: 40, color: 'var(--accent)' }}>progress_activity</span>
+                      <p style={{ color: 'var(--text-2)', fontSize: 14, textAlign: 'center' }}>
+                        {planillaStage === 'saving' ? 'Guardando en KitchenOS…' : 'Leyendo planilla con IA…'}
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* ── Estado: done ── */}
+              {planillaStage === 'done' && planillaResult && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '32px 0' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 52, color: '#10b981' }}>check_circle</span>
+                  <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>Stock actualizado</p>
+                  <div style={{ display: 'flex', gap: 16 }}>
+                    <div style={{ textAlign: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 20px' }}>
+                      <p style={{ fontSize: 28, fontWeight: 800, color: 'var(--accent)' }}>{planillaResult.updated}</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>Actualizados</p>
+                    </div>
+                    <div style={{ textAlign: 'center', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 20px' }}>
+                      <p style={{ fontSize: 28, fontWeight: 800, color: '#10b981' }}>{planillaResult.created}</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>Nuevos</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowPlanillaImport(false)}
+                    style={{ padding: '10px 28px', borderRadius: 10, border: 'none', background: 'var(--navy)', color: '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}
+                  >
+                    Listo
+                  </button>
+                </div>
+              )}
+
+              {/* ── Estado: preview ── */}
+              {planillaStage === 'preview' && (() => {
+                const nExacto = planillaItems.filter(i => i.confianza === 'exacto').length
+                const nParcial = planillaItems.filter(i => i.confianza === 'parcial').length
+                const nNuevo = planillaItems.filter(i => i.confianza === 'nuevo').length
+                const nSelected = planillaItems.filter(i => i.selected).length
+
+                const filteredItems = planillaItems.filter(i => {
+                  if (planillaFilter === 'actualizar') return i.confianza !== 'nuevo'
+                  if (planillaFilter === 'nuevo') return i.confianza === 'nuevo'
+                  return true
+                })
+
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {/* Resumen */}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1, minWidth: 80, background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
+                        <p style={{ fontSize: 20, fontWeight: 800, color: '#15803d' }}>{nExacto}</p>
+                        <p style={{ fontSize: 10, color: '#15803d', fontWeight: 700, textTransform: 'uppercase' }}>Exactos</p>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 80, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
+                        <p style={{ fontSize: 20, fontWeight: 800, color: '#92400e' }}>{nParcial}</p>
+                        <p style={{ fontSize: 10, color: '#92400e', fontWeight: 700, textTransform: 'uppercase' }}>Similares</p>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 80, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
+                        <p style={{ fontSize: 20, fontWeight: 800, color: '#1d4ed8' }}>{nNuevo}</p>
+                        <p style={{ fontSize: 10, color: '#1d4ed8', fontWeight: 700, textTransform: 'uppercase' }}>Nuevos</p>
+                      </div>
+                    </div>
+
+                    {/* Error inline */}
+                    {planillaError && (
+                      <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, padding: '10px 12px', color: '#991b1b', fontSize: 13 }}>
+                        {planillaError}
+                      </div>
+                    )}
+
+                    {/* Filtros */}
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {(['todos', 'actualizar', 'nuevo'] as const).map(f => (
+                        <button
+                          key={f}
+                          onClick={() => setPlanillaFilter(f)}
+                          style={{ padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)', background: planillaFilter === f ? 'var(--accent)' : 'var(--surface)', color: planillaFilter === f ? '#fff' : 'var(--text-2)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize' }}
+                        >
+                          {f === 'todos' ? `Todos (${planillaItems.length})` : f === 'actualizar' ? `Actualizar (${nExacto + nParcial})` : `Nuevos (${nNuevo})`}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setPlanillaItems(prev => prev.map(i => ({ ...i, selected: !prev.every(x => x.selected) })))}
+                        style={{ marginLeft: 'auto', padding: '5px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                      >
+                        {planillaItems.every(i => i.selected) ? 'Deselect todo' : 'Select todo'}
+                      </button>
+                    </div>
+
+                    {/* Lista */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {filteredItems.map((item, idx) => {
+                        const realIdx = planillaItems.indexOf(item)
+                        const confColor = item.confianza === 'exacto' ? '#15803d' : item.confianza === 'parcial' ? '#92400e' : '#1d4ed8'
+                        const confBg = item.confianza === 'exacto' ? '#f0fdf4' : item.confianza === 'parcial' ? '#fffbeb' : '#eff6ff'
+                        const confBorder = item.confianza === 'exacto' ? '#86efac' : item.confianza === 'parcial' ? '#fde68a' : '#bfdbfe'
+                        const confLabel = item.confianza === 'exacto' ? '✓' : item.confianza === 'parcial' ? '~' : '+'
+
+                        return (
+                          <div
+                            key={idx}
+                            onClick={() => setPlanillaItems(prev => prev.map((x, i) => i === realIdx ? { ...x, selected: !x.selected } : x))}
+                            style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 10, border: `1px solid ${item.selected ? confBorder : 'var(--border)'}`, background: item.selected ? confBg : 'var(--surface)', cursor: 'pointer', opacity: item.selected ? 1 : 0.45, transition: 'opacity .15s' }}
+                          >
+                            <div style={{ width: 18, height: 18, borderRadius: 4, border: `2px solid ${item.selected ? confColor : 'var(--border)'}`, background: item.selected ? confColor : 'transparent', flexShrink: 0, marginTop: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              {item.selected && <span style={{ color: '#fff', fontSize: 11, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', margin: 0 }}>{item.nombre}</p>
+                                <span style={{ fontSize: 10, fontWeight: 800, color: confColor, background: confBg, border: `1px solid ${confBorder}`, borderRadius: 5, padding: '1px 5px' }}>{confLabel} {item.confianza}</span>
+                                <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{item.hoja}</span>
+                              </div>
+                              {item.producto_nombre && item.confianza !== 'exacto' && (
+                                <p style={{ fontSize: 11, color: 'var(--text-2)', margin: '2px 0 0' }}>→ {item.producto_nombre}</p>
+                              )}
+                              <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
+                                {item.stock_actual !== null && (
+                                  <p style={{ fontSize: 11, color: 'var(--text-2)', margin: 0 }}>Actual: <b>{item.stock_actual}</b> {item.unidad ?? ''}</p>
+                                )}
+                                {item.stock_minimo !== null && (
+                                  <p style={{ fontSize: 11, color: 'var(--text-2)', margin: 0 }}>Mín: <b>{item.stock_minimo}</b></p>
+                                )}
+                                {item.stock_critico !== null && (
+                                  <p style={{ fontSize: 11, color: '#ef4444', margin: 0 }}>Crít: <b>{item.stock_critico}</b></p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+
+            {/* Footer con botón guardar */}
+            {planillaStage === 'preview' && (
+              <div style={{ padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+                <button
+                  onClick={handlePlanillaGuardar}
+                  disabled={planillaItems.filter(i => i.selected).length === 0}
+                  style={{ width: '100%', padding: '13px', borderRadius: 12, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: planillaItems.filter(i => i.selected).length === 0 ? 'not-allowed' : 'pointer', opacity: planillaItems.filter(i => i.selected).length === 0 ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: 'inherit' }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>save</span>
+                  Guardar {planillaItems.filter(i => i.selected).length} productos en stock
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
