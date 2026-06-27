@@ -1132,7 +1132,7 @@ export default function StockPage() {
 
       {/* ── Insumos: fixed table header ── */}
       {activeTab === 'insumos' && (
-      <div style={{ background: '#2d4070', flexShrink: 0 }}>
+      <div style={{ background: 'var(--navy)', flexShrink: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <colgroup>
             <col style={{ width: 26 }} />
@@ -1189,10 +1189,10 @@ export default function StockPage() {
             <p style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>{error}</p>
           </div>
         ) : filtered.length === 0 ? (
-          <div style={{ padding: '48px 24px', textAlign: 'center', color: '#94a3b8' }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>🔍</div>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>{productos.length === 0 ? 'Sin productos aún' : 'Sin resultados'}</div>
-            {productos.length === 0 && <p style={{ fontSize: 11, marginTop: 6, color: '#64748b' }}>Los productos se agregan automáticamente al cargar facturas</p>}
+          <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-3)' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 36, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>search_off</span>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>{productos.length === 0 ? 'Sin productos aún' : 'Sin resultados'}</div>
+            {productos.length === 0 && <p style={{ fontSize: 11, marginTop: 6, color: 'var(--text-3)' }}>Los productos se agregan automáticamente al cargar facturas</p>}
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
@@ -1217,24 +1217,24 @@ export default function StockPage() {
                       background: (p.stock_actual === 0 && p.precio_unitario === 0)
                         ? 'rgba(239,68,68,0.07)'
                         : i % 2 === 0 ? 'var(--surface)' : 'var(--bg)',
-                      cursor: 'default',
+                      cursor: canEdit ? 'pointer' : 'default',
                     }}
                   >
-                    <td style={{ padding: '8px 4px', fontSize: 10, color: 'var(--text-3)', textAlign: 'center', fontFamily: "'DM Mono', monospace" }}>
+                    <td style={{ padding: '11px 4px', fontSize: 10, color: 'var(--text-3)', textAlign: 'center', fontFamily: "'DM Mono', monospace" }}>
                       {i + 1}
                     </td>
-                    <td style={{ padding: '8px 8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between' }}>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', lineHeight: 1.2, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <td style={{ padding: '11px 8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: 8 }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)', lineHeight: 1.25, display: 'flex', alignItems: 'center', gap: 6 }}>
                             {p.nombre}
                             {p.es_produccion && (
-                              <span style={{ fontSize: 8.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', padding: '1px 5px', borderRadius: 4, background: 'rgba(16,185,129,.12)', color: '#10b981', flexShrink: 0 }}>
+                              <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', padding: '1px 5px', borderRadius: 4, background: 'rgba(16,185,129,.12)', color: '#10b981', flexShrink: 0 }}>
                                 Producción
                               </span>
                             )}
                           </div>
-                          <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>
+                          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>
                             {!isDesktop && `${p.categoria} · `}{p.unidad_uso ?? p.unidad}
                           </div>
                           {val > 0 && isAdmin && !isDesktop && (
@@ -1270,7 +1270,7 @@ export default function StockPage() {
                     </td>
                     {/* Categoría — solo desktop */}
                     {isDesktop && (
-                      <td style={{ padding: '8px 8px' }}>
+                      <td style={{ padding: '11px 8px' }}>
                         <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{p.categoria || '—'}</span>
                         {val > 0 && isAdmin && (
                           <div style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700, marginTop: 1, fontFamily: "'DM Mono', monospace" }}>{fmtValor(val)}</div>
@@ -1278,13 +1278,13 @@ export default function StockPage() {
                       </td>
                     )}
                     {isAdmin && (
-                    <td style={{ padding: '8px 4px', textAlign: 'right' }}>
-                      <span style={{ fontSize: 10, fontWeight: 500, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', opacity: 0.7 }}>
+                    <td style={{ padding: '11px 4px', textAlign: 'right' }}>
+                      <span style={{ fontSize: 12, fontWeight: 500, fontFamily: "'DM Mono', monospace", color: 'var(--text-2)' }}>
                         {fmtPrecio(p.precio_unitario)}
                       </span>
                     </td>
                     )}
-                    <td style={{ padding: '8px 4px', textAlign: 'center', background: 'rgba(255,255,255,.02)' }}>
+                    <td style={{ padding: '11px 4px', textAlign: 'center', background: 'color-mix(in srgb, var(--accent) 6%, transparent)' }}>
                       {editingId === p.id ? (
                         <input
                           ref={inputRef}
@@ -1296,20 +1296,20 @@ export default function StockPage() {
                             if (e.key === 'Enter') commitEdit(p.id)
                             if (e.key === 'Escape') cancelEdit()
                           }}
-                          style={{ width: 60, textAlign: 'center', fontSize: 12, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--navy)', color: '#fff', border: '1px solid rgba(255,255,255,.3)', borderRadius: 6, padding: '3px 4px', outline: 'none' }}
+                          style={{ width: 60, textAlign: 'center', fontSize: 14, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--navy)', color: '#fff', border: '1px solid rgba(255,255,255,.3)', borderRadius: 6, padding: '3px 4px', outline: 'none' }}
                         />
                       ) : (
                         <button
                           onDoubleClick={e => { e.stopPropagation(); startEdit(p) }}
                           title="Doble tap para editar"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 12, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: p.estado === 'critico' ? '#fca5a5' : p.estado === 'bajo' ? '#fcd34d' : 'var(--text-1)' }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: 15, fontWeight: 800, fontFamily: "'DM Mono', monospace", color: p.estado === 'critico' ? '#dc2626' : p.estado === 'bajo' ? '#d97706' : 'var(--text-1)' }}
                         >
                           {p.stock_actual}
                           <span style={{ fontSize: 9, fontWeight: 400, color: 'var(--text-3)', marginLeft: 2 }}>{p.unidad_uso ?? p.unidad}</span>
                         </button>
                       )}
                     </td>
-                    <td style={{ padding: '8px 4px', textAlign: 'center' }}>
+                    <td style={{ padding: '11px 4px', textAlign: 'center' }}>
                       {estadoBadge(p)}
                     </td>
                   </tr>
@@ -1334,7 +1334,7 @@ export default function StockPage() {
               Producto
             </button>
           )}
-          <span style={{ fontSize: 10, color: 'var(--text-3)' }}>Doble tap para editar · Ctrl+V para pegar Excel</span>
+          <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{isDesktop ? 'Doble clic para editar · Ctrl+V para pegar Excel' : 'Doble tap para editar'}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {totalValor > 0 && isAdmin && (
