@@ -277,8 +277,8 @@ export default function VentasPage() {
     const reader = new FileReader()
     reader.onload = (ev) => {
       try {
-        const data = ev.target?.result
-        const workbook = XLSX.read(data, { type: 'binary' })
+        const data = new Uint8Array(ev.target?.result as ArrayBuffer)
+        const workbook = XLSX.read(data, { type: 'array' })
         const sheetName = workbook.SheetNames[0]
         const sheet = workbook.Sheets[sheetName]
         const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
@@ -359,6 +359,7 @@ export default function VentasPage() {
           })
         }
 
+        setModoImport('excel')
         setParsedVenta({
           fecha,
           total,
@@ -371,7 +372,7 @@ export default function VentasPage() {
         showToast('Error al procesar el archivo')
       }
     }
-    reader.readAsBinaryString(file)
+    reader.readAsArrayBuffer(file)
     // Reset input so same file can be re-selected
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
@@ -783,6 +784,15 @@ export default function VentasPage() {
       {tab === 'importar' && (
         <div className="px-4 pt-5">
 
+          {/* Siempre montado para que el onChange llegue aunque cambie modoImport */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+
           {/* Confirm screen — parsed venta review */}
           {parsedVenta ? (
             <ConfirmScreen
@@ -802,7 +812,7 @@ export default function VentasPage() {
 
                   {/* Excel / CSV */}
                   <button
-                    onClick={() => { setModoImport('excel'); fileInputRef.current?.click() }}
+                    onClick={() => fileInputRef.current?.click()}
                     className="flex items-center gap-4 p-4 rounded-xl text-left transition-colors active:scale-[.98]"
                     style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
                   >
@@ -843,14 +853,6 @@ export default function VentasPage() {
                     </div>
                   </button>
 
-                  {/* Hidden file input */}
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".xlsx,.xls,.csv"
-                    className="hidden"
-                    onChange={handleFileChange}
-                  />
                 </div>
               )}
 
