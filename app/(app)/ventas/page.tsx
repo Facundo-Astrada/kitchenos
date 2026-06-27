@@ -129,12 +129,19 @@ function normalizeHdr(s: string): string {
 const HDR_NOMBRE = ['plato', 'nombre', 'item', 'producto', 'descripcion', 'articulo', 'concepto', 'detalle', 'comida', 'bebida']
 const HDR_CANTIDAD = ['cant', 'qty', 'unid', 'cantidad', 'vendido', 'porcion']
 const HDR_PRECIO = ['precio', 'unit', 'valor', 'tarifa', 'unitario']
-const HDR_TOTAL = ['total', 'subtotal', 'monto']
-const HDR_FECHA = ['fecha', 'date', 'dia']
+const HDR_TOTAL = ['subtotal', 'total venta', 'importe', 'monto']
+const HDR_FECHA = ['fecha', 'date', 'dia', 'creacion', 'creado', 'created', 'timestamp']
 
 function hdrMatch(cell: string, keys: string[]): boolean {
   const n = normalizeHdr(cell)
   return keys.some(k => n.includes(k))
+}
+
+// Para totales: excluir columnas de costo (food cost) que no son ventas
+function hdrMatchTotal(cell: string): boolean {
+  const n = normalizeHdr(cell)
+  if (n.startsWith('costo') || n.includes(' costo')) return false
+  return HDR_TOTAL.some(k => n.includes(k))
 }
 
 function looksLikeCodes(values: string[]): boolean {
@@ -142,6 +149,37 @@ function looksLikeCodes(values: string[]): boolean {
   if (nonEmpty.length < 2) return false
   const codeCount = nonEmpty.filter(v => /^[\d\s\-\.]+$/.test(v.trim()) || v.trim().length < 3).length
   return codeCount / nonEmpty.length > 0.6
+}
+
+// Parsea fechas en formato dd/mm/yyyy, dd/mm/yyyy hh:mm:ss, ISO, o serial Excel
+function parseFecha(raw: unknown): Date | null {
+  if (typeof raw === 'number') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const d = (XLSX.SSF as any).parse_date_code(raw)
+      if (d) return new Date(d.y, d.m - 1, d.d)
+    } catch { return null }
+    return null
+  }
+  const s = String(raw).trim()
+  // dd/mm/yyyy o dd/mm/yyyy hh:mm:ss (formato Fudo y mayoría AR)
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]))
+  // ISO o formato que JS entiende
+  const p = new Date(s)
+  return isNaN(p.getTime()) ? null : p
+}
+
+// Parsea números en formato AR: "7.024,79" o "7024,79" o "108000"
+function parseNumAR(v: unknown): number {
+  const s = String(v ?? '').trim()
+  if (!s || s === '-') return 0
+  // Si tiene coma: coma = decimal, puntos = miles → remover puntos, reemplazar coma
+  if (s.includes(',')) {
+    return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0
+  }
+  // Sin coma: punto podría ser decimal o miles — asumir decimal si tiene pocos dígitos tras él
+  return parseFloat(s.replace(/[^0-9.]/g, '')) || 0
 }
 
 interface ParseResult {
@@ -174,8 +212,9 @@ function parseSheetData(workbook: XLSX.WorkBook, sheetName: string, fileName: st
   let colNombre = headerNorm.findIndex(h => hdrMatch(h, HDR_NOMBRE))
   const colCantidad = headerNorm.findIndex(h => hdrMatch(h, HDR_CANTIDAD))
   const colPrecio = headerNorm.findIndex(h => hdrMatch(h, HDR_PRECIO))
-  const colTotal = headerNorm.findIndex(h => hdrMatch(h, HDR_TOTAL))
+  const colTotal = headerNorm.findIndex(h => hdrMatchTotal(h))  // excluye "Costo total"
   const colFecha = headerNorm.findIndex(h => hdrMatch(h, HDR_FECHA))
+  const colCancelada = headerNorm.findIndex(h => h.includes('cancelad'))  // "Cancelada" en Fudo
 
   const dataStart = headerIdx >= 0 ? headerIdx + 1 : 0
   const dataRows = rows.slice(dataStart).filter(r => r.some(c => c !== '' && c !== null && c !== undefined))
@@ -184,7 +223,7 @@ function parseSheetData(workbook: XLSX.WorkBook, sheetName: string, fileName: st
 
   const warnings: string[] = []
 
-  // Si la columna de nombre parece contener códigos, buscar una mejor
+  // Si la columna de nombre parece tener códigos, buscar una mejor
   if (colNombre >= 0) {
     const nameVals = dataRows.map(r => String(r[colNombre] ?? ''))
     if (looksLikeCodes(nameVals)) {
@@ -203,70 +242,81 @@ function parseSheetData(workbook: XLSX.WorkBook, sheetName: string, fileName: st
       if (bestCol >= 0) {
         const oldH = String(headerIdx >= 0 ? rows[headerIdx][colNombre] ?? `col ${colNombre + 1}` : `col ${colNombre + 1}`)
         const newH = String(headerIdx >= 0 ? rows[headerIdx][bestCol] ?? `col ${bestCol + 1}` : `col ${bestCol + 1}`)
-        warnings.push(`"${oldH}" tenía códigos numéricos — usamos "${newH}" como nombre del plato.`)
+        warnings.push(`"${oldH}" tenía códigos — usamos "${newH}" como nombre del plato.`)
         colNombre = bestCol
-      } else {
-        warnings.push('La columna de nombre parece tener códigos. Revisá el mapeo de columnas en el archivo.')
       }
     }
   }
 
-  // Parsear filas
-  const items: ItemDetectado[] = []
-  let total = 0
-  let fecha = fmtDate(new Date())
+  // Primera pasada: recolectar items raw (uno por fila)
+  interface RawItem { nombre: string; cantidad: number; precio: number }
+  const rawItems: RawItem[] = []
+  const datesFound: number[] = []
 
   for (const row of dataRows) {
-    // Fecha
+    // Saltar cancelados (columna "Cancelada" de Fudo tiene "Si"/"No")
+    if (colCancelada >= 0) {
+      const v = normalizeHdr(String(row[colCancelada] ?? ''))
+      if (v === 'si' || v === 'yes' || v === '1' || v === 'true') continue
+    }
+
+    // Recolectar fecha
     if (colFecha >= 0 && row[colFecha]) {
-      const raw = row[colFecha]
-      if (typeof raw === 'number') {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const d = (XLSX.SSF as any).parse_date_code(raw)
-          if (d) fecha = fmtDate(new Date(d.y, d.m - 1, d.d))
-        } catch { /* ignorar */ }
-      } else {
-        const p = new Date(String(raw))
-        if (!isNaN(p.getTime())) fecha = fmtDate(p)
-      }
+      const d = parseFecha(row[colFecha])
+      if (d) datesFound.push(d.getTime())
     }
 
     const nombre = (colNombre >= 0 ? String(row[colNombre] ?? '') : String(row[0] ?? '')).trim()
+    if (!nombre || /^[\d\s\-\.]+$/.test(nombre)) continue
+
     const cantRaw = colCantidad >= 0 ? row[colCantidad] : row[1]
     const precioRaw = colPrecio >= 0 ? row[colPrecio] : row[2]
     const totalRaw = colTotal >= 0 ? row[colTotal] : null
 
-    // Saltar filas con nombre vacío o solo numérico
-    if (!nombre || /^[\d\s\-\.]+$/.test(nombre)) continue
+    const cantidad = Math.max(1, parseNumAR(cantRaw) || 1)
+    const precio = parseNumAR(precioRaw)
+    const sub = parseNumAR(totalRaw)
 
-    const parseNum = (v: unknown) =>
-      Number(String(v ?? '').replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0
-    const cantidad = Math.max(1, Number(String(cantRaw ?? '').replace(',', '.')) || 1)
-    const precio = parseNum(precioRaw)
-    const sub = parseNum(totalRaw)
-
-    if (precio > 0 || sub > 0) {
-      items.push({
-        nombre_plato: nombre,
-        cantidad,
-        precio_unitario: precio > 0 ? precio : sub / cantidad,
-      })
-      total += sub > 0 ? sub : precio * cantidad
-    }
+    // Precio efectivo: usar precio unitario; si no, derivar del total de fila
+    const precioEfectivo = precio > 0 ? precio : (sub > 0 ? sub / cantidad : 0)
+    rawItems.push({ nombre, cantidad, precio: precioEfectivo })
   }
 
-  if (items.length === 0) {
+  if (rawItems.length === 0) {
     if (headerIdx < 0) {
-      return {
-        error: 'No se detectó un encabezado. El archivo necesita columnas "Nombre/Plato", "Cantidad" y "Precio".',
-      }
+      return { error: 'No se detectó encabezado. El archivo necesita columnas "Nombre/Plato", "Cantidad" y "Precio".' }
     }
     const detected = headerNorm.filter(h => h.trim()).slice(0, 6).join(', ')
-    return {
-      error: `Encabezado detectado pero sin platos con precio. Columnas encontradas: ${detected}. Verificá que el archivo tenga precios.`,
+    return { error: `Encabezado detectado pero sin platos. Columnas: ${detected}. Verificá que el archivo tenga datos válidos.` }
+  }
+
+  // Si hay muchas filas individuales, avisar que se agrupan
+  if (rawItems.length > 100) {
+    warnings.push(`${rawItems.length} filas encontradas — agrupadas por nombre de plato.`)
+  }
+
+  // Segunda pasada: agregar por nombre de plato
+  const byName = new Map<string, ItemDetectado>()
+  for (const it of rawItems) {
+    const key = normalizeHdr(it.nombre)
+    const ex = byName.get(key)
+    if (ex) {
+      ex.cantidad += it.cantidad
+      // Si el acumulado no tenía precio, tomar el primero que aparezca
+      if (ex.precio_unitario === 0 && it.precio > 0) ex.precio_unitario = it.precio
+    } else {
+      byName.set(key, { nombre_plato: it.nombre, cantidad: it.cantidad, precio_unitario: it.precio })
     }
   }
+
+  // Ordenar por cantidad desc; calcular total solo de items con precio
+  const items = Array.from(byName.values()).sort((a, b) => b.cantidad - a.cantidad)
+  const total = items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0)
+
+  // Fecha: la más reciente encontrada (o hoy)
+  const fecha = datesFound.length > 0
+    ? fmtDate(new Date(Math.max(...datesFound)))
+    : fmtDate(new Date())
 
   return {
     venta: { fecha, total, cantidad_cubiertos: null, notas: `Importado desde ${fileName}`, items },
