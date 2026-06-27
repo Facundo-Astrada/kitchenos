@@ -183,7 +183,7 @@ function parseNumAR(v: unknown): number {
 }
 
 interface ParseResult {
-  venta?: ParsedVenta
+  ventas?: ParsedVenta[]   // uno por día
   error?: string
   warnings?: string[]
 }
@@ -248,22 +248,22 @@ function parseSheetData(workbook: XLSX.WorkBook, sheetName: string, fileName: st
     }
   }
 
-  // Primera pasada: recolectar items raw (uno por fila)
-  interface RawItem { nombre: string; cantidad: number; precio: number }
+  // Primera pasada: recolectar items raw con fecha por ítem
+  interface RawItem { nombre: string; cantidad: number; precio: number; fecha: string }
   const rawItems: RawItem[] = []
-  const datesFound: number[] = []
 
   for (const row of dataRows) {
-    // Saltar cancelados (columna "Cancelada" de Fudo tiene "Si"/"No")
+    // Saltar cancelados
     if (colCancelada >= 0) {
       const v = normalizeHdr(String(row[colCancelada] ?? ''))
       if (v === 'si' || v === 'yes' || v === '1' || v === 'true') continue
     }
 
-    // Recolectar fecha
+    // Fecha del ítem (por defecto: hoy)
+    let itemFecha = fmtDate(new Date())
     if (colFecha >= 0 && row[colFecha]) {
       const d = parseFecha(row[colFecha])
-      if (d) datesFound.push(d.getTime())
+      if (d) itemFecha = fmtDate(d)
     }
 
     const nombre = (colNombre >= 0 ? String(row[colNombre] ?? '') : String(row[0] ?? '')).trim()
@@ -277,9 +277,8 @@ function parseSheetData(workbook: XLSX.WorkBook, sheetName: string, fileName: st
     const precio = parseNumAR(precioRaw)
     const sub = parseNumAR(totalRaw)
 
-    // Precio efectivo: usar precio unitario; si no, derivar del total de fila
     const precioEfectivo = precio > 0 ? precio : (sub > 0 ? sub / cantidad : 0)
-    rawItems.push({ nombre, cantidad, precio: precioEfectivo })
+    rawItems.push({ nombre, cantidad, precio: precioEfectivo, fecha: itemFecha })
   }
 
   if (rawItems.length === 0) {
@@ -290,38 +289,39 @@ function parseSheetData(workbook: XLSX.WorkBook, sheetName: string, fileName: st
     return { error: `Encabezado detectado pero sin platos. Columnas: ${detected}. Verificá que el archivo tenga datos válidos.` }
   }
 
-  // Si hay muchas filas individuales, avisar que se agrupan
-  if (rawItems.length > 100) {
-    warnings.push(`${rawItems.length} filas encontradas — agrupadas por nombre de plato.`)
-  }
-
-  // Segunda pasada: agregar por nombre de plato
-  const byName = new Map<string, ItemDetectado>()
+  // Agrupar por fecha → por nombre de plato
+  const byDate = new Map<string, Map<string, ItemDetectado>>()
   for (const it of rawItems) {
+    if (!byDate.has(it.fecha)) byDate.set(it.fecha, new Map())
+    const byName = byDate.get(it.fecha)!
     const key = normalizeHdr(it.nombre)
     const ex = byName.get(key)
     if (ex) {
       ex.cantidad += it.cantidad
-      // Si el acumulado no tenía precio, tomar el primero que aparezca
       if (ex.precio_unitario === 0 && it.precio > 0) ex.precio_unitario = it.precio
     } else {
       byName.set(key, { nombre_plato: it.nombre, cantidad: it.cantidad, precio_unitario: it.precio })
     }
   }
 
-  // Ordenar por cantidad desc; calcular total solo de items con precio
-  const items = Array.from(byName.values()).sort((a, b) => b.cantidad - a.cantidad)
-  const total = items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0)
-
-  // Fecha: la más reciente encontrada (o hoy)
-  const fecha = datesFound.length > 0
-    ? fmtDate(new Date(Math.max(...datesFound)))
-    : fmtDate(new Date())
-
-  return {
-    venta: { fecha, total, cantidad_cubiertos: null, notas: `Importado desde ${fileName}`, items },
-    warnings: warnings.length > 0 ? warnings : undefined,
+  const diasCount = byDate.size
+  if (diasCount > 1) {
+    warnings.push(`Datos de ${diasCount} días — se crearán ${diasCount} registros de venta separados.`)
+  } else if (rawItems.length > 100) {
+    const platosCount = byDate.values().next().value?.size ?? 0
+    warnings.push(`${rawItems.length} filas agrupadas en ${platosCount} platos únicos.`)
   }
+
+  // Un ParsedVenta por día, ordenados cronológicamente
+  const ventas: ParsedVenta[] = Array.from(byDate.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([fecha, byName]) => {
+      const items = Array.from(byName.values()).sort((a, b) => b.cantidad - a.cantidad)
+      const total = items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0)
+      return { fecha, total, cantidad_cubiertos: null, notas: `Importado desde ${fileName}`, items }
+    })
+
+  return { ventas, warnings: warnings.length > 0 ? warnings : undefined }
 }
 
 // ── Component ───────────────────────────────────────────────
@@ -338,7 +338,7 @@ export default function VentasPage() {
   // Importar tab state
   const [modoImport, setModoImport] = useState<'excel' | 'texto' | null>(null)
   const [textoRaw, setTextoRaw] = useState('')
-  const [parsedVenta, setParsedVenta] = useState<ParsedVenta | null>(null)
+  const [parsedVentas, setParsedVentas] = useState<ParsedVenta[] | null>(null)
   const [importing, setImporting] = useState(false)
   const [saving, setSaving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -499,7 +499,7 @@ export default function VentasPage() {
           if (result.error) { showToast(result.error); return }
           setImportWarnings(result.warnings ?? [])
           setModoImport('excel')
-          setParsedVenta(result.venta!)
+          setParsedVentas(result.ventas!)
         }
       } catch (err) {
         console.error('[VentasPage] Excel parse error:', err)
@@ -522,13 +522,13 @@ export default function VentasPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Error de IA')
 
-      setParsedVenta({
+      setParsedVentas([{
         fecha: json.fecha ?? fmtDate(new Date()),
         total: json.total ?? 0,
         cantidad_cubiertos: json.cantidad_cubiertos ?? null,
         notas: json.notas ?? null,
         items: (json.items ?? []) as ItemDetectado[],
-      })
+      }])
     } catch (e: unknown) {
       showToast('Error al importar: ' + (e instanceof Error ? e.message : 'desconocido'))
     } finally {
@@ -536,24 +536,50 @@ export default function VentasPage() {
     }
   }
 
-  // ── Save confirmed venta ─────────────────────────────────
-  async function handleGuardar(overrides: Partial<ParsedVenta>) {
-    if (!parsedVenta) return
+  // ── Save single confirmed venta (ConfirmScreen) ─────────────
+  async function handleGuardarSingle(overrides: Partial<ParsedVenta>) {
+    if (!parsedVentas?.[0]) return
     setSaving(true)
     try {
+      const parsed = parsedVentas[0]
       const datos: NuevaVenta = {
-        fecha: overrides.fecha ?? parsedVenta.fecha,
-        origen: modoImport === 'excel' ? 'excel' : modoImport === 'texto' ? 'manual' : 'manual',
-        total_ventas: overrides.total ?? parsedVenta.total,
-        cantidad_cubiertos: overrides.cantidad_cubiertos ?? parsedVenta.cantidad_cubiertos,
-        notas: overrides.notas ?? parsedVenta.notas,
-        items: (overrides.items ?? parsedVenta.items).filter(it => it.nombre_plato.trim()),
+        fecha: overrides.fecha ?? parsed.fecha,
+        origen: modoImport === 'excel' ? 'excel' : 'manual',
+        total_ventas: overrides.total ?? parsed.total,
+        cantidad_cubiertos: overrides.cantidad_cubiertos ?? parsed.cantidad_cubiertos,
+        notas: overrides.notas ?? parsed.notas,
+        items: (overrides.items ?? parsed.items).filter(it => it.nombre_plato.trim()),
       }
       await agregarVenta(datos)
       showToast('Ventas guardadas')
-      setParsedVenta(null)
-      setModoImport(null)
-      setTextoRaw('')
+      resetImport()
+      setTab('resumen')
+      const { desde, hasta } = getRango(periodo)
+      fetchVentas(desde, hasta)
+    } catch (e: unknown) {
+      showToast('Error al guardar: ' + (e instanceof Error ? e.message : 'desconocido'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // ── Save multiple ventas (multi-día) ─────────────────────────
+  async function handleGuardarMulti() {
+    if (!parsedVentas?.length) return
+    setSaving(true)
+    try {
+      for (const parsed of parsedVentas) {
+        await agregarVenta({
+          fecha: parsed.fecha,
+          origen: 'excel',
+          total_ventas: parsed.total,
+          cantidad_cubiertos: parsed.cantidad_cubiertos,
+          notas: parsed.notas,
+          items: parsed.items.filter(it => it.nombre_plato.trim()),
+        })
+      }
+      showToast(parsedVentas.length === 1 ? 'Ventas guardadas' : `${parsedVentas.length} días guardados`)
+      resetImport()
       setTab('resumen')
       const { desde, hasta } = getRango(periodo)
       fetchVentas(desde, hasta)
@@ -570,7 +596,7 @@ export default function VentasPage() {
   }
 
   function resetImport() {
-    setParsedVenta(null)
+    setParsedVentas(null)
     setModoImport(null)
     setTextoRaw('')
     setParsedWorkbook(null)
@@ -928,15 +954,25 @@ export default function VentasPage() {
             onChange={handleFileChange}
           />
 
-          {/* Confirm screen — parsed venta review */}
-          {parsedVenta ? (
-            <ConfirmScreen
-              parsed={parsedVenta}
-              onSave={handleGuardar}
-              onCancel={resetImport}
-              saving={saving}
-              warnings={importWarnings}
-            />
+          {/* Confirm / multi-day screen */}
+          {parsedVentas ? (
+            parsedVentas.length === 1 ? (
+              <ConfirmScreen
+                parsed={parsedVentas[0]}
+                onSave={handleGuardarSingle}
+                onCancel={resetImport}
+                saving={saving}
+                warnings={importWarnings}
+              />
+            ) : (
+              <MultiDayConfirmScreen
+                ventas={parsedVentas}
+                onSave={handleGuardarMulti}
+                onCancel={resetImport}
+                saving={saving}
+                warnings={importWarnings}
+              />
+            )
           ) : parsedWorkbook ? (
             /* Selector de hojas */
             <SheetPicker
@@ -946,7 +982,7 @@ export default function VentasPage() {
                 const result = parseSheetData(parsedWorkbook, sheetName, pendingFileName)
                 if (result.error) { showToast(result.error); return }
                 setImportWarnings(result.warnings ?? [])
-                setParsedVenta(result.venta!)
+                setParsedVentas(result.ventas!)
                 setParsedWorkbook(null)
               }}
               onCancel={resetImport}
@@ -1122,6 +1158,117 @@ function StatCard({ icon, label, value, color }: { icon: string; label: string; 
         <span className="text-[11px] font-medium" style={{ color: 'var(--text-2)' }}>{label}</span>
       </div>
       <p className="text-[16px] font-bold truncate" style={{ color: 'var(--text-1)' }}>{value}</p>
+    </div>
+  )
+}
+
+// ── MultiDayConfirmScreen ────────────────────────────────────
+
+function MultiDayConfirmScreen({
+  ventas,
+  onSave,
+  onCancel,
+  saving,
+  warnings,
+}: {
+  ventas: ParsedVenta[]
+  onSave: () => Promise<void>
+  onCancel: () => void
+  saving: boolean
+  warnings?: string[]
+}) {
+  const totalGlobal = ventas.reduce((s, v) => s + v.total, 0)
+  const totalPlatos = ventas.reduce((s, v) => s + v.items.length, 0)
+
+  function fmtP(n: number) {
+    return '$' + n.toLocaleString('es-AR', { maximumFractionDigits: 0 })
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onCancel}
+          className="flex items-center justify-center rounded-lg"
+          style={{ width: 32, height: 32, background: 'var(--surface)', border: '1px solid var(--border)' }}
+        >
+          <span className="material-symbols-outlined text-[18px]" style={{ color: 'var(--text-2)' }}>arrow_back</span>
+        </button>
+        <p className="text-[15px] font-semibold" style={{ color: 'var(--text-1)' }}>
+          Importar {ventas.length} días de ventas
+        </p>
+      </div>
+
+      {/* Warnings */}
+      {warnings && warnings.length > 0 && (
+        <div className="rounded-xl p-3 flex flex-col gap-1.5" style={{ background: '#fffbeb', border: '1px solid #fde68a' }}>
+          {warnings.map((w, i) => (
+            <div key={i} className="flex items-start gap-2">
+              <span className="material-symbols-outlined text-[16px] shrink-0 mt-0.5" style={{ color: '#92400e' }}>warning</span>
+              <p className="text-[12px]" style={{ color: '#92400e' }}>{w}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Info */}
+      <div className="rounded-xl p-3" style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}>
+        <p className="text-[13px]" style={{ color: '#1e40af' }}>
+          Se van a guardar <b>{ventas.length} registros</b> — uno por día — con sus platos vendidos. Podés editarlos después desde el resumen.
+        </p>
+      </div>
+
+      {/* Lista de días */}
+      <div className="flex flex-col gap-2">
+        {ventas.map((v, i) => (
+          <div
+            key={i}
+            className="rounded-xl p-3"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[14px] font-semibold" style={{ color: 'var(--text-1)' }}>
+                  {fmtFecha(v.fecha)}
+                </p>
+                <p className="text-[12px] mt-0.5" style={{ color: 'var(--text-2)' }}>
+                  {v.items.length} platos · {v.fecha}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[15px] font-bold" style={{ color: 'var(--navy)' }}>{fmtP(v.total)}</p>
+                <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>a la carta</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Total global */}
+      <div
+        className="flex items-center justify-between px-4 py-3 rounded-xl"
+        style={{ background: 'var(--navy)' }}
+      >
+        <div>
+          <p className="text-[13px] font-semibold text-white">{ventas.length} días · {totalPlatos} platos únicos</p>
+        </div>
+        <span className="text-[18px] font-bold text-white">{fmtP(totalGlobal)}</span>
+      </div>
+
+      {/* Botón guardar */}
+      <button
+        onClick={onSave}
+        disabled={saving}
+        className="flex items-center justify-center gap-2 py-3.5 rounded-xl text-[14px] font-semibold"
+        style={{ background: 'var(--accent)', color: '#fff', opacity: saving ? 0.6 : 1 }}
+      >
+        {saving ? (
+          <span className="material-symbols-outlined animate-spin text-[20px]">progress_activity</span>
+        ) : (
+          <span className="material-symbols-outlined text-[20px]">save</span>
+        )}
+        {saving ? 'Guardando…' : `Guardar ${ventas.length} días`}
+      </button>
     </div>
   )
 }
