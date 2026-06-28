@@ -1147,17 +1147,19 @@ export default function StockPage() {
       <div style={{ background: 'var(--navy)', flexShrink: 0 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <colgroup>
-            <col />
-            {isDesktop && <col style={{ width: 140 }} />}
-            {isAdmin && <col style={{ width: isDesktop ? 80 : 64 }} />}
-            <col style={{ width: isDesktop ? 100 : 86 }} />
-            <col style={{ width: 56 }} />
-            {isAdmin && <col style={{ width: 50 }} />}
+            <col style={{ width: isDesktop ? '30%' : undefined }} />
+            {isDesktop && <col style={{ width: '14%' }} />}
+            {isDesktop && <col style={{ width: '16%' }} />}
+            {isAdmin && <col style={{ width: isDesktop ? '10%' : 64 }} />}
+            <col style={{ width: isDesktop ? '18%' : 96 }} />
+            <col style={{ width: isDesktop ? '6%' : 56 }} />
+            {isAdmin && <col style={{ width: isDesktop ? '6%' : 64 }} />}
           </colgroup>
           <thead>
             <tr>
               <th style={{ ...thStyle, textAlign: 'left', paddingLeft: 12, color: 'rgba(255,255,255,.7)' }}>Producto</th>
               {isDesktop && <th style={{ ...thStyle, textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Categoría</th>}
+              {isDesktop && <th style={{ ...thStyle, textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Nivel</th>}
               {isAdmin && <th style={{ ...thStyle, textAlign: 'right', paddingRight: 8 }}>Precio</th>}
               <th style={{ ...thStyle, background: 'rgba(255,255,255,.07)', color: 'rgba(255,255,255,.9)' }}>Stock</th>
               <th style={thStyle}>Estado</th>
@@ -1207,12 +1209,13 @@ export default function StockPage() {
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
-              <col />
-              {isDesktop && <col style={{ width: 140 }} />}
-              {isAdmin && <col style={{ width: isDesktop ? 80 : 64 }} />}
-              <col style={{ width: isDesktop ? 100 : 86 }} />
-              <col style={{ width: 56 }} />
-              {isAdmin && <col style={{ width: 50 }} />}
+              <col style={{ width: isDesktop ? '30%' : undefined }} />
+              {isDesktop && <col style={{ width: '14%' }} />}
+              {isDesktop && <col style={{ width: '16%' }} />}
+              {isAdmin && <col style={{ width: isDesktop ? '10%' : 64 }} />}
+              <col style={{ width: isDesktop ? '18%' : 96 }} />
+              <col style={{ width: isDesktop ? '6%' : 56 }} />
+              {isAdmin && <col style={{ width: isDesktop ? '6%' : 64 }} />}
             </colgroup>
             <tbody>
               {filtered.map((p, i) => {
@@ -1255,6 +1258,22 @@ export default function StockPage() {
                         )}
                       </td>
                     )}
+                    {/* Nivel — mini-barra stock vs mínimo (solo desktop) */}
+                    {isDesktop && (() => {
+                      const min = p.stock_minimo ?? 0
+                      const pct = min > 0 ? Math.min(100, Math.round((p.stock_actual / min) * 100)) : (p.stock_actual > 0 ? 100 : 0)
+                      const barColor = p.estado === 'critico' ? '#dc2626' : p.estado === 'bajo' ? '#d97706' : '#10b981'
+                      return (
+                        <td style={{ padding: '11px 10px 11px 8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <div style={{ flex: 1, height: 6, borderRadius: 99, background: 'var(--border)', overflow: 'hidden' }}>
+                              <div style={{ width: `${pct}%`, height: '100%', borderRadius: 99, background: barColor, transition: 'width .2s' }} />
+                            </div>
+                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', minWidth: 28, textAlign: 'right' }}>{min > 0 ? `${pct}%` : '—'}</span>
+                          </div>
+                        </td>
+                      )
+                    })()}
                     {/* Precio */}
                     {isAdmin && (
                     <td style={{ padding: '11px 8px 11px 4px', textAlign: 'right' }}>
@@ -1263,60 +1282,68 @@ export default function StockPage() {
                       </span>
                     </td>
                     )}
-                    {/* Stock + umbrales editables */}
-                    <td style={{ padding: '8px 4px', textAlign: 'center', background: 'color-mix(in srgb, var(--accent) 6%, transparent)' }}>
-                      {editingId === p.id ? (
-                        <input
-                          ref={inputRef}
-                          type="number"
-                          value={editValue}
-                          onChange={e => setEditValue(e.target.value)}
-                          onBlur={() => commitEdit(p.id)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') commitEdit(p.id)
-                            if (e.key === 'Escape') cancelEdit()
-                          }}
-                          style={{ width: 60, textAlign: 'center', fontSize: 14, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--navy)', color: '#fff', border: '1px solid rgba(255,255,255,.3)', borderRadius: 6, padding: '3px 4px', outline: 'none' }}
-                        />
-                      ) : (
-                        <button
-                          onClick={e => { if (canEdit) { e.stopPropagation(); startEdit(p) } }}
-                          title="Tocá para editar stock"
-                          style={{ background: 'none', border: 'none', cursor: canEdit ? 'pointer' : 'default', padding: '0 4px', fontSize: 16, fontWeight: 800, fontFamily: "'DM Mono', monospace", color: p.estado === 'critico' ? '#dc2626' : p.estado === 'bajo' ? '#d97706' : 'var(--text-1)' }}
-                        >
-                          {p.stock_actual}
-                          <span style={{ fontSize: 9, fontWeight: 400, color: 'var(--text-3)', marginLeft: 2 }}>{p.unidad_uso ?? p.unidad}</span>
-                        </button>
-                      )}
-                      {/* Mín / Crít editable */}
-                      {editThr?.id === p.id ? (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, marginTop: 4 }} onClick={e => e.stopPropagation()}>
+                    {/* Stock + umbrales editables — HORIZONTAL */}
+                    <td style={{ padding: '8px 6px', background: 'color-mix(in srgb, var(--accent) 6%, transparent)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                        {/* Número de stock (izquierda) */}
+                        {editingId === p.id ? (
                           <input
-                            type="number" value={editThr.min} autoFocus
-                            onChange={e => setEditThr(t => t && { ...t, min: e.target.value })}
-                            onKeyDown={e => { if (e.key === 'Enter') guardarUmbrales(); if (e.key === 'Escape') setEditThr(null) }}
-                            style={{ width: 30, textAlign: 'center', fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--bg)', color: '#d97706', border: '1px solid var(--border)', borderRadius: 5, padding: '2px 1px', outline: 'none' }}
+                            ref={inputRef}
+                            type="number"
+                            value={editValue}
+                            onChange={e => setEditValue(e.target.value)}
+                            onBlur={() => commitEdit(p.id)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') commitEdit(p.id)
+                              if (e.key === 'Escape') cancelEdit()
+                            }}
+                            style={{ width: 54, textAlign: 'center', fontSize: 14, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--navy)', color: '#fff', border: '1px solid rgba(255,255,255,.3)', borderRadius: 6, padding: '3px 4px', outline: 'none' }}
                           />
-                          <input
-                            type="number" value={editThr.crit}
-                            onChange={e => setEditThr(t => t && { ...t, crit: e.target.value })}
-                            onKeyDown={e => { if (e.key === 'Enter') guardarUmbrales(); if (e.key === 'Escape') setEditThr(null) }}
-                            style={{ width: 30, textAlign: 'center', fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--bg)', color: '#dc2626', border: '1px solid var(--border)', borderRadius: 5, padding: '2px 1px', outline: 'none' }}
-                          />
-                          <button onClick={guardarUmbrales} aria-label="Guardar umbrales" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#10b981' }}>check_circle</span>
+                        ) : (
+                          <button
+                            onClick={e => { if (canEdit) { e.stopPropagation(); startEdit(p) } }}
+                            title="Tocá para editar stock"
+                            style={{ background: 'none', border: 'none', cursor: canEdit ? 'pointer' : 'default', padding: 0, fontSize: 16, fontWeight: 800, lineHeight: 1, fontFamily: "'DM Mono', monospace", color: p.estado === 'critico' ? '#dc2626' : p.estado === 'bajo' ? '#d97706' : 'var(--text-1)', whiteSpace: 'nowrap' }}
+                          >
+                            {p.stock_actual}
+                            <span style={{ fontSize: 9, fontWeight: 400, color: 'var(--text-3)', marginLeft: 2 }}>{p.unidad_uso ?? p.unidad}</span>
                           </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={e => { if (canEdit) { e.stopPropagation(); setEditThr({ id: p.id, min: String(p.stock_minimo ?? 0), crit: String(p.stock_critico ?? 0) }) } }}
-                          title="Tocá para editar mínimo y crítico"
-                          aria-label="Editar mínimo y crítico"
-                          style={{ background: 'none', border: 'none', cursor: canEdit ? 'pointer' : 'default', padding: '1px 2px', marginTop: 3, fontSize: 9.5, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', display: 'block', margin: '3px auto 0', whiteSpace: 'nowrap' }}
-                        >
-                          mín <b style={{ color: '#d97706' }}>{p.stock_minimo ?? 0}</b> · crít <b style={{ color: '#dc2626' }}>{p.stock_critico ?? 0}</b>
-                        </button>
-                      )}
+                        )}
+
+                        {/* Separador vertical */}
+                        <div style={{ width: 1, alignSelf: 'stretch', minHeight: 22, background: 'var(--border)', opacity: 0.6 }} />
+
+                        {/* Mín / Crít (derecha) */}
+                        {editThr?.id === p.id ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }} onClick={e => e.stopPropagation()}>
+                            <input
+                              type="number" value={editThr.min} autoFocus
+                              onChange={e => setEditThr(t => t && { ...t, min: e.target.value })}
+                              onKeyDown={e => { if (e.key === 'Enter') guardarUmbrales(); if (e.key === 'Escape') setEditThr(null) }}
+                              style={{ width: 30, textAlign: 'center', fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--bg)', color: '#d97706', border: '1px solid var(--border)', borderRadius: 5, padding: '2px 1px', outline: 'none' }}
+                            />
+                            <input
+                              type="number" value={editThr.crit}
+                              onChange={e => setEditThr(t => t && { ...t, crit: e.target.value })}
+                              onKeyDown={e => { if (e.key === 'Enter') guardarUmbrales(); if (e.key === 'Escape') setEditThr(null) }}
+                              style={{ width: 30, textAlign: 'center', fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--bg)', color: '#dc2626', border: '1px solid var(--border)', borderRadius: 5, padding: '2px 1px', outline: 'none' }}
+                            />
+                            <button onClick={guardarUmbrales} aria-label="Guardar umbrales" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
+                              <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#10b981' }}>check_circle</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={e => { if (canEdit) { e.stopPropagation(); setEditThr({ id: p.id, min: String(p.stock_minimo ?? 0), crit: String(p.stock_critico ?? 0) }) } }}
+                            title="Tocá para editar mínimo y crítico"
+                            aria-label="Editar mínimo y crítico"
+                            style={{ background: 'none', border: 'none', cursor: canEdit ? 'pointer' : 'default', padding: 0, fontSize: 9.5, lineHeight: 1.35, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}
+                          >
+                            <div>mín <b style={{ color: '#d97706' }}>{p.stock_minimo ?? 0}</b></div>
+                            <div>crít <b style={{ color: '#dc2626' }}>{p.stock_critico ?? 0}</b></div>
+                          </button>
+                        )}
+                      </div>
                     </td>
                     {/* Estado */}
                     <td style={{ padding: '11px 4px', textAlign: 'center' }}>
@@ -1325,7 +1352,7 @@ export default function StockPage() {
                     {/* Acciones */}
                     {isAdmin && (
                     <td style={{ padding: '11px 4px', textAlign: 'center' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                         <button
                           onClick={(e) => { e.stopPropagation(); addToCart(p) }}
                           aria-label="Agregar al carrito de compras"
