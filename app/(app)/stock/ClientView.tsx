@@ -1337,10 +1337,10 @@ export default function StockPage() {
                             onClick={e => { if (canEdit) { e.stopPropagation(); setEditThr({ id: p.id, min: String(p.stock_minimo ?? 0), crit: String(p.stock_critico ?? 0) }) } }}
                             title="Tocá para editar mínimo y crítico"
                             aria-label="Editar mínimo y crítico"
-                            style={{ background: 'none', border: 'none', cursor: canEdit ? 'pointer' : 'default', padding: 0, fontSize: 9.5, lineHeight: 1.35, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', textAlign: 'left', whiteSpace: 'nowrap' }}
+                            style={{ background: 'none', border: 'none', cursor: canEdit ? 'pointer' : 'default', padding: 0, fontSize: 9.5, lineHeight: 1, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6 }}
                           >
-                            <div>mín <b style={{ color: '#d97706' }}>{p.stock_minimo ?? 0}</b></div>
-                            <div>crít <b style={{ color: '#dc2626' }}>{p.stock_critico ?? 0}</b></div>
+                            <span>mín <b style={{ color: '#d97706' }}>{p.stock_minimo ?? 0}</b></span>
+                            <span>crít <b style={{ color: '#dc2626' }}>{p.stock_critico ?? 0}</b></span>
                           </button>
                         )}
                       </div>
