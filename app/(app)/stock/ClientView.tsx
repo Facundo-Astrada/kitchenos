@@ -1847,11 +1847,13 @@ export default function StockPage() {
               <button
                 onPointerDown={e => { e.preventDefault(); if (quickIdx > 0) { const prev = quickIdx - 1; setQuickIdx(prev); setQuickValue(String(quickItems[prev]?.stock_actual ?? '')); setTimeout(() => { quickRef.current?.focus(); quickRef.current?.select() }, 30) } }}
                 disabled={quickIdx === 0}
-                title="Volver al producto anterior para corregir"
-                style={{ flex: 1, height: 48, borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: 'var(--text-2)', fontFamily: 'inherit', cursor: quickIdx > 0 ? 'pointer' : 'default', opacity: quickIdx > 0 ? 1 : 0.35 }}
+                title="Volver al producto anterior para corregir un peso mal cargado"
+                style={{ flex: 1, minWidth: 0, height: 48, borderRadius: 10, background: quickIdx > 0 ? 'rgba(67,97,160,.12)' : 'var(--surface)', border: `1px solid ${quickIdx > 0 ? 'var(--accent)' : 'var(--border)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '0 8px', fontSize: 13, fontWeight: 700, color: quickIdx > 0 ? 'var(--accent)' : 'var(--text-3)', fontFamily: 'inherit', cursor: quickIdx > 0 ? 'pointer' : 'default', opacity: quickIdx > 0 ? 1 : 0.4 }}
               >
-                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>chevron_left</span>
-                Atrás
+                <span className="material-symbols-outlined" style={{ fontSize: 18, flexShrink: 0 }}>undo</span>
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {quickIdx > 0 ? `Corregir: ${quickItems[quickIdx - 1]?.nombre ?? 'anterior'}` : 'Atrás'}
+                </span>
               </button>
               <button
                 onPointerDown={e => { e.preventDefault(); saveAndNext(true) }}
