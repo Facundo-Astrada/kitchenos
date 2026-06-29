@@ -1282,10 +1282,11 @@ export default function StockPage() {
                       </span>
                     </td>
                     )}
-                    {/* Stock + umbrales editables — HORIZONTAL */}
+                    {/* Stock + umbrales editables — HORIZONTAL alineado */}
                     <td style={{ padding: '8px 6px', background: 'color-mix(in srgb, var(--accent) 6%, transparent)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                        {/* Número de stock (izquierda) */}
+                        {/* Número de stock (sub-columna derecha, ancho fijo) */}
+                        <div style={{ width: 62, textAlign: 'right', flexShrink: 0 }}>
                         {editingId === p.id ? (
                           <input
                             ref={inputRef}
@@ -1309,11 +1310,13 @@ export default function StockPage() {
                             <span style={{ fontSize: 9, fontWeight: 400, color: 'var(--text-3)', marginLeft: 2 }}>{p.unidad_uso ?? p.unidad}</span>
                           </button>
                         )}
+                        </div>
 
                         {/* Separador vertical */}
                         <div style={{ width: 1, alignSelf: 'stretch', minHeight: 22, background: 'var(--border)', opacity: 0.6 }} />
 
-                        {/* Mín / Crít (derecha) */}
+                        {/* Mín / Crít (sub-columna izquierda, ancho fijo) */}
+                        <div style={{ width: 84, textAlign: 'left', flexShrink: 0 }}>
                         {editThr?.id === p.id ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 3 }} onClick={e => e.stopPropagation()}>
                             <input
@@ -1343,6 +1346,7 @@ export default function StockPage() {
                             <span>crít <b style={{ color: '#dc2626' }}>{p.stock_critico ?? 0}</b></span>
                           </button>
                         )}
+                        </div>
                       </div>
                     </td>
                     {/* Estado */}
