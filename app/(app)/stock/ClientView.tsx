@@ -15,6 +15,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import ImportadorArchivo, { UndoBanner } from '@/components/importador/ImportadorArchivo'
 import CarritoCompras, { type CartItem } from '@/components/stock/CarritoCompras'
+import MultiSelectFiltro from '@/components/stock/MultiSelectFiltro'
 import { usePedidos } from '@/lib/hooks/usePedidos'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
@@ -206,7 +207,8 @@ export default function StockPage() {
 
   // Filters
   const [search, setSearch] = useState('')
-  const [catFilter, setCatFilter] = useState('')
+  const [catFilters, setCatFilters] = useState<string[]>([])
+  const [provFilters, setProvFilters] = useState<string[]>([])
   const [estadoFilter, setEstadoFilter] = useState<FiltroEstado>('all')
   const [sortMode, setSortMode] = useState<SortMode>('default')
 
@@ -541,6 +543,29 @@ export default function StockPage() {
     [productos]
   )
 
+  // Opciones de filtro de categoría (con conteo)
+  const catOpciones = useMemo(() => {
+    const cnt = new Map<string, number>()
+    for (const p of productos) if (p.categoria) cnt.set(p.categoria, (cnt.get(p.categoria) ?? 0) + 1)
+    return categoriasFiltro.map(c => ({ value: c, label: c, count: cnt.get(c) ?? 0 }))
+  }, [productos, categoriasFiltro])
+
+  // Opciones de filtro de proveedor (con conteo) — incluye "Sin proveedor"
+  const provOpciones = useMemo(() => {
+    const nombre = new Map(proveedores.map(pr => [pr.id, pr.nombre]))
+    const cnt = new Map<string, number>()
+    for (const p of productos) {
+      const key = p.proveedor_id ?? '__sin__'
+      cnt.set(key, (cnt.get(key) ?? 0) + 1)
+    }
+    const opts = Array.from(cnt.entries())
+      .filter(([k]) => k !== '__sin__')
+      .map(([id, count]) => ({ value: id, label: nombre.get(id) ?? 'Proveedor', count }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'es'))
+    if (cnt.has('__sin__')) opts.push({ value: '__sin__', label: 'Sin proveedor', count: cnt.get('__sin__')! })
+    return opts
+  }, [productos, proveedores])
+
   // Filtered + sorted list
   const filtered = useMemo(() => {
     let list = productos
@@ -551,7 +576,8 @@ export default function StockPage() {
     } else if (estadoFilter !== 'all') {
       list = list.filter(p => p.estado === estadoFilter)
     }
-    if (catFilter) list = list.filter(p => p.categoria === catFilter)
+    if (catFilters.length) list = list.filter(p => catFilters.includes(p.categoria))
+    if (provFilters.length) list = list.filter(p => provFilters.includes(p.proveedor_id ?? '__sin__'))
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(p => p.nombre.toLowerCase().includes(q))
@@ -560,12 +586,15 @@ export default function StockPage() {
       list = [...list].sort((a, b) => valorStock(b) - valorStock(a))
     }
     return list
-  }, [productos, estadoFilter, catFilter, search, sortMode, esInmovil, inmovilLoaded])
+  }, [productos, estadoFilter, catFilters, provFilters, search, sortMode, esInmovil, inmovilLoaded])
 
   const totalDormido = useMemo(
     () => estadoFilter === 'inmovil' ? filtered.reduce((s, p) => s + valorStock(p), 0) : 0,
     [estadoFilter, filtered]
   )
+
+  // Cantidad de columnas visibles (para colSpan de estados vacíos)
+  const colCount = 3 + (isDesktop ? 2 : 0) + (isAdmin ? 2 : 0)
 
   const totalValor = useMemo(() =>
     filtered.reduce((acc, p) => acc + valorStock(p), 0),
@@ -934,16 +963,20 @@ export default function StockPage() {
                     <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,.5)', fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
                   )}
                 </div>
-                <select
-                  value={catFilter}
-                  onChange={e => setCatFilter(e.target.value)}
-                  style={{ height: 32, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 8, padding: '0 8px', fontSize: 11, fontFamily: 'inherit', color: '#fff', outline: 'none', cursor: 'pointer' }}
-                >
-                  <option value="">Todas</option>
-                  {categoriasFiltro.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                <MultiSelectFiltro
+                  label="Categorías"
+                  icon="category"
+                  opciones={catOpciones}
+                  seleccionadas={catFilters}
+                  onChange={setCatFilters}
+                />
+                <MultiSelectFiltro
+                  label="Proveedor"
+                  icon="local_shipping"
+                  opciones={provOpciones}
+                  seleccionadas={provFilters}
+                  onChange={setProvFilters}
+                />
                 <button
                   onClick={() => setSortMode(s => s === 'valor_desc' ? 'default' : 'valor_desc')}
                   title={sortMode === 'valor_desc' ? 'Orden por valor activo' : 'Ordenar por valor'}
@@ -1142,35 +1175,7 @@ export default function StockPage() {
         </div>
       )}
 
-      {/* ── Insumos: fixed table header ── */}
-      {activeTab === 'insumos' && (
-      <div style={{ background: 'var(--navy)', flexShrink: 0 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-          <colgroup>
-            <col style={{ width: isDesktop ? '30%' : undefined }} />
-            {isDesktop && <col style={{ width: '14%' }} />}
-            {isDesktop && <col style={{ width: '16%' }} />}
-            {isAdmin && <col style={{ width: isDesktop ? '10%' : 64 }} />}
-            <col style={{ width: isDesktop ? '18%' : 96 }} />
-            <col style={{ width: isDesktop ? '6%' : 56 }} />
-            {isAdmin && <col style={{ width: isDesktop ? '6%' : 64 }} />}
-          </colgroup>
-          <thead>
-            <tr>
-              <th style={{ ...thStyle, textAlign: 'left', paddingLeft: 12, color: 'rgba(255,255,255,.7)' }}>Producto</th>
-              {isDesktop && <th style={{ ...thStyle, textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Categoría</th>}
-              {isDesktop && <th style={{ ...thStyle, textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Nivel</th>}
-              {isAdmin && <th style={{ ...thStyle, textAlign: 'right', paddingRight: 8 }}>Precio</th>}
-              <th style={{ ...thStyle, background: 'rgba(255,255,255,.07)', color: 'rgba(255,255,255,.9)' }}>Stock</th>
-              <th style={thStyle}>Estado</th>
-              {isAdmin && <th style={thStyle} aria-label="Acciones"></th>}
-            </tr>
-          </thead>
-        </table>
-      </div>
-      )}
-
-      {/* ── Scrollable body (insumos) ── */}
+      {/* ── Insumos: tabla unificada (thead sticky) ── */}
       {activeTab === 'insumos' && (
       <div data-coach-target="stock-lista" style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {estadoFilter === 'inmovil' && (
@@ -1190,33 +1195,44 @@ export default function StockPage() {
             </div>
           </div>
         )}
-        {loading ? (
-          <div style={{ padding: '48px 24px', textAlign: 'center' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 28, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>hourglass_empty</span>
-            <p style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>Cargando inventario…</p>
-          </div>
-        ) : error ? (
-          <div style={{ padding: '48px 24px', textAlign: 'center' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 28, color: '#ef4444', display: 'block', marginBottom: 8 }}>error</span>
-            <p style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>{error}</p>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-3)' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 36, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>search_off</span>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>{productos.length === 0 ? 'Sin productos aún' : 'Sin resultados'}</div>
-            {productos.length === 0 && <p style={{ fontSize: 11, marginTop: 6, color: 'var(--text-3)' }}>Los productos se agregan automáticamente al cargar facturas</p>}
-          </div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-            <colgroup>
-              <col style={{ width: isDesktop ? '30%' : undefined }} />
-              {isDesktop && <col style={{ width: '14%' }} />}
-              {isDesktop && <col style={{ width: '16%' }} />}
-              {isAdmin && <col style={{ width: isDesktop ? '10%' : 64 }} />}
-              <col style={{ width: isDesktop ? '18%' : 96 }} />
-              <col style={{ width: isDesktop ? '6%' : 56 }} />
-              {isAdmin && <col style={{ width: isDesktop ? '6%' : 64 }} />}
-            </colgroup>
+        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: isDesktop ? '30%' : undefined }} />
+            {isDesktop && <col style={{ width: '14%' }} />}
+            {isDesktop && <col style={{ width: '16%' }} />}
+            {isAdmin && <col style={{ width: isDesktop ? '10%' : 64 }} />}
+            <col style={{ width: isDesktop ? '18%' : 96 }} />
+            <col style={{ width: isDesktop ? '6%' : 56 }} />
+            {isAdmin && <col style={{ width: isDesktop ? '6%' : 64 }} />}
+          </colgroup>
+          <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+            <tr>
+              <th style={{ ...thStyle, background: 'var(--navy)', textAlign: 'left', paddingLeft: 12, color: 'rgba(255,255,255,.7)' }}>Producto</th>
+              {isDesktop && <th style={{ ...thStyle, background: 'var(--navy)', textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Categoría</th>}
+              {isDesktop && <th style={{ ...thStyle, background: 'var(--navy)', textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Nivel</th>}
+              {isAdmin && <th style={{ ...thStyle, background: 'var(--navy)', textAlign: 'right', paddingRight: 8 }}>Precio</th>}
+              <th style={{ ...thStyle, background: '#243a5e', color: 'rgba(255,255,255,.9)' }}>Stock</th>
+              <th style={{ ...thStyle, background: 'var(--navy)' }}>Estado</th>
+              {isAdmin && <th style={{ ...thStyle, background: 'var(--navy)' }} aria-label="Acciones"></th>}
+            </tr>
+          </thead>
+          {loading ? (
+            <tbody><tr><td colSpan={colCount} style={{ padding: '48px 24px', textAlign: 'center' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 28, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>hourglass_empty</span>
+              <p style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>Cargando inventario…</p>
+            </td></tr></tbody>
+          ) : error ? (
+            <tbody><tr><td colSpan={colCount} style={{ padding: '48px 24px', textAlign: 'center' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 28, color: '#ef4444', display: 'block', marginBottom: 8 }}>error</span>
+              <p style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>{error}</p>
+            </td></tr></tbody>
+          ) : filtered.length === 0 ? (
+            <tbody><tr><td colSpan={colCount} style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-3)' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 36, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>search_off</span>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>{productos.length === 0 ? 'Sin productos aún' : 'Sin resultados'}</div>
+              {productos.length === 0 && <p style={{ fontSize: 11, marginTop: 6, color: 'var(--text-3)' }}>Los productos se agregan automáticamente al cargar facturas</p>}
+            </td></tr></tbody>
+          ) : (
             <tbody>
               {filtered.map((p, i) => {
                 const val = valorStock(p)
@@ -1383,8 +1399,8 @@ export default function StockPage() {
                 )
               })}
             </tbody>
-          </table>
-        )}
+          )}
+        </table>
       </div>
       )}
 
