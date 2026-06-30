@@ -73,7 +73,10 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 ### Merma (1)
 `merma`
 
-**Total: 31 tablas** con RLS habilitado. Aislamiento multi-tenant real via `mi_restaurante_id()`. Todas las políticas UPDATE tienen `WITH CHECK` explícito. Listo para multi-tenant.
+### Servicio / Salón / Cobro / Fiscal — Fase 1 (12, jun 2026)
+`estaciones`, `comandas`, `comanda_items`, `comanda_item_modificadores`, `eventos_cocina`, `mesas` (pos_x/pos_y), `cuentas`, `medios_pago`, `pagos`, `config_fiscal`, `comprobantes`, `comprobante_items`
+
+**Total: 43 tablas** con RLS habilitado. Aislamiento multi-tenant real via `mi_restaurante_id()`. Todas las políticas UPDATE tienen `WITH CHECK` explícito. Listo para multi-tenant.
 
 ---
 
@@ -100,6 +103,31 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 ---
 
 ## 4. Implementado en Últimas Sesiones
+
+### Sesión 2026-06-30 — Fase 1 Fundación: Salón + KDS + Cobro + Fiscal
+
+**Plan ejecutado:** `docs/gestion salon KOS/PLAN-FASE-1.md` — 8 commits atómicos, todos los pasos de la Fase 1 salvo Playwright e2e (implementación postergada) y adopción Supabase CLI (estructura de migraciones ya en `supabase/migrations/`).
+
+1. **Esquema de datos — 4 bloques, 4 commits:**
+   - Bloque Servicio (`estaciones`, `comandas`, `comanda_items`, `comanda_item_modificadores`, `eventos_cocina`). `comandas.mesa_id/cuenta_id` como UUID simple → FKs agregadas en Bloque 2.
+   - Bloque Salón (`mesas` con `pos_x`/`pos_y` para mapa visual desde Fase 1, `cuentas`) + FKs retroactivas en `comandas`.
+   - Bloque Cobro (`medios_pago`, `pagos`).
+   - Bloque Fiscal (`config_fiscal`, `comprobantes`, `comprobante_items`). `cert_ref` solo como referencia al secret store; jamás el `.crt/.key` en tabla.
+   - RLS multi-tenant incluida en cada migración (48 políticas en 12 tablas). Tablas hijo aíslan por subquery al padre.
+
+2. **Tipos TypeScript** (`types/index.ts`): 12 interfaces nuevas + tipos de estado narrowing (`EstadoComanda`, `EstadoMesa`, etc.). Módulos `salon/kds/cobro/fiscal` agregados a `TODOS_LOS_MODULOS`.
+
+3. **Adapter fiscal** (`lib/fiscal/index.ts`): interfaz `ProveedorFiscal` con `emitir()` y `ultimoAutorizado()`. `ProveedorFiscalStub` devuelve `estado='pendiente'` sin llamar a ARCA — cobro desacoplado de fiscal listo.
+
+4. **Stub ESC/POS** (`app/api/ingest/escpos/route.ts`): contrato + validación zod del texto crudo de comanda POS legacy. Parseo real va en Fase 2.
+
+5. **Tooling** (`lib/comanda/stateMachine.ts` + tests): máquina de estados pura para `Comanda` (abierta→enviada→en_prep→lista→cerrada, cancel desde cualquier estado) y `ComandaItem` (pendiente→en_prep, bump, recall). 13 tests con Vitest — todos pasan. CI GitHub Actions (`.github/workflows/ci.yml`): typecheck + vitest + build en cada push/PR.
+
+6. **Regla UI cocina** (`.claude/docs/ui.md`): botones ≥64px, swipe amplio, alto contraste negro, CERO dropdowns en despacho, fuente ≥18px, tablet-first, sin BottomNav ni Coach FAB en KDS. Route group `app/(servicio)/` con layout full-screen `#111`. Esqueletos `salon/page.tsx` y `kds/page.tsx` (placeholder "Fase 2").
+
+7. **Seed El Rescoldo** (`supabase/migrations/20260630_seed_rescoldo_servicio.sql`): 5 estaciones KDS (Parrilla/Fríos/Postres/Pase/Barra), 12 mesas con pos_x/y (Salón 6, Terraza 4, Barra 2), 5 medios de pago, `config_fiscal` RI con CUIT de ejemplo y PV 3. Bros intacto.
+
+**Commits:** `f9408de` (servicio) · `f129522` (salón) · `9d0a613` (cobro) · `003159e` (fiscal) · `932fc5b` (tipos) · `84b7b13` (fiscal adapter) · `30a92a7` (tooling) · `6ac7dde` (UI) · `a5867ce` (seed).
 
 ### Sesión 2026-06-28 — Stock: import planilla + carrito + rediseño tabla · Pedidos: rango entrega + banner ingresos · Ventas: import multi-día
 
@@ -449,11 +477,14 @@ Auth: proxy.ts (NO middleware.ts — breaking change Next 16)
 app/
   (app)/          ← 20 rutas protegidas (dashboard + módulos)
   (auth)/         ← login + register (públicas)
-  api/            ← coach, facturas, listas-precios, recetas/import, recetas/save, migrate
+  (servicio)/     ← layout full-screen + salon/page + kds/page (esqueletos Fase 1)
+  api/            ← coach, facturas, listas-precios, recetas/import, recetas/save, ingest/escpos
 lib/
   auth/           ← AuthProvider context + RouteGuard
   hooks/          ← 19 hooks (useRecetas, useStock, useTareas, …)
   supabase/       ← client (browser), server (SSR), admin (service role)
+  fiscal/         ← interfaz ProveedorFiscal + stub (Fase 1)
+  comanda/        ← stateMachine.ts + tests (máquina de estados comanda/ítem)
   constants.ts    ← Roles, módulos, nav
 components/
   dashboard/      ← Header, MiPlaza, ModoServicio, ModulosGrid, PasePreview, StockCritico, WelcomeDashboard
@@ -465,4 +496,4 @@ types/
 proxy.ts          ← Auth middleware (Next 16)
 ```
 
-**Hooks:** 19 | **Páginas app:** 20 | **API routes:** 6 | **Tablas:** 28 | **Componentes:** 19
+**Hooks:** 19 | **Páginas app:** 22 (+ 2 esqueletos servicio) | **API routes:** 8 | **Tablas:** 43 | **Componentes:** 19

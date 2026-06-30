@@ -90,9 +90,11 @@ Desde `/turnos` tab Puestos → ficha del puesto → "Exportar legajo". PDF con 
 **Status:** ✅ Resuelto — ver sesiones 22 jun 2026.
 
 ### 16. Tests
-- Vitest + Testing Library para hooks (mock del cliente Supabase).
-- Playwright para 3 flujos críticos: login, crear receta con IA, cargar factura con OCR.
-**Status:** ⏳ Pendiente.
+- ✅ Vitest instalado + máquina de estados de comanda (13 tests, jun 2026).
+- ✅ CI GitHub Actions: typecheck + vitest + build en cada push/PR.
+- Testing Library para hooks (mock del cliente Supabase). ⏳ Pendiente.
+- Playwright e2e: 1 flujo base pendiente de implementar (estructura ya en devDeps).
+**Status:** 🟡 Parcialmente resuelto — tooling base listo, e2e pendiente.
 
 ### 16. Limpiar tokens hardcodeados en scripts
 Los scripts de `scripts/*.mjs` tienen el `SUPABASE_MANAGEMENT_TOKEN` en texto plano. Mover a `.env.local`.
@@ -104,6 +106,7 @@ Los scripts de `scripts/*.mjs` tienen el `SUPABASE_MANAGEMENT_TOKEN` en texto pl
 
 | # | Descripción | Cuándo |
 |---|---|---|
+| **Fase 1 Fundación — Salón + KDS + Cobro + Fiscal** | 12 tablas nuevas (comandas/items/modificadores, estaciones, eventos_cocina, mesas, cuentas, medios_pago, pagos, config_fiscal, comprobantes, comprobante_items) con RLS multi-tenant. Tipos TypeScript. Adapter fiscal (interfaz ProveedorFiscal + stub pendiente-de-emisión). Endpoint ESC/POS stub. Vitest + máquina de estados comanda (13 tests). CI GitHub Actions. Regla UI cocina en docs. Route group `(servicio)` (layout full-screen + esqueletos salon/kds). Seed El Rescoldo: 5 estaciones, 12 mesas con pos_x/y, 5 medios de pago, config_fiscal RI. | 30 jun 2026 |
 | Stock: import de planilla + carrito de compras + rediseño de tabla + filtros | **Import planilla** (`/api/stock/import-planilla`): sube Excel multi-hoja, una llamada Haiku **por hoja en paralelo** (evita truncamiento de JSON con archivos grandes), extrae stock/mín/crít, fuzzy match exacto/similar/nuevo, preview con checkboxes → UPDATE solo campos de stock + INSERT nuevos. **Carrito de compras**: botón por fila (cantidad sugerida = mín−actual), carrito flotante con total, bottom sheet agrupado por proveedor → crea un pedido (borrador) por proveedor. **Rediseño tabla** (auditoría ui-auditor): anchos en %, columna "Nivel" (mini-barra stock vs mínimo), celda Stock horizontal alineada (número \| mín/crít con sub-columnas de ancho fijo), acciones horizontales, **tabla unificada con thead sticky** (fix desfase header/body por scrollbar). **Filtros**: multi-categoría + multi-proveedor (`MultiSelectFiltro`), mín/crít editable inline. **Stockear**: botón "Corregir: \<anterior\>" claro + fix z-index (overlay 1000 sobre BottomNav). Commits c5284ca→e37520d. | 28 jun 2026 |
 | Pedidos: rango de entrega + banner de ingresos · Ventas: import multi-día | **Pedidos**: migración `entrega_desde`+`entrega_hasta`, `enviarPedido(id,desde,hasta)`, selector de rango con atajos (Hoy/1-2/3-5 días/próx. semana), lista+detalle muestran "llega 28 jun – 30 jun". **`IngresosBanner`**: los días que cae la ventana de entrega de un pedido sin recibir (o atrasado) → banner en Inicio (admin) + Pedidos con proveedores y monto a ingresar. **Ventas**: el import de Excel ahora agrupa por fecha → un registro de venta por día distinto (antes mergeaba todo en uno); `MultiDayConfirmScreen`. Commits 3291c7a / 645d0be. | 28 jun 2026 |
 | Etapa 1 carga de datos — 15 valores adicionales | **Facturas**: alerta de variación de precio, cuentas por pagar (status `pagada` + filtro + KPI dashboard), reconciliación factura↔pedido (col `pedido_id`). **Stock**: producciones internas (`es_produccion`+`receta_id`, costo desde receta), sugerir mínimos (`/api/stock/sugerir-minimos` desde frecuencia de compra), stock inmóvil (capital dormido). **Recetario**: escalado "producir N porciones", salud del recetario, sugerir precio por FC objetivo. **Carta**: ingeniería de menú (matriz pop×rentab), reprecio por inflación en lote, salud de la carta (`RentabilidadView` → 4 tabs). **Ventas**: ranking/mix de platos (tab Platos), food cost teórico del período, cierre rápido + alerta de días sin cargar. Documentado en `docs/funciones-carga-datos.md`. 2 migraciones aplicadas. Commits eb6750d/909652a/4300158/0968806. | 24–25 jun 2026 |
