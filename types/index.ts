@@ -811,6 +811,8 @@ export interface Comanda {
   created_at: string
   // joined
   items?: ComandaItem[]
+  mesa?: { numero: string; sector?: string | null } | null
+  mozo?: { nombre: string; apellido?: string | null } | null
 }
 
 // DB: comanda_items (id, comanda_id, carta_item_id, cantidad, estado, estacion_id, fired_at, bumped_at, notas, created_at)
@@ -827,6 +829,7 @@ export interface ComandaItem {
   created_at: string
   // joined
   modificadores?: ComandaItemModificador[]
+  carta_item?: { nombre: string } | null
 }
 
 // DB: comanda_item_modificadores (id, comanda_item_id, tipo, texto, flag_alergeno, created_at)

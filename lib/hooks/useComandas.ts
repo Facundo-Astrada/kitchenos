@@ -21,7 +21,7 @@ async function fetchComandasData(key: string): Promise<Comanda[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('comandas')
-    .select('*, items:comanda_items(*, modificadores:comanda_item_modificadores(*))')
+    .select('*, items:comanda_items(*, modificadores:comanda_item_modificadores(*), carta_item:carta_items(nombre)), mesa:mesas(numero, sector), mozo:equipo_miembros(nombre, apellido)')
     .eq('restaurante_id', rid)
     .not('estado', 'in', '(cerrada,cancelada)')
     .order('created_at', { ascending: true })
