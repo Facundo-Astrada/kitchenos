@@ -772,4 +772,179 @@ export const TODOS_LOS_MODULOS = [
   { key: 'merma', label: 'Merma' },
   { key: 'equipo', label: 'Equipo' },
   { key: 'configuracion', label: 'Configuración' },
+  // Fase 1: Salón + KDS + Cobro + Fiscal
+  { key: 'salon', label: 'Salón' },
+  { key: 'kds', label: 'KDS' },
+  { key: 'cobro', label: 'Cobro' },
+  { key: 'fiscal', label: 'Fiscal' },
 ] as const
+
+// ── Servicio — Estaciones KDS ────────────────────────────────
+// DB: estaciones (id, restaurante_id, nombre, pantalla_asignada, created_at)
+export interface Estacion {
+  id: string
+  restaurante_id: string
+  nombre: string
+  pantalla_asignada?: string | null
+  created_at: string
+}
+
+// ── Servicio — Comandas ──────────────────────────────────────
+export type OrigenComanda = 'salon' | 'mostrador' | 'delivery' | 'marca'
+export type EstadoComanda = 'abierta' | 'enviada' | 'en_prep' | 'lista' | 'cerrada' | 'cancelada'
+export type EstadoComandaItem = 'pendiente' | 'en_prep' | 'listo' | 'bumpeado'
+export type TipoModificador = 'con' | 'sin' | 'extra'
+export type EventoCocinaType = 'fired' | 'bumped' | 'recalled'
+
+// DB: comandas (id, restaurante_id, origen, mesa_id, mozo_id, cuenta_id, estado, course, marca, created_at)
+export interface Comanda {
+  id: string
+  restaurante_id: string
+  origen: OrigenComanda
+  mesa_id?: string | null
+  mozo_id?: string | null
+  cuenta_id?: string | null
+  estado: EstadoComanda
+  course?: number | null
+  marca?: string | null
+  created_at: string
+  // joined
+  items?: ComandaItem[]
+}
+
+// DB: comanda_items (id, comanda_id, carta_item_id, cantidad, estado, estacion_id, fired_at, bumped_at, notas, created_at)
+export interface ComandaItem {
+  id: string
+  comanda_id: string
+  carta_item_id?: string | null
+  cantidad: number
+  estado: EstadoComandaItem
+  estacion_id?: string | null
+  fired_at?: string | null
+  bumped_at?: string | null
+  notas?: string | null
+  created_at: string
+  // joined
+  modificadores?: ComandaItemModificador[]
+}
+
+// DB: comanda_item_modificadores (id, comanda_item_id, tipo, texto, flag_alergeno, created_at)
+export interface ComandaItemModificador {
+  id: string
+  comanda_item_id: string
+  tipo: TipoModificador
+  texto: string
+  flag_alergeno: boolean
+  created_at: string
+}
+
+// DB: eventos_cocina (id, comanda_item_id, evento, ts)
+export interface EventoCocina {
+  id: string
+  comanda_item_id: string
+  evento: EventoCocinaType
+  ts: string
+}
+
+// ── Salón — Mesas ────────────────────────────────────────────
+export type EstadoMesa = 'libre' | 'ocupada' | 'cuenta_pedida'
+
+// DB: mesas (id, restaurante_id, numero, sector, capacidad, estado, pos_x, pos_y, created_at)
+export interface Mesa {
+  id: string
+  restaurante_id: string
+  numero: string
+  sector?: string | null
+  capacidad?: number | null
+  estado: EstadoMesa
+  pos_x: number
+  pos_y: number
+  created_at: string
+}
+
+// ── Salón — Cuentas ──────────────────────────────────────────
+export type EstadoCuenta = 'abierta' | 'cerrada'
+
+// DB: cuentas (id, restaurante_id, mesa_id, estado, total, mozo_id, abierta_at, cerrada_at, created_at)
+export interface Cuenta {
+  id: string
+  restaurante_id: string
+  mesa_id?: string | null
+  estado: EstadoCuenta
+  total: number
+  mozo_id?: string | null
+  abierta_at: string
+  cerrada_at?: string | null
+  created_at: string
+}
+
+// ── Cobro ────────────────────────────────────────────────────
+// DB: medios_pago (id, restaurante_id, nombre, activo, created_at)
+export interface MedioPago {
+  id: string
+  restaurante_id: string
+  nombre: string
+  activo: boolean
+  created_at: string
+}
+
+// DB: pagos (id, cuenta_id, medio_id, monto, propina, created_at)
+export interface Pago {
+  id: string
+  cuenta_id: string
+  medio_id: string
+  monto: number
+  propina: number
+  created_at: string
+}
+
+// ── Fiscal ───────────────────────────────────────────────────
+export type CondicionFiscal = 'monotributo' | 'RI'
+export type TipoComprobante = 'A' | 'B' | 'C' | 'NC' | 'ND'
+export type EstadoComprobante = 'pendiente' | 'emitido' | 'rechazado' | 'anulado'
+
+// DB: config_fiscal (id, restaurante_id, condicion, cuit, puntos_venta, cert_ref, created_at, updated_at)
+export interface ConfigFiscal {
+  id: string
+  restaurante_id: string
+  condicion: CondicionFiscal
+  cuit: string
+  puntos_venta: number[]
+  cert_ref?: string | null  // referencia al secret store; nunca el .crt/.key
+  created_at: string
+  updated_at: string
+}
+
+// DB: comprobantes (id, restaurante_id, cuenta_id, tipo, punto_venta, numero, cae, cae_vencimiento, estado, receptor_cuit, receptor_condicion_iva, subtotal, iva, total, qr_data, arca_raw, emitido_at, created_at)
+export interface Comprobante {
+  id: string
+  restaurante_id: string
+  cuenta_id?: string | null
+  tipo: TipoComprobante
+  punto_venta: number
+  numero?: number | null
+  cae?: string | null
+  cae_vencimiento?: string | null
+  estado: EstadoComprobante
+  receptor_cuit?: string | null
+  receptor_condicion_iva?: string | null
+  subtotal: number
+  iva: number
+  total: number
+  qr_data?: string | null
+  arca_raw?: Record<string, unknown> | null
+  emitido_at?: string | null
+  created_at: string
+}
+
+// DB: comprobante_items (id, comprobante_id, descripcion, cantidad, precio, alicuota_iva, subtotal, created_at)
+export interface ComprobanteItem {
+  id: string
+  comprobante_id: string
+  descripcion: string
+  cantidad: number
+  precio: number
+  alicuota_iva: number  // porcentaje: 0, 10.5, 21
+  subtotal: number
+  created_at: string
+}
