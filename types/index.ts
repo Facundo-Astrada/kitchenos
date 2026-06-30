@@ -372,6 +372,7 @@ export interface CartaItem {
   orden: number
   restaurante_id: string
   created_at: string
+  estacion_default_id?: string | null
 }
 
 // ── Tareas ──────────────────────────────────────────────────
