@@ -1,5 +1,15 @@
 # UI / CSS — KitchenOS
 
+## Tabla con header fijo: usar UNA tabla con `thead` sticky, no dos tablas (jun 2026)
+
+Patrón viejo (header en su `<table>` + body en otra `<table>` scrolleable): si el body tiene scrollbar, su `<table>` queda ~15px más angosta que la del header. Con anchos de columna en **%** ese desfase se reparte y las columnas del header **no caen sobre las del body** (se nota como líneas corridas, sobre todo en el resaltado de una columna). Pasó en `stock/ClientView.tsx`.
+
+**Fix:** una sola `<table tableLayout: fixed>` dentro del contenedor scrolleable, con `<thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>` y cada `<th>` con `background: var(--navy)` (el fondo va en cada th, no en un div padre, porque el thead flota sobre el contenido al scrollear). Loading/error/vacío van como `<tbody><tr><td colSpan={N}>…`. Un solo `<colgroup>` → header y body comparten anchos exactos. Calcular `colCount` para el `colSpan`.
+
+## Overlay full-screen (`position: fixed; inset: 0`) debe ir por encima del BottomNav (jun 2026)
+
+El `BottomNav` es `z-[100]`. Un overlay a pantalla completa con `zIndex: 100` (ej. el modo "Stockear" de stock) queda **al mismo nivel** → el nav le tapa la barra de botones de abajo. Usar `zIndex: 1000` (o cualquier valor > 100) para overlays que deben cubrir toda la pantalla, nav incluido. (Distinto del caso "botón Guardar inline" de más abajo, que es para forms que viven dentro del scroll de `main`.)
+
 ## Animaciones de lista — no romper el tap (junio 2026)
 
 Animar la entrada de una lista con framer-motion `staggerChildren` + `y`-translate por ítem hace que las cards **se muevan bajo el dedo** durante toda la animación (con 20+ ítems y `staggerChildren: 0.05` son >1s). El primer tap cae sobre un target en movimiento → "hay que apretar dos veces" para abrir la card; un buscador en el mismo header también queda trabado mientras el main thread compone. Pasó en `recetario/page.tsx`.

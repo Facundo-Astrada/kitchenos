@@ -16,6 +16,7 @@ Al cargar una factura, `useFacturas.crearFactura` matchea cada ítem contra `pro
 | `/api/stock/rebuild` | Borra productos del restaurante → llama `productos-desde-facturas` apply → llama `auto-link-ingredientes`. Falla seguro si no hay facturas. |
 | `/api/recetas/auto-link-ingredientes` | Fuzzy match: ingredientes sin `producto_id` ↔ productos. Niveles `exacto`/`parcial`/`fuzzy`. Bug del JOIN PostgREST arreglado: ahora hace 2 queries (recetas → ingredientes con `.in('receta_id', ids)`). |
 | `/api/stock/sync-precio` | Cuando se cambia precio en stock, propaga a `ingredientes.costo_unitario` de los vinculados. |
+| `/api/stock/import-planilla` | **Import de planilla de stock** (Excel/CSV multi-hoja, jun 2026). Modo `preview`: recibe `sheets[]` (filas crudas por hoja) y hace **una llamada a Haiku por hoja, en paralelo (batch de 5)** — clave: con todas las hojas en una sola llamada el JSON se truncaba a ~8192 tokens. Cada hoja extrae nombre/unidad/stock_actual/mínimo/crítico ignorando headers de color y filas de proveedor. Luego fuzzy match contra `productos` → `exacto`/`parcial`/`nuevo`. Modo `apply`: UPDATE de productos existentes (**solo** stock_actual/minimo/critico, nunca pisa precio ni nombre) + INSERT de los nuevos. `restaurante_id` de la sesión. Extracción robusta de JSON: `content.match(/\{[\s\S]*\}/)`. |
 
 ## Componentes UI
 

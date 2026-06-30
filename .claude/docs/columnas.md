@@ -13,6 +13,8 @@
 | `turnos` | UNIQUE (`miembro_id`, `fecha`) — hacer upsert | insert directo |
 | `facturas` | `condicion_pago` (`'contado'|'cuenta_corriente'|'30dias'|'60dias'`), `status` (`'pagada'|'pendiente'|'confirmada'|'observada'`). **"Por pagar"** = condicion_pago a crédito (cuenta_corriente/30dias/60dias) ∧ status≠pagada (`esPorPagar` en `facturas/page.tsx`). `pedido_id UUID NULL` (FK pedidos, ON DELETE SET NULL, jun 2026) — reconciliación factura↔pedido. | — |
 | `factura_items` | `producto_nombre` (text, no FK), `precio_unitario` por unidad | (sin link directo a productos) |
+| `pedidos` | `status` (`'borrador'\|'enviado'\|'parcial'\|'recibido'`), `fecha_pedido`, `total_estimado`. **Rango de entrega (jun 2026):** `entrega_desde DATE` + `entrega_hasta DATE` — se setean al enviar (`usePedidos.enviarPedido`); la vieja `fecha_entrega_esperada` queda como fallback. `IngresosBanner` usa la ventana [desde,hasta] para avisar qué pedidos llegan hoy / están atrasados. | `fecha_entrega_esperada` sola (deprecada por el rango) |
+| `pedido_items` | `producto_nombre`, `producto_id` (FK NULL), `cantidad`, `unidad`, `precio_estimado`, `recibido BOOL`, `cantidad_recibida`. Al recibir (`recibirPedido`) suma `cantidad_recibida` a `productos.stock_actual` matcheando por nombre. | — |
 | `plato_componentes` | `plaza`, `cantidad_diaria`, `unidad`, `sync_ops BOOLEAN DEFAULT false` — solo sincroniza al checklist si es `true` | (sync_ops agregado mayo 2026) |
 | `plato_plazas` | `plato_id` = `receta_id` (no es `plato_compuesto_id`), `ingredientes text[]` | `receta_id` (la columna se llama `plato_id`) |
 | `plato_recetas` | `plaza VARCHAR(50) NULL` — estación de producción asignada al vincular receta a plato | (agregado mayo 2026) |

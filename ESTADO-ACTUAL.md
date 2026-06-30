@@ -101,6 +101,24 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 
 ## 4. Implementado en Últimas Sesiones
 
+### Sesión 2026-06-28 — Stock: import planilla + carrito + rediseño tabla · Pedidos: rango entrega + banner ingresos · Ventas: import multi-día
+
+1. **Ventas — import multi-día** (`ventas/page.tsx`): el parser de Excel ahora guarda la fecha por ítem (col "Creación" de Fudo), agrupa **por fecha → por nombre de plato** y devuelve `ParsedVenta[]` (uno por día). 1 día → `ConfirmScreen` editable; varios días → `MultiDayConfirmScreen` (lista de días + total, guarda todos en secuencia). Antes mergeaba todo en un único registro con la última fecha.
+
+2. **Stock — import de planilla** (`/api/stock/import-planilla` + UI en `ClientView`): botón "Planilla" sube Excel/CSV multi-hoja. **Una llamada a Haiku por hoja en paralelo** (batch de 5) — clave: con todas las hojas en una sola llamada el JSON se truncaba a los ~8192 tokens. Extrae nombre/unidad/stock_actual/mínimo/crítico ignorando headers de color y filas de proveedor. Fuzzy match contra `productos` → `exacto`/`parcial`/`nuevo`. Preview con checkboxes + filtro; apply hace UPDATE (solo campos de stock, nunca pisa precio/nombre) + INSERT nuevos.
+
+3. **Stock — carrito de compras** (`components/stock/CarritoCompras.tsx`): botón "agregar al carrito" por fila (cantidad sugerida = `stock_minimo − stock_actual`), carrito flotante con contador + total estimado, bottom sheet con ítems **agrupados por proveedor** (stepper de cantidad, subtotales), "Crear pedido" → `crearPedido` por cada proveedor (estado borrador). Sin proveedor → grupo aparte.
+
+4. **Stock — rediseño de tabla** (auditoría `ui-auditor`): anchos de columna en % (suman 100%, elimina el hueco muerto de la columna Producto flex). Nueva columna **"Nivel"** (mini-barra CSS stock vs mínimo, color por estado). Celda **Stock horizontal alineada**: número (sub-columna 62px right) \| separador \| mín/crít (sub-columna 84px left) → alinean entre filas sin importar el largo del número. Acciones (carrito+merma) horizontales. Columna `#` eliminada. **Tabla unificada con `thead` sticky** (una sola `<table>` en vez de header+body separados) → arregla el desfase header/body que causaba el scrollbar con anchos en %. Emoji 🔍 → `search_off`, hex sueltos → vars, badges con contraste para light mode.
+
+5. **Stock — filtros** (`components/stock/MultiSelectFiltro.tsx`): filtro de categorías y de proveedor, ambos **multi-selección** (popover con checkboxes + conteos), reemplazan el `<select>` único. Proveedor incluye "Sin proveedor". Mín/crítico **editable inline** en la celda Stock (tap → 2 inputs + check).
+
+6. **Pedidos — rango de entrega + banner de ingresos** (`pedidos/page.tsx`, `components/pedidos/IngresosBanner.tsx`): migración `pedidos.entrega_desde`+`entrega_hasta`. `usePedidos.enviarPedido(id,desde,hasta)`. Al enviar: selector desde-hasta con atajos (Hoy / 1-2 / 3-5 días / próx. semana). Lista y detalle muestran "llega 28 jun – 30 jun" (fallback a la fecha única previa). **`IngresosBanner`**: los días que la ventana de entrega de un pedido (enviado/parcial) cae hoy o está atrasada → banner en Inicio (admin, mobile+desktop) y Pedidos con proveedores + monto estimado a ingresar.
+
+7. **Stockear (quick mode)**: el botón "Atrás" (ya existía) ahora muestra "Corregir: \<producto anterior\>" con color de acento (para corregir un peso mal cargado). Fix: el overlay estaba en `zIndex 100` igual que el BottomNav → el nav tapaba la barra de botones; subido a `1000`.
+
+**Migración aplicada en prod:** `supabase/migrations/pedidos_rango_entrega.sql` (entrega_desde/entrega_hasta). Build verde, todo deployado a `main`.
+
 ### Sesión 2026-06-24/25 — Etapa 1 carga de datos: 15 valores adicionales (Facturas/Stock/Recetario/Carta/Ventas)
 
 Definición + implementación de "valores adicionales" para las 5 funciones de carga de gestión. Documentadas en `docs/funciones-carga-datos.md` (cómo cargar · impacto · qué soluciona · valor adicional por función).
