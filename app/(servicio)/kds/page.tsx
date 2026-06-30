@@ -3,7 +3,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useComandas } from '@/lib/hooks/useComandas'
 import { useEstaciones, KDS_ESTACION_STORAGE_KEY } from '@/lib/hooks/useEstaciones'
+import { useAlertasSonoras } from '@/lib/servicio/useAlertasSonoras'
 import type { Comanda, ComandaItem, Estacion, EstadoComandaItem } from '@/types'
+
+// ─── helpers ────────────────────────────────────────────────────────────────
 
 const ESTADO_ITEM_LABEL: Record<EstadoComandaItem, string> = {
   pendiente: 'Pendiente',
@@ -20,9 +23,9 @@ const ESTADO_ITEM_COLOR: Record<EstadoComandaItem, string> = {
 }
 
 function umbralColor(segundos: number): string {
-  if (segundos < 300) return '#2e7d32'   // verde — <5min
-  if (segundos < 600) return '#c9a227'   // amarillo — 5-10min
-  return '#c0392b'                        // rojo — >10min
+  if (segundos < 300) return '#2e7d32'
+  if (segundos < 600) return '#c9a227'
+  return '#c0392b'
 }
 
 function formatearTiempo(segundos: number): string {
@@ -36,6 +39,8 @@ function tiempoFiredMasViejo(items: ComandaItem[]): number | null {
   if (fired.length === 0) return null
   return Math.min(...fired.map(f => new Date(f).getTime()))
 }
+
+// ─── sub-componentes (nivel módulo — evita remount) ──────────────────────────
 
 function SelectorEstacion({ estaciones, onElegir }: { estaciones: Estacion[]; onElegir: (id: string) => void }) {
   return (
@@ -56,13 +61,7 @@ function SelectorEstacion({ estaciones, onElegir }: { estaciones: Estacion[]; on
   )
 }
 
-function ItemRow({
-  item, onAvanzar, onBump,
-}: {
-  item: ComandaItem
-  onAvanzar: (id: string) => void
-  onBump: (id: string) => void
-}) {
+function ItemRow({ item, onAvanzar, onBump }: { item: ComandaItem; onAvanzar: (id: string) => void; onBump: (id: string) => void }) {
   function onTap() {
     if (item.estado === 'listo') onBump(item.id)
     else onAvanzar(item.id)
@@ -83,56 +82,187 @@ function ItemRow({
       {item.modificadores?.map(m => (
         <span key={m.id} style={{ fontSize: 14, opacity: 0.8 }}>{m.tipo} {m.texto}</span>
       ))}
-      {item.notas && <span style={{ fontSize: 14, opacity: 0.8, fontStyle: 'italic' }}>“{item.notas}”</span>}
+      {item.notas && <span style={{ fontSize: 14, opacity: 0.8, fontStyle: 'italic' }}>"{item.notas}"</span>}
     </button>
   )
 }
 
 function ComandaCard({
-  comanda, ahora, onAvanzarItem, onBumpItem, onBumpComanda,
+  comanda, ahora, onAvanzarItem, onBumpItem, onBumpComanda, onHold,
 }: {
   comanda: Comanda
   ahora: number
   onAvanzarItem: (id: string) => void
   onBumpItem: (id: string) => void
   onBumpComanda: (id: string) => void
+  onHold: (id: string) => void
 }) {
   const firedMs = tiempoFiredMasViejo(comanda.items ?? [])
   const segundos = firedMs ? Math.floor((ahora - firedMs) / 1000) : 0
-  const color = firedMs ? umbralColor(segundos) : '#444'
+  const color = comanda.held ? '#333' : (firedMs ? umbralColor(segundos) : '#444')
 
   return (
-    <div style={{ background: '#161616', borderRadius: 16, border: `2px solid ${color}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: color }}>
+    <div style={{ background: '#161616', borderRadius: 16, border: `2px solid ${color}`, display: 'flex', flexDirection: 'column', overflow: 'hidden', opacity: comanda.held ? 0.65 : 1 }}>
+      {/* Header */}
+      <button
+        onClick={() => onHold(comanda.id)}
+        style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: color, width: '100%', textAlign: 'left' }}
+      >
         <div>
           <p style={{ fontSize: 22, fontWeight: 800, color: '#fff' }}>
             {comanda.mesa ? `Mesa ${comanda.mesa.numero}` : comanda.origen}
           </p>
           {comanda.mozo && <p style={{ fontSize: 14, color: '#fff', opacity: 0.85 }}>{comanda.mozo.nombre}</p>}
         </div>
-        <p style={{ fontSize: 24, fontWeight: 800, color: '#fff' }}>{firedMs ? formatearTiempo(segundos) : '—'}</p>
-      </div>
-      <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {(comanda.items ?? []).map(item => (
-          <ItemRow key={item.id} item={item} onAvanzar={onAvanzarItem} onBump={onBumpItem} />
-        ))}
-      </div>
-      <div style={{ padding: 12, paddingTop: 0 }}>
-        <button
-          onClick={() => onBumpComanda(comanda.id)}
-          style={{ width: '100%', minHeight: 56, borderRadius: 12, background: '#2a2a2a', color: '#fff', fontSize: 18, fontWeight: 700 }}
-        >
-          BUMP COMANDA
-        </button>
+        <div style={{ textAlign: 'right' }}>
+          {comanda.held
+            ? <span style={{ fontSize: 16, fontWeight: 800, color: '#fff', letterSpacing: 1 }}>EN HOLD</span>
+            : <p style={{ fontSize: 24, fontWeight: 800, color: '#fff' }}>{firedMs ? formatearTiempo(segundos) : '—'}</p>
+          }
+        </div>
+      </button>
+      {/* Ítems */}
+      {!comanda.held && (
+        <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {(comanda.items ?? []).map(item => (
+            <ItemRow key={item.id} item={item} onAvanzar={onAvanzarItem} onBump={onBumpItem} />
+          ))}
+        </div>
+      )}
+      {/* Acción */}
+      <div style={{ padding: 12, paddingTop: comanda.held ? 12 : 0 }}>
+        {comanda.held
+          ? (
+            <button
+              onClick={() => onBumpComanda(comanda.id)}  // reuse handler — Fire = misma fn con held=false
+              style={{ width: '100%', minHeight: 64, borderRadius: 12, background: '#4361a0', color: '#fff', fontSize: 20, fontWeight: 800, letterSpacing: 1 }}
+            >
+              FIRE — Marchar
+            </button>
+          )
+          : (
+            <button
+              onClick={() => onBumpComanda(comanda.id)}
+              style={{ width: '100%', minHeight: 56, borderRadius: 12, background: '#2a2a2a', color: '#fff', fontSize: 18, fontWeight: 700 }}
+            >
+              BUMP COMANDA
+            </button>
+          )
+        }
       </div>
     </div>
   )
 }
 
+// Panel All-day — nivel módulo
+function AllDayPanel({ tarjetas, onCerrar }: { tarjetas: Comanda[]; onCerrar: () => void }) {
+  const totales = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const c of tarjetas) {
+      for (const item of c.items ?? []) {
+        if (item.estado === 'bumpeado') continue
+        const nombre = item.carta_item?.nombre ?? 'Ítem sin nombre'
+        map[nombre] = (map[nombre] ?? 0) + item.cantidad
+      }
+    }
+    return Object.entries(map).sort((a, b) => b[1] - a[1])
+  }, [tarjetas])
+
+  return (
+    <div
+      onClick={onCerrar}
+      style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ width: '100%', background: '#1a1a1a', borderRadius: '16px 16px 0 0', maxHeight: '60vh', display: 'flex', flexDirection: 'column' }}
+      >
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #2a2a2a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <span style={{ fontSize: 20, fontWeight: 800, color: '#fff' }}>All-day</span>
+          <button onClick={onCerrar} style={{ background: 'none', color: '#aaa', fontSize: 14 }}>Cerrar</button>
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1, padding: '8px 20px 24px' }}>
+          {totales.length === 0
+            ? <p style={{ color: '#666', textAlign: 'center', marginTop: 24 }}>Sin ítems activos</p>
+            : totales.map(([nombre, cant]) => (
+              <div key={nombre} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid #222' }}>
+                <span style={{ fontSize: 18, color: '#fff' }}>{nombre}</span>
+                <span style={{ fontSize: 28, fontWeight: 800, color: '#fff', minWidth: 40, textAlign: 'right' }}>{cant}</span>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Panel Recall — nivel módulo
+function RecallPanel({
+  comandasRecientes, onRestaurar, onCerrar,
+}: {
+  comandasRecientes: Comanda[]
+  onRestaurar: (id: string) => Promise<void>
+  onCerrar: () => void
+}) {
+  const [restaurando, setRestaurando] = useState<string | null>(null)
+
+  async function handleRestaurar(id: string) {
+    setRestaurando(id)
+    try { await onRestaurar(id) } finally { setRestaurando(null) }
+    onCerrar()
+  }
+
+  return (
+    <div
+      onClick={onCerrar}
+      style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ width: '100%', background: '#1a1a1a', borderRadius: '16px 16px 0 0', maxHeight: '65vh', display: 'flex', flexDirection: 'column' }}
+      >
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #2a2a2a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <span style={{ fontSize: 20, fontWeight: 800, color: '#fff' }}>Recall — últimos 30 min</span>
+          <button onClick={onCerrar} style={{ background: 'none', color: '#aaa', fontSize: 14 }}>Cerrar</button>
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1, padding: '8px 20px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {comandasRecientes.length === 0
+            ? <p style={{ color: '#666', textAlign: 'center', marginTop: 24 }}>Sin comandas bumpeadas recientes</p>
+            : comandasRecientes.map(c => {
+              const nombreMesa = c.mesa ? `Mesa ${c.mesa.numero}` : c.origen
+              const items = (c.items ?? []).map(i => `${i.cantidad}× ${i.carta_item?.nombre ?? '?'}`).join(', ')
+              return (
+                <div key={c.id} style={{ background: '#222', borderRadius: 12, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>{nombreMesa}</p>
+                    <p style={{ fontSize: 14, color: '#aaa', marginTop: 4 }}>{items}</p>
+                  </div>
+                  <button
+                    onClick={() => handleRestaurar(c.id)}
+                    disabled={restaurando === c.id}
+                    style={{ minHeight: 52, minWidth: 100, borderRadius: 10, background: '#4361a0', color: '#fff', fontSize: 15, fontWeight: 700 }}
+                  >
+                    {restaurando === c.id ? '...' : 'Restaurar'}
+                  </button>
+                </div>
+              )
+            })
+          }
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── página principal ─────────────────────────────────────────────────────────
+
 export default function KdsPage() {
   const { estaciones, loading: loadingEstaciones } = useEstaciones()
   const [estacionId, setEstacionId] = useState<string | null>(null)
   const [ahora, setAhora] = useState(() => Date.now())
+  const [allDayOpen, setAllDayOpen] = useState(false)
+  const [recallOpen, setRecallOpen] = useState(false)
 
   useEffect(() => {
     const saved = localStorage.getItem(KDS_ESTACION_STORAGE_KEY)
@@ -144,13 +274,15 @@ export default function KdsPage() {
     return () => clearInterval(tick)
   }, [])
 
-  const { comandas, loading: loadingComandas, avanzarItem, bumpearItem, bumpearComanda } = useComandas(estacionId ?? undefined)
+  const { comandas, loading: loadingComandas, avanzarItem, bumpearItem, bumpearComanda, restaurarComanda, comandasRecientes, holdComanda, fireComanda } = useComandas(estacionId ?? undefined)
 
   const tarjetas = useMemo(() => {
     return comandas
       .map(c => ({ ...c, items: (c.items ?? []).filter(i => i.estado !== 'bumpeado') }))
-      .filter(c => (c.items?.length ?? 0) > 0)
+      .filter(c => (c.items?.length ?? 0) > 0 || c.held)
   }, [comandas])
+
+  const { silenciado, toggleSilencio } = useAlertasSonoras(tarjetas, ahora)
 
   function elegirEstacion(id: string) {
     localStorage.setItem(KDS_ESTACION_STORAGE_KEY, id)
@@ -162,14 +294,34 @@ export default function KdsPage() {
     setEstacionId(null)
   }
 
+  async function onToggleHold(id: string) {
+    const comanda = comandas.find(c => c.id === id)
+    if (!comanda) return
+    try {
+      if (comanda.held) await fireComanda(id)
+      else await holdComanda(id)
+    } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
+  }
+
   async function onAvanzarItem(id: string) {
     try { await avanzarItem(id) } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
   }
+
   async function onBumpItem(id: string) {
     try { await bumpearItem(id) } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
   }
-  async function onBumpComanda(id: string) {
+
+  async function onBumpOFireComanda(id: string) {
+    const comanda = comandas.find(c => c.id === id)
+    if (comanda?.held) {
+      try { await fireComanda(id) } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
+      return
+    }
     try { await bumpearComanda(id) } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
+  }
+
+  async function onRestaurarComanda(id: string) {
+    try { await restaurarComanda(id) } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
   }
 
   if (loadingEstaciones) {
@@ -184,12 +336,40 @@ export default function KdsPage() {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <div style={{ padding: '46px 16px 14px', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <p style={{ fontSize: 24, fontWeight: 700, color: '#fff' }}>{estacionActual?.nombre ?? 'KDS'}</p>
-        <button onClick={cambiarEstacion} style={{ minHeight: 44, padding: '0 16px', borderRadius: 10, background: '#1a1a1a', color: '#fff', fontSize: 14 }}>
-          Cambiar estación
+      {/* Header */}
+      <div style={{ padding: '46px 16px 14px', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <p style={{ fontSize: 22, fontWeight: 700, color: '#fff', flex: 1 }}>{estacionActual?.nombre ?? 'KDS'}</p>
+        {/* All-day */}
+        <button
+          onClick={() => setAllDayOpen(true)}
+          style={{ minHeight: 44, padding: '0 14px', borderRadius: 10, background: '#1a1a1a', color: '#fff', fontSize: 14, fontWeight: 600 }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 20, verticalAlign: 'middle', marginRight: 4 }}>table_rows</span>
+          All-day
+        </button>
+        {/* Recall */}
+        <button
+          onClick={() => setRecallOpen(true)}
+          style={{ minHeight: 44, padding: '0 14px', borderRadius: 10, background: '#1a1a1a', color: '#fff', fontSize: 14, fontWeight: 600 }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 20, verticalAlign: 'middle', marginRight: 4 }}>history</span>
+          Recall
+        </button>
+        {/* Mute */}
+        <button
+          onClick={toggleSilencio}
+          style={{ minHeight: 44, width: 44, borderRadius: 10, background: silenciado ? '#3a1a1a' : '#1a1a1a', color: silenciado ? '#e57373' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          title={silenciado ? 'Activar sonido' : 'Silenciar'}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 22 }}>{silenciado ? 'volume_off' : 'volume_up'}</span>
+        </button>
+        {/* Cambiar estación */}
+        <button onClick={cambiarEstacion} style={{ minHeight: 44, padding: '0 12px', borderRadius: 10, background: '#1a1a1a', color: '#aaa', fontSize: 13 }}>
+          Cambiar
         </button>
       </div>
+
+      {/* Grilla de comandas */}
       {loadingComandas ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>Cargando comandas...</div>
       ) : tarjetas.length === 0 ? (
@@ -203,10 +383,21 @@ export default function KdsPage() {
               ahora={ahora}
               onAvanzarItem={onAvanzarItem}
               onBumpItem={onBumpItem}
-              onBumpComanda={onBumpComanda}
+              onBumpComanda={onBumpOFireComanda}
+              onHold={onToggleHold}
             />
           ))}
         </div>
+      )}
+
+      {/* Paneles */}
+      {allDayOpen && <AllDayPanel tarjetas={tarjetas} onCerrar={() => setAllDayOpen(false)} />}
+      {recallOpen && (
+        <RecallPanel
+          comandasRecientes={comandasRecientes}
+          onRestaurar={onRestaurarComanda}
+          onCerrar={() => setRecallOpen(false)}
+        />
       )}
     </div>
   )

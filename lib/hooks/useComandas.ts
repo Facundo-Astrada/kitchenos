@@ -302,6 +302,79 @@ export function useComandas(estacionId?: string) {
     }
   }
 
+  /**
+   * Recall: restaura una comanda completamente bumpeada (estado='lista') a 'enviada',
+   * revierte sus ítems a 'pendiente' y registra eventos 'recalled'.
+   */
+  async function restaurarComanda(comandaId: string) {
+    const comanda = comandasRaw.find(c => c.id === comandaId)
+    if (!comanda) throw new Error('Comanda no encontrada')
+    const itemsBumpeados = (comanda.items ?? []).filter(i => i.estado === 'bumpeado')
+    if (itemsBumpeados.length === 0) return
+    try {
+      const ts = new Date().toISOString()
+      const ids = itemsBumpeados.map(i => i.id)
+      const { error: itemsError } = await supabase
+        .from('comanda_items')
+        .update({ estado: 'pendiente', bumped_at: null, fired_at: ts })
+        .in('id', ids)
+      if (itemsError) throw itemsError
+      const { error: eventosError } = await supabase
+        .from('eventos_cocina')
+        .insert(ids.map(id => ({ comanda_item_id: id, evento: 'recalled' as const })))
+      if (eventosError) throw eventosError
+      const { error: comandaError } = await supabase
+        .from('comandas')
+        .update({ estado: 'enviada' })
+        .eq('id', comandaId)
+      if (comandaError) throw comandaError
+      await mutate()
+    } catch (e: unknown) {
+      throw new Error(errMsg(e, 'Error al restaurar comanda'))
+    }
+  }
+
+  /** Pone una comanda en hold (no se procesa hasta hacer fire). */
+  async function holdComanda(comandaId: string) {
+    try {
+      const { error } = await supabase.from('comandas').update({ held: true }).eq('id', comandaId)
+      if (error) throw error
+      await mutate()
+    } catch (e: unknown) {
+      throw new Error(errMsg(e, 'Error al poner comanda en hold'))
+    }
+  }
+
+  /** Quita el hold y avanza todos los ítems pendientes a en_prep (marchar). */
+  async function fireComanda(comandaId: string) {
+    try {
+      const { error: holdError } = await supabase.from('comandas').update({ held: false }).eq('id', comandaId)
+      if (holdError) throw holdError
+      const comanda = comandasRaw.find(c => c.id === comandaId)
+      const pendientes = (comanda?.items ?? []).filter(i => i.estado === 'pendiente').map(i => i.id)
+      if (pendientes.length > 0) {
+        const { error: itemsError } = await supabase.from('comanda_items').update({ estado: 'en_prep' }).in('id', pendientes)
+        if (itemsError) throw itemsError
+      }
+      await mutate()
+    } catch (e: unknown) {
+      throw new Error(errMsg(e, 'Error al marchar comanda'))
+    }
+  }
+
+  /** Comandas bumpeadas en los últimos 30 min disponibles para recall. */
+  const comandasRecientes = useMemo(() => {
+    const hace30min = Date.now() - 30 * 60_000
+    return comandasRaw.filter(c => {
+      if (c.estado !== 'lista') return false
+      const bumps = (c.items ?? [])
+        .map(i => i.bumped_at)
+        .filter((b): b is string => !!b)
+        .map(b => new Date(b).getTime())
+      return bumps.length > 0 && Math.max(...bumps) >= hace30min
+    })
+  }, [comandasRaw])
+
   return {
     comandas,
     loading,
@@ -314,6 +387,10 @@ export function useComandas(estacionId?: string) {
     bumpearItem,
     bumpearComanda,
     cambiarEstadoComanda,
+    restaurarComanda,
+    comandasRecientes,
+    holdComanda,
+    fireComanda,
   }
 }
 

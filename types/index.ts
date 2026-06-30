@@ -797,7 +797,7 @@ export type EstadoComandaItem = 'pendiente' | 'en_prep' | 'listo' | 'bumpeado'
 export type TipoModificador = 'con' | 'sin' | 'extra'
 export type EventoCocinaType = 'fired' | 'bumped' | 'recalled'
 
-// DB: comandas (id, restaurante_id, origen, mesa_id, mozo_id, cuenta_id, estado, course, marca, created_at)
+// DB: comandas (id, restaurante_id, origen, mesa_id, mozo_id, cuenta_id, estado, course, marca, held, created_at)
 export interface Comanda {
   id: string
   restaurante_id: string
@@ -808,6 +808,7 @@ export interface Comanda {
   estado: EstadoComanda
   course?: number | null
   marca?: string | null
+  held?: boolean | null
   created_at: string
   // joined
   items?: ComandaItem[]
