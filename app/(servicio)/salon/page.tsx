@@ -4,7 +4,40 @@ import { useState, useMemo } from 'react'
 import { useMesas } from '@/lib/hooks/useMesas'
 import { useCarta } from '@/lib/hooks/useCarta'
 import { useComandas, type NuevoComandaItem } from '@/lib/hooks/useComandas'
-import type { Mesa, CartaItem, EstadoMesa, TipoModificador } from '@/types'
+import type { Mesa, CartaItem, EstadoMesa, TipoModificador, Comanda, EstadoComandaItem } from '@/types'
+
+const ESTADO_ITEM_LABEL: Record<EstadoComandaItem, string> = {
+  pendiente: 'Pendiente',
+  en_prep: 'En cocina',
+  listo: 'Listo',
+  bumpeado: 'Servido',
+}
+
+const ESTADO_ITEM_COLOR: Record<EstadoComandaItem, string> = {
+  pendiente: '#666',
+  en_prep: '#a07a20',
+  listo: '#2e7d32',
+  bumpeado: '#444',
+}
+
+function PedidoEnCursoPanel({ comandas }: { comandas: Comanda[] }) {
+  if (comandas.length === 0) return null
+  return (
+    <div style={{ flexShrink: 0, padding: '0 16px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <p style={{ fontSize: 14, opacity: 0.7, color: '#fff' }}>Pedido en curso</p>
+      {comandas.map(c => (
+        <div key={c.id} style={{ background: '#1a1a1a', borderRadius: 12, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {(c.items ?? []).map(item => (
+            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 16, color: '#fff' }}>{item.cantidad}× {item.carta_item?.nombre ?? 'Ítem'}</span>
+              <span style={{ fontSize: 13, color: ESTADO_ITEM_COLOR[item.estado], fontWeight: 700 }}>{ESTADO_ITEM_LABEL[item.estado]}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 interface DraftItem {
   key: string
@@ -195,7 +228,7 @@ function AgregarItemSheet({
 export default function SalonPage() {
   const { mesas, loading: loadingMesas, abrirCuenta } = useMesas()
   const { items: cartaItems, loading: loadingCarta } = useCarta()
-  const { crearComanda, agregarItems, enviarComanda } = useComandas()
+  const { comandas, crearComanda, agregarItems, enviarComanda } = useComandas()
 
   const [mesaActiva, setMesaActiva] = useState<Mesa | null>(null)
   const [cuentaId, setCuentaId] = useState<string | null>(null)
@@ -209,6 +242,11 @@ export default function SalonPage() {
     if (!q) return cartaItems
     return cartaItems.filter(i => i.nombre.toLowerCase().includes(q))
   }, [cartaItems, busqueda])
+
+  const comandasMesaActiva = useMemo(() => {
+    if (!mesaActiva) return []
+    return comandas.filter(c => c.mesa_id === mesaActiva.id && (c.items?.length ?? 0) > 0)
+  }, [comandas, mesaActiva])
 
   async function onTapMesa(mesa: Mesa) {
     try {
@@ -301,6 +339,8 @@ export default function SalonPage() {
         </button>
         <p style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>Mesa {mesaActiva.numero}</p>
       </div>
+
+      <PedidoEnCursoPanel comandas={comandasMesaActiva} />
 
       <div style={{ padding: '0 16px 12px', flexShrink: 0 }}>
         <input
