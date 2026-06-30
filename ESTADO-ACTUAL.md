@@ -35,10 +35,11 @@
 | 18 | **Auth** | `/login`, `/register` | Funcional | Login email+password, registro (crea restaurante + user_restaurantes + equipo_miembros + rol_permisos seed), reset password por email, proxy.ts protege rutas. |
 | 19 | **Perfil** | `/perfil` | Funcional | Avatar, datos, cambiar contraseña, cerrar sesión. Linkado desde el header del dashboard. |
 | 20 | **Kitchen Coach (IA)** | API `/api/coach` + FAB | Funcional | Chat UI con FAB draggable. Overlay SVG tutorial. Tour guiado OPS 11 pasos. Chips de respuesta. **Suggestions dinámicas por pantalla**: en Carta muestra sugerencias de análisis de carta, food cost, import. **Integración con Carta**: screen context con FC promedio, platos problema, sin receta; highlights `carta-importar`, `carta-rentabilidad`, `carta-lista`, etc. |
-| 21 | **Modo Servicio** | En dashboard | Parcial | UI existe (`components/dashboard/ModoServicio.tsx`) pero **sin conectar a datos reales** — ver DECISIONES.md, se decidió diferir / descartar. |
+| 21 | **Modo Servicio / Salón** | `/salon` | Funcional | Mapa de mesas (pos_x/pos_y), abrir cuenta, vista de comanda: buscador de carta, agregar ítems con modificadores (con/sin/extra) + notas, draft editable, panel "Pedido en curso" con estado en tiempo real, enviar. Sin conexión: botón bloqueado + banner. `ModoServicio.tsx` en dashboard (botón de acceso) también existe pero no conectado. |
+| 26 | **KDS (Kitchen Display)** | `/kds` | Funcional | Selector de estación (persistido en localStorage por dispositivo). Grilla de tarjetas por comanda: mesa, mozo, cronómetro ticket-time (verde/amarillo/rojo por umbral 5/10 min), lista de ítems con estado, bump por ítem y bump de comanda completa. Solo muestra ítems de la estación activa. Sin conexión: bumps se encolan en IndexedDB y se reenvían al reconectar. |
 | 22 | **Ventas** | `/ventas` | Funcional | Importación desde Excel/CSV (xlsx) y texto libre con IA (Haiku). Pantalla de revisión editable antes de guardar. Tab Resumen con KPIs y lista de ventas con detalle de items. Requiere migración SQL (`ventas` + `ventas_items`). |
 
-**Resumen:** 25 módulos funcionales, 1 parcial (modo servicio), 0 críticos pendientes.
+**Resumen:** 26 módulos funcionales (salón y KDS ahora completos), 0 parciales, 0 críticos pendientes.
 
 ---
 
@@ -98,11 +99,35 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 | 7 | Media | Tipos desactualizados: `Evento`, `Turno`, `Puesto` en `types/index.ts` tienen campos legacy que no matchean el schema DB actual. | `types/index.ts` |
 | 8 | Baja | Modo Servicio no conectado (ver DECISIONES.md — probablemente se descarta). | `components/dashboard/ModoServicio.tsx` |
 | 9 | Info | Scripts de migración con token de Supabase hardcodeado. | `scripts/*.mjs` |
-| 10 | Info | No hay tests (unitarios ni e2e). | — |
+| 10 | Info | **Vitest**: 13 tests de máquina de estados ✅. **Playwright**: `e2e/salon-kds.spec.ts` + `npm run test:e2e` ✅ (requiere `npx playwright install chromium` + dev server). Testing Library para hooks pendiente. | — |
 
 ---
 
 ## 4. Implementado en Últimas Sesiones
+
+### Sesión 2026-06-30 (cont.) — Fase 2 Walking Skeleton: comanda → KDS → bump
+
+**Plan ejecutado:** `docs/gestion salon KOS/PLAN-FASE-2.md` — 9 commits atómicos, walking skeleton completo end-to-end.
+
+1. **Mini-migración** (`20260701_fase2_estacion_routing.sql`): columna `carta_items.estacion_default_id UUID NULL` → `estaciones`. Seed ruteo en El Rescoldo: 31 carta_items ruteados por categoría (Parrilla/Fríos/Postres/Pase/Barra).
+
+2. **Hook `useComandas`** (`lib/hooks/useComandas.ts`): SWR + Supabase Realtime (`comandas` + `comanda_items`), filtro por estación para KDS. CRUD: `crearComanda`, `agregarItems`, `enviarComanda` (fired_at + eventos_cocina), `avanzarItem`, `bumpearItem`, `bumpearComanda`, `cambiarEstadoComanda`. Queries con joins embebidos (`mesa:mesas(numero,sector)`, `mozo:equipo_miembros(nombre,apellido)`, `carta_item:carta_items(nombre)`).
+
+3. **Vista Salón** (`app/(servicio)/salon/page.tsx`): mapa de mesas usando `pos_x/pos_y`. Tap en mesa → `abrirCuenta` → vista de comanda con buscador de carta, `AgregarItemSheet` (stepper cantidad + modificadores con/sin/extra como chips + nota), draft editable, `PedidoEnCursoPanel` (refleja en tiempo real el estado de los ítems de la comanda activa). Botón Enviar bloqueado sin conexión.
+
+4. **Vista KDS** (`app/(servicio)/kds/page.tsx`): selector de estación persistido en localStorage (`kds_estacion_id`). Grilla de tarjetas: header con color por umbral (verde <5 min / amarillo 5-10 min / rojo >10 min), cronómetro en tiempo real (`setInterval` 1s), lista de ítems tappables (avanzar estado / bump), "BUMP COMANDA". Solo ítems de la estación seleccionada; oculta ítems ya bumpeados.
+
+5. **Hooks auxiliares**: `useMesas` (SWR+Realtime + `abrirCuenta`/`liberarMesa`), `useEstaciones` (read-only).
+
+6. **Offline Opción A** (`lib/offline/bumpQueue.ts` + `lib/offline/useOnlineStatus.ts` + `public/sw.js`):
+   - SW extendido: intercepta GETs a `/rest/v1/` (network-first + cache fallback) → la data de comandas/mesas/estaciones queda disponible sin red.
+   - Cola IndexedDB: bumps offline → `marcarBumpeadosLocal` (optimista) + `encolarBump` → se reenvían al reconectar (evento `online` en `useComandas`). Idempotente (para en el primer fallo).
+   - Banner "Sin conexión" en el layout de servicio compartido entre Salón y KDS.
+   - Salón no permite crear comandas sin red (botón bloqueado + aviso).
+
+7. **Playwright e2e** (`playwright.config.ts` + `e2e/salon-kds.spec.ts` + `npm run test:e2e`): test del camino feliz en dos contextos de browser (mozo en salón, cocinero en KDS). Requiere `npx playwright install chromium` + dev server. Instrucciones de demo manual embebidas como comentario.
+
+**Commits:** `92b28c8` (migración estacion_id) · `4979902` (seed ruteo) · `83bf279` (useComandas) · `beec84a` (lockfile) · `e02f42e` (salón) · `971c2d3` (KDS) · `f0f40d9` (reflejo salón) · `5e47f59` (offline) · `19524fe` (playwright).
 
 ### Sesión 2026-06-30 — Fase 1 Fundación: Salón + KDS + Cobro + Fiscal
 
@@ -481,10 +506,11 @@ app/
   api/            ← coach, facturas, listas-precios, recetas/import, recetas/save, ingest/escpos
 lib/
   auth/           ← AuthProvider context + RouteGuard
-  hooks/          ← 19 hooks (useRecetas, useStock, useTareas, …)
+  hooks/          ← 22 hooks (useRecetas, useStock, useTareas, …, useComandas, useMesas, useEstaciones)
   supabase/       ← client (browser), server (SSR), admin (service role)
   fiscal/         ← interfaz ProveedorFiscal + stub (Fase 1)
   comanda/        ← stateMachine.ts + tests (máquina de estados comanda/ítem)
+  offline/        ← bumpQueue.ts (IndexedDB cola bumps), useOnlineStatus.ts
   constants.ts    ← Roles, módulos, nav
 components/
   dashboard/      ← Header, MiPlaza, ModoServicio, ModulosGrid, PasePreview, StockCritico, WelcomeDashboard
@@ -496,4 +522,4 @@ types/
 proxy.ts          ← Auth middleware (Next 16)
 ```
 
-**Hooks:** 19 | **Páginas app:** 22 (+ 2 esqueletos servicio) | **API routes:** 8 | **Tablas:** 43 | **Componentes:** 19
+**Hooks:** 22 | **Páginas app:** 22 (+ 2 servicio funcionales) | **API routes:** 8 | **Tablas:** 43 (+1 col: carta_items.estacion_default_id) | **Componentes:** 19
