@@ -830,7 +830,7 @@ export interface ComandaItem {
   created_at: string
   // joined
   modificadores?: ComandaItemModificador[]
-  carta_item?: { nombre: string } | null
+  carta_item?: { nombre: string; precio_venta?: number | null } | null
 }
 
 // DB: comanda_item_modificadores (id, comanda_item_id, tipo, texto, flag_alergeno, created_at)
