@@ -159,3 +159,22 @@ function onPointerUp() {
 if (loading) return <div>Cargando...</div>
 if (items.length === 0) return <div>No hay datos todavía</div>
 ```
+
+## Vista de servicio (Salón / KDS) — reglas UI inamovibles (Fase 1, jun 2026)
+
+La vista de servicio (`app/(servicio)/`) tiene UX radicalmente distinta al dashboard de gestión. Vive en su propio route group con layout sin BottomNav ni Coach FAB.
+
+**Reglas:**
+- **Botones masivos** — mínimo 64px de alto, área táctil generosa. El cocinero/mozo toca con guantes y con urgencia.
+- **Swipe amplio** — las acciones principales (bump, recall, fire) deben poder activarse con un swipe largo, no con un tap pequeño.
+- **Alto contraste** — fondo negro (`#000`) o gris muy oscuro (`#111`), texto blanco. En cocina hay mucha luz ambiental y pantallas grasientas.
+- **CERO menús desplegables durante el despacho** — ningún `<select>`, dropdown ni modal con múltiples opciones en la pantalla de KDS o mapa de mesas activo. Todas las acciones deben ser de 1 tap o 1 swipe.
+- **Fuente grande** — mínimo 18px en labels de ítem, 24px en nombres de plato.
+- **Sin animaciones de entrada costosas** — el KDS recibe updates en tiempo real; las animaciones de lista bloquean taps (ver regla de "Animaciones de lista").
+- **Tablet-first, no escritorio** — diseñar para pantalla 768-1024px horizontal. Desktop funciona, celular es secundario para KDS.
+- **Layout del route group:** `app/(servicio)/layout.tsx` es `position: fixed; inset: 0; background: #111; overflow: hidden` — ocupa toda la pantalla sin scroll global. Cada sub-vista maneja su propio scroll interno.
+
+**Qué NO hacer:**
+- No reusar el `BottomNav` de gestión en la vista de servicio.
+- No mostrar el Coach FAB en pantallas de KDS (distrae durante el despacho).
+- No usar `var(--navy)` como fondo — es para gestión. En servicio usar negro/gris oscuro.
