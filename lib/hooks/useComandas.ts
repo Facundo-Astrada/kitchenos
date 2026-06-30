@@ -9,6 +9,7 @@ import type {
 } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
 import { puedeTranicionarComanda, puedeTranicionarItem, todosListos } from '@/lib/comanda/stateMachine'
+import { encolarBump, leerCola, quitarDeCola } from '@/lib/offline/bumpQueue'
 
 function errMsg(e: unknown, fallback: string): string {
   if (e instanceof Error) return e.message
@@ -185,6 +186,39 @@ export function useComandas(estacionId?: string) {
     }
   }
 
+  /** Sin catch — usado tanto por el bump online directo como por el reenvío de la cola offline. */
+  async function bumpearItemEnDB(itemId: string) {
+    const actual = comandasRaw.flatMap(c => c.items ?? []).find(i => i.id === itemId)
+    const ts = new Date().toISOString()
+    const { error } = await supabase.from('comanda_items').update({ estado: 'bumpeado', bumped_at: ts }).eq('id', itemId)
+    if (error) throw error
+    const { error: eventoError } = await supabase.from('eventos_cocina').insert({ comanda_item_id: itemId, evento: 'bumped' })
+    if (eventoError) throw eventoError
+    if (actual) await bumpItemsYRevisarComanda(actual.comanda_id, [itemId])
+  }
+
+  async function bumpearComandaEnDB(comandaId: string, itemIds: string[]) {
+    const ts = new Date().toISOString()
+    const { error } = await supabase.from('comanda_items').update({ estado: 'bumpeado', bumped_at: ts }).in('id', itemIds)
+    if (error) throw error
+    const { error: eventoError } = await supabase.from('eventos_cocina').insert(
+      itemIds.map(id => ({ comanda_item_id: id, evento: 'bumped' as const }))
+    )
+    if (eventoError) throw eventoError
+    await bumpItemsYRevisarComanda(comandaId, itemIds)
+  }
+
+  /** Marca local-optimista (sin red) — se confirma/reintenta al reconectar via la cola IndexedDB. */
+  function marcarBumpeadosLocal(comandaId: string, itemIds: string[]) {
+    const ts = new Date().toISOString()
+    mutate((current: Comanda[] = []) => current.map(c => {
+      if (c.id !== comandaId) return c
+      const items = (c.items ?? []).map(i => itemIds.includes(i.id) ? { ...i, estado: 'bumpeado' as EstadoComandaItem, bumped_at: ts } : i)
+      const estado = todosListos(items) && puedeTranicionarComanda(c.estado, 'lista') ? ('lista' as EstadoComanda) : c.estado
+      return { ...c, items, estado }
+    }), { revalidate: false })
+  }
+
   /** Bump de un ítem individual: en_prep|listo → bumpeado. */
   async function bumpearItem(itemId: string) {
     const actual = comandasRaw.flatMap(c => c.items ?? []).find(i => i.id === itemId)
@@ -193,14 +227,14 @@ export function useComandas(estacionId?: string) {
       throw new Error(`Transición inválida de ítem: ${actual.estado} → bumpeado`)
     }
     try {
-      const ts = new Date().toISOString()
-      const { error } = await supabase.from('comanda_items').update({ estado: 'bumpeado', bumped_at: ts }).eq('id', itemId)
-      if (error) throw error
-      const { error: eventoError } = await supabase.from('eventos_cocina').insert({ comanda_item_id: itemId, evento: 'bumped' })
-      if (eventoError) throw eventoError
-      await bumpItemsYRevisarComanda(actual.comanda_id, [itemId])
+      await bumpearItemEnDB(itemId)
       await mutate()
     } catch (e: unknown) {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        marcarBumpeadosLocal(actual.comanda_id, [itemId])
+        await encolarBump({ tipo: 'item', targetId: itemId })
+        return
+      }
       throw new Error(errMsg(e, 'Error al bumpear ítem'))
     }
   }
@@ -211,21 +245,48 @@ export function useComandas(estacionId?: string) {
     if (!comanda) return
     const bumpeables = (comanda.items ?? []).filter(i => puedeTranicionarItem(i.estado, 'bumpeado'))
     if (bumpeables.length === 0) return
+    const ids = bumpeables.map(i => i.id)
     try {
-      const ts = new Date().toISOString()
-      const ids = bumpeables.map(i => i.id)
-      const { error } = await supabase.from('comanda_items').update({ estado: 'bumpeado', bumped_at: ts }).in('id', ids)
-      if (error) throw error
-      const { error: eventoError } = await supabase.from('eventos_cocina').insert(
-        ids.map(id => ({ comanda_item_id: id, evento: 'bumped' as const }))
-      )
-      if (eventoError) throw eventoError
-      await bumpItemsYRevisarComanda(comandaId, ids)
+      await bumpearComandaEnDB(comandaId, ids)
       await mutate()
     } catch (e: unknown) {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        marcarBumpeadosLocal(comandaId, ids)
+        await encolarBump({ tipo: 'comanda', targetId: comandaId, itemIds: ids })
+        return
+      }
       throw new Error(errMsg(e, 'Error al bumpear comanda'))
     }
   }
+
+  /** Reenvía la cola de bumps offline al reconectar. Idempotente: para en el primer fallo (se reintenta en la próxima reconexión). */
+  const sincronizarColaOffline = useCallback(async () => {
+    let cola
+    try {
+      cola = await leerCola()
+    } catch {
+      return
+    }
+    for (const entry of cola) {
+      try {
+        if (entry.tipo === 'item') {
+          await bumpearItemEnDB(entry.targetId)
+        } else if (entry.itemIds?.length) {
+          await bumpearComandaEnDB(entry.targetId, entry.itemIds)
+        }
+        await quitarDeCola(entry.id)
+      } catch {
+        break
+      }
+    }
+    await mutate()
+  }, [comandasRaw, supabase, mutate])
+
+  useEffect(() => {
+    window.addEventListener('online', sincronizarColaOffline)
+    if (navigator.onLine) sincronizarColaOffline()
+    return () => window.removeEventListener('online', sincronizarColaOffline)
+  }, [sincronizarColaOffline])
 
   async function cambiarEstadoComanda(comandaId: string, hacia: EstadoComanda) {
     const actual = comandasRaw.find(c => c.id === comandaId)

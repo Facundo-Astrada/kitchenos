@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react'
 import { useMesas } from '@/lib/hooks/useMesas'
 import { useCarta } from '@/lib/hooks/useCarta'
 import { useComandas, type NuevoComandaItem } from '@/lib/hooks/useComandas'
+import { useOnlineStatus } from '@/lib/offline/useOnlineStatus'
 import type { Mesa, CartaItem, EstadoMesa, TipoModificador, Comanda, EstadoComandaItem } from '@/types'
 
 const ESTADO_ITEM_LABEL: Record<EstadoComandaItem, string> = {
@@ -229,6 +230,7 @@ export default function SalonPage() {
   const { mesas, loading: loadingMesas, abrirCuenta } = useMesas()
   const { items: cartaItems, loading: loadingCarta } = useCarta()
   const { comandas, crearComanda, agregarItems, enviarComanda } = useComandas()
+  const online = useOnlineStatus()
 
   const [mesaActiva, setMesaActiva] = useState<Mesa | null>(null)
   const [cuentaId, setCuentaId] = useState<string | null>(null)
@@ -284,6 +286,10 @@ export default function SalonPage() {
 
   async function onEnviar() {
     if (!cuentaId || !mesaActiva || draft.length === 0) return
+    if (!online) {
+      alert('Sin conexión: no se pueden crear comandas nuevas. Esperá a reconectar.')
+      return
+    }
     setEnviando(true)
     try {
       const comandaId = await crearComanda({ origen: 'salon', mesa_id: mesaActiva.id, cuenta_id: cuentaId })
@@ -368,14 +374,14 @@ export default function SalonPage() {
       <div style={{ padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0 }}>
         <button
           onClick={onEnviar}
-          disabled={draft.length === 0 || enviando}
+          disabled={draft.length === 0 || enviando || !online}
           style={{
             width: '100%', minHeight: 64, borderRadius: 14, fontSize: 20, fontWeight: 700,
-            background: draft.length === 0 ? '#2a2a2a' : '#4361a0',
+            background: draft.length === 0 || !online ? '#2a2a2a' : '#4361a0',
             color: '#fff', opacity: enviando ? 0.6 : 1,
           }}
         >
-          {enviando ? 'Enviando...' : `Enviar comanda${draft.length ? ` (${draft.length})` : ''}`}
+          {!online ? 'Sin conexión' : enviando ? 'Enviando...' : `Enviar comanda${draft.length ? ` (${draft.length})` : ''}`}
         </button>
       </div>
 
