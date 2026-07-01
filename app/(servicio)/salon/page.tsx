@@ -212,6 +212,95 @@ function AgregarItemSheet({
 
 const PROPINA_PRESETS = [0, 10, 15, 20]
 
+// ── interfaces internas de cobro ──────────────────────────────────────────────
+
+interface LineaPago {
+  id: string         // clave local
+  medio_id: string
+  monto: string      // string para el input
+}
+
+// ── Ticket post-cobro ────────────────────────────────────────────────────────
+
+function TicketCobro({
+  mesa, resumenLineas, subtotal, propinaMonto, total, pagos, vuelto, onVolver,
+}: {
+  mesa: Mesa
+  resumenLineas: { nombre: string; cantidad: number; subtotal: number }[]
+  subtotal: number
+  propinaMonto: number
+  total: number
+  pagos: { nombre: string; monto: number }[]
+  vuelto: number
+  onVolver: () => void
+}) {
+  const hora = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '46px 20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Encabezado */}
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#2e7d32', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 40, color: '#fff' }}>check_circle</span>
+          </div>
+          <p style={{ fontSize: 26, fontWeight: 800, color: '#fff' }}>Cobrado</p>
+          <p style={{ color: '#aaa', marginTop: 4 }}>Mesa {mesa.numero} · {hora}</p>
+        </div>
+
+        {/* Detalle de ítems */}
+        <div style={{ background: '#1a1a1a', borderRadius: 14, overflow: 'hidden' }}>
+          {resumenLineas.map((l, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 16px', borderBottom: i < resumenLineas.length - 1 ? '1px solid #2a2a2a' : 'none' }}>
+              <span style={{ color: '#aaa' }}>{l.cantidad}× {l.nombre}</span>
+              <span style={{ color: '#fff' }}>{formatPesos(l.subtotal)}</span>
+            </div>
+          ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 16px', borderTop: '1px solid #333' }}>
+            <span style={{ color: '#aaa' }}>Subtotal</span>
+            <span style={{ color: '#fff' }}>{formatPesos(subtotal)}</span>
+          </div>
+          {propinaMonto > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 16px' }}>
+              <span style={{ color: '#aaa' }}>Propina</span>
+              <span style={{ color: '#c9a227' }}>{formatPesos(propinaMonto)}</span>
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: '#222', borderTop: '1px solid #333' }}>
+            <span style={{ color: '#fff', fontWeight: 800, fontSize: 18 }}>Total</span>
+            <span style={{ color: '#fff', fontWeight: 800, fontSize: 20 }}>{formatPesos(total)}</span>
+          </div>
+        </div>
+
+        {/* Pagos registrados */}
+        <div style={{ background: '#1a1a1a', borderRadius: 14, overflow: 'hidden' }}>
+          <p style={{ color: '#aaa', fontSize: 13, padding: '10px 16px 4px' }}>Pagos</p>
+          {pagos.map((p, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 16px', borderTop: '1px solid #2a2a2a' }}>
+              <span style={{ color: '#fff' }}>{p.nombre}</span>
+              <span style={{ color: '#fff', fontWeight: 700 }}>{formatPesos(p.monto)}</span>
+            </div>
+          ))}
+          {vuelto > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: '#1e3320', borderTop: '1px solid #2e7d32' }}>
+              <span style={{ color: '#4caf50', fontWeight: 700 }}>Vuelto</span>
+              <span style={{ color: '#4caf50', fontWeight: 800, fontSize: 18 }}>{formatPesos(vuelto)}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0 }}>
+        <button onClick={onVolver}
+          style={{ width: '100%', minHeight: 68, borderRadius: 14, background: '#1a1a1a', border: '2px solid #2a2a2a', color: '#fff', fontSize: 20, fontWeight: 700 }}>
+          Volver al mapa
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── VistaCuenta principal ────────────────────────────────────────────────────
+
 function VistaCuenta({
   mesa, cuentaId, comandas, onVolver, onCobrado,
 }: {
@@ -229,9 +318,17 @@ function VistaCuenta({
   const [propinaPct, setPropinaPct] = useState(10)
   const [propinaCustom, setPropinaCustom] = useState('')
   const [divisiones, setDivisiones] = useState(1)
-  const [medioId, setMedioId] = useState<string | null>(null)
   const [cobrando, setCobrando] = useState(false)
-  const [vista, setVista] = useState<'cuenta' | 'cobro'>('cuenta')
+  const [subVista, setSubVista] = useState<'cuenta' | 'cobro' | 'ticket'>('cuenta')
+
+  // Multi-medio: array de líneas de pago
+  const [lineasPago, setLineasPago] = useState<LineaPago[]>([])
+  // Resultado del cobro para el ticket
+  const [resultadoCobro, setResultadoCobro] = useState<{
+    pagos: { nombre: string; monto: number }[]
+    vuelto: number
+    propinaMonto: number
+  } | null>(null)
 
   const propinaMonto = useMemo(() => {
     if (propinaCustom !== '') return Number(propinaCustom) || 0
@@ -241,13 +338,66 @@ function VistaCuenta({
   const total = resumen.subtotal + propinaMonto
   const porPersona = divisiones > 1 ? total / divisiones : null
 
+  // Totales del cobro
+  const sumaCobrada = useMemo(() =>
+    lineasPago.reduce((s, l) => s + (Number(l.monto) || 0), 0),
+    [lineasPago]
+  )
+  const faltante = total - sumaCobrada
+  const vuelto = sumaCobrada > total ? sumaCobrada - total : 0
+  const cobradoCompleto = sumaCobrada >= total && lineasPago.every(l => l.medio_id)
+
+  const mediosMap = useMemo(() =>
+    Object.fromEntries(medios.map(m => [m.id, m.nombre])),
+    [medios]
+  )
+
+  // Al entrar al cobro inicializar con una línea por el total completo
+  function abrirCobro() {
+    if (medios.length > 0) {
+      setLineasPago([{ id: '1', medio_id: medios[0].id, monto: String(Math.round(total)) }])
+    } else {
+      setLineasPago([{ id: '1', medio_id: '', monto: String(Math.round(total)) }])
+    }
+    setSubVista('cobro')
+  }
+
+  function agregarLineaPago() {
+    const resto = Math.max(0, total - sumaCobrada)
+    const nuevoMedioId = medios.find(m => !lineasPago.some(l => l.medio_id === m.id))?.id ?? medios[0]?.id ?? ''
+    setLineasPago(prev => [...prev, { id: String(Date.now()), medio_id: nuevoMedioId, monto: String(Math.round(resto)) }])
+  }
+
+  function actualizarLinea(id: string, campo: Partial<LineaPago>) {
+    setLineasPago(prev => prev.map(l => l.id === id ? { ...l, ...campo } : l))
+  }
+
+  function quitarLinea(id: string) {
+    setLineasPago(prev => {
+      const next = prev.filter(l => l.id !== id)
+      // recalcular monto de la primera línea si solo queda una
+      if (next.length === 1) {
+        return [{ ...next[0], monto: String(Math.round(total)) }]
+      }
+      return next
+    })
+  }
+
   async function onCobrar() {
-    if (!medioId) { alert('Elegí un medio de pago'); return }
+    if (!cobradoCompleto) return
     setCobrando(true)
     try {
-      const pagos: PagoInput[] = [{ medio_id: medioId, monto: total }]
+      const pagos: PagoInput[] = lineasPago.map(l => ({
+        medio_id: l.medio_id,
+        monto: Number(l.monto) || 0,
+      }))
       await cobrarCuenta({ cuentaId, mesaId: mesa.id, pagos, propina: propinaMonto, total: resumen.subtotal })
-      onCobrado()
+      setResultadoCobro({
+        pagos: lineasPago.map(l => ({ nombre: mediosMap[l.medio_id] ?? 'Pago', monto: Number(l.monto) || 0 })),
+        vuelto,
+        propinaMonto,
+      })
+      setSubVista('ticket')
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : 'Error al cobrar')
     } finally {
@@ -255,65 +405,133 @@ function VistaCuenta({
     }
   }
 
-  if (vista === 'cobro') {
+  // ── Ticket ────────────────────────────────────────────────────────────────
+  if (subVista === 'ticket' && resultadoCobro) {
+    return (
+      <TicketCobro
+        mesa={mesa}
+        resumenLineas={resumen.lineas}
+        subtotal={resumen.subtotal}
+        propinaMonto={resultadoCobro.propinaMonto}
+        total={total}
+        pagos={resultadoCobro.pagos}
+        vuelto={resultadoCobro.vuelto}
+        onVolver={onCobrado}
+      />
+    )
+  }
+
+  // ── Cobro (multi-medio + vuelto) ──────────────────────────────────────────
+  if (subVista === 'cobro') {
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div style={{ padding: '46px 16px 14px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={() => setVista('cuenta')} style={{ minWidth: 44, minHeight: 44, color: '#fff', background: 'transparent', border: 'none' }}>
+          <button onClick={() => setSubVista('cuenta')} style={{ minWidth: 44, minHeight: 44, color: '#fff', background: 'transparent', border: 'none' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 28 }}>arrow_back</span>
           </button>
           <p style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>Cobrar — Mesa {mesa.numero}</p>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px' }}>
-          {/* Totales */}
-          <div style={{ background: '#1a1a1a', borderRadius: 14, padding: 16, marginBottom: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+          {/* Resumen del total */}
+          <div style={{ background: '#1a1a1a', borderRadius: 14, padding: '14px 16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
               <span style={{ color: '#aaa' }}>Subtotal</span>
-              <span style={{ color: '#fff', fontWeight: 600 }}>{formatPesos(resumen.subtotal)}</span>
+              <span style={{ color: '#fff' }}>{formatPesos(resumen.subtotal)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ color: '#aaa' }}>Propina ({propinaPct}%)</span>
-              <span style={{ color: '#fff', fontWeight: 600 }}>{formatPesos(propinaMonto)}</span>
-            </div>
+            {propinaMonto > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ color: '#aaa' }}>Propina</span>
+                <span style={{ color: '#c9a227' }}>{formatPesos(propinaMonto)}</span>
+              </div>
+            )}
             <div style={{ height: 1, background: '#333', margin: '8px 0' }} />
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#fff', fontSize: 20, fontWeight: 700 }}>Total</span>
+              <span style={{ color: '#fff', fontSize: 20, fontWeight: 800 }}>Total</span>
               <span style={{ color: '#fff', fontSize: 22, fontWeight: 800 }}>{formatPesos(total)}</span>
             </div>
-            {porPersona && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-                <span style={{ color: '#aaa' }}>Por persona ({divisiones})</span>
-                <span style={{ color: '#c9a227', fontWeight: 700 }}>{formatPesos(porPersona)}</span>
+          </div>
+
+          {/* Líneas de pago */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {lineasPago.map((linea, idx) => (
+              <div key={linea.id} style={{ background: '#1a1a1a', borderRadius: 14, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: '#aaa', fontSize: 13 }}>Pago {idx + 1}</span>
+                  {lineasPago.length > 1 && (
+                    <button onClick={() => quitarLinea(linea.id)} style={{ background: 'none', color: '#a04343', minWidth: 36, minHeight: 36 }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 20 }}>close</span>
+                    </button>
+                  )}
+                </div>
+                {/* Selector de medio */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {medios.map(m => (
+                    <button key={m.id} onClick={() => actualizarLinea(linea.id, { medio_id: m.id })}
+                      style={{ flex: '1 1 auto', minHeight: 44, borderRadius: 10, background: linea.medio_id === m.id ? '#4361a0' : '#2a2a2a', border: `1.5px solid ${linea.medio_id === m.id ? '#4361a0' : 'transparent'}`, color: '#fff', fontSize: 15, fontWeight: 600 }}>
+                      {m.nombre}
+                    </button>
+                  ))}
+                </div>
+                {/* Monto */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ color: '#aaa', fontSize: 16 }}>$</span>
+                  <input
+                    type="number"
+                    value={linea.monto}
+                    onChange={e => actualizarLinea(linea.id, { monto: e.target.value })}
+                    placeholder="0"
+                    style={{ flex: 1, minHeight: 52, borderRadius: 10, background: '#2a2a2a', color: '#fff', border: 'none', padding: '0 14px', fontSize: 20, fontWeight: 700 }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Botón agregar medio */}
+          {medios.length > lineasPago.length && (
+            <button onClick={agregarLineaPago}
+              style={{ minHeight: 52, borderRadius: 12, background: 'transparent', border: '1.5px dashed #333', color: '#aaa', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <span className="material-symbols-outlined">add</span>
+              Agregar otro medio
+            </button>
+          )}
+
+          {/* Estado del cobro */}
+          <div style={{ background: '#1a1a1a', borderRadius: 14, padding: '14px 16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ color: '#aaa' }}>Cobrado</span>
+              <span style={{ color: cobradoCompleto ? '#4caf50' : '#fff', fontWeight: 700 }}>{formatPesos(sumaCobrada)}</span>
+            </div>
+            {faltante > 0.5 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: '#e57373' }}>Falta</span>
+                <span style={{ color: '#e57373', fontWeight: 700 }}>{formatPesos(faltante)}</span>
+              </div>
+            )}
+            {vuelto > 0.5 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, paddingTop: 8, borderTop: '1px solid #333' }}>
+                <span style={{ color: '#4caf50', fontWeight: 700, fontSize: 18 }}>Vuelto</span>
+                <span style={{ color: '#4caf50', fontWeight: 800, fontSize: 20 }}>{formatPesos(vuelto)}</span>
               </div>
             )}
           </div>
 
-          {/* Medio de pago */}
-          <p style={{ color: '#aaa', fontSize: 14, marginBottom: 10 }}>Medio de pago</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-            {medios.length === 0
-              ? <p style={{ color: '#666' }}>No hay medios de pago configurados</p>
-              : medios.map(m => (
-                <button key={m.id} onClick={() => setMedioId(m.id)}
-                  style={{ minHeight: 60, borderRadius: 12, background: medioId === m.id ? '#4361a0' : '#1a1a1a', border: `2px solid ${medioId === m.id ? '#4361a0' : '#2a2a2a'}`, color: '#fff', fontSize: 18, fontWeight: 600 }}>
-                  {m.nombre}
-                </button>
-              ))
-            }
-          </div>
+          <div style={{ height: 16 }} />
         </div>
 
         <div style={{ padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0 }}>
-          <button onClick={onCobrar} disabled={cobrando || !medioId}
-            style={{ width: '100%', minHeight: 68, borderRadius: 14, background: medioId ? '#2e7d32' : '#2a2a2a', color: '#fff', fontSize: 22, fontWeight: 800, opacity: cobrando ? 0.6 : 1 }}>
-            {cobrando ? 'Registrando...' : `Cobrar ${formatPesos(total)}`}
+          <button onClick={onCobrar} disabled={cobrando || !cobradoCompleto}
+            style={{ width: '100%', minHeight: 68, borderRadius: 14, background: cobradoCompleto ? '#2e7d32' : '#2a2a2a', color: '#fff', fontSize: 22, fontWeight: 800, opacity: cobrando ? 0.6 : 1 }}>
+            {cobrando ? 'Registrando...' : cobradoCompleto ? `Confirmar cobro ${formatPesos(total)}` : `Falta ${formatPesos(faltante)}`}
           </button>
         </div>
       </div>
     )
   }
 
-  // Vista cuenta (detalle de ítems + propina + división)
+  // ── Cuenta (ítems + propina + división) ──────────────────────────────────
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ padding: '46px 16px 14px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -345,7 +563,7 @@ function VistaCuenta({
         {/* Propina */}
         <div style={{ background: '#1a1a1a', borderRadius: 14, padding: 16 }}>
           <p style={{ color: '#aaa', fontSize: 14, marginBottom: 12 }}>Propina</p>
-          <div style={{ display: 'flex', gap: 8, marginBottom: propinaCustom !== '' ? 0 : 8 }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
             {PROPINA_PRESETS.map(pct => (
               <button key={pct} onClick={() => { setPropinaPct(pct); setPropinaCustom('') }}
                 style={{ flex: 1, minHeight: 48, borderRadius: 10, background: propinaPct === pct && propinaCustom === '' ? '#4361a0' : '#2a2a2a', color: '#fff', fontSize: 15, fontWeight: 600 }}>
@@ -353,18 +571,13 @@ function VistaCuenta({
               </button>
             ))}
           </div>
-          {propinaCustom !== '' && (
-            <p style={{ color: '#aaa', fontSize: 13, marginTop: 4 }}>Monto personalizado</p>
-          )}
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <input
-              value={propinaCustom}
-              onChange={e => { setPropinaCustom(e.target.value); if (e.target.value) setPropinaPct(-1) }}
-              placeholder="$ Monto personalizado"
-              type="number"
-              style={{ flex: 1, minHeight: 44, borderRadius: 10, background: '#2a2a2a', color: '#fff', border: propinaCustom ? '1px solid #4361a0' : 'none', padding: '0 12px', fontSize: 16 }}
-            />
-          </div>
+          <input
+            value={propinaCustom}
+            onChange={e => { setPropinaCustom(e.target.value); if (e.target.value) setPropinaPct(-1) }}
+            placeholder="$ Monto personalizado"
+            type="number"
+            style={{ width: '100%', minHeight: 44, borderRadius: 10, background: '#2a2a2a', color: '#fff', border: propinaCustom ? '1px solid #4361a0' : 'none', padding: '0 12px', fontSize: 16 }}
+          />
           {propinaMonto > 0 && (
             <p style={{ color: '#c9a227', fontSize: 15, marginTop: 8, textAlign: 'right', fontWeight: 600 }}>+ {formatPesos(propinaMonto)}</p>
           )}
@@ -383,9 +596,9 @@ function VistaCuenta({
             <button onClick={() => setDivisiones(d => d + 1)}
               style={{ width: 52, height: 52, borderRadius: 12, background: '#2a2a2a', color: '#fff', fontSize: 28 }}>+</button>
           </div>
-          {divisiones > 1 && (
+          {porPersona && (
             <p style={{ color: '#c9a227', textAlign: 'center', fontSize: 18, fontWeight: 700, marginTop: 12 }}>
-              {formatPesos(total / divisiones)} por persona
+              {formatPesos(porPersona)} por persona
             </p>
           )}
         </div>
@@ -400,7 +613,7 @@ function VistaCuenta({
       </div>
 
       <div style={{ padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0 }}>
-        <button onClick={() => setVista('cobro')}
+        <button onClick={abrirCobro}
           style={{ width: '100%', minHeight: 68, borderRadius: 14, background: '#4361a0', color: '#fff', fontSize: 22, fontWeight: 800 }}>
           <span className="material-symbols-outlined" style={{ verticalAlign: 'middle', marginRight: 8 }}>payment</span>
           Cobrar {formatPesos(total)}
