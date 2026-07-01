@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { useMesas } from '@/lib/hooks/useMesas'
 import { useCarta } from '@/lib/hooks/useCarta'
 import { useComandas, type NuevoComandaItem } from '@/lib/hooks/useComandas'
-import { useCuenta, calcularResumen, type PagoInput } from '@/lib/hooks/useCuenta'
+import { useCuenta, calcularResumen, type PagoInput, type ResultadoFiscal } from '@/lib/hooks/useCuenta'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
 import { useOnlineStatus } from '@/lib/offline/useOnlineStatus'
 import type { Mesa, CartaItem, EstadoMesa, TipoModificador, Comanda, EstadoComandaItem } from '@/types'
@@ -223,7 +223,7 @@ interface LineaPago {
 // ── Ticket post-cobro ────────────────────────────────────────────────────────
 
 function TicketCobro({
-  mesa, resumenLineas, subtotal, propinaMonto, total, pagos, vuelto, onVolver,
+  mesa, resumenLineas, subtotal, propinaMonto, total, pagos, vuelto, fiscal, onVolver,
 }: {
   mesa: Mesa
   resumenLineas: { nombre: string; cantidad: number; subtotal: number }[]
@@ -232,6 +232,7 @@ function TicketCobro({
   total: number
   pagos: { nombre: string; monto: number }[]
   vuelto: number
+  fiscal?: ResultadoFiscal
   onVolver: () => void
 }) {
   const hora = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
@@ -287,6 +288,58 @@ function TicketCobro({
             </div>
           )}
         </div>
+
+        {/* Comprobante fiscal */}
+        {fiscal && fiscal.estado === 'emitido' && fiscal.cae && (
+          <div style={{ background: '#1a1a1a', borderRadius: 14, padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <span className="material-symbols-outlined" style={{ color: '#4caf50', fontSize: 20 }}>verified</span>
+              <span style={{ color: '#4caf50', fontWeight: 700, fontSize: 14 }}>Comprobante electrónico emitido</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ color: '#aaa', fontSize: 13 }}>CAE</span>
+              <span style={{ color: '#fff', fontSize: 13, fontFamily: 'monospace' }}>{fiscal.cae}</span>
+            </div>
+            {fiscal.numero && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ color: '#aaa', fontSize: 13 }}>Nro. comprobante</span>
+                <span style={{ color: '#fff', fontSize: 13 }}>{fiscal.numero}</span>
+              </div>
+            )}
+            {fiscal.cae_vencimiento && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: fiscal.qr_data ? 12 : 0 }}>
+                <span style={{ color: '#aaa', fontSize: 13 }}>Vto. CAE</span>
+                <span style={{ color: '#aaa', fontSize: 13 }}>
+                  {`${fiscal.cae_vencimiento.slice(6,8)}/${fiscal.cae_vencimiento.slice(4,6)}/${fiscal.cae_vencimiento.slice(0,4)}`}
+                </span>
+              </div>
+            )}
+            {/* QR AFIP */}
+            {fiscal.qr_data && (
+              <div style={{ textAlign: 'center' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(fiscal.qr_data)}`}
+                  alt="QR AFIP"
+                  width={160}
+                  height={160}
+                  style={{ display: 'block', margin: '0 auto', borderRadius: 8 }}
+                />
+                <p style={{ color: '#555', fontSize: 11, marginTop: 6 }}>Escanear para verificar en AFIP</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {fiscal && fiscal.estado === 'pendiente' && (
+          <div style={{ background: '#1a1010', borderRadius: 14, padding: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className="material-symbols-outlined" style={{ color: '#e57373', fontSize: 20 }}>warning</span>
+            <div>
+              <p style={{ color: '#e57373', fontWeight: 600, fontSize: 14 }}>Comprobante fiscal pendiente</p>
+              <p style={{ color: '#aaa', fontSize: 12 }}>Se emitirá automáticamente cuando ARCA esté disponible</p>
+            </div>
+          </div>
+        )}
       </div>
 
       <div style={{ padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0 }}>
@@ -328,6 +381,7 @@ function VistaCuenta({
     pagos: { nombre: string; monto: number }[]
     vuelto: number
     propinaMonto: number
+    fiscal?: ResultadoFiscal
   } | null>(null)
 
   const propinaMonto = useMemo(() => {
@@ -391,11 +445,12 @@ function VistaCuenta({
         medio_id: l.medio_id,
         monto: Number(l.monto) || 0,
       }))
-      await cobrarCuenta({ cuentaId, mesaId: mesa.id, pagos, propina: propinaMonto, total: resumen.subtotal })
+      const { fiscal } = await cobrarCuenta({ cuentaId, mesaId: mesa.id, pagos, propina: propinaMonto, total: resumen.subtotal })
       setResultadoCobro({
         pagos: lineasPago.map(l => ({ nombre: mediosMap[l.medio_id] ?? 'Pago', monto: Number(l.monto) || 0 })),
         vuelto,
         propinaMonto,
+        fiscal,
       })
       setSubVista('ticket')
     } catch (e: unknown) {
@@ -416,6 +471,7 @@ function VistaCuenta({
         total={total}
         pagos={resultadoCobro.pagos}
         vuelto={resultadoCobro.vuelto}
+        fiscal={resultadoCobro.fiscal}
         onVolver={onCobrado}
       />
     )

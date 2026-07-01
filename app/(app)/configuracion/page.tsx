@@ -176,14 +176,23 @@ export default function ConfiguracionPage() {
             <h1 className="text-lg font-bold text-white">Configuración</h1>
             <p className="text-[11px] text-white/60">Equipo y permisos por rol</p>
           </div>
-          <button
-            onClick={abrirGuiaInicio}
-            className="flex items-center gap-1.5 cursor-pointer"
-            style={{ background: 'rgba(255,255,255,.16)', border: 'none', borderRadius: 999, padding: '6px 12px', color: '#fff', fontSize: 12, fontWeight: 700 }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>rocket_launch</span>
-            Guía de inicio
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => router.push('/configuracion/fiscal')}
+              style={{ background: 'rgba(255,255,255,.16)', border: 'none', borderRadius: 999, padding: '6px 12px', color: '#fff', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>receipt_long</span>
+              Fiscal
+            </button>
+            <button
+              onClick={abrirGuiaInicio}
+              className="flex items-center gap-1.5 cursor-pointer"
+              style={{ background: 'rgba(255,255,255,.16)', border: 'none', borderRadius: 999, padding: '6px 12px', color: '#fff', fontSize: 12, fontWeight: 700 }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>rocket_launch</span>
+              Guía de inicio
+            </button>
+          </div>
         </div>
       </div>
 

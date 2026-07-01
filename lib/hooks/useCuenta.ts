@@ -47,9 +47,19 @@ export interface PagoInput {
   monto: number
 }
 
+export interface ResultadoFiscal {
+  estado:          'emitido' | 'pendiente' | 'rechazado'
+  cae?:            string
+  cae_vencimiento?: string
+  numero?:         number
+  qr_data?:        string
+  error?:          string
+  comprobante_id?: string
+}
+
 /**
  * Cierra una cuenta: registra pagos, propina, actualiza cuenta → cerrada,
- * actualiza mesa → libre.
+ * actualiza mesa → libre. Luego dispara emisión fiscal en paralelo (fire-and-forget).
  */
 export function useCuenta() {
   const RESTAURANTE_ID = useRestauranteId()
@@ -60,8 +70,8 @@ export function useCuenta() {
     mesaId: string
     pagos: PagoInput[]
     propina: number
-    total: number
-  }) {
+    total: number    // subtotal (sin propina)
+  }): Promise<{ fiscal?: ResultadoFiscal }> {
     const { cuentaId, mesaId, pagos, propina, total } = params
     try {
       // 1. Registrar pagos
@@ -71,16 +81,17 @@ export function useCuenta() {
             cuenta_id: cuentaId,
             medio_id: p.medio_id,
             monto: p.monto,
-            propina: propina / pagos.length,  // distribuir propina entre los pagos
+            propina: propina / pagos.length,
           }))
         )
         if (pagosError) throw pagosError
       }
 
       // 2. Cerrar la cuenta
+      const totalConPropina = total + propina
       const { error: cuentaError } = await supabase
         .from('cuentas')
-        .update({ estado: 'cerrada', total: total + propina, cerrada_at: new Date().toISOString() })
+        .update({ estado: 'cerrada', total: totalConPropina, cerrada_at: new Date().toISOString() })
         .eq('id', cuentaId)
       if (cuentaError) throw cuentaError
 
@@ -88,6 +99,30 @@ export function useCuenta() {
       const { error: mesaError } = await supabase.from('mesas').update({ estado: 'libre' }).eq('id', mesaId)
       if (mesaError) throw mesaError
 
+      // 4. Emisión fiscal (no bloquea el cobro — si falla queda 'pendiente' en DB)
+      let fiscal: ResultadoFiscal | undefined
+      try {
+        const resp = await fetch('/api/fiscal/emitir', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            cuenta_id: cuentaId,
+            total:     totalConPropina,
+            subtotal:  total,
+            propina,
+          }),
+        })
+        if (resp.ok) {
+          fiscal = await resp.json() as ResultadoFiscal
+        } else {
+          fiscal = { estado: 'pendiente', error: `HTTP ${resp.status}` }
+        }
+      } catch (fe: unknown) {
+        const msg = fe instanceof Error ? fe.message : 'Error fiscal'
+        fiscal = { estado: 'pendiente', error: msg }
+      }
+
+      return { fiscal }
     } catch (e: unknown) {
       throw new Error(errMsg(e, 'Error al cobrar la cuenta'))
     }
