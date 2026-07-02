@@ -166,6 +166,19 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const [toast, setToast] = useState<string | null>(null)
   const [pendientesApertura, setPendientesApertura] = useState<MisePlaceItem[]>([])
   const [regCierreAnteriorMap, setRegCierreAnteriorMap] = useState<Record<string, number | null>>({})
+  const [modoControl, setModoControl] = useState(false)
+
+  useEffect(() => {
+    setModoControl(localStorage.getItem('checklist_modo_control') === 'true')
+  }, [])
+
+  function toggleModoControl() {
+    setModoControl(prev => {
+      const next = !prev
+      localStorage.setItem('checklist_modo_control', String(next))
+      return next
+    })
+  }
 
   const fecha = getToday()
   const turno = tab === 'rutina' ? 'apertura' : tab
@@ -531,6 +544,19 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
             <div style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>{PLAZA_LABELS[plaza]}</div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', marginTop: 1 }}>{fmtFecha(fecha)}</div>
           </div>
+          <button
+            onClick={toggleModoControl}
+            title={modoControl ? 'Modo Control activo — tap para volver a OPS' : 'Activar Modo Control'}
+            style={{
+              ...btnReset,
+              background: modoControl ? 'rgba(255,255,255,.9)' : 'rgba(255,255,255,.1)',
+              borderRadius: 8, padding: 6, marginRight: 4,
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18, color: modoControl ? 'var(--navy)' : 'rgba(255,255,255,.7)' }}>
+              fact_check
+            </span>
+          </button>
           <button onClick={() => setShowSectionEditor(true)} style={{ ...btnReset, background: 'rgba(255,255,255,.1)', borderRadius: 8, padding: 6 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'rgba(255,255,255,.7)' }}>settings</span>
           </button>
@@ -573,6 +599,19 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                 {PLAZA_LABELS[p]}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* Modo control banner */}
+        {modoControl && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6,
+            background: 'rgba(255,255,255,.12)', borderRadius: 8, padding: '5px 10px',
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'rgba(255,255,255,.7)' }}>fact_check</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.7)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
+              Modo Control — solo tildá lo que está listo
+            </span>
           </div>
         )}
 
@@ -687,9 +726,9 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                   {secItems.map(item => (
                     <div
                       key={item.id}
-                      onTouchStart={e => startLongPress(item, e.touches[0].clientY)}
-                      onTouchMove={cancelLongPress}
-                      onTouchEnd={cancelLongPress}
+                      onTouchStart={modoControl ? undefined : e => startLongPress(item, e.touches[0].clientY)}
+                      onTouchMove={modoControl ? undefined : cancelLongPress}
+                      onTouchEnd={modoControl ? undefined : cancelLongPress}
                       style={{
                         opacity: dragging?.item.id === item.id ? 0.35 : 1,
                         transition: 'opacity .15s',
@@ -698,36 +737,69 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                         WebkitUserSelect: 'none',
                       }}
                     >
-                      <ProductoMiseCard
-                        item={item}
-                        reg={regMap[item.id]}
-                        fecha={fecha}
-                        turno={turno}
-                        recetaInfo={item.receta_id ? recetaInfoMap[item.receta_id] : undefined}
-                        platoPlazo={item.receta_id ? (platoPlazoMap[item.receta_id] ?? []) : []}
-                        hasTareaPendiente={tareasHoySet.has(item.nombre.toLowerCase())}
-                        rendimientoPromedio={item.receta_id ? rendimientoMap[item.receta_id] : null}
-                        regCierreAnterior={regCierreAnteriorMap[item.id] ?? null}
-                        onUpsert={handleMiseUpsert}
-                        onCrearTarea={handleCrearTarea}
-                        onPrioChange={async (i, prio) => {
-                          await actualizarItem(i.id, { prioridad: prio })
-                          if ((prio === 'sp' || prio === 'p') && !tareasHoySet.has(i.nombre.toLowerCase())) {
-                            const plazoPlazas = i.receta_id ? (platoPlazoMap[i.receta_id] ?? []) : []
-                            const primaryPlaza = plazoPlazas.length > 0 ? plazoPlazas[0].plaza : i.plaza
-                            await handleCrearTarea({
-                              titulo: i.nombre,
-                              seccion: PLAZA_TO_SECCION[primaryPlaza] ?? 'general',
-                              prioridad: prio,
-                              cantidad: i.cantidad > 0 ? i.cantidad : null,
-                              receta_id: i.receta_id ?? null,
-                              plaza: primaryPlaza,
-                              plazas: plazoPlazas,
-                            })
-                          }
-                        }}
-                        onDelete={eliminarItem}
-                      />
+                      {modoControl ? (
+                        <button
+                          onClick={() => handleMiseUpsert(item.id, fecha, turno, { completado: !regMap[item.id]?.completado })}
+                          style={{
+                            width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                            padding: '10px 4px', background: 'none', border: 'none', cursor: 'pointer',
+                            fontFamily: 'inherit', textAlign: 'left',
+                            borderBottom: '1px solid var(--border)',
+                            WebkitTapHighlightColor: 'transparent',
+                          }}
+                        >
+                          <span className="material-symbols-outlined" style={{
+                            fontSize: 22, flexShrink: 0,
+                            color: regMap[item.id]?.completado ? '#22c55e' : 'var(--border)',
+                            transition: 'color .15s',
+                          }}>
+                            {regMap[item.id]?.completado ? 'check_circle' : 'radio_button_unchecked'}
+                          </span>
+                          <span style={{
+                            flex: 1, fontSize: 14, fontWeight: 600, color: 'var(--text-1)',
+                            textDecoration: regMap[item.id]?.completado ? 'line-through' : 'none',
+                            opacity: regMap[item.id]?.completado ? 0.55 : 1,
+                          }}>
+                            {item.nombre}
+                          </span>
+                          {item.cantidad > 0 && (
+                            <span style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0 }}>
+                              {item.cantidad} {item.unidad}
+                            </span>
+                          )}
+                        </button>
+                      ) : (
+                        <ProductoMiseCard
+                          item={item}
+                          reg={regMap[item.id]}
+                          fecha={fecha}
+                          turno={turno}
+                          recetaInfo={item.receta_id ? recetaInfoMap[item.receta_id] : undefined}
+                          platoPlazo={item.receta_id ? (platoPlazoMap[item.receta_id] ?? []) : []}
+                          hasTareaPendiente={tareasHoySet.has(item.nombre.toLowerCase())}
+                          rendimientoPromedio={item.receta_id ? rendimientoMap[item.receta_id] : null}
+                          regCierreAnterior={regCierreAnteriorMap[item.id] ?? null}
+                          onUpsert={handleMiseUpsert}
+                          onCrearTarea={handleCrearTarea}
+                          onPrioChange={async (i, prio) => {
+                            await actualizarItem(i.id, { prioridad: prio })
+                            if ((prio === 'sp' || prio === 'p') && !tareasHoySet.has(i.nombre.toLowerCase())) {
+                              const plazoPlazas = i.receta_id ? (platoPlazoMap[i.receta_id] ?? []) : []
+                              const primaryPlaza = plazoPlazas.length > 0 ? plazoPlazas[0].plaza : i.plaza
+                              await handleCrearTarea({
+                                titulo: i.nombre,
+                                seccion: PLAZA_TO_SECCION[primaryPlaza] ?? 'general',
+                                prioridad: prio,
+                                cantidad: i.cantidad > 0 ? i.cantidad : null,
+                                receta_id: i.receta_id ?? null,
+                                plaza: primaryPlaza,
+                                plazas: plazoPlazas,
+                              })
+                            }
+                          }}
+                          onDelete={eliminarItem}
+                        />
+                      )}
                     </div>
                   ))}
                   <button

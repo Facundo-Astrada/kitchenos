@@ -72,7 +72,7 @@ export interface PlatoReceta {
   created_at?: string | null
 }
 
-// DB: recetas (id, nombre, categoria, porciones, tiempo_min, precio_venta, procedimiento, status, activa, restaurante_id, created_at, updated_at)
+// DB: recetas (id, nombre, categoria, porciones, tiempo_min, precio_venta, procedimiento, status, activa, foto_url, peso_total_g, peso_escurrido_g, restaurante_id, created_at, updated_at)
 export interface Receta {
   id: string
   nombre: string
@@ -83,6 +83,9 @@ export interface Receta {
   procedimiento?: string | null
   status: string
   activa?: boolean | null
+  foto_url?: string | null
+  peso_total_g?: number | null
+  peso_escurrido_g?: number | null
   restaurante_id: string
   created_at: string
   updated_at?: string | null

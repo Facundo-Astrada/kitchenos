@@ -27,6 +27,22 @@ Varios hooks tienen `useCallback(…, [])` cuando capturan `RESTAURANTE_ID`. Agr
 
 ---
 
+### 3. Fiscal ARCA — homologación y prueba end-to-end
+Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/emitir/route.ts`). Falta:
+- Certificado real de ARCA para homologación (`.crt/.key` del contribuyente).
+- Probar `emitir(comanda, cuenta, config_fiscal)` contra servidor de testing de AFIP.
+- Configurar `config_fiscal.wsaa_url` + `wsfev1_url` con URLs de prod ARCA.
+- Almacenar token/sign WSAA con caché en Supabase (evita un auth por comprobante).
+**Status:** ⏳ Pendiente — necesita credenciales reales de ARCA.
+
+### 3b. ESC/POS client en salón
+El endpoint `POST /api/ingest/escpos?mode=generate` ya genera bytes en base64. Falta el cliente en `salon/page.tsx`:
+- Botón "Imprimir ticket" después de cobrar → `fetch /api/ingest/escpos` → `Buffer.from(base64, 'base64')` → enviar bytes vía WebUSB (impresoras USB) o Web Bluetooth (bluetooth thermal).
+- Fallback: link "Descargar .bin" para impresoras conectadas por software.
+**Status:** ⏳ Pendiente — endpoint listo, falta integración UI + driver WebUSB/Bluetooth.
+
+---
+
 ## 🟡 Medio — Roadmap: Planes y Stripe
 
 ### 6. Estructura de planes $60 / $99
@@ -106,6 +122,7 @@ Los scripts de `scripts/*.mjs` tienen el `SUPABASE_MANAGEMENT_TOKEN` en texto pl
 
 | # | Descripción | Cuándo |
 |---|---|---|
+| **Fase 7 Salón/KDS: config + 86 + merma auto + métricas + modo mozo + prep-list viva + ESC/POS** | Config salón (`/salon/config`): CRUD mesas/medios de pago/estaciones KDS. 86 bidireccional: botón en KDS → `POST /api/carta/86` → `carta_items.disponible=false`. Merma automática: `POST /api/salon/merma-auto` (comanda_items→plato_recetas→ingredientes→`productos.stock_actual` + insert `merma`), llamado fire-and-forget desde `useCuenta.cobrarYCerrar`. Métricas KDS: `MetricasPanel` con avg ticket-time, bumps del día, pendientes, en preparación — computa desde `tarjetas`/`comandasRecientes`. Modo mozo mejorado: category tabs filtrados + link a config. Prep-list viva: `POST /api/salon/prep-list-update` incrementa `checklist_items.demanda_viva` fire-and-forget al enviar comanda. ESC/POS real: `POST /api/ingest/escpos` modo `generate` → bytes ESC/POS en base64 para `TicketCocina` y `TicketCliente` (ancho 42, CP437, GS V cut). | 1 jul 2026 |
 | **Fase 2 Walking Skeleton — comanda → KDS → bump (end-to-end)** | `carta_items.estacion_default_id` + seed ruteo El Rescoldo. Hook `useComandas` (SWR+Realtime+eventos_cocina). Vista Salón: mapa de mesas, cuenta, comanda con modificadores/notas, enviar. Vista KDS: tarjetas por comanda, cronómetro ticket-time con colores, bump por ítem y comanda. Reflejo tiempo real en salón (panel "Pedido en curso"). Offline Opción A: SW cachea GETs de Supabase, bumps en cola IndexedDB, sync al reconectar, banner sin-conexión. Playwright e2e setup + test camino feliz. | 30 jun 2026 |
 | **Fase 1 Fundación — Salón + KDS + Cobro + Fiscal** | 12 tablas nuevas (comandas/items/modificadores, estaciones, eventos_cocina, mesas, cuentas, medios_pago, pagos, config_fiscal, comprobantes, comprobante_items) con RLS multi-tenant. Tipos TypeScript. Adapter fiscal (interfaz ProveedorFiscal + stub pendiente-de-emisión). Endpoint ESC/POS stub. Vitest + máquina de estados comanda (13 tests). CI GitHub Actions. Regla UI cocina en docs. Route group `(servicio)` (layout full-screen + esqueletos salon/kds). Seed El Rescoldo: 5 estaciones, 12 mesas con pos_x/y, 5 medios de pago, config_fiscal RI. | 30 jun 2026 |
 | Stock: import de planilla + carrito de compras + rediseño de tabla + filtros | **Import planilla** (`/api/stock/import-planilla`): sube Excel multi-hoja, una llamada Haiku **por hoja en paralelo** (evita truncamiento de JSON con archivos grandes), extrae stock/mín/crít, fuzzy match exacto/similar/nuevo, preview con checkboxes → UPDATE solo campos de stock + INSERT nuevos. **Carrito de compras**: botón por fila (cantidad sugerida = mín−actual), carrito flotante con total, bottom sheet agrupado por proveedor → crea un pedido (borrador) por proveedor. **Rediseño tabla** (auditoría ui-auditor): anchos en %, columna "Nivel" (mini-barra stock vs mínimo), celda Stock horizontal alineada (número \| mín/crít con sub-columnas de ancho fijo), acciones horizontales, **tabla unificada con thead sticky** (fix desfase header/body por scrollbar). **Filtros**: multi-categoría + multi-proveedor (`MultiSelectFiltro`), mín/crít editable inline. **Stockear**: botón "Corregir: \<anterior\>" claro + fix z-index (overlay 1000 sobre BottomNav). Commits c5284ca→e37520d. | 28 jun 2026 |

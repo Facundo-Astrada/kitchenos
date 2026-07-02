@@ -147,6 +147,35 @@ export function useRecetas() {
         return [nueva, ...(prev ?? [])]
       }, { revalidate: false })
       mutate() // background sync
+
+      // Auto-link ingredientes al stock (exacto + parcial) en background
+      if (ingredientesData && ingredientesData.length > 0) {
+        fetch('/api/recetas/auto-link-ingredientes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        })
+          .then(r => r.json())
+          .then(({ matches = [] }) => {
+            const toApply = matches.filter((m: { confianza: string }) =>
+              m.confianza === 'exacto' || m.confianza === 'parcial'
+            )
+            if (!toApply.length) return
+            return fetch('/api/recetas/auto-link-ingredientes', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                links: toApply.map((m: { ingrediente_ids: string[]; producto_id: string }) => ({
+                  ingrediente_ids: m.ingrediente_ids,
+                  producto_id: m.producto_id,
+                })),
+              }),
+            })
+          })
+          .then(() => mutate())
+          .catch(e => console.warn('[useRecetas] auto-link silencioso:', e))
+      }
+
       return newId
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al agregar receta'

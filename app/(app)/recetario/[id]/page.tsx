@@ -7,6 +7,7 @@ import { useStock } from '@/lib/hooks/useStock'
 import { useProduccionRegistros, type ProduccionRegistro } from '@/lib/hooks/useProduccionRegistros'
 import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
 import type { Ingrediente } from '@/types'
+import PhotoPicker from '@/components/ui/PhotoPicker'
 
 const UNIDADES = ['kg', 'g', 'L', 'ml', 'unidad', 'docena', 'caja']
 
@@ -44,6 +45,31 @@ function calcPesoNetos(ingredientes: { cantidad: number; unidad: string; merma_p
 function formatPeso(gramos: number): string {
   if (gramos >= 1000) return `${(gramos / 1000).toFixed(gramos % 1000 === 0 ? 0 : 1)}kg/u`
   return `${gramos}g/u`
+}
+
+// Smart display: siempre muestra la unidad más legible independiente de cómo está guardado.
+// 0.005 kg → 5g | 1500 g → 1.5kg | 0.05 l → 50ml | 2000 ml → 2l
+function smartQty(qty: number, unit: string): { qty: string; unit: string } {
+  const u = (unit || '').toLowerCase().trim()
+  if ((u === 'kg' || u === 'kgs' || u === 'kilo') && qty < 0.1 && qty > 0) {
+    const g = qty * 1000
+    return { qty: g % 1 === 0 ? String(g) : g.toFixed(1), unit: 'g' }
+  }
+  if (u === 'g' && qty >= 1000) {
+    const kg = qty / 1000
+    return { qty: kg % 1 === 0 ? String(kg) : kg.toFixed(2).replace(/\.?0+$/, ''), unit: 'kg' }
+  }
+  if ((u === 'l' || u === 'lt' || u === 'lts') && qty < 0.1 && qty > 0) {
+    const ml = qty * 1000
+    return { qty: ml % 1 === 0 ? String(ml) : ml.toFixed(1), unit: 'ml' }
+  }
+  if (u === 'ml' && qty >= 1000) {
+    const l = qty / 1000
+    return { qty: l % 1 === 0 ? String(l) : l.toFixed(2).replace(/\.?0+$/, ''), unit: 'l' }
+  }
+  // Default: format removing trailing zeros
+  const fmtQty = qty % 1 === 0 ? String(qty) : qty.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
+  return { qty: fmtQty, unit }
 }
 
 function fcColor(pct: number) {
@@ -191,6 +217,8 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
   // Edit receta modal
   const [editModal, setEditModal] = useState(false)
   const [editForm, setEditForm] = useState({ nombre: '', categoria: '', porciones: '', precio_venta: '', tiempo_min: '', procedimiento: '' })
+  const [editPesoTotal, setEditPesoTotal] = useState('')
+  const [editPesoEscurrido, setEditPesoEscurrido] = useState('')
   const [editSaving, setEditSaving] = useState(false)
 
   // Delete confirm
@@ -419,11 +447,15 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
       tiempo_min: String(receta.tiempo_min),
       procedimiento: receta.procedimiento ?? '',
     })
+    setEditPesoTotal(receta.peso_total_g != null ? String(receta.peso_total_g) : '')
+    setEditPesoEscurrido(receta.peso_escurrido_g != null ? String(receta.peso_escurrido_g) : '')
     setEditModal(true)
   }
   async function handleSaveReceta() {
     setEditSaving(true)
     try {
+      const pesoTotalV = parseFloat(editPesoTotal.replace(',', '.'))
+      const pesoEscurridoV = parseFloat(editPesoEscurrido.replace(',', '.'))
       await actualizarReceta(id, {
         nombre: editForm.nombre.trim(),
         categoria: editForm.categoria.trim() || 'Otros',
@@ -431,6 +463,8 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
         precio_venta: parseFloat(editForm.precio_venta) || 0,
         tiempo_min: parseInt(editForm.tiempo_min) || 0,
         procedimiento: editForm.procedimiento,
+        peso_total_g: isNaN(pesoTotalV) ? null : pesoTotalV,
+        peso_escurrido_g: isNaN(pesoEscurridoV) ? null : pesoEscurridoV,
       })
       setEditModal(false)
     } catch { /* ignore */ }
@@ -489,6 +523,14 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
 
       {/* ── Body: scroll continuo ── */}
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 0 80px' }}>
+
+        {/* Foto de la receta */}
+        {receta.foto_url && (
+          <div style={{ position: 'relative', width: '100%', maxHeight: 220, overflow: 'hidden' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={receta.foto_url} alt={receta.nombre} style={{ width: '100%', height: 220, objectFit: 'cover', display: 'block' }} />
+          </div>
+        )}
 
         {/* Escalado por porciones (rendimiento dinámico) */}
         {(receta.porciones ?? 0) > 0 && (
@@ -626,11 +668,18 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                     ) : (() => {
                       const baseUnit = i.unidad?.toLowerCase() ?? ''
                       const pair = UNIT_PAIRS[baseUnit]
-                      const displayQty = unitToggleGlobal && pair ? scaled * pair.factor : scaled
-                      const displayUnit = unitToggleGlobal && pair ? pair.target : i.unidad
-                      const fmtQty = displayQty % 1 === 0
-                        ? displayQty.toFixed(0)
-                        : displayQty.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
+                      // Con el toggle global: fuerza conversión kg→g / l→ml
+                      // Sin toggle: usa smart formatting (muestra la unidad más legible)
+                      let displayQty: string
+                      let displayUnit: string
+                      if (unitToggleGlobal && pair) {
+                        displayQty = (scaled * pair.factor).toFixed(0)
+                        displayUnit = pair.target
+                      } else {
+                        const smart = smartQty(scaled, i.unidad ?? '')
+                        displayQty = smart.qty
+                        displayUnit = smart.unit
+                      }
                       return (
                         <div
                           onClick={() => handleIngTap(i)}
@@ -646,7 +695,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                             color: isHighlighted ? '#d97706' : 'var(--text-1)',
                             transition: 'color .5s',
                           }}>
-                            {fmtQty}
+                            {displayQty}
                           </span>
                           <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)' }}>{displayUnit}</span>
                           {(i.merma_pct ?? 0) > 0 && (
@@ -863,6 +912,25 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                   </div>
                 )
               })()}
+              {/* Peso escurrido (si fue cargado manualmente) */}
+              {receta.peso_escurrido_g != null && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ padding: '10px', textAlign: 'center', borderRight: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)', fontFamily: "'DM Mono', monospace" }}>
+                      {receta.peso_total_g != null
+                        ? (receta.peso_total_g >= 1000 ? `${(receta.peso_total_g / 1000).toFixed(1)}kg` : `${Math.round(receta.peso_total_g)}g`)
+                        : '—'}
+                    </div>
+                    <div style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase', marginTop: 2 }}>Peso total</div>
+                  </div>
+                  <div style={{ padding: '10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#3b82f6', fontFamily: "'DM Mono', monospace" }}>
+                      {receta.peso_escurrido_g >= 1000 ? `${(receta.peso_escurrido_g / 1000).toFixed(1)}kg` : `${Math.round(receta.peso_escurrido_g)}g`}
+                    </div>
+                    <div style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase', marginTop: 2 }}>Peso escurrido</div>
+                  </div>
+                </div>
+              )}
 
               {/* Per-ingredient cost */}
               {ingsEfectivos.map((i, idx) => {
@@ -1144,6 +1212,27 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
             </div>{/* fin área scrollable */}
             {/* Footer fijo — fuera del scroll */}
             <div style={{ padding: '12px 16px', paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))', borderTop: '1px solid var(--border)', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* Preview de costo en tiempo real */}
+              {ingTipo === 'producto' && (() => {
+                const cantV = parseFloat(ingForm.cantidad.replace(',', '.')) || 0
+                const costoV = parseFloat(ingForm.costo_unitario.replace(',', '.')) || 0
+                const factor = unitConversionFactor(ingForm.unidad, ingForm.unidad_costo || ingForm.unidad)
+                const subtotal = cantV * costoV * factor
+                const mermaG = toGramos(cantV, ingForm.unidad)
+                const netoG = mermaG > 0 ? mermaG * (1 - (parseFloat(ingForm.merma_pct) || 0) / 100) : 0
+                if (cantV <= 0 || costoV <= 0) return null
+                return (
+                  <div style={{ background: 'rgba(67,97,160,.06)', border: '1px solid rgba(67,97,160,.15)', borderRadius: 8, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-2)' }}>
+                      <span style={{ fontWeight: 700 }}>{cantV} {ingForm.unidad}</span>
+                      {netoG > 0 && netoG < mermaG && <span style={{ color: 'var(--text-3)' }}> → {netoG >= 1000 ? `${(netoG / 1000).toFixed(2)}kg` : `${Math.round(netoG)}g`} neto</span>}
+                    </div>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--navy)', fontFamily: "'DM Mono', monospace" }}>
+                      ${subtotal.toFixed(0)}
+                    </span>
+                  </div>
+                )
+              })()}
               <button onClick={handleSaveIng} disabled={ingSaving} style={{ width: '100%', background: ingSaving ? 'var(--border)' : 'var(--navy)', border: 'none', borderRadius: 10, padding: '13px', fontSize: 14, fontWeight: 700, color: ingSaving ? 'var(--text-3)' : '#fff', cursor: ingSaving ? 'default' : 'pointer', fontFamily: 'inherit' }}>
                 {ingSaving ? 'Guardando…' : editIng ? 'Guardar cambios' : 'Agregar ingrediente'}
               </button>
@@ -1168,10 +1257,22 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
               <button onClick={() => setDeleteTarget('receta')} style={{ background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 8, padding: '5px 10px', fontSize: 11, fontWeight: 700, color: '#ef4444', cursor: 'pointer', fontFamily: 'inherit' }}>Eliminar</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={lbl}>Nombre</span>
-                <input value={editForm.nombre} onChange={e => setEditForm(f => ({ ...f, nombre: e.target.value }))} style={inp} />
-              </label>
+              {/* Foto */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <PhotoPicker
+                  currentUrl={receta?.foto_url}
+                  path={`recetas/${id}`}
+                  size={80}
+                  onUploaded={url => actualizarReceta(id, { foto_url: url })}
+                  onRemoved={() => actualizarReceta(id, { foto_url: null })}
+                />
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={lbl}>Nombre</span>
+                    <input value={editForm.nombre} onChange={e => setEditForm(f => ({ ...f, nombre: e.target.value }))} style={inp} />
+                  </label>
+                </div>
+              </div>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={lbl}>Categoría</span>
                 <select value={editForm.categoria} onChange={e => setEditForm(f => ({ ...f, categoria: e.target.value }))} style={{ ...inp, appearance: 'auto' as const }}>
@@ -1195,6 +1296,31 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={lbl}>Precio venta $</span>
                   <input type="number" min="0" value={editForm.precio_venta} onChange={e => setEditForm(f => ({ ...f, precio_venta: e.target.value }))} style={inp} />
+                </label>
+              </div>
+              {/* Pesos manuales */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={lbl}>Peso total (g)</span>
+                  <input
+                    type="text" inputMode="decimal"
+                    value={editPesoTotal}
+                    onChange={e => setEditPesoTotal(e.target.value.replace(/[^0-9.,]/g, ''))}
+                    placeholder="Ej: 850"
+                    style={inp}
+                  />
+                  <span style={{ fontSize: 9, color: 'var(--text-3)' }}>Peso bruto de la receta completa</span>
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={lbl}>Peso escurrido (g)</span>
+                  <input
+                    type="text" inputMode="decimal"
+                    value={editPesoEscurrido}
+                    onChange={e => setEditPesoEscurrido(e.target.value.replace(/[^0-9.,]/g, ''))}
+                    placeholder="Ej: 620"
+                    style={inp}
+                  />
+                  <span style={{ fontSize: 9, color: 'var(--text-3)' }}>Tras cocción / escurrido / moldeo</span>
                 </label>
               </div>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

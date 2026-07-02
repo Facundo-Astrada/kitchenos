@@ -105,6 +105,24 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 
 ## 4. Implementado en Últimas Sesiones
 
+### Sesión 2026-07-01 — Fase 7: Config salón · 86 bidireccional · Merma auto · Métricas KDS · Modo mozo · Prep-list viva · ESC/POS real
+
+1. **Config salón** (`app/(servicio)/salon/config/page.tsx`): 3 tabs CRUD — Mesas (numero/sector/capacidad), Medios de pago (nombre/activo), Estaciones KDS (nombre/pantalla_asignada). `MesaForm` a nivel de módulo para evitar pérdida de foco. Accesible desde ícono `settings` en el mapa de mesas.
+
+2. **86 bidireccional** (`app/api/carta/86/route.ts`): `POST { carta_item_id, disponible }` → UPDATE `carta_items`. Usa `createAdminClient()` (bypasea RLS). KDS: botón "86" por ítem (con confirm dialog) → invalida el ítem globalmente para el salón.
+
+3. **Merma automática** (`app/api/salon/merma-auto/route.ts`): cadena `comandas → comanda_items → plato_recetas → ingredientes → productos.stock_actual` + insert `merma` para trazabilidad. Llamado fire-and-forget en `useCuenta.cobrarYCerrar` (paso 4 del flujo de cobro, nunca bloquea).
+
+4. **Métricas KDS** (`MetricasPanel` en `kds/page.tsx`): avg ticket-time (segundos), bumps del día, comandas pendientes, comandas en preparación. Panel deslizable desde header con `bar_chart`.
+
+5. **Modo mozo mejorado** (`salon/page.tsx`): category tabs filtrados (scroll horizontal, derivados de `cartaItems`), link a `/salon/config` desde el mapa. Fire-and-forget a `prep-list-update` al enviar comanda.
+
+6. **Prep-list viva** (`app/api/salon/prep-list-update/route.ts`): incrementa `checklist_items.demanda_viva` según carta_item → receta → checklist_item. Falla silenciosamente si la columna no existe. Migración aplicada via SQL Editor: `ALTER TABLE checklist_items ADD COLUMN IF NOT EXISTS demanda_viva INTEGER DEFAULT 0;` + `NOTIFY pgrst, 'reload schema';`.
+
+7. **ESC/POS real** (`app/api/ingest/escpos/route.ts`): modo `generate` reemplaza el stub. Genera bytes binarios ESC/POS para `TicketCocina` (** COCINA **, mesa, items bold, hora) y `TicketCliente` (header, itemizado, totales, pagos, vuelto, bloque CAE/QR si hay fiscal). Ancho 42 chars, CP437, GS V cut. Devuelve base64. Cliente WebUSB/Bluetooth pendiente.
+
+**Learnings:** `createAdminClient()` (no `createClient`) es el export correcto de `lib/supabase/admin.ts`. Ver hooks.md gotcha #3.
+
 ### Sesión 2026-06-30 (cont.) — Fase 2 Walking Skeleton: comanda → KDS → bump
 
 **Plan ejecutado:** `docs/gestion salon KOS/PLAN-FASE-2.md` — 9 commits atómicos, walking skeleton completo end-to-end.

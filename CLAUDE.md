@@ -15,7 +15,7 @@ git push             # deploy → GitHub (Facundo-Astrada/kitchenos, branch main
 
 Si Vercel pide credenciales: `git push https://Facundo-Astrada:<PAT>@github.com/Facundo-Astrada/kitchenos.git main`
 
-No hay tests. Producción: https://kos-app-one.vercel.app | Credenciales test: `admin@elrescoldo.com / kitchenos2026`
+Tests: `npm test` (Vitest) · `npm run test:e2e` (Playwright, requiere dev server + `npx playwright install chromium`) · CI en GitHub Actions. Producción: https://kos-app-one.vercel.app | Credenciales test: `admin@elrescoldo.com / kitchenos2026`
 
 ---
 

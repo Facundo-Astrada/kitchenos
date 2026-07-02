@@ -6,7 +6,9 @@
 
 2. **Los errores de Supabase NO son instancias de `Error`.** Son objetos `{ message, code, details }`. Un `catch (e) { e instanceof Error ? e.message : 'desconocido' }` traga el mensaje real → siempre "desconocido". Extraer así: `const msg = e instanceof Error ? e.message : (e && typeof e === 'object' && 'message' in e) ? String(e.message) : 'desconocido'`.
 
-3. **Insert directo no actualiza el SWR de otro hook.** Si insertás con `supabase.from(...).insert()` directo (no vía la función del hook), el cache SWR de `useTareas`/etc. solo se entera por el **realtime** (1-3 s). Para refresco inmediato, llamar `refetch()`/`mutate()` del hook justo después del insert. (Ver `activarMenu` en produccion/page.tsx.)
+3. **`lib/supabase/admin.ts` exporta `createAdminClient`, NO `createClient`.** El admin client tiene un nombre de export distinto al browser/server client. Importar así: `import { createAdminClient } from '@/lib/supabase/admin'`. Importar `{ createClient }` del mismo módulo da error TS "declares 'createClient' locally, but it is not exported". Pasó en los 3 endpoints de Fase 7 salón (jul 2026).
+
+4. **Insert directo no actualiza el SWR de otro hook.** Si insertás con `supabase.from(...).insert()` directo (no vía la función del hook), el cache SWR de `useTareas`/etc. solo se entera por el **realtime** (1-3 s). Para refresco inmediato, llamar `refetch()`/`mutate()` del hook justo después del insert. (Ver `activarMenu` en produccion/page.tsx.)
 
 ## Anti-patrón: funciones internas usadas como JSX en React (jun 2026)
 

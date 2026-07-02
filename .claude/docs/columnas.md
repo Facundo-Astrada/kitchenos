@@ -58,6 +58,8 @@ El código en `lib/hooks/useRecetas.ts` canoniza via `canonUnit()` antes de calc
 
 **Categorías de `productos`**: 16 categorías canónicas: `Carnes`, `Pescados`, `Verduras`, `Frutas`, `Lácteos`, `Panadería`, `Secos`, `Especias`, `Bebidas`, `Aceites`, `Vinagres`, `Conservas`, `Congelados`, `Limpieza`, `Descartables`, `Otros`. Usar siempre estas. Para re-categorizar en bulk: `scripts/recategorizar-productos.mjs --apply` (reglas + Haiku + guard).
 
+| `checklist_items` | `demanda_viva INTEGER DEFAULT 0` — porciones pedidas desde el salón en el turno actual. Incrementado por `POST /api/salon/prep-list-update` cuando se envía una comanda (fire-and-forget). Se reinicia manualmente al aperturar. `ProductoMiseCard` puede usarlo para mostrar cuánto falta producir. | (agregado jul 2026) |
+
 ## Cómo verificar columnas reales
 
 ```bash

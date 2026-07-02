@@ -15,6 +15,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useMenus, type MenuConPreparaciones } from '@/lib/hooks/useMenus'
 import MenusView from './MenusView'
 import ComposicionEditor, { type CompPayload, type CompInicial, PLAZAS_OPS, SECCIONES_OPS } from './ComposicionEditor'
+import PhotoPicker from '@/components/ui/PhotoPicker'
 // ── Helpers ─────────────────────────────────────────────
 const fmtMoney = (n: number) =>
   n > 0 ? `$${n.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—'
@@ -215,6 +216,12 @@ function PlatoCard({
         padding: '14px 14px 8px',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          {item.foto_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={item.foto_url} alt="" style={{
+              width: 52, height: 52, borderRadius: 8, objectFit: 'cover', flexShrink: 0,
+            }} />
+          )}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-1)', lineHeight: 1.3 }}>
               {item.nombre}
@@ -325,12 +332,14 @@ interface FormPlato {
   precio_venta: string
   categoria: CategoriaCartaItem
   receta_id: string
+  foto_url: string
   pendingRecetas: Array<{ recetaId: string; porciones: number }>
 }
 
 const FORM_EMPTY: FormPlato = {
   nombre: '', descripcion: '', precio_venta: '',
   categoria: 'Principales', receta_id: '',
+  foto_url: '',
   pendingRecetas: [],
 }
 
@@ -356,6 +365,7 @@ function FormView({
       precio_venta: String(initialData.precio_venta),
       categoria: initialData.categoria,
       receta_id: initialData.receta_id || '',
+      foto_url: initialData.foto_url || '',
       pendingRecetas: [],
     }
     return { ...FORM_EMPTY }
@@ -467,6 +477,21 @@ function FormView({
       </div>
 
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Foto */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <PhotoPicker
+            currentUrl={form.foto_url || null}
+            path={`carta/${initialData?.id ?? 'new-' + Date.now()}`}
+            size={90}
+            onUploaded={url => setForm(prev => ({ ...prev, foto_url: url }))}
+            onRemoved={() => setForm(prev => ({ ...prev, foto_url: '' }))}
+          />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 2 }}>Foto del plato</div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Se muestra en la carta digital y en la lista</div>
+          </div>
+        </div>
+
         {/* Nombre */}
         <div>
           <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 4, display: 'block' }}>
@@ -3246,6 +3271,7 @@ export default function CartaPage() {
       precio_venta: parseFloat(form.precio_venta),
       categoria: form.categoria,
       receta_id: null,
+      foto_url: form.foto_url || null,
     })
     for (const pr of form.pendingRecetas) {
       await agregarPlatoReceta(newId, pr.recetaId, pr.porciones)
@@ -3262,6 +3288,7 @@ export default function CartaPage() {
       precio_venta: parseFloat(form.precio_venta),
       categoria: form.categoria,
       receta_id: form.receta_id || null,
+      foto_url: form.foto_url || null,
     })
     setToast('Plato actualizado')
     setView('detail')
