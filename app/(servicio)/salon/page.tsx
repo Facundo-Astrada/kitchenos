@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { useMesas } from '@/lib/hooks/useMesas'
 import { useCarta } from '@/lib/hooks/useCarta'
 import { useComandas, type NuevoComandaItem } from '@/lib/hooks/useComandas'
@@ -684,6 +685,7 @@ function VistaCuenta({
 type Vista = 'mapa' | 'mesa' | 'cuenta'
 
 export default function SalonPage() {
+  const router  = useRouter()
   const { mesas, loading: loadingMesas, abrirCuenta, liberarMesa } = useMesas()
   const { items: cartaItems, loading: loadingCarta } = useCarta()
   const { comandas, crearComanda, agregarItems, enviarComanda } = useComandas()
@@ -694,16 +696,26 @@ export default function SalonPage() {
   const [mesaActiva, setMesaActiva] = useState<Mesa | null>(null)
   const [cuentaId, setCuentaId] = useState<string | null>(null)
   const [busqueda, setBusqueda] = useState('')
+  const [categoriaActiva, setCategoriaActiva] = useState<string>('Todos')
   const [itemParaAgregar, setItemParaAgregar] = useState<CartaItem | null>(null)
   const [draft, setDraft] = useState<DraftItem[]>([])
   const [enviando, setEnviando] = useState(false)
   const [pidiendoCuenta, setPidiendoCuenta] = useState(false)
 
+  // Categorías únicas de la carta
+  const categorias = useMemo(() => {
+    const cats = [...new Set(cartaItems.map(i => i.categoria).filter(Boolean))].sort()
+    return ['Todos', ...cats]
+  }, [cartaItems])
+
   const itemsFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
-    if (!q) return cartaItems
-    return cartaItems.filter(i => i.nombre.toLowerCase().includes(q))
-  }, [cartaItems, busqueda])
+    return cartaItems.filter(i => {
+      const matchQ = !q || i.nombre.toLowerCase().includes(q)
+      const matchCat = categoriaActiva === 'Todos' || i.categoria === categoriaActiva
+      return matchQ && matchCat
+    })
+  }, [cartaItems, busqueda, categoriaActiva])
 
   const comandasMesaActiva = useMemo(() => {
     if (!mesaActiva) return []
@@ -768,6 +780,12 @@ export default function SalonPage() {
       }))
       await agregarItems(comandaId, items)
       await enviarComanda(comandaId)
+      // Prep-list viva: fire-and-forget (actualiza demanda en checklist)
+      fetch('/api/salon/prep-list-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: draft.map(d => ({ carta_item_id: d.carta_item_id, cantidad: d.cantidad })) }),
+      }).catch(() => {})
       setDraft([])
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : 'Error al enviar la comanda')
@@ -803,8 +821,12 @@ export default function SalonPage() {
   if (vista === 'mapa') {
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '46px 16px 14px', flexShrink: 0 }}>
+        <div style={{ padding: '46px 16px 14px', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <p style={{ fontSize: 24, fontWeight: 700, color: '#fff' }}>Salón</p>
+          <button onClick={() => router.push('/salon/config')}
+            style={{ minWidth: 44, minHeight: 44, background: '#1a1a1a', borderRadius: 12, border: 'none', color: '#aaa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 24 }}>settings</span>
+          </button>
         </div>
         {mesas.length === 0 ? (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>No hay mesas cargadas</div>
@@ -861,14 +883,30 @@ export default function SalonPage() {
 
       <PedidoEnCursoPanel comandas={comandasMesaActiva} />
 
-      <div style={{ padding: '0 16px 12px', flexShrink: 0 }}>
+      <div style={{ padding: '0 16px 8px', flexShrink: 0 }}>
         <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar en la carta..."
-          style={{ width: '100%', minHeight: 52, borderRadius: 12, background: '#1a1a1a', color: '#fff', border: '1px solid #2a2a2a', padding: '0 16px', fontSize: 18 }} />
+          style={{ width: '100%', minHeight: 48, borderRadius: 12, background: '#1a1a1a', color: '#fff', border: '1px solid #2a2a2a', padding: '0 16px', fontSize: 17 }} />
       </div>
+
+      {/* Tabs de categoría */}
+      {categorias.length > 2 && (
+        <div style={{ padding: '0 16px 8px', flexShrink: 0, overflowX: 'auto', display: 'flex', gap: 8 }}>
+          {categorias.map(cat => (
+            <button key={cat} onClick={() => setCategoriaActiva(cat)}
+              style={{ flexShrink: 0, minHeight: 38, padding: '0 16px', borderRadius: 20, background: categoriaActiva === cat ? '#4361a0' : '#1a1a1a', color: categoriaActiva === cat ? '#fff' : '#aaa', fontSize: 14, fontWeight: categoriaActiva === cat ? 700 : 500, border: 'none', whiteSpace: 'nowrap' }}>
+              {cat}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {loadingCarta ? (
           <p style={{ color: '#666' }}>Cargando carta...</p>
+        ) : itemsFiltrados.length === 0 ? (
+          <p style={{ color: '#555', textAlign: 'center', padding: 24 }}>
+            {busqueda ? `Sin resultados para "${busqueda}"` : 'Sin ítems en esta categoría'}
+          </p>
         ) : (
           itemsFiltrados.map(item => <CartaItemBoton key={item.id} item={item} onTap={setItemParaAgregar} />)
         )}

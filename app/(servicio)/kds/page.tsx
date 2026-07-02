@@ -61,34 +61,53 @@ function SelectorEstacion({ estaciones, onElegir }: { estaciones: Estacion[]; on
   )
 }
 
-function ItemRow({ item, onAvanzar, onBump }: { item: ComandaItem; onAvanzar: (id: string) => void; onBump: (id: string) => void }) {
+function ItemRow({
+  item, onAvanzar, onBump, on86,
+}: {
+  item: ComandaItem
+  onAvanzar: (id: string) => void
+  onBump: (id: string) => void
+  on86: (cartaItemId: string) => void
+}) {
   function onTap() {
     if (item.estado === 'listo') onBump(item.id)
     else onAvanzar(item.id)
   }
+  const cartaItemId = item.carta_item_id
   return (
-    <button
-      onClick={onTap}
-      style={{
-        width: '100%', minHeight: 64, padding: '10px 14px', borderRadius: 10,
-        background: ESTADO_ITEM_COLOR[item.estado], color: '#fff',
-        display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, textAlign: 'left',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
-        <span style={{ fontSize: 18, fontWeight: 700 }}>{item.cantidad}× {item.carta_item?.nombre ?? 'Ítem'}</span>
-        <span style={{ fontSize: 14, opacity: 0.85 }}>{ESTADO_ITEM_LABEL[item.estado]}</span>
-      </div>
-      {item.modificadores?.map(m => (
-        <span key={m.id} style={{ fontSize: 14, opacity: 0.8 }}>{m.tipo} {m.texto}</span>
-      ))}
-      {item.notas && <span style={{ fontSize: 14, opacity: 0.8, fontStyle: 'italic' }}>"{item.notas}"</span>}
-    </button>
+    <div style={{ display: 'flex', gap: 6, width: '100%' }}>
+      <button
+        onClick={onTap}
+        style={{
+          flex: 1, minHeight: 64, padding: '10px 14px', borderRadius: 10,
+          background: ESTADO_ITEM_COLOR[item.estado], color: '#fff',
+          display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, textAlign: 'left',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+          <span style={{ fontSize: 18, fontWeight: 700 }}>{item.cantidad}× {item.carta_item?.nombre ?? 'Ítem'}</span>
+          <span style={{ fontSize: 14, opacity: 0.85 }}>{ESTADO_ITEM_LABEL[item.estado]}</span>
+        </div>
+        {item.modificadores?.map(m => (
+          <span key={m.id} style={{ fontSize: 14, opacity: 0.8 }}>{m.tipo} {m.texto}</span>
+        ))}
+        {item.notas && <span style={{ fontSize: 14, opacity: 0.8, fontStyle: 'italic' }}>"{item.notas}"</span>}
+      </button>
+      {cartaItemId && (
+        <button
+          onClick={() => on86(cartaItemId)}
+          title="Marcar agotado (86)"
+          style={{ minWidth: 48, borderRadius: 10, background: '#2a1a1a', color: '#e57373', fontWeight: 900, fontSize: 15, border: '1px solid #4a2a2a', flexShrink: 0 }}
+        >
+          86
+        </button>
+      )}
+    </div>
   )
 }
 
 function ComandaCard({
-  comanda, ahora, onAvanzarItem, onBumpItem, onBumpComanda, onHold,
+  comanda, ahora, onAvanzarItem, onBumpItem, onBumpComanda, onHold, on86,
 }: {
   comanda: Comanda
   ahora: number
@@ -96,6 +115,7 @@ function ComandaCard({
   onBumpItem: (id: string) => void
   onBumpComanda: (id: string) => void
   onHold: (id: string) => void
+  on86: (cartaItemId: string) => void
 }) {
   const firedMs = tiempoFiredMasViejo(comanda.items ?? [])
   const segundos = firedMs ? Math.floor((ahora - firedMs) / 1000) : 0
@@ -125,7 +145,7 @@ function ComandaCard({
       {!comanda.held && (
         <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {(comanda.items ?? []).map(item => (
-            <ItemRow key={item.id} item={item} onAvanzar={onAvanzarItem} onBump={onBumpItem} />
+            <ItemRow key={item.id} item={item} onAvanzar={onAvanzarItem} onBump={onBumpItem} on86={on86} />
           ))}
         </div>
       )}
@@ -255,6 +275,48 @@ function RecallPanel({
   )
 }
 
+// Panel Métricas — nivel módulo
+function MetricasPanel({ tarjetas, comandasRecientes, onCerrar }: { tarjetas: Comanda[]; comandasRecientes: Comanda[]; onCerrar: () => void }) {
+  const stats = useMemo(() => {
+    const bumpeados = comandasRecientes.flatMap(c => c.items ?? []).filter(i => i.estado === 'bumpeado' && i.fired_at && i.bumped_at)
+    const tiempos = bumpeados.map(i => (new Date(i.bumped_at!).getTime() - new Date(i.fired_at!).getTime()) / 1000)
+    const promedio = tiempos.length > 0 ? Math.round(tiempos.reduce((a, b) => a + b, 0) / tiempos.length) : null
+    const pendientes = tarjetas.reduce((s, c) => s + (c.items?.filter(i => i.estado === 'pendiente').length ?? 0), 0)
+    const enPrep = tarjetas.reduce((s, c) => s + (c.items?.filter(i => i.estado === 'en_prep').length ?? 0), 0)
+    return { bumpeados: bumpeados.length, promedio, pendientes, enPrep }
+  }, [tarjetas, comandasRecientes])
+
+  function fmtSeg(s: number | null): string {
+    if (s === null) return '—'
+    return `${Math.floor(s / 60)}m ${s % 60}s`
+  }
+
+  return (
+    <div onClick={onCerrar} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', background: '#1a1a1a', borderRadius: '16px 16px 0 0', padding: '20px 20px 40px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <span style={{ fontSize: 20, fontWeight: 800, color: '#fff' }}>Métricas de cocina</span>
+          <button onClick={onCerrar} style={{ background: 'none', color: '#aaa', fontSize: 14 }}>Cerrar</button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          {[
+            { label: 'Tiempo promedio', value: fmtSeg(stats.promedio), icon: 'timer', color: '#c9a227' },
+            { label: 'Platos bumpeados', value: String(stats.bumpeados), icon: 'done_all', color: '#4caf50' },
+            { label: 'Pendientes', value: String(stats.pendientes), icon: 'hourglass_empty', color: '#e57373' },
+            { label: 'En preparación', value: String(stats.enPrep), icon: 'local_fire_department', color: '#ff9800' },
+          ].map(s => (
+            <div key={s.label} style={{ background: '#222', borderRadius: 14, padding: '16px 18px' }}>
+              <span className="material-symbols-outlined" style={{ color: s.color, fontSize: 24 }}>{s.icon}</span>
+              <p style={{ fontSize: 32, fontWeight: 900, color: '#fff', margin: '8px 0 4px' }}>{s.value}</p>
+              <p style={{ fontSize: 13, color: '#777' }}>{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── página principal ─────────────────────────────────────────────────────────
 
 export default function KdsPage() {
@@ -263,6 +325,7 @@ export default function KdsPage() {
   const [ahora, setAhora] = useState(() => Date.now())
   const [allDayOpen, setAllDayOpen] = useState(false)
   const [recallOpen, setRecallOpen] = useState(false)
+  const [metricasOpen, setMetricasOpen] = useState(false)
 
   useEffect(() => {
     const saved = localStorage.getItem(KDS_ESTACION_STORAGE_KEY)
@@ -324,6 +387,17 @@ export default function KdsPage() {
     try { await restaurarComanda(id) } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
   }
 
+  async function on86(cartaItemId: string) {
+    if (!confirm('¿Marcar este ítem como AGOTADO (86)? No aparecerá disponible en el salón.')) return
+    try {
+      await fetch('/api/carta/86', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ carta_item_id: cartaItemId, disponible: false }),
+      })
+    } catch { /* fire-and-forget */ }
+  }
+
   if (loadingEstaciones) {
     return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>Cargando...</div>
   }
@@ -363,6 +437,14 @@ export default function KdsPage() {
         >
           <span className="material-symbols-outlined" style={{ fontSize: 22 }}>{silenciado ? 'volume_off' : 'volume_up'}</span>
         </button>
+        {/* Métricas */}
+        <button
+          onClick={() => setMetricasOpen(true)}
+          style={{ minHeight: 44, width: 44, borderRadius: 10, background: '#1a1a1a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          title="Métricas"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 22 }}>bar_chart</span>
+        </button>
         {/* Cambiar estación */}
         <button onClick={cambiarEstacion} style={{ minHeight: 44, padding: '0 12px', borderRadius: 10, background: '#1a1a1a', color: '#aaa', fontSize: 13 }}>
           Cambiar
@@ -385,6 +467,7 @@ export default function KdsPage() {
               onBumpItem={onBumpItem}
               onBumpComanda={onBumpOFireComanda}
               onHold={onToggleHold}
+              on86={on86}
             />
           ))}
         </div>
@@ -397,6 +480,13 @@ export default function KdsPage() {
           comandasRecientes={comandasRecientes}
           onRestaurar={onRestaurarComanda}
           onCerrar={() => setRecallOpen(false)}
+        />
+      )}
+      {metricasOpen && (
+        <MetricasPanel
+          tarjetas={tarjetas}
+          comandasRecientes={comandasRecientes}
+          onCerrar={() => setMetricasOpen(false)}
         />
       )}
     </div>

@@ -99,7 +99,16 @@ export function useCuenta() {
       const { error: mesaError } = await supabase.from('mesas').update({ estado: 'libre' }).eq('id', mesaId)
       if (mesaError) throw mesaError
 
-      // 4. Emisión fiscal (no bloquea el cobro — si falla queda 'pendiente' en DB)
+      // 4. Merma automática (fire-and-forget — no bloquea)
+      if (RESTAURANTE_ID) {
+        fetch('/api/salon/merma-auto', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ cuenta_id: cuentaId, restaurante_id: RESTAURANTE_ID }),
+        }).catch(() => {})
+      }
+
+      // 5. Emisión fiscal (no bloquea el cobro — si falla queda 'pendiente' en DB)
       let fiscal: ResultadoFiscal | undefined
       try {
         const resp = await fetch('/api/fiscal/emitir', {
