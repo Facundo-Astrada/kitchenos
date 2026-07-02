@@ -14,13 +14,13 @@
 |---|--------|------|--------|---------|
 | 1 | **Dashboard** | `/` | Funcional | Header con perfil real (auth), status bars reales, pase preview, stock crítico, **ModulosGrid usa `puedeVer()` dinámico** (muestra módulos del puesto asignado, no lista hardcodeada). Turno tracking en localStorage (único — banner del layout.tsx eliminado). |
 | 2 | **Tareas** | `/tareas` | Funcional | CRUD, prioridades (crítica/alta/media/baja), categorías, asignación a plaza, checklist por tarea, filtros, tab Producción con matriz, FAB elevado para no tapar navbar. |
-| 3 | **Recetario** | `/recetario` | Funcional | Lista con food cost, detalle `/recetario/[id]`, CRUD ingredientes, cálculo automático, búsqueda, filtros, tabs Recetas/Ideas (drafts), **importación IA** (single + multi). **Ideas: botón "Cargar/Actualizar con IA"** → bottom sheet texto → IA parsea → aplica ingredientes+pasos a la receta existente sin crear nueva (modo `enrichRecetaId` en `/api/recetas/save`). Crear recetas abierto a todos, **importar/exportar solo admin**. |
+| 3 | **Recetario** | `/recetario` | Funcional | Lista con food cost, detalle `/recetario/[id]`, CRUD ingredientes, cálculo automático, búsqueda, filtros, tabs Recetas/Ideas (drafts), **importación IA** (single + multi). **Ideas: botón "Cargar/Actualizar con IA"** → bottom sheet texto → IA parsea → aplica ingredientes+pasos a la receta existente sin crear nueva (modo `enrichRecetaId` en `/api/recetas/save`). Crear recetas abierto a todos, **importar/exportar solo admin**. **Foto de receta** (PhotoPicker → bucket `fotos`). **Peso total y escurrido** (editables + display en Food Cost). **Costeo en tiempo real** en form ingrediente. **Unidades smart** (kg↔g auto). **Auto-link ingredientes** al stock tras guardar (fire-and-forget). |
 | 4 | **Stock** | `/stock` | Funcional | Productos con estado (ok/bajo/crítico), CRUD, categorías, alertas, búsqueda, exportar, **modo rápido** (pantalla grande para stock-take secuencial), precio con fuente reducida. Sheet de selector de sector scrolleable (maxHeight 80vh). |
 | 5 | **Pedidos** | `/pedidos` | Funcional | CRUD, items con precios, estados (borrador/enviado/recibido/parcial), productos frecuentes como chips, búsqueda predictiva, WhatsApp y PDF, recepción parcial. |
 | 6 | **Proveedores** | `/proveedores` | Funcional | CRUD, CUIT, teléfono, días entrega, rubro, historial facturas por proveedor, **auto-creación** desde facturas con IA. |
 | 7 | **Facturas** | `/facturas` | Funcional | Carga con items, tipos A/B/C/X/remito/ticket, **OCR con IA** (Claude Sonnet 4.6) que detecta proveedor/items/total, detección de variaciones de precio, historial, condición de pago. |
-| 8 | **Carta** | `/carta` | Funcional | Items vinculados a recetas, food cost preview coloreado, 86, categorías **dinámicas por restaurante** (`carta_categorias`), vincular/cambiar receta inline (search siempre visible, porciones editables con tap), export PDF. **Tags dietarios** toggleables. **Importar con IA**. **Crear receta borrador** desde búsqueda. **Vincular productos de stock** en la misma búsqueda. **Asignar a OPS**: plato_recetas.cantidad_ops+unidad_ops → checklist_item (suma de contribuciones). **Recipientes en OPS**: se configura recipiente (nombre, capacidad, peso_porcion) → mise muestra déficit + CTA "Producir X porc". Panel OPS idéntico en creación y en vista detalle. **Crear idea en recetario** desde buscador de componentes sin resultados. Precio y food cost visible **solo para admin**. **KitchenCoach integrado**. |
-| 9 | **Checklist / Mise en Place** | `/checklist` | Funcional | Mise en place por plaza, items SP/P/REF/OK, cantidades color-coded, registros diarios, rutinas con frecuencia. Drag long-press entre secciones. **Plaza General**: items/secciones/rutinas con `plaza='general'` aparecen en TODAS las plazas al tope — para tareas que cualquiera puede cubrir (rutinas de limpieza, mise compartido, etc.). |
+| 8 | **Carta** | `/carta` | Funcional | Items vinculados a recetas, food cost preview coloreado, 86, categorías **dinámicas por restaurante** (`carta_categorias`), vincular/cambiar receta inline (search siempre visible, porciones editables con tap), export PDF. **Tags dietarios** toggleables. **Importar con IA**. **Crear receta borrador** desde búsqueda. **Vincular productos de stock** en la misma búsqueda. **Asignar a OPS**: plato_recetas.cantidad_ops+unidad_ops → checklist_item (suma de contribuciones). **Recipientes en OPS**: se configura recipiente (nombre, capacidad, peso_porcion) → mise muestra déficit + CTA "Producir X porc". Panel OPS idéntico en creación y en vista detalle. **Crear idea en recetario** desde buscador de componentes sin resultados. Precio y food cost visible **solo para admin**. **KitchenCoach integrado**. **Foto de plato** (PhotoPicker en form + thumbnail en lista). |
+| 9 | **Checklist / Mise en Place** | `/checklist` | Funcional | Mise en place por plaza, items SP/P/REF/OK, cantidades color-coded, registros diarios, rutinas con frecuencia. Drag long-press entre secciones. **Plaza General**: items/secciones/rutinas con `plaza='general'` aparecen en TODAS las plazas al tope. **Modo Control**: botón `fact_check` en header → vista simplificada (tick + nombre, sin cantidades) para onboarding de nuevos restaurantes. Persiste en localStorage. |
 | 10 | **Pase de Turno** | `/pase` | Funcional | Chat continuo entre turnos, grouping por emisor (sin avatar repetido), prioridades, crear tarea desde mensaje, realtime. |
 | 11 | **HACCP / Limpieza** | `/haccp` | Funcional | 3 tabs: Temperaturas, Vencimientos (color coding por días), **Limpieza** (sub-tabs Lista/Calendario; crear tarea con día + frecuencia; sync a OPS checklist plaza General). Export PDF para Bromatología. |
 | 12 | **Reportes / CMV** | `/reportes` | Funcional | 8 tabs: Resumen, **CMV** (ventas vs compras), **Presupuesto vs Real** (semanal→anual), **Rendimiento por plaza**, Food Cost, Compras, Precios/inflación, Producción. Selector de periodo, gráficos CSS (sin Chart.js). |
@@ -104,6 +104,28 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 ---
 
 ## 4. Implementado en Últimas Sesiones
+
+### Sesión 2026-07-01 (tarde) — Fotos, pesos, unidades smart, auto-link, costeo real, checklist modo control
+
+1. **PhotoPicker** (`components/ui/PhotoPicker.tsx`): componente reutilizable que sube imágenes al bucket `fotos` de Supabase Storage (público). Acepta cámara/galería, máx 5 MB, upsert, cache-busting con `?t=timestamp`. Botones "Cambiar" / "Quitar" inline.
+
+2. **Fotos en Recetario** (`recetario/[id]/page.tsx`): foto a ancho completo (220px de alto) en el detalle si hay URL; PhotoPicker en el modal de edición.
+
+3. **Peso total y escurrido** (`recetario/[id]/page.tsx` + `types/index.ts`): nuevos campos `peso_total_g` y `peso_escurrido_g` en la tabla `recetas` (migración `20260701_recetas_foto_pesos.sql`). Se muestran en la sección Food Cost y son editables en el modal. El peso total también se calcula automáticamente desde ingredientes cuando hay datos.
+
+4. **Costeo en tiempo real**: en el form de agregar/editar ingrediente (tipo Producto), un chip muestra el subtotal calculado en vivo (`cantidad × costo × unitConversionFactor`) mientras el usuario escribe. Si hay merma también muestra el peso neto.
+
+5. **Unidades smart** (`smartQty` en `recetario/[id]/page.tsx`): la lista de ingredientes muestra automáticamente la unidad más legible: 0.005 kg → 5 g, 1500 g → 1.5 kg. Sin alterar los datos guardados.
+
+6. **Auto-link ingredientes al stock** (`lib/hooks/useRecetas.ts`): después de guardar una receta nueva (con IA o manual), `agregarReceta` dispara fire-and-forget a `POST /api/recetas/auto-link-ingredientes` → aplica matches exactos y parciales automáticamente → mutate SWR.
+
+7. **Fotos en Carta** (`carta/page.tsx`): PhotoPicker en el form de crear/editar plato (primer campo). La URL se guarda en `carta_items.foto_url`. En la lista, los platos con foto muestran un thumbnail 52×52px a la izquierda del nombre.
+
+8. **Checklist Modo Control** (`checklist/ClientView.tsx`): botón `fact_check` en el header de cualquier plaza activa el modo simplificado. En modo control, los ítems se renderizan como lista de checkboxes (tick + nombre + cantidad target) en vez del `ProductoMiseCard` completo. Un tap alterna `completado` y los datos se guardan igual. Banner "Modo Control" en el header. Persiste en `localStorage('checklist_modo_control')`.
+
+**Migración aplicada:** `20260701_recetas_foto_pesos.sql` — `ALTER TABLE recetas ADD COLUMN foto_url TEXT, peso_total_g NUMERIC, peso_escurrido_g NUMERIC` + bucket `fotos` público (vía SQL directo porque la nueva key `sb_secret_...` no funciona con la Storage REST API directa). `NOTIFY pgrst, 'reload schema'`.
+
+**Commit:** `a5284aa` en `main`, deployado a Vercel.
 
 ### Sesión 2026-07-01 — Fase 7: Config salón · 86 bidireccional · Merma auto · Métricas KDS · Modo mozo · Prep-list viva · ESC/POS real
 

@@ -59,6 +59,27 @@ El código en `lib/hooks/useRecetas.ts` canoniza via `canonUnit()` antes de calc
 **Categorías de `productos`**: 16 categorías canónicas: `Carnes`, `Pescados`, `Verduras`, `Frutas`, `Lácteos`, `Panadería`, `Secos`, `Especias`, `Bebidas`, `Aceites`, `Vinagres`, `Conservas`, `Congelados`, `Limpieza`, `Descartables`, `Otros`. Usar siempre estas. Para re-categorizar en bulk: `scripts/recategorizar-productos.mjs --apply` (reglas + Haiku + guard).
 
 | `checklist_items` | `demanda_viva INTEGER DEFAULT 0` — porciones pedidas desde el salón en el turno actual. Incrementado por `POST /api/salon/prep-list-update` cuando se envía una comanda (fire-and-forget). Se reinicia manualmente al aperturar. `ProductoMiseCard` puede usarlo para mostrar cuánto falta producir. | (agregado jul 2026) |
+| `recetas` | `foto_url TEXT NULL` — URL pública en bucket `fotos` de Supabase Storage. `peso_total_g NUMERIC NULL` — peso bruto total de la receta (suma de ingredientes o manual). `peso_escurrido_g NUMERIC NULL` — peso neto tras cocción/escurrido. | (agregado jul 2026) |
+| `carta_items` | `foto_url TEXT NULL` — ya existía en DB y en `useCarta`. Bucket `fotos`. Se pasa en `crearItem` y `actualizarItem`. | (verificado jul 2026) |
+
+## Supabase Storage — bucket `fotos` (jul 2026)
+
+Bucket `fotos` público creado via **SQL directo** (no vía Storage REST API) porque la nueva key `sb_secret_...` no funciona con la Storage REST API:
+
+```sql
+INSERT INTO storage.buckets (id, name, public)
+  VALUES ('fotos', 'fotos', true) ON CONFLICT (id) DO NOTHING;
+```
+
+Políticas RLS en `storage.objects`:
+```sql
+-- SELECT: objetos públicos accesibles sin auth
+CREATE POLICY "fotos_select" ON storage.objects FOR SELECT USING (bucket_id = 'fotos');
+-- INSERT: requiere usuario autenticado
+CREATE POLICY "fotos_insert" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'fotos');
+```
+
+Paths usados: `recetas/{receta_id}.{ext}`, `carta/{item_id}.{ext}`.
 
 ## Cómo verificar columnas reales
 
