@@ -2693,7 +2693,7 @@ function RecetaCard({ receta: r, isDraft, onPublish, onCompleteIA }: { receta: R
   const sinIngredientes = (r.ingredientes?.length ?? 0) === 0
   return (
     <div style={{ position: 'relative' }}>
-      <Link href={`/recetario/${r.id}`} style={{ textDecoration: 'none', display: 'block', background: 'var(--surface)', border: isDraft ? '1px solid rgba(245,158,11,.3)' : '1px solid var(--border)', borderRadius: 14, padding: isDraft && onCompleteIA ? '14px 14px 44px' : '14px', cursor: 'pointer' }}>
+      <Link href={`/recetario/${r.id}`} style={{ textDecoration: 'none', display: 'block', background: r.es_plato && !isDraft ? 'rgba(67,97,160,.035)' : 'var(--surface)', border: isDraft ? '1px solid rgba(245,158,11,.3)' : r.es_plato ? '1px solid rgba(67,97,160,.35)' : '1px solid var(--border)', borderRadius: 14, padding: isDraft && onCompleteIA ? '14px 14px 44px' : '14px', cursor: 'pointer' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -2703,6 +2703,16 @@ function RecetaCard({ receta: r, isDraft, onPublish, onCompleteIA }: { receta: R
                   fontSize: 9, fontWeight: 700, color: '#92400e', background: 'rgba(245,158,11,.15)',
                   border: '1px solid rgba(245,158,11,.3)', borderRadius: 4, padding: '1px 6px',
                 }}>BORRADOR</span>
+              )}
+              {r.es_plato && !isDraft && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 3,
+                  fontSize: 9, fontWeight: 700, color: 'var(--accent)', background: 'rgba(67,97,160,.1)',
+                  border: '1px solid rgba(67,97,160,.28)', borderRadius: 4, padding: '1px 6px',
+                }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 11 }}>restaurant</span>
+                  PLATO
+                </span>
               )}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{r.categoria} · {r.porciones} porc.{(() => { const p = calcPesoPorcion(r.ingredientes || [], r.porciones ?? 0); return p ? ` · ${formatPeso(p)}` : '' })()} · {r.tiempo_min} min</div>

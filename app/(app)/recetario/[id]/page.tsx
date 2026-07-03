@@ -4,10 +4,14 @@ import { useState, useMemo, useRef, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { useRecetas, calcFoodCost, unitConversionFactor, type RecetaConCosto } from '@/lib/hooks/useRecetas'
 import { useStock } from '@/lib/hooks/useStock'
+import { useCarta } from '@/lib/hooks/useCarta'
+import { usePermisos } from '@/lib/hooks/usePermisos'
+import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { useProduccionRegistros, type ProduccionRegistro } from '@/lib/hooks/useProduccionRegistros'
 import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
 import type { Ingrediente } from '@/types'
 import PhotoPicker from '@/components/ui/PhotoPicker'
+import RecetaOpsSheet from './RecetaOpsSheet'
 
 const UNIDADES = ['kg', 'g', 'L', 'ml', 'unidad', 'docena', 'caja']
 
@@ -112,6 +116,10 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
   const { recetas, loading, agregarReceta, actualizarReceta, eliminarReceta, agregarIngrediente, actualizarIngrediente, eliminarIngrediente } = useRecetas()
   const { productos: stockProductos } = useStock()
   const { getHistorial } = useProduccionRegistros()
+  const { items: cartaItems, crearItem, actualizarItem, categorias: cartaCategorias } = useCarta()
+  const { isAdmin, puedeEditar } = usePermisos()
+  const RESTAURANTE_ID = useRestauranteId()
+  const canEdit = isAdmin || puedeEditar('recetas')
 
   const [historial, setHistorial] = useState<ProduccionRegistro[]>([])
   const [historialOpen, setHistorialOpen] = useState(false)
@@ -119,11 +127,58 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
   const [actualizarSugerencia, setActualizarSugerencia] = useState<{ promedio: number } | null>(null)
   const [actualizandoReceta, setActualizandoReceta] = useState(false)
 
+  // Convertir a plato / OPS
+  const [opsOpen, setOpsOpen] = useState(false)
+  const [converting, setConverting] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 2600)
+    return () => clearTimeout(t)
+  }, [toast])
+
   // Receta buscada en la lista paginada — o fetcheada directo si no está aún
   const recetaEnLista = useMemo(() => recetas.find(r => r.id === id) ?? null, [recetas, id])
   const [recetaDirecta, setRecetaDirecta] = useState<RecetaConCosto | null>(null)
   const [fetchingDirect, setFetchingDirect] = useState(false)
   const receta = recetaEnLista ?? recetaDirecta
+
+  // Plato de carta vinculado a esta receta (link 1:1 por receta_id)
+  const linkedPlato = useMemo(
+    () => (receta ? cartaItems.find(i => i.receta_id === receta.id) ?? null : null),
+    [cartaItems, receta]
+  )
+
+  async function handleConvertir() {
+    if (!receta || converting) return
+    if (linkedPlato) { router.push('/carta'); return }
+    setConverting(true)
+    try {
+      const catMatch = cartaCategorias.find(c => c.nombre.toLowerCase() === (receta.categoria ?? '').toLowerCase())
+      await crearItem({
+        nombre: receta.nombre,
+        descripcion: null,
+        precio_venta: receta.precio_venta ?? 0,
+        categoria: catMatch?.nombre ?? cartaCategorias[0]?.nombre ?? 'Principales',
+        receta_id: receta.id,
+        foto_url: receta.foto_url ?? null,
+      })
+      setToast((receta.precio_venta ?? 0) > 0 ? 'Plato creado en la carta' : 'Plato creado — cargá un precio de venta')
+    } catch (e: unknown) {
+      setToast('Error: ' + (e instanceof Error ? e.message : 'desconocido'))
+    } finally { setConverting(false) }
+  }
+
+  async function syncPrecioAPlato() {
+    if (!linkedPlato || !receta) return
+    await actualizarItem(linkedPlato.id, { precio_venta: receta.precio_venta ?? 0 })
+    setToast('Precio del plato actualizado')
+  }
+  async function syncPrecioAReceta() {
+    if (!linkedPlato || !receta) return
+    await actualizarReceta(receta.id, { precio_venta: linkedPlato.precio_venta })
+    setToast('Precio de la receta actualizado')
+  }
 
   useEffect(() => {
     if (!loading && !recetaEnLista && !recetaDirecta && !fetchingDirect) {
@@ -529,6 +584,52 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
           <div style={{ position: 'relative', width: '100%', maxHeight: 220, overflow: 'hidden' }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={receta.foto_url} alt={receta.nombre} style={{ width: '100%', height: 220, objectFit: 'cover', display: 'block' }} />
+          </div>
+        )}
+
+        {/* ── Convertir a plato + OPS ── */}
+        {canEdit && (
+          <div style={{ display: 'flex', gap: 8, padding: '12px 14px 0' }}>
+            <button
+              onClick={handleConvertir}
+              disabled={converting}
+              style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                padding: '11px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
+                border: linkedPlato ? '1px solid rgba(67,97,160,.35)' : 'none',
+                background: linkedPlato ? 'rgba(67,97,160,.08)' : 'linear-gradient(135deg, var(--navy), #4361a0)',
+                color: linkedPlato ? 'var(--accent)' : '#fff', opacity: converting ? 0.6 : 1,
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{linkedPlato ? 'restaurant_menu' : 'add_circle'}</span>
+              {linkedPlato ? 'Ver en carta' : converting ? 'Creando…' : 'Convertir a plato'}
+            </button>
+            <button
+              onClick={() => setOpsOpen(true)}
+              title="Asignar a OPS / Mise (plaza, heladera, tupper)"
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
+                padding: '8px 14px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit',
+                border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--accent)',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>restaurant_menu</span>
+              <span style={{ fontSize: 9, fontWeight: 800 }}>OPS</span>
+            </button>
+          </div>
+        )}
+
+        {/* Banner de sync de precio receta ↔ plato */}
+        {linkedPlato && (receta.precio_venta ?? 0) !== (linkedPlato.precio_venta ?? 0) && (
+          <div style={{ margin: '10px 14px 0', padding: '10px 12px', borderRadius: 10, background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.3)' }}>
+            <div style={{ fontSize: 11, color: '#92400e', lineHeight: 1.4, marginBottom: 8 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 14, verticalAlign: -2, marginRight: 4 }}>sync_problem</span>
+              El plato en carta figura a <b>${(linkedPlato.precio_venta ?? 0).toLocaleString('es-AR')}</b> y la receta a <b>${(receta.precio_venta ?? 0).toLocaleString('es-AR')}</b>.
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button onClick={syncPrecioAPlato} style={syncBtn}>Actualizar plato → ${(receta.precio_venta ?? 0).toLocaleString('es-AR')}</button>
+              <button onClick={syncPrecioAReceta} style={syncBtn}>Actualizar receta → ${(linkedPlato.precio_venta ?? 0).toLocaleString('es-AR')}</button>
+            </div>
           </div>
         )}
 
@@ -1357,10 +1458,29 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
           </div>
         </div>
       )}
+
+      {/* ── Sheet OPS / Mise ── */}
+      {opsOpen && receta && RESTAURANTE_ID && (
+        <RecetaOpsSheet
+          recetaId={receta.id}
+          recetaNombre={receta.nombre}
+          restauranteId={RESTAURANTE_ID}
+          onClose={() => setOpsOpen(false)}
+          onSaved={() => setToast('Receta asignada al mise')}
+        />
+      )}
+
+      {/* ── Toast ── */}
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 'calc(var(--fab-bottom) + 8px)', left: '50%', transform: 'translateX(-50%)', zIndex: 300, background: 'var(--navy)', color: '#fff', padding: '10px 18px', borderRadius: 99, fontSize: 12, fontWeight: 700, boxShadow: '0 6px 24px rgba(0,0,0,.3)', maxWidth: '90%', textAlign: 'center' }}>
+          {toast}
+        </div>
+      )}
     </div>
   )
 }
 
+const syncBtn: React.CSSProperties = { background: 'rgba(245,158,11,.2)', border: 'none', borderRadius: 7, padding: '5px 9px', fontSize: 10, fontWeight: 700, color: '#92400e', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }
 const btnClear: React.CSSProperties = { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }
 const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '.06em' }
 const inp: React.CSSProperties = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 10px', fontSize: 13, fontFamily: 'inherit', color: 'var(--text-1)', outline: 'none', width: '100%', boxSizing: 'border-box' }

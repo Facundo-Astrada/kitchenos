@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
+import { PLAZAS_OPS, SECCIONES_OPS } from '@/lib/ops/mise'
 
 // ── Tipos públicos ──────────────────────────────────────────
 export type CompModo = 'plato' | 'menu' | 'evento'
@@ -52,21 +53,9 @@ export interface CompInicial {
 
 // ── Constantes ──────────────────────────────────────────────
 const PLAZAS_BASE = ['parrilla', 'fríos', 'calientes', 'pase', 'pastelería']
-export const PLAZAS_OPS = [
-  { id: 'general',    label: 'General',     color: '#6b7280' },
-  { id: 'parrilla',   label: 'Parrilla',    color: '#ef4444' },
-  { id: 'frios',      label: 'Fríos',       color: '#0ea5e9' },
-  { id: 'calientes',  label: 'Calientes',   color: '#f97316' },
-  { id: 'pase',       label: 'Pase',        color: '#8b5cf6' },
-  { id: 'pasteleria', label: 'Pastelería',  color: '#ec4899' },
-  { id: 'panaderia',  label: 'Panadería',   color: '#84cc16' },
-]
-export const SECCIONES_OPS = [
-  { id: 'heladera',   label: 'Heladera',       icono: 'kitchen' },
-  { id: 'secos',      label: 'Secos / Tuppers', icono: 'inventory_2' },
-  { id: 'congelados', label: 'Congelados',      icono: 'severe_cold' },
-  { id: 'estacion',   label: 'Estación',        icono: 'countertops' },
-]
+// PLAZAS_OPS / SECCIONES_OPS ahora viven en @/lib/ops/mise; se re-exportan
+// para no romper los imports existentes (`from './ComposicionEditor'`).
+export { PLAZAS_OPS, SECCIONES_OPS }
 const UNIDADES_OPS = ['u', 'kg', 'g', 'l', 'ml', 'pax', 'porc', 'bandeja']
 const DEFAULT_SECCIONES = ['Entradas', 'Principales', 'Postres']
 

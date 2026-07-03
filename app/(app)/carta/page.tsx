@@ -14,7 +14,8 @@ import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import { createClient } from '@/lib/supabase/client'
 import { useMenus, type MenuConPreparaciones } from '@/lib/hooks/useMenus'
 import MenusView from './MenusView'
-import ComposicionEditor, { type CompPayload, type CompInicial, PLAZAS_OPS, SECCIONES_OPS } from './ComposicionEditor'
+import ComposicionEditor, { type CompPayload, type CompInicial } from './ComposicionEditor'
+import { upsertMiseChecklistItem } from '@/lib/ops/mise'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 // ── Helpers ─────────────────────────────────────────────
 const fmtMoney = (n: number) =>
@@ -3167,35 +3168,21 @@ export default function CartaPage() {
                 .update({ plaza: it.plaza ?? null, cantidad_ops: it.cantidad_ops ?? null, unidad_ops: it.unidad_ops ?? null })
                 .eq('plato_id', newId).eq('receta_id', it.ref_id)
             }
-            // Si tiene OPS configurado: upsert checklist_items
+            // Si tiene OPS configurado: upsert checklist_items (helper compartido)
             if (it.plaza && it.seccion_mise && it.ref_id && RESTAURANTE_ID) {
-              const secCfg = SECCIONES_OPS.find(s => s.id === it.seccion_mise)
-              const secNombre = secCfg?.label ?? it.seccion_mise
-              const secIcono = secCfg?.icono ?? 'inventory_2'
-              const secOrden = SECCIONES_OPS.findIndex(s => s.id === it.seccion_mise)
-              const cantidadOps = it.cantidad_ops ?? 1
-              // Buscar o crear sección checklist
-              const { data: secExistente } = await supa.from('checklist_secciones').select('id')
-                .eq('restaurante_id', RESTAURANTE_ID).eq('plaza', it.plaza).ilike('nombre', secNombre).limit(1)
-              let seccionId: string | null = secExistente?.[0]?.id ?? null
-              if (!seccionId) {
-                const { data: newSec } = await supa.from('checklist_secciones')
-                  .insert({ nombre: secNombre, icono: secIcono, plaza: it.plaza, orden: secOrden, restaurante_id: RESTAURANTE_ID })
-                  .select('id').single()
-                seccionId = newSec?.id ?? null
-              }
-              // Upsert checklist_item
-              const { data: existente } = await supa.from('checklist_items').select('id')
-                .eq('restaurante_id', RESTAURANTE_ID).eq('receta_id', it.ref_id).eq('plaza', it.plaza).limit(1)
-              const recipienteNombre = it.recipiente_nombre ?? null
-              const recipienteCapacidad = recipienteNombre ? cantidadOps : null
-              const pesoPorcion = it.peso_porcion ?? null
-              const pesoPorcionUnidad = it.peso_porcion_unidad ?? null
-              if (existente?.[0]) {
-                await supa.from('checklist_items').update({ cantidad: cantidadOps, unidad: it.unidad_ops ?? 'u', seccion_id: seccionId, seccion: secNombre, recipiente_nombre: recipienteNombre, recipiente_capacidad: recipienteCapacidad, peso_porcion: pesoPorcion, peso_porcion_unidad: pesoPorcionUnidad }).eq('id', existente[0].id)
-              } else {
-                await supa.from('checklist_items').insert({ nombre: it.nombre, plaza: it.plaza, receta_id: it.ref_id, cantidad: cantidadOps, unidad: it.unidad_ops ?? 'u', prioridad: 'sp', seccion_id: seccionId, seccion: secNombre, restaurante_id: RESTAURANTE_ID, orden: 0, recipiente_nombre: recipienteNombre, recipiente_capacidad: recipienteCapacidad, peso_porcion: pesoPorcion, peso_porcion_unidad: pesoPorcionUnidad })
-              }
+              await upsertMiseChecklistItem({
+                supabase: supa,
+                restauranteId: RESTAURANTE_ID,
+                recetaId: it.ref_id,
+                nombre: it.nombre,
+                plaza: it.plaza,
+                seccionMiseId: it.seccion_mise,
+                cantidad: it.cantidad_ops ?? 1,
+                unidad: it.unidad_ops ?? 'u',
+                recipienteNombre: it.recipiente_nombre ?? null,
+                pesoPorcion: it.peso_porcion ?? null,
+                pesoPorcionUnidad: it.peso_porcion_unidad ?? null,
+              })
             }
           }
         }

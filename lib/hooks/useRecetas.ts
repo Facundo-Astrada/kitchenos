@@ -8,6 +8,7 @@ import { useRestauranteId } from './useRestauranteId'
 
 export type RecetaConCosto = Receta & {
   food_cost: FoodCostCalc
+  es_plato?: boolean   // derivado: existe un carta_item con receta_id = esta receta
 }
 
 // Normaliza variantes de unidad a una forma canónica: g | kg | ml | l | u
@@ -84,7 +85,20 @@ async function fetchRecetasData(key: string): Promise<RecetaConCosto[]> {
     .eq('activa', true)
     .order('created_at', { ascending: false })
   if (error) throw error
-  return (data ?? []).map(r => mapReceta(r as Record<string, unknown>))
+
+  // Recetas que son platos: existe un carta_item vinculado por receta_id.
+  // Derivado (no columna) → si se borra el plato en Carta, el flag desaparece solo.
+  const { data: cartaLinks } = await supabase
+    .from('carta_items')
+    .select('receta_id')
+    .eq('restaurante_id', rid)
+    .not('receta_id', 'is', null)
+  const platoIds = new Set((cartaLinks ?? []).map(c => (c as { receta_id: string }).receta_id))
+
+  return (data ?? []).map(r => {
+    const mapped = mapReceta(r as Record<string, unknown>)
+    return { ...mapped, es_plato: platoIds.has(mapped.id) }
+  })
 }
 
 export function useRecetas() {
@@ -112,6 +126,7 @@ export function useRecetas() {
       .channel(`recetas-rt-${RESTAURANTE_ID}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'recetas' }, () => mutate())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredientes' }, () => mutate())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'carta_items' }, () => mutate())
       .subscribe()
     return () => { supabase.removeChannel(ch1) }
   }, [RESTAURANTE_ID, supabase, mutate])
