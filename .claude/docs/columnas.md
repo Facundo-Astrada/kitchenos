@@ -61,6 +61,7 @@ El código en `lib/hooks/useRecetas.ts` canoniza via `canonUnit()` antes de calc
 | `checklist_items` | `demanda_viva INTEGER DEFAULT 0` — porciones pedidas desde el salón en el turno actual. Incrementado por `POST /api/salon/prep-list-update` cuando se envía una comanda (fire-and-forget). Se reinicia manualmente al aperturar. `ProductoMiseCard` puede usarlo para mostrar cuánto falta producir. | (agregado jul 2026) |
 | `recetas` | `foto_url TEXT NULL` — URL pública en bucket `fotos` de Supabase Storage. `peso_total_g NUMERIC NULL` — peso bruto total de la receta (suma de ingredientes o manual). `peso_escurrido_g NUMERIC NULL` — peso neto tras cocción/escurrido. | (agregado jul 2026) |
 | `carta_items` | `foto_url TEXT NULL` — ya existía en DB y en `useCarta`. Bucket `fotos`. Se pasa en `crearItem` y `actualizarItem`. | (verificado jul 2026) |
+| `carta_items` | `receta_id UUID NULL` = **link 1:1 "la receta ES un plato"** (jul 2026). "Convertir a plato" en `recetario/[id]` crea el `carta_item` con este FK; el costo/FC se leen en vivo de la receta (rama fallback de `useCarta.fetchCartaItemsData`). **`recetas.es_plato` NO es columna** — es derivado en `useRecetas` (query a `carta_items` con `receta_id` no null → `Set`); si se borra el plato, el flag desaparece solo. | — |
 
 ## Supabase Storage — bucket `fotos` (jul 2026)
 

@@ -105,6 +105,20 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 
 ## 4. Implementado en Últimas Sesiones
 
+### Sesión 2026-07-03 (cont.) — Recetario como creador de platos: convertir a plato + OPS + link vivo a carta
+
+1. **Helper compartido `lib/ops/mise.ts`**: `upsertMiseChecklistItem({ supabase, restauranteId, recetaId, nombre, plaza, seccionMiseId, cantidad, unidad, recipienteNombre, pesoPorcion, pesoPorcionUnidad })` — busca/crea `checklist_secciones` y hace upsert de `checklist_items` keyed por `(restaurante_id, receta_id, plaza)`. Extraído de `handleComposicionSave` (Carta), que ahora lo consume (DRY). Las constantes `PLAZAS_OPS`/`SECCIONES_OPS` se mudaron acá; `ComposicionEditor` las importa y re-exporta para no romper imports existentes.
+
+2. **Convertir receta a plato** (`recetario/[id]/page.tsx`): botón que crea un `carta_items` con `receta_id` = la receta (link 1:1). Copia precio, foto (`foto_url`) y mapea la categoría a una de carta (match por nombre, fallback `Principales`). Idempotente: si ya existe el plato vinculado, el botón pasa a **"Ver en carta"**. El costo/FC del plato se leen en vivo de la receta (ya lo hacía `useCarta` por la rama fallback de `receta_id`).
+
+3. **Botón OPS + `RecetaOpsSheet.tsx`** (nuevo, bottom sheet): asigna la receta al mise (plaza → sección → recipiente/tupper → cantidad+unidad → peso por porción con cálculo de porciones por recipiente). Prefill desde el `checklist_items` existente; botón "Quitar". Guarda vía `upsertMiseChecklistItem`. No requiere que la receta sea plato. Aparece directo en la Mesa de Trabajo/OPS (que ya lee `checklist_items` por `receta_id`+plaza).
+
+4. **Sync de precio receta ↔ plato**: banner en la ficha si `receta.precio_venta !== plato.precio_venta`, con acciones "Actualizar plato →" / "Actualizar receta →".
+
+5. **Flag `es_plato` derivado + color sutil** (`useRecetas.ts` + `recetario/page.tsx`): `fetchRecetasData` consulta `carta_items` (receta_id no null) y marca `es_plato` (no es columna → si se borra el plato en Carta, el flag desaparece solo). `RecetaCard` muestra borde accent tenue + fondo levísimo + chip `PLATO`. Canal realtime de recetas ahora escucha también `carta_items`.
+
+**Sin migraciones** (reusa `carta_items.receta_id` y las columnas ya existentes de `checklist_items`). **Commit:** `24cc07e` en `main`, deployado a Vercel.
+
 ### Sesión 2026-07-01 (tarde) — Fotos, pesos, unidades smart, auto-link, costeo real, checklist modo control
 
 1. **PhotoPicker** (`components/ui/PhotoPicker.tsx`): componente reutilizable que sube imágenes al bucket `fotos` de Supabase Storage (público). Acepta cámara/galería, máx 5 MB, upsert, cache-busting con `?t=timestamp`. Botones "Cambiar" / "Quitar" inline.
@@ -126,6 +140,16 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 **Migración aplicada:** `20260701_recetas_foto_pesos.sql` — `ALTER TABLE recetas ADD COLUMN foto_url TEXT, peso_total_g NUMERIC, peso_escurrido_g NUMERIC` + bucket `fotos` público (vía SQL directo porque la nueva key `sb_secret_...` no funciona con la Storage REST API directa). `NOTIFY pgrst, 'reload schema'`.
 
 **Commit:** `a5284aa` en `main`, deployado a Vercel.
+
+### Sesión 2026-07-03 — Auditoría A4–A6: tipos legacy · ESC/POS UI · migración importador Fudo
+
+1. **A4 — Tipos sincronizados** (`types/index.ts` + `lib/hooks/useEquipo.ts`): `Evento.color/recurrente` ya no nullable (DB NOT NULL); `Turno.notas` quita el `?` opcional; `Puesto.tareas_funciones/permisos_app` → `string[]` (eran `string[] | null`). Mapper `fetchPuestosData` agrega `tareas_funciones ?? []`. PENDIENTES.md ítem 4 cerrado.
+
+2. **A5 — Cliente ESC/POS en salón** (`app/(servicio)/salon/page.tsx`): tipos locales para Web USB/BT (no están en el DOM lib por defecto). Helpers `fetchEscPosBytes`, `printViaUSB` (WebUSB, reutiliza device persistido en `kos_printer_usb` localStorage, detecta interfaz clase 7 printer con endpoint BULK OUT), `printViaBluetooth` (BLE genérico, servicio `000018f0…`). En `TicketCobro`: estado `printing/printError`, sección "Imprimir ticket" con botones ≥64px para USB y BT (solo si el browser los soporta) + "Descargar .bin" siempre disponible. Fix TS 5.7: `bytes.buffer as ArrayBuffer` para `new Blob`. PENDIENTES.md ítem 3b cerrado.
+
+3. **A6 — `importarFudo()` migrada a endpoint universal** (`components/importador/ImportadorUniversal.tsx`): reemplaza `fetch('/api/importador/facturas-fudo', ...)` por `fetch('/api/importador/facturas-universal', ...)` con `mode: apply`. El endpoint universal detecta Fudo nativamente (hojas Gastos+Detalle). Endpoint legacy `facturas-fudo` marcado `@deprecated` en el comentario de cabecera; sigue disponible para calls externos legacy.
+
+**Learnings:** (1) `new Blob([uint8array])` falla en TS 5.7+ con `Uint8Array<ArrayBufferLike>` — usar `bytes.buffer as ArrayBuffer`. (2) `navigator.usb` y `navigator.bluetooth` no están en el DOM lib de TS — declarar interfaces mínimas locales y castear `navigator as Navigator & { usb?: UsbApi }`.
 
 ### Sesión 2026-07-01 — Fase 7: Config salón · 86 bidireccional · Merma auto · Métricas KDS · Modo mozo · Prep-list viva · ESC/POS real
 

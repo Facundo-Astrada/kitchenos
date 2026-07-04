@@ -10,6 +10,10 @@
 
 4. **Insert directo no actualiza el SWR de otro hook.** Si insertás con `supabase.from(...).insert()` directo (no vía la función del hook), el cache SWR de `useTareas`/etc. solo se entera por el **realtime** (1-3 s). Para refresco inmediato, llamar `refetch()`/`mutate()` del hook justo después del insert. (Ver `activarMenu` en produccion/page.tsx.)
 
+5. **`new Blob([uint8Array])` falla en TypeScript 5.7+ (jul 2026).** `Uint8Array<ArrayBufferLike>` no es asignable a `BlobPart` desde TS 5.7. Fix: pasar el buffer subyacente: `new Blob([bytes.buffer as ArrayBuffer], { type: '...' })`. Pasó al implementar el cliente ESC/POS en `salon/page.tsx`.
+
+6. **`navigator.usb` y `navigator.bluetooth` NO están en el DOM lib de TS por defecto (jul 2026).** Estos browser APIs (Web USB / Web Bluetooth) no tienen tipos en `lib.dom.d.ts` estándar. Patrón correcto: declarar interfaces mínimas locales y castear el navigator: `(navigator as Navigator & { usb?: UsbApi }).usb`. No instalar `@types/w3c-web-usb` (rompe el build Next.js). Pasó en `salon/page.tsx` al agregar impresión ESC/POS.
+
 ## Anti-patrón: funciones internas usadas como JSX en React (jun 2026)
 
 **Síntoma:** el teclado se cierra al escribir el primer carácter en un input; el focus se pierde; un formulario se "resetea" solo.
@@ -203,3 +207,9 @@ const total = data.reduce((s, r) => s + (r.cantidad_ops ?? 0), 0)
 ```
 
 No hacer UPDATE directamente con el valor ingresado — siempre recalcular la suma.
+
+## OPS mise — helper compartido `lib/ops/mise.ts` (jul 2026)
+
+Escribir un ítem del mise (`checklist_items` keyed por `restaurante_id + receta_id + plaza`) tiene una única fuente de verdad: `upsertMiseChecklistItem({ supabase, restauranteId, recetaId, nombre, plaza, seccionMiseId, cantidad, unidad, recipienteNombre?, pesoPorcion?, pesoPorcionUnidad? })`. Busca/crea la `checklist_secciones` de la plaza (por `SECCIONES_OPS`) y hace el upsert. Lo usan **Carta** (`handleComposicionSave`) y **Recetario** (`RecetaOpsSheet`, botón OPS de la ficha) — no duplicar esa lógica en un tercer lugar.
+
+Las constantes `PLAZAS_OPS` / `SECCIONES_OPS` viven en `lib/ops/mise.ts` y se **re-exportan** desde `carta/ComposicionEditor` (`import { … } from '@/lib/ops/mise'; export { … }`) para no romper los `import … from './ComposicionEditor'` existentes. Importar desde `@/lib/ops/mise` en código nuevo (evita el import circular con el editor).

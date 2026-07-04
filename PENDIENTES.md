@@ -19,7 +19,7 @@ Lista priorizada de todo lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL
 
 ### 4. Tipos desactualizados
 `Evento`, `Turno` y `Puesto` en `types/index.ts` tienen campos legacy. Sincronizar con el schema real. Puede causar type errors en refactors.
-**Status:** ⏳ Pendiente.
+**Status:** ✅ Resuelto 2026-07-02 — `Evento.color/recurrente` → NOT NULL; `Turno.notas` quita `?`; `Puesto.tareas_funciones/permisos_app` → `string[]`. Mapper en `useEquipo.ts` actualizado.
 
 ### 5. `useCallback` deps faltantes
 Varios hooks tienen `useCallback(…, [])` cuando capturan `RESTAURANTE_ID`. Agregar `RESTAURANTE_ID` a las deps para evitar stale closure si el usuario cambia de restaurante.
@@ -39,7 +39,7 @@ Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/
 El endpoint `POST /api/ingest/escpos?mode=generate` ya genera bytes en base64. Falta el cliente en `salon/page.tsx`:
 - Botón "Imprimir ticket" después de cobrar → `fetch /api/ingest/escpos` → `Buffer.from(base64, 'base64')` → enviar bytes vía WebUSB (impresoras USB) o Web Bluetooth (bluetooth thermal).
 - Fallback: link "Descargar .bin" para impresoras conectadas por software.
-**Status:** ⏳ Pendiente — endpoint listo, falta integración UI + driver WebUSB/Bluetooth.
+**Status:** ✅ Resuelto 2026-07-03 — `TicketCobro` en `salon/page.tsx` tiene botones "Imprimir por USB" (WebUSB, reusar device persistido), "Imprimir por Bluetooth" (BLE genérico) y "Descargar .bin" (siempre visible). Dispositivo USB persistido en `kos_printer_usb` localStorage. Pendiente: obtener `nombreLocal` del restaurante en vez de placeholder 'KitchenOS'.
 
 ---
 
@@ -122,6 +122,7 @@ Los scripts de `scripts/*.mjs` tienen el `SUPABASE_MANAGEMENT_TOKEN` en texto pl
 
 | # | Descripción | Cuándo |
 |---|---|---|
+| **Recetario como creador de platos + OPS + link vivo a carta (3 jul 2026)** — Botón "Convertir a plato" en la ficha (`recetario/[id]`): crea `carta_items` con `receta_id` = la receta (link 1:1, idempotente → "Ver en carta"), copia precio/foto/categoría. Botón "OPS": nuevo `RecetaOpsSheet` (plaza → sección heladera/secos/congelados/estación → recipiente/tupper → peso por porción) que escribe el mise (`checklist_items` por `receta_id`+plaza). Banner de sync de precio receta ↔ plato. Flag `es_plato` **derivado** (query a `carta_items` en `useRecetas`, no columna) → color sutil + chip PLATO en la lista. Nuevo helper compartido `lib/ops/mise.ts` (`upsertMiseChecklistItem` + `PLAZAS_OPS`/`SECCIONES_OPS`); Carta lo adopta (DRY). Sin migraciones. Commit `24cc07e`. | 3 jul 2026 |
 | **Mejoras recetario/carta/checklist (1 jul 2026)** — Fotos en recetario y carta (`PhotoPicker`, bucket `fotos`). Peso total y escurrido en receta (campos editables + display en Food Cost). Costeo en tiempo real en form de ingrediente (subtotal live). Unidades smart (0.005kg→5g, 1500g→1.5kg). Auto-link ingredientes al stock tras guardar receta con IA (fire-and-forget). Checklist Modo Control (botón `fact_check` en header → vista simplificada tick+nombre sin cantidades, persiste en localStorage). | 1 jul 2026 |
 | **Fase 7 Salón/KDS: config + 86 + merma auto + métricas + modo mozo + prep-list viva + ESC/POS** | Config salón (`/salon/config`): CRUD mesas/medios de pago/estaciones KDS. 86 bidireccional: botón en KDS → `POST /api/carta/86` → `carta_items.disponible=false`. Merma automática: `POST /api/salon/merma-auto` (comanda_items→plato_recetas→ingredientes→`productos.stock_actual` + insert `merma`), llamado fire-and-forget desde `useCuenta.cobrarYCerrar`. Métricas KDS: `MetricasPanel` con avg ticket-time, bumps del día, pendientes, en preparación — computa desde `tarjetas`/`comandasRecientes`. Modo mozo mejorado: category tabs filtrados + link a config. Prep-list viva: `POST /api/salon/prep-list-update` incrementa `checklist_items.demanda_viva` fire-and-forget al enviar comanda. ESC/POS real: `POST /api/ingest/escpos` modo `generate` → bytes ESC/POS en base64 para `TicketCocina` y `TicketCliente` (ancho 42, CP437, GS V cut). | 1 jul 2026 |
 | **Fase 2 Walking Skeleton — comanda → KDS → bump (end-to-end)** | `carta_items.estacion_default_id` + seed ruteo El Rescoldo. Hook `useComandas` (SWR+Realtime+eventos_cocina). Vista Salón: mapa de mesas, cuenta, comanda con modificadores/notas, enviar. Vista KDS: tarjetas por comanda, cronómetro ticket-time con colores, bump por ítem y comanda. Reflejo tiempo real en salón (panel "Pedido en curso"). Offline Opción A: SW cachea GETs de Supabase, bumps en cola IndexedDB, sync al reconectar, banner sin-conexión. Playwright e2e setup + test camino feliz. | 30 jun 2026 |
