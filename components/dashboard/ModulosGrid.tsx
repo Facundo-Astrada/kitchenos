@@ -15,27 +15,6 @@ const GRID_MODULOS: ModuloId[] = [
   'pase', 'produccion', 'turnos', 'ventas', 'merma', 'equipo', 'configuracion',
 ]
 
-// Color único por módulo: [background, iconColor]
-const MODULO_COLORS: Partial<Record<ModuloId, [string, string]>> = {
-  operaciones: ['#e8f4fd', '#0369a1'],
-  espacios:    ['#eef2ff', '#4f46e5'],
-  recetario:   ['#ecfdf5', '#059669'],
-  stock:       ['#fffbeb', '#d97706'],
-  pedidos:     ['#fff7ed', '#ea580c'],
-  carta:       ['#fdf4ff', '#9333ea'],
-  facturas:    ['#f0fdf4', '#16a34a'],
-  proveedores: ['#eff6ff', '#2563eb'],
-  calendario:  ['#f5f3ff', '#7c3aed'],
-  reportes:    ['#fefce8', '#ca8a04'],
-  haccp:       ['#f0fdfa', '#0d9488'],
-  pase:        ['#eef2ff', '#4f46e5'],
-  produccion:  ['#fff1f2', '#e11d48'],
-  turnos:      ['#f0f9ff', '#0284c7'],
-  ventas:      ['#faf5ff', '#a21caf'],
-  merma:       ['#fef2f2', '#dc2626'],
-  equipo:      ['#e8f0fe', '#1d4ed8'],
-  configuracion: ['#f8fafc', '#475569'],
-}
 
 interface ModulosGridProps {
   rol: Rol
@@ -66,31 +45,29 @@ export default function ModulosGrid({ rol, desktop = false }: ModulosGridProps) 
           {/* Importar */}
           <button
             onClick={() => setShowImportador(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 14, background: '#e0f2fe', border: '1px solid #bae6fd', cursor: 'pointer', textAlign: 'left', transition: 'box-shadow 0.15s, transform 0.15s', fontFamily: 'inherit' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 6px 16px rgba(0,0,0,.1)' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left', transition: 'box-shadow 0.15s, transform 0.15s', fontFamily: 'inherit' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 6px 16px rgba(0,0,0,.08)' }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ''; (e.currentTarget as HTMLElement).style.boxShadow = '' }}
           >
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#0369a1' }}>upload_file</span>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--accent)' }}>upload_file</span>
             </div>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#0c4a6e', lineHeight: 1.2 }}>Importar</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1.2 }}>Importar</span>
           </button>
 
           {modulos.map((moduloId) => {
             const modulo = MODULO_CONFIG[moduloId as ModuloId]
             if (!modulo) return null
-            const [bg, iconColor] = MODULO_COLORS[moduloId] ?? ['var(--surface)', 'var(--navy)']
-            const borderColor = bg.replace(')', ', .4)').replace('rgb(', 'rgba(').replace('#', '')
             return (
               <Link
                 key={moduloId}
                 href={modulo.href}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 14, background: bg, border: `1px solid ${bg}`, cursor: 'pointer', textDecoration: 'none', transition: 'box-shadow 0.15s, transform 0.15s' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 6px 16px rgba(0,0,0,.1)' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)', cursor: 'pointer', textDecoration: 'none', transition: 'box-shadow 0.15s, transform 0.15s' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 6px 16px rgba(0,0,0,.08)' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ''; (e.currentTarget as HTMLElement).style.boxShadow = '' }}
               >
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 20, color: iconColor }}>{modulo.icon}</span>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--accent)' }}>{modulo.icon}</span>
                 </div>
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1.2 }}>{modulo.label}</span>
               </Link>
@@ -122,15 +99,12 @@ export default function ModulosGrid({ rol, desktop = false }: ModulosGridProps) 
           <div
             style={{
               width: 56, height: 56, borderRadius: 16,
-              background: '#e0f2fe',
+              background: 'var(--surface)', border: '1px solid var(--border)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'transform 0.12s, box-shadow 0.12s',
-              boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+              transition: 'transform 0.12s',
             }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.06)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,.1)' }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,.06)' }}
           >
-            <span className="material-symbols-outlined" style={{ fontSize: 26, color: '#0369a1' }}>upload_file</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 26, color: 'var(--accent)' }}>upload_file</span>
           </div>
           <span style={{ fontSize: 10, fontWeight: 600, textAlign: 'center', lineHeight: 1.2, color: 'var(--text-2)', maxWidth: 64 }}>
             Importar
@@ -140,7 +114,6 @@ export default function ModulosGrid({ rol, desktop = false }: ModulosGridProps) 
         {modulos.map((moduloId) => {
           const modulo = MODULO_CONFIG[moduloId as ModuloId]
           if (!modulo) return null
-          const [bg, iconColor] = MODULO_COLORS[moduloId] ?? ['var(--surface)', 'var(--navy)']
           return (
             <Link
               key={moduloId}
@@ -151,23 +124,14 @@ export default function ModulosGrid({ rol, desktop = false }: ModulosGridProps) 
                 style={{
                   width: 56, height: 56,
                   borderRadius: 16,
-                  background: bg,
+                  background: 'var(--surface)', border: '1px solid var(--border)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'transform 0.12s, box-shadow 0.12s',
-                  boxShadow: '0 1px 3px rgba(0,0,0,.06)',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.transform = 'scale(1.06)'
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,.1)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.transform = 'scale(1)'
-                  e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,.06)'
+                  transition: 'transform 0.12s',
                 }}
               >
                 <span
                   className="material-symbols-outlined"
-                  style={{ fontSize: 26, color: iconColor }}
+                  style={{ fontSize: 26, color: 'var(--accent)' }}
                 >
                   {modulo.icon}
                 </span>

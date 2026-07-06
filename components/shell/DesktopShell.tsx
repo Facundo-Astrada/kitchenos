@@ -11,6 +11,9 @@ import ShortcutsHelp from '@/components/desktop/ShortcutsHelp'
 import { useDesktopShortcuts } from '@/lib/hooks/useDesktopShortcuts'
 import { useState } from 'react'
 
+// Rutas que necesitan ancho completo (tabla, mapa, gráficos)
+const FULL_WIDTH_ROUTES = ['/stock', '/espacios', '/reportes']
+
 const SECCIONES: { label: string; items: ModuloId[] }[] = [
   { label: 'Operaciones', items: ['home', 'operaciones', 'espacios', 'tareas', 'pase', 'checklist'] },
   { label: 'Cocina', items: ['recetario', 'carta', 'produccion'] },
@@ -31,6 +34,8 @@ export default function DesktopShell({ children }: { children: React.ReactNode }
   const rol = perfil?.rol ?? 'ayudante'
   const modulosDelRol = MODULOS_POR_ROL[rol]
   const rolConfig = perfil ? ROL_CONFIG[perfil.rol] : null
+
+  const isFullWidth = FULL_WIDTH_ROUTES.some(r => pathname.startsWith(r))
 
   const canSee = (id: ModuloId) =>
     id === 'home' || isAdmin || puedeVer(id)
@@ -196,7 +201,11 @@ export default function DesktopShell({ children }: { children: React.ReactNode }
 
       {/* ── Contenido principal ── */}
       <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
-        {children}
+        {isFullWidth ? children : (
+          <div style={{ maxWidth: 1040, margin: '0 auto', height: '100%' }}>
+            {children}
+          </div>
+        )}
       </main>
 
       {showImportador && (

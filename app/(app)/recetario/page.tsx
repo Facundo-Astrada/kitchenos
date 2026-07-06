@@ -15,6 +15,7 @@ import ImageCropModal from '@/components/ui/ImageCropModal'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import ImportadorFichasTecnicas from '@/components/importador/ImportadorFichasTecnicas'
 import { HeaderAction } from '@/components/ui'
+import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 
 const UNIDADES = ['kg', 'g', 'l', 'ml', 'u']
 
@@ -213,6 +214,7 @@ export default function RecetarioPage() {
   const { categorias: catDB } = useCategoriasProducto()
   const { puedeEditar, isAdmin } = usePermisos()
   const canEdit = isAdmin || puedeEditar('recetas')
+  const isDesktop = useIsDesktop()
 
   const [search, setSearch] = useState('')
   const [catFilter, setCatFilter] = useState('')
@@ -522,7 +524,10 @@ export default function RecetarioPage() {
             variants={containerVariants}
             initial="hidden"
             animate="show"
-            style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+            style={isDesktop
+              ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }
+              : { display: 'flex', flexDirection: 'column', gap: 8 }
+            }
           >
             {filtered.map(r => (
               <motion.div key={r.id} variants={itemVariants}>
