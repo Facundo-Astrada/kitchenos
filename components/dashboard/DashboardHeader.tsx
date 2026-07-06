@@ -151,7 +151,7 @@ function StatusBar({
         barColor="#10b981"
       />
       <StatusCard
-        label="Tareas"
+        label="Tareas hoy"
         href="/tareas"
         value={`${tareasCompletadas}/${tareasTotal}`}
         barWidth={tareasPct}

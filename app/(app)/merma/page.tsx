@@ -78,6 +78,11 @@ export default function MermaPage() {
   const [toast, setToast] = useState('')
 
   // ── Fetch on period change ────────────────────────────────
+  useEffect(() => {
+    const { desde, hasta } = getRango('hoy')
+    fetchMerma(desde, hasta)
+  }, [fetchMerma])
+
   const handlePeriodo = useCallback((p: Periodo) => {
     setPeriodo(p)
     const { desde, hasta } = getRango(p)

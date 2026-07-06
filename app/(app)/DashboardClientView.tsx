@@ -101,13 +101,16 @@ export default function DashboardPage() {
   // Stats separados para mise en place y tareas
   const { plazaStats, miseStats, tareasStats } = useMemo(() => {
     const hoy = new Date().toISOString().slice(0, 10)
-    // All pending/in_proceso tasks are "relevant today"; completed only if done today
+    const ayerDate = new Date(); ayerDate.setDate(ayerDate.getDate() - 1)
+    const ayer = ayerDate.toISOString().slice(0, 10)
+    // Solo tareas de hoy + carryover de ayer (mismo criterio que OPS Producción)
     const tareasHoy = tareas.filter(t => {
-      if (t.status !== 'completada') return true
-      const completedDate = t.completed_at?.slice(0, 10) || t.created_at?.slice(0, 10) || ''
-      return completedDate === hoy
+      if (!t.turno_fecha) return false
+      if (t.turno_fecha === hoy) return true
+      if (t.turno_fecha === ayer && t.estado !== 'listo') return true
+      return false
     })
-    const tareasCompletadas = tareasHoy.filter(t => t.status === 'completada').length
+    const tareasCompletadas = tareasHoy.filter(t => t.estado === 'listo').length
     const registrosHoy = registros.filter(r => r.fecha === hoy && r.completado)
     const totalChecklist = checklistItems.length
     const completadosChecklist = registrosHoy.length

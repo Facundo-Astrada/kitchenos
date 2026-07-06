@@ -6,47 +6,80 @@ import { useAuth } from '@/lib/auth/context'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { RUTA_A_MODULO } from '@/lib/constants'
 
+const MODULO_LABEL: Record<string, string> = {
+  facturas: 'Facturas',
+  configuracion: 'Configuración',
+  espacios: 'Espacios',
+  reportes: 'Reportes',
+  ventas: 'Ventas',
+  carta: 'Carta',
+  recetario: 'Recetario',
+  stock: 'Stock',
+  operaciones: 'OPS',
+  pedidos: 'Pedidos',
+  proveedores: 'Proveedores',
+  merma: 'Merma',
+  haccp: 'HACCP',
+  equipo: 'Equipo',
+  salon: 'Salón',
+  kds: 'KDS',
+  calendario: 'Calendario',
+  pase: 'Pase',
+}
+
 export default function RouteGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const { perfil, loading: authLoading } = useAuth()
   const { puedeVer, loading: permLoading, isAdmin } = usePermisos()
-  const [allowed, setAllowed] = useState(true)
+  const [moduloBloqueado, setModuloBloqueado] = useState<string | null>(null)
 
-  // Wait for auth to finish loading
   const stillLoading = authLoading || permLoading
 
   useEffect(() => {
     if (stillLoading) return
-    // No perfil means user has no restaurant link — let them through
-    // (the dashboard will show empty state, not a lock screen)
-    if (!perfil) { setAllowed(true); return }
+    if (!perfil) { setModuloBloqueado(null); return }
+    if (isAdmin) { setModuloBloqueado(null); return }
 
-    // Admin always has access
-    if (isAdmin) { setAllowed(true); return }
-
-    // Find the module for this route
     const basePath = '/' + (pathname.split('/')[1] ?? '')
     const modulo = RUTA_A_MODULO[basePath]
 
-    // Unknown routes or always-accessible routes
-    if (!modulo) { setAllowed(true); return }
+    if (!modulo) { setModuloBloqueado(null); return }
 
     if (!puedeVer(modulo)) {
-      setAllowed(false)
-      router.replace('/')
+      setModuloBloqueado(modulo)
     } else {
-      setAllowed(true)
+      setModuloBloqueado(null)
     }
-  }, [pathname, stillLoading, perfil, isAdmin, puedeVer, router])
+  }, [pathname, stillLoading, perfil, isAdmin, puedeVer])
 
-  if (stillLoading) return null // parent layout already shows spinner
-  if (!allowed) {
+  if (stillLoading) return null
+
+  if (moduloBloqueado) {
+    const nombre = MODULO_LABEL[moduloBloqueado] ?? moduloBloqueado
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 p-8" style={{ background: 'var(--bg)' }}>
-        <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'var(--text-3)' }}>lock</span>
-        <p className="text-sm font-semibold" style={{ color: 'var(--text-2)' }}>No tenés acceso a este módulo</p>
-        <p className="text-xs" style={{ color: 'var(--text-3)' }}>Contactá al administrador para cambiar tus permisos</p>
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', height: '100%', gap: 10, padding: 32,
+        background: 'var(--bg)',
+      }}>
+        <span className="material-symbols-outlined" style={{ fontSize: 52, color: 'var(--text-3)' }}>lock</span>
+        <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', margin: 0, textAlign: 'center' }}>
+          Sin acceso a {nombre}
+        </p>
+        <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, textAlign: 'center', maxWidth: 260 }}>
+          Pedile al administrador que habilite este módulo en tu perfil.
+        </p>
+        <button
+          onClick={() => router.replace('/')}
+          style={{
+            marginTop: 8, padding: '10px 24px', borderRadius: 12, border: 'none',
+            background: 'var(--navy)', color: '#fff', fontSize: 14, fontWeight: 700,
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >
+          Volver al inicio
+        </button>
       </div>
     )
   }
