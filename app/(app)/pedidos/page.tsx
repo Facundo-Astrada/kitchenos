@@ -49,8 +49,11 @@ async function exportPedidoPDF(pedido: Pedido, items: PedidoItem[]) {
   doc.setFontSize(10)
   doc.text(`Proveedor: ${pedido.proveedor_nombre}`, 14, 28)
   doc.text(`Fecha: ${fmtDate(pedido.fecha_pedido)}`, 14, 34)
-  if (pedido.fecha_entrega_esperada) {
-    doc.text(`Entrega esperada: ${fmtDate(pedido.fecha_entrega_esperada)}`, 100, 28)
+  const entregaPDF = pedido.entrega_desde || pedido.entrega_hasta
+    ? fmtRangoEntrega(pedido.entrega_desde, pedido.entrega_hasta)
+    : pedido.fecha_entrega_esperada ? fmtDate(pedido.fecha_entrega_esperada) : null
+  if (entregaPDF) {
+    doc.text(`Entrega: ${entregaPDF}`, 100, 28)
   }
   doc.text(`Estado: ${STATUS_COLORS[pedido.status as EstadoPedido].label}`, 100, 34)
 
@@ -98,7 +101,10 @@ async function exportPedidoPDF(pedido: Pedido, items: PedidoItem[]) {
 function buildWhatsAppText(pedido: Pedido, items: PedidoItem[]) {
   let msg = `*Pedido - ${pedido.proveedor_nombre}*\n`
   msg += `Fecha: ${fmtDate(pedido.fecha_pedido)}\n`
-  if (pedido.fecha_entrega_esperada) msg += `Entrega esperada: ${fmtDate(pedido.fecha_entrega_esperada)}\n`
+  const entrega = pedido.entrega_desde || pedido.entrega_hasta
+    ? fmtRangoEntrega(pedido.entrega_desde, pedido.entrega_hasta)
+    : pedido.fecha_entrega_esperada ? fmtDate(pedido.fecha_entrega_esperada) : null
+  if (entrega) msg += `Entrega: ${entrega}\n`
   msg += `\n`
   items.forEach((it, i) => {
     msg += `${i + 1}. ${it.producto_nombre} — ${it.cantidad} ${it.unidad}`
@@ -145,8 +151,8 @@ function PedidoCard({ pedido, onClick, onWhatsApp, onPDF }: {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-1)' }}>
-              {pedido.proveedor_nombre}
+            <span style={{ fontWeight: 700, fontSize: 15, color: pedido.proveedor_nombre ? 'var(--text-1)' : '#f97316' }}>
+              {pedido.proveedor_nombre || 'Sin proveedor asignado'}
             </span>
             <StatusBadge status={pedido.status as EstadoPedido} />
           </div>
@@ -163,11 +169,11 @@ function PedidoCard({ pedido, onClick, onWhatsApp, onPDF }: {
           </div>
         </div>
       </button>
-      {/* Quick actions */}
-      <div style={{ padding: '0 14px 10px', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+      {/* Quick actions — solo WhatsApp; PDF en el detalle */}
+      <div style={{ padding: '0 14px 8px', display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <button onClick={e => { e.stopPropagation(); onWhatsApp() }} style={{
           display: 'flex', alignItems: 'center', gap: 4,
-          padding: '9px 14px', borderRadius: 8, minHeight: 44,
+          padding: '7px 14px', borderRadius: 8, minHeight: 40,
           background: '#25D366', color: '#fff', border: 'none',
           fontSize: 12, fontWeight: 600, cursor: 'pointer',
         }}>
@@ -176,13 +182,12 @@ function PedidoCard({ pedido, onClick, onWhatsApp, onPDF }: {
         </button>
         <button onClick={e => { e.stopPropagation(); onPDF() }} style={{
           display: 'flex', alignItems: 'center', gap: 4,
-          padding: '9px 14px', borderRadius: 8, minHeight: 44,
-          background: 'var(--surface)', color: 'var(--text-2)',
+          padding: '7px 10px', borderRadius: 8, minHeight: 40,
+          background: 'var(--surface)', color: 'var(--text-3)',
           border: '1px solid var(--border)',
-          fontSize: 12, fontWeight: 600, cursor: 'pointer',
+          fontSize: 12, cursor: 'pointer',
         }}>
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>picture_as_pdf</span>
-          PDF
         </button>
       </div>
     </div>

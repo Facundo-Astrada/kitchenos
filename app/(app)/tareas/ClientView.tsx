@@ -237,9 +237,6 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
             <OpsToggle value={modo} onChange={handleModoChange} />
-            <span style={{ fontSize: 9, color: 'rgba(255,255,255,.35)', textAlign: 'right', lineHeight: 1.3 }}>
-              {modo === 'carta' ? 'Por prioridad' : 'Por categoría de plato'}
-            </span>
           </div>
         </div>
 

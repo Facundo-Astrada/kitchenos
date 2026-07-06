@@ -152,7 +152,7 @@ export default function PerfilPage() {
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <div className="flex flex-col items-center gap-4 max-w-[400px] mx-auto">
           {/* Avatar — tappable */}
-          <div style={{ position: 'relative' }}>
+          <div style={{ position: 'relative', width: 88, height: 88 }}>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
@@ -161,7 +161,6 @@ export default function PerfilPage() {
                 background: avatarUrl ? 'transparent' : (perfil?.color ?? '#4361a0'),
                 border: 'none', cursor: 'pointer', padding: 0,
                 overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                position: 'relative',
               }}
             >
               {avatarUrl ? (
@@ -172,18 +171,23 @@ export default function PerfilPage() {
                   {perfil?.initials ?? '??'}
                 </span>
               )}
-              {/* overlay */}
-              <div style={{
-                position: 'absolute', inset: 0, borderRadius: '50%',
-                background: 'rgba(0,0,0,.35)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                {uploading
-                  ? <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#fff' }}>hourglass_empty</span>
-                  : <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#fff' }}>photo_camera</span>
-                }
-              </div>
             </button>
+            {/* Badge de cámara en esquina inferior derecha */}
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                position: 'absolute', bottom: 0, right: 0,
+                width: 28, height: 28, borderRadius: '50%',
+                background: 'var(--navy)', border: '2px solid var(--bg)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer',
+              }}
+            >
+              {uploading
+                ? <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#fff' }}>hourglass_empty</span>
+                : <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#fff' }}>photo_camera</span>
+              }
+            </div>
             <input
               ref={fileInputRef}
               type="file"

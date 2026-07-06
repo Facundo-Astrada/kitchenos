@@ -7,6 +7,7 @@ import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import type { Proveedor, Factura } from '@/types'
 import PageHeader from '@/components/shell/PageHeader'
 import ActionButton from '@/components/shell/ActionButton'
+import { Avatar } from '@/components/ui'
 import ImportadorArchivo, { UndoBanner } from '@/components/importador/ImportadorArchivo'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 
@@ -280,9 +281,7 @@ export default function ProveedoresPage({ embedded = false }: { embedded?: boole
                     onClick={() => toggleExpand(p.id)}
                     style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '14px', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left' }}
                   >
-                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: avatarColor(p.nombre), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
-                      {initials(p.nombre)}
-                    </div>
+                    <Avatar name={p.nombre} size={40} style={{ flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{p.nombre}</div>
                       <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>

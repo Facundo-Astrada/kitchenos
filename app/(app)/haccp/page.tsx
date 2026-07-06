@@ -45,7 +45,7 @@ function vencColor(days: number, status: string): { bg: string; text: string } {
 }
 
 function timeAgo(d: string | null): string {
-  if (!d) return 'Nunca'
+  if (!d) return 'Nunca realizada'
   const diff = Date.now() - new Date(d).getTime()
   const mins = Math.floor(diff / 60000)
   if (mins < 60) return 'Hace ' + mins + ' min'

@@ -23,22 +23,26 @@ export function OpsToggle({ value, onChange }: OpsToggleProps) {
             key={m}
             onClick={() => onChange(m)}
             style={{
-              padding: '5px 16px',
+              padding: '4px 16px',
               borderRadius: 999,
               border: 'none',
               cursor: 'pointer',
-              fontSize: 11,
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '.07em',
               fontFamily: 'inherit',
               background: active ? '#fff' : 'transparent',
               color: active ? 'var(--navy)' : 'rgba(255,255,255,.55)',
               transition: 'all .15s',
               WebkitTapHighlightColor: 'transparent',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0,
             }}
           >
-            {m === 'menu' ? 'Menú' : 'Carta'}
+            <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>
+              {m === 'menu' ? 'Menú' : 'Carta'}
+            </span>
+            {active && (
+              <span style={{ fontSize: 8, fontWeight: 600, opacity: 0.5, letterSpacing: '.04em', lineHeight: 1.3 }}>
+                {m === 'carta' ? 'Por prioridad' : 'Por categoría'}
+              </span>
+            )}
           </button>
         )
       })}

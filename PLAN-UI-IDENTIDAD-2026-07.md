@@ -198,7 +198,7 @@
 
 ## D9 — Batch de detalles menores 🟡 Media-baja (una sesión, muchos arreglos chicos)
 
-- [ ] Completado — fecha: ____
+- [x] Completado — fecha: 2026-07-06
 
 Lista cerrada (cada ítem es un arreglo puntual; verificar línea con Grep):
 
@@ -219,7 +219,7 @@ Lista cerrada (cada ítem es un arreglo puntual; verificar línea con Grep):
 
 ## D10 — Limpieza de datos Bros que ensucian la demo 🟡 (scripts, sin UI)
 
-- [ ] Completado — fecha: ____
+- [x] Completado — fecha: 2026-07-06
 
 **Problema:** datos de prueba/basura visibles en la primera pantalla que ve el cliente:
 - Mensajes de prueba en el pase ("Falta stock jdhvfnlkakvpñv — Producción pendienteksjañla-", de Franco, 8 jun).

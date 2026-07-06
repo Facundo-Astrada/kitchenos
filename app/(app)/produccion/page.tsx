@@ -360,9 +360,9 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
                 Cancelar
               </button>
             )}
-            <button onClick={() => setShowMenuPicker(true)} style={{ background: '#fff', border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: 'var(--navy)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <button onClick={() => setShowMenuPicker(true)} style={{ background: '#fff', border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: 'var(--navy)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 14 }}>menu_book</span>
-              Activar menú
+              Activar
             </button>
             <button onClick={() => setView('crear')} style={{ background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer' }}>
               + Plato
@@ -372,20 +372,22 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
 
         {/* Date selector — only in normal mode */}
         {!multiSelectMode && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-            <button onClick={() => shiftDate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 10 }}>
+            <button onClick={() => shiftDate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
               <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 20 }}>chevron_left</span>
             </button>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#fff', flex: 1 }}>{fmtDateLabel(new Date(fecha + 'T12:00:00'))}</span>
-            <button onClick={() => shiftDate(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+            <label style={{ flex: 1, position: 'relative', cursor: 'pointer' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{fmtDateLabel(new Date(fecha + 'T12:00:00'))}</span>
+              <input
+                type="date"
+                value={fecha}
+                onChange={e => setFecha(e.target.value)}
+                style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }}
+              />
+            </label>
+            <button onClick={() => shiftDate(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
               <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 20 }}>chevron_right</span>
             </button>
-            <input
-              type="date"
-              value={fecha}
-              onChange={e => setFecha(e.target.value)}
-              style={{ background: 'rgba(255,255,255,.1)', color: '#fff', border: 'none', borderRadius: 6, padding: '3px 8px', fontSize: 11 }}
-            />
           </div>
         )}
 

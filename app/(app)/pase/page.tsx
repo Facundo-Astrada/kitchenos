@@ -167,11 +167,6 @@ function MensajeBurbuja({ msg, showHeader = true, onCrearTarea }: { msg: PaseMen
             <span style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 600 }}>Crear tarea</span>
           </button>
         )}
-        {!showHeader && (
-          <span className="text-[9px] mt-[2px] block" style={{ color: 'var(--text-3)' }}>
-            {horaCorta(msg.created_at)}
-          </span>
-        )}
       </div>
     </div>
   )
@@ -580,6 +575,8 @@ export default function PasePage() {
         }}
       >
         {/* Quick messages */}
+        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 32, background: 'linear-gradient(to right, transparent, var(--surface))', pointerEvents: 'none', zIndex: 1 }} />
         <div data-coach-target="pase-rapidos" className="flex gap-[6px] overflow-x-auto px-3 py-[8px]" style={{ scrollbarWidth: 'none' }}>
           {/* 86 button — special */}
           <button
@@ -602,6 +599,7 @@ export default function PasePage() {
               {mr.texto}
             </button>
           ))}
+        </div>
         </div>
 
         {/* Mention dropdown */}

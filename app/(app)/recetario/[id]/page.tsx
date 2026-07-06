@@ -551,7 +551,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
               <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>arrow_back</span>
             </button>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{receta.nombre}</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: '#fff', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{receta.nombre}</div>
               <div style={{ fontSize: 10, color: 'rgba(255,255,255,.45)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {[
                   receta.categoria,

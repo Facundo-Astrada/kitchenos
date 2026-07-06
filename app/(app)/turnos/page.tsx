@@ -1121,7 +1121,7 @@ export default function TurnosPage() {
           <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 400 }}>
             <thead>
               <tr>
-                <th style={{ width: 70, padding: '6px 4px', fontSize: 11, color: 'var(--text-3)', textAlign: 'left', fontWeight: 600 }} />
+                <th style={{ width: 70, padding: '6px 4px', fontSize: 11, color: 'var(--text-3)', textAlign: 'left', fontWeight: 600, position: 'sticky', left: 0, background: 'var(--surface)', zIndex: 2 }} />
                 {weekDates.map((d, i) => (
                   <th key={i} style={{ padding: '6px 2px', fontSize: 11, color: 'var(--text-3)', textAlign: 'center', fontWeight: 600 }}>
                     <div>{DIAS[i]}</div>
@@ -1134,7 +1134,7 @@ export default function TurnosPage() {
             <tbody>
               {miembros.map(m => (
                 <tr key={m.id}>
-                  <td style={{ padding: '4px 4px', fontSize: 12, fontWeight: 600, color: 'var(--text-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 70 }}>
+                  <td style={{ padding: '4px 4px', fontSize: 12, fontWeight: 600, color: 'var(--text-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 70, position: 'sticky', left: 0, background: 'var(--surface)', zIndex: 1 }}>
                     {m.nombre.slice(0, 3)}.{m.apellido?.[0] ?? ''}
                   </td>
                   {weekDates.map((d, i) => {

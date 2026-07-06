@@ -331,9 +331,15 @@ function MiembroCard({
             <p className="text-sm font-semibold" style={{ color: 'var(--navy)' }}>
               {m.nombre} {m.apellido}
             </p>
-            <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
-              {rolLabel}{m.plaza_asignada ? ` · ${m.plaza_asignada}` : ''}
-            </p>
+            {(!rol && !m.plaza_asignada) ? (
+              <button onClick={onEdit} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>
+                Asignar puesto
+              </button>
+            ) : (
+              <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+                {rolLabel}{m.plaza_asignada ? ` · ${m.plaza_asignada}` : ''}
+              </p>
+            )}
           </div>
         </div>
         <button onClick={onEdit} className="bg-transparent border-none cursor-pointer p-1">
