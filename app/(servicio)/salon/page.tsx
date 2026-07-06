@@ -221,6 +221,99 @@ interface LineaPago {
   monto: string      // string para el input
 }
 
+// ── ESC/POS tipos mínimos (Web USB / Bluetooth no están en el DOM lib por defecto) ──
+
+interface PrinterUsbEp { direction: string; type: string; endpointNumber: number }
+interface PrinterUsbIface {
+  interfaceNumber: number
+  alternates: { interfaceClass: number; endpoints: PrinterUsbEp[] }[]
+}
+interface PrinterUsbDevice {
+  vendorId: number; productId: number
+  configuration: { interfaces: PrinterUsbIface[] } | null
+  open(): Promise<void>; selectConfiguration(n: number): Promise<void>
+  claimInterface(n: number): Promise<void>; releaseInterface(n: number): Promise<void>
+  transferOut(ep: number, data: Uint8Array): Promise<unknown>
+}
+interface PrinterBleChar { writeValueWithoutResponse(data: Uint8Array): Promise<void> }
+interface PrinterBleGattServer {
+  getPrimaryService(s: string): Promise<{ getCharacteristic(c: string): Promise<PrinterBleChar> }>
+}
+interface PrinterBleDevice {
+  id?: string
+  gatt?: { connect(): Promise<PrinterBleGattServer> }
+}
+
+async function fetchEscPosBytes(payload: object): Promise<Uint8Array> {
+  const res = await fetch('/api/ingest/escpos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const json = await res.json() as { ok: boolean; bytes: string; error?: string }
+  if (!json.ok) throw new Error(json.error ?? 'Error generando ticket')
+  const raw = atob(json.bytes)
+  const arr = new Uint8Array(raw.length)
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i)
+  return arr
+}
+
+const BLE_SERVICE = '000018f0-0000-1000-8000-00805f9b34fb'
+const BLE_CHAR    = '00002af1-0000-1000-8000-00805f9b34fb'
+
+async function printViaUSB(bytes: Uint8Array): Promise<void> {
+  type UsbApi = {
+    getDevices(): Promise<PrinterUsbDevice[]>
+    requestDevice(o: { filters: unknown[] }): Promise<PrinterUsbDevice>
+  }
+  const usb = (navigator as Navigator & { usb?: UsbApi }).usb
+  if (!usb) throw new Error('WebUSB no disponible en este navegador')
+  const saved = localStorage.getItem('kos_printer_usb')
+  let device: PrinterUsbDevice | undefined
+  const all = await usb.getDevices()
+  if (saved) {
+    const { vendorId, productId } = JSON.parse(saved) as { vendorId: number; productId: number }
+    device = all.find(d => d.vendorId === vendorId && d.productId === productId)
+  }
+  if (!device) {
+    device = await usb.requestDevice({ filters: [] })
+    localStorage.setItem('kos_printer_usb', JSON.stringify({ vendorId: device.vendorId, productId: device.productId }))
+  }
+  await device.open()
+  if (!device.configuration) await device.selectConfiguration(1)
+  let ifaceNum = 0, epNum = 1
+  for (const iface of device.configuration?.interfaces ?? []) {
+    for (const alt of iface.alternates) {
+      if (alt.interfaceClass === 7) {
+        ifaceNum = iface.interfaceNumber
+        const ep = alt.endpoints.find(e => e.direction === 'out' && e.type === 'bulk')
+        if (ep) epNum = ep.endpointNumber
+      }
+    }
+  }
+  await device.claimInterface(ifaceNum)
+  try {
+    for (let i = 0; i < bytes.length; i += 512) await device.transferOut(epNum, bytes.slice(i, i + 512))
+  } finally {
+    await device.releaseInterface(ifaceNum)
+  }
+}
+
+async function printViaBluetooth(bytes: Uint8Array): Promise<void> {
+  type BtApi = {
+    requestDevice(o: { acceptAllDevices?: boolean; optionalServices?: string[] }): Promise<PrinterBleDevice>
+  }
+  const bt = (navigator as Navigator & { bluetooth?: BtApi }).bluetooth
+  if (!bt) throw new Error('Web Bluetooth no disponible en este navegador')
+  const device = await bt.requestDevice({ acceptAllDevices: true, optionalServices: [BLE_SERVICE] })
+  if (device.id) localStorage.setItem('kos_printer_bt', device.id)
+  const server = await device.gatt?.connect()
+  if (!server) throw new Error('No se pudo conectar al dispositivo Bluetooth')
+  const service = await server.getPrimaryService(BLE_SERVICE)
+  const char = await service.getCharacteristic(BLE_CHAR)
+  for (let i = 0; i < bytes.length; i += 512) await char.writeValueWithoutResponse(bytes.slice(i, i + 512))
+}
+
 // ── Ticket post-cobro ────────────────────────────────────────────────────────
 
 function TicketCobro({
@@ -237,6 +330,64 @@ function TicketCobro({
   onVolver: () => void
 }) {
   const hora = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+
+  const [printing, setPrinting] = useState(false)
+  const [printError, setPrintError] = useState<string | null>(null)
+  const supportsUSB = typeof navigator !== 'undefined' && 'usb' in navigator
+  const supportsBT  = typeof navigator !== 'undefined' && 'bluetooth' in navigator
+
+  function ticketPayload() {
+    return {
+      mode: 'generate', tipo: 'cliente',
+      data: {
+        nombreLocal: 'KitchenOS',
+        mesa: String(mesa.numero),
+        items: resumenLineas.map(l => ({
+          nombre: l.nombre, cantidad: l.cantidad,
+          precio: l.cantidad > 0 ? l.subtotal / l.cantidad : 0,
+        })),
+        subtotal, propina: propinaMonto, total, pagos, vuelto,
+        ...(fiscal?.cae ? {
+          cae: fiscal.cae,
+          ...(fiscal.cae_vencimiento ? { caeVto: fiscal.cae_vencimiento } : {}),
+          ...(fiscal.numero ? { numeroComprobante: fiscal.numero } : {}),
+          ...(fiscal.qr_data ? { qrData: fiscal.qr_data } : {}),
+        } : {}),
+      },
+    }
+  }
+
+  async function handlePrint(method: 'usb' | 'bluetooth') {
+    setPrinting(true)
+    setPrintError(null)
+    try {
+      const bytes = await fetchEscPosBytes(ticketPayload())
+      if (method === 'usb') await printViaUSB(bytes)
+      else await printViaBluetooth(bytes)
+    } catch (e: unknown) {
+      setPrintError(e instanceof Error ? e.message : 'Error al imprimir')
+    } finally {
+      setPrinting(false)
+    }
+  }
+
+  async function handleDownload() {
+    setPrinting(true)
+    setPrintError(null)
+    try {
+      const bytes = await fetchEscPosBytes(ticketPayload())
+      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/octet-stream' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = `ticket-mesa-${mesa.numero}.bin`; a.click()
+      URL.revokeObjectURL(url)
+    } catch (e: unknown) {
+      setPrintError(e instanceof Error ? e.message : 'Error al descargar')
+    } finally {
+      setPrinting(false)
+    }
+  }
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ flex: 1, overflowY: 'auto', padding: '46px 20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -341,6 +492,33 @@ function TicketCobro({
             </div>
           </div>
         )}
+
+        {/* Imprimir ticket */}
+        <div style={{ background: '#1a1a1a', borderRadius: 14, padding: 16 }}>
+          <p style={{ color: '#aaa', fontSize: 13, marginBottom: 12 }}>Imprimir ticket</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {supportsUSB && (
+              <button onClick={() => { void handlePrint('usb') }} disabled={printing}
+                style={{ minHeight: 64, borderRadius: 12, background: '#1c2d4a', border: 'none', color: '#fff', fontSize: 18, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: printing ? 0.6 : 1 }}>
+                <span className="material-symbols-outlined">print</span>
+                {printing ? 'Imprimiendo...' : 'Imprimir por USB'}
+              </button>
+            )}
+            {supportsBT && (
+              <button onClick={() => { void handlePrint('bluetooth') }} disabled={printing}
+                style={{ minHeight: 64, borderRadius: 12, background: '#1c2d4a', border: 'none', color: '#fff', fontSize: 18, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: printing ? 0.6 : 1 }}>
+                <span className="material-symbols-outlined">bluetooth</span>
+                {printing ? 'Conectando...' : 'Imprimir por Bluetooth'}
+              </button>
+            )}
+            <button onClick={() => { void handleDownload() }} disabled={printing}
+              style={{ minHeight: 64, borderRadius: 12, background: '#2a2a2a', border: 'none', color: '#fff', fontSize: 18, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: printing ? 0.6 : 1 }}>
+              <span className="material-symbols-outlined">download</span>
+              Descargar .bin
+            </button>
+          </div>
+          {printError && <p style={{ color: '#e57373', fontSize: 13, marginTop: 10 }}>{printError}</p>}
+        </div>
       </div>
 
       <div style={{ padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0 }}>
@@ -829,7 +1007,17 @@ export default function SalonPage() {
           </button>
         </div>
         {mesas.length === 0 ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>No hay mesas cargadas</div>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 56, color: '#444' }}>table_restaurant</span>
+            <p style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: 0, textAlign: 'center' }}>No hay mesas cargadas</p>
+            <p style={{ fontSize: 13, color: '#888', margin: 0, textAlign: 'center' }}>Configurá el mapa de mesas para usar el salón</p>
+            <button
+              onClick={() => router.push('/salon/config')}
+              style={{ marginTop: 8, minHeight: 64, padding: '0 28px', borderRadius: 14, border: 'none', background: '#1a1a1a', color: '#fff', fontSize: 18, fontWeight: 700, cursor: 'pointer' }}
+            >
+              Configurar mesas
+            </button>
+          </div>
         ) : (
           <div style={{ flex: 1, overflow: 'auto', position: 'relative', minHeight: 600 }}>
             {mesas.map(m => (

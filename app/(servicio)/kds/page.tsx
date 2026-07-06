@@ -43,6 +43,23 @@ function tiempoFiredMasViejo(items: ComandaItem[]): number | null {
 // ─── sub-componentes (nivel módulo — evita remount) ──────────────────────────
 
 function SelectorEstacion({ estaciones, onElegir }: { estaciones: Estacion[]; onElegir: (id: string) => void }) {
+  if (estaciones.length === 0) {
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24, textAlign: 'center' }}>
+        <span className="material-symbols-outlined" style={{ fontSize: 56, color: '#444' }}>kitchen</span>
+        <p style={{ fontSize: 22, fontWeight: 700, color: '#fff', margin: 0 }}>No hay estaciones configuradas</p>
+        <p style={{ fontSize: 16, color: '#888', margin: 0, maxWidth: 340 }}>
+          Creá al menos una estación en<br /><strong style={{ color: '#ccc' }}>Configuración → Salón</strong>
+        </p>
+        <button
+          onClick={() => { window.location.href = '/configuracion' }}
+          style={{ marginTop: 8, minHeight: 64, padding: '0 32px', borderRadius: 14, border: 'none', background: '#1a1a1a', color: '#fff', fontSize: 18, fontWeight: 700, cursor: 'pointer' }}
+        >
+          Ir a Configuración
+        </button>
+      </div>
+    )
+  }
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 }}>
       <p style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>¿Qué estación es esta pantalla?</p>

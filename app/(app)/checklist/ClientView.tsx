@@ -669,7 +669,20 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         )}
 
         {/* ── APERTURA / CIERRE ── */}
-        {!loading && tab !== 'rutina' && plazaSecciones.map(sec => {
+        {!loading && tab !== 'rutina' && (() => {
+          const allSectionsEmpty = plazaSecciones.every(sec => (grouped[sec.id] ?? []).length === 0)
+          if (allSectionsEmpty && plazaSecciones.length > 0) {
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 16px', gap: 8 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 44, color: 'var(--text-3)' }}>playlist_add_check</span>
+                <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-2)', margin: 0, textAlign: 'center' }}>El mise está vacío</p>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0, textAlign: 'center', maxWidth: 240 }}>
+                  Activá un menú en Planificación o agregá preparaciones desde Carta → OPS.
+                </p>
+              </div>
+            )
+          }
+          return plazaSecciones.map(sec => {
           const secItems = grouped[sec.id] ?? []
           const secDone = secItems.filter(i => regMap[i.id]?.completado).length
           const isCollapsed = collapsed[sec.id] ?? false
@@ -817,7 +830,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
               )}
             </div>
           )
-        })}
+        })
+        })()}
 
         {/* ── RUTINA ── */}
         {!loading && tab === 'rutina' && (

@@ -184,13 +184,15 @@ export default function ReportesPage() {
   // ---------------------------------------------------------------------------
 
   function KpiCard({ label, value, prev, icon, suffix }: { label: string; value: number; prev?: number; icon: string; suffix?: string }) {
-    const displayVal = suffix === '%' ? fmtPct(value) : suffix === '$' ? fmtMoney(value) : value.toString()
+    const displayVal = value === 0 ? '—' : suffix === '%' ? fmtPct(value) : suffix === '$' ? fmtMoney(value) : value.toString()
     let arrow = ''
     let arrowColor = 'var(--text-3)'
-    if (prev !== undefined && prev > 0) {
+    if (prev !== undefined && prev > 0 && value > 0) {
       const change = ((value - prev) / prev) * 100
       if (change > 0) { arrow = `+${change.toFixed(0)}%`; arrowColor = label.includes('Food') ? '#dc2626' : '#16a34a' }
       else if (change < 0) { arrow = `${change.toFixed(0)}%`; arrowColor = label.includes('Food') ? '#16a34a' : '#dc2626' }
+    } else if (prev !== undefined && prev > 0 && value === 0) {
+      arrow = 'sin datos aún'; arrowColor = 'var(--text-3)'
     }
 
     return (
@@ -260,7 +262,7 @@ export default function ReportesPage() {
   }
 
   function renderFoodCost() {
-    if (!foodCostData.length) return <EmptyState icon="restaurant" text="Sin datos de food cost. Vinculá recetas a la carta." />
+    if (!foodCostData.length) return <EmptyState icon="restaurant" text="Sin datos de food cost. Vinculá recetas a la carta (Carta → Plato → FC)." />
     const max = Math.max(...foodCostData.map(f => f.food_cost_pct))
     const avgFc = foodCostData.reduce((s, f) => s + f.food_cost_pct, 0) / foodCostData.length
     return (
@@ -312,7 +314,13 @@ export default function ReportesPage() {
 
   function renderCompras() {
     const { proveedores, facturas } = comprasData
-    if (!proveedores.length) return <EmptyState icon="shopping_cart" text="Sin compras para el período" />
+    if (!proveedores.length) {
+      const esMesActual = periodo === 'mes'
+      return <EmptyState icon="shopping_cart"
+        text={esMesActual ? `Sin compras en "${PERIODOS.find(p => p.key === periodo)?.label}". Puede que el mes no tenga facturas cargadas aún.` : 'Sin compras para el período seleccionado.'}
+        cta={esMesActual ? { label: 'Ver Último mes', onClick: () => setPeriodo('mes_anterior') } : undefined}
+      />
+    }
     const maxTotal = Math.max(...proveedores.map(p => p.total))
     const totalGlobal = proveedores.reduce((s, p) => s + p.total, 0)
 
@@ -479,7 +487,11 @@ export default function ReportesPage() {
   // ── CMV ──
   function renderCMV() {
     if (!cmvData || (cmvData.ventas === 0 && cmvData.compras === 0)) {
-      return <EmptyState icon="savings" text="Sin datos. Importá ventas y cargá facturas para calcular el CMV." />
+      const esMesActual = periodo === 'mes'
+      return <EmptyState icon="savings"
+        text={esMesActual ? `Sin datos en "${PERIODOS.find(p => p.key === periodo)?.label}". Es posible que el mes recién empiece.` : 'Sin datos. Importá ventas y cargá facturas para calcular el CMV.'}
+        cta={esMesActual ? { label: 'Ver Último mes', onClick: () => setPeriodo('mes_anterior') } : undefined}
+      />
     }
     const c = cmvData
     const cmvCol = c.cmvPct < 33 ? '#16a34a' : c.cmvPct <= 40 ? '#ca8a04' : '#dc2626'
@@ -615,14 +627,19 @@ export default function ReportesPage() {
     )
   }
 
-  function EmptyState({ icon, text }: { icon: string; text: string }) {
+  function EmptyState({ icon, text, cta }: { icon: string; text: string; cta?: { label: string; onClick: () => void } }) {
     return (
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         padding: '48px 16px', gap: 8,
       }}>
         <span className="material-symbols-outlined" style={{ fontSize: 40, color: 'var(--text-3)' }}>{icon}</span>
-        <span style={{ fontSize: 13, color: 'var(--text-3)' }}>{text}</span>
+        <span style={{ fontSize: 13, color: 'var(--text-3)', textAlign: 'center', maxWidth: 280 }}>{text}</span>
+        {cta && (
+          <button onClick={cta.onClick} style={{ marginTop: 8, padding: '10px 20px', borderRadius: 10, border: 'none', background: 'var(--navy)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            {cta.label}
+          </button>
+        )}
       </div>
     )
   }
