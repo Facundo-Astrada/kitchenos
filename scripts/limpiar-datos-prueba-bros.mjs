@@ -116,15 +116,17 @@ casosB.slice(0, 10).forEach(p =>
 )
 if (casosB.length > 10) console.log(`   ... y ${casosB.length - 10} más`)
 
-if (APPLY && absurdos.length > 0) {
-  const ids = absurdos.map(p => p.id)
+if (APPLY && casosA.length > 0) {
+  // Caso A: umbral exagerado → resetear a 0 (columna es NOT NULL)
+  const ids = casosA.map(p => p.id)
   const { error } = await supabase
     .from('productos')
-    .update({ stock_minimo: null, stock_critico: null })
+    .update({ stock_minimo: 0, stock_critico: 0 })
     .in('id', ids)
-  if (error) console.error('   ❌ Error:', error.message)
-  else console.log(`   ✅ ${ids.length} productos con umbrales reseteados a NULL`)
+  if (error) console.error('   ❌ Error Caso A:', error.message)
+  else console.log(`   ✅ ${ids.length} productos Caso A reseteados a 0`)
 }
+// Caso B: ya están en 0/0 — nada que cambiar en DB
 
 // ── 3. Plazas equipo — dedup + tildes ────────────────────────
 const TILDES = {
