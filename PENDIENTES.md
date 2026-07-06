@@ -6,7 +6,9 @@ Lista priorizada de todo lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL
 
 ## 🟠 Alto — Seguridad y UX
 
-### 2. Invitación de usuarios por email
+> **Planes activos:** `PLAN-UI-IDENTIDAD-2026-07.md` ✅ **completo** (D0–D10, 6 jul) · `PLAN-ROADMAP-COMPETENCIA-2026-07.md` ⏳ próximo (empezar por Q1 carta QR, gate: D0 hecho) · `PLAN-MEJORAS-AUDITORIA-2026-07.md` (A/B/C — B2 fiscal y A7 dictado quedan abiertos).
+
+### 1. Invitación de usuarios por email
 **Flujo esperado:** Admin ingresa email + rol → Supabase envía magic link → el empleado llega a la app, setea contraseña, queda vinculado al `restaurante_id` del admin con el rol asignado.
 **Hecho:**
 - ✅ Endpoint `POST /api/invitar` con service role (`inviteUserByEmail` + pre-crea `user_restaurantes` + `equipo_miembros` con `activo: false`).
@@ -122,6 +124,7 @@ Los scripts de `scripts/*.mjs` tienen el `SUPABASE_MANAGEMENT_TOKEN` en texto pl
 
 | # | Descripción | Cuándo |
 |---|---|---|
+| **Limpieza de datos de prueba en Bros (D10, 6 jul 2026)** — Script `scripts/limpiar-datos-prueba-bros.mjs --apply` ejecutado. Eliminado 1 mensaje de pase basura, reseteados 28 productos con umbrales absurdos (`stock_minimo=0`), normalizadas plazas de 3 miembros (tildes + dedup). | 6 jul 2026 |
 | **Recetario como creador de platos + OPS + link vivo a carta (3 jul 2026)** — Botón "Convertir a plato" en la ficha (`recetario/[id]`): crea `carta_items` con `receta_id` = la receta (link 1:1, idempotente → "Ver en carta"), copia precio/foto/categoría. Botón "OPS": nuevo `RecetaOpsSheet` (plaza → sección heladera/secos/congelados/estación → recipiente/tupper → peso por porción) que escribe el mise (`checklist_items` por `receta_id`+plaza). Banner de sync de precio receta ↔ plato. Flag `es_plato` **derivado** (query a `carta_items` en `useRecetas`, no columna) → color sutil + chip PLATO en la lista. Nuevo helper compartido `lib/ops/mise.ts` (`upsertMiseChecklistItem` + `PLAZAS_OPS`/`SECCIONES_OPS`); Carta lo adopta (DRY). Sin migraciones. Commit `24cc07e`. | 3 jul 2026 |
 | **Mejoras recetario/carta/checklist (1 jul 2026)** — Fotos en recetario y carta (`PhotoPicker`, bucket `fotos`). Peso total y escurrido en receta (campos editables + display en Food Cost). Costeo en tiempo real en form de ingrediente (subtotal live). Unidades smart (0.005kg→5g, 1500g→1.5kg). Auto-link ingredientes al stock tras guardar receta con IA (fire-and-forget). Checklist Modo Control (botón `fact_check` en header → vista simplificada tick+nombre sin cantidades, persiste en localStorage). | 1 jul 2026 |
 | **Fase 7 Salón/KDS: config + 86 + merma auto + métricas + modo mozo + prep-list viva + ESC/POS** | Config salón (`/salon/config`): CRUD mesas/medios de pago/estaciones KDS. 86 bidireccional: botón en KDS → `POST /api/carta/86` → `carta_items.disponible=false`. Merma automática: `POST /api/salon/merma-auto` (comanda_items→plato_recetas→ingredientes→`productos.stock_actual` + insert `merma`), llamado fire-and-forget desde `useCuenta.cobrarYCerrar`. Métricas KDS: `MetricasPanel` con avg ticket-time, bumps del día, pendientes, en preparación — computa desde `tarjetas`/`comandasRecientes`. Modo mozo mejorado: category tabs filtrados + link a config. Prep-list viva: `POST /api/salon/prep-list-update` incrementa `checklist_items.demanda_viva` fire-and-forget al enviar comanda. ESC/POS real: `POST /api/ingest/escpos` modo `generate` → bytes ESC/POS en base64 para `TicketCocina` y `TicketCliente` (ancho 42, CP437, GS V cut). | 1 jul 2026 |

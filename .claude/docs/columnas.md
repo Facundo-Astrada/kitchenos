@@ -2,7 +2,7 @@
 
 | Tabla | Columna correcta | NO usar |
 |---|---|---|
-| `productos` | `stock_actual`, `stock_minimo`, `stock_critico` | `cantidad` |
+| `productos` | `stock_actual`, `stock_minimo`, `stock_critico` — **`stock_minimo` y `stock_critico` son NOT NULL** (DEFAULT 0). Al resetear umbrales usar `update({ stock_minimo: 0, stock_critico: 0 })`, nunca `null`. | `cantidad` |
 | `productos` | `precio_unitario` | `precio` |
 | `productos` | `es_produccion BOOLEAN DEFAULT false` + `receta_id UUID NULL` (FK recetas, ON DELETE SET NULL) — producción interna (caldo/masa/fondo): el costo se toma de la receta vinculada (`food_cost.costo_porcion`), no de factura. Badge "Producción" en stock. | (agregado jun 2026) |
 | `tareas` | `status` (`'pendiente'|'en_proceso'|'completada'`) | `completada` (bool) |

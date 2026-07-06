@@ -105,6 +105,24 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 
 ## 4. Implementado en Últimas Sesiones
 
+### Sesión 2026-07-06 — Plan UI-Identidad completo (D0–D10): sistema de diseño canónico + correcciones de auditoría
+
+Ejecución completa de `PLAN-UI-IDENTIDAD-2026-07.md` (origen: auditoría visual del 5 jul con la cuenta Bros). 6 commits: `10dc47e` (D0–D4) · `4d05378` (D5) · `6c7fd6c` (D6–D7) · `5909f4d` (D8) · `8e4d3ed` (D9+D10) · `cc1ade3` (fix D10).
+
+1. **D0 — Sistema de identidad (`components/ui/` + `lib/ui/chrome.tsx`)**: componentes canónicos que reemplazan los ~5 estilos de tabs, 4 patrones de "crear", chips invertidos y avatares inconsistentes que había. `SegmentedTabs` (variantes onDark/onLight), `FilterChips` (fade de overflow), `EmptyState` (con CTA), `HeaderAction` (pill navy en header — reemplaza FABs de acción y la barra flotante de Recetario), `Avatar` (hash determinístico, paleta fija de 6), `Num` (tabular-nums). `UiChromeProvider` + `useSheetOpen()` para que flotantes globales se oculten con sheets abiertos. **Regla de oro** documentada en `.claude/docs/ui.md` (sección "Componentes canónicos D0") + `ui-auditor` actualizado: ninguna pantalla nueva introduce patrón visual propio. Pantalla de muestra migrada: Ventas.
+2. **D1 — Coach FAB deja de tapar contenido**: sheets/editores llaman `useSheetOpen`/`useSheetOpenWhen` (Merma, Stock sector+Stockear, ComposicionEditor, ImportadorUniversal, Producción menu picker) → el FAB se oculta. FAB "+" de Merma movido al header como `HeaderAction`.
+3. **D2 — Stock mobile**: en ≤479px el bloque mín/crít baja como segunda línea de la celda Producto (elimina la colisión badge/número); Insumos/Producciones → `SegmentedTabs`; KPIs con scroll+fade; placeholder "Buscar…".
+4. **D3 — Recetario**: barra flotante "Nueva receta" → iconos + `HeaderAction` en header; cards ocultan metadata en 0 (tiempo/porciones); `normalizeCategoria()` dedup + `CATEGORIAS_RECETA` canónicas en el form; subtítulo "Food cost" solo para admin. Script `scripts/normalizar-categorias-recetas.mjs`.
+5. **D4 — Editor de Carta unificado**: mismo buscador inline por sección en Plato/Menú/Evento (elimina el patrón de ítem en blanco); títulos de sección con el label chico canónico; placeholders correctos (Nombre del evento/menú); resumen ÍTEMS/COSTO con label contextual y COSTO oculto para no-admin.
+6. **D5 — Empty states con salida**: Salón sin mesas → "Configurar mesas"; KDS sin estaciones → "Ir a Configuración"; Reportes period-aware (CTA "Ver Último mes", KPI en 0 muestra "—" no "-100%"); Mise todo-vacío → un solo EmptyState.
+7. **D6 — Permisos**: `RouteGuard` con pantalla de bloqueo (lock icon + módulo + instrucción al admin) en vez de redirect mudo.
+8. **D7 — Números confiables**: dashboard "Tareas hoy" filtra `turno_fecha` (hoy + carryover ayer sin `estado=listo`); Merma aplica filtro "hoy" al montar.
+9. **D8 — Desktop**: `DesktopShell` wrapea contenido a `max-width:1040px` (excepto /stock, /espacios, /reportes); `ModulosGrid` elimina la paleta pastel → `var(--surface)`/`--border`/`--accent`; Recetario 2 columnas en desktop.
+10. **D9 — 11 detalles**: HACCP "Nunca realizada"; título de receta 2 líneas; `OpsToggle` sublabel integrado; Proveedores+Perfil → `Avatar`; Pedidos PDF a ícono + "Sin proveedor asignado" naranja; Pase timestamps sin duplicar; Producción un solo control de fecha; Turnos columna sticky; Equipo CTA "Asignar puesto".
+11. **D10 — Limpieza de datos Bros** (`scripts/limpiar-datos-prueba-bros.mjs`): **Aplicado** (6 jul, Facundo confirmó dry-run en sesión). Resultados: 1 mensaje de pase basura eliminado, 28 productos Caso A reseteados a `stock_minimo=0, stock_critico=0` (tenían umbrales absurdo vs stock_actual < 5), 3 miembros con plazas normalizadas (tildes + dedup). Nota: `stock_minimo`/`stock_critico` son NOT NULL — usar `0`, nunca `null`. Caso B (todo en 0/0/0) ya estaba correcto, no requirió cambio.
+
+**Sin migraciones de DB.** Aprendizajes de UI capturados en `.claude/docs/ui.md`.
+
 ### Sesión 2026-07-03 (cont.) — Recetario como creador de platos: convertir a plato + OPS + link vivo a carta
 
 1. **Helper compartido `lib/ops/mise.ts`**: `upsertMiseChecklistItem({ supabase, restauranteId, recetaId, nombre, plaza, seccionMiseId, cantidad, unidad, recipienteNombre, pesoPorcion, pesoPorcionUnidad })` — busca/crea `checklist_secciones` y hace upsert de `checklist_items` keyed por `(restaurante_id, receta_id, plaza)`. Extraído de `handleComposicionSave` (Carta), que ahora lo consume (DRY). Las constantes `PLAZAS_OPS`/`SECCIONES_OPS` se mudaron acá; `ComposicionEditor` las importa y re-exporta para no romper imports existentes.

@@ -10,6 +10,8 @@
 
 4. **Insert directo no actualiza el SWR de otro hook.** Si insertás con `supabase.from(...).insert()` directo (no vía la función del hook), el cache SWR de `useTareas`/etc. solo se entera por el **realtime** (1-3 s). Para refresco inmediato, llamar `refetch()`/`mutate()` del hook justo después del insert. (Ver `activarMenu` en produccion/page.tsx.)
 
+7. **Scripts `.mjs` no aceptan anotaciones TypeScript (jul 2026).** Node.js ejecuta `.mjs` como ES module puro — cualquier `: string`, `: number`, `Record<K, V>`, `as Type` causa `SyntaxError: Missing initializer`. Usar JS puro: `function f(param)` (sin tipos), `const MAP = { ... }` (sin `Record<string,string>`). Si el script necesita tipos, cambiar extensión a `.ts` y correr con `tsx` o `ts-node`. Pasó con `limpiar-datos-prueba-bros.mjs` (jul 2026).
+
 5. **`new Blob([uint8Array])` falla en TypeScript 5.7+ (jul 2026).** `Uint8Array<ArrayBufferLike>` no es asignable a `BlobPart` desde TS 5.7. Fix: pasar el buffer subyacente: `new Blob([bytes.buffer as ArrayBuffer], { type: '...' })`. Pasó al implementar el cliente ESC/POS en `salon/page.tsx`.
 
 6. **`navigator.usb` y `navigator.bluetooth` NO están en el DOM lib de TS por defecto (jul 2026).** Estos browser APIs (Web USB / Web Bluetooth) no tienen tipos en `lib.dom.d.ts` estándar. Patrón correcto: declarar interfaces mínimas locales y castear el navigator: `(navigator as Navigator & { usb?: UsbApi }).usb`. No instalar `@types/w3c-web-usb` (rompe el build Next.js). Pasó en `salon/page.tsx` al agregar impresión ESC/POS.
