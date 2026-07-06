@@ -1,5 +1,152 @@
 # UI / CSS — KitchenOS
 
+## Componentes canónicos (D0, jul 2026)
+
+**Regla de oro: ninguna pantalla nueva introduce tabs, chips, empty states, botón de crear, avatares ni números propios. Todo sale de `components/ui/`.**
+
+```typescript
+import { SegmentedTabs, FilterChips, EmptyState, HeaderAction, Avatar, Num } from '@/components/ui'
+import type { SegmentedTab, FilterChip } from '@/components/ui'
+```
+
+### SegmentedTabs
+
+Tabs pill con dos variantes. Reemplaza los ~5 estilos distintos de tabs que había en la app.
+
+```tsx
+// onDark (default) — pill blanco sobre navy. Patrón OPS / Equipo / Carta.
+// Usar DENTRO de un contenedor con background: 'var(--navy)'.
+<SegmentedTabs
+  tabs={[{ id: 'a', label: 'Uno', icon: 'task_alt' }, { id: 'b', label: 'Dos' }]}
+  active={tab}
+  onChange={setTab}
+/>
+
+// onLight — pill card sobre fondo claro. Patrón HACCP sub-tabs.
+<SegmentedTabs tabs={tabs} active={tab} onChange={setTab} variant="onLight" />
+```
+
+Props:
+- `tabs: SegmentedTab<T>[]` — `{ id: T, label: string, icon?: string }`
+- `active: T`
+- `onChange: (id: T) => void`
+- `variant?: 'onDark' | 'onLight'` (default: `'onDark'`)
+- `style?: CSSProperties`
+
+### FilterChips
+
+Chips de filtro con scroll horizontal y fade de overflow. Reemplaza los 4 patrones de chips contradictorios.
+
+```tsx
+const PERIODOS: FilterChip<Periodo>[] = [
+  { value: 'semana', label: 'Semana' },
+  { value: 'mes', label: 'Mes' },
+  { value: 'todo', label: 'Todo' },
+]
+
+// onLight (default) — activo navy sólido, inactivo var(--surface). Para body claro.
+<FilterChips chips={PERIODOS} active={periodo} onChange={handlePeriodo} style={{ padding: '16px 16px 12px' }} />
+
+// onDark — inactivo rgba(255,255,255,.08). Para dentro de headers oscuros.
+<FilterChips chips={chips} active={active} onChange={onChange} context="onDark" />
+```
+
+Props:
+- `chips: FilterChip<T>[]` — `{ value: T, label: string }`
+- `active: T`
+- `onChange: (value: T) => void`
+- `context?: 'onLight' | 'onDark'` (default: `'onLight'`)
+- `style?: CSSProperties`
+
+### EmptyState
+
+Estado vacío único de la app. Reemplaza los ~12 empty states ad hoc.
+
+```tsx
+<EmptyState
+  icon="bar_chart"
+  title="Sin datos de ventas"
+  subtitle="Importá tus ventas desde la pestaña Importar"
+  cta={{ label: 'Ir a Importar', onClick: () => setTab('importar') }}
+/>
+```
+
+Props:
+- `icon: string` — nombre de Material Symbol
+- `title: string`
+- `subtitle?: string`
+- `cta?: { label: string; onClick: () => void }`
+- `style?: CSSProperties`
+
+### HeaderAction
+
+Botón de acción primaria de pantalla. Va DENTRO del header navy. Reemplaza FABs de acción y barras flotantes por pantalla.
+
+```tsx
+// Siempre dentro de: <div style={{ background: 'var(--navy)', ... }}>
+<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+  <span style={{ color: '#fff', fontWeight: 700, fontSize: 20 }}>Mi pantalla</span>
+  <HeaderAction label="Nuevo" icon="add" onClick={handleNuevo} />
+</div>
+```
+
+Props:
+- `label?: string` (default: `'Nuevo'`)
+- `icon?: string` (default: `'add'`)
+- `onClick: () => void`
+- `disabled?: boolean`
+- `style?: CSSProperties`
+
+### Avatar
+
+Iniciales con color determinístico por hash del nombre. Paleta fija de 6 colores de identidad. Reemplaza naranja-todos (Equipo) y multicolor-aleatorio (Proveedores).
+
+```tsx
+<Avatar name="Franco López" size={40} />
+<Avatar name="Ana García" size={32} />
+```
+
+Props:
+- `name: string` — nombre completo; hash determina el color
+- `size?: number` (default: `40`)
+- `style?: CSSProperties`
+- `className?: string`
+
+Paleta: accent navy `#4361a0`, verde `#10b981`, naranja `#f97316`, violeta `#8b5cf6`, rosa `#ec4899`, azul `#0ea5e9`.
+
+### Num
+
+Número tabular (`font-variant-numeric: tabular-nums`). Alinea cifras en columnas. Usar en: precios, cantidades de stock, KPIs, contadores.
+
+```tsx
+<Num>$328.500</Num>
+<Num style={{ fontSize: 20, fontWeight: 700 }}>{stock_actual}</Num>
+<p className="text-[16px] font-bold"><Num>{fmtPrecio(total)}</Num></p>
+```
+
+Props:
+- `children: ReactNode`
+- `className?: string`
+- `style?: CSSProperties`
+
+### UiChromeProvider + useSheetOpen
+
+Provider montado en `app/(app)/layout.tsx`. El KitchenCoachFAB se oculta cuando `sheetCount > 0`.
+
+```tsx
+// En un bottom sheet, modal o editor full-screen:
+import { useSheetOpen } from '@/lib/ui/chrome'
+
+function MiSheet() {
+  useSheetOpen()  // ← incrementa al montar, decrementa al desmontar
+  return <div>...</div>
+}
+```
+
+La integración masiva de sheets existentes ocurre en D1. En D0 solo el provider está montado y el FAB lo lee.
+
+---
+
 ## Tabla con header fijo: usar UNA tabla con `thead` sticky, no dos tablas (jun 2026)
 
 Patrón viejo (header en su `<table>` + body en otra `<table>` scrolleable): si el body tiene scrollbar, su `<table>` queda ~15px más angosta que la del header. Con anchos de columna en **%** ese desfase se reparte y las columnas del header **no caen sobre las del body** (se nota como líneas corridas, sobre todo en el resaltado de una columna). Pasó en `stock/ClientView.tsx`.

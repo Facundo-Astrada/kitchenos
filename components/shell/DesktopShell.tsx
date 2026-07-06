@@ -14,6 +14,7 @@ import { useState } from 'react'
 const SECCIONES: { label: string; items: ModuloId[] }[] = [
   { label: 'Operaciones', items: ['home', 'operaciones', 'espacios', 'tareas', 'pase', 'checklist'] },
   { label: 'Cocina', items: ['recetario', 'carta', 'produccion'] },
+  { label: 'Servicio', items: ['salon', 'kds'] },
   { label: 'Insumos', items: ['stock', 'facturas', 'pedidos', 'proveedores', 'merma'] },
   { label: 'Gestión', items: ['reportes', 'ventas', 'haccp', 'calendario', 'turnos'] },
   { label: 'Sistema', items: ['equipo', 'configuracion'] },

@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
 import { PLAZAS_OPS, SECCIONES_OPS } from '@/lib/ops/mise'
+import { useSheetOpen } from '@/lib/ui/chrome'
+import { usePermisos } from '@/lib/hooks/usePermisos'
 
 // ── Tipos públicos ──────────────────────────────────────────
 export type CompModo = 'plato' | 'menu' | 'evento'
@@ -102,7 +104,9 @@ export default function ComposicionEditor({
   onSave: (payload: CompPayload) => Promise<void>
   onCancel: () => void
 }) {
+  useSheetOpen()
   const RESTAURANTE_ID = useRestauranteId()
+  const { isAdmin } = usePermisos()
 
   async function crearIdeaReceta(nombre: string): Promise<string> {
     if (!RESTAURANTE_ID) throw new Error('Sin sesión')
@@ -158,6 +162,9 @@ export default function ComposicionEditor({
   const [secEdit, setSecEdit] = useState<{ idx: number; val: string } | null>(null)
   const [nuevaSeccion, setNuevaSeccion] = useState('')
   const [saving, setSaving] = useState(false)
+  const [activeSearch, setActiveSearch] = useState<string | null>(null)
+  const [sectionQuery, setSectionQuery] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
 
   // ── Estado exclusivo para modo plato (UI simplificada) ──
   const [platoRecetas, setPlatoRecetas] = useState<PlatoItem[]>(() => {
@@ -218,11 +225,33 @@ export default function ComposicionEditor({
   const fcPct = esPlato && precioN > 0 ? (costoTotal / precioN) * 100 : null
   const fcColor = fcPct == null ? 'var(--text-3)' : fcPct < 30 ? '#16a34a' : fcPct <= 35 ? '#d97706' : '#dc2626'
 
+  const searchResults = useMemo(() => {
+    if (!sectionQuery.trim()) return []
+    const q = sectionQuery.toLowerCase()
+    const recetasR = recetas.filter(r => r.nombre.toLowerCase().includes(q)).slice(0, 5).map(r => ({ ...r, tipo: 'receta' as const }))
+    const productosR = productos.filter(r => r.nombre.toLowerCase().includes(q)).slice(0, 4).map(r => ({ ...r, tipo: 'producto' as const }))
+    const platosR = cartaItems.filter(r => r.nombre.toLowerCase().includes(q)).slice(0, 3).map(r => ({ ...r, tipo: 'plato' as const }))
+    return [...recetasR, ...productosR, ...platosR]
+  }, [sectionQuery, recetas, productos, cartaItems])
+
   // ── Item ops ──
   function addItem(seccion: string) {
     const nuevo: ItemRow = { _uid: uid(), _seccion: seccion, tipo: null, ref_id: null, nombre: '', prioridad: 'media', plaza: null, seccion_mise: null, usuario_asignado: null, cantidad: null, unidad: null }
     setItems(prev => [...prev, nuevo])
     setExpandedUid(nuevo._uid)
+  }
+
+  function addItemFromSearch(seccion: string, tipo: 'receta' | 'producto' | 'plato', ref_id: string, nombre: string) {
+    const nuevo: ItemRow = { _uid: uid(), _seccion: seccion, tipo, ref_id, nombre, prioridad: 'media', plaza: null, seccion_mise: null, usuario_asignado: null, cantidad: 1, unidad: null }
+    setItems(prev => [...prev, nuevo])
+    setActiveSearch(null)
+    setSectionQuery('')
+  }
+
+  function openSectionSearch(sec: string) {
+    setActiveSearch(sec)
+    setSectionQuery('')
+    setTimeout(() => searchRef.current?.focus(), 50)
   }
   function updateItem(u: number, patch: Partial<ItemRow>) {
     setItems(prev => prev.map(it => it._uid === u ? { ...it, ...patch } : it))
@@ -325,24 +354,29 @@ export default function ComposicionEditor({
         </div>
       </div>
 
-      {/* Resumen vivo pegajoso */}
-      <div style={{ flexShrink: 0, background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '8px 12px', display: 'flex', gap: 8, alignItems: 'stretch' }}>
-        {(() => {
-          const Metric = ({ label, value, color, big }: { label: string; value: string; color?: string; big?: boolean }) => (
-            <div style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 9, padding: '5px 8px', textAlign: 'center' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
-              <div style={{ fontSize: big ? 15 : 13, fontWeight: 800, color: color ?? 'var(--text-1)', fontFamily: 'monospace' }}>{value}</div>
-            </div>
-          )
-          return (
-            <>
-              <Metric label="Ítems" value={String(esPlato ? platoRecetas.length : items.filter(i => i.nombre.trim()).length)} />
-              <Metric label="Costo" value={fmtMoney(costoTotal)} />
-              {fcPct != null && <Metric label="Food cost" value={`${fcPct.toFixed(0)}%`} color={fcColor} big />}
-              {esPlato && precioN > 0 && <Metric label="Margen" value={fmtMoney(precioN - costoTotal)} color={precioN - costoTotal > 0 ? '#16a34a' : '#dc2626'} />}
-            </>
-          )
-        })()}
+      {/* Resumen vivo */}
+      <div style={{ flexShrink: 0, background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '6px 12px 8px' }}>
+        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 5 }}>
+          {esPlato ? 'Este plato' : modo === 'evento' ? 'Este evento' : 'Este menú'}
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+          {(() => {
+            const Metric = ({ label, value, color, big }: { label: string; value: string; color?: string; big?: boolean }) => (
+              <div style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 9, padding: '5px 8px', textAlign: 'center' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
+                <div style={{ fontSize: big ? 15 : 13, fontWeight: 800, color: color ?? 'var(--text-1)', fontFamily: 'monospace' }}>{value}</div>
+              </div>
+            )
+            return (
+              <>
+                <Metric label="Ítems" value={String(esPlato ? platoRecetas.length : items.filter(i => i.nombre.trim()).length)} />
+                {isAdmin && <Metric label="Costo" value={fmtMoney(costoTotal)} />}
+                {isAdmin && fcPct != null && <Metric label="Food cost" value={`${fcPct.toFixed(0)}%`} color={fcColor} big />}
+                {isAdmin && esPlato && precioN > 0 && <Metric label="Margen" value={fmtMoney(precioN - costoTotal)} color={precioN - costoTotal > 0 ? '#16a34a' : '#dc2626'} />}
+              </>
+            )
+          })()}
+        </div>
       </div>
 
       {/* Body */}
@@ -352,7 +386,7 @@ export default function ComposicionEditor({
           {esPlato ? 'Datos del plato' : modo === 'evento' ? 'Datos del evento' : 'Datos del menú'}
         </div>
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 12, marginBottom: 18 }}>
-          <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder={esPlato ? 'Nombre del plato' : 'Nombre del menú'} style={{ ...inp, fontWeight: 800, fontSize: 18, marginBottom: 10 }} autoFocus />
+          <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder={esPlato ? 'Nombre del plato' : modo === 'evento' ? 'Nombre del evento' : 'Nombre del menú'} style={{ ...inp, fontWeight: 800, fontSize: 18, marginBottom: 10 }} autoFocus />
 
           {/* Campos de Plato */}
           {esPlato && (
@@ -380,7 +414,7 @@ export default function ComposicionEditor({
               </div>
             </>
           )}
-          <input value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder="Descripción (opcional)" style={{ ...inp }} />
+          <input value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder={modo === 'evento' ? 'Fecha, lugar, comensales estimados…' : 'Descripción (opcional)'} style={{ ...inp }} />
         </div>
 
         {/* ── Bloque COMPOSICIÓN ── */}
@@ -424,8 +458,8 @@ export default function ComposicionEditor({
                       <input value={secEdit!.val} onChange={e => setSecEdit({ idx: secIdx, val: e.target.value })} onBlur={commitSecRename} onKeyDown={e => { if (e.key === 'Enter') commitSecRename() }} autoFocus
                         style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 13, fontWeight: 700, color: 'var(--text-1)', outline: 'none', textTransform: 'uppercase', letterSpacing: '.04em' }} />
                     ) : (
-                      <button onClick={() => setSecEdit({ idx: secIdx, val: sec })} style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: '.04em', display: 'flex', alignItems: 'center', gap: 5 }}>
-                        {sec}<span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--text-3)' }}>edit</span>
+                      <button onClick={() => setSecEdit({ idx: secIdx, val: sec })} style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', display: 'flex', alignItems: 'center', gap: 5 }}>
+                        {sec}<span className="material-symbols-outlined" style={{ fontSize: 13, color: 'var(--text-3)', opacity: .6 }}>edit</span>
                       </button>
                     )}
                     <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 700, fontFamily: 'monospace' }}>{rows.length}</span>
@@ -446,11 +480,41 @@ export default function ComposicionEditor({
                     />
                   ))}
 
-                  <button onClick={() => addItem(sec)}
-                    style={{ width: '100%', padding: '9px', background: 'none', border: 'none', borderTop: rows.length > 0 ? '1px solid var(--border)' : 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
-                    Agregar a {sec}
-                  </button>
+                  {activeSearch === sec ? (
+                    <div style={{ borderTop: rows.length > 0 ? '1px solid var(--border)' : 'none', padding: '8px 10px' }}>
+                      <div style={{ position: 'relative', marginBottom: 4 }}>
+                        <span className="material-symbols-outlined" style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: 'var(--text-3)', pointerEvents: 'none' }}>search</span>
+                        <input ref={searchRef} value={sectionQuery} onChange={e => setSectionQuery(e.target.value)}
+                          placeholder="Buscar receta, producto o plato…"
+                          style={{ width: '100%', paddingLeft: 30, paddingRight: 8, paddingTop: 7, paddingBottom: 7, border: '1px solid var(--border)', borderRadius: 9, fontSize: 13, background: 'var(--bg)', color: 'var(--text-1)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+                        <button onClick={() => { setActiveSearch(null); setSectionQuery('') }}
+                          style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', padding: 2 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+                        </button>
+                      </div>
+                      <div style={{ maxHeight: 180, overflowY: 'auto' }}>
+                        {sectionQuery.trim().length < 2 ? (
+                          <div style={{ padding: '8px 4px', fontSize: 12, color: 'var(--text-3)' }}>Escribí 2 letras para buscar…</div>
+                        ) : searchResults.length === 0 ? (
+                          <div style={{ padding: '8px 4px', fontSize: 12, color: 'var(--text-3)' }}>Sin resultados</div>
+                        ) : searchResults.map(r => (
+                          <button key={r.id} onClick={() => addItemFromSearch(sec, r.tipo, r.id, r.nombre)}
+                            style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderRadius: 8, padding: '7px 6px', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: r.tipo === 'receta' ? 'rgba(67,97,160,.12)' : r.tipo === 'producto' ? 'rgba(16,185,129,.12)' : 'rgba(249,115,22,.12)', color: r.tipo === 'receta' ? 'var(--accent)' : r.tipo === 'producto' ? '#10b981' : '#f97316' }}>
+                              {r.tipo === 'receta' ? 'Receta' : r.tipo === 'producto' ? 'Producto' : 'Plato'}
+                            </span>
+                            <span style={{ fontSize: 13, color: 'var(--text-1)' }}>{r.nombre}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => openSectionSearch(sec)}
+                      style={{ width: '100%', padding: '9px', background: 'none', border: 'none', borderTop: rows.length > 0 ? '1px solid var(--border)' : 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
+                      Agregar a {sec}
+                    </button>
+                  )}
                 </div>
               )
             })}

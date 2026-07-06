@@ -1,10 +1,14 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import * as XLSX from 'xlsx'
+import { useSheetOpen } from '@/lib/ui/chrome'
+
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
 import ImportadorArchivo from './ImportadorArchivo'
+import ExcelPOSImportModal from '@/components/facturas/ExcelPOSImportModal'
 
 type WorkbookRef = {
   wb: XLSX.WorkBook
@@ -71,7 +75,7 @@ const TIPO_ICON: Record<TipoDetectado, string> = {
 const TIPO_DISPONIBLE: Record<TipoDetectado, boolean> = {
   stock: true,
   proveedores: true,
-  facturas: false,
+  facturas: true,
   recetas: false,
   desconocido: false,
 }
@@ -129,11 +133,14 @@ interface Props {
 interface FudoPreview { facturas: number; items: number; fileName: string }
 
 export default function ImportadorUniversal({ onClose }: Props) {
+  useSheetOpen()
   const RESTAURANTE_ID = useRestauranteId()
+  const router = useRouter()
   const fileRef = useRef<HTMLInputElement>(null)
   const rawFileRef = useRef<File | null>(null)
 
   const [step, setStep] = useState<'idle' | 'analizando' | 'seleccionar_hoja' | 'confirmar' | 'asignar_proveedores' | 'importando' | 'fudo_preview' | 'stock_fudo_preview' | 'done'>('idle')
+  const [showFacturasModal, setShowFacturasModal] = useState(false)
   const [fudoPreview, setFudoPreview] = useState<FudoPreview | null>(null)
   const [stockFudoPreview, setStockFudoPreview] = useState<{ fileName: string; total: number; conPrecio: number } | null>(null)
   const [stockFudoResult, setStockFudoResult] = useState<{ actualizados: number; sin_match: number; sin_match_nombres: string[] } | null>(null)
@@ -454,8 +461,9 @@ export default function ImportadorUniversal({ onClose }: Props) {
       const fd = new FormData()
       fd.append('file', rawFileRef.current)
       fd.append('restauranteId', RESTAURANTE_ID)
-      const res = await fetch('/api/importador/facturas-fudo', { method: 'POST', body: fd })
-      const data = await res.json() as { importadas?: number; items?: number; omitidas?: number; error?: string }
+      fd.append('mode', 'apply')
+      const res = await fetch('/api/importador/facturas-universal', { method: 'POST', body: fd })
+      const data = await res.json() as { importadas?: number; items?: number; omitidas?: number; excluidas_privacidad?: string[]; error?: string }
       if (data.error) { setError(data.error); setStep('fudo_preview'); return }
       setImportCount(data.importadas ?? 0)
       setOmitidas(data.omitidas ?? 0)
@@ -487,6 +495,18 @@ export default function ImportadorUniversal({ onClose }: Props) {
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
+
+  // Delegar al modal universal de facturas cuando el usuario confirma tipo facturas
+  if (showFacturasModal && rawFileRef.current) {
+    return (
+      <ExcelPOSImportModal
+        open={true}
+        initialFile={rawFileRef.current}
+        onClose={() => setShowFacturasModal(false)}
+        onImported={() => { setShowFacturasModal(false); onClose() }}
+      />
+    )
+  }
 
   const importConfig: Record<string, unknown> = {}
 
@@ -936,11 +956,27 @@ export default function ImportadorUniversal({ onClose }: Props) {
               {/* Acción */}
               {TIPO_DISPONIBLE[tipoElegido] ? (
                 <button
-                  onClick={() => tipoElegido === 'stock' ? setStep('asignar_proveedores') : setStep('importando')}
+                  onClick={() => {
+                    if (tipoElegido === 'stock') setStep('asignar_proveedores')
+                    else if (tipoElegido === 'facturas') setShowFacturasModal(true)
+                    else setStep('importando')
+                  }}
                   style={{ background: 'var(--navy)', border: 'none', borderRadius: 12, padding: '14px', fontSize: 14, fontWeight: 700, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}
                 >
                   Continuar como {TIPO_LABEL[tipoElegido]} →
                 </button>
+              ) : tipoElegido === 'recetas' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px', fontSize: 13, color: 'var(--text-3)', textAlign: 'center' }}>
+                    Las recetas se importan desde el Recetario
+                  </div>
+                  <button
+                    onClick={() => { onClose(); router.push('/recetario') }}
+                    style={{ background: 'var(--accent)', border: 'none', borderRadius: 12, padding: '14px', fontSize: 14, fontWeight: 700, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}
+                  >
+                    Ir al Recetario →
+                  </button>
+                </div>
               ) : (
                 <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px', fontSize: 13, color: 'var(--text-3)', textAlign: 'center' }}>
                   La importación de {TIPO_LABEL[tipoElegido]} estará disponible próximamente

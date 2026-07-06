@@ -5,6 +5,8 @@ import * as XLSX from 'xlsx'
 import { useVentas, type NuevaVenta } from '@/lib/hooks/useVentas'
 import { useCarta } from '@/lib/hooks/useCarta'
 import type { Venta, VentaItem, OrigenVenta } from '@/types'
+import { SegmentedTabs, FilterChips, EmptyState, Num } from '@/components/ui'
+import type { SegmentedTab, FilterChip } from '@/components/ui'
 
 const normName = (s: string) => s.toLowerCase().trim().replace(/\s+/g, ' ')
 
@@ -55,10 +57,16 @@ const ORIGEN_CONFIG: Record<OrigenVenta, { label: string; icon: string; color: s
   pos: { label: 'POS', icon: 'point_of_sale', color: '#f97316' },
 }
 
-const PERIODOS: { value: Periodo; label: string }[] = [
+const PERIODOS: FilterChip<Periodo>[] = [
   { value: 'semana', label: 'Semana' },
   { value: 'mes', label: 'Mes' },
   { value: 'todo', label: 'Todo' },
+]
+
+const VENTAS_TABS: SegmentedTab<'resumen' | 'platos' | 'importar'>[] = [
+  { id: 'resumen', label: 'Resumen' },
+  { id: 'platos', label: 'Platos' },
+  { id: 'importar', label: 'Importar' },
 ]
 
 // ── Detected item state (before saving) ─────────────────────
@@ -614,46 +622,16 @@ export default function VentasPage() {
         <p className="text-[13px] mt-0.5 text-white/60">Importá y analizá tus ventas diarias</p>
       </div>
 
-      {/* Tabs */}
-      <div
-        className="flex"
-        style={{ background: 'var(--navy)', paddingBottom: 12, paddingLeft: 16, paddingRight: 16, gap: 8 }}
-      >
-        {(['resumen', 'platos', 'importar'] as const).map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className="px-4 py-1.5 rounded-full text-[13px] font-semibold transition-colors"
-            style={{
-              background: tab === t ? 'rgba(255,255,255,0.18)' : 'transparent',
-              color: tab === t ? '#fff' : 'rgba(255,255,255,0.55)',
-            }}
-          >
-            {t === 'resumen' ? 'Resumen' : t === 'platos' ? 'Platos' : 'Importar'}
-          </button>
-        ))}
+      {/* Tabs — SegmentedTabs canónico */}
+      <div style={{ background: 'var(--navy)', padding: '0 16px 12px' }}>
+        <SegmentedTabs tabs={VENTAS_TABS} active={tab} onChange={setTab} />
       </div>
 
       {/* ── TAB RESUMEN ─────────────────────────────────── */}
       {tab === 'resumen' && (
         <>
-          {/* Period pills */}
-          <div className="flex gap-2 px-4 pt-4 pb-3">
-            {PERIODOS.map(p => (
-              <button
-                key={p.value}
-                onClick={() => handlePeriodo(p.value)}
-                className="text-[13px] font-medium px-3.5 py-1.5 rounded-full transition-colors"
-                style={{
-                  background: periodo === p.value ? 'var(--navy)' : 'var(--surface)',
-                  color: periodo === p.value ? '#fff' : 'var(--text-2)',
-                  border: `1px solid ${periodo === p.value ? 'var(--navy)' : 'var(--border)'}`,
-                }}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+          {/* FilterChips de período */}
+          <FilterChips chips={PERIODOS} active={periodo} onChange={handlePeriodo} style={{ padding: '16px 16px 12px' }} />
 
           {/* KPI cards */}
           <div data-coach-target="ventas-stats" className="flex gap-3 px-4 pb-4 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
@@ -715,9 +693,9 @@ export default function VentasPage() {
                   </div>
                   <div className="text-right">
                     <div className="text-[20px] font-bold" style={{ color: fcTeorico.fcPct >= 35 ? '#ef4444' : fcTeorico.fcPct >= 30 ? '#f59e0b' : '#16a34a' }}>
-                      {fcTeorico.fcPct.toFixed(1)}%
+                      <Num>{fcTeorico.fcPct.toFixed(1)}%</Num>
                     </div>
-                    <div className="text-[11px]" style={{ color: 'var(--text-2)' }}>costo mercadería {fmtPrecio(fcTeorico.costo)}</div>
+                    <div className="text-[11px]" style={{ color: 'var(--text-2)' }}>costo mercadería <Num>{fmtPrecio(fcTeorico.costo)}</Num></div>
                   </div>
                 </div>
                 {fcTeorico.cobertura < 80 && (
@@ -745,20 +723,12 @@ export default function VentasPage() {
 
           {/* Empty state */}
           {!loading && !error && ventas.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-              <span className="material-symbols-outlined text-[48px] mb-3" style={{ color: 'var(--border)' }}>bar_chart</span>
-              <p className="text-[15px] font-medium" style={{ color: 'var(--text-1)' }}>Sin datos de ventas</p>
-              <p className="text-[13px] mt-1" style={{ color: 'var(--text-2)' }}>
-                Importá tus ventas desde la pestaña Importar
-              </p>
-              <button
-                onClick={() => setTab('importar')}
-                className="mt-4 px-4 py-2 rounded-full text-[13px] font-semibold text-white"
-                style={{ background: 'var(--navy)' }}
-              >
-                Ir a Importar
-              </button>
-            </div>
+            <EmptyState
+              icon="bar_chart"
+              title="Sin datos de ventas"
+              subtitle="Importá tus ventas desde la pestaña Importar"
+              cta={{ label: 'Ir a Importar', onClick: () => setTab('importar') }}
+            />
           )}
 
           {/* Ventas list */}
@@ -885,24 +855,14 @@ export default function VentasPage() {
       {/* ── TAB PLATOS (ranking / mix) ──────────────────── */}
       {tab === 'platos' && (
         <>
-          <div className="flex gap-2 px-4 pt-4 pb-3">
-            {PERIODOS.map(p => (
-              <button key={p.value} onClick={() => handlePeriodo(p.value)}
-                className="text-[13px] font-medium px-3.5 py-1.5 rounded-full transition-colors"
-                style={{ background: periodo === p.value ? 'var(--navy)' : 'var(--surface)', color: periodo === p.value ? '#fff' : 'var(--text-2)', border: `1px solid ${periodo === p.value ? 'var(--navy)' : 'var(--border)'}` }}>
-                {p.label}
-              </button>
-            ))}
-          </div>
+          <FilterChips chips={PERIODOS} active={periodo} onChange={handlePeriodo} style={{ padding: '16px 16px 12px' }} />
 
           {platosRank.arr.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-              <span className="material-symbols-outlined text-[48px] mb-3" style={{ color: 'var(--border)' }}>restaurant</span>
-              <p className="text-[15px] font-medium" style={{ color: 'var(--text-1)' }}>Sin platos vendidos</p>
-              <p className="text-[13px] mt-1" style={{ color: 'var(--text-2)' }}>
-                Importá ventas con el detalle de platos (no solo el total) para ver el ranking
-              </p>
-            </div>
+            <EmptyState
+              icon="restaurant"
+              title="Sin platos vendidos"
+              subtitle="Importá ventas con el detalle de platos (no solo el total) para ver el ranking"
+            />
           ) : (
             <div className="px-4 flex flex-col gap-2">
               <div className="flex items-center justify-between pb-1">
@@ -922,7 +882,7 @@ export default function VentasPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[13px] font-semibold truncate" style={{ color: 'var(--text-1)' }}>{p.nombre}</span>
-                          <span className="text-[13px] font-bold shrink-0" style={{ color: 'var(--navy)' }}>{fmtPrecio(p.revenue)}</span>
+                          <span className="text-[13px] font-bold shrink-0" style={{ color: 'var(--navy)' }}><Num>{fmtPrecio(p.revenue)}</Num></span>
                         </div>
                         <div className="flex items-center gap-2 mt-1">
                           <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg)' }}>
@@ -1157,7 +1117,9 @@ function StatCard({ icon, label, value, color }: { icon: string; label: string; 
         <span className="material-symbols-outlined text-[16px]" style={{ color }}>{icon}</span>
         <span className="text-[11px] font-medium" style={{ color: 'var(--text-2)' }}>{label}</span>
       </div>
-      <p className="text-[16px] font-bold truncate" style={{ color: 'var(--text-1)' }}>{value}</p>
+      <p className="text-[16px] font-bold truncate" style={{ color: 'var(--text-1)' }}>
+        <Num>{value}</Num>
+      </p>
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { MOTIVOS_MERMA } from '@/types'
 import type { MotivoMerma } from '@/types'
+import { useSheetOpenWhen } from '@/lib/ui/chrome'
 
 interface MermaBottomSheetProps {
   open: boolean
@@ -27,6 +28,7 @@ interface MermaBottomSheetProps {
 }
 
 export default function MermaBottomSheet({ open, onClose, onRegistrar, prefill }: MermaBottomSheetProps) {
+  useSheetOpenWhen(open)
   const RESTAURANTE_ID = useRestauranteId()
   const [supabase] = useState(() => createClient())
   const [productos, setProductos] = useState<{ id: string; nombre: string; unidad: string; precio_unitario: number }[]>([])

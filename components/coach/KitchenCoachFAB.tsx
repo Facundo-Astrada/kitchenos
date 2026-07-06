@@ -5,6 +5,7 @@ import { useKitchenCoach } from '@/lib/hooks/useKitchenCoach'
 import { useMerma } from '@/lib/hooks/useMerma'
 import MermaBottomSheet from '@/components/merma/MermaBottomSheet'
 import { type TourStep, TOURS } from '@/lib/coach/tours'
+import { useSheetCount } from '@/lib/ui/chrome'
 
 interface KitchenCoachFABProps {
   stockCritico?: Array<{ nombre: string; cantidad: number; minimo: number }>
@@ -472,6 +473,7 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
     messages, loading, error, isOpen, highlight, overlayText,
     toggle, open, close, sendMessage, clearMessages, clearHighlight, clearOverlayText,
   } = useKitchenCoach()
+  const sheetCount = useSheetCount()
 
   const [input, setInput] = useState('')
   const [tourStep, setTourStep] = useState(-1)
@@ -779,12 +781,12 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
         onRegistrar={async (data) => { await registrarMerma(data); setMermaOpen(false) }}
       />
 
-      {/* FAB */}
+      {/* FAB — se oculta cuando hay sheets/modales abiertos (useSheetOpen en D1) */}
       <button
         className="kc-fab"
         title="Kitchen Coach"
         aria-label="Kitchen Coach"
-        style={{ bottom: fabPos.bottom, right: fabPos.right, touchAction: 'none' }}
+        style={{ bottom: fabPos.bottom, right: fabPos.right, touchAction: 'none', opacity: sheetCount > 0 ? 0 : 1, pointerEvents: sheetCount > 0 ? 'none' : 'auto', transition: 'opacity .2s' }}
         onPointerDown={onFabPointerDown}
         onPointerMove={onFabPointerMove}
         onPointerUp={onFabPointerUp}

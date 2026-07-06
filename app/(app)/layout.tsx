@@ -12,6 +12,7 @@ import MoreMenu from '@/components/shell/MoreMenu'
 import DesktopShell from '@/components/shell/DesktopShell'
 import RouteGuard from '@/components/shell/RouteGuard'
 import KitchenCoachFAB from '@/components/coach/KitchenCoachFAB'
+import { UiChromeProvider } from '@/lib/ui/chrome'
 
 type StockCriticoItem = { nombre: string; cantidad: number; minimo: number }
 type TareaPendienteItem = { titulo: string; prioridad: string; plaza?: string }
@@ -103,37 +104,39 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (isDesktop) {
     return (
-      <>
+      <UiChromeProvider>
         <DesktopShell>{pageContent}</DesktopShell>
         <KitchenCoachFAB
           stockCritico={stockCritico}
           tareasPendientes={tareasPendientes}
         />
-      </>
+      </UiChromeProvider>
     )
   }
 
   return (
-    <div className="relative flex flex-col h-full">
-      <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
-        {pageContent}
-      </main>
+    <UiChromeProvider>
+      <div className="relative flex flex-col h-full">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
+          {pageContent}
+        </main>
 
-      <AnimatePresence>
-        {moreOpen && (
-          <MoreMenu
-            rol={rol}
-            onClose={() => setMoreOpen(false)}
-          />
-        )}
-      </AnimatePresence>
+        <AnimatePresence>
+          {moreOpen && (
+            <MoreMenu
+              rol={rol}
+              onClose={() => setMoreOpen(false)}
+            />
+          )}
+        </AnimatePresence>
 
-      <BottomNav onMoreClick={() => setMoreOpen(true)} />
+        <BottomNav onMoreClick={() => setMoreOpen(true)} />
 
-      <KitchenCoachFAB
-        stockCritico={stockCritico}
-        tareasPendientes={tareasPendientes}
-      />
-    </div>
+        <KitchenCoachFAB
+          stockCritico={stockCritico}
+          tareasPendientes={tareasPendientes}
+        />
+      </div>
+    </UiChromeProvider>
   )
 }

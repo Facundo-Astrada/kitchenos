@@ -1,6 +1,9 @@
 'use client'
 
 import PageTransition from '@/components/PageTransition'
+import { SheetChrome } from '@/lib/ui/chrome'
+import { SegmentedTabs } from '@/components/ui'
+import type { SegmentedTab } from '@/components/ui'
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
@@ -24,6 +27,11 @@ import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 
 const UNIDADES = ['kg', 'g', 'L', 'ml', 'unidad', 'docena', 'caja', 'bolsa', 'lata', 'botella']
 const UNIDADES_USO = ['kg', 'g', 'l', 'ml', 'unidad']
+
+const STOCK_TABS: SegmentedTab<'insumos' | 'producciones'>[] = [
+  { id: 'insumos', label: 'Insumos' },
+  { id: 'producciones', label: 'Producciones' },
+]
 
 // ── Paste desde Excel ──
 type PasteRow = { nombre: string; precio: number | null; stock: number | null; unidad: string | null }
@@ -70,8 +78,15 @@ function parseTSV(text: string): PasteRow[] {
   }).filter(r => r.nombre.length >= 2)
 }
 
-type FiltroEstado = 'all' | 'critico' | 'bajo' | 'pendiente' | 'inmovil'
+type FiltroEstado = 'all' | 'critico' | 'bajo' | 'pendiente' | 'inmovil' | 'unidad'
 const INMOVIL_DIAS = 60
+const PRECIO_SOSPECHOSO_UMBRAL = 2000
+
+function esUnidadSospechosa(p: { unidad: string; precio_unitario: number | null }): boolean {
+  const u = (p.unidad ?? '').toLowerCase().trim()
+  const esU = u === 'u' || u === 'unidad' || u === 'unidades' || u === 'un'
+  return esU && (p.precio_unitario ?? 0) > PRECIO_SOSPECHOSO_UMBRAL
+}
 type SortMode = 'default' | 'valor_desc'
 
 interface FormData {
@@ -152,6 +167,14 @@ export default function StockPage() {
   const { puedeEditar, puedeEliminar, isAdmin } = usePermisos()
   const canEdit = isAdmin || puedeEditar('stock')
   const isDesktop = useIsDesktop()
+  const [isNarrow, setIsNarrow] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 479px)')
+    setIsNarrow(mq.matches)
+    const h = (e: MediaQueryListEvent) => setIsNarrow(e.matches)
+    mq.addEventListener('change', h)
+    return () => mq.removeEventListener('change', h)
+  }, [])
 
   // ── Tabs ──
   const [activeTab, setActiveTab] = useState<'insumos' | 'producciones'>('insumos')
@@ -510,6 +533,10 @@ export default function StockPage() {
   const [mermaOpen, setMermaOpen] = useState(false)
   const [mermaPrefill, setMermaPrefill] = useState<{ producto_nombre?: string; producto_id?: string; unidad?: string } | undefined>()
 
+  // Corrección masiva de unidades (A3)
+  const [unidadEdits, setUnidadEdits] = useState<Record<string, string>>({})
+  const [unidadSaving, setUnidadSaving] = useState(false)
+
   // Paste desde Excel (desktop)
   const [pasteRows, setPasteRows] = useState<PasteRow[]>([])
   const [pasteLoading, setPasteLoading] = useState(false)
@@ -573,6 +600,8 @@ export default function StockPage() {
       list = productos.filter(p => p.stock_actual === 0 && p.precio_unitario === 0)
     } else if (estadoFilter === 'inmovil') {
       list = inmovilLoaded ? productos.filter(esInmovil) : []
+    } else if (estadoFilter === 'unidad') {
+      list = productos.filter(esUnidadSospechosa)
     } else if (estadoFilter !== 'all') {
       list = list.filter(p => p.estado === estadoFilter)
     }
@@ -604,6 +633,7 @@ export default function StockPage() {
   const nCritico = useMemo(() => productos.filter(p => p.estado === 'critico').length, [productos])
   const nBajo = useMemo(() => productos.filter(p => p.estado === 'bajo').length, [productos])
   const nPendiente = useMemo(() => productos.filter(p => p.stock_actual === 0 && p.precio_unitario === 0).length, [productos])
+  const nUnidadSospechosa = useMemo(() => productos.filter(esUnidadSospechosa).length, [productos])
 
   useEffect(() => {
     // Insights accionables para Kitchen Coach (no solo conteos)
@@ -652,6 +682,24 @@ export default function StockPage() {
   function openMerma(p: ProductoConEstado) {
     setMermaPrefill({ producto_nombre: p.nombre, producto_id: p.id, unidad: p.unidad })
     setMermaOpen(true)
+  }
+
+  // ── Corrección masiva de unidades ──
+  async function aplicarCambiosUnidad() {
+    if (Object.keys(unidadEdits).length === 0) return
+    setUnidadSaving(true)
+    const supabase = createClient()
+    try {
+      for (const [id, unidad] of Object.entries(unidadEdits)) {
+        await actualizarProducto(id, { unidad })
+        // Propaga unidad_costo a ingredientes vinculados para que el food cost pueda calcularse
+        await supabase.from('ingredientes').update({ unidad_costo: unidad }).eq('producto_id', id)
+      }
+      setUnidadEdits({})
+      setEstadoFilter('all')
+      refetch()
+    } catch { /* noop */ }
+    setUnidadSaving(false)
   }
 
   // ── Inline stock edit ──
@@ -836,7 +884,8 @@ export default function StockPage() {
         subtitle={loading ? '…' : `${productos.length} producto${productos.length !== 1 ? 's' : ''}`}
         onBack={() => router.back()}
         actions={
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
+          <div style={{ position: 'relative', overflow: 'hidden', maxWidth: '100%' }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', scrollbarWidth: 'none' }}>
             <button
               data-coach-target="stock-kpis"
               onClick={() => setEstadoFilter(f => f === 'critico' ? 'all' : 'critico')}
@@ -869,6 +918,17 @@ export default function StockPage() {
               >
                 <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#c4b5fd' }}>hourglass_empty</span>
                 <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.07em' }}>Inmóvil</span>
+              </button>
+            )}
+            {isAdmin && nUnidadSospechosa > 0 && (
+              <button
+                onClick={() => setEstadoFilter(f => f === 'unidad' ? 'all' : 'unidad')}
+                title="Productos 'por unidad' con precio alto — posible unidad incorrecta que excluye líneas del food cost"
+                style={{ background: estadoFilter === 'unidad' ? 'rgba(245,158,11,.35)' : 'rgba(245,158,11,.15)', border: `1px solid ${estadoFilter === 'unidad' ? 'rgba(245,158,11,.6)' : 'rgba(245,158,11,.3)'}`, borderRadius: 8, padding: '5px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#fcd34d' }}>warning</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: '#fcd34d', fontFamily: "'DM Mono', monospace" }}>{nUnidadSospechosa}</span>
+                <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.07em' }}>Unidades</span>
               </button>
             )}
             <ActionButton icon="table_view" label="Excel" variant="secondary" onClick={exportXLSX} />
@@ -933,20 +993,15 @@ export default function StockPage() {
               Stockear
             </button>
           </div>
+          {/* Fade indicator — right edge */}
+          <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 32, background: 'linear-gradient(to right, transparent, var(--navy))', pointerEvents: 'none' }} />
+          </div>
         }
         below={
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {/* Tab bar */}
-            <div data-coach-target="stock-tabs" style={{ display: 'flex', gap: 6 }}>
-              {(['insumos', 'producciones'] as const).map(tab => (
-                <button key={tab} onClick={() => setActiveTab(tab)}
-                  style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', transition: 'all .15s',
-                    background: activeTab === tab ? '#fff' : 'rgba(255,255,255,.1)',
-                    color: activeTab === tab ? 'var(--navy)' : 'rgba(255,255,255,.6)',
-                  }}>
-                  {tab === 'insumos' ? 'Insumos' : 'Producciones'}
-                </button>
-              ))}
+            <div data-coach-target="stock-tabs">
+              <SegmentedTabs tabs={STOCK_TABS} active={activeTab} onChange={setActiveTab} style={{ width: '100%' }} />
             </div>
             {/* Insumos filters */}
             {activeTab === 'insumos' && (
@@ -956,7 +1011,7 @@ export default function StockPage() {
                   <input
                     value={search}
                     onChange={e => setSearch(e.target.value)}
-                    placeholder="Buscar producto..."
+                    placeholder="Buscar…"
                     style={{ border: 'none', background: 'none', outline: 'none', fontSize: 12, fontFamily: 'inherit', color: '#fff', width: '100%' }}
                   />
                   {search && (
@@ -1175,9 +1230,86 @@ export default function StockPage() {
         </div>
       )}
 
+      {/* ── Banner CTA: unidades sospechosas ── */}
+      {activeTab === 'insumos' && nUnidadSospechosa > 0 && estadoFilter !== 'unidad' && (
+        <div style={{
+          margin: '8px 12px 0', padding: '12px 14px',
+          background: 'linear-gradient(135deg, rgba(245,158,11,.12), rgba(234,179,8,.08))',
+          border: '1px solid rgba(245,158,11,.3)', borderRadius: 10,
+          display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
+        }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#f59e0b', flexShrink: 0 }}>warning</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1.3 }}>
+              {nUnidadSospechosa} producto{nUnidadSospechosa !== 1 ? 's' : ''} con posible unidad incorrecta
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 2 }}>
+              Cargados &quot;por unidad&quot; con precio alto — el food cost excluye esas líneas silenciosamente.
+            </div>
+          </div>
+          <button
+            onClick={() => setEstadoFilter('unidad')}
+            style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+          >
+            Revisar
+          </button>
+        </div>
+      )}
+
       {/* ── Insumos: tabla unificada (thead sticky) ── */}
       {activeTab === 'insumos' && (
       <div data-coach-target="stock-lista" style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        {estadoFilter === 'unidad' && (
+          <div style={{ margin: '8px 12px', padding: '14px', background: 'rgba(245,158,11,.08)', border: '1px solid rgba(245,158,11,.3)', borderRadius: 10, flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#f59e0b', flexShrink: 0 }}>warning</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
+                  {filtered.length} producto{filtered.length !== 1 ? 's' : ''} con unidad a revisar
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 2 }}>
+                  Seleccioná la unidad correcta (kg, l, etc.) y aplicá. El food cost dejará de excluir esas líneas.
+                </div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+              {filtered.map(p => (
+                <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{fmtPrecio(p.precio_unitario ?? 0)} / {p.unidad}</div>
+                  </div>
+                  <select
+                    value={unidadEdits[p.id] ?? p.unidad}
+                    onChange={e => setUnidadEdits(prev => ({ ...prev, [p.id]: e.target.value }))}
+                    style={{ fontSize: 12, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', fontFamily: 'inherit', cursor: 'pointer' }}
+                  >
+                    {(['u', 'g', 'kg', 'ml', 'l'] as const).map(u => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+            <button
+              disabled={unidadSaving || Object.keys(unidadEdits).length === 0}
+              onClick={aplicarCambiosUnidad}
+              style={{
+                width: '100%', padding: 12, borderRadius: 8, border: 'none',
+                background: Object.keys(unidadEdits).length === 0 ? 'var(--border)' : 'var(--accent)',
+                color: '#fff', fontWeight: 700, fontSize: 13,
+                cursor: Object.keys(unidadEdits).length === 0 ? 'default' : 'pointer',
+                fontFamily: 'inherit', opacity: unidadSaving ? .6 : 1,
+              }}
+            >
+              {unidadSaving
+                ? 'Guardando…'
+                : Object.keys(unidadEdits).length === 0
+                  ? 'Modificá al menos una unidad'
+                  : `Aplicar ${Object.keys(unidadEdits).length} cambio${Object.keys(unidadEdits).length !== 1 ? 's' : ''}`}
+            </button>
+          </div>
+        )}
         {estadoFilter === 'inmovil' && (
           <div style={{ margin: '8px 12px 0', padding: '12px 14px', background: 'rgba(139,92,246,.08)', border: '1px solid rgba(139,92,246,.3)', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#8b5cf6', flexShrink: 0 }}>hourglass_empty</span>
@@ -1201,8 +1333,8 @@ export default function StockPage() {
             {isDesktop && <col style={{ width: '14%' }} />}
             {isDesktop && <col style={{ width: '16%' }} />}
             {isAdmin && <col style={{ width: isDesktop ? '10%' : 64 }} />}
-            <col style={{ width: isDesktop ? '18%' : 96 }} />
-            <col style={{ width: isDesktop ? '6%' : 56 }} />
+            <col style={{ width: isDesktop ? '18%' : isNarrow ? 64 : 96 }} />
+            <col style={{ width: isDesktop ? '6%' : isNarrow ? 62 : 56 }} />
             {isAdmin && <col style={{ width: isDesktop ? '6%' : 64 }} />}
           </colgroup>
           <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
@@ -1263,6 +1395,12 @@ export default function StockPage() {
                           {!isDesktop && `${p.categoria} · `}{p.unidad_uso ?? p.unidad}
                           {val > 0 && isAdmin && !isDesktop && <span style={{ color: 'var(--accent)', fontWeight: 700, marginLeft: 6, fontFamily: "'DM Mono', monospace" }}>{fmtValor(val)}</span>}
                         </div>
+                        {isNarrow && (
+                          <div style={{ fontSize: 9.5, color: 'var(--text-3)', marginTop: 2, fontFamily: "'DM Mono', monospace", display: 'flex', gap: 8 }}>
+                            <span>mín <b style={{ color: '#d97706' }}>{p.stock_minimo ?? 0}</b></span>
+                            <span>crít <b style={{ color: '#dc2626' }}>{p.stock_critico ?? 0}</b></span>
+                          </div>
+                        )}
                       </div>
                     </td>
                     {/* Categoría — solo desktop */}
@@ -1328,11 +1466,11 @@ export default function StockPage() {
                         )}
                         </div>
 
-                        {/* Separador vertical */}
-                        <div style={{ width: 1, alignSelf: 'stretch', minHeight: 22, background: 'var(--border)', opacity: 0.6 }} />
+                        {/* Separador vertical + Mín/Crít — oculto en pantallas muy angostas (<480px) */}
+                        {!isNarrow && <div style={{ width: 1, alignSelf: 'stretch', minHeight: 22, background: 'var(--border)', opacity: 0.6 }} />}
 
                         {/* Mín / Crít (sub-columna izquierda, ancho fijo) */}
-                        <div style={{ width: 84, textAlign: 'left', flexShrink: 0 }}>
+                        {!isNarrow && <div style={{ width: 84, textAlign: 'left', flexShrink: 0 }}>
                         {editThr?.id === p.id ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 3 }} onClick={e => e.stopPropagation()}>
                             <input
@@ -1362,7 +1500,7 @@ export default function StockPage() {
                             <span>crít <b style={{ color: '#dc2626' }}>{p.stock_critico ?? 0}</b></span>
                           </button>
                         )}
-                        </div>
+                        </div>}
                       </div>
                     </td>
                     {/* Estado */}
@@ -1712,6 +1850,7 @@ export default function StockPage() {
 
       {/* ── Sector selector ── */}
       {showSectorSelect && (
+        <SheetChrome>
         <div onClick={() => setShowSectorSelect(false)} style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-end' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '20px 16px 0', flexShrink: 0 }}>
@@ -1753,6 +1892,7 @@ export default function StockPage() {
             </div>
           </div>
         </div>
+        </SheetChrome>
       )}
 
       {/* ── Quick stock mode ── */}
@@ -1784,6 +1924,7 @@ export default function StockPage() {
         }
 
         return (
+          <SheetChrome>
           <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
             <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1869,6 +2010,7 @@ export default function StockPage() {
               </button>
             </div>
           </div>
+          </SheetChrome>
         )
       })()}
 

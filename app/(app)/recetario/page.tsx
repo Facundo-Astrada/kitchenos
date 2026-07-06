@@ -14,7 +14,34 @@ import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
 import ImageCropModal from '@/components/ui/ImageCropModal'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import ImportadorFichasTecnicas from '@/components/importador/ImportadorFichasTecnicas'
+import { HeaderAction } from '@/components/ui'
+
 const UNIDADES = ['kg', 'g', 'l', 'ml', 'u']
+
+// Categorías canónicas de recetas
+const CATEGORIAS_RECETA = [
+  'Entradas', 'Principales', 'Guarniciones', 'Salsas', 'Fondos', 'Bases',
+  'Carnes', 'Aves', 'Pescados', 'Vegetariano', 'Postres', 'Repostería',
+  'Panificados', 'Bebidas', 'Otros',
+]
+
+// Normaliza nombres de categoría con variantes históricas
+function normalizeCategoria(cat: string | null | undefined): string {
+  if (!cat) return ''
+  const lower = cat.toLowerCase().trim()
+  const MAP: Record<string, string> = {
+    entrantes: 'Entradas',
+    garnishes: 'Guarniciones',
+    guarniciones: 'Guarniciones',
+    'carnes rojas': 'Carnes',
+    otros: 'Otros',
+    otras: 'Otros',
+    other: 'Otros',
+    'bases y salsas': 'Salsas',
+    salsa: 'Salsas',
+  }
+  return MAP[lower] ?? (cat.charAt(0).toUpperCase() + cat.slice(1))
+}
 
 // ── Tipos para importación IA ──
 type ImportMode = 'camera' | 'gallery' | 'file' | 'audio' | 'text' | 'glink' | null
@@ -247,14 +274,14 @@ export default function RecetarioPage() {
   }, [recetas, catDB])
 
   const categoriasFiltro = useMemo(() =>
-    Array.from(new Set(recetasPublicadas.map(r => r.categoria).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'es')),
+    Array.from(new Set(recetasPublicadas.map(r => normalizeCategoria(r.categoria)).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'es')),
     [recetasPublicadas])
 
   const activeList = tab === 'recetas' ? recetasPublicadas : recetasDraft
 
   const filtered = useMemo(() => {
     let list = activeList
-    if (catFilter) list = list.filter(r => r.categoria === catFilter)
+    if (catFilter) list = list.filter(r => normalizeCategoria(r.categoria) === catFilter)
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(r => r.nombre.toLowerCase().includes(q))
@@ -355,18 +382,31 @@ export default function RecetarioPage() {
             <button onClick={() => router.back()} style={btnClear}><span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>arrow_back</span></button>
             <div>
               <div style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>Recetario</div>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,.45)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Fichas técnicas · Food cost</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,.45)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Fichas técnicas{isAdmin && ' · Food cost'}</div>
             </div>
           </div>
-          {isAdmin && (
-          <button
-            onClick={exportXLSX}
-            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, background: 'rgba(255,255,255,.15)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>table_view</span>
-            Exportar
-          </button>
-          )}
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {isAdmin && (
+              <button onClick={exportXLSX} title="Exportar Excel"
+                style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 8, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 17, color: '#fff' }}>table_view</span>
+              </button>
+            )}
+            {isAdmin && (
+              <button data-coach-target="recetario-importar" onClick={() => setShowFichas(true)} title="Importar fichas técnicas"
+                style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 8, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 17, color: '#fff' }}>upload_file</span>
+              </button>
+            )}
+            <button data-coach-target="recetario-vincular" onClick={() => setShowLink(true)} title="Vincular ingredientes con stock"
+              style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 8, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 17, color: '#10b981' }}>link</span>
+            </button>
+            <HeaderAction label="Nueva" icon="add" onClick={() => setCreando(true)} />
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 8, padding: '0 10px', height: 34 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'rgba(255,255,255,.4)' }}>search</span>
@@ -419,7 +459,7 @@ export default function RecetarioPage() {
       )}
 
       {/* Body */}
-      <div data-coach-target="recetario-lista" style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 14px 80px' }}>
+      <div data-coach-target="recetario-lista" style={{ flex: 1, overflowY: 'auto', padding: '12px 14px 24px' }}>
         {/* Salud del recetario */}
         {tab === 'recetas' && isAdmin && !loading && salud.total > 0 && (
           <div style={{ marginBottom: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
@@ -498,50 +538,6 @@ export default function RecetarioPage() {
         )}
       </div>
 
-      {/* ── Botones NUEVA RECETA + IMPORTAR FICHAS ── */}
-      <div data-coach-target="recetario-acciones" style={{ position: 'absolute', bottom: 'var(--fab-bottom)', left: 14, right: 14, zIndex: 10, display: 'flex', gap: 10 }}>
-        <button
-          data-coach-target="recetario-nueva"
-          onClick={() => setCreando(true)}
-          style={{
-            flex: 1, background: 'linear-gradient(135deg, var(--navy), #4361a0)',
-            border: 'none', borderRadius: 16, padding: '14px 20px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            boxShadow: '0 6px 24px rgba(28,45,74,.45)', cursor: 'pointer',
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#fff' }}>add_circle</span>
-          <span style={{ fontSize: 15, fontWeight: 700, color: '#fff', fontFamily: 'inherit' }}>Nueva receta</span>
-        </button>
-        {isAdmin && (
-        <button
-          data-coach-target="recetario-importar"
-          onClick={() => setShowFichas(true)}
-          title="Importar fichas técnicas"
-          style={{
-            background: 'var(--surface)', border: '1.5px solid var(--border)',
-            borderRadius: 16, padding: '14px 16px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 2px 8px rgba(0,0,0,.08)', cursor: 'pointer', flexShrink: 0,
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--accent)' }}>upload_file</span>
-        </button>
-        )}
-        <button
-          data-coach-target="recetario-vincular"
-          onClick={() => setShowLink(true)}
-          title="Vincular ingredientes con stock"
-          style={{
-            background: 'var(--surface)', border: '1.5px solid var(--border)',
-            borderRadius: 16, padding: '14px 16px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 2px 8px rgba(0,0,0,.08)', cursor: 'pointer', flexShrink: 0,
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#10b981' }}>link</span>
-        </button>
-      </div>
 
       {/* ── Drawer: Importar fichas técnicas ── */}
       {showFichas && RESTAURANTE_ID && (
@@ -2199,15 +2195,24 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
                 placeholder="Nombre de la receta *"
                 style={{ ...inp, flex: 2, fontWeight: 600, fontSize: 13 }}
               />
-              <div style={{ flex: 1, position: 'relative' }}>
-                <input
-                  list="cat-nueva"
-                  value={categoria}
-                  onChange={e => setCategoria(e.target.value)}
-                  placeholder="Categoría"
+              <div style={{ flex: 1 }}>
+                <select
+                  value={CATEGORIAS_RECETA.includes(categoria) ? categoria : (categoria ? '__otra' : '')}
+                  onChange={e => { if (e.target.value !== '__otra') setCategoria(e.target.value) }}
                   style={{ ...inp, fontSize: 11 }}
-                />
-                <datalist id="cat-nueva">{categorias.map(c => <option key={c} value={c} />)}</datalist>
+                >
+                  <option value="">Categoría…</option>
+                  {CATEGORIAS_RECETA.map(c => <option key={c} value={c}>{c}</option>)}
+                  <option value="__otra">Otra…</option>
+                </select>
+                {(!CATEGORIAS_RECETA.includes(categoria) && categoria) && (
+                  <input
+                    value={categoria}
+                    onChange={e => setCategoria(e.target.value)}
+                    placeholder="Nombre de categoría"
+                    style={{ ...inp, fontSize: 11, marginTop: 4 }}
+                  />
+                )}
               </div>
             </div>
 
@@ -2715,7 +2720,11 @@ function RecetaCard({ receta: r, isDraft, onPublish, onCompleteIA }: { receta: R
                 </span>
               )}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>{r.categoria} · {r.porciones} porc.{(() => { const p = calcPesoPorcion(r.ingredientes || [], r.porciones ?? 0); return p ? ` · ${formatPeso(p)}` : '' })()} · {r.tiempo_min} min</div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+              {normalizeCategoria(r.categoria)}
+              {(r.porciones ?? 0) > 1 && ` · ${r.porciones} porc.${(() => { const p = calcPesoPorcion(r.ingredientes || [], r.porciones ?? 0); return p ? ` · ${formatPeso(p)}` : '' })()}`}
+              {(r.tiempo_min ?? 0) > 0 && ` · ${r.tiempo_min} min`}
+            </div>
           </div>
           {(r.precio_venta ?? 0) > 0 && !isDraft && (
             <div style={{ textAlign: 'right' }}>

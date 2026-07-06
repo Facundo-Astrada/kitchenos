@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import { useSheetOpenWhen } from '@/lib/ui/chrome'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth/context'
 import { useProduccion, type PlatoConComponentes } from '@/lib/hooks/useProduccion'
@@ -66,6 +67,7 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
   const { agregarTarea, tareas, eliminarTarea, refetch: refetchTareas } = useTareas()
   const { menus: catalogoMenus } = useMenus()
   const [showMenuPicker, setShowMenuPicker] = useState(false)
+  useSheetOpenWhen(showMenuPicker)
   const [cargandoMenu, setCargandoMenu] = useState(false)
   const puedeDelegar = authPerfil?.rol === 'admin' || authPerfil?.rol === 'chef'
   const [fecha, setFecha] = useState(() => fmtDate(new Date()))

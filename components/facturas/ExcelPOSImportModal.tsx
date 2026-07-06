@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
+import { useSheetOpenWhen } from '@/lib/ui/chrome'
 
 type HojaInfo = {
   name: string
@@ -28,9 +29,11 @@ interface Props {
   open: boolean
   onClose: () => void
   onImported?: (count: number) => void
+  initialFile?: File
 }
 
-export default function ExcelPOSImportModal({ open, onClose, onImported }: Props) {
+export default function ExcelPOSImportModal({ open, onClose, onImported, initialFile }: Props) {
+  useSheetOpenWhen(open)
   const RESTAURANTE_ID = useRestauranteId()
   const [file, setFile] = useState<File | null>(null)
   const [detecting, setDetecting] = useState(false)
@@ -39,6 +42,15 @@ export default function ExcelPOSImportModal({ open, onClose, onImported }: Props
   const [result, setResult] = useState<{ importadas: number; items: number; omitidas: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const autoStarted = useRef(false)
+
+  // Auto-trigger analysis when file is provided as prop (from ImportadorUniversal)
+  useEffect(() => {
+    if (!initialFile || !RESTAURANTE_ID || autoStarted.current) return
+    autoStarted.current = true
+    void handleFile(initialFile)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [RESTAURANTE_ID])
 
   if (!open) return null
 

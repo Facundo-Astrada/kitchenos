@@ -7,6 +7,7 @@ import { usePermisos } from '@/lib/hooks/usePermisos'
 import { MOTIVOS_MERMA } from '@/types'
 import type { Merma, MotivoMerma } from '@/types'
 import MermaBottomSheet from '@/components/merma/MermaBottomSheet'
+import { HeaderAction } from '@/components/ui'
 
 // ── Helpers ─────────────────────────────────────────────────
 type Periodo = 'hoy' | 'semana' | 'mes' | 'todo'
@@ -169,7 +170,10 @@ export default function MermaPage() {
             <h1 className="text-[22px] font-bold" style={{ color: '#fff' }}>Merma</h1>
             <p className="text-[13px] mt-0.5" style={{ color: 'rgba(255,255,255,0.65)' }}>Control de desperdicios</p>
           </div>
-          <span className="material-symbols-outlined" style={{ fontSize: 28, color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>delete_sweep</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 28, color: 'rgba(255,255,255,0.35)' }}>delete_sweep</span>
+            <HeaderAction label="Registrar" icon="add" onClick={() => setSheetOpen(true)} />
+          </div>
         </div>
 
         {/* Period pills in header */}
@@ -312,17 +316,6 @@ export default function MermaPage() {
           })}
         </div>
       ))}
-
-      {/* FAB */}
-      <button
-        data-coach-target="merma-fab"
-        onClick={() => setSheetOpen(true)}
-        className="fixed right-5 z-40 flex items-center justify-center rounded-full shadow-lg active:scale-95 transition-transform"
-        style={{ width: 56, height: 56, background: 'var(--navy)', bottom: 'var(--fab-bottom)' }}
-        aria-label="Registrar merma"
-      >
-        <span className="material-symbols-outlined text-[28px] text-white">add</span>
-      </button>
 
       {/* Bottom Sheet */}
       <MermaBottomSheet

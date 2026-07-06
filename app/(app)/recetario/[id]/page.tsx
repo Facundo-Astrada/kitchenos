@@ -552,13 +552,12 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
             </button>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{receta.nombre}</div>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,.45)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em', display: 'flex', gap: 6, marginTop: 2 }}>
-                <span>{receta.categoria}</span>
-                <span style={{ opacity: .4 }}>·</span>
-                <span>{receta.porciones} porc.</span>
-                {(() => { const p = calcPesoPorcion(receta.ingredientes ?? [], receta.porciones ?? 0); return p ? <><span style={{ opacity: .4 }}>·</span><span>{formatPeso(p)}</span></> : null })()}
-                <span style={{ opacity: .4 }}>·</span>
-                <span>{receta.tiempo_min} min</span>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,.45)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {[
+                  receta.categoria,
+                  (receta.porciones ?? 0) > 1 ? `${receta.porciones} porc.${(() => { const p = calcPesoPorcion(receta.ingredientes ?? [], receta.porciones ?? 0); return p ? ` · ${formatPeso(p)}` : '' })()}` : null,
+                  (receta.tiempo_min ?? 0) > 0 ? `${receta.tiempo_min} min` : null,
+                ].filter(Boolean).join(' · ')}
               </div>
             </div>
           </div>
