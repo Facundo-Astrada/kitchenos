@@ -116,7 +116,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
   const { recetas, loading, agregarReceta, actualizarReceta, eliminarReceta, agregarIngrediente, actualizarIngrediente, eliminarIngrediente } = useRecetas()
   const { productos: stockProductos } = useStock()
   const { getHistorial } = useProduccionRegistros()
-  const { items: cartaItems, crearItem, actualizarItem, categorias: cartaCategorias } = useCarta()
+  const { items: cartaItems, crearItem, actualizarItem, eliminarItem, categorias: cartaCategorias } = useCarta()
   const { isAdmin, puedeEditar } = usePermisos()
   const RESTAURANTE_ID = useRestauranteId()
   const canEdit = isAdmin || puedeEditar('recetas')
@@ -528,6 +528,9 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
 
   async function handleDelete() {
     if (deleteTarget === 'receta') {
+      // Si la receta es un plato de la carta, quitar también el plato vinculado
+      // (si no, quedaría huérfano en la carta apuntando a una receta inactiva)
+      if (linkedPlato) await eliminarItem(linkedPlato.id)
       await eliminarReceta(id)
       router.push('/recetario')
     } else if (deleteTarget === 'ingrediente' && deleteIngId) {
@@ -586,23 +589,25 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
           </div>
         )}
 
-        {/* ── Convertir a plato + OPS ── */}
+        {/* ── Convertir a plato (solo admin) + OPS ── */}
         {canEdit && (
           <div style={{ display: 'flex', gap: 8, padding: '12px 14px 0' }}>
-            <button
-              onClick={handleConvertir}
-              disabled={converting}
-              style={{
-                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                padding: '11px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
-                border: linkedPlato ? '1px solid rgba(67,97,160,.35)' : 'none',
-                background: linkedPlato ? 'rgba(67,97,160,.08)' : 'linear-gradient(135deg, var(--navy), #4361a0)',
-                color: linkedPlato ? 'var(--accent)' : '#fff', opacity: converting ? 0.6 : 1,
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{linkedPlato ? 'restaurant_menu' : 'add_circle'}</span>
-              {linkedPlato ? 'Ver en carta' : converting ? 'Creando…' : 'Convertir a plato'}
-            </button>
+            {isAdmin && (
+              <button
+                onClick={handleConvertir}
+                disabled={converting}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  padding: '11px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
+                  border: linkedPlato ? '1px solid rgba(67,97,160,.35)' : 'none',
+                  background: linkedPlato ? 'rgba(67,97,160,.08)' : 'linear-gradient(135deg, var(--navy), #4361a0)',
+                  color: linkedPlato ? 'var(--accent)' : '#fff', opacity: converting ? 0.6 : 1,
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{linkedPlato ? 'restaurant_menu' : 'add_circle'}</span>
+                {linkedPlato ? 'Ver en carta' : converting ? 'Creando…' : 'Convertir a plato'}
+              </button>
+            )}
             <button
               onClick={() => setOpsOpen(true)}
               title="Asignar a OPS / Mise (plaza, heladera, tupper)"
@@ -618,19 +623,8 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
           </div>
         )}
 
-        {/* Banner de sync de precio receta ↔ plato */}
-        {linkedPlato && (receta.precio_venta ?? 0) !== (linkedPlato.precio_venta ?? 0) && (
-          <div style={{ margin: '10px 14px 0', padding: '10px 12px', borderRadius: 10, background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.3)' }}>
-            <div style={{ fontSize: 11, color: '#92400e', lineHeight: 1.4, marginBottom: 8 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 14, verticalAlign: -2, marginRight: 4 }}>sync_problem</span>
-              El plato en carta figura a <b>${(linkedPlato.precio_venta ?? 0).toLocaleString('es-AR')}</b> y la receta a <b>${(receta.precio_venta ?? 0).toLocaleString('es-AR')}</b>.
-            </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <button onClick={syncPrecioAPlato} style={syncBtn}>Actualizar plato → ${(receta.precio_venta ?? 0).toLocaleString('es-AR')}</button>
-              <button onClick={syncPrecioAReceta} style={syncBtn}>Actualizar receta → ${(linkedPlato.precio_venta ?? 0).toLocaleString('es-AR')}</button>
-            </div>
-          </div>
-        )}
+        {/* (El banner de sync de precio receta ↔ plato se movió a la sección Food Cost —
+            el precio de venta solo se ve dentro de Food Cost o del modal Editar) */}
 
         {/* Escalado por porciones (rendimiento dinámico) */}
         {(receta.porciones ?? 0) > 0 && (
@@ -917,6 +911,19 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
 
           {fcOpen && (
             <div style={{ background: 'var(--surface)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
+              {/* Banner de sync de precio receta ↔ plato (movido acá desde el cuerpo) */}
+              {linkedPlato && (receta.precio_venta ?? 0) !== (linkedPlato.precio_venta ?? 0) && (
+                <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', background: 'rgba(245,158,11,.1)' }}>
+                  <div style={{ fontSize: 11, color: '#92400e', lineHeight: 1.4, marginBottom: 8 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 14, verticalAlign: -2, marginRight: 4 }}>sync_problem</span>
+                    El plato en carta figura a <b>${(linkedPlato.precio_venta ?? 0).toLocaleString('es-AR')}</b> y la receta a <b>${(receta.precio_venta ?? 0).toLocaleString('es-AR')}</b>.
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button onClick={syncPrecioAPlato} style={syncBtn}>Actualizar plato → ${(receta.precio_venta ?? 0).toLocaleString('es-AR')}</button>
+                    <button onClick={syncPrecioAReceta} style={syncBtn}>Actualizar receta → ${(linkedPlato.precio_venta ?? 0).toLocaleString('es-AR')}</button>
+                  </div>
+                </div>
+              )}
               {/* Sugerir precio de venta por food cost objetivo */}
               {receta.food_cost.costo_porcion > 0 && (() => {
                 const tfc = parseFloat(targetFC.replace(',', '.'))
@@ -1449,7 +1456,11 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
             <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', margin: '0 0 8px' }}>
               {deleteTarget === 'receta' ? 'Eliminar receta' : 'Eliminar ingrediente'}
             </h3>
-            <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 20px' }}>¿Confirmás?</p>
+            <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 20px' }}>
+              {deleteTarget === 'receta' && linkedPlato
+                ? 'Esta receta es un plato de la carta. Al desactivarla también se quitará el plato de la carta. ¿Confirmás?'
+                : '¿Confirmás?'}
+            </p>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => { setDeleteTarget(null); setDeleteIngId(null) }} style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: 11, fontSize: 13, fontWeight: 700, color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'inherit' }}>Cancelar</button>
               <button onClick={handleDelete} style={{ flex: 1, background: '#ef4444', border: 'none', borderRadius: 10, padding: 11, fontSize: 13, fontWeight: 700, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>Eliminar</button>

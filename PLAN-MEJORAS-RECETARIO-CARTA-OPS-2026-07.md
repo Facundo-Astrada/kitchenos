@@ -54,7 +54,17 @@ Resuelve: Recetario #1 (OPS por componente) y la base de Carta #4 (el componente
 
 ---
 
-## Tanda B — Recetario (todo en `app/(app)/recetario/[id]/page.tsx`)
+## Tanda B — Recetario (todo en `app/(app)/recetario/[id]/page.tsx`) — ✅ HECHA (7 jul)
+
+**Implementado:**
+- **B1** — banner de sync de precio receta↔plato movido del cuerpo a la sección Food Cost; el precio de venta ahora solo aparece dentro de Food Cost o del modal Editar.
+- **B2** — botón "Convertir a plato" envuelto en `{isAdmin && …}` (el botón OPS sigue para `canEdit`).
+- **B3** — `handleDelete`: si la receta es plato (`linkedPlato`), llama `eliminarItem(linkedPlato.id)` antes del soft-delete → ya no queda plato huérfano. Diálogo de confirmación avisa el caso. `eliminarItem` agregado al destructure de `useCarta`.
+- `npm run build` ✅ Compiled successfully.
+
+---
+
+### (referencia) diseño original
 
 ### B1 · Precio de venta oculto salvo en food cost  *(obs. Recetario #5)*
 - Quitar el bloque de precio de la vista principal de la ficha (≈ líneas 893, 951).
