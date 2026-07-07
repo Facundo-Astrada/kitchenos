@@ -101,7 +101,7 @@ interface AuthContextType {
   loading: boolean
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signUp: (email: string, password: string, restauranteName: string, nombre?: string, apellido?: string) => Promise<{ error: string | null }>
-  signOut: () => Promise<void>
+  signOut: (redirectTo?: string) => Promise<void>
   isAdmin: boolean
   restauranteId: string | null
 }
@@ -369,12 +369,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   )
 
   // ── Sign Out ──────────────────────────────────────────────
-  const signOut = useCallback(async () => {
+  const signOut = useCallback(async (redirectTo = '/login') => {
     await supabase.auth.signOut()
     setUser(null)
     setPerfil(null)
     // Force full page reload to clear server-side session cookie
-    window.location.href = '/login'
+    window.location.href = redirectTo
   }, [supabase])
 
   const value: AuthContextType = {

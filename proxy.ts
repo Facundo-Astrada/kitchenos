@@ -32,10 +32,13 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
   // Public routes that don't require auth
+  // '/carta/' (con slash) es la carta pública por slug — '/carta' a secas sigue
+  // siendo la pantalla de gestión interna y requiere sesión.
   const isPublicRoute =
     pathname.startsWith('/login') ||
     pathname.startsWith('/register') ||
     pathname.startsWith('/registro-invitado') ||
+    pathname.startsWith('/carta/') ||
     pathname.startsWith('/api/')
 
   // No session → redirect to /login

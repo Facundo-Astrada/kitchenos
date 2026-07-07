@@ -12,6 +12,7 @@ import MoreMenu from '@/components/shell/MoreMenu'
 import DesktopShell from '@/components/shell/DesktopShell'
 import RouteGuard from '@/components/shell/RouteGuard'
 import KitchenCoachFAB from '@/components/coach/KitchenCoachFAB'
+import DemoBanner from '@/components/shell/DemoBanner'
 import { UiChromeProvider } from '@/lib/ui/chrome'
 
 type StockCriticoItem = { nombre: string; cantidad: number; minimo: number }
@@ -117,6 +118,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <UiChromeProvider>
       <div className="relative flex flex-col h-full">
+        <DemoBanner />
         <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
           {pageContent}
         </main>

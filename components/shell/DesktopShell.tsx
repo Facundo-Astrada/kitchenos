@@ -8,6 +8,7 @@ import { MODULO_CONFIG, MODULOS_POR_ROL, ROL_CONFIG } from '@/lib/constants'
 import type { ModuloId } from '@/lib/constants'
 import ImportadorUniversal from '@/components/importador/ImportadorUniversal'
 import ShortcutsHelp from '@/components/desktop/ShortcutsHelp'
+import DemoBanner from '@/components/shell/DemoBanner'
 import { useDesktopShortcuts } from '@/lib/hooks/useDesktopShortcuts'
 import { useState } from 'react'
 
@@ -41,7 +42,9 @@ export default function DesktopShell({ children }: { children: React.ReactNode }
     id === 'home' || isAdmin || puedeVer(id)
 
   return (
-    <div style={{ display: 'flex', height: '100dvh', background: 'var(--bg)', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', background: 'var(--bg)', overflow: 'hidden' }}>
+      <DemoBanner />
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
       {/* ── Sidebar ── */}
       <aside style={{
@@ -213,6 +216,7 @@ export default function DesktopShell({ children }: { children: React.ReactNode }
       )}
 
       <ShortcutsHelp />
+      </div>
     </div>
   )
 }

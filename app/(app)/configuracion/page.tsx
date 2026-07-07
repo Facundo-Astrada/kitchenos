@@ -729,6 +729,8 @@ function RestauranteTab({
 }) {
   const [nombre, setNombre] = useState('')
   const [nombreOriginal, setNombreOriginal] = useState('')
+  const [slug, setSlug] = useState<string | null>(null)
+  const [cartaActiva, setCartaActiva] = useState(false)
   const [loadingR, setLoadingR] = useState(true)
   const [savingR, setSavingR] = useState(false)
 
@@ -737,13 +739,15 @@ function RestauranteTab({
     setLoadingR(true)
     supabase
       .from('restaurantes')
-      .select('nombre')
+      .select('nombre, slug, carta_publica_activa')
       .eq('id', restauranteId)
       .single()
       .then(({ data }) => {
         const n = data?.nombre ?? ''
         setNombre(n)
         setNombreOriginal(n)
+        setSlug(data?.slug ?? null)
+        setCartaActiva(data?.carta_publica_activa ?? false)
         setLoadingR(false)
       })
   }, [restauranteId, supabase])
@@ -834,6 +838,18 @@ function RestauranteTab({
         </div>
       </div>
 
+      {/* Carta pública (Q1) */}
+      <CartaPublicaCard
+        nombreRestaurante={nombre}
+        slug={slug}
+        setSlug={setSlug}
+        cartaActiva={cartaActiva}
+        setCartaActiva={setCartaActiva}
+        restauranteId={restauranteId}
+        showToast={showToast}
+        supabase={supabase}
+      />
+
       {/* Logo */}
       <div
         className="rounded-xl p-4 flex items-center justify-center"
@@ -841,6 +857,151 @@ function RestauranteTab({
       >
         <p className="text-sm" style={{ color: 'var(--text-3)' }}>Logo (proxim<wbr/>amente)</p>
       </div>
+    </div>
+  )
+}
+
+// ── Carta pública: toggle + slug + QR (Q1, jul 2026) ─────────
+function slugify(s: string): string {
+  const sinDiacriticos = s.normalize('NFD').split('').filter(ch => ch.codePointAt(0)! < 0x300 || ch.codePointAt(0)! > 0x36f).join('')
+  return sinDiacriticos
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+const CARTA_PUBLICA_BASE_URL = 'https://kos-app-one.vercel.app'
+
+function CartaPublicaCard({
+  nombreRestaurante, slug, setSlug, cartaActiva, setCartaActiva, restauranteId, showToast, supabase,
+}: {
+  nombreRestaurante: string
+  slug: string | null
+  setSlug: (s: string | null) => void
+  cartaActiva: boolean
+  setCartaActiva: (v: boolean) => void
+  restauranteId: string | null
+  showToast: (msg: string) => void
+  supabase: ReturnType<typeof createClient>
+}) {
+  const [slugInput, setSlugInput] = useState(slug ?? '')
+  const [saving, setSaving] = useState(false)
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+
+  useEffect(() => { setSlugInput(slug ?? '') }, [slug])
+
+  const slugEfectivo = slug ?? null
+  const publicUrl = slugEfectivo ? `${CARTA_PUBLICA_BASE_URL}/carta/${slugEfectivo}` : null
+
+  useEffect(() => {
+    if (!cartaActiva || !publicUrl) { setQrDataUrl(null); return }
+    let cancelled = false
+    import('qrcode').then(QRCode => QRCode.toDataURL(publicUrl, { margin: 1, width: 320 })).then(url => {
+      if (!cancelled) setQrDataUrl(url)
+    })
+    return () => { cancelled = true }
+  }, [cartaActiva, publicUrl])
+
+  async function guardar(nextActiva: boolean) {
+    if (!restauranteId) return
+    const nextSlug = slugInput.trim() ? slugify(slugInput) : slugify(nombreRestaurante)
+    if (nextActiva && !nextSlug) {
+      showToast('Error: ingresá un nombre o slug válido')
+      return
+    }
+    setSaving(true)
+    const { error } = await supabase
+      .from('restaurantes')
+      .update({ slug: nextSlug || null, carta_publica_activa: nextActiva })
+      .eq('id', restauranteId)
+    setSaving(false)
+    if (error) {
+      showToast(error.code === '23505' ? 'Error: ese slug ya está en uso, probá otro' : 'Error: ' + error.message)
+      return
+    }
+    setSlug(nextSlug || null)
+    setSlugInput(nextSlug)
+    setCartaActiva(nextActiva)
+    showToast('Guardado')
+  }
+
+  function descargarQr() {
+    if (!qrDataUrl || !slugEfectivo) return
+    const a = document.createElement('a')
+    a.href = qrDataUrl
+    a.download = `carta-qr-${slugEfectivo}.png`
+    a.click()
+  }
+
+  return (
+    <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Carta pública</p>
+        <button
+          onClick={() => guardar(!cartaActiva)}
+          disabled={saving}
+          className="bg-transparent border-none cursor-pointer p-0"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 28, color: cartaActiva ? '#10b981' : 'var(--text-3)' }}>
+            {cartaActiva ? 'toggle_on' : 'toggle_off'}
+          </span>
+        </button>
+      </div>
+      <p className="text-xs" style={{ color: 'var(--text-3)' }}>
+        Activá un menú digital sin login que tus clientes acceden escaneando un QR — se actualiza solo cuando marcás un plato sin stock.
+      </p>
+
+      <div className="flex gap-2 items-center">
+        <span className="text-xs" style={{ color: 'var(--text-2)' }}>{CARTA_PUBLICA_BASE_URL}/carta/</span>
+        <input
+          type="text"
+          value={slugInput}
+          onChange={e => setSlugInput(e.target.value)}
+          placeholder={slugify(nombreRestaurante) || 'mi-restaurante'}
+          className="flex-1"
+          style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-1)', borderRadius: 8, padding: '6px 10px', fontSize: 13 }}
+        />
+        <button
+          onClick={() => guardar(cartaActiva)}
+          disabled={saving || slugify(slugInput) === (slug ?? '')}
+          className="px-3 py-[6px] rounded-lg text-xs font-semibold text-white"
+          style={{ background: 'var(--navy)', opacity: (saving || slugify(slugInput) === (slug ?? '')) ? 0.5 : 1, whiteSpace: 'nowrap' }}
+        >
+          Guardar
+        </button>
+      </div>
+
+      {cartaActiva && publicUrl && (
+        <div className="flex flex-col items-center gap-2 mt-1 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
+          {qrDataUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={qrDataUrl} alt="Código QR de la carta pública" style={{ width: 160, height: 160 }} />
+          ) : (
+            <div style={{ width: 160, height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 28, color: 'var(--text-3)', animation: 'spin 1s linear infinite' }}>progress_activity</span>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <a
+              href={`/carta/${slugEfectivo}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-[6px] rounded-lg text-xs font-semibold"
+              style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
+            >
+              Ver carta
+            </a>
+            <button
+              onClick={descargarQr}
+              disabled={!qrDataUrl}
+              className="px-3 py-[6px] rounded-lg text-xs font-semibold text-white"
+              style={{ background: 'var(--navy)' }}
+            >
+              Descargar QR
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

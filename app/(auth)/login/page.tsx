@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth/context'
 import { createClient } from '@/lib/supabase/client'
+import { DEMO_EMAIL, DEMO_PASSWORD } from '@/lib/demo'
 
 const fieldStyle: React.CSSProperties = {
   background: 'rgba(255,255,255,0.06)',
@@ -40,6 +41,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [showPass, setShowPass] = useState(false)
   const [resetSent, setResetSent] = useState(false)
+  const [demoLoading, setDemoLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -53,6 +55,21 @@ export default function LoginPage() {
       return
     }
 
+    router.push('/')
+  }
+
+  const handleVerDemo = async () => {
+    setError(null)
+    setDemoLoading(true)
+    const supabase = createClient()
+    // Fire-and-forget: contador de clicks, no debe bloquear el ingreso a la demo si falla.
+    supabase.from('demo_visitas').insert({}).then(() => {}, () => {})
+    const { error: err } = await signIn(DEMO_EMAIL, DEMO_PASSWORD)
+    if (err) {
+      setError('No se pudo entrar a la demo. Probá de nuevo en un rato.')
+      setDemoLoading(false)
+      return
+    }
     router.push('/')
   }
 
@@ -174,6 +191,33 @@ export default function LoginPage() {
         >
           Crear cuenta
         </Link>
+
+        {/* Ver demo — Q2, fricción cero */}
+        <div className="flex items-center gap-3 w-full mt-1">
+          <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.12)' }} />
+          <span className="text-[11px]" style={{ color: 'rgba(255,255,255,.35)' }}>o</span>
+          <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.12)' }} />
+        </div>
+        <button
+          type="button"
+          onClick={handleVerDemo}
+          disabled={demoLoading}
+          className="flex items-center justify-center gap-2 w-full"
+          style={{
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            color: '#fff',
+            padding: '12px',
+            borderRadius: 14,
+            fontWeight: 600,
+            fontSize: 14,
+            cursor: 'pointer',
+            opacity: demoLoading ? 0.7 : 1,
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>visibility</span>
+          {demoLoading ? 'Entrando a la demo...' : 'Ver demo sin registrarme'}
+        </button>
       </form>
     </div>
   )
