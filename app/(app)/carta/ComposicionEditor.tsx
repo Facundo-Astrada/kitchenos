@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { PLAZAS_OPS, SECCIONES_OPS } from '@/lib/ops/mise'
 import { useSheetOpen } from '@/lib/ui/chrome'
 import { usePermisos } from '@/lib/hooks/usePermisos'
+import OpsPanel, { type OpsResult } from '@/components/ops/OpsPanel'
 
 // ── Tipos públicos ──────────────────────────────────────────
 export type CompModo = 'plato' | 'menu' | 'evento'
@@ -58,7 +59,6 @@ const PLAZAS_BASE = ['parrilla', 'fríos', 'calientes', 'pase', 'pastelería']
 // PLAZAS_OPS / SECCIONES_OPS ahora viven en @/lib/ops/mise; se re-exportan
 // para no romper los imports existentes (`from './ComposicionEditor'`).
 export { PLAZAS_OPS, SECCIONES_OPS }
-const UNIDADES_OPS = ['u', 'kg', 'g', 'l', 'ml', 'pax', 'porc', 'bandeja']
 const DEFAULT_SECCIONES = ['Entradas', 'Principales', 'Postres']
 
 const PRIORIDADES: { id: CompPrioridad; label: string; sublabel: string; color: string; bg: string }[] = [
@@ -574,48 +574,27 @@ function PlatoRecetasEditor({
   onCrearIdea: (nombre: string) => Promise<string>
 }) {
   const [creandoIdea, setCreandoIdea] = useState(false)
-  // OPS panel local — abre/cierra por _uid de la fila
+  // OPS panel local — abre/cierra por _uid de la fila (el panel es OpsPanel compartido)
   const [opsPanelUid, setOpsPanelUid] = useState<number | null>(null)
-  const [opsPlaza, setOpsPlaza] = useState('')
-  const [opsSeccion, setOpsSeccion] = useState('')
-  const [opsCantidad, setOpsCantidad] = useState('1')
-  const [opsUnidad, setOpsUnidad] = useState('u')
-  const [opsRecipienteNombre, setOpsRecipienteNombre] = useState('')
-  const [opsPesoPorcion, setOpsPesoPorcion] = useState('')
-  const [opsPesoPorcionUnidad, setOpsPesoPorcionUnidad] = useState('g')
 
   function openOps(pr: PlatoItem) {
-    if (opsPanelUid === pr._uid) { setOpsPanelUid(null); return }
-    setOpsPanelUid(pr._uid)
-    setOpsPlaza(pr.opsPlaza ?? '')
-    setOpsSeccion(pr.opsSeccion ?? '')
-    setOpsCantidad(pr.opsCantidad != null ? String(pr.opsCantidad) : '')
-    setOpsUnidad(pr.opsUnidad ?? 'g')
-    setOpsRecipienteNombre(pr.opsRecipienteNombre ?? '')
-    setOpsPesoPorcion(pr.opsPesoPorcion != null ? String(pr.opsPesoPorcion) : '')
-    setOpsPesoPorcionUnidad(pr.opsPesoPorcionUnidad ?? 'g')
+    setOpsPanelUid(prev => prev === pr._uid ? null : pr._uid)
   }
 
-  function saveOps(uid_: number) {
-    if (!opsPlaza || !opsSeccion) return
-    const recipNombre = opsRecipienteNombre.trim() || null
-    const pesoPorcion = recipNombre && opsPesoPorcion ? parseFloat(opsPesoPorcion) || null : null
-    const pesoPorcionUnidad = pesoPorcion ? opsPesoPorcionUnidad : null
-    // Calcular porciones reales para mise: si capacidad y porcion estan en gramos → dividir
-    const capVal = parseFloat(opsCantidad) || 0
-    const porVal = pesoPorcion ?? 0
-    const toG = (v: number, u: string) => u === 'kg' ? v * 1000 : u === 'g' ? v : null
-    const capG = toG(capVal, opsUnidad)
-    const porG = toG(porVal, opsPesoPorcionUnidad)
-    const porcionesCalculadas = capG !== null && porG !== null && porG > 0
-      ? Math.round(capG / porG)
-      : null
-    // opsCantidad guardado: si capacidad es porc/u usamos directo; si es peso usamos porciones calculadas
-    const cantidadFinal = (['porc', 'u', 'pax'].includes(opsUnidad))
-      ? capVal
-      : (porcionesCalculadas ?? capVal)
+  function saveOps(uid_: number, r: OpsResult) {
     setPlatoRecetas(prev => prev.map(pr =>
-      pr._uid === uid_ ? { ...pr, opsPlaza, opsSeccion, opsCantidad: cantidadFinal, opsUnidad, opsRecipienteNombre: recipNombre, opsPesoPorcion: pesoPorcion, opsPesoPorcionUnidad: pesoPorcionUnidad } : pr
+      pr._uid === uid_
+        ? { ...pr, opsPlaza: r.plaza, opsSeccion: r.seccion, opsCantidad: r.cantidad, opsUnidad: r.unidad, opsRecipienteNombre: r.recipienteNombre, opsPesoPorcion: r.pesoPorcion, opsPesoPorcionUnidad: r.pesoPorcionUnidad }
+        : pr
+    ))
+    setOpsPanelUid(null)
+  }
+
+  function clearOps(uid_: number) {
+    setPlatoRecetas(prev => prev.map(pr =>
+      pr._uid === uid_
+        ? { ...pr, opsPlaza: null, opsSeccion: null, opsCantidad: null, opsUnidad: null, opsRecipienteNombre: null, opsPesoPorcion: null, opsPesoPorcionUnidad: null }
+        : pr
     ))
     setOpsPanelUid(null)
   }
@@ -740,130 +719,25 @@ function PlatoRecetasEditor({
                   </button>
                 </div>
 
-                {/* Panel OPS inline */}
+                {/* Panel OPS inline (componente compartido) */}
                 {opsActiva && (
                   <div style={{ padding: '12px 14px', borderBottom: idx < platoRecetas.length - 1 ? '1px solid var(--border)' : 'none', background: '#f8faff' }}>
-                    {/* Plazas */}
-                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Plaza de producción</div>
-                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
-                      {PLAZAS_OPS.map(p => (
-                        <button key={p.id} onClick={() => { setOpsPlaza(opsPlaza === p.id ? '' : p.id); setOpsSeccion('') }}
-                          style={{ padding: '5px 11px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
-                            background: opsPlaza === p.id ? `${p.color}18` : 'var(--surface)',
-                            color: opsPlaza === p.id ? p.color : 'var(--text-3)',
-                            outline: opsPlaza === p.id ? `1.5px solid ${p.color}50` : '1px solid var(--border)' }}>
-                          {p.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {opsPlaza && (
-                      <>
-                        {/* Secciones mise */}
-                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Sección del mise</div>
-                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
-                          {SECCIONES_OPS.map(s => (
-                            <button key={s.id} onClick={() => setOpsSeccion(opsSeccion === s.id ? '' : s.id)}
-                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
-                                background: opsSeccion === s.id ? 'rgba(67,97,160,.12)' : 'var(--surface)',
-                                color: opsSeccion === s.id ? 'var(--accent)' : 'var(--text-3)',
-                                outline: opsSeccion === s.id ? '1.5px solid rgba(67,97,160,.3)' : '1px solid var(--border)' }}>
-                              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>{s.icono}</span>
-                              {s.label}
-                            </button>
-                          ))}
-                        </div>
-
-                        {/* Recipiente */}
-                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Recipiente (opcional)</div>
-                        <input type="text" value={opsRecipienteNombre} onChange={e => { setOpsRecipienteNombre(e.target.value); if (!e.target.value.trim()) setOpsPesoPorcion('') }}
-                          placeholder="ej: tupper, cubeta GN, bandeja"
-                          style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)', boxSizing: 'border-box', marginBottom: 12 }} />
-
-                        {/* Cantidad + unidad */}
-                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>
-                          {opsRecipienteNombre.trim() ? 'Porciones/peso recipiente lleno' : 'Cantidad en mise'}
-                        </div>
-                        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-                          <input type="number" value={opsCantidad} onChange={e => setOpsCantidad(e.target.value)} inputMode="decimal"
-                            placeholder="0"
-                            style={{ width: 70, padding: '8px 10px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 14, fontWeight: 700, textAlign: 'center', fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)' }} />
-                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                            {UNIDADES_OPS.map(u => (
-                              <button key={u} onClick={() => setOpsUnidad(u)}
-                                style={{ padding: '6px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
-                                  background: opsUnidad === u ? 'var(--navy)' : 'var(--surface)',
-                                  color: opsUnidad === u ? '#fff' : 'var(--text-3)',
-                                  outline: opsUnidad === u ? 'none' : '1px solid var(--border)' }}>
-                                {u}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Tamaño de porción — solo cuando hay recipiente */}
-                        {opsRecipienteNombre.trim() && (() => {
-                          const capVal = parseFloat(opsCantidad) || 0
-                          const porVal = parseFloat(opsPesoPorcion) || 0
-                          const toG = (v: number, u: string) => u === 'kg' ? v * 1000 : u === 'g' ? v : null
-                          const capG = toG(capVal, opsUnidad)
-                          const porG = toG(porVal, opsPesoPorcionUnidad)
-                          const porcionesAuto = capG !== null && porG !== null && porG > 0 ? Math.round(capG / porG) : null
-                          const UNIDADES_PORCION = ['g', 'kg', 'u', 'porc', 'ml', 'l']
-                          return (
-                            <>
-                              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>
-                                Tamaño por porción
-                              </div>
-                              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
-                                <input type="number" value={opsPesoPorcion} onChange={e => setOpsPesoPorcion(e.target.value)} inputMode="decimal"
-                                  placeholder="ej: 110"
-                                  style={{ width: 70, padding: '8px 10px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 14, fontWeight: 700, textAlign: 'center', fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)' }} />
-                                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                                  {UNIDADES_PORCION.map(u => (
-                                    <button key={u} onClick={() => setOpsPesoPorcionUnidad(u)}
-                                      style={{ padding: '6px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
-                                        background: opsPesoPorcionUnidad === u ? '#4361a0' : 'var(--surface)',
-                                        color: opsPesoPorcionUnidad === u ? '#fff' : 'var(--text-3)',
-                                        outline: opsPesoPorcionUnidad === u ? 'none' : '1px solid var(--border)' }}>
-                                      {u}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                              {/* Resultado calculado */}
-                              {porcionesAuto !== null && opsCantidad && opsPesoPorcion ? (
-                                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', marginBottom: 12, paddingLeft: 2 }}>
-                                  = {porcionesAuto} porciones por recipiente
-                                </div>
-                              ) : opsCantidad && opsPesoPorcion ? (
-                                <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 12, paddingLeft: 2 }}>
-                                  {capVal} {opsUnidad} · {porVal} {opsPesoPorcionUnidad} / porción
-                                </div>
-                              ) : <div style={{ marginBottom: 12 }} />}
-                            </>
-                          )
-                        })()}
-                      </>
-                    )}
-
-                    {/* Guardar / cancelar */}
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => saveOps(pr._uid)} disabled={!opsPlaza || !opsSeccion}
-                        style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: opsPlaza && opsSeccion ? 'var(--navy)' : 'var(--border)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: opsPlaza && opsSeccion ? 'pointer' : 'default', fontFamily: 'inherit' }}>
-                        Guardar OPS
-                      </button>
-                      {pr.opsPlaza && (
-                        <button onClick={() => { setPlatoRecetas(prev => prev.map(x => x._uid === pr._uid ? { ...x, opsPlaza: null, opsSeccion: null, opsCantidad: null, opsUnidad: null, opsRecipienteNombre: null, opsPesoPorcion: null, opsPesoPorcionUnidad: null } : x)); setOpsPanelUid(null) }}
-                          style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                          Quitar
-                        </button>
-                      )}
-                      <button onClick={() => setOpsPanelUid(null)}
-                        style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-3)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                        Cancelar
-                      </button>
-                    </div>
+                    <OpsPanel
+                      initial={{
+                        plaza: pr.opsPlaza,
+                        seccion: pr.opsSeccion,
+                        recipienteNombre: pr.opsRecipienteNombre,
+                        cantidad: pr.opsCantidad,
+                        unidad: pr.opsUnidad,
+                        pesoPorcion: pr.opsPesoPorcion,
+                        pesoPorcionUnidad: pr.opsPesoPorcionUnidad,
+                      }}
+                      hasExisting={!!pr.opsPlaza}
+                      defaultUnidad="g"
+                      onSave={r => saveOps(pr._uid, r)}
+                      onRemove={() => clearOps(pr._uid)}
+                      onCancel={() => setOpsPanelUid(null)}
+                    />
                   </div>
                 )}
               </div>
