@@ -6,7 +6,7 @@ Lista priorizada de todo lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL
 
 ## 🟠 Alto — Seguridad y UX
 
-> **Planes activos:** `PLAN-UI-IDENTIDAD-2026-07.md` ✅ **completo** (D0–D10, 6 jul) · `PLAN-ROADMAP-COMPETENCIA-2026-07.md` ⏳ en curso (Q1 carta QR ✅ · Q2 demo pública ✅, ambos 6 jul; sigue Q3 export Excel Reportes) · `PLAN-MEJORAS-AUDITORIA-2026-07.md` (A/B/C — B2 fiscal y A7 dictado quedan abiertos).
+> **Planes activos:** `PLAN-UI-IDENTIDAD-2026-07.md` ✅ **completo** (D0–D10, 6 jul) · `PLAN-ROADMAP-COMPETENCIA-2026-07.md` ⏳ en curso (Q1 carta QR ✅ · Q2 demo pública ✅ · Q3 export Excel Reportes ✅, todos 6 jul; sigue Q4 etiquetas ESC/POS) · `PLAN-MEJORAS-AUDITORIA-2026-07.md` (A/B/C — B2 fiscal y A7 dictado quedan abiertos).
 >
 > **Acción manual pendiente (Q2):** agregar `CRON_SECRET` a las env vars de Vercel (valor ya generado en `.env.local`) para que el cron nocturno de reset de la demo (`/api/cron/reset-demo`, `vercel.json`) quede protegido en producción.
 

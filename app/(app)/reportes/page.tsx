@@ -5,6 +5,11 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { useAuth } from '@/lib/auth/context'
+import { usePermisos } from '@/lib/hooks/usePermisos'
+import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
+import { createClient } from '@/lib/supabase/client'
+import { HeaderAction } from '@/components/ui'
+import { exportarExcel, fechaArchivo, type HojaExcel } from '@/lib/exportar'
 import {
   useReportes,
   type Periodo,
@@ -21,6 +26,9 @@ import {
 } from '@/lib/hooks/useReportes'
 
 type Tab = 'resumen' | 'cmv' | 'presupuesto' | 'rendimiento' | 'foodcost' | 'compras' | 'precios' | 'produccion'
+
+// Tabs con export a Excel (Q3) — contextual al tab activo, mismos números que el render.
+const TABS_EXPORTABLES: Tab[] = ['cmv', 'compras', 'foodcost', 'presupuesto', 'rendimiento']
 
 const PERIODOS: { key: Periodo; label: string }[] = [
   { key: 'semana', label: 'Esta semana' },
@@ -71,11 +79,21 @@ export default function ReportesPage() {
   const router = useRouter()
   const { perfil } = useAuth()
   const esAdmin = perfil?.rol === 'admin'
+  const { puedeVer } = usePermisos()
+  const RESTAURANTE_ID = useRestauranteId()
   const { loading, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchPresupuestos, savePresupuesto, fetchRendimiento } = useReportes()
   const isDesktop = useIsDesktop()
 
   const [periodo, setPeriodo] = useState<Periodo>('mes')
   const [tab, setTab] = useState<Tab>('resumen')
+
+  const [restauranteNombre, setRestauranteNombre] = useState('')
+  useEffect(() => {
+    if (!RESTAURANTE_ID) return
+    const supabase = createClient()
+    supabase.from('restaurantes').select('nombre').eq('id', RESTAURANTE_ID).maybeSingle()
+      .then(({ data }) => setRestauranteNombre(data?.nombre ?? ''))
+  }, [RESTAURANTE_ID])
 
   useEffect(() => {
     function handleSetTab(e: Event) {
@@ -178,6 +196,120 @@ export default function ReportesPage() {
   useEffect(() => {
     loadTab(tab, periodo)
   }, [tab, periodo, loadTab])
+
+  // ---------------------------------------------------------------------------
+  // Export a Excel (Q3) — contextual al tab activo, mismos números que el render.
+  // ---------------------------------------------------------------------------
+
+  function buildMetaHoja(): HojaExcel {
+    return {
+      nombre: 'Info',
+      filas: [
+        { Campo: 'Restaurante', Valor: restauranteNombre || '—' },
+        { Campo: 'Período', Valor: PERIODOS.find(p => p.key === periodo)?.label ?? periodo },
+        { Campo: 'Fecha de exportación', Valor: fechaArchivo() },
+      ],
+    }
+  }
+
+  function hojasCMV(): HojaExcel[] {
+    if (!cmvData) return []
+    const c = cmvData
+    return [{
+      nombre: 'CMV',
+      filas: [{
+        'Ventas': c.ventas,
+        'Compras (costo)': c.compras,
+        'CMV %': Math.round(c.cmvPct * 10) / 10,
+        'Margen bruto': c.margenBruto,
+        'Ticket promedio': Math.round(c.ticketPromedio),
+        'Cubiertos': c.cubiertos,
+        'Ventas período anterior': c.ventasAnterior,
+        'Compras período anterior': c.comprasAnterior,
+      }],
+    }]
+  }
+
+  function hojasCompras(): HojaExcel[] {
+    const { proveedores, facturas } = comprasData
+    return [
+      {
+        nombre: 'Por proveedor',
+        filas: proveedores.map(p => ({
+          'Proveedor': p.proveedor,
+          'Facturas': p.cantFacturas,
+          'Total': p.total,
+          '% del total': Math.round(p.porcentaje * 10) / 10,
+        })),
+      },
+      {
+        nombre: 'Facturas',
+        filas: facturas.map(f => ({
+          'Proveedor': f.proveedor_nombre,
+          'Fecha': f.fecha_factura ?? '',
+          'Total': f.total,
+          'Estado': f.status,
+        })),
+      },
+    ]
+  }
+
+  function hojasFoodCost(): HojaExcel[] {
+    return [{
+      nombre: 'Food Cost',
+      filas: foodCostData.map(f => ({
+        'Plato': f.nombre,
+        'Costo porción': Math.round(f.costo_porcion),
+        'Precio venta': f.precio_venta,
+        'Food cost %': Math.round(f.food_cost_pct * 10) / 10,
+        'Margen': Math.round(f.margen),
+      })),
+    }]
+  }
+
+  function hojasPresupuesto(): HojaExcel[] {
+    const periodos: PeriodoPresupuesto[] = ['semanal', 'mensual', 'trimestral', 'semestral', 'anual']
+    return [{
+      nombre: 'Presupuesto vs Real',
+      filas: periodos.map(per => {
+        const row = presuData.find(r => r.periodo === per) ?? { periodo: per, presupuesto: 0, real: 0 }
+        return {
+          'Período': PRESU_LABELS[per],
+          'Presupuesto': row.presupuesto,
+          'Real': row.real,
+          'Diferencia': row.presupuesto - row.real,
+        }
+      }),
+    }]
+  }
+
+  function hojasRendimiento(): HojaExcel[] {
+    return [{
+      nombre: 'Rendimiento por plaza',
+      filas: rendData.map(r => ({
+        'Plaza': r.plaza,
+        'Tareas completadas': r.tareasCompletadas,
+        'Tareas totales': r.tareasTotal,
+        'Cumplimiento %': Math.round(r.cumplimientoPct * 10) / 10,
+        'Merma ($)': Math.round(r.mermaCosto),
+      })),
+    }]
+  }
+
+  function handleExportar() {
+    let hojas: HojaExcel[] = []
+    let slug = ''
+    switch (tab) {
+      case 'cmv': hojas = hojasCMV(); slug = 'cmv'; break
+      case 'compras': hojas = hojasCompras(); slug = 'compras'; break
+      case 'foodcost': hojas = hojasFoodCost(); slug = 'food_cost'; break
+      case 'presupuesto': hojas = hojasPresupuesto(); slug = 'presupuesto'; break
+      case 'rendimiento': hojas = hojasRendimiento(); slug = 'rendimiento'; break
+      default: return
+    }
+    if (!hojas.length) return
+    exportarExcel(`reportes_${slug}_${fechaArchivo()}.xlsx`, [buildMetaHoja(), ...hojas])
+  }
 
   // ---------------------------------------------------------------------------
   // Render helpers
@@ -655,20 +787,31 @@ export default function ReportesPage() {
       <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1 style={{ fontSize: 20, fontWeight: 700, color: '#fff', margin: 0 }}>Reportes</h1>
-          {esAdmin && (
-            <button
-              onClick={() => router.push('/reportes/personal')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                background: 'rgba(255,255,255,0.15)', border: 'none',
-                borderRadius: 10, padding: '7px 12px', cursor: 'pointer',
-                color: '#fff', fontSize: 12, fontWeight: 600,
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>group</span>
-              Personal
-            </button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {puedeVer('reportes') && TABS_EXPORTABLES.includes(tab) && (
+              <HeaderAction
+                label="Exportar"
+                icon="table_view"
+                onClick={handleExportar}
+                disabled={tabLoading}
+                style={{ padding: '7px 12px', fontSize: 12 }}
+              />
+            )}
+            {esAdmin && (
+              <button
+                onClick={() => router.push('/reportes/personal')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  background: 'rgba(255,255,255,0.15)', border: 'none',
+                  borderRadius: 10, padding: '7px 12px', cursor: 'pointer',
+                  color: '#fff', fontSize: 12, fontWeight: 600,
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>group</span>
+                Personal
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Period selector */}
