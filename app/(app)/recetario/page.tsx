@@ -1570,6 +1570,7 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
   const [porciones, setPorciones] = useState(String(initialDraft?.porciones || 1))
   const [tiempoMin, setTiempoMin] = useState(initialDraft?.tiempo_min ? String(initialDraft.tiempo_min) : '')
   const [precioVenta, setPrecioVenta] = useState(initialDraft?.precio_venta ? String(initialDraft.precio_venta) : '')
+  const [esPlato, setEsPlato] = useState(false)   // "trabajar como plato" — OPS por ingrediente en la ficha
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [activeIngId, setActiveIngId] = useState<number | null>(null)
@@ -1897,6 +1898,7 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
           procedimiento,
           activa: true,
           status,
+          es_plato: esPlato,
         })
         if (ingredientesData.length > 0) {
           await fetch('/api/recetas/save', {
@@ -1920,6 +1922,7 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
           procedimiento,
           activa: true,
           status,
+          es_plato: esPlato,
         }, ingredientesData)
       }
       await sincronizarIngredientesConStock(ingredientesData)
@@ -2236,6 +2239,21 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
               </label>
             </div>
           </div>
+          {/* Trabajar como plato — habilita OPS por ingrediente en la ficha */}
+          <button
+            type="button"
+            onClick={() => setEsPlato(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginTop: 10, borderRadius: 10, border: `1px solid ${esPlato ? 'rgba(67,97,160,.35)' : 'var(--border)'}`, background: esPlato ? 'rgba(67,97,160,.06)' : 'var(--bg)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', width: '100%' }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 20, color: esPlato ? 'var(--accent)' : 'var(--text-3)' }}>restaurant</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Trabajar como plato</span>
+              <span style={{ display: 'block', fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>Cada ingrediente/subreceta se rutea a una plaza (botón OPS en la ficha).</span>
+            </span>
+            <span style={{ width: 40, height: 24, borderRadius: 99, background: esPlato ? 'var(--accent)' : 'var(--border)', position: 'relative', flexShrink: 0, transition: 'background .15s' }}>
+              <span style={{ position: 'absolute', top: 2, left: esPlato ? 18 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .15s', boxShadow: '0 1px 3px rgba(0,0,0,.3)' }} />
+            </span>
+          </button>
         </Section>
 
         {/* Save buttons */}

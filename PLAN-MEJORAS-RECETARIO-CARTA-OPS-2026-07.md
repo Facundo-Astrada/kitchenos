@@ -139,14 +139,38 @@ Orden objetivo **Menú/Evento**: nombre → precio del menú (con **variantes** 
 
 ---
 
-## Tanda D — Feature nueva: split de receta en N partes  *(obs. Recetario #4)*
+## Tanda D — Receta como plato: OPS por ingrediente/subreceta — ✅ HECHA (7 jul)
 
-Único cambio que no es refactor. Objetivo: al cargar una receta larga o con ingredientes compartidos, dividirla en partes (P1, P2, P3…) diferenciando qué ingredientes van a cada una. Opcional, activado por un botón en el editor de receta.
+**Implementado:**
+- Migración `20260707_receta_es_plato_ingredientes_ops.sql` aplicada: `recetas.es_plato BOOLEAN DEFAULT false` + columnas OPS en `ingredientes` (`plaza, seccion_mise, cantidad_ops, unidad_ops, recipiente_nombre, peso_porcion, peso_porcion_unidad`).
+- `types/index.ts`: `Receta.es_plato` + campos OPS en `Ingrediente`.
+- `useRecetas`: `es_plato` como columna real; el derivado (link a carta) renombrado a **`en_carta`** para no colisionar. CRUD pasa los campos por spread (ya servía).
+- **`components/... IngredienteOpsSheet.tsx`** (nuevo): bottom sheet que envuelve `OpsPanel` para un ingrediente.
+- **`recetario/[id]/page.tsx`**: toggle "Trabajar como plato" en el modal Editar; cuando `es_plato`, cada fila de ingrediente/subreceta suma botón OPS (label = plaza) → abre `IngredienteOpsSheet` → guarda en la fila (`actualizarIngrediente`) y, si es subreceta, alimenta el mise (`upsertMiseChecklistItem` keyed por `subreceta_id`).
+- **`recetario/page.tsx`** (`NuevaFichaScreen`): mismo toggle "Trabajar como plato" al crear (persiste vía `agregarReceta`/`/api/recetas/save` que hace `...receta`).
+- `npm run build` ✅.
+- **Ojo:** el badge PLATO de la lista ahora refleja `es_plato` (el modo), no `en_carta` (link a carta) — cambio de significado intencional.
+- **Pendiente futuro:** propagar al mise vivo los ingredientes-**producto** (sin `receta_id`); hoy guardan el ruteo en la línea pero no crean checklist_item.
 
-- **DB:** `supabase/migrations/20260707_ingredientes_parte.sql` — `ALTER TABLE ingredientes ADD COLUMN IF NOT EXISTS parte SMALLINT NULL;` (`NULL` = receta sin dividir) + `NOTIFY pgrst`. Verificar con `/supabase-check ingredientes`.
-- **UI editor de receta:** botón "Dividir en partes" → agrupa ingredientes por `parte` (agregar/quitar partes, reasignar cada ingrediente). N partes, no fijo a 2.
-- **Render de ficha:** cuando hay partes, mostrar ingredientes agrupados por P1/P2/… con su sub-total.
-- **Ficha técnica / gramajes** (obs. Recetario #2): en gran parte ya cubierto (`recetas.peso_total_g`, `peso_escurrido_g`, gramaje por ingrediente). Confirmar con el cliente si falta algo o es solo presentación.
+---
+
+### (referencia) diseño original — Tanda D
+
+> **Reemplaza** el split P1/P2 original (subsumido: en vez de partes arbitrarias, cada ingrediente/subreceta se rutea a su plaza real — más granular).
+> **Decisiones (7 jul):** "trabajar como plato" = **flag propio** `recetas.es_plato`, separado de la carta · los componentes ruteables son los **ingredientes/subrecetas de la propia receta**.
+
+**Concepto:** una receta puede marcarse "trabajar como plato" (elegido al crear/editar). Cuando lo está, cada ingrediente/subreceta de su ficha técnica muestra un botón OPS (el `OpsPanel` compartido) → cada componente se rutea a su plaza/sección/recipiente. La ficha del recetario se comporta como el editor de composición de Carta/Menú, pero los componentes son los ingredientes de la receta.
+
+**La sintonía = extender a `ingredientes` el mismo trío que ya usan `plato_recetas` y `menu_preparaciones`:** `OpsPanel` (UI única, hecho) + columnas OPS en la fila de composición + `upsertMiseChecklistItem` (escritor único del mise).
+
+- **DB:**
+  - `recetas.es_plato BOOLEAN DEFAULT false` — flag explícito (modo), elegido al cargar. **Ojo naming:** hoy `es_plato` es *derivado* en `useRecetas` (link a `carta_items`); pasa a ser columna real. El derivado "está en la carta" se renombra a `en_carta` (mantiene el badge sin colisión).
+  - `ingredientes` gana las columnas OPS: `plaza TEXT, seccion_mise TEXT, cantidad_ops NUMERIC, unidad_ops TEXT, recipiente_nombre TEXT, peso_porcion NUMERIC, peso_porcion_unidad TEXT` (mismo set que `menu_preparaciones`). `NOTIFY pgrst`.
+- **`useRecetas`:** `es_plato` como columna real en el tipo + CRUD; renombrar el derivado a `en_carta`; tipo + CRUD de `ingredientes` con las columnas OPS.
+- **Recetario — form crear/editar:** toggle "Trabajar como plato" → setea `recetas.es_plato`.
+- **Recetario ficha (`recetario/[id]/page.tsx`):** cuando `es_plato`, cada fila de ingrediente/subreceta suma un botón OPS → abre `OpsPanel` (sheet, reusa `RecetaOpsSheet` o inline) → guarda en la fila del ingrediente + chip resumen (plaza/sección).
+- **Mise (mismo criterio que Carta):** subrecetas (tienen `receta_id` propio) → `upsertMiseChecklistItem` keyed por ese receta_id. Ingredientes-producto (sin receta_id) → por ahora se guarda el ruteo en la línea (definición); la propagación al mise vivo del producto queda como paso siguiente (o vía ítem por nombre).
+- **Ficha técnica / gramajes** (obs. Recetario #2): ya cubierto (`recetas.peso_total_g`, `peso_escurrido_g`, gramaje por ingrediente) — sin trabajo extra salvo presentación.
 
 ---
 

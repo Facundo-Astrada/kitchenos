@@ -60,6 +60,14 @@ export interface Ingrediente {
   merma_pct?: number | null
   producto_id?: string | null
   created_at?: string | null
+  // OPS / mise por ingrediente — se usa cuando la receta es_plato (mismo set que menu_preparaciones)
+  plaza?: string | null
+  seccion_mise?: string | null
+  cantidad_ops?: number | null
+  unidad_ops?: string | null
+  recipiente_nombre?: string | null
+  peso_porcion?: number | null
+  peso_porcion_unidad?: string | null
 }
 
 // DB: plato_recetas (id, plato_id, receta_id, porciones, orden, created_at)
@@ -72,7 +80,7 @@ export interface PlatoReceta {
   created_at?: string | null
 }
 
-// DB: recetas (id, nombre, categoria, porciones, tiempo_min, precio_venta, procedimiento, status, activa, foto_url, peso_total_g, peso_escurrido_g, restaurante_id, created_at, updated_at)
+// DB: recetas (id, nombre, categoria, porciones, tiempo_min, precio_venta, procedimiento, status, activa, foto_url, peso_total_g, peso_escurrido_g, vida_util_dias, restaurante_id, created_at, updated_at)
 export interface Receta {
   id: string
   nombre: string
@@ -86,6 +94,8 @@ export interface Receta {
   foto_url?: string | null
   peso_total_g?: number | null
   peso_escurrido_g?: number | null
+  vida_util_dias?: number | null
+  es_plato?: boolean | null   // modo "trabajar como plato": la ficha rutea cada ingrediente a OPS
   restaurante_id: string
   created_at: string
   updated_at?: string | null
@@ -354,7 +364,7 @@ export interface Turno {
   turno_tipo: string
   hora_entrada: string | null
   hora_salida: string | null
-  notas?: string | null
+  notas: string | null
   restaurante_id: string
   created_at: string
 }
@@ -450,7 +460,7 @@ export type TipoEvento =
   | 'reunion'
   | 'otro'
 
-// DB: eventos (id, titulo, descripcion, tipo, fecha_inicio, fecha_fin, hora_inicio, hora_fin, color, recurrente, frecuencia, proveedor_id, usuario_id, restaurante_id, created_at)
+// DB: eventos (id, titulo, descripcion, tipo, fecha_inicio, fecha_fin, hora_inicio, hora_fin, color NOT NULL, recurrente NOT NULL, frecuencia, proveedor_id, usuario_id, restaurante_id, created_at)
 export interface Evento {
   id: string
   titulo: string
@@ -460,8 +470,8 @@ export interface Evento {
   fecha_fin?: string | null
   hora_inicio?: string | null
   hora_fin?: string | null
-  color?: string | null
-  recurrente?: boolean | null
+  color: string
+  recurrente: boolean
   frecuencia?: string | null
   proveedor_id?: string | null
   usuario_id?: string | null
@@ -584,15 +594,15 @@ export interface EquipoMiembro {
   created_at: string
 }
 
-// DB: puestos (id, nombre, descripcion, tareas_funciones text[], permisos_app text[], nivel, plaza_default, restaurante_id, created_at)
+// DB: puestos (id, nombre, descripcion, tareas_funciones text[] NOT NULL, permisos_app text[] NOT NULL, nivel, plaza_default, restaurante_id, created_at)
 export interface Puesto {
   id: string
   nombre: string
   descripcion: string | null
-  tareas_funciones: string[] | null
-  permisos_app: string[] | null  // array de ModuloId reales
-  nivel: string                   // admin | sous_chef | cocinero | bachero
-  plaza_default: string | null    // plaza OPS por defecto
+  tareas_funciones: string[]
+  permisos_app: string[]         // array de ModuloId reales
+  nivel: string                  // admin | sous_chef | cocinero | bachero
+  plaza_default: string | null   // plaza OPS por defecto
   restaurante_id: string
   created_at: string
 }
@@ -903,6 +913,41 @@ export interface Pago {
   medio_id: string
   monto: number
   propina: number
+  created_at: string
+}
+
+// ── Arqueo de caja (M1) ─────────────────────────────────────
+export type EstadoCajaTurno = 'abierta' | 'cerrada'
+
+// DB: cajas_turnos (id, restaurante_id, estado, abierta_por, fecha_apertura, monto_inicial,
+//     cerrada_por, fecha_cierre, montos_esperados, montos_declarados, diferencia_total, arqueo_ciego, notas, created_at)
+export interface CajaTurno {
+  id: string
+  restaurante_id: string
+  estado: EstadoCajaTurno
+  abierta_por: string | null
+  fecha_apertura: string
+  monto_inicial: number
+  cerrada_por: string | null
+  fecha_cierre: string | null
+  montos_esperados: Record<string, number> | null
+  montos_declarados: Record<string, number> | null
+  diferencia_total: number | null
+  arqueo_ciego: boolean
+  notas: string | null
+  created_at: string
+}
+
+// DB: caja_movimientos (id, caja_turno_id, medio_id, tipo, monto, motivo, creado_por, created_at)
+export type TipoMovimientoCaja = 'retiro' | 'ingreso'
+export interface CajaMovimiento {
+  id: string
+  caja_turno_id: string
+  medio_id: string
+  tipo: TipoMovimientoCaja
+  monto: number
+  motivo: string | null
+  creado_por: string | null
   created_at: string
 }
 

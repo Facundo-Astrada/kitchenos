@@ -8,12 +8,13 @@ import { useRestauranteId } from './useRestauranteId'
 
 export type RecetaConCosto = Receta & {
   food_cost: FoodCostCalc
-  es_plato?: boolean   // derivado: existe un carta_item con receta_id = esta receta
+  en_carta?: boolean   // derivado: existe un carta_item con receta_id = esta receta (publicada en carta)
+  // `es_plato` es columna real de Receta (modo "trabajar como plato") — no confundir con en_carta
 }
 
 // Normaliza variantes de unidad a una forma canónica: g | kg | ml | l | u
 // Datos reales traen 'gr', 'lt', 'lts', 'cc', 'L', 'unidad', etc.
-function canonUnit(unit: string): 'g' | 'kg' | 'ml' | 'l' | 'u' | string {
+export function canonUnit(unit: string): 'g' | 'kg' | 'ml' | 'l' | 'u' | string {
   const x = (unit || '').toLowerCase().trim()
   if (x === 'g' || x === 'gr' || x === 'grs' || x === 'gramo' || x === 'gramos') return 'g'
   if (x === 'kg' || x === 'kgs' || x === 'kilo' || x === 'kilos' || x === 'k') return 'kg'
@@ -97,7 +98,7 @@ async function fetchRecetasData(key: string): Promise<RecetaConCosto[]> {
 
   return (data ?? []).map(r => {
     const mapped = mapReceta(r as Record<string, unknown>)
-    return { ...mapped, es_plato: platoIds.has(mapped.id) }
+    return { ...mapped, en_carta: platoIds.has(mapped.id) }
   })
 }
 

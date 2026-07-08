@@ -12,6 +12,10 @@ import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
 import type { Ingrediente } from '@/types'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import RecetaOpsSheet from './RecetaOpsSheet'
+import IngredienteOpsSheet from './IngredienteOpsSheet'
+import { createClient } from '@/lib/supabase/client'
+import { upsertMiseChecklistItem, PLAZAS_OPS } from '@/lib/ops/mise'
+import type { OpsResult } from '@/components/ops/OpsPanel'
 
 const UNIDADES = ['kg', 'g', 'L', 'ml', 'unidad', 'docena', 'caja']
 
@@ -129,6 +133,8 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
 
   // Convertir a plato / OPS
   const [opsOpen, setOpsOpen] = useState(false)
+  const [opsIngId, setOpsIngId] = useState<string | null>(null)   // OPS por ingrediente (receta-plato)
+  const [opsIngSaving, setOpsIngSaving] = useState(false)
   const [converting, setConverting] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   useEffect(() => {
@@ -271,7 +277,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
 
   // Edit receta modal
   const [editModal, setEditModal] = useState(false)
-  const [editForm, setEditForm] = useState({ nombre: '', categoria: '', porciones: '', precio_venta: '', tiempo_min: '', procedimiento: '' })
+  const [editForm, setEditForm] = useState({ nombre: '', categoria: '', porciones: '', precio_venta: '', tiempo_min: '', procedimiento: '', es_plato: false })
   const [editPesoTotal, setEditPesoTotal] = useState('')
   const [editPesoEscurrido, setEditPesoEscurrido] = useState('')
   const [editSaving, setEditSaving] = useState(false)
@@ -501,6 +507,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
       precio_venta: String(receta.precio_venta),
       tiempo_min: String(receta.tiempo_min),
       procedimiento: receta.procedimiento ?? '',
+      es_plato: receta.es_plato ?? false,
     })
     setEditPesoTotal(receta.peso_total_g != null ? String(receta.peso_total_g) : '')
     setEditPesoEscurrido(receta.peso_escurrido_g != null ? String(receta.peso_escurrido_g) : '')
@@ -520,10 +527,52 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
         procedimiento: editForm.procedimiento,
         peso_total_g: isNaN(pesoTotalV) ? null : pesoTotalV,
         peso_escurrido_g: isNaN(pesoEscurridoV) ? null : pesoEscurridoV,
+        es_plato: editForm.es_plato,
       })
       setEditModal(false)
     } catch { /* ignore */ }
     finally { setEditSaving(false) }
+  }
+
+  // OPS por ingrediente (receta-plato): guarda el ruteo en la fila del ingrediente
+  // y, si es subreceta, alimenta el mise (mismo criterio que Carta).
+  async function handleIngOpsSave(result: OpsResult) {
+    const ing = ings.find(i => i.id === opsIngId)
+    if (!ing) return
+    setOpsIngSaving(true)
+    try {
+      await actualizarIngrediente(ing.id, {
+        plaza: result.plaza,
+        seccion_mise: result.seccion,
+        cantidad_ops: result.cantidad,
+        unidad_ops: result.unidad,
+        recipiente_nombre: result.recipienteNombre,
+        peso_porcion: result.pesoPorcion,
+        peso_porcion_unidad: result.pesoPorcionUnidad,
+      })
+      if (ing.subreceta_id && RESTAURANTE_ID) {
+        await upsertMiseChecklistItem({
+          supabase: createClient(), restauranteId: RESTAURANTE_ID, recetaId: ing.subreceta_id,
+          nombre: ing.nombre, plaza: result.plaza, seccionMiseId: result.seccion,
+          cantidad: result.cantidad, unidad: result.unidad,
+          recipienteNombre: result.recipienteNombre, pesoPorcion: result.pesoPorcion, pesoPorcionUnidad: result.pesoPorcionUnidad,
+        })
+      }
+      setOpsIngId(null)
+    } finally { setOpsIngSaving(false) }
+  }
+
+  async function handleIngOpsRemove() {
+    const ing = ings.find(i => i.id === opsIngId)
+    if (!ing) { setOpsIngId(null); return }
+    setOpsIngSaving(true)
+    try {
+      await actualizarIngrediente(ing.id, {
+        plaza: null, seccion_mise: null, cantidad_ops: null, unidad_ops: null,
+        recipiente_nombre: null, peso_porcion: null, peso_porcion_unidad: null,
+      })
+      setOpsIngId(null)
+    } finally { setOpsIngSaving(false) }
   }
 
   async function handleDelete() {
@@ -706,6 +755,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                 const scaled = i.cantidad * scaleFactor
                 const isHighlighted = highlightedIds.has(i.id)
                 const isEditing = editingIngId === i.id
+                const plazaOpsCfg = PLAZAS_OPS.find(p => p.id === i.plaza)
                 return (
                   <div
                     key={i.id}
@@ -798,6 +848,24 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                         </div>
                       )
                     })()}
+
+                    {/* Botón OPS por ingrediente — solo cuando la receta se trabaja como plato */}
+                    {receta.es_plato && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setOpsIngId(i.id) }}
+                        title="Asignar a OPS / Mise"
+                        style={{
+                          marginLeft: 10, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
+                          border: `1px solid ${i.plaza ? (plazaOpsCfg?.color ?? 'var(--accent)') + '55' : 'var(--border)'}`,
+                          borderRadius: 8, padding: '4px 7px', cursor: 'pointer',
+                          background: i.plaza ? (plazaOpsCfg?.color ?? 'var(--accent)') + '14' : 'var(--bg)',
+                          color: i.plaza ? (plazaOpsCfg?.color ?? 'var(--accent)') : 'var(--text-3)',
+                        }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 14 }}>restaurant_menu</span>
+                        <span style={{ fontSize: 8, fontWeight: 800, lineHeight: 1 }}>{i.plaza ? (plazaOpsCfg?.label ?? 'OPS') : 'OPS'}</span>
+                      </button>
+                    )}
                   </div>
                 )
               })}
@@ -1387,6 +1455,21 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                   {CAT_RECETA.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </label>
+              {/* Trabajar como plato — habilita el botón OPS por ingrediente en la ficha */}
+              <button
+                type="button"
+                onClick={() => setEditForm(f => ({ ...f, es_plato: !f.es_plato }))}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, border: `1px solid ${editForm.es_plato ? 'rgba(67,97,160,.35)' : 'var(--border)'}`, background: editForm.es_plato ? 'rgba(67,97,160,.06)' : 'var(--bg)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', width: '100%' }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 20, color: editForm.es_plato ? 'var(--accent)' : 'var(--text-3)' }}>restaurant</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Trabajar como plato</span>
+                  <span style={{ display: 'block', fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>Cada ingrediente/subreceta puede rutearse a una plaza (botón OPS en la ficha).</span>
+                </span>
+                <span style={{ width: 40, height: 24, borderRadius: 99, background: editForm.es_plato ? 'var(--accent)' : 'var(--border)', position: 'relative', flexShrink: 0, transition: 'background .15s' }}>
+                  <span style={{ position: 'absolute', top: 2, left: editForm.es_plato ? 18 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left .15s', boxShadow: '0 1px 3px rgba(0,0,0,.3)' }} />
+                </span>
+              </button>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={lbl}>Porciones</span>
@@ -1479,6 +1562,21 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
           onSaved={() => setToast('Receta asignada al mise')}
         />
       )}
+
+      {/* ── Sheet OPS por ingrediente (receta-plato) ── */}
+      {opsIngId && (() => {
+        const ing = ings.find(i => i.id === opsIngId)
+        if (!ing) return null
+        return (
+          <IngredienteOpsSheet
+            ing={ing}
+            saving={opsIngSaving}
+            onClose={() => setOpsIngId(null)}
+            onSave={handleIngOpsSave}
+            onRemove={handleIngOpsRemove}
+          />
+        )
+      })()}
 
       {/* ── Toast ── */}
       {toast && (
