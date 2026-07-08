@@ -6,6 +6,7 @@ import { PLAZAS_OPS, SECCIONES_OPS } from '@/lib/ops/mise'
 import { useSheetOpen } from '@/lib/ui/chrome'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import OpsPanel, { type OpsResult } from '@/components/ops/OpsPanel'
+import { SegmentedTabs } from '@/components/ui'
 
 // ── Tipos públicos ──────────────────────────────────────────
 export type CompModo = 'plato' | 'menu' | 'evento'
@@ -76,17 +77,17 @@ const PRIO_CFG: Record<CompPrioridad, { label: string; color: string }> = {
   media: { label: 'REF', color: '#3b82f6' }, baja: { label: 'Check', color: '#64748b' },
 }
 const TIPO_CFG: Record<'receta' | 'producto' | 'plato', { icon: string; color: string; bg: string; label: string }> = {
-  receta:   { icon: 'menu_book',   color: '#4361a0', bg: '#eef2ff', label: 'Receta' },
-  producto: { icon: 'inventory_2', color: '#059669', bg: '#d1fae5', label: 'Ingrediente' },
-  plato:    { icon: 'restaurant',  color: '#f97316', bg: '#ffedd5', label: 'Plato' },
+  receta:   { icon: 'menu_book',   color: '#4361a0', bg: 'rgba(67,97,160,.12)', label: 'Receta' },
+  producto: { icon: 'inventory_2', color: '#059669', bg: 'rgba(5,150,105,.14)', label: 'Ingrediente' },
+  plato:    { icon: 'restaurant',  color: '#f97316', bg: 'rgba(249,115,22,.14)', label: 'Plato' },
 }
 const TAG_CFG: Record<string, { label: string; bg: string; color: string }> = {
-  's/tacc':      { label: 'S/TACC',      bg: '#fef3c7', color: '#92400e' },
-  'vegano':      { label: 'Vegano',      bg: '#d1fae5', color: '#065f46' },
-  'vegetariano': { label: 'Vegetariano', bg: '#dcfce7', color: '#166534' },
-  'keto':        { label: 'Keto',        bg: '#ede9fe', color: '#5b21b6' },
-  'picante':     { label: '🌶 Picante',  bg: '#fee2e2', color: '#991b1b' },
-  'sin lactosa': { label: 'Sin lactosa', bg: '#e0f2fe', color: '#075985' },
+  's/tacc':      { label: 'S/TACC',      bg: 'rgba(146,64,14,.14)', color: '#92400e' },
+  'vegano':      { label: 'Vegano',      bg: 'rgba(6,95,70,.14)',   color: '#065f46' },
+  'vegetariano': { label: 'Vegetariano', bg: 'rgba(22,101,52,.14)', color: '#166534' },
+  'keto':        { label: 'Keto',        bg: 'rgba(91,33,182,.14)', color: '#5b21b6' },
+  'picante':     { label: 'Picante',     bg: 'rgba(153,27,27,.14)', color: '#991b1b' },
+  'sin lactosa': { label: 'Sin lactosa', bg: 'rgba(7,89,133,.14)',  color: '#075985' },
 }
 const fmtMoney = (n: number) => n > 0 ? `$${Math.round(n).toLocaleString('es-AR')}` : '—'
 
@@ -338,21 +339,15 @@ export default function ComposicionEditor({
           </button>
         </div>
         {/* Segmented: tipo */}
-        <div style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,.1)', borderRadius: 10, padding: 3 }}>
-          {([
-            ['plato',  'restaurant',  'Plato'],
-            ['menu',   'menu_book',   'Menú'],
-            ['evento', 'celebration', 'Evento'],
-          ] as const).map(([id, icon, label]) => (
-            <button key={id} onClick={() => cambiarModo(id)}
-              style={{ flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
-                background: modo === id ? '#fff' : 'transparent', color: modo === id ? 'var(--navy)' : 'rgba(255,255,255,.7)', transition: 'all .15s',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>{icon}</span>
-              {label}
-            </button>
-          ))}
-        </div>
+        <SegmentedTabs
+          tabs={[
+            { id: 'plato', label: 'Plato', icon: 'restaurant' },
+            { id: 'menu', label: 'Menú', icon: 'menu_book' },
+            { id: 'evento', label: 'Evento', icon: 'celebration' },
+          ]}
+          active={modo}
+          onChange={cambiarModo}
+        />
       </div>
 
       {/* Resumen vivo */}
@@ -774,7 +769,7 @@ function PlatoRecetasEditor({
                   {/* Botón OPS */}
                   <button onClick={() => openOps(pr)}
                     title="Asignar a OPS / Mise"
-                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '4px 7px', background: opsActiva ? '#eef2ff' : opsConf ? `${plazaCfg?.color ?? 'var(--accent)'}15` : 'var(--bg)', color: opsActiva ? 'var(--accent)' : opsConf ? (plazaCfg?.color ?? 'var(--accent)') : 'var(--text-3)', cursor: 'pointer', flexShrink: 0 }}>
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '4px 7px', background: opsActiva ? 'rgba(67,97,160,.10)' : opsConf ? `${plazaCfg?.color ?? 'var(--accent)'}15` : 'var(--bg)', color: opsActiva ? 'var(--accent)' : opsConf ? (plazaCfg?.color ?? 'var(--accent)') : 'var(--text-3)', cursor: 'pointer', flexShrink: 0 }}>
                     <span className="material-symbols-outlined" style={{ fontSize: 14 }}>restaurant_menu</span>
                     <span style={{ fontSize: 8, fontWeight: 800, lineHeight: 1 }}>OPS</span>
                   </button>
@@ -787,7 +782,7 @@ function PlatoRecetasEditor({
 
                 {/* Panel OPS inline (componente compartido) */}
                 {opsActiva && (
-                  <div style={{ padding: '12px 14px', borderBottom: idx < platoRecetas.length - 1 ? '1px solid var(--border)' : 'none', background: '#f8faff' }}>
+                  <div style={{ padding: '12px 14px', borderBottom: idx < platoRecetas.length - 1 ? '1px solid var(--border)' : 'none', background: 'var(--surface)' }}>
                     <OpsPanel
                       initial={{
                         plaza: pr.opsPlaza,
@@ -941,7 +936,7 @@ function ItemRowInline({
             <div style={{ display: 'flex', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
               {item.variante && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(139,92,246,.12)', color: '#7c3aed' }}>{item.variante}</span>}
               {item.plaza && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(67,97,160,.1)', color: 'var(--accent)', textTransform: 'capitalize' }}>{plazaCfg?.label ?? item.plaza}</span>}
-              {item.seccion_mise && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: '#ecfeff', color: '#0e7490' }}>{seccionLabel}</span>}
+              {item.seccion_mise && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(14,116,144,.12)', color: '#0e7490' }}>{seccionLabel}</span>}
               {item.cantidad != null && <span style={{ fontSize: 9, color: 'var(--text-3)', fontFamily: 'monospace' }}>{item.cantidad}{item.unidad ?? ''}</span>}
             </div>
           )}

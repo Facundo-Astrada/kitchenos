@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { SECCIONES_OPS, upsertMiseChecklistItem } from '@/lib/ops/mise'
+import { useSheetOpen } from '@/lib/ui/chrome'
 import OpsPanel, { type OpsInitial, type OpsResult } from '@/components/ops/OpsPanel'
 
 // ════════════════════════════════════════════════════════════
@@ -20,6 +21,7 @@ export default function RecetaOpsSheet({
   onClose: () => void
   onSaved?: () => void
 }) {
+  useSheetOpen()
   const [initial, setInitial] = useState<OpsInitial | null>(null)
   const [existingId, setExistingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
