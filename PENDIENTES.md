@@ -6,9 +6,9 @@ Lista priorizada de todo lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL
 
 ## 🟠 Alto — Seguridad y UX
 
-> **Planes activos:** `PLAN-UI-IDENTIDAD-2026-07.md` ✅ **completo** (D0–D10, 6 jul) · `PLAN-ROADMAP-COMPETENCIA-2026-07.md` ⏳ en curso (Q1 carta QR ✅ · Q2 demo pública ✅ · Q3 export Excel Reportes ✅, todos 6 jul; sigue Q4 etiquetas ESC/POS) · `PLAN-MEJORAS-AUDITORIA-2026-07.md` (A/B/C — B2 fiscal y A7 dictado quedan abiertos).
+> **Planes activos:** `PLAN-UI-IDENTIDAD-2026-07.md` ✅ **completo** (D0–D10, 6 jul) · `PLAN-ROADMAP-COMPETENCIA-2026-07.md` ⏳ en curso (Q1 carta QR ✅ · Q2 demo pública ✅ · Q3 export Excel Reportes ✅, 6 jul · Q4 etiquetas ESC/POS ✅ · Q5 comparador de precios ✅ · M1 arqueo de caja ✅, 7 jul; sigue M5 cuentas por pagar) · `PLAN-MEJORAS-AUDITORIA-2026-07.md` (A/B/C — B2 fiscal y A7 dictado quedan abiertos).
 >
-> **Acción manual pendiente (Q2):** agregar `CRON_SECRET` a las env vars de Vercel (valor ya generado en `.env.local`) para que el cron nocturno de reset de la demo (`/api/cron/reset-demo`, `vercel.json`) quede protegido en producción.
+> **Q2 cerrado end-to-end (6 jul):** `CRON_SECRET` ya cargado en Vercel; `/api/cron/reset-demo` verificado en producción (401 sin secret, 200 + reset con secret correcto).
 
 ### 1. Invitación de usuarios por email
 **Flujo esperado:** Admin ingresa email + rol → Supabase envía magic link → el empleado llega a la app, setea contraseña, queda vinculado al `restaurante_id` del admin con el rol asignado.
@@ -43,7 +43,7 @@ Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/
 El endpoint `POST /api/ingest/escpos?mode=generate` ya genera bytes en base64. Falta el cliente en `salon/page.tsx`:
 - Botón "Imprimir ticket" después de cobrar → `fetch /api/ingest/escpos` → `Buffer.from(base64, 'base64')` → enviar bytes vía WebUSB (impresoras USB) o Web Bluetooth (bluetooth thermal).
 - Fallback: link "Descargar .bin" para impresoras conectadas por software.
-**Status:** ✅ Resuelto 2026-07-03 — `TicketCobro` en `salon/page.tsx` tiene botones "Imprimir por USB" (WebUSB, reusar device persistido), "Imprimir por Bluetooth" (BLE genérico) y "Descargar .bin" (siempre visible). Dispositivo USB persistido en `kos_printer_usb` localStorage. Pendiente: obtener `nombreLocal` del restaurante en vez de placeholder 'KitchenOS'.
+**Status:** ✅ Resuelto 2026-07-03 — `TicketCobro` en `salon/page.tsx` tiene botones "Imprimir por USB" (WebUSB, reusar device persistido), "Imprimir por Bluetooth" (BLE genérico) y "Descargar .bin" (siempre visible). Dispositivo USB persistido en `kos_printer_usb` localStorage. Cliente ESC/POS extraído a `lib/print/escpos.ts` compartido (Q4, 7 jul) y `nombreLocal` reemplazado por el nombre real del restaurante (`restaurantes.nombre` vía `RESTAURANTE_ID`).
 
 ---
 
@@ -120,12 +120,18 @@ Desde `/turnos` tab Puestos → ficha del puesto → "Exportar legajo". PDF con 
 Los scripts de `scripts/*.mjs` tienen el `SUPABASE_MANAGEMENT_TOKEN` en texto plano. Mover a `.env.local`.
 **Status:** ✅ Resuelto (verificado en auditoría 10 jun 2026 — los scripts ya leen `process.env.SUPABASE_MANAGEMENT_TOKEN`).
 
+### 17. Warning "Maximum update depth exceeded" en /checklist
+Detectado durante la sesión Q4 (7 jul 2026) haciendo QA con Playwright: la consola tira este warning de React repetidamente al entrar a `/checklist`. **Confirmado que es preexistente** — se reproduce igual revirtiendo con `git stash` los cambios de esa sesión en `ClientView.tsx`. No rompe funcionalidad visible (los datos cargan bien), pero indica un `setState` sin dependencias estables en algún efecto de la pantalla (candidatos: `useChecklist`, `useProduccionRegistros`, o el propio `ClientView.tsx` — no investigado a fondo). Sin síntoma de usuario reportado todavía.
+**Status:** ⏳ Pendiente — queda para una auditoría de hooks de Checklist/Mise cuando haya tiempo, no bloquea nada.
+
 ---
 
 ## ✅ Resuelto (historial)
 
 | # | Descripción | Cuándo |
 |---|---|---|
+| **Mejoras Recetario · Carta · OPS (Tandas A/B/C + UI)** — plan `PLAN-MEJORAS-RECETARIO-CARTA-OPS-2026-07.md`. **A:** `components/ops/OpsPanel.tsx` como panel único de asignación OPS/mise; `RecetaOpsSheet` y el panel de `PlatoRecetasEditor` deduplicados (–~125 líneas). **B (`recetario/[id]`):** precio de venta movido a dentro de Food Cost (fuera de la ficha, salvo Editar); "Convertir a plato" solo admin (`isAdmin`); desactivar una receta que es plato ahora también quita el `carta_item` vinculado (no queda huérfano). **C (Carta):** `menus.fecha_evento` (input date + chip); **variantes de menú a un precio** (`menu_preparaciones.variante` + `menus.variantes`, definir + selector Común/variante por ítem); OPS por ítem en menú/evento vía el `OpsPanel` compartido (nuevas cols `menu_preparaciones.cantidad_ops/unidad_ops/recipiente_nombre/peso_porcion/peso_porcion_unidad`); crear receta inexistente desde el buscador de secciones + ítems `draft` en rojo con badge "a realizar"; `menus.precio` + input de precio de menú/evento. **UI (ui-auditor):** consistencia del wrapper OPS (`var(--surface)`), badges TIPO/TAG + MenusView a tinte alfa (dark-mode), `useSheetOpen()` en el sheet, componentes D0 (`SegmentedTabs`/`HeaderAction`/`FilterChips`/`EmptyState`). 4 migraciones aplicadas. Commits `3c1a34d`/`81c961e`/`1247a2b`/`37bffea`. **Pendiente futuro:** consumo de variantes en `activarMenu` (producción/salón). | 7 jul 2026 |
+| **Q4+Q5+M1 del roadmap de competencia** — Q4: etiquetas de producción ESC/POS (`recetas.vida_util_dias`, cliente ESC/POS compartido en `lib/print/escpos.ts`, botón en Mise + HACCP Vencimientos, loop a `haccp_vencimientos`). Q5: comparador de precios entre proveedores (`usePreciosProveedores.ts`, match factura↔producto igual que el importador, tab Precios en Reportes + badge en Stock). M1: arqueo y cierre de caja por turno (`cajas_turnos`+`caja_movimientos`, `useCajaTurno.ts`, `VistaCaja.tsx` en salón, tab Caja en Reportes). Detalle completo de cada uno en `PLAN-ROADMAP-COMPETENCIA-2026-07.md`. | 7 jul 2026 |
 | **Limpieza de datos de prueba en Bros (D10, 6 jul 2026)** — Script `scripts/limpiar-datos-prueba-bros.mjs --apply` ejecutado. Eliminado 1 mensaje de pase basura, reseteados 28 productos con umbrales absurdos (`stock_minimo=0`), normalizadas plazas de 3 miembros (tildes + dedup). | 6 jul 2026 |
 | **Recetario como creador de platos + OPS + link vivo a carta (3 jul 2026)** — Botón "Convertir a plato" en la ficha (`recetario/[id]`): crea `carta_items` con `receta_id` = la receta (link 1:1, idempotente → "Ver en carta"), copia precio/foto/categoría. Botón "OPS": nuevo `RecetaOpsSheet` (plaza → sección heladera/secos/congelados/estación → recipiente/tupper → peso por porción) que escribe el mise (`checklist_items` por `receta_id`+plaza). Banner de sync de precio receta ↔ plato. Flag `es_plato` **derivado** (query a `carta_items` en `useRecetas`, no columna) → color sutil + chip PLATO en la lista. Nuevo helper compartido `lib/ops/mise.ts` (`upsertMiseChecklistItem` + `PLAZAS_OPS`/`SECCIONES_OPS`); Carta lo adopta (DRY). Sin migraciones. Commit `24cc07e`. | 3 jul 2026 |
 | **Mejoras recetario/carta/checklist (1 jul 2026)** — Fotos en recetario y carta (`PhotoPicker`, bucket `fotos`). Peso total y escurrido en receta (campos editables + display en Food Cost). Costeo en tiempo real en form de ingrediente (subtotal live). Unidades smart (0.005kg→5g, 1500g→1.5kg). Auto-link ingredientes al stock tras guardar receta con IA (fire-and-forget). Checklist Modo Control (botón `fact_check` en header → vista simplificada tick+nombre sin cantidades, persiste en localStorage). | 1 jul 2026 |

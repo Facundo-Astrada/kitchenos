@@ -252,6 +252,14 @@ Solo `Material Symbols Outlined`. Nunca emoji ni SVG custom.
 > 35%  → rojo   (crítico)
 ```
 
+## Panel OPS / mise — fuente única `components/ops/OpsPanel.tsx` (jul 2026)
+
+El panel de asignación a OPS/mise (plaza → sección → recipiente → cantidad+unidad → tamaño por porción con porciones auto) vive **una sola vez** en `components/ops/OpsPanel.tsx`. Recibe `initial?: OpsInitial` (prefill) y emite `onSave(result: OpsResult)` normalizado; quién persiste depende del contexto. Lo usan `RecetaOpsSheet` (ficha del recetario, como bottom sheet), `PlatoRecetasEditor` (carta → plato, inline) y `ItemRowInline` (carta → menú/evento, inline). **No duplicar esa UI en ningún lado** — antes estaba triplicada y divergía. Las constantes `PLAZAS_OPS`/`SECCIONES_OPS` siguen viviendo en `lib/ops/mise.ts`.
+
+## Badges / chips de estado — tinte alfa, no hex claro fijo (dark mode)
+
+Un badge con **fondo hex claro fijo + texto hex oscuro fijo** (ej. `bg:'#eef2ff', color:'#4361a0'`) **no adapta a dark mode**: el fondo queda claro sobre el tema oscuro. Patrón correcto: fondo = **tinte alfa del color de texto** sobre `var(--surface)`/`var(--bg)` (ej. `background:'rgba(67,97,160,.12)', color:'#4361a0'`), o `${color}18` cuando el color viene de una constante. Así el badge hereda el fondo del tema y el texto sigue legible en claro y oscuro. Los colores **semánticos de estado** (food cost verde/amarillo/rojo, draft `#dc2626`, prioridades, identidad de plaza) sí pueden ser hex fijos porque son señales, no superficies. Pasó migrando `TIPO_CFG`/`TAG_CFG` de Carta y los badges de `MenusView` (ui-auditor, jul 2026).
+
 ## Idioma
 
 Español argentino: "mise en place", "turno", "recetario", "pase", "merma", "stock", "plaza".  
@@ -306,6 +314,12 @@ function onPointerUp() {
 if (loading) return <div>Cargando...</div>
 if (items.length === 0) return <div>No hay datos todavía</div>
 ```
+
+## Vistas públicas (`app/(publico)/`) — escapar el `#shell` mobile (Q1, jul 2026)
+
+`#shell` (`globals.css`) tiene `max-width: 420px; height: 100dvh; overflow: hidden` — pensado para la app de gestión logueada. Una vista pública sin BottomNav/Coach (carta QR, y a futuro `/planes`, `/herramientas`) con contenido más largo que el viewport queda **recortada** si su layout es un `<div>` normal, porque hereda el `overflow: hidden` del ancestro.
+
+**Fix:** el layout del route group usa `position: fixed; inset: 0; overflowY: 'auto'` — un `position: fixed` no es clippeado por el `overflow: hidden` de un ancestro (salvo que ese ancestro tenga `transform`/`filter`/`contain`, que `#shell` no tiene), así que la vista pública ocupa pantalla completa y scrollea sola, en cualquier tamaño. Ver `app/(publico)/layout.tsx`. Mismo truco que usa `app/(servicio)/layout.tsx`, pero ahí es `overflow: hidden` (scroll interno propio) en vez de `overflowY: 'auto'`.
 
 ## Vista de servicio (Salón / KDS) — reglas UI inamovibles (Fase 1, jun 2026)
 
