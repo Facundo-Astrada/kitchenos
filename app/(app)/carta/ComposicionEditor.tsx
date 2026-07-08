@@ -1,8 +1,7 @@
 'use client'
 
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
-import { createClient } from '@/lib/supabase/client'
 import { PLAZAS_OPS, SECCIONES_OPS } from '@/lib/ops/mise'
 import { useSheetOpen } from '@/lib/ui/chrome'
 import { usePermisos } from '@/lib/hooks/usePermisos'
@@ -23,6 +22,7 @@ export interface CompItemOut {
   usuario_asignado: string | null
   cantidad: number | null
   unidad: string | null
+  variante: string | null
   // OPS mise
   cantidad_ops?: number | null
   unidad_ops?: string | null
@@ -34,6 +34,8 @@ export interface CompPayload {
   tipo: CompModo
   nombre: string
   descripcion: string | null
+  fechaEvento: string | null
+  variantes: string[]
   precio: number
   categoria: string
   tags: string[]
@@ -48,6 +50,8 @@ export interface CompInicial {
   modo: CompModo
   nombre: string
   descripcion: string | null
+  fechaEvento?: string | null
+  variantes?: string[]
   precio: number
   categoria: string
   tags: string[]
@@ -94,13 +98,14 @@ const uid = () => ++_u
 // COMPOSICION EDITOR — un solo editor para Plato / Menú / Evento
 // ════════════════════════════════════════════════════════════
 export default function ComposicionEditor({
-  inicial, recetas, productos, cartaItems, categoriasCarta, onSave, onCancel,
+  inicial, recetas, productos, cartaItems, categoriasCarta, draftRecetaIds = new Set(), onSave, onCancel,
 }: {
   inicial?: CompInicial
   recetas: RefConCosto[]
   productos: RefConCosto[]
   cartaItems: RefConCosto[]
   categoriasCarta: string[]
+  draftRecetaIds?: Set<string>
   onSave: (payload: CompPayload) => Promise<void>
   onCancel: () => void
 }) {
@@ -120,21 +125,11 @@ export default function ComposicionEditor({
     return json.id as string
   }
 
-  // Secciones de mise (checklist_secciones) para rutear cada preparación
-  const [miseSecciones, setMiseSecciones] = useState<{ plaza: string; nombre: string }[]>([])
-  useEffect(() => {
-    if (!RESTAURANTE_ID) return
-    createClient().from('checklist_secciones').select('plaza, nombre').eq('restaurante_id', RESTAURANTE_ID)
-      .then(({ data }) => {
-        const seen = new Set<string>()
-        const out: { plaza: string; nombre: string }[] = []
-        for (const s of (data ?? []) as { plaza: string; nombre: string }[]) {
-          const k = `${s.plaza}|${s.nombre}`
-          if (!seen.has(k)) { seen.add(k); out.push(s) }
-        }
-        setMiseSecciones(out)
-      })
-  }, [RESTAURANTE_ID])
+  // Recetas-idea creadas en esta sesión del editor (draft) → se pintan en rojo
+  // al instante, sin esperar el revalidate de useRecetas.
+  const [localDraftIds, setLocalDraftIds] = useState<Set<string>>(new Set())
+  const [creandoIdeaSec, setCreandoIdeaSec] = useState(false)
+  const allDraftIds = useMemo(() => new Set<string>([...draftRecetaIds, ...localDraftIds]), [draftRecetaIds, localDraftIds])
 
   const [modo, setModo] = useState<CompModo>(inicial?.modo ?? 'plato')
   const [nombre, setNombre] = useState(inicial?.nombre ?? '')
@@ -142,6 +137,9 @@ export default function ComposicionEditor({
   const [precio, setPrecio] = useState(inicial?.precio ? String(inicial.precio) : '')
   const [categoria, setCategoria] = useState(inicial?.categoria ?? categoriasCarta[0] ?? 'Principales')
   const [tags, setTags] = useState<string[]>(inicial?.tags ?? [])
+  const [fechaEvento, setFechaEvento] = useState(inicial?.fechaEvento ?? '')
+  const [variantes, setVariantes] = useState<string[]>(inicial?.variantes ?? [])
+  const [nuevaVariante, setNuevaVariante] = useState('')
 
   // Secciones (para plato es una sola implícita)
   const [secciones, setSecciones] = useState<string[]>(() => {
@@ -222,7 +220,7 @@ export default function ComposicionEditor({
   }, [esPlato, platoRecetas, items, recetas, productos, cartaItems])
 
   const precioN = parseFloat(precio.replace(',', '.')) || 0
-  const fcPct = esPlato && precioN > 0 ? (costoTotal / precioN) * 100 : null
+  const fcPct = precioN > 0 && costoTotal > 0 ? (costoTotal / precioN) * 100 : null
   const fcColor = fcPct == null ? 'var(--text-3)' : fcPct < 30 ? '#16a34a' : fcPct <= 35 ? '#d97706' : '#dc2626'
 
   const searchResults = useMemo(() => {
@@ -236,13 +234,13 @@ export default function ComposicionEditor({
 
   // ── Item ops ──
   function addItem(seccion: string) {
-    const nuevo: ItemRow = { _uid: uid(), _seccion: seccion, tipo: null, ref_id: null, nombre: '', prioridad: 'media', plaza: null, seccion_mise: null, usuario_asignado: null, cantidad: null, unidad: null }
+    const nuevo: ItemRow = { _uid: uid(), _seccion: seccion, tipo: null, ref_id: null, nombre: '', prioridad: 'media', plaza: null, seccion_mise: null, usuario_asignado: null, cantidad: null, unidad: null, variante: null }
     setItems(prev => [...prev, nuevo])
     setExpandedUid(nuevo._uid)
   }
 
   function addItemFromSearch(seccion: string, tipo: 'receta' | 'producto' | 'plato', ref_id: string, nombre: string) {
-    const nuevo: ItemRow = { _uid: uid(), _seccion: seccion, tipo, ref_id, nombre, prioridad: 'media', plaza: null, seccion_mise: null, usuario_asignado: null, cantidad: 1, unidad: null }
+    const nuevo: ItemRow = { _uid: uid(), _seccion: seccion, tipo, ref_id, nombre, prioridad: 'media', plaza: null, seccion_mise: null, usuario_asignado: null, cantidad: 1, unidad: null, variante: null }
     setItems(prev => [...prev, nuevo])
     setActiveSearch(null)
     setSectionQuery('')
@@ -297,6 +295,7 @@ export default function ComposicionEditor({
           usuario_asignado: null,
           cantidad: pr.porciones,
           unidad: null,
+          variante: null,
           cantidad_ops: pr.opsCantidad ?? null,
           unidad_ops: pr.opsUnidad ?? null,
           recipiente_nombre: pr.opsRecipienteNombre ?? null,
@@ -313,6 +312,8 @@ export default function ComposicionEditor({
     try {
       await onSave({
         tipo: modo, nombre: nombre.trim(), descripcion: descripcion.trim() || null,
+        fechaEvento: modo === 'evento' ? (fechaEvento || null) : null,
+        variantes: esPlato ? [] : variantes,
         precio: precioN, categoria, tags, secciones: secs,
       })
     } finally { setSaving(false) }
@@ -388,6 +389,14 @@ export default function ComposicionEditor({
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 12, marginBottom: 18 }}>
           <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder={esPlato ? 'Nombre del plato' : modo === 'evento' ? 'Nombre del evento' : 'Nombre del menú'} style={{ ...inp, fontWeight: 800, fontSize: 18, marginBottom: 10 }} autoFocus />
 
+          {/* Precio — menú/evento (un precio; las variantes lo comparten) */}
+          {!esPlato && (
+            <div style={{ position: 'relative', marginBottom: 10 }}>
+              <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', fontSize: 14 }}>$</span>
+              <input value={precio} onChange={e => setPrecio(e.target.value)} placeholder={modo === 'evento' ? 'Precio del evento' : 'Precio del menú'} inputMode="decimal" style={{ ...inp, paddingLeft: 24 }} />
+            </div>
+          )}
+
           {/* Campos de Plato */}
           {esPlato && (
             <>
@@ -414,7 +423,44 @@ export default function ComposicionEditor({
               </div>
             </>
           )}
-          <input value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder={modo === 'evento' ? 'Fecha, lugar, comensales estimados…' : 'Descripción (opcional)'} style={{ ...inp }} />
+          {/* Fecha del evento — solo en modo evento */}
+          {modo === 'evento' && (
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>Fecha del evento</label>
+              <input type="date" value={fechaEvento} onChange={e => setFechaEvento(e.target.value)} style={{ ...inp }} />
+            </div>
+          )}
+          <input value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder={modo === 'evento' ? 'Lugar, comensales estimados…' : 'Descripción (opcional)'} style={{ ...inp }} />
+
+          {/* Variantes — solo menú/evento. Un precio, el comensal elige una. */}
+          {!esPlato && (
+            <div style={{ marginTop: 12 }}>
+              <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 3 }}>Variantes</label>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 7 }}>Composiciones alternativas al mismo precio — el comensal elige una (ej. Proteína / Pasta).</div>
+              {variantes.length > 0 && (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                  {variantes.map(v => (
+                    <span key={v} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 6px 4px 10px', borderRadius: 99, background: 'rgba(67,97,160,.1)', border: '1px solid rgba(67,97,160,.3)', color: 'var(--accent)', fontSize: 12, fontWeight: 700 }}>
+                      {v}
+                      <button onClick={() => { setVariantes(prev => prev.filter(x => x !== v)); setItems(prev => prev.map(it => it.variante === v ? { ...it, variante: null } : it)) }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--accent)', display: 'flex' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 15 }}>close</span>
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input value={nuevaVariante} onChange={e => setNuevaVariante(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); const n = nuevaVariante.trim(); if (n && !variantes.includes(n)) setVariantes(prev => [...prev, n]); setNuevaVariante('') } }}
+                  placeholder="Agregar variante (ej: Proteína)" style={{ ...inp, flex: 1 }} />
+                <button onClick={() => { const n = nuevaVariante.trim(); if (n && !variantes.includes(n)) setVariantes(prev => [...prev, n]); setNuevaVariante('') }} disabled={!nuevaVariante.trim()}
+                  style={{ padding: '0 14px', borderRadius: 10, border: 'none', background: nuevaVariante.trim() ? 'var(--navy)' : 'var(--border)', color: '#fff', cursor: nuevaVariante.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Bloque COMPOSICIÓN ── */}
@@ -435,7 +481,8 @@ export default function ComposicionEditor({
             editingPorcionVal={editingPorcionVal}
             setEditingPorcionVal={setEditingPorcionVal}
             uid={uid}
-            onCrearIdea={crearIdeaReceta}
+            draftRecetaIds={allDraftIds}
+            onCrearIdea={async (n) => { const idNueva = await crearIdeaReceta(n); setLocalDraftIds(prev => new Set(prev).add(idNueva)); return idNueva }}
           />
         ) : (
           <>
@@ -475,8 +522,8 @@ export default function ComposicionEditor({
                       onChange={patch => updateItem(it._uid, patch)}
                       onRemove={() => removeItem(it._uid)}
                       recetas={recetas} productos={productos} cartaItems={cartaItems}
-                      plazas={plazas}
-                      miseSecciones={miseSecciones}
+                      variantes={variantes}
+                      draftRecetaIds={allDraftIds}
                     />
                   ))}
 
@@ -496,7 +543,22 @@ export default function ComposicionEditor({
                         {sectionQuery.trim().length < 2 ? (
                           <div style={{ padding: '8px 4px', fontSize: 12, color: 'var(--text-3)' }}>Escribí 2 letras para buscar…</div>
                         ) : searchResults.length === 0 ? (
-                          <div style={{ padding: '8px 4px', fontSize: 12, color: 'var(--text-3)' }}>Sin resultados</div>
+                          <button
+                            onClick={async () => {
+                              const nombreIdea = sectionQuery.trim()
+                              if (!nombreIdea || creandoIdeaSec) return
+                              setCreandoIdeaSec(true)
+                              try {
+                                const idNueva = await crearIdeaReceta(nombreIdea)
+                                setLocalDraftIds(prev => new Set(prev).add(idNueva))
+                                addItemFromSearch(sec, 'receta', idNueva, nombreIdea)
+                              } finally { setCreandoIdeaSec(false) }
+                            }}
+                            disabled={creandoIdeaSec}
+                            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 10px', borderRadius: 9, border: '1.5px dashed var(--accent)', background: 'rgba(67,97,160,.06)', color: 'var(--accent)', fontSize: 12, fontWeight: 700, cursor: creandoIdeaSec ? 'default' : 'pointer', fontFamily: 'inherit', opacity: creandoIdeaSec ? .6 : 1 }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{creandoIdeaSec ? 'progress_activity' : 'add_circle'}</span>
+                            {creandoIdeaSec ? 'Creando…' : `Crear "${sectionQuery.trim()}" como receta`}
+                          </button>
                         ) : searchResults.map(r => (
                           <button key={r.id} onClick={() => addItemFromSearch(sec, r.tipo, r.id, r.nombre)}
                             style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderRadius: 8, padding: '7px 6px', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -555,7 +617,7 @@ function PlatoRecetasEditor({
   recetas, productos, platoRecetas, setPlatoRecetas, costoTotal,
   platoSearch, setPlatoSearch, platoShowResults, setPlatoShowResults,
   editingPorcionUid, setEditingPorcionUid, editingPorcionVal, setEditingPorcionVal, uid,
-  onCrearIdea,
+  draftRecetaIds, onCrearIdea,
 }: {
   recetas: RefConCosto[]
   productos: RefConCosto[]
@@ -571,6 +633,7 @@ function PlatoRecetasEditor({
   editingPorcionVal: string
   setEditingPorcionVal: (v: string) => void
   uid: () => number
+  draftRecetaIds: Set<string>
   onCrearIdea: (nombre: string) => Promise<string>
 }) {
   const [creandoIdea, setCreandoIdea] = useState(false)
@@ -670,8 +733,11 @@ function PlatoRecetasEditor({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px', borderBottom: (idx < platoRecetas.length - 1 || opsActiva) ? '1px solid var(--border)' : 'none', background: idx % 2 === 1 ? 'rgba(0,0,0,.01)' : 'transparent' }}>
                   <span className="material-symbols-outlined" style={{ fontSize: 17, color: cfg.color, flexShrink: 0 }}>{cfg.icon}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {pr.nombre}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: (pr.tipo === 'receta' && draftRecetaIds.has(pr.ref_id)) ? '#dc2626' : 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {pr.nombre}
+                      </div>
+                      {pr.tipo === 'receta' && draftRecetaIds.has(pr.ref_id) && <span style={{ fontSize: 8, fontWeight: 800, padding: '1px 5px', borderRadius: 99, background: 'rgba(220,38,38,.1)', color: '#dc2626', textTransform: 'uppercase', letterSpacing: '.04em', flexShrink: 0 }}>a realizar</span>}
                     </div>
                     <div style={{ display: 'flex', gap: 5, marginTop: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                       {item && item.costo > 0 && (
@@ -814,7 +880,7 @@ function PlatoRecetasEditor({
 // ITEM ROW — fila colapsada + editor inline expandible
 // ════════════════════════════════════════════════════════════
 function ItemRowInline({
-  item, expanded, onToggle, onChange, onRemove, recetas, productos, cartaItems, plazas, miseSecciones,
+  item, expanded, onToggle, onChange, onRemove, recetas, productos, cartaItems, variantes, draftRecetaIds,
 }: {
   item: ItemRow
   expanded: boolean
@@ -824,20 +890,20 @@ function ItemRowInline({
   recetas: RefConCosto[]
   productos: RefConCosto[]
   cartaItems: RefConCosto[]
-  plazas: string[]
-  miseSecciones: { plaza: string; nombre: string }[]
+  variantes: string[]
+  draftRecetaIds: Set<string>
 }) {
   const [search, setSearch] = useState('')
   const [showResults, setShowResults] = useState(false)
-  const [nuevaPlaza, setNuevaPlaza] = useState('')
-  const [nuevaSecMise, setNuevaSecMise] = useState('')
+  const [opsOpen, setOpsOpen] = useState(false)
 
-  const seccionesParaPlaza = useMemo(() => {
-    const rel = item.plaza ? miseSecciones.filter(s => s.plaza === item.plaza) : miseSecciones
-    const base = rel.map(s => s.nombre)
-    if (item.seccion_mise && !base.includes(item.seccion_mise)) base.push(item.seccion_mise)
-    return Array.from(new Set(base))
-  }, [miseSecciones, item.plaza, item.seccion_mise])
+  // Receta vinculada todavía sin realizar (idea/draft) → se pinta en rojo.
+  const isDraft = item.tipo === 'receta' && !!item.ref_id && draftRecetaIds.has(item.ref_id)
+  const plazaCfg = PLAZAS_OPS.find(p => p.id === item.plaza)
+  const seccionLabel = SECCIONES_OPS.find(s => s.id === item.seccion_mise)?.label ?? item.seccion_mise
+  const opsResumen = item.plaza
+    ? `${plazaCfg?.label ?? item.plaza}${seccionLabel ? ' · ' + seccionLabel : ''}${item.cantidad_ops != null ? ' · ' + item.cantidad_ops + (item.unidad_ops ?? '') : ''}`
+    : null
 
   const results = useMemo(() => {
     if (!search.trim()) return []
@@ -865,13 +931,17 @@ function ItemRowInline({
       <div onClick={onToggle} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', cursor: 'pointer' }}>
         {tcfg && <span className="material-symbols-outlined" style={{ fontSize: 18, color: tcfg.color, flexShrink: 0 }}>{tcfg.icon}</span>}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: item.nombre ? 'var(--text-1)' : 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {item.nombre || 'Tocá para completar…'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: isDraft ? '#dc2626' : (item.nombre ? 'var(--text-1)' : 'var(--text-3)'), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {item.nombre || 'Tocá para completar…'}
+            </div>
+            {isDraft && <span style={{ fontSize: 8, fontWeight: 800, padding: '1px 5px', borderRadius: 99, background: 'rgba(220,38,38,.1)', color: '#dc2626', textTransform: 'uppercase', letterSpacing: '.04em', flexShrink: 0 }}>a realizar</span>}
           </div>
-          {!expanded && (item.plaza || item.seccion_mise || item.cantidad != null) && (
+          {!expanded && (item.plaza || item.seccion_mise || item.cantidad != null || item.variante) && (
             <div style={{ display: 'flex', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
-              {item.plaza && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(67,97,160,.1)', color: 'var(--accent)', textTransform: 'capitalize' }}>{item.plaza}</span>}
-              {item.seccion_mise && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: '#ecfeff', color: '#0e7490' }}>{item.seccion_mise}</span>}
+              {item.variante && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(139,92,246,.12)', color: '#7c3aed' }}>{item.variante}</span>}
+              {item.plaza && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(67,97,160,.1)', color: 'var(--accent)', textTransform: 'capitalize' }}>{plazaCfg?.label ?? item.plaza}</span>}
+              {item.seccion_mise && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: '#ecfeff', color: '#0e7490' }}>{seccionLabel}</span>}
               {item.cantidad != null && <span style={{ fontSize: 9, color: 'var(--text-3)', fontFamily: 'monospace' }}>{item.cantidad}{item.unidad ?? ''}</span>}
             </div>
           )}
@@ -913,32 +983,49 @@ function ItemRowInline({
             {tcfg && <span style={{ fontSize: 9, fontWeight: 700, padding: '4px 8px', borderRadius: 99, background: tcfg.bg, color: tcfg.color, flexShrink: 0 }}>{tcfg.label}</span>}
           </div>
 
-          {/* Plaza */}
-          <label style={lbl}>Plaza</label>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 7 }}>
-            {plazas.map(pz => <button key={pz} onClick={() => onChange({ plaza: item.plaza === pz ? null : pz })} style={chip(item.plaza === pz)}>{pz}</button>)}
-          </div>
-          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-            <input value={nuevaPlaza} onChange={e => setNuevaPlaza(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && nuevaPlaza.trim()) { e.preventDefault(); onChange({ plaza: nuevaPlaza.trim().toLowerCase() }); setNuevaPlaza('') } }} placeholder="Crear plaza…" style={{ ...fieldInp, flex: 1 }} />
-            <button onClick={() => { if (nuevaPlaza.trim()) { onChange({ plaza: nuevaPlaza.trim().toLowerCase() }); setNuevaPlaza('') } }} disabled={!nuevaPlaza.trim()} style={{ padding: '0 13px', borderRadius: 9, border: 'none', background: nuevaPlaza.trim() ? 'var(--accent)' : 'var(--border)', color: '#fff', cursor: nuevaPlaza.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
+          {/* OPS / Mise — mismo panel compartido que ficha y plato */}
+          <label style={lbl}>OPS / Mise</label>
+          {!opsOpen ? (
+            <button onClick={() => setOpsOpen(true)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', borderRadius: 9, border: `1px solid ${item.plaza ? (plazaCfg?.color ?? 'var(--accent)') + '55' : 'var(--border)'}`, background: item.plaza ? (plazaCfg?.color ?? 'var(--accent)') + '10' : 'var(--bg)', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 10 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16, color: item.plaza ? (plazaCfg?.color ?? 'var(--accent)') : 'var(--accent)' }}>restaurant_menu</span>
+              <span style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 600, color: item.plaza ? 'var(--text-1)' : 'var(--text-3)' }}>
+                {opsResumen ?? 'Asignar plaza, sección, recipiente…'}
+              </span>
+              <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)' }}>chevron_right</span>
             </button>
-          </div>
+          ) : (
+            <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 12, marginBottom: 10, background: 'var(--surface)' }}>
+              <OpsPanel
+                initial={{
+                  plaza: item.plaza,
+                  seccion: SECCIONES_OPS.find(s => s.id === item.seccion_mise || s.label === item.seccion_mise)?.id ?? '',
+                  recipienteNombre: item.recipiente_nombre,
+                  cantidad: item.cantidad_ops,
+                  unidad: item.unidad_ops,
+                  pesoPorcion: item.peso_porcion,
+                  pesoPorcionUnidad: item.peso_porcion_unidad,
+                }}
+                hasExisting={!!item.plaza}
+                onSave={r => { onChange({ plaza: r.plaza, seccion_mise: r.seccion, cantidad_ops: r.cantidad, unidad_ops: r.unidad, recipiente_nombre: r.recipienteNombre, peso_porcion: r.pesoPorcion, peso_porcion_unidad: r.pesoPorcionUnidad }); setOpsOpen(false) }}
+                onRemove={() => { onChange({ plaza: null, seccion_mise: null, cantidad_ops: null, unidad_ops: null, recipiente_nombre: null, peso_porcion: null, peso_porcion_unidad: null }); setOpsOpen(false) }}
+                onCancel={() => setOpsOpen(false)}
+              />
+            </div>
+          )}
 
-          {/* Sección de mise — dónde aparece en el checklist de Mise */}
-          <>
-            <label style={lbl}>Sección de mise <span style={{ textTransform: 'none', fontWeight: 500, color: 'var(--text-3)' }}>(en qué parte del checklist va)</span></label>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 7 }}>
-              {seccionesParaPlaza.map(sn => <button key={sn} onClick={() => onChange({ seccion_mise: item.seccion_mise === sn ? null : sn })} style={chip(item.seccion_mise === sn)}>{sn}</button>)}
-              {seccionesParaPlaza.length === 0 && <span style={{ fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic' }}>{item.plaza ? 'Sin secciones cargadas para esta plaza' : 'Elegí una plaza o creá una sección abajo'}</span>}
-            </div>
-            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-              <input value={nuevaSecMise} onChange={e => setNuevaSecMise(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && nuevaSecMise.trim()) { e.preventDefault(); onChange({ seccion_mise: nuevaSecMise.trim() }); setNuevaSecMise('') } }} placeholder="Crear sección de mise…" style={{ ...fieldInp, flex: 1 }} />
-              <button onClick={() => { if (nuevaSecMise.trim()) { onChange({ seccion_mise: nuevaSecMise.trim() }); setNuevaSecMise('') } }} disabled={!nuevaSecMise.trim()} style={{ padding: '0 13px', borderRadius: 9, border: 'none', background: nuevaSecMise.trim() ? 'var(--accent)' : 'var(--border)', color: '#fff', cursor: nuevaSecMise.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
-              </button>
-            </div>
-          </>
+          {/* Variante — a qué opción del menú pertenece (Común = todas) */}
+          {variantes.length > 0 && (
+            <>
+              <label style={lbl}>Variante <span style={{ textTransform: 'none', fontWeight: 500, color: 'var(--text-3)' }}>(a qué opción pertenece)</span></label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                <button onClick={() => onChange({ variante: null })} style={chip(!item.variante)}>Común</button>
+                {variantes.map(v => (
+                  <button key={v} onClick={() => onChange({ variante: item.variante === v ? null : v })} style={chip(item.variante === v)}>{v}</button>
+                ))}
+              </div>
+            </>
+          )}
 
           {/* Cantidad */}
           <div>

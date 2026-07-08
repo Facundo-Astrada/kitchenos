@@ -21,6 +21,12 @@ export interface MenuPreparacion {
   usuario_asignado: string | null
   cantidad: number | null
   unidad: string | null
+  variante: string | null
+  cantidad_ops: number | null
+  unidad_ops: string | null
+  recipiente_nombre: string | null
+  peso_porcion: number | null
+  peso_porcion_unidad: string | null
   orden: number
 }
 
@@ -30,6 +36,9 @@ export interface MenuConPreparaciones {
   nombre: string
   tipo: MenuTipo
   descripcion: string | null
+  fecha_evento: string | null
+  variantes: string[] | null
+  precio: number | null
   activo: boolean
   created_at: string
   preparaciones: MenuPreparacion[]
@@ -47,6 +56,12 @@ export interface PrepInput {
   usuario_asignado: string | null
   cantidad?: number | null
   unidad?: string | null
+  variante?: string | null
+  cantidad_ops?: number | null
+  unidad_ops?: string | null
+  recipiente_nombre?: string | null
+  peso_porcion?: number | null
+  peso_porcion_unidad?: string | null
 }
 
 async function fetchMenusData(key: string): Promise<MenuConPreparaciones[]> {
@@ -97,7 +112,7 @@ export function useMenus() {
 
   // ── Crear menú + sus preparaciones ──
   const crearMenu = useCallback(async (
-    data: { nombre: string; tipo: MenuTipo; descripcion?: string | null },
+    data: { nombre: string; tipo: MenuTipo; descripcion?: string | null; fecha_evento?: string | null; variantes?: string[] | null; precio?: number | null },
     preps: PrepInput[],
   ): Promise<string | null> => {
     if (!RESTAURANTE_ID) return null
@@ -108,6 +123,9 @@ export function useMenus() {
         nombre: data.nombre,
         tipo: data.tipo,
         descripcion: data.descripcion ?? null,
+        fecha_evento: data.fecha_evento ?? null,
+        variantes: data.variantes && data.variantes.length > 0 ? data.variantes : null,
+        precio: data.precio ?? null,
       })
       .select('id')
       .single()
@@ -126,6 +144,12 @@ export function useMenus() {
         usuario_asignado: p.usuario_asignado,
         cantidad: p.cantidad ?? null,
         unidad: p.unidad ?? null,
+        variante: p.variante ?? null,
+        cantidad_ops: p.cantidad_ops ?? null,
+        unidad_ops: p.unidad_ops ?? null,
+        recipiente_nombre: p.recipiente_nombre ?? null,
+        peso_porcion: p.peso_porcion ?? null,
+        peso_porcion_unidad: p.peso_porcion_unidad ?? null,
         orden: i,
       }))
       const { error: prepErr } = await supabase.from('menu_preparaciones').insert(rows)
@@ -138,12 +162,12 @@ export function useMenus() {
   // ── Actualizar menú: update + reemplazar preparaciones ──
   const actualizarMenu = useCallback(async (
     id: string,
-    data: { nombre: string; tipo: MenuTipo; descripcion?: string | null },
+    data: { nombre: string; tipo: MenuTipo; descripcion?: string | null; fecha_evento?: string | null; variantes?: string[] | null; precio?: number | null },
     preps: PrepInput[],
   ) => {
     const { error } = await supabase
       .from('menus')
-      .update({ nombre: data.nombre, tipo: data.tipo, descripcion: data.descripcion ?? null, updated_at: new Date().toISOString() })
+      .update({ nombre: data.nombre, tipo: data.tipo, descripcion: data.descripcion ?? null, fecha_evento: data.fecha_evento ?? null, variantes: data.variantes && data.variantes.length > 0 ? data.variantes : null, precio: data.precio ?? null, updated_at: new Date().toISOString() })
       .eq('id', id)
     if (error) throw new Error(error.message)
 
@@ -163,6 +187,12 @@ export function useMenus() {
         usuario_asignado: p.usuario_asignado,
         cantidad: p.cantidad ?? null,
         unidad: p.unidad ?? null,
+        variante: p.variante ?? null,
+        cantidad_ops: p.cantidad_ops ?? null,
+        unidad_ops: p.unidad_ops ?? null,
+        recipiente_nombre: p.recipiente_nombre ?? null,
+        peso_porcion: p.peso_porcion ?? null,
+        peso_porcion_unidad: p.peso_porcion_unidad ?? null,
         orden: i,
       }))
       const { error: prepErr } = await supabase.from('menu_preparaciones').insert(rows)

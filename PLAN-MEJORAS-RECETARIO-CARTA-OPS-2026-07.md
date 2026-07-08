@@ -82,9 +82,32 @@ Resuelve: Recetario #1 (OPS por componente) y la base de Carta #4 (el componente
 
 ---
 
-## Tanda C — Carta (`ComposicionEditor.tsx` + migración menús)
+## Tanda C — Carta — ✅ HECHA COMPLETA (7 jul)
 
-### C1 · Fecha de evento  *(obs. Carta #1)*
+**Resumen de lo implementado (todo compila):**
+- **C1 fecha de evento** ✓ (migración `menus.fecha_evento`, input date en modo evento, chip en card).
+- **Variantes de menú** ✓ (esquema columna, `menu_preparaciones.variante` + `menus.variantes`; UI definir + selector por ítem + chip).
+- **OPS por ítem en menú/evento** ✓ — `ItemRowInline` ahora usa el `OpsPanel` compartido (botón OPS + resumen); se quitaron los campos libres de plaza/sección. Migración `20260707_menu_precio_ops.sql`: `menu_preparaciones` gana `cantidad_ops/unidad_ops/recipiente_nombre/peso_porcion/peso_porcion_unidad`. Cierra Carta #4.
+- **Crear receta inexistente en rojo** ✓ — botón "Crear … como receta" en el buscador de secciones de menú/evento (además del ya existente en plato); ítems con receta `draft` se pintan en rojo + badge "a realizar" (en plato y en menú/evento). Set `allDraftIds` = drafts de useRecetas + creados en la sesión.
+- **Precio del menú/evento** ✓ — nuevo `menus.precio`; input de precio en modo menú/evento; food cost del resumen ahora también aplica a menú.
+- **Reorden de forms** ✓ — orden resultante plato: nombre → precio/categoría → especificaciones → descripción → composición; menú/evento: nombre → precio → (fecha) → descripción → variantes → composición.
+- 3 migraciones aplicadas a la DB (verificadas) + guardadas en `supabase/migrations/`.
+- `npm run build` ✅.
+- Pendiente futuro (no bloqueante): consumo de variantes en `activarMenu` (producción/salón).
+
+---
+
+### (referencia) diseño original — Tanda C
+
+### C1 · Fecha de evento — ✅ HECHA (7 jul)
+- Migración `20260707_menus_fecha_evento.sql` aplicada (columna `menus.fecha_evento DATE NULL`, verificada).
+- `useMenus`: tipo + `crearMenu`/`actualizarMenu` escriben `fecha_evento`.
+- `ComposicionEditor`: `CompPayload.fechaEvento` + input `type=date` visible solo en modo evento; descripción de evento pasa a "Lugar, comensales…".
+- `carta/page.tsx`: `handleComposicionSave` pasa `fecha_evento`; `menuToInicial` lo lee para editar.
+- `MenusView`: chip con la fecha en la card de eventos.
+- `npm run build` ✅.
+
+### C1 · Fecha de evento (diseño)  *(obs. Carta #1)*
 - **Migración** `supabase/migrations/20260707_menus_fecha_evento.sql`:
   `ALTER TABLE menus ADD COLUMN IF NOT EXISTS fecha_evento DATE NULL;` + `NOTIFY pgrst, 'reload schema';`
   (verificar columnas reales antes con `/supabase-check menus`; hereda RLS de `menus`, no requiere policy nueva).
@@ -97,7 +120,15 @@ Orden objetivo **Plato**: nombre → precio → sección (categoría) → especi
 - El orden actual ya es casi ese; es mayormente cosmético (separar precio/categoría, mover labels). Bajo esfuerzo.
 
 Orden objetivo **Menú/Evento**: nombre → precio del menú (con **variantes** de composición a ese mismo precio) → descripción → composición (Entradas / Principal / Postre). Cada ítem de composición muestra: buscador (receta/producto/plato/crear) + especificaciones alimentarias + botón OPS (`OpsPanel` de Tanda A).
-- **Variantes de menú (DECIDIDO):** un menú a **un precio** ofrece varias composiciones alternativas y **el comensal elige una** (ej. variante A: entrada+proteína+postre / variante B: entrada+pasta+postre). Modelo: agregar una capa de "variante" sobre la composición. Opciones a evaluar en C2: (a) columna `variante TEXT` en `menu_preparaciones` que agrupa preparaciones por variante, o (b) tabla `menu_variantes`. El precio vive en el menú, no en la variante.
+- **Variantes de menú — ✅ HECHA (7 jul, esquema "columna en preparaciones"):**
+  - Migración `20260707_menu_variantes.sql` aplicada: `menu_preparaciones.variante TEXT NULL` (NULL = común a todas) + `menus.variantes TEXT[] NULL` (lista de nombres).
+  - `useMenus`: tipos + persistencia de `variante` por prep y `variantes` del menú.
+  - `ComposicionEditor`: sección "Variantes" en Datos (chips add/remove) + selector Común/variante por ítem en `ItemRowInline` + chip en la fila colapsada. `CompPayload.variantes` + `CompItemOut.variante`.
+  - `carta/page.tsx`: guardado + `menuToInicial` leen/escriben variante(s).
+  - Pendiente futuro: consumo en `activarMenu` (hoy activa todas las preps; la selección del comensal es tema aparte).
+  - `npm run build` ✅.
+
+- **Variantes de menú (diseño DECIDIDO):** un menú a **un precio** ofrece varias composiciones alternativas y **el comensal elige una** (ej. variante A: entrada+proteína+postre / variante B: entrada+pasta+postre). Modelo: agregar una capa de "variante" sobre la composición. Opciones a evaluar en C2: (a) columna `variante TEXT` en `menu_preparaciones` que agrupa preparaciones por variante, o (b) tabla `menu_variantes`. El precio vive en el menú, no en la variante.
 
 ### C3 · Crear receta inexistente (en rojo hasta realizarse)  *(obs. Carta #2 y #3)*
 - **Ya existe a medias:** `crearIdeaReceta`/`agregarIdea` crea `recetas` con `status:'draft'`; el recetario ya las separa en la tab "Ideas" (`recetario/page.tsx` líneas 240-241).

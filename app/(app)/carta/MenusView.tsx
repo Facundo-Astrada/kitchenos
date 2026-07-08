@@ -111,6 +111,12 @@ function MenuCard({ menu, onEdit, onDelete }: { menu: MenuConPreparaciones; onEd
           }}>
             {menu.tipo === 'evento' ? 'Evento' : 'Fijo'}
           </span>
+          {menu.tipo === 'evento' && menu.fecha_evento && (
+            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#f5f3ff', color: '#6d28d9', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 12 }}>event</span>
+              {new Date(menu.fecha_evento + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+            </span>
+          )}
           <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>{menu.nombre}</span>
           <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>{menu.preparaciones.length} prep.</span>
         </div>

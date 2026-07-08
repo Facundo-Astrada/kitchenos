@@ -3203,11 +3203,20 @@ export default function CartaPage() {
         usuario_asignado: it.usuario_asignado,
         cantidad: it.cantidad,
         unidad: it.unidad,
+        variante: it.variante ?? null,
+        cantidad_ops: it.cantidad_ops ?? null,
+        unidad_ops: it.unidad_ops ?? null,
+        recipiente_nombre: it.recipiente_nombre ?? null,
+        peso_porcion: it.peso_porcion ?? null,
+        peso_porcion_unidad: it.peso_porcion_unidad ?? null,
       })))
       const data = {
         nombre: payload.nombre,
         tipo: (payload.tipo === 'evento' ? 'evento' : 'fijo') as 'fijo' | 'evento',
         descripcion: payload.descripcion,
+        fecha_evento: payload.fechaEvento,
+        variantes: payload.variantes,
+        precio: payload.precio,
       }
       if (composing?.menuEditId) {
         await actualizarMenu(composing.menuEditId, data, preps)
@@ -3231,7 +3240,9 @@ export default function CartaPage() {
       modo: menu.tipo === 'evento' ? 'evento' : 'menu',
       nombre: menu.nombre,
       descripcion: menu.descripcion,
-      precio: 0,
+      fechaEvento: menu.fecha_evento,
+      variantes: menu.variantes ?? [],
+      precio: menu.precio ?? 0,
       categoria: '',
       tags: [],
       secciones: secOrden.map(sec => ({
@@ -3246,6 +3257,12 @@ export default function CartaPage() {
           usuario_asignado: p.usuario_asignado,
           cantidad: p.cantidad,
           unidad: p.unidad,
+          variante: p.variante,
+          cantidad_ops: p.cantidad_ops,
+          unidad_ops: p.unidad_ops,
+          recipiente_nombre: p.recipiente_nombre,
+          peso_porcion: p.peso_porcion,
+          peso_porcion_unidad: p.peso_porcion_unidad,
         })),
       })),
     }
@@ -3360,6 +3377,7 @@ export default function CartaPage() {
           productos={productos.map(p => ({ id: p.id, nombre: p.nombre, costo: p.precio_unitario }))}
           cartaItems={items.map(i => ({ id: i.id, nombre: i.nombre, costo: i.costo_porcion ?? 0 }))}
           categoriasCarta={categorias.length > 0 ? categorias.map(c => c.nombre) : CATEGORIAS}
+          draftRecetaIds={new Set(recetas.filter(r => r.status === 'draft').map(r => r.id))}
           onSave={handleComposicionSave}
           onCancel={() => setComposing(null)}
         />
