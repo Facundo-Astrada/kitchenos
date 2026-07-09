@@ -1,7 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { PLAZAS_OPS, SECCIONES_OPS } from '@/lib/ops/mise'
+import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
+import { createClient } from '@/lib/supabase/client'
 
 // ════════════════════════════════════════════════════════════
 // OPS PANEL — panel único de asignación a OPS / mise.
@@ -61,6 +63,54 @@ export default function OpsPanel({
   const [pesoPorcion, setPesoPorcion] = useState(initial?.pesoPorcion != null ? String(initial.pesoPorcion) : '')
   const [pesoPorcionUnidad, setPesoPorcionUnidad] = useState(initial?.pesoPorcionUnidad ?? 'g')
 
+  // ── Secciones del mise de la plaza elegida (Sesión 2, B2) — checklist_secciones
+  // reales de esa plaza + las 4 default (SECCIONES_OPS) como fallback "virtual"
+  // cuando la plaza todavía no tiene ninguna sección propia con ese nombre.
+  const RESTAURANTE_ID = useRestauranteId()
+  const supabase = useMemo(() => createClient(), [])
+  const [seccionesDb, setSeccionesDb] = useState<{ id: string; nombre: string; icono: string; orden: number }[]>([])
+  const [nuevaSeccionMode, setNuevaSeccionMode] = useState(false)
+  const [nuevaSeccionNombre, setNuevaSeccionNombre] = useState('')
+  const [creandoSeccion, setCreandoSeccion] = useState(false)
+
+  useEffect(() => {
+    if (!plaza || !RESTAURANTE_ID) { setSeccionesDb([]); return }
+    let cancelled = false
+    supabase.from('checklist_secciones').select('id, nombre, icono, orden')
+      .eq('restaurante_id', RESTAURANTE_ID).eq('plaza', plaza).order('orden', { ascending: true })
+      .then(({ data }) => { if (!cancelled) setSeccionesDb(data ?? []) })
+    return () => { cancelled = true }
+  }, [plaza, RESTAURANTE_ID, supabase])
+
+  const seccionesDisponibles = useMemo(() => {
+    const dbNombres = new Set(seccionesDb.map(s => s.nombre.trim().toLowerCase()))
+    const virtuales = SECCIONES_OPS.filter(s => !dbNombres.has(s.label.trim().toLowerCase()))
+    return [
+      ...seccionesDb.map(s => ({ id: s.id, label: s.nombre, icono: s.icono })),
+      ...virtuales.map(s => ({ id: s.id, label: s.label, icono: s.icono })),
+    ]
+  }, [seccionesDb])
+
+  async function handleCrearSeccion() {
+    const nombre = nuevaSeccionNombre.trim()
+    if (!nombre || !RESTAURANTE_ID || !plaza) return
+    setCreandoSeccion(true)
+    try {
+      const orden = seccionesDb.length > 0 ? Math.max(...seccionesDb.map(s => s.orden)) + 1 : 0
+      const { data } = await supabase.from('checklist_secciones')
+        .insert({ nombre, icono: 'inventory_2', plaza, orden, restaurante_id: RESTAURANTE_ID })
+        .select('id, nombre, icono, orden').single()
+      if (data) {
+        setSeccionesDb(prev => [...prev, data])
+        setSeccion(data.id)
+      }
+      setNuevaSeccionMode(false)
+      setNuevaSeccionNombre('')
+    } finally {
+      setCreandoSeccion(false)
+    }
+  }
+
   const capVal = parseFloat(cantidad) || 0
   const porVal = parseFloat(pesoPorcion) || 0
   const capG = toG(capVal, unidad)
@@ -86,7 +136,7 @@ export default function OpsPanel({
       <div style={secTitle}>Plaza de producción</div>
       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 14 }}>
         {PLAZAS_OPS.map(p => (
-          <button key={p.id} onClick={() => { setPlaza(plaza === p.id ? '' : p.id); setSeccion('') }}
+          <button key={p.id} onClick={() => { setPlaza(plaza === p.id ? '' : p.id); setSeccion(''); setNuevaSeccionMode(false); setNuevaSeccionNombre('') }}
             style={{ padding: '6px 12px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
               background: plaza === p.id ? `${p.color}18` : 'var(--bg)',
               color: plaza === p.id ? p.color : 'var(--text-3)',
@@ -100,8 +150,8 @@ export default function OpsPanel({
         <>
           {/* Sección del mise */}
           <div style={secTitle}>Sección del mise</div>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 14 }}>
-            {SECCIONES_OPS.map(s => (
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: nuevaSeccionMode ? 8 : 14, alignItems: 'center' }}>
+            {seccionesDisponibles.map(s => (
               <button key={s.id} onClick={() => setSeccion(seccion === s.id ? '' : s.id)}
                 style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
                   background: seccion === s.id ? 'rgba(67,97,160,.12)' : 'var(--bg)',
@@ -111,7 +161,33 @@ export default function OpsPanel({
                 {s.label}
               </button>
             ))}
+            {!nuevaSeccionMode && (
+              <button onClick={() => setNuevaSeccionMode(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', borderRadius: 99, border: '1px dashed var(--border)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, background: 'none', color: 'var(--text-3)' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>add</span>
+                Nueva sección
+              </button>
+            )}
           </div>
+          {nuevaSeccionMode && (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 14, alignItems: 'center' }}>
+              <input
+                autoFocus type="text" value={nuevaSeccionNombre}
+                onChange={e => setNuevaSeccionNombre(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleCrearSeccion(); if (e.key === 'Escape') { setNuevaSeccionMode(false); setNuevaSeccionNombre('') } }}
+                placeholder="Nombre de la sección"
+                style={{ flex: 1, padding: '8px 12px', borderRadius: 9, border: '1px solid var(--accent)', background: 'var(--bg)', fontSize: 13, fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)' }}
+              />
+              <button onClick={handleCrearSeccion} disabled={creandoSeccion || !nuevaSeccionNombre.trim()}
+                style={{ padding: '8px 12px', borderRadius: 9, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: nuevaSeccionNombre.trim() ? 1 : .5 }}>
+                {creandoSeccion ? '…' : 'Crear'}
+              </button>
+              <button onClick={() => { setNuevaSeccionMode(false); setNuevaSeccionNombre('') }} aria-label="Cancelar"
+                style={{ padding: '8px 10px', borderRadius: 9, border: '1px solid var(--border)', background: 'none', color: 'var(--text-3)', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+              </button>
+            </div>
+          )}
 
           {/* Recipiente */}
           <div style={secTitle}>Recipiente (opcional)</div>

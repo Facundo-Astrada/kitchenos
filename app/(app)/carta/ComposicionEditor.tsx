@@ -895,7 +895,12 @@ function ItemRowInline({
   // Receta vinculada todavía sin realizar (idea/draft) → se pinta en rojo.
   const isDraft = item.tipo === 'receta' && !!item.ref_id && draftRecetaIds.has(item.ref_id)
   const plazaCfg = PLAZAS_OPS.find(p => p.id === item.plaza)
-  const seccionLabel = SECCIONES_OPS.find(s => s.id === item.seccion_mise)?.label ?? item.seccion_mise
+  // seccion_mise puede ser un id legacy de SECCIONES_OPS o un UUID real de
+  // checklist_secciones (Sesión 2, B2) — sin el nombre cargado acá, mostrar
+  // "Sección" en vez de filtrar el UUID crudo al chip.
+  const seccionLabel = item.seccion_mise
+    ? (SECCIONES_OPS.find(s => s.id === item.seccion_mise)?.label ?? (/^[0-9a-f-]{36}$/i.test(item.seccion_mise) ? 'Sección' : item.seccion_mise))
+    : null
   const opsResumen = item.plaza
     ? `${plazaCfg?.label ?? item.plaza}${seccionLabel ? ' · ' + seccionLabel : ''}${item.cantidad_ops != null ? ' · ' + item.cantidad_ops + (item.unidad_ops ?? '') : ''}`
     : null
@@ -994,7 +999,9 @@ function ItemRowInline({
               <OpsPanel
                 initial={{
                   plaza: item.plaza,
-                  seccion: SECCIONES_OPS.find(s => s.id === item.seccion_mise || s.label === item.seccion_mise)?.id ?? '',
+                  // seccion_mise ya guarda el id tal cual lo emitió OpsPanel
+                  // (legacy o UUID real de checklist_secciones) — sin remapear.
+                  seccion: item.seccion_mise ?? '',
                   recipienteNombre: item.recipiente_nombre,
                   cantidad: item.cantidad_ops,
                   unidad: item.unidad_ops,

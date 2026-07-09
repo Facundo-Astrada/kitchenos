@@ -43,20 +43,30 @@ export async function upsertMiseChecklistItem(params: {
     cantidad, unidad, recipienteNombre = null, pesoPorcion = null, pesoPorcionUnidad = null,
   } = params
 
+  // seccionMiseId puede ser un id legacy de SECCIONES_OPS (4 fijas) o un UUID
+  // real de checklist_secciones (Sesión 2, B2 — secciones editables por plaza).
   const secCfg = SECCIONES_OPS.find(s => s.id === seccionMiseId)
-  const secNombre = secCfg?.label ?? seccionMiseId
-  const secIcono = secCfg?.icono ?? 'inventory_2'
-  const secOrden = SECCIONES_OPS.findIndex(s => s.id === seccionMiseId)
-
-  // Buscar o crear la sección del checklist para esta plaza
-  const { data: secExistente } = await supabase.from('checklist_secciones').select('id')
-    .eq('restaurante_id', restauranteId).eq('plaza', plaza).ilike('nombre', secNombre).limit(1)
-  let seccionId: string | null = secExistente?.[0]?.id ?? null
-  if (!seccionId) {
-    const { data: newSec } = await supabase.from('checklist_secciones')
-      .insert({ nombre: secNombre, icono: secIcono, plaza, orden: secOrden, restaurante_id: restauranteId })
-      .select('id').single()
-    seccionId = newSec?.id ?? null
+  let seccionId: string | null
+  let secNombre: string
+  if (secCfg) {
+    // Legacy: buscar/crear por label (comportamiento histórico, compat)
+    secNombre = secCfg.label
+    const secIcono = secCfg.icono
+    const secOrden = SECCIONES_OPS.findIndex(s => s.id === seccionMiseId)
+    const { data: secExistente } = await supabase.from('checklist_secciones').select('id')
+      .eq('restaurante_id', restauranteId).eq('plaza', plaza).ilike('nombre', secNombre).limit(1)
+    seccionId = secExistente?.[0]?.id ?? null
+    if (!seccionId) {
+      const { data: newSec } = await supabase.from('checklist_secciones')
+        .insert({ nombre: secNombre, icono: secIcono, plaza, orden: secOrden, restaurante_id: restauranteId })
+        .select('id').single()
+      seccionId = newSec?.id ?? null
+    }
+  } else {
+    // UUID real de checklist_secciones — usarlo directo, sin buscar/crear
+    seccionId = seccionMiseId
+    const { data: secRow } = await supabase.from('checklist_secciones').select('nombre').eq('id', seccionMiseId).single()
+    secNombre = secRow?.nombre ?? seccionMiseId
   }
 
   const recipCapacidad = recipienteNombre ? cantidad : null

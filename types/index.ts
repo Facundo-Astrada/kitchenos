@@ -486,6 +486,10 @@ export type ChecklistSeccion = string
 export type MisePrioridad = 'sp' | 'p' | 'ref' | 'chk'
 
 // DB: checklist_secciones (id, nombre, icono, plaza, orden, restaurante_id, created_at)
+// tipo: 'produccion' (default, mise diario) | 'almacen' (con producto_ids + Stockear
+// sección) | 'heladera' | 'freezer' (vínculo liviano a HACCP) | 'estacion'
+export type ChecklistSeccionTipo = 'produccion' | 'almacen' | 'heladera' | 'freezer' | 'estacion'
+
 export interface ChecklistSeccionConfig {
   id: string
   nombre: string
@@ -494,6 +498,11 @@ export interface ChecklistSeccionConfig {
   orden: number
   restaurante_id: string
   created_at: string
+  // Opcionales: filas creadas por código que no conoce estos campos (ej. el
+  // SectionEditor legacy embebido en checklist/ClientView.tsx) los omiten —
+  // tratar ausencia como 'produccion'/[] (mismo default que la columna en DB).
+  tipo?: ChecklistSeccionTipo
+  producto_ids?: string[]
 }
 
 // DB: checklist_items (id, plaza, seccion, nombre, cantidad, unidad, prioridad, receta_id, restaurante_id, created_at, seccion_id, ubicacion, orden, recipiente_nombre, recipiente_capacidad)

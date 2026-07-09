@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import type { ChecklistSeccionConfig, MisePlaceItem, Plaza } from '@/types'
 import ProduccionRow from './ProduccionRow'
+import StockearSeccionOverlay from './StockearSeccionOverlay'
+import HaccpSeccionLink from './HaccpSeccionLink'
 
 interface Props {
   seccion: ChecklistSeccionConfig | null   // null = bucket "Sin sección"
@@ -27,6 +29,7 @@ export default function SeccionRow({
   onAddItem, onDeleteSeccion, onDeleteItem, onEditItem, onLimpieza,
 }: Props) {
   const [open, setOpen] = useState(true)
+  const [stockeando, setStockeando] = useState(false)
   const droppable = !!seccion
 
   return (
@@ -55,6 +58,11 @@ export default function SeccionRow({
           </span>
           <span style={{ fontSize: 11, color: 'var(--text-3)' }}>· {items.length}</span>
         </button>
+        {droppable && seccion!.tipo === 'almacen' && (
+          <button onClick={() => setStockeando(true)} title="Stockear sección" style={iconBtn}>
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>inventory</span>
+          </button>
+        )}
         {droppable && (
           <>
             <button onClick={onLimpieza} title="Limpieza" style={iconBtn}>
@@ -63,12 +71,27 @@ export default function SeccionRow({
             <button onClick={() => onAddItem(seccion!)} title="Agregar producción" style={iconBtn}>
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
             </button>
-            <button onClick={() => onDeleteSeccion(seccion!.id)} title="Eliminar sección" style={iconBtn}>
-              <span className="material-symbols-outlined" style={{ fontSize: 15 }}>delete</span>
-            </button>
+            {(() => {
+              const tieneProductosAlmacen = seccion!.tipo === 'almacen' && (seccion!.producto_ids?.length ?? 0) > 0
+              const bloqueado = items.length > 0 || tieneProductosAlmacen
+              return (
+                <button
+                  onClick={() => { if (!bloqueado) onDeleteSeccion(seccion!.id) }}
+                  disabled={bloqueado}
+                  title={bloqueado ? 'Vacía la sección (producciones o productos asignados) antes de borrarla' : 'Eliminar sección'}
+                  style={{ ...iconBtn, opacity: bloqueado ? 0.3 : 1 }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 15, color: bloqueado ? 'var(--text-3)' : '#ef4444' }}>delete</span>
+                </button>
+              )
+            })()}
           </>
         )}
       </div>
+
+      {droppable && (seccion!.tipo === 'heladera' || seccion!.tipo === 'freezer') && (
+        <HaccpSeccionLink nombreSeccion={seccion!.nombre} />
+      )}
 
       {open && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 8 }}>
@@ -88,6 +111,10 @@ export default function SeccionRow({
             />
           ))}
         </div>
+      )}
+
+      {stockeando && seccion && (
+        <StockearSeccionOverlay seccion={seccion} onClose={() => setStockeando(false)} />
       )}
     </div>
   )

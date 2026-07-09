@@ -31,23 +31,26 @@ export default function RecetaOpsSheet({
     let cancel = false
     createClient()
       .from('checklist_items')
-      .select('id, plaza, seccion, cantidad, unidad, recipiente_nombre, recipiente_capacidad, peso_porcion, peso_porcion_unidad')
+      .select('id, plaza, seccion, seccion_id, cantidad, unidad, recipiente_nombre, recipiente_capacidad, peso_porcion, peso_porcion_unidad')
       .eq('restaurante_id', restauranteId)
       .eq('receta_id', recetaId)
       .limit(1)
       .then(({ data }) => {
         if (cancel) return
         const row = data?.[0] as {
-          id: string; plaza: string; seccion: string | null; cantidad: number | null; unidad: string | null
+          id: string; plaza: string; seccion: string | null; seccion_id: string | null; cantidad: number | null; unidad: string | null
           recipiente_nombre: string | null; recipiente_capacidad: number | null
           peso_porcion: number | null; peso_porcion_unidad: string | null
         } | undefined
         if (!row) { setInitial({}); return }
         setExistingId(row.id)
+        // Preferir el UUID real (seccion_id) — funciona para secciones legacy
+        // Y custom (Sesión 2, B2). Fallback al label legacy solo para filas
+        // viejas guardadas antes de que seccion_id existiera.
         const secCfg = SECCIONES_OPS.find(s => s.label === row.seccion)
         setInitial({
           plaza: row.plaza ?? '',
-          seccion: secCfg?.id ?? '',
+          seccion: row.seccion_id ?? secCfg?.id ?? '',
           recipienteNombre: row.recipiente_nombre ?? '',
           cantidad: row.recipiente_capacidad ?? row.cantidad,
           unidad: row.unidad ?? 'porc',

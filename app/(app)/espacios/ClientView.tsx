@@ -8,6 +8,7 @@ import type { MisePlaceItem, ChecklistSeccionConfig, Plaza, RutinaFrecuencia, Mi
 import EspacioCard from './components/EspacioCard'
 import LimpiezaPanel from './components/LimpiezaPanel'
 import ItemEditPanel from './components/ItemEditPanel'
+import SectionEditor from '@/components/checklist/SectionEditor'
 
 const DEFAULT_SECCIONES_BOARD = [
   { nombre: 'Heladera',       icono: 'kitchen',     orden: 0 },
@@ -21,7 +22,10 @@ type LimpiezaScope = { type: 'espacio' | 'plaza' | 'seccion'; plazas: Plaza[]; n
 export default function EspaciosClientView() {
   const isDesktop = useIsDesktop()
   const { espacios, espacioPlazas, plazasUsadas, loading: loadingEsp, agregarEspacio, actualizarEspacio, eliminarEspacio, asignarPlaza, quitarPlaza } = useEspacios()
-  const { secciones, items, rutinas, loading: loadingCk, agregarSeccion, eliminarSeccion, agregarItem, eliminarItem, actualizarItem, agregarRutina, eliminarRutina } = useChecklist()
+  const { secciones, items, rutinas, loading: loadingCk, agregarSeccion, actualizarSeccion, eliminarSeccion, reordenarSecciones, agregarItem, eliminarItem, actualizarItem, agregarRutina, eliminarRutina } = useChecklist()
+
+  // ── Editor de secciones (agregar/renombrar/reordenar/borrar) — mismo componente que Mise ──
+  const [sectionEditorPlaza, setSectionEditorPlaza] = useState<Plaza | null>(null)
 
   // ── Drag state ──
   const [draggingItem, setDraggingItem] = useState<MisePlaceItem | null>(null)
@@ -136,11 +140,9 @@ export default function EspaciosClientView() {
     } finally { setGuardandoItem(false) }
   }
 
-  // ── Agregar seccion ──
-  async function onAddSeccion(plaza: Plaza) {
-    const nombre = window.prompt('Nombre de la nueva sección:')?.trim()
-    if (!nombre) return
-    await agregarSeccion({ nombre, icono: 'folder', orden: secciones.filter(s => s.plaza === plaza).length, plaza })
+  // ── Editor de secciones — abre el mismo panel de rename/reorder/borrar que Mise ──
+  function onAddSeccion(plaza: Plaza) {
+    setSectionEditorPlaza(plaza)
   }
 
   // Guard desktop
@@ -339,6 +341,20 @@ export default function EspaciosClientView() {
           sugerenciasRecipiente={recipientesUsados}
           onClose={() => setEditingItem(null)}
           onGuardar={handleGuardarItem}
+        />
+      )}
+
+      {/* Editor de secciones de la plaza (agregar/renombrar/reordenar/borrar) */}
+      {sectionEditorPlaza && (
+        <SectionEditor
+          secciones={secciones.filter(s => s.plaza === sectionEditorPlaza)}
+          items={items.filter(i => i.plaza === sectionEditorPlaza)}
+          plaza={sectionEditorPlaza}
+          onAdd={agregarSeccion}
+          onUpdate={actualizarSeccion}
+          onDelete={eliminarSeccion}
+          onReorder={reordenarSecciones}
+          onClose={() => setSectionEditorPlaza(null)}
         />
       )}
     </div>

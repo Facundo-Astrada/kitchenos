@@ -1,7 +1,6 @@
 'use client'
 
 import { useSheetOpen } from '@/lib/ui/chrome'
-import { SECCIONES_OPS } from '@/lib/ops/mise'
 import OpsPanel, { type OpsInitial, type OpsResult } from '@/components/ops/OpsPanel'
 import type { Ingrediente } from '@/types'
 
@@ -24,7 +23,9 @@ export default function IngredienteOpsSheet({
 
   const initial: OpsInitial = {
     plaza: ing.plaza,
-    seccion: SECCIONES_OPS.find(s => s.id === ing.seccion_mise || s.label === ing.seccion_mise)?.id ?? '',
+    // seccion_mise ya guarda el id tal cual lo emitió OpsPanel (legacy o UUID
+    // real de checklist_secciones) — pasarlo directo, sin remapear.
+    seccion: ing.seccion_mise ?? '',
     recipienteNombre: ing.recipiente_nombre,
     cantidad: ing.cantidad_ops,
     unidad: ing.unidad_ops,

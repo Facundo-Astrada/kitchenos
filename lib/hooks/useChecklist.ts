@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import type {
-  MisePlaceItem, MisePlaceRegistro, ChecklistSeccionConfig,
+  MisePlaceItem, MisePlaceRegistro, ChecklistSeccionConfig, ChecklistSeccionTipo,
   ChecklistRutina, ChecklistRutinaRegistro,
   Plaza, MisePrioridad, RutinaFrecuencia,
 } from '@/types'
@@ -134,7 +134,7 @@ export function useChecklist() {
   }, [mutateConfig, fetchRegistros, fetchRutinaRegistros])
 
   // ── Secciones CRUD ──
-  async function agregarSeccion(datos: { nombre: string; icono: string; orden: number; plaza: Plaza }) {
+  async function agregarSeccion(datos: { nombre: string; icono: string; orden: number; plaza: Plaza; tipo?: ChecklistSeccionTipo; producto_ids?: string[] }) {
     try {
       const { data, error } = await supabase.from('checklist_secciones').insert({
         ...datos, restaurante_id: RESTAURANTE_ID,
@@ -149,7 +149,7 @@ export function useChecklist() {
     }
   }
 
-  async function actualizarSeccion(id: string, datos: Partial<{ nombre: string; icono: string; orden: number }>) {
+  async function actualizarSeccion(id: string, datos: Partial<{ nombre: string; icono: string; orden: number; tipo: ChecklistSeccionTipo; producto_ids: string[] }>) {
     try {
       const { error } = await supabase.from('checklist_secciones').update(datos).eq('id', id)
       if (error) throw error
