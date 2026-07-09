@@ -182,6 +182,7 @@ interface FormIng {
   unidad: string
   nombre: string
   costo_unitario: number
+  grupo: string
 }
 
 interface FormPaso {
@@ -1563,7 +1564,11 @@ interface NuevaFichaProps {
 }
 
 function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIngrediente, agregarProducto, actualizarReceta, initialDraft, onClose, onCreated }: NuevaFichaProps) {
-  const [ings, setIngs] = useState<FormIng[]>(() => [{ id: uid(), cantidad: '', unidad: 'kg', nombre: '', costo_unitario: 0 }])
+  const [ings, setIngs] = useState<FormIng[]>(() => [{ id: uid(), cantidad: '', unidad: 'kg', nombre: '', costo_unitario: 0, grupo: '' }])
+  // Etapa actual: se asigna a los ingredientes que se agreguen de acá en adelante
+  // (mismo criterio de agrupación que la ficha del recetario, ver .claude/docs/columnas.md).
+  const [grupoActual, setGrupoActual] = useState('')
+  const [grupoActualNuevo, setGrupoActualNuevo] = useState(false)
   const [pasos, setPasos] = useState<FormPaso[]>(() => [{ id: uid(), texto: '' }])
   const [nombre, setNombre] = useState(initialDraft?.nombre || '')
   const [categoria, setCategoria] = useState(initialDraft?.categoria || '')
@@ -1614,6 +1619,10 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
 
   // Food cost live
   const costoTotal = useMemo(() => ings.reduce((s, i) => s + (parseFloat(i.cantidad) || 0) * i.costo_unitario, 0), [ings])
+  const gruposExistentesCreacion = useMemo(
+    () => Array.from(new Set(ings.map(i => i.grupo?.trim()).filter((g): g is string => !!g))).sort(),
+    [ings]
+  )
   const porcionesN = parseInt(porciones) || 1
   const precioVentaN = parseNum(precioVenta) || 0
   const costoPorcion = porcionesN > 0 ? costoTotal / porcionesN : 0
@@ -1631,7 +1640,7 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
   const removeIng = useCallback((id: number) => {
     setIngs(prev => {
       const next = prev.filter(i => i.id !== id)
-      return next.length ? next : [{ id: uid(), cantidad: '', unidad: 'kg', nombre: '', costo_unitario: 0 }]
+      return next.length ? next : [{ id: uid(), cantidad: '', unidad: 'kg', nombre: '', costo_unitario: 0, grupo: '' }]
     })
   }, [])
 
@@ -1649,13 +1658,13 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
           return [...prev]
         }
       }
-      const newRow: FormIng = { id: newId, cantidad: '', unidad: 'kg', nombre: '', costo_unitario: 0 }
+      const newRow: FormIng = { id: newId, cantidad: '', unidad: 'kg', nombre: '', costo_unitario: 0, grupo: grupoActual }
       const next = [...prev]
       next.splice(idx + 1, 0, newRow)
       pendingFocusRef.current = { id: newId, type: 'ing' }
       return next
     })
-  }, [])
+  }, [grupoActual])
 
   // ── Paso operations ──
   const updatePaso = useCallback((id: number, texto: string) => {
@@ -1808,7 +1817,7 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
     if (r.tiempo_min) setTiempoMin(String(r.tiempo_min))
     if (r.ingredientes.length > 0) {
       setIngs(r.ingredientes.map(i => ({
-        id: uid(), nombre: i.nombre, cantidad: i.cantidad, unidad: i.unidad, costo_unitario: 0,
+        id: uid(), nombre: i.nombre, cantidad: i.cantidad, unidad: i.unidad, costo_unitario: 0, grupo: '',
       })))
     }
     if (r.pasos.length > 0) {
@@ -1885,6 +1894,7 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
         unidad: ing.unidad || 'u',
         costo_unitario: ing.costo_unitario ?? 0,
         unidad_costo: ing.unidad || 'u',
+        grupo: ing.grupo?.trim() || null,
       }))
       let savedId: string
       if (initialDraft?.id) {
@@ -2132,6 +2142,33 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
 
         {/* ═══ 1. INGREDIENTES ═══ */}
         <Section icon="restaurant" title="Ingredientes" badge={ingCount > 0 ? `${ingCount}` : undefined} badgeColor="var(--navy)">
+          {/* Etapa actual — se asigna a los ingredientes que se agreguen de acá en adelante */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', flexShrink: 0 }}>Etapa</span>
+            {grupoActualNuevo ? (
+              <input
+                autoFocus
+                value={grupoActual}
+                onChange={e => setGrupoActual(e.target.value)}
+                onBlur={() => { if (!grupoActual.trim()) setGrupoActualNuevo(false) }}
+                placeholder="Ej: Etapa 1 — marinada"
+                style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '5px 8px', fontSize: 11, fontFamily: 'inherit', color: 'var(--text-1)', background: 'var(--surface)' }}
+              />
+            ) : (
+              <select
+                value={grupoActual}
+                onChange={e => {
+                  if (e.target.value === '__new__') { setGrupoActual(''); setGrupoActualNuevo(true) }
+                  else setGrupoActual(e.target.value)
+                }}
+                style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '5px 8px', fontSize: 11, fontFamily: 'inherit', color: 'var(--text-1)', background: 'var(--surface)', cursor: 'pointer' }}
+              >
+                <option value="">General (sin etapa)</option>
+                {gruposExistentesCreacion.map(g => <option key={g} value={g}>{g}</option>)}
+                <option value="__new__">+ Nueva etapa…</option>
+              </select>
+            )}
+          </div>
           <div style={{ background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
             {ings.map((ing, idx) => (
               <IngRow
@@ -2153,7 +2190,7 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
           <button
             onClick={() => {
               const newId = uid()
-              setIngs(prev => [...prev, { id: newId, cantidad: '', unidad: 'kg', nombre: '', costo_unitario: 0 }])
+              setIngs(prev => [...prev, { id: newId, cantidad: '', unidad: 'kg', nombre: '', costo_unitario: 0, grupo: grupoActual }])
               pendingFocusRef.current = { id: newId, type: 'ing' }
             }}
             style={{ marginTop: 6, width: '100%', background: 'transparent', border: '1px dashed var(--border)', borderRadius: 8, padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer' }}

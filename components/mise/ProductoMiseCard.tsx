@@ -97,7 +97,8 @@ function StockBox({ stockCierre, target, unidad }: {
       </div>
       <div style={{ fontSize: 14, fontWeight: 800, color, fontFamily: "'DM Mono', monospace" }}>
         {stockCierre !== null ? stockCierre : '—'}
-        {stockCierre !== null && <span style={{ fontSize: 10, fontWeight: 600, marginLeft: 3 }}>{unidad}</span>}
+        {target > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)' }}> / {target}</span>}
+        <span style={{ fontSize: 10, fontWeight: 600, marginLeft: 3 }}>{unidad}</span>
       </div>
       {ratio !== null && ratio >= 1 && (
         <div style={{ fontSize: 9, color: '#22c55e', fontWeight: 600, marginTop: 1 }}>suficiente</div>
@@ -262,7 +263,7 @@ export function ProductoMiseCard({
               }}
             />
             <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 700, flexShrink: 0 }}>
-              {item.unidad}
+              / {item.cantidad} {item.unidad}
             </span>
           </>
         )}
@@ -393,8 +394,8 @@ export function ProductoMiseCard({
                   }}
                 >
                   {stockDisplay !== null
-                    ? <>{stockDisplay}<span style={{ fontSize: 10, fontWeight: 600, marginLeft: 2 }}>{item.unidad}</span></>
-                    : 'cargar stock'}
+                    ? <>{stockDisplay}<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)' }}> / {item.recipiente_capacidad}</span><span style={{ fontSize: 10, fontWeight: 600, marginLeft: 2 }}>{item.unidad}</span></>
+                    : <span style={{ fontSize: 12, color: 'var(--text-3)' }}>— / {item.recipiente_capacidad}</span>}
                 </div>
               )}
             </div>

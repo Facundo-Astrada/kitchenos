@@ -86,6 +86,45 @@ function fcColor(pct: number) {
   return '#4ade80'
 }
 
+// Header de etapa/sección de ingredientes — nombre editable inline (click para renombrar).
+function IngGrupoHeader({ nombre, onRename }: { nombre: string; onRename: (nuevo: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(nombre)
+  useEffect(() => { setValue(nombre) }, [nombre])
+  function commit() {
+    setEditing(false)
+    const trimmed = value.trim()
+    if (trimmed && trimmed !== nombre) onRename(trimmed)
+    else setValue(nombre)
+  }
+  return (
+    <div style={{ padding: '8px 12px 4px', background: 'var(--bg)' }}>
+      {editing ? (
+        <input
+          autoFocus
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          onBlur={commit}
+          onKeyDown={e => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            if (e.key === 'Escape') { setValue(nombre); setEditing(false) }
+          }}
+          style={{
+            fontSize: 11, fontWeight: 800, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '.06em',
+            border: '1px solid var(--accent)', borderRadius: 6, padding: '2px 6px', background: 'var(--surface)',
+            outline: 'none', width: '70%', fontFamily: 'inherit',
+          }}
+        />
+      ) : (
+        <button onClick={() => setEditing(true)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '.06em' }}>{nombre}</span>
+          <span className="material-symbols-outlined" style={{ fontSize: 12, color: 'var(--text-3)' }}>edit</span>
+        </button>
+      )}
+    </div>
+  )
+}
+
 interface FormIng {
   nombre: string
   cantidad: string
@@ -93,8 +132,9 @@ interface FormIng {
   costo_unitario: string
   unidad_costo: string
   merma_pct: string
+  grupo: string
 }
-const ING_EMPTY: FormIng = { nombre: '', cantidad: '0', unidad: 'kg', costo_unitario: '0', unidad_costo: 'kg', merma_pct: '0' }
+const ING_EMPTY: FormIng = { nombre: '', cantidad: '0', unidad: 'kg', costo_unitario: '0', unidad_costo: 'kg', merma_pct: '0', grupo: '' }
 
 // ── PDF Export (lazy-loaded to avoid SSR issues with jsPDF) ──
 async function handleExportPDF(receta: RecetaConCosto) {
@@ -272,6 +312,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
   const [ingSubrecetaId, setIngSubrecetaId] = useState<string | null>(null)
   const [subrecetaSearch, setSubrecetaSearch] = useState('')
   const [mermaPesoInput, setMermaPesoInput] = useState('0')
+  const [ingGrupoNuevo, setIngGrupoNuevo] = useState(false)
 
   const CAT_RECETA = ['Entradas', 'Principales', 'Postres', 'Guarniciones', 'Bebidas', 'Pastelería', 'Panadería', 'Fondos', 'Salsas', 'Otros']
 
@@ -347,6 +388,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
 
   const fc = scaledFC ?? receta.food_cost
   const ings = receta.ingredientes ?? []
+  const gruposExistentes = Array.from(new Set(ings.map(i => i.grupo?.trim()).filter((g): g is string => !!g))).sort()
   // Sub-recetas con costos corregidos (para food cost card)
   const ingsEfectivos = ings.map(corregirSubreceta)
   const costoTotal = ingsEfectivos.reduce((s, i) => {
@@ -418,11 +460,13 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
     setIngSubrecetaId(null)
     setSubrecetaSearch('')
     setMermaPesoInput('0')
+    setIngGrupoNuevo(false)
     setIngModal(true)
   }
   function openEditIng(i: Ingrediente) {
     setEditIng(i)
     setIngError(null)
+    setIngGrupoNuevo(false)
     const tipo: 'producto' | 'subreceta' = i.tipo === 'subreceta' ? 'subreceta' : 'producto'
     setIngTipo(tipo)
     setIngSubrecetaId(i.subreceta_id ?? null)
@@ -430,10 +474,10 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
     if (tipo === 'subreceta') {
       // Recalcular desde datos live para corregir costo_unitario mal guardado
       const corr = corregirSubreceta(i)
-      setIngForm({ nombre: i.nombre, cantidad: String(corr.cantidad), unidad: corr.unidad, costo_unitario: String(corr.costo_unitario?.toFixed(6) ?? 0), unidad_costo: corr.unidad, merma_pct: '0' })
+      setIngForm({ nombre: i.nombre, cantidad: String(corr.cantidad), unidad: corr.unidad, costo_unitario: String(corr.costo_unitario?.toFixed(6) ?? 0), unidad_costo: corr.unidad, merma_pct: '0', grupo: i.grupo ?? '' })
       setMermaPesoInput('0')
     } else {
-      setIngForm({ nombre: i.nombre, cantidad: String(i.cantidad), unidad: i.unidad, costo_unitario: String(i.costo_unitario ?? 0), unidad_costo: i.unidad_costo ?? '', merma_pct: String(i.merma_pct ?? 0) })
+      setIngForm({ nombre: i.nombre, cantidad: String(i.cantidad), unidad: i.unidad, costo_unitario: String(i.costo_unitario ?? 0), unidad_costo: i.unidad_costo ?? '', merma_pct: String(i.merma_pct ?? 0), grupo: i.grupo ?? '' })
       const pct = i.merma_pct ?? 0
       if (pct > 0 && i.cantidad > 0) {
         const peso = i.cantidad * (pct / 100)
@@ -444,6 +488,12 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
     }
     setIngModal(true)
   }
+  async function renameGrupo(oldNombre: string | null, nuevoNombre: string) {
+    const nuevo = nuevoNombre.trim() || null
+    const afectados = ings.filter(i => (i.grupo?.trim() || null) === oldNombre)
+    await Promise.all(afectados.map(i => actualizarIngrediente(i.id, { grupo: nuevo })))
+  }
+
   async function handleSaveIng() {
     if (!ingForm.nombre.trim()) { setIngError('Nombre obligatorio'); return }
     if (ingTipo === 'subreceta' && !ingSubrecetaId) { setIngError('Seleccioná una subreceta'); return }
@@ -459,6 +509,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
         tipo: ingTipo,
         subreceta_id: ingTipo === 'subreceta' ? ingSubrecetaId : null,
         merma_pct: parseFloat(ingForm.merma_pct) || 0,
+        grupo: ingForm.grupo.trim() || null,
       }
       if (editIng) {
         await actualizarIngrediente(editIng.id, datos)
@@ -591,6 +642,19 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
 
   // Parse procedimiento into steps
   const pasos = (receta.procedimiento ?? '').split('\n').filter(l => l.trim())
+
+  // Ingredientes agrupados por etapa (grupo). NULL/'' = "General", siempre primero.
+  const gruposIngs: { nombre: string | null; items: Ingrediente[] }[] = (() => {
+    const map = new Map<string, Ingrediente[]>()
+    const orderedKeys: string[] = []
+    for (const i of ings) {
+      const key = i.grupo?.trim() || ''
+      if (!map.has(key)) { map.set(key, []); orderedKeys.push(key) }
+      map.get(key)!.push(i)
+    }
+    const keys = [...orderedKeys].sort((a, b) => a === '' ? -1 : b === '' ? 1 : 0)
+    return keys.map(k => ({ nombre: k || null, items: map.get(k)! }))
+  })()
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -745,24 +809,33 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
           </div>
 
           {ings.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '24px 16px', color: '#94a3b8' }}>
-              <div style={{ fontSize: 24, marginBottom: 6 }}>🧂</div>
+            <div style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--text-3)' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 24, marginBottom: 6 }}>restaurant</span>
               <div style={{ fontSize: 12, fontWeight: 600 }}>Sin ingredientes</div>
             </div>
           ) : (
             <div style={{ background: 'var(--surface)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
-              {ings.map((i, idx) => {
+              {gruposIngs.map((grupo, gIdx) => (
+                <div key={grupo.nombre ?? '__general__'}>
+                  {gruposIngs.length > 1 && (
+                    <IngGrupoHeader
+                      nombre={grupo.nombre ?? 'General'}
+                      onRename={(nuevo) => renameGrupo(grupo.nombre, nuevo)}
+                    />
+                  )}
+                  {grupo.items.map((i, idx) => {
                 const scaled = i.cantidad * scaleFactor
                 const isHighlighted = highlightedIds.has(i.id)
                 const isEditing = editingIngId === i.id
                 const plazaOpsCfg = PLAZAS_OPS.find(p => p.id === i.plaza)
+                const isLastOverall = gIdx === gruposIngs.length - 1 && idx === grupo.items.length - 1
                 return (
                   <div
                     key={i.id}
                     style={{
                       display: 'flex', alignItems: 'center',
                       padding: '10px 12px',
-                      borderBottom: idx < ings.length - 1 ? '1px solid var(--border)' : 'none',
+                      borderBottom: !isLastOverall ? '1px solid var(--border)' : 'none',
                       borderLeft: i.cantidad === 0 ? '3px solid #ef4444' : '3px solid transparent',
                       transition: 'background .3s',
                       background: isHighlighted ? 'rgba(245,158,11,.06)' : (i.cantidad === 0 ? '#fef2f2' : 'transparent'),
@@ -868,7 +941,9 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                     )}
                   </div>
                 )
-              })}
+                  })}
+                </div>
+              ))}
             </div>
           )}
 
@@ -1323,6 +1398,32 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                   </select>
                 </label>
               </div>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={lbl}>Etapa</span>
+                {ingGrupoNuevo ? (
+                  <input
+                    autoFocus
+                    value={ingForm.grupo}
+                    onChange={e => setIngForm(f => ({ ...f, grupo: e.target.value }))}
+                    onBlur={() => { if (!ingForm.grupo.trim()) setIngGrupoNuevo(false) }}
+                    placeholder="Ej: Etapa 1 — marinada"
+                    style={inp}
+                  />
+                ) : (
+                  <select
+                    value={ingForm.grupo || ''}
+                    onChange={e => {
+                      if (e.target.value === '__new__') { setIngForm(f => ({ ...f, grupo: '' })); setIngGrupoNuevo(true) }
+                      else setIngForm(f => ({ ...f, grupo: e.target.value }))
+                    }}
+                    style={{ ...inp, cursor: 'pointer' }}
+                  >
+                    <option value="">General (sin etapa)</option>
+                    {gruposExistentes.map(g => <option key={g} value={g}>{g}</option>)}
+                    <option value="__new__">+ Nueva etapa…</option>
+                  </select>
+                )}
+              </label>
               {ingTipo === 'producto' && (
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={lbl}>Merma ({ingForm.unidad || 'unidad'})</span>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useAuth } from '@/lib/auth/context'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { useRecetas } from '@/lib/hooks/useRecetas'
@@ -63,7 +63,7 @@ const SECCIONES_MENU = [
 export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   const { perfil } = useAuth()
   const restauranteId = useRestauranteId()
-  const { tareas, loading, agregarTarea, cambiarEstado } = useTareas()
+  const { tareas, loading, agregarTarea, cambiarEstado, eliminarTarea } = useTareas()
   const { recetas } = useRecetas()
   const recetasSimple = useMemo(() => recetas.map(r => ({ id: r.id, nombre: r.nombre })), [recetas])
 
@@ -102,15 +102,25 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     return () => localStorage.removeItem('kc_screen_context')
   }, [tareas, modo, today, embedded])
 
-  const { topLevel, subtareasByParent, statsHoy } = useMemo(() => {
+  const { topLevel, subtareasByParent, statsHoy, ayerDuplicadosIds } = useMemo(() => {
     // Ayer = carryover de un solo día: una tarea no completada se arrastra al día
     // siguiente y nada más. Evita que las pendientes se apilen indefinidamente.
     const ayer = (() => { const d = new Date(today + 'T12:00:00'); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0] })()
-    const hoyCandidates = tareas.filter((t) =>
-      t.modo === modo && !t.parent_id && !!t.turno_fecha &&
-      (t.turno_fecha === today ||
-        (t.turno_fecha === ayer && t.estado !== 'listo'))
-    ).sort((a, b) => {
+    const todasHoyModo = tareas.filter((t) => t.modo === modo && !t.parent_id && t.turno_fecha === today)
+    const clavesHoyModo = new Set(todasHoyModo.map((t) => t.titulo.trim().toLowerCase()))
+    const ayerCandidates = tareas.filter((t) =>
+      t.modo === modo && !t.parent_id && t.turno_fecha === ayer && t.estado !== 'listo'
+    )
+    // Si hoy ya existe una tarea con el mismo título (mismo modo), la de ayer es un
+    // duplicado: se oculta acá y se borra de DB abajo (ver activarMenu, que ahora
+    // siempre crea la de hoy en vez de saltearla).
+    const ayerDuplicados: Tarea[] = []
+    const ayerNoDuplicados: Tarea[] = []
+    for (const t of ayerCandidates) {
+      if (clavesHoyModo.has(t.titulo.trim().toLowerCase())) ayerDuplicados.push(t)
+      else ayerNoDuplicados.push(t)
+    }
+    const hoyCandidates = [...todasHoyModo, ...ayerNoDuplicados].sort((a, b) => {
       // Turno actual primero
       const aHoy = a.turno_fecha === today
       const bHoy = b.turno_fecha === today
@@ -131,8 +141,21 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
       topLevel: hoyCandidates,
       subtareasByParent: subMap,
       statsHoy: { listos: listosHoy, total: totalHoy.length },
+      ayerDuplicadosIds: ayerDuplicados.map((t) => t.id),
     }
   }, [tareas, modo, today])
+
+  // Red de seguridad: si quedó un duplicado de ayer (mismo título+modo que uno de
+  // hoy) que activarMenu no haya limpiado, lo borramos acá — fire-and-forget vía
+  // la función del hook (nunca insert/delete directo, ver .claude/docs/hooks.md §4).
+  const ayerDuplicadosBorrados = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    for (const id of ayerDuplicadosIds) {
+      if (ayerDuplicadosBorrados.current.has(id)) continue
+      ayerDuplicadosBorrados.current.add(id)
+      eliminarTarea(id).catch(() => {})
+    }
+  }, [ayerDuplicadosIds, eliminarTarea])
 
   // ── Agregar item a sección de prioridad ───────────────────────
   const handleAddItem = useCallback(async (prioridad: string, titulo: string, recetaId?: string) => {
@@ -193,7 +216,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   }, [cambiarEstado, tareas, today])
 
   // ── Generar lista desde evento ────────────────────────────────
-  const secciones = modo === 'menu' ? [...SECCIONES_MENU] : [...SECCIONES_CARTA]
+  const secciones = (modo === 'menu' || modo === 'evento') ? [...SECCIONES_MENU] : [...SECCIONES_CARTA]
 
   const handleGenerarLista = useCallback(async (seccionIds: string[], eventoTitulo: string) => {
     for (const seccionId of seccionIds) {
@@ -275,7 +298,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
             Cargando...
           </div>
-        ) : modo === 'menu' ? (
+        ) : (modo === 'menu' || modo === 'evento') ? (
           // Modo menú: secciones dinámicas — las del menú activo (las conocidas en su orden + las custom)
           (() => {
             const conocidas = new Set<string>(SECCIONES_MENU.map(s => s.id))

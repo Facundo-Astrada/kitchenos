@@ -79,7 +79,6 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
   const [miseItems, setMiseItems] = useState<{ nombre: string; plaza: string }[]>([])
 
   // ── Calendar state ──────────────────────────────────────────
-  const [calendarOpen, setCalendarOpen] = useState(false)
   const [fechasMes, setFechasMes] = useState<Record<string, string[]>>({})
   const [mesActual, setMesActual] = useState(() => fmtDate(new Date()).slice(0, 7))
   const [multiSelectMode, setMultiSelectMode] = useState(false)
@@ -133,25 +132,32 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
     setCargandoMenu(true)
     try {
       const supabase = createClient()
+      const modoDestino = menu.tipo === 'evento' ? 'evento' : 'menu'
       let totalTareas = 0, diasActivados = 0, diasYaActivos = 0
       for (const f of fechas) {
-        // Dedupe por preparación: no recrear una tarea si ya existe para ese día,
-        // o si la del día anterior quedó sin completar (arrastra al día siguiente).
-        // Así "tomates asados" pendiente de ayer NO se duplica al activar hoy.
+        // Dedupe por preparación: si ya existe una tarea para ESTE día, no se
+        // recrea (evita duplicar con doble click). Si la del día anterior quedó
+        // sin completar (carryover), la de hoy se crea igual y la de ayer se borra
+        // (con sus subtareas — tareas_parent_id_fkey tiene ON DELETE CASCADE) para
+        // no dejar el duplicado dando vueltas en la lista.
         const prev = new Date(f + 'T12:00:00'); prev.setDate(prev.getDate() - 1)
         const prevDay = fmtDate(prev)
         const { data: previas } = await supabase.from('tareas')
-          .select('titulo, turno_fecha, estado')
+          .select('id, titulo, turno_fecha, estado')
           .eq('restaurante_id', RESTAURANTE_ID).eq('menu_id', menu.id)
           .gte('turno_fecha', prevDay).lte('turno_fecha', f)
-        const yaCubiertas = new Set<string>()
+        const existentesHoy = new Set<string>()
+        const idsAyerABorrar: string[] = []
         for (const t of previas ?? []) {
-          if (t.turno_fecha === f) yaCubiertas.add(t.titulo)                       // mismo día
-          else if (t.turno_fecha === prevDay && t.estado !== 'listo') yaCubiertas.add(t.titulo) // arrastre de ayer
+          if (t.turno_fecha === f) existentesHoy.add(t.titulo.trim().toLowerCase())
+          else if (t.turno_fecha === prevDay && t.estado !== 'listo') idsAyerABorrar.push(t.id)
+        }
+        if (idsAyerABorrar.length > 0) {
+          await supabase.from('tareas').delete().in('id', idsAyerABorrar)
         }
         const preparacionesNuevas = menu.preparaciones
           .map((p, i) => ({ p, orden: i }))
-          .filter(({ p }) => !yaCubiertas.has(p.nombre))
+          .filter(({ p }) => !existentesHoy.has(p.nombre.trim().toLowerCase()))
         if (preparacionesNuevas.length === 0) { diasYaActivos++; continue }
         const rows = preparacionesNuevas.map(({ p, orden: i }) => ({
           titulo: p.nombre,
@@ -160,7 +166,7 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
           estado: 'pendiente',
           prioridad: p.prioridad,
           categoria: 'produccion',
-          modo: 'menu',                      // se ve en Producción → Menú
+          modo: modoDestino,                 // se ve en Producción → Menú/Evento
           seccion: p.paso || 'general',      // sección del menú (NOT NULL en tareas)
           plaza: p.plaza,
           asignado_a: p.usuario_asignado,
@@ -344,118 +350,31 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
             <h1 style={{ fontSize: 17, fontWeight: 700, color: '#fff', margin: 0 }}>Planificación</h1>
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            {!multiSelectMode ? (
-              <button
-                onClick={() => setMultiSelectMode(true)}
-                style={{ background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 8, padding: '5px 10px', fontSize: 11, fontWeight: 700, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 13 }}>event</span>
-                Días
-              </button>
-            ) : (
-              <button
-                onClick={() => { setMultiSelectMode(false); setDiasSeleccionados(new Set()) }}
-                style={{ background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 8, padding: '5px 10px', fontSize: 11, fontWeight: 700, color: '#fff', cursor: 'pointer' }}
-              >
-                Cancelar
-              </button>
-            )}
-            <button onClick={() => setShowMenuPicker(true)} style={{ background: '#fff', border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: 'var(--navy)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>menu_book</span>
-              Activar
-            </button>
-            <button onClick={() => setView('crear')} style={{ background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer' }}>
-              + Plato
+            <button onClick={() => setShowMenuPicker(true)} style={{ background: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 700, color: 'var(--navy)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 15 }}>menu_book</span>
+              Cargar menú
             </button>
           </div>
         </div>
 
-        {/* Date selector — only in normal mode */}
-        {!multiSelectMode && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 10 }}>
-            <button onClick={() => shiftDate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
-              <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 20 }}>chevron_left</span>
-            </button>
-            <label style={{ flex: 1, position: 'relative', cursor: 'pointer' }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{fmtDateLabel(new Date(fecha + 'T12:00:00'))}</span>
-              <input
-                type="date"
-                value={fecha}
-                onChange={e => setFecha(e.target.value)}
-                style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }}
-              />
-            </label>
-            <button onClick={() => shiftDate(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
-              <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 20 }}>chevron_right</span>
-            </button>
-          </div>
-        )}
-
-        {/* Monthly calendar — collapsible */}
-        {platos.length > 0 && (
-          <>
-            <button
-              onClick={() => setCalendarOpen(v => !v)}
-              style={{
-                width: '100%', display: 'flex', alignItems: 'center',
-                justifyContent: 'space-between', marginTop: 10,
-                background: 'rgba(255,255,255,.08)', borderRadius: 8,
-                border: 'none', cursor: 'pointer', padding: '6px 10px',
-                WebkitTapHighlightColor: 'transparent',
-              }}
-            >
-              <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.75)', textTransform: 'capitalize' }}>
-                {fmtMesLabel(mesActual)} · {fmtDateLabel(new Date(fecha + 'T12:00:00'))}
-              </span>
-              <span className="material-symbols-outlined" style={{
-                fontSize: 18, color: 'rgba(255,255,255,.55)',
-                transform: calendarOpen ? 'rotate(180deg)' : 'none',
-                transition: 'transform .2s',
-              }}>
-                expand_more
-              </span>
-            </button>
-
-            {calendarOpen && (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-                  <button onClick={() => shiftMes(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                    <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 18 }}>chevron_left</span>
-                  </button>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.8)', textTransform: 'capitalize' }}>
-                    {fmtMesLabel(mesActual)}
-                  </span>
-                  <button onClick={() => shiftMes(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                    <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 18 }}>chevron_right</span>
-                  </button>
-                </div>
-                <MesCalendar
-                  mes={mesActual}
-                  fechaSeleccionada={fecha}
-                  fechasMes={fechasMes}
-                  multiSelectMode={multiSelectMode}
-                  diasSeleccionados={diasSeleccionados}
-                  onSelectFecha={(f) => { setFecha(f); setView('planilla'); setCalendarOpen(false) }}
-                  onToggleDia={(f) => setDiasSeleccionados(prev => {
-                    const next = new Set(prev)
-                    if (next.has(f)) next.delete(f)
-                    else next.add(f)
-                    return next
-                  })}
-                />
-                {multiSelectMode && diasSeleccionados.size > 0 && (
-                  <button
-                    onClick={() => setShowMenuPicker(true)}
-                    style={{ width: '100%', marginTop: 10, padding: '10px', borderRadius: 10, border: 'none', background: '#22c55e', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-                  >
-                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>menu_book</span>
-                    Activar menú en {diasSeleccionados.size} {diasSeleccionados.size === 1 ? 'día' : 'días'}
-                  </button>
-                )}
-              </>
-            )}
-          </>
-        )}
+        {/* Date selector */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 10 }}>
+          <button onClick={() => shiftDate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+            <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 20 }}>chevron_left</span>
+          </button>
+          <label style={{ flex: 1, position: 'relative', cursor: 'pointer' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{fmtDateLabel(new Date(fecha + 'T12:00:00'))}</span>
+            <input
+              type="date"
+              value={fecha}
+              onChange={e => setFecha(e.target.value)}
+              style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }}
+            />
+          </label>
+          <button onClick={() => shiftDate(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+            <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 20 }}>chevron_right</span>
+          </button>
+        </div>
       </div>
 
       {/* Menu tag filter */}
@@ -488,6 +407,7 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
             miembros={miembros}
             onVaciar={vaciarMenuDelDia}
             onActivarOtro={() => setShowMenuPicker(true)}
+            onPlatoSuelto={() => setView('crear')}
             onIrAProduccion={() => window.dispatchEvent(new CustomEvent('kc-set-tab', { detail: { tab: 'produccion' } }))}
           />
         )}
@@ -519,6 +439,12 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
                   Armá un menú en <b>Carta → Menús</b> y después activalo acá.
                 </p>
               )}
+              <button
+                onClick={() => setView('crear')}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: 'var(--accent)', textDecoration: 'underline', padding: 0 }}
+              >
+                o cargar un plato suelto
+              </button>
             </div>
           ) : (
             <PlanillaView
@@ -631,19 +557,88 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
       {showMenuPicker && typeof document !== 'undefined' && createPortal(
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-          onClick={(e) => { if (e.target === e.currentTarget) setShowMenuPicker(false) }}
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowMenuPicker(false); setMultiSelectMode(false); setDiasSeleccionados(new Set()) } }}
         >
           <div style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 520, maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '18px 16px 12px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)' }}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>Activar menú</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>Cargar menú</div>
                 <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{multiSelectMode && diasSeleccionados.size > 0 ? `En ${diasSeleccionados.size} ${diasSeleccionados.size === 1 ? 'día' : 'días'} seleccionados` : 'Crea las tareas en Producción → Menú'}</div>
               </div>
-              <button onClick={() => setShowMenuPicker(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }}>
+              <button onClick={() => { setShowMenuPicker(false); setMultiSelectMode(false); setDiasSeleccionados(new Set()) }} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-3)' }}>close</span>
               </button>
             </div>
             <div style={{ overflowY: 'auto', flex: 1, padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}>
+              {/* Paso opcional: ¿un día o varios? */}
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+                ¿Un día o varios?
+              </div>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                <button
+                  onClick={() => { setMultiSelectMode(false); setDiasSeleccionados(new Set()) }}
+                  style={{
+                    flex: 1, padding: '8px 10px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+                    border: `1.5px solid ${!multiSelectMode ? 'var(--navy)' : 'var(--border)'}`,
+                    background: !multiSelectMode ? 'rgba(28,45,74,.06)' : 'var(--bg)',
+                    color: !multiSelectMode ? 'var(--navy)' : 'var(--text-2)',
+                    fontSize: 12, fontWeight: 700,
+                  }}
+                >
+                  {fmtDateLabel(new Date(fecha + 'T12:00:00'))}
+                </button>
+                <button
+                  onClick={() => setMultiSelectMode(true)}
+                  style={{
+                    flex: 1, padding: '8px 10px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+                    border: `1.5px solid ${multiSelectMode ? 'var(--navy)' : 'var(--border)'}`,
+                    background: multiSelectMode ? 'rgba(28,45,74,.06)' : 'var(--bg)',
+                    color: multiSelectMode ? 'var(--navy)' : 'var(--text-2)',
+                    fontSize: 12, fontWeight: 700,
+                  }}
+                >
+                  Varios días
+                </button>
+              </div>
+
+              {multiSelectMode && (
+                <div style={{ background: 'var(--navy)', borderRadius: 12, padding: '10px 10px 4px', marginBottom: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <button onClick={() => shiftMes(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                      <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 18 }}>chevron_left</span>
+                    </button>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.8)', textTransform: 'capitalize' }}>
+                      {fmtMesLabel(mesActual)}
+                    </span>
+                    <button onClick={() => shiftMes(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                      <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 18 }}>chevron_right</span>
+                    </button>
+                  </div>
+                  <MesCalendar
+                    mes={mesActual}
+                    fechaSeleccionada={fecha}
+                    fechasMes={fechasMes}
+                    multiSelectMode={true}
+                    diasSeleccionados={diasSeleccionados}
+                    onSelectFecha={() => {}}
+                    onToggleDia={(f) => setDiasSeleccionados(prev => {
+                      const next = new Set(prev)
+                      if (next.has(f)) next.delete(f)
+                      else next.add(f)
+                      return next
+                    })}
+                  />
+                  <div style={{
+                    padding: '8px 0 6px', textAlign: 'center', fontSize: 12, fontWeight: 700,
+                    color: diasSeleccionados.size > 0 ? '#22c55e' : 'rgba(255,255,255,.4)',
+                  }}>
+                    {diasSeleccionados.size > 0
+                      ? `${diasSeleccionados.size} ${diasSeleccionados.size === 1 ? 'día seleccionado' : 'días seleccionados'} — elegí un menú abajo`
+                      : 'Tocá los días para seleccionarlos'}
+                  </div>
+                </div>
+              )}
+
               {catalogoMenus.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-3)' }}>
                   <span className="material-symbols-outlined" style={{ fontSize: 40, opacity: .5 }}>menu_book</span>
@@ -651,12 +646,14 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
                   <div style={{ fontSize: 11, marginTop: 4 }}>Armá uno en Carta → Menús</div>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {catalogoMenus.map(menu => (
-                    <button key={menu.id} onClick={() => !cargandoMenu && activarMenu(menu)} disabled={cargandoMenu}
-                      style={{ textAlign: 'left', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 14px', cursor: cargandoMenu ? 'default' : 'pointer', fontFamily: 'inherit', opacity: cargandoMenu ? .6 : 1 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, opacity: multiSelectMode && diasSeleccionados.size === 0 ? .45 : 1 }}>
+                  {catalogoMenus.map(menu => {
+                    const disabled = cargandoMenu || (multiSelectMode && diasSeleccionados.size === 0)
+                    return (
+                    <button key={menu.id} onClick={() => !disabled && activarMenu(menu)} disabled={disabled}
+                      style={{ textAlign: 'left', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 14px', cursor: disabled ? 'default' : 'pointer', fontFamily: 'inherit', opacity: cargandoMenu ? .6 : 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 99, textTransform: 'uppercase', letterSpacing: '.04em', background: menu.tipo === 'evento' ? '#ede9fe' : '#e0f2fe', color: menu.tipo === 'evento' ? '#6d28d9' : '#075985' }}>
+                        <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 99, textTransform: 'uppercase', letterSpacing: '.04em', background: menu.tipo === 'evento' ? 'rgba(139,92,246,.14)' : 'rgba(14,165,233,.14)', color: menu.tipo === 'evento' ? '#8b5cf6' : '#0ea5e9' }}>
                           {menu.tipo === 'evento' ? 'Evento' : 'Fijo'}
                         </span>
                         <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{menu.nombre}</span>
@@ -665,9 +662,17 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
                       </div>
                       {menu.descripcion && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>{menu.descripcion}</div>}
                     </button>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
+
+              <button
+                onClick={() => { setShowMenuPicker(false); setMultiSelectMode(false); setDiasSeleccionados(new Set()); setView('crear') }}
+                style={{ width: '100%', marginTop: 12, padding: '8px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: 'var(--text-3)', textDecoration: 'underline' }}
+              >
+                o cargar un plato suelto
+              </button>
             </div>
           </div>
         </div>,
@@ -1743,12 +1748,13 @@ const PRIO_BADGE: Record<string, { label: string; color: string; bg: string }> =
 }
 
 function MenuActivoView({
-  tareas, miembros, onVaciar, onActivarOtro, onIrAProduccion,
+  tareas, miembros, onVaciar, onActivarOtro, onPlatoSuelto, onIrAProduccion,
 }: {
   tareas: Tarea[]
   miembros: { id: string; nombre: string; apellido: string }[]
   onVaciar: () => void
   onActivarOtro: () => void
+  onPlatoSuelto: () => void
   onIrAProduccion: () => void
 }) {
   const grouped = useMemo(() => {
@@ -1774,6 +1780,7 @@ function MenuActivoView({
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Menú activo · {listos}/{total} listas</span>
           <div style={{ display: 'flex', gap: 6 }}>
             <button onClick={onActivarOtro} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 700, color: 'var(--accent)', cursor: 'pointer', fontFamily: 'inherit' }}>+ Otro</button>
+            <button onClick={onPlatoSuelto} style={{ background: 'none', border: 'none', borderRadius: 8, padding: '4px 6px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', cursor: 'pointer', fontFamily: 'inherit' }}>Plato suelto</button>
             <button onClick={onVaciar} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 700, color: '#ef4444', cursor: 'pointer', fontFamily: 'inherit' }}>Vaciar</button>
           </div>
         </div>

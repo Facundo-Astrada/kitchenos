@@ -68,6 +68,8 @@ export interface Ingrediente {
   recipiente_nombre?: string | null
   peso_porcion?: number | null
   peso_porcion_unidad?: string | null
+  // Etapa/sección editable dentro de la receta (ej. "Etapa 1 — marinada"). NULL = sin etapa.
+  grupo?: string | null
 }
 
 // DB: plato_recetas (id, plato_id, receta_id, porciones, orden, created_at)
@@ -394,7 +396,7 @@ export type TareaStatus = 'pendiente' | 'en_proceso' | 'completada'
 export type TareaCategoria = 'general' | 'plaza' | 'rutina' | 'evento' | 'produccion'
 export type Plaza = 'parrilla' | 'frios' | 'calientes' | 'pase' | 'pasteleria' | 'panaderia' | 'general'
 export type OpsEstado = 'pendiente' | 'en_curso' | 'listo' | 'duda'
-export type OpsModo = 'menu' | 'carta'
+export type OpsModo = 'menu' | 'carta' | 'evento'
 
 export interface ChecklistItemTarea {
   texto: string

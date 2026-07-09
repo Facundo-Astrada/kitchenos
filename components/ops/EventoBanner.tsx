@@ -52,7 +52,7 @@ export function EventoBanner({ restauranteId, modo, onGenerarLista }: EventoBann
     if (generando) return
     setGenerando(true)
     try {
-      const secciones = modo === 'menu' ? SECCIONES_MENU : SECCIONES_CARTA
+      const secciones = (modo === 'menu' || modo === 'evento') ? SECCIONES_MENU : SECCIONES_CARTA
       await onGenerarLista(secciones, evento!.titulo)
       setGenerado(true)
     } finally {
