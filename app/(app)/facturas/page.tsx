@@ -12,6 +12,7 @@ import BulkUploadDrawer from '@/components/facturas/BulkUploadDrawer'
 import ExcelPOSImportModal from '@/components/facturas/ExcelPOSImportModal'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import { createClient } from '@/lib/supabase/client'
+import { calcularVencimientoFactura, type VencimientoFactura } from '@/lib/utils'
 import type {
   Factura, FacturaItem, FacturaStatus, TipoFactura, CondicionPago,
   Pedido, PedidoItem,
@@ -147,35 +148,78 @@ interface ListaAIResult {
 
 type MainTab = 'facturas' | 'listas' | 'proveedores'
 
+// ── Vencimiento badge (cuentas por pagar) ─────────────────────
+const VENC_CONFIG: Record<VencimientoFactura['urgencia'], { bg: string; color: string }> = {
+  vencida: { bg: '#fee2e2', color: '#991b1b' },
+  esta_semana: { bg: '#fef3c7', color: '#92400e' },
+  proximamente: { bg: '#e0f2fe', color: '#075985' },
+  sin_fecha: { bg: '#f1f5f9', color: '#64748b' },
+}
+function labelVencimiento(v: VencimientoFactura): string {
+  if (v.urgencia === 'sin_fecha') return 'Cuenta corriente'
+  if (v.diasRestantes === null) return ''
+  if (v.diasRestantes < 0) return `Venció hace ${Math.abs(v.diasRestantes)}d`
+  if (v.diasRestantes === 0) return 'Vence hoy'
+  return `Vence en ${v.diasRestantes}d`
+}
+
 // ── Factura Card ─────────────────────────────────────────────
-function FacturaCard({ f, onClick }: { f: Factura; onClick: () => void }) {
+function FacturaCard({ f, onClick, vencimiento, onMarcarPagada }: {
+  f: Factura
+  onClick: () => void
+  vencimiento?: VencimientoFactura
+  onMarcarPagada?: () => void
+}) {
   const st = STATUS_CONFIG[f.status as FacturaStatus] || STATUS_CONFIG.pendiente
+  const vc = vencimiento ? VENC_CONFIG[vencimiento.urgencia] : null
   return (
-    <button
-      onClick={onClick}
-      className="w-full text-left rounded-[14px] p-[14px] mb-[8px] border-none cursor-pointer"
-      style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+    <div
+      className="w-full rounded-[14px] p-[14px] mb-[8px]"
+      style={{ background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'stretch', gap: 10 }}
     >
-      <div className="flex items-start justify-between mb-[4px]">
-        <div className="flex-1 min-w-0">
-          <div className="text-[14px] font-bold truncate" style={{ color: 'var(--text)' }}>
-            {f.proveedor_nombre}
+      <button
+        onClick={onClick}
+        className="flex-1 min-w-0 text-left border-none cursor-pointer bg-transparent p-0"
+      >
+        <div className="flex items-start justify-between mb-[4px]">
+          <div className="flex-1 min-w-0">
+            <div className="text-[14px] font-bold truncate" style={{ color: 'var(--text)' }}>
+              {f.proveedor_nombre}
+            </div>
+            <div className="text-[11px] mt-[2px]" style={{ color: 'var(--text-3)' }}>
+              {fmtFecha(f.fecha_factura)} · {TIPO_LABELS[f.tipo_factura as TipoFactura] || f.tipo_factura}
+            </div>
           </div>
-          <div className="text-[11px] mt-[2px]" style={{ color: 'var(--text-3)' }}>
-            {fmtFecha(f.fecha_factura)} · {TIPO_LABELS[f.tipo_factura as TipoFactura] || f.tipo_factura}
+          <div className="text-right flex-shrink-0 ml-3">
+            <div className="text-[15px] font-bold" style={{ color: 'var(--text)' }}>{fmt(f.total)}</div>
+            <span
+              className="text-[9px] font-bold px-[6px] py-[2px] rounded-[4px] inline-block mt-[2px]"
+              style={{ background: st.bg, color: st.color }}
+            >
+              {st.label}
+            </span>
           </div>
         </div>
-        <div className="text-right flex-shrink-0 ml-3">
-          <div className="text-[15px] font-bold" style={{ color: 'var(--text)' }}>{fmt(f.total)}</div>
+        {vc && (
           <span
             className="text-[9px] font-bold px-[6px] py-[2px] rounded-[4px] inline-block mt-[2px]"
-            style={{ background: st.bg, color: st.color }}
+            style={{ background: vc.bg, color: vc.color }}
           >
-            {st.label}
+            {labelVencimiento(vencimiento!)}
           </span>
-        </div>
-      </div>
-    </button>
+        )}
+      </button>
+      {onMarcarPagada && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onMarcarPagada() }}
+          title="Marcar pagada"
+          className="flex-shrink-0 border-none cursor-pointer flex items-center justify-center"
+          style={{ width: 40, borderRadius: 10, background: 'rgba(16,185,129,.1)', color: '#10b981' }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 22 }}>check_circle</span>
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -2211,7 +2255,14 @@ export default function FacturasPage() {
     if (filtro === 'por_pagar') recargarPorPagar()
   }, [filtro, facturas, recargarPorPagar])
 
-  // Agrupar cuentas por pagar por proveedor
+  // Vencimiento por factura (30/60 días desde fecha_factura; cuenta_corriente = sin_fecha)
+  const vencimientos = useMemo(() => {
+    const map = new Map<string, VencimientoFactura>()
+    for (const f of porPagar) map.set(f.id, calcularVencimientoFactura(f))
+    return map
+  }, [porPagar])
+
+  // Agrupar cuentas por pagar por proveedor — dentro de cada grupo, lo más urgente primero
   const porPagarGrupos = useMemo(() => {
     const map = new Map<string, { proveedor: string; total: number; facturas: Factura[] }>()
     for (const f of porPagar) {
@@ -2221,10 +2272,40 @@ export default function FacturasPage() {
       g.facturas.push(f)
       map.set(key, g)
     }
+    const orden = { vencida: 0, esta_semana: 1, proximamente: 2, sin_fecha: 3 }
+    for (const g of map.values()) {
+      g.facturas.sort((a, b) => {
+        const va = vencimientos.get(a.id), vb = vencimientos.get(b.id)
+        const oa = va ? orden[va.urgencia] : 4, ob = vb ? orden[vb.urgencia] : 4
+        if (oa !== ob) return oa - ob
+        return (va?.diasRestantes ?? 0) - (vb?.diasRestantes ?? 0)
+      })
+    }
     return Array.from(map.values()).sort((a, b) => b.total - a.total)
-  }, [porPagar])
+  }, [porPagar, vencimientos])
 
   const totalPorPagar = useMemo(() => porPagar.reduce((s, f) => s + f.total, 0), [porPagar])
+
+  // Resumen de urgencia para el callout — mismo criterio que el dashboard (D7: no divergir)
+  const resumenVencimientos = useMemo(() => {
+    let vencidas = 0, vencidasTotal = 0, estaSemana = 0, estaSemanaTotal = 0
+    for (const f of porPagar) {
+      const v = vencimientos.get(f.id)
+      if (v?.urgencia === 'vencida') { vencidas++; vencidasTotal += f.total }
+      else if (v?.urgencia === 'esta_semana') { estaSemana++; estaSemanaTotal += f.total }
+    }
+    return { vencidas, vencidasTotal, estaSemana, estaSemanaTotal }
+  }, [porPagar, vencimientos])
+
+  async function marcarPagadaRapido(f: Factura) {
+    try {
+      await actualizarStatus(f.id, 'pagada')
+      setToast(`${f.proveedor_nombre} marcada como pagada`)
+      recargarPorPagar()
+    } catch (e: unknown) {
+      setToast(e instanceof Error ? e.message : 'Error al marcar como pagada')
+    }
+  }
 
   useEffect(() => {
     const pendientes = facturas.filter(f => f.status === 'pendiente')
@@ -2241,9 +2322,12 @@ export default function FacturasPage() {
       pendientes,
       cuentaCorriente: Math.round(cuentaCorriente),
       proveedoresActivos: resumen.proveedores,
+      totalPorPagar: Math.round(totalPorPagar),
+      vencidas: resumenVencimientos.vencidas,
+      vencenEstaSemana: resumenVencimientos.estaSemana,
     }))
     return () => localStorage.removeItem('kc_screen_context')
-  }, [facturas, facturasFiltradas, mainTab, filtro, totalCount, resumen])
+  }, [facturas, facturasFiltradas, mainTab, filtro, totalCount, resumen, totalPorPagar, resumenVencimientos])
 
   async function exportXLSX() {
     const facturasRows = facturasFiltradas.map(f => ({
@@ -2738,6 +2822,20 @@ export default function FacturasPage() {
                 <div className="text-[11px] mt-1" style={{ opacity: 0.7 }}>
                   {porPagar.length} factura{porPagar.length !== 1 ? 's' : ''} a crédito · {porPagarGrupos.length} proveedor{porPagarGrupos.length !== 1 ? 'es' : ''}
                 </div>
+                {(resumenVencimientos.vencidas > 0 || resumenVencimientos.estaSemana > 0) && (
+                  <div className="flex gap-[8px] mt-3">
+                    {resumenVencimientos.vencidas > 0 && (
+                      <span className="text-[11px] font-bold px-[8px] py-[4px] rounded-[8px]" style={{ background: 'rgba(239,68,68,.2)', color: '#fecaca' }}>
+                        {resumenVencimientos.vencidas} vencida{resumenVencimientos.vencidas !== 1 ? 's' : ''} · {fmt(resumenVencimientos.vencidasTotal)}
+                      </span>
+                    )}
+                    {resumenVencimientos.estaSemana > 0 && (
+                      <span className="text-[11px] font-bold px-[8px] py-[4px] rounded-[8px]" style={{ background: 'rgba(245,158,11,.2)', color: '#fde68a' }}>
+                        Vencen esta semana: {fmt(resumenVencimientos.estaSemanaTotal)}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               {/* Grupos por proveedor */}
               {porPagarGrupos.map(g => (
@@ -2747,7 +2845,13 @@ export default function FacturasPage() {
                     <div className="text-[13px] font-bold whitespace-nowrap ml-2" style={{ color: 'var(--navy)' }}>{fmt(g.total)}</div>
                   </div>
                   {g.facturas.map(f => (
-                    <FacturaCard key={f.id} f={f} onClick={() => { setSelectedFactura(f); setView('detail') }} />
+                    <FacturaCard
+                      key={f.id}
+                      f={f}
+                      onClick={() => { setSelectedFactura(f); setView('detail') }}
+                      vencimiento={vencimientos.get(f.id)}
+                      onMarcarPagada={() => marcarPagadaRapido(f)}
+                    />
                   ))}
                 </div>
               ))}

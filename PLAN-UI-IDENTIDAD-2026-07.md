@@ -148,7 +148,7 @@
 
 ## D6 — Permisos sin redirects mudos + matriz coherente 🟠 Media
 
-- [ ] Completado — fecha: ____
+- [x] Completado — fecha: 2026-07-06
 
 **Problema:** con rol chef, `/facturas`, `/configuracion` y `/espacios` redirigen al dashboard **en silencio** — parece un bug de navegación. Además la matriz es incoherente: chef no ve Facturas pero sí ve Reportes con total de compras, Ventas con facturación completa y Presupuesto editable.
 
@@ -163,7 +163,7 @@
 
 ## D7 — Números confiables (KPIs, filtros y food cost) 🔴 Alta
 
-- [ ] Completado — fecha: ____
+- [x] Completado — fecha: 2026-07-06
 
 **Problema:** varios números visibles no resisten una lectura del dueño:
 - Dashboard "TAREAS 0/333" cuenta el histórico completo, pero OPS muestra 0 tareas hoy (la vista de Producción filtra hoy+carryover desde jun 2026; el KPI no).
@@ -247,3 +247,5 @@ Lista cerrada (cada ítem es un arreglo puntual; verificar línea con Grep):
 | 2026-07-06 | D4 | ComposicionEditor.tsx: (1) Resumen vivo — label contextual "Este plato/menú/evento" + `isAdmin` guard para COSTO/Food cost/Margen (rol no admin solo ve cantidad de ítems). (2) Títulos de sección en Menú/Evento — reducidos de `fontSize:13 fontWeight:700` uppercase gris-medio a `fontSize:11 fontWeight:700 color:text-3` (mismo label chico que "COMPOSICIÓN"). (3) Buscador inline por sección — al tocar "+ Agregar a {sec}" se abre un search con input + resultados combinados (recetas + productos + platos de carta), tipo con badge de color, cierre con X; reemplaza el patrón `addItem()` que generaba un ítem en blanco. (4) Placeholders correctos: Nombre del evento / Nombre del menú; descripción con "Fecha, lugar, comensales estimados…" para Evento. Build limpio. |
 | 2026-07-06 | D6+D7 | D6 — RouteGuard: reemplaza redirect mudo por pantalla de bloqueo con lock icon, nombre del módulo e instrucción al admin. D7 — Dashboard tareasHoy filtrado por `turno_fecha` (hoy + carryover ayer sin `estado=listo`); StatusBar label "Tareas hoy"; Merma: `useEffect` aplica filtro "hoy" al montar. Build limpio. |
 | 2026-07-06 | D8 | DesktopShell: wrapper `max-width:1040px; margin:0 auto` para rutas no-full-width (excepciones: /stock, /espacios, /reportes). ModulosGrid: eliminado `MODULO_COLORS` pastel (44 líneas); tiles y cards ahora usan `var(--surface)` + borde `var(--border)` + icono `var(--accent)` — tanto mobile (56px tiles) como desktop (rows con texto). Recetario: `useIsDesktop` + grid 2 columnas en desktop (`repeat(2,1fr)`). Build limpio. |
+| 2026-07-06 | D9 | Batch de 11 arreglos menores: HACCP "Nunca"→"Nunca realizada"; Recetario [id] título 2 líneas `webkit-line-clamp`; `OpsToggle` con sublabel integrado (elimina span flotante); Proveedores + Perfil migrados a `Avatar` de D0 (badge de cámara en esquina, sin overlay que tapa iniciales); Pedidos PDF a ícono + "Sin proveedor asignado" en naranja + menos padding; Pase timestamps solo en header de grupo + fade en mensajes rápidos; Producción un solo control de fecha (label tappable) + "Activar" nowrap; Turnos columna de nombres `sticky left:0`; Equipo CTA "Asignar puesto". Build limpio. |
+| 2026-07-06 | D10 | `scripts/limpiar-datos-prueba-bros.mjs` (dry-run por defecto, `--apply`): detecta 1 mensaje de pase basura (Franco, 8 jun), 134 productos con umbrales absurdos (28 Caso A umbral 100×+ vs stock real, 106 Caso B todo en 0 = falsa alerta roja), 3 miembros con plazas sin tildes/duplicadas. Fix `cc1ade3`: el reset de stock usa `0` no `NULL` (columna NOT NULL). **Pendiente: correr dry-run, que Facundo confirme la lista, y `--apply`.** |

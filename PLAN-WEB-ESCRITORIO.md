@@ -140,8 +140,7 @@ quedan disponibles):** obviously-awesome, jobs-to-be-done, lean-startup, etc.
 
 - [x] Plan documentado
 - [x] Skills seleccionadas e instaladas para diseño
-- [ ] Fase 0
-- [ ] Fase 1
-- [ ] Fase 2
-- [ ] Fase 3
-- [ ] Fase 4
+- [x] Fase 0 — `DesktopShell` (sidebar) + `useIsDesktop()` SSR-safe hechos (sesión 22 jun 2026, ver `PENDIENTES.md` historial "Versión web desktop completa"), reforzado en D8 de `PLAN-UI-IDENTIDAD-2026-07.md` (6 jul: max-width 1040px, paleta de módulos consistente, Recetario 2 columnas).
+- [~] Fase 1/2 — **parcial, no completa según el scope original.** Lo hecho (22 jun + D8): layouts responsive de Reportes (4-col KPI), Carta (2-col + panel detalle), Stock (tabla), Facturas (tabla), HACCP (grid), Recetario (2 col). Lo que sigue **sin hacer** de esta fase tal como está descripta abajo: drag&drop multi-archivo real en Facturas, grilla tipo planilla con edición inline en Stock, carga tabular de ingredientes en Recetario, y paridad de layout en ventas/proveedores/merma/producción/turnos/pase/pedidos/calendario.
+- [ ] Fase 3 — superpoderes (pegar Excel, atajos de teclado, multi-panel, export grande, Coach lateral) sin empezar.
+- [ ] Fase 4 — QA + endurecer escalado sin empezar.

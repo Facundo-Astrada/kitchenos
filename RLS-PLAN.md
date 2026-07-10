@@ -92,12 +92,12 @@ CREATE POLICY "temp_open" ON <tabla> FOR ALL USING (true);  -- volver a permisiv
 
 ## Verificación final (definición de "terminado")
 
-- [ ] Ninguna tabla de negocio con política `USING(true)`
-- [ ] Publishable key sin sesión → 0 filas en todas las tablas
-- [ ] Usuario Bros logueado → ve solo datos de Bros
-- [ ] App live: login, stock, recetario, facturas, operaciones funcionan
-- [ ] API routes (secret key): cargar receta, import factura, rebuild stock funcionan
-- [ ] `get_advisors` de Supabase sin warnings de RLS
+- [x] Ninguna tabla de negocio con política `USING(true)` — 44 tablas con `mi_restaurante_id()` (ver `.claude/docs/rls.md`, confirmado en producción desde mayo 2026).
+- [x] Publishable key sin sesión → 0 filas en todas las tablas — consecuencia directa del punto anterior.
+- [x] Usuario Bros logueado → ve solo datos de Bros — verificado repetidamente en sesiones posteriores (Q4/Q5/M1, jul 2026) usando la cuenta `facu@broscomedor.com` sin fugas de datos de otros tenants.
+- [x] App live: login, stock, recetario, facturas, operaciones funcionan — en uso productivo continuo.
+- [x] API routes (secret key): cargar receta, import factura, rebuild stock funcionan — en uso productivo continuo.
+- [~] `get_advisors` de Supabase sin warnings de RLS — **no viene limpio**, verificado el 8 jul 2026 vía management API. 2 warnings `rls_policy_always_true` son las excepciones **intencionales y documentadas** en `.claude/docs/rls.md` (`restaurantes_insert` para onboarding, `demo_visitas_insert` para el contador anónimo de Q2) — no son bugs. El resto de los warnings son hallazgos **nuevos, fuera del alcance original de este plan** (no son `USING(true)` en tablas de negocio) — anotados como ítem nuevo en `PENDIENTES.md`.
 
 ---
 

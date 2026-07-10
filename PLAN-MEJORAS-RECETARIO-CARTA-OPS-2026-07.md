@@ -3,7 +3,7 @@
 > Fuente: observaciones del cliente (sesión 7 jul 2026).
 > Decisiones tomadas: precio de venta **oculto en la ficha salvo dentro del food cost** · split de receta **a N partes** (no fijo a 2) · ejecutar **por tandas** tras aprobar este plan.
 
-Estado: **PLANIFICADO** — nada implementado todavía.
+Estado: ✅ **COMPLETO** — Keystone + Tandas A, B, C y D implementadas (7 jul 2026).
 
 ---
 

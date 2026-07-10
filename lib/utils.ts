@@ -52,3 +52,31 @@ export function getInitials(nombre: string): string {
     .join('')
     .toUpperCase()
 }
+
+// ── Cuentas por pagar (M1, jul 2026) ─────────────────────────
+export type UrgenciaVencimiento = 'vencida' | 'esta_semana' | 'proximamente' | 'sin_fecha'
+
+export interface VencimientoFactura {
+  fecha: string | null          // ISO date del vencimiento, null = sin plazo fijo
+  diasRestantes: number | null  // negativo = vencida; null si sin_fecha
+  urgencia: UrgenciaVencimiento
+}
+
+/**
+ * Vencimiento de pago de una factura a crédito: `30dias`/`60dias` cuentan desde
+ * `fecha_factura`. `cuenta_corriente` no tiene plazo fijo (se salda al arreglo con
+ * el proveedor) → `sin_fecha`, no se le inventa una fecha. `contado`/`pagada` no
+ * aplican acá (no deberían llegar a esta función).
+ */
+export function calcularVencimientoFactura(f: { fecha_factura: string; condicion_pago?: string | null }): VencimientoFactura {
+  const dias = f.condicion_pago === '30dias' ? 30 : f.condicion_pago === '60dias' ? 60 : null
+  if (dias === null) return { fecha: null, diasRestantes: null, urgencia: 'sin_fecha' }
+
+  const venc = new Date(f.fecha_factura + 'T12:00:00')
+  venc.setDate(venc.getDate() + dias)
+  const hoy = new Date()
+  hoy.setHours(12, 0, 0, 0)
+  const diasRestantes = Math.round((venc.getTime() - hoy.getTime()) / 86400000)
+  const urgencia: UrgenciaVencimiento = diasRestantes < 0 ? 'vencida' : diasRestantes <= 7 ? 'esta_semana' : 'proximamente'
+  return { fecha: venc.toISOString().slice(0, 10), diasRestantes, urgencia }
+}
