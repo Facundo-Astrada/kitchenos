@@ -6,6 +6,9 @@ import {
   useEquipo, TURNO_CONFIG, NIVELES_ACCESO, PUESTO_TEMPLATES,
   type Miembro, type Puesto, type TurnoTipo, type Turno,
 } from '@/lib/hooks/useEquipo'
+import { useFichaje, type FichajeDia } from '@/lib/hooks/useFichaje'
+import { useAuth } from '@/lib/auth/context'
+import { usePermisos } from '@/lib/hooks/usePermisos'
 import { MODULO_CONFIG } from '@/lib/constants'
 
 // ── Constantes ──
@@ -79,17 +82,19 @@ const btnDanger: React.CSSProperties = {
 
 // ── Types internos ──
 
-type Tab = 'equipo' | 'turnos' | 'puestos'
+type Tab = 'equipo' | 'turnos' | 'fichajes' | 'puestos'
 type EquipoView = 'list' | 'ficha' | 'nuevo'
 type PuestosView = 'list' | 'detalle' | 'nuevo' | 'template'
 
 interface MiembroForm {
   nombre: string; apellido: string; rol: string; puesto_id: string
   plaza_asignada: string; telefono: string; email: string; fecha_ingreso: string
+  costo_hora: string
 }
 const EMPTY_MIEMBRO_FORM: MiembroForm = {
   nombre: '', apellido: '', rol: '', puesto_id: '',
   plaza_asignada: '', telefono: '', email: '', fecha_ingreso: '',
+  costo_hora: '',
 }
 
 interface PuestoForm {
@@ -108,10 +113,11 @@ const EMPTY_PUESTO_FORM: PuestoForm = {
 // ══════════════════════════════════════════════════════════════
 
 function MiembroFormDatos({
-  form, setForm,
+  form, setForm, isAdmin,
 }: {
   form: MiembroForm
   setForm: React.Dispatch<React.SetStateAction<MiembroForm>>
+  isAdmin: boolean
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -142,6 +148,13 @@ function MiembroFormDatos({
         <input style={fieldStyle} value={form.fecha_ingreso}
           onChange={e => setForm(f => ({ ...f, fecha_ingreso: e.target.value }))} type="date" />
       </div>
+      {isAdmin && (
+        <div>
+          <label style={labelStyle}>Costo por hora ($) — solo vos lo ves</label>
+          <input style={fieldStyle} value={form.costo_hora} inputMode="decimal" type="number"
+            onChange={e => setForm(f => ({ ...f, costo_hora: e.target.value }))} placeholder="Ej: 3500" />
+        </div>
+      )}
     </div>
   )
 }
@@ -263,6 +276,9 @@ export default function TurnosPage() {
     fetchTurnos, fetchTurnosMes, asignarTurno, limpiarTurno,
     crearPuesto, actualizarPuesto, eliminarPuesto, getModulosMiembro,
   } = useEquipo()
+  const { user } = useAuth()
+  const { isAdmin } = usePermisos()
+  const { fetchQuienEstaAdentro, fetchHistorial, guardarFichajeManual } = useFichaje()
 
   const [tab, setTab] = useState<Tab>('equipo')
 
@@ -302,6 +318,15 @@ export default function TurnosPage() {
   const weekStart = fmtDate(weekDates[0])
   const weekEnd = fmtDate(weekDates[6])
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── Fichajes state ──
+  const [quienAdentro, setQuienAdentro] = useState<(FichajeDia & { nombre: string })[]>([])
+  const [loadingAdentro, setLoadingAdentro] = useState(false)
+  const [personaHistorialId, setPersonaHistorialId] = useState<string | null>(null)
+  const [historialPersona, setHistorialPersona] = useState<FichajeDia[]>([])
+  const [misFichajes, setMisFichajes] = useState<FichajeDia[]>([])
+  const [editandoFichaje, setEditandoFichaje] = useState<{ id?: string; usuarioId: string; fecha: string; entrada: string; salida: string } | null>(null)
+  const [guardandoFichaje, setGuardandoFichaje] = useState(false)
 
   // ── Puestos state ──
   const [puestosView, setPuestosView] = useState<PuestosView>('list')
@@ -362,6 +387,7 @@ export default function TurnosPage() {
       plaza_asignada: selectedMiembro.plaza_asignada ?? '',
       telefono: selectedMiembro.telefono ?? '', email: selectedMiembro.email ?? '',
       fecha_ingreso: selectedMiembro.fecha_ingreso ?? '',
+      costo_hora: selectedMiembro.costo_hora != null ? String(selectedMiembro.costo_hora) : '',
     })
     setEditingMiembro(true)
   }
@@ -381,6 +407,7 @@ export default function TurnosPage() {
         telefono: miembroForm.telefono || null,
         email: miembroForm.email || null,
         fecha_ingreso: miembroForm.fecha_ingreso || null,
+        costo_hora: miembroForm.costo_hora !== '' ? parseFloat(miembroForm.costo_hora) : null,
       })
       setEditingMiembro(false); setEquipoView('list'); setSelectedMiembro(null)
     } catch (e: any) { alert(e.message) }
@@ -453,6 +480,7 @@ export default function TurnosPage() {
         plaza_asignada: plaza, telefono: miembroForm.telefono || null,
         email: miembroForm.email || null,
         fecha_ingreso: miembroForm.fecha_ingreso || null, foto_url: null,
+        costo_hora: miembroForm.costo_hora !== '' ? parseFloat(miembroForm.costo_hora) : null,
       })
       setEquipoView('list')
       showToast(`${miembroForm.nombre} agregado al equipo`)
@@ -573,7 +601,7 @@ export default function TurnosPage() {
       <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px' }}>
         <h1 style={{ color: '#fff', fontSize: 20, fontWeight: 700, margin: 0, marginBottom: 14 }}>Equipo</h1>
         <div style={{ display: 'flex', gap: 6, background: 'rgba(255,255,255,0.12)', borderRadius: 10, padding: 3 }}>
-          {(['equipo', 'turnos', 'puestos'] as Tab[]).map(t => (
+          {(['equipo', 'turnos', 'fichajes', 'puestos'] as Tab[]).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -584,7 +612,7 @@ export default function TurnosPage() {
                 fontSize: 13, fontWeight: 600, cursor: 'pointer',
               }}
             >
-              {t === 'equipo' ? 'Equipo' : t === 'turnos' ? 'Turnos' : 'Puestos'}
+              {t === 'equipo' ? 'Equipo' : t === 'turnos' ? 'Turnos' : t === 'fichajes' ? 'Fichajes' : 'Puestos'}
             </button>
           ))}
         </div>
@@ -600,6 +628,7 @@ export default function TurnosPage() {
           <>
             {tab === 'equipo' && TabEquipo()}
             {tab === 'turnos' && TabTurnos()}
+            {tab === 'fichajes' && TabFichajes()}
             {tab === 'puestos' && TabPuestos()}
           </>
         )}
@@ -756,7 +785,7 @@ export default function TurnosPage() {
             </button>
             <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>Editar miembro</h2>
           </div>
-          <MiembroFormDatos form={miembroForm} setForm={setMiembroForm} />
+          <MiembroFormDatos form={miembroForm} setForm={setMiembroForm} isAdmin={isAdmin} />
           <div style={{ marginTop: 12 }}>
             {MiembroFormPuesto()}
           </div>
@@ -928,7 +957,7 @@ export default function TurnosPage() {
 
         {formStep === 'datos' && (
           <>
-            <MiembroFormDatos form={miembroForm} setForm={setMiembroForm} />
+            <MiembroFormDatos form={miembroForm} setForm={setMiembroForm} isAdmin={isAdmin} />
             <button
               onClick={() => {
                 if (!miembroForm.nombre.trim() || !miembroForm.apellido.trim()) { alert('Nombre y apellido son obligatorios'); return }
@@ -1235,6 +1264,243 @@ export default function TurnosPage() {
               </div>
             )}
           </div>
+        )}
+      </div>
+    )
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // TAB: FICHAJES (M3)
+  // ══════════════════════════════════════════════════════════════
+
+  // "Mis fichajes" (todos los roles) + "quién está adentro" (solo admin) al entrar al tab
+  useEffect(() => {
+    if (tab !== 'fichajes') return
+    if (isAdmin) {
+      setLoadingAdentro(true)
+      fetchQuienEstaAdentro().then(setQuienAdentro).finally(() => setLoadingAdentro(false))
+    }
+    if (user?.id) {
+      const hasta = new Date().toISOString().slice(0, 10)
+      const desdeD = new Date(); desdeD.setDate(desdeD.getDate() - 14)
+      fetchHistorial(user.id, desdeD.toISOString().slice(0, 10), hasta).then(setMisFichajes)
+    }
+  }, [tab, isAdmin, user?.id, fetchQuienEstaAdentro, fetchHistorial])
+
+  // Historial semanal de la persona elegida por el admin
+  useEffect(() => {
+    if (!personaHistorialId) { setHistorialPersona([]); return }
+    const hasta = new Date().toISOString().slice(0, 10)
+    const desdeD = new Date(); desdeD.setDate(desdeD.getDate() - 7)
+    fetchHistorial(personaHistorialId, desdeD.toISOString().slice(0, 10), hasta).then(setHistorialPersona)
+  }, [personaHistorialId, fetchHistorial])
+
+  function toTimeInputValue(iso: string): string {
+    const d = new Date(iso)
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  }
+
+  function abrirEdicionFichaje(f?: FichajeDia) {
+    const usuarioId = f?.usuario_id ?? personaHistorialId
+    if (!usuarioId) return
+    setEditandoFichaje({
+      id: f?.id,
+      usuarioId,
+      fecha: f?.fecha ?? new Date().toISOString().slice(0, 10),
+      entrada: f?.entrada ? toTimeInputValue(f.entrada) : '',
+      salida: f?.salida ? toTimeInputValue(f.salida) : '',
+    })
+  }
+
+  async function guardarEdicionFichaje() {
+    if (!editandoFichaje) return
+    setGuardandoFichaje(true)
+    try {
+      const entradaISO = editandoFichaje.entrada
+        ? new Date(`${editandoFichaje.fecha}T${editandoFichaje.entrada}:00`).toISOString()
+        : null
+      const salidaISO = editandoFichaje.salida
+        ? new Date(`${editandoFichaje.fecha}T${editandoFichaje.salida}:00`).toISOString()
+        : null
+      await guardarFichajeManual({
+        id: editandoFichaje.id, usuarioId: editandoFichaje.usuarioId, fecha: editandoFichaje.fecha,
+        entrada: entradaISO, salida: salidaISO,
+      })
+      setToast('Fichaje guardado')
+      setEditandoFichaje(null)
+      if (personaHistorialId) {
+        const hasta = new Date().toISOString().slice(0, 10)
+        const desdeD = new Date(); desdeD.setDate(desdeD.getDate() - 7)
+        fetchHistorial(personaHistorialId, desdeD.toISOString().slice(0, 10), hasta).then(setHistorialPersona)
+      }
+    } catch (e: unknown) {
+      setToast(e instanceof Error ? e.message : 'Error al guardar el fichaje')
+    } finally {
+      setGuardandoFichaje(false)
+    }
+  }
+
+  function FilaFichaje({ f, onClick }: { f: FichajeDia; onClick?: () => void }) {
+    return (
+      <div
+        onClick={onClick}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
+          cursor: onClick ? 'pointer' : 'default',
+        }}
+      >
+        <span style={{ fontSize: 13, color: 'var(--text-1)', flex: 1 }}>{f.fecha}</span>
+        <span style={{ fontSize: 12, color: 'var(--text-2)' }}>
+          {f.entrada ? new Date(f.entrada).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '—'}
+          {' → '}
+          {f.salida ? new Date(f.salida).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : 'en curso'}
+        </span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy)', minWidth: 40, textAlign: 'right' }}>
+          {f.horas_total !== null ? `${f.horas_total.toFixed(1)}h` : '—'}
+        </span>
+        {f.editado_por && (
+          <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--text-3)' }} title="Corregido manualmente">edit</span>
+        )}
+      </div>
+    )
+  }
+
+  function TabFichajes() {
+    const totalHorasMias = misFichajes.reduce((s, f) => s + (f.horas_total ?? 0), 0)
+
+    return (
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 22 }}>
+        {/* Mis fichajes — visible para cualquier rol, sin costos */}
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>
+            Mis fichajes (14 días) · {totalHorasMias.toFixed(1)}h
+          </div>
+          {misFichajes.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Sin fichajes registrados todavía</div>
+          ) : (
+            <div style={{ background: 'var(--surface)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
+              {misFichajes.map((f, i) => (
+                <div key={f.id} style={{ borderBottom: i < misFichajes.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <FilaFichaje f={f} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {isAdmin && (
+          <>
+            {/* Quién está adentro ahora */}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>
+                Quién está adentro ahora
+              </div>
+              {loadingAdentro ? (
+                <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Cargando...</div>
+              ) : quienAdentro.length === 0 ? (
+                <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Nadie fichó entrada todavía hoy</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {quienAdentro.map(f => (
+                    <div key={f.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12,
+                      background: 'rgba(34,197,94,.08)', border: '1px solid rgba(34,197,94,.25)',
+                    }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
+                      <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{f.nombre}</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                        desde {new Date(f.entrada!).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Historial semanal por persona + edición manual */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: .5 }}>
+                  Historial semanal por persona
+                </span>
+                {personaHistorialId && (
+                  <button onClick={() => abrirEdicionFichaje()} style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                    + Corregir
+                  </button>
+                )}
+              </div>
+              <select
+                value={personaHistorialId ?? ''}
+                onChange={e => setPersonaHistorialId(e.target.value || null)}
+                style={{ ...fieldStyle, marginBottom: 10 }}
+              >
+                <option value="">Elegir persona…</option>
+                {miembros.filter(m => m.auth_user_id).map(m => (
+                  <option key={m.id} value={m.auth_user_id!}>{m.nombre} {m.apellido}</option>
+                ))}
+              </select>
+              {personaHistorialId && (
+                historialPersona.length === 0 ? (
+                  <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Sin fichajes en los últimos 7 días</div>
+                ) : (
+                  <div style={{ background: 'var(--surface)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
+                    {historialPersona.map((f, i) => (
+                      <div key={f.id} style={{ borderBottom: i < historialPersona.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                        <FilaFichaje f={f} onClick={() => abrirEdicionFichaje(f)} />
+                      </div>
+                    ))}
+                  </div>
+                )
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Modal de edición manual (admin) */}
+        {editandoFichaje && (
+          <>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.5)' }} onClick={() => setEditandoFichaje(null)} />
+            <div style={{
+              position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 101,
+              background: 'var(--surface)', borderRadius: '20px 20px 0 0',
+              padding: '20px 20px', paddingBottom: 'max(env(safe-area-inset-bottom, 20px), 20px)',
+            }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 14 }}>
+                {editandoFichaje.id ? 'Corregir fichaje' : 'Agregar fichaje'} — {editandoFichaje.fecha}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <label style={labelStyle}>Fecha</label>
+                  <input type="date" style={fieldStyle} value={editandoFichaje.fecha}
+                    onChange={e => setEditandoFichaje(prev => prev && { ...prev, fecha: e.target.value })} />
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={labelStyle}>Entrada</label>
+                    <input type="time" style={fieldStyle} value={editandoFichaje.entrada}
+                      onChange={e => setEditandoFichaje(prev => prev && { ...prev, entrada: e.target.value })} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={labelStyle}>Salida</label>
+                    <input type="time" style={fieldStyle} value={editandoFichaje.salida}
+                      onChange={e => setEditandoFichaje(prev => prev && { ...prev, salida: e.target.value })} />
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+                <button onClick={() => setEditandoFichaje(null)} style={{
+                  flex: 1, padding: 14, borderRadius: 12, background: 'var(--bg)',
+                  border: '1px solid var(--border)', fontSize: 14, fontWeight: 600,
+                  color: 'var(--text-2)', cursor: 'pointer',
+                }}>Cancelar</button>
+                <button onClick={guardarEdicionFichaje} disabled={guardandoFichaje} style={{
+                  flex: 1, padding: 14, borderRadius: 12, background: 'var(--navy)',
+                  border: 'none', fontSize: 14, fontWeight: 700,
+                  color: '#fff', cursor: 'pointer', opacity: guardandoFichaje ? 0.6 : 1,
+                }}>{guardandoFichaje ? 'Guardando...' : 'Guardar'}</button>
+              </div>
+            </div>
+          </>
         )}
       </div>
     )

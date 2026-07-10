@@ -27,6 +27,7 @@ export interface Miembro {
   fecha_ingreso: string | null
   activo: boolean
   foto_url: string | null
+  costo_hora: number | null
   modulos_extra: string[]
   modulos_restringidos: string[]
   restaurante_id: string
@@ -49,9 +50,9 @@ export interface Puesto {
   id: string
   nombre: string
   descripcion: string | null
-  tareas_funciones: string[] | null
-  permisos_app: string[] | null   // ModuloId[]
-  nivel: string                   // admin | sous_chef | cocinero | bachero
+  tareas_funciones: string[]
+  permisos_app: string[]        // ModuloId[]
+  nivel: string                 // admin | sous_chef | cocinero | bachero
   plaza_default: string | null
   restaurante_id: string
   created_at: string
@@ -222,6 +223,7 @@ async function fetchPuestosData(key: string): Promise<Puesto[]> {
     ...p,
     nivel: p.nivel ?? 'cocinero',
     plaza_default: p.plaza_default ?? null,
+    tareas_funciones: p.tareas_funciones ?? [],
     permisos_app: p.permisos_app ?? [],
   })) as Puesto[]
 }

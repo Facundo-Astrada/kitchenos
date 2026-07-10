@@ -15,38 +15,66 @@ import { useStock } from '@/lib/hooks/useStock'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { useChecklist } from '@/lib/hooks/useChecklist'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
-import { getEstadoStock } from '@/lib/utils'
+import { getEstadoStock, calcularVencimientoFactura } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
+import { useFichaje } from '@/lib/hooks/useFichaje'
 import type { Perfil, Rol } from '@/types'
 
 // KPI "Cuentas por pagar" — solo admin, oculto si no hay deuda. Query liviana propia.
+// Prioriza el mensaje por urgencia (vencidas > vencen esta semana > total), mismo
+// cálculo de vencimiento que la agenda de Facturas (lib/utils.ts) para que nunca diverjan.
 function CuentasPorPagarCard({ restauranteId }: { restauranteId: string }) {
-  const [data, setData] = useState<{ total: number; count: number } | null>(null)
+  const [data, setData] = useState<{ total: number; count: number; vencidas: number; vencidasTotal: number; estaSemana: number; estaSemanaTotal: number } | null>(null)
   useEffect(() => {
     if (!restauranteId) return
     let cancel = false
     ;(async () => {
       const supabase = createClient()
-      const { data: rows } = await supabase.from('facturas').select('total, condicion_pago, status')
+      const { data: rows } = await supabase.from('facturas').select('total, fecha_factura, condicion_pago, status')
         .eq('restaurante_id', restauranteId)
         .in('condicion_pago', ['cuenta_corriente', '30dias', '60dias'])
         .neq('status', 'pagada')
       if (cancel) return
-      const list = (rows ?? []) as { total: number | null }[]
-      setData({ total: list.reduce((s, f) => s + (f.total ?? 0), 0), count: list.length })
+      const list = (rows ?? []) as { total: number | null; fecha_factura: string; condicion_pago: string | null }[]
+      let vencidas = 0, vencidasTotal = 0, estaSemana = 0, estaSemanaTotal = 0
+      for (const f of list) {
+        const v = calcularVencimientoFactura(f)
+        if (v.urgencia === 'vencida') { vencidas++; vencidasTotal += f.total ?? 0 }
+        else if (v.urgencia === 'esta_semana') { estaSemana++; estaSemanaTotal += f.total ?? 0 }
+      }
+      setData({ total: list.reduce((s, f) => s + (f.total ?? 0), 0), count: list.length, vencidas, vencidasTotal, estaSemana, estaSemanaTotal })
     })()
     return () => { cancel = true }
   }, [restauranteId])
   if (!data || data.count === 0) return null
   const fmt = (n: number) => n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
+
+  const urgente = data.vencidas > 0 || data.estaSemana > 0
+  const tituloUrgente = data.vencidas > 0
+    ? `${data.vencidas} factura${data.vencidas !== 1 ? 's' : ''} vencida${data.vencidas !== 1 ? 's' : ''}`
+    : `Vencen esta semana`
+  const montoUrgente = data.vencidas > 0 ? data.vencidasTotal : data.estaSemanaTotal
+
   return (
-    <Link href="/facturas" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 14, background: '#fffbeb', border: '1px solid #fde68a', textDecoration: 'none' }}>
-      <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#92400e' }}>account_balance_wallet</span>
+    <Link href="/facturas" style={{
+      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 14, textDecoration: 'none',
+      background: data.vencidas > 0 ? '#fef2f2' : '#fffbeb',
+      border: `1px solid ${data.vencidas > 0 ? '#fecaca' : '#fde68a'}`,
+    }}>
+      <span className="material-symbols-outlined" style={{ fontSize: 22, color: data.vencidas > 0 ? '#991b1b' : '#92400e' }}>
+        {data.vencidas > 0 ? 'error' : 'account_balance_wallet'}
+      </span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e' }}>Cuentas por pagar</div>
-        <div style={{ fontSize: 11, color: '#b45309' }}>{data.count} factura{data.count !== 1 ? 's' : ''} a crédito</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: data.vencidas > 0 ? '#991b1b' : '#92400e' }}>
+          {urgente ? tituloUrgente : 'Cuentas por pagar'}
+        </div>
+        <div style={{ fontSize: 11, color: data.vencidas > 0 ? '#b91c1c' : '#b45309' }}>
+          {data.count} factura{data.count !== 1 ? 's' : ''} a crédito en total
+        </div>
       </div>
-      <div style={{ fontSize: 15, fontWeight: 800, color: '#92400e', whiteSpace: 'nowrap' }}>{fmt(data.total)}</div>
+      <div style={{ fontSize: 15, fontWeight: 800, color: data.vencidas > 0 ? '#991b1b' : '#92400e', whiteSpace: 'nowrap' }}>
+        {fmt(urgente ? montoUrgente : data.total)}
+      </div>
     </Link>
   )
 }
@@ -57,24 +85,46 @@ export default function DashboardPage() {
   const [turnoActivo, setTurnoActivo] = useState<string | null>(null)
   const [showCierre, setShowCierre] = useState(false)
   const [showNotif, setShowNotif] = useState(false)
+  const { fichajeAbierto, marcarEntrada, marcarSalida } = useFichaje()
 
-  // Persist shift state in localStorage
+  // Persist shift state in localStorage (cache local — la fuente de verdad es turnos_personal)
   useEffect(() => {
     const saved = localStorage.getItem('kitchenos_turno')
     if (saved) setTurnoActivo(saved)
   }, [])
 
-  const iniciarTurno = () => {
+  // Reconciliar con la DB: si hay un fichaje abierto (ej. se clockeó desde otro dispositivo
+  // o se cerró el navegador sin marcar salida) y el localStorage quedó vacío, restaurarlo.
+  useEffect(() => {
+    if (fichajeAbierto?.entrada && !localStorage.getItem('kitchenos_turno')) {
+      localStorage.setItem('kitchenos_turno', fichajeAbierto.entrada)
+      setTurnoActivo(fichajeAbierto.entrada)
+    }
+  }, [fichajeAbierto])
+
+  const iniciarTurno = async () => {
     const now = new Date().toISOString()
     localStorage.setItem('kitchenos_turno', now)
     setTurnoActivo(now)
+    try {
+      const fichaje = await marcarEntrada()
+      // Usar el timestamp real que guardó el server, por si difiere unos ms del optimista
+      localStorage.setItem('kitchenos_turno', fichaje.entrada!)
+      setTurnoActivo(fichaje.entrada)
+    } catch {
+      // El fichaje en DB falló, pero no bloqueamos el flujo local — el turno sigue "activo"
+      // para el usuario; se reintentará fichar la próxima vez que abra el dashboard.
+    }
   }
 
   const cerrarTurno = () => {
     setShowCierre(true)
   }
 
-  const confirmarCierre = () => {
+  const confirmarCierre = async () => {
+    if (fichajeAbierto) {
+      try { await marcarSalida(fichajeAbierto) } catch { /* no bloquea el cierre local */ }
+    }
     localStorage.removeItem('kitchenos_turno')
     setTurnoActivo(null)
     setShowCierre(false)

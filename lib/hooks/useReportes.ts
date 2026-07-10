@@ -60,6 +60,8 @@ export interface CMVData {
   margenBruto: number     // ventas - compras
   ventasAnterior: number
   comprasAnterior: number
+  costoLaboral: number | null          // horas fichadas × costo_hora del período (M3) — null si nadie tiene costo_hora cargado
+  costoLaboralAnterior: number | null
 }
 
 export type PeriodoPresupuesto = 'semanal' | 'mensual' | 'trimestral' | 'semestral' | 'anual'
@@ -449,19 +451,23 @@ export function useReportes() {
     } finally { setLoading(false) }
   }, [RESTAURANTE_ID, supabase])
 
-  // ── CMV (Costo Mercadería Vendida) ──
+  // ── CMV (Costo Mercadería Vendida) + costo laboral (M3) ──
   const fetchCMV = useCallback(async (periodo: Periodo): Promise<CMVData> => {
-    const empty: CMVData = { ventas: 0, compras: 0, cmvPct: 0, cubiertos: 0, ticketPromedio: 0, margenBruto: 0, ventasAnterior: 0, comprasAnterior: 0 }
+    const empty: CMVData = {
+      ventas: 0, compras: 0, cmvPct: 0, cubiertos: 0, ticketPromedio: 0, margenBruto: 0,
+      ventasAnterior: 0, comprasAnterior: 0, costoLaboral: null, costoLaboralAnterior: null,
+    }
     if (!RESTAURANTE_ID) return empty
     setLoading(true)
     try {
       const { from, to, prevFrom, prevTo } = getDateRange(periodo)
 
-      const [ventasRes, comprasRes, ventasPrevRes, comprasPrevRes] = await Promise.all([
+      const [ventasRes, comprasRes, ventasPrevRes, comprasPrevRes, miembrosRes] = await Promise.all([
         supabase.from('ventas').select('total_ventas, cantidad_cubiertos').eq('restaurante_id', RESTAURANTE_ID).gte('fecha', from).lte('fecha', to),
         supabase.from('facturas').select('total').eq('restaurante_id', RESTAURANTE_ID).eq('status', 'confirmada').gte('fecha_factura', from).lte('fecha_factura', to),
         supabase.from('ventas').select('total_ventas').eq('restaurante_id', RESTAURANTE_ID).gte('fecha', prevFrom).lte('fecha', prevTo),
         supabase.from('facturas').select('total').eq('restaurante_id', RESTAURANTE_ID).eq('status', 'confirmada').gte('fecha_factura', prevFrom).lte('fecha_factura', prevTo),
+        supabase.from('equipo_miembros').select('auth_user_id, costo_hora').eq('restaurante_id', RESTAURANTE_ID).not('costo_hora', 'is', null),
       ])
 
       const ventas = (ventasRes.data ?? []).reduce((s, v) => s + (v.total_ventas || 0), 0)
@@ -470,6 +476,29 @@ export function useReportes() {
       const ventasAnterior = (ventasPrevRes.data ?? []).reduce((s, v) => s + (v.total_ventas || 0), 0)
       const comprasAnterior = (comprasPrevRes.data ?? []).reduce((s, f) => s + (f.total || 0), 0)
 
+      // Costo laboral: horas fichadas (turnos_personal) × costo_hora de cada persona.
+      // null (no "$0") si nadie del equipo tiene costo_hora cargado — evita mostrar un CMV-laboral falso.
+      const costoPorUsuario = new Map(
+        (miembrosRes.data ?? [])
+          .filter((m: { auth_user_id: string | null; costo_hora: number | null }) => m.auth_user_id)
+          .map((m: { auth_user_id: string | null; costo_hora: number | null }) => [m.auth_user_id as string, m.costo_hora as number])
+      )
+      let costoLaboral: number | null = null
+      let costoLaboralAnterior: number | null = null
+      if (costoPorUsuario.size > 0) {
+        const [fichajesRes, fichajesPrevRes] = await Promise.all([
+          supabase.from('turnos_personal').select('usuario_id, horas_total').eq('restaurante_id', RESTAURANTE_ID).gte('fecha', from).lte('fecha', to),
+          supabase.from('turnos_personal').select('usuario_id, horas_total').eq('restaurante_id', RESTAURANTE_ID).gte('fecha', prevFrom).lte('fecha', prevTo),
+        ])
+        const sumaCosto = (rows: { usuario_id: string | null; horas_total: number | null }[]) =>
+          rows.reduce((s, r) => {
+            const tarifa = r.usuario_id ? costoPorUsuario.get(r.usuario_id) : undefined
+            return tarifa ? s + (r.horas_total ?? 0) * tarifa : s
+          }, 0)
+        costoLaboral = sumaCosto(fichajesRes.data ?? [])
+        costoLaboralAnterior = sumaCosto(fichajesPrevRes.data ?? [])
+      }
+
       return {
         ventas, compras,
         cmvPct: ventas > 0 ? (compras / ventas) * 100 : 0,
@@ -477,6 +506,7 @@ export function useReportes() {
         ticketPromedio: cubiertos > 0 ? ventas / cubiertos : 0,
         margenBruto: ventas - compras,
         ventasAnterior, comprasAnterior,
+        costoLaboral, costoLaboralAnterior,
       }
     } catch (e: unknown) {
       console.error('[useReportes] fetchCMV Error:', e)
