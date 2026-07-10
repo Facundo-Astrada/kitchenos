@@ -6,6 +6,10 @@ import { useHaccp, type HaccpEquipo, type HaccpTemperatura, type HaccpVencimient
 import { useMerma } from '@/lib/hooks/useMerma'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
+import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
+import { useAuth } from '@/lib/auth/context'
+import { createClient } from '@/lib/supabase/client'
+import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, supportsWebUSB, supportsWebBluetooth } from '@/lib/print/escpos'
 
 // ── Helpers ─────────────────────────────────────────────
 const fmtDate = (d: string | null) => {
@@ -490,19 +494,41 @@ function ConfigEquiposView({
 }
 
 // ── Nuevo Vencimiento View ──────────────────────────────
+function fmtFechaISOaCorta(iso: string): string {
+  const d = new Date(iso + 'T12:00:00')
+  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+const btnEtiqueta: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 12px', borderRadius: 10,
+  fontSize: 13, fontWeight: 700, fontFamily: 'inherit', border: '1px solid rgba(67,97,160,.3)',
+  background: 'rgba(67,97,160,.08)', color: '#4361a0', cursor: 'pointer', flex: 1,
+}
+const btnEtiquetaSecundario: React.CSSProperties = {
+  ...btnEtiqueta, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)',
+}
+
 function NuevoVencView({
   onSave,
   onBack,
+  restauranteNombre,
 }: {
   onSave: (d: { producto_nombre: string; fecha_vencimiento: string; fecha_apertura?: string; lote?: string; ubicacion?: string }) => Promise<void>
   onBack: () => void
+  restauranteNombre: string
 }) {
+  const { perfil } = useAuth()
   const [nombre, setNombre] = useState('')
   const [fechaVenc, setFechaVenc] = useState('')
   const [fechaAp, setFechaAp] = useState('')
   const [lote, setLote] = useState('')
   const [ubic, setUbic] = useState('')
   const [saving, setSaving] = useState(false)
+  const [printingEtiqueta, setPrintingEtiqueta] = useState(false)
+  const [etiquetaError, setEtiquetaError] = useState<string | null>(null)
+
+  const puedeImprimir = !!nombre.trim() && !!fechaVenc
+  const responsable = perfil ? `${perfil.nombre} ${perfil.apellido}`.trim() : null
 
   const handleSave = async () => {
     if (!nombre.trim() || !fechaVenc) return
@@ -513,6 +539,48 @@ function NuevoVencView({
         fecha_apertura: fechaAp || undefined, lote: lote || undefined, ubicacion: ubic || undefined,
       })
     } finally { setSaving(false) }
+  }
+
+  async function buildEtiquetaBytes() {
+    return fetchEscPosBytes({
+      mode: 'etiqueta',
+      data: {
+        restaurante: restauranteNombre || 'KitchenOS',
+        nombreProduccion: nombre.trim(),
+        fechaElaboracion: fmtFechaISOaCorta(fechaAp || new Date().toISOString().slice(0, 10)),
+        fechaCaducidad: fmtFechaISOaCorta(fechaVenc),
+        responsable,
+      },
+    })
+  }
+
+  async function handlePrintEtiqueta(method: 'usb' | 'bluetooth') {
+    if (!puedeImprimir) return
+    setPrintingEtiqueta(true)
+    setEtiquetaError(null)
+    try {
+      const bytes = await buildEtiquetaBytes()
+      if (method === 'usb') await printViaUSB(bytes)
+      else await printViaBluetooth(bytes)
+    } catch (e: unknown) {
+      setEtiquetaError(e instanceof Error ? e.message : 'Error al imprimir')
+    } finally {
+      setPrintingEtiqueta(false)
+    }
+  }
+
+  async function handleDownloadEtiqueta() {
+    if (!puedeImprimir) return
+    setPrintingEtiqueta(true)
+    setEtiquetaError(null)
+    try {
+      const bytes = await buildEtiquetaBytes()
+      downloadEscPosBytes(bytes, `etiqueta-${nombre.trim().toLowerCase().replace(/\s+/g, '-')}.bin`)
+    } catch (e: unknown) {
+      setEtiquetaError(e instanceof Error ? e.message : 'Error al descargar')
+    } finally {
+      setPrintingEtiqueta(false)
+    }
   }
 
   return (
@@ -529,6 +597,31 @@ function NuevoVencView({
         <div><label style={labelStyle}>Fecha de apertura (opcional)</label><input type="date" value={fechaAp} onChange={e => setFechaAp(e.target.value)} style={fieldStyle} /></div>
         <div><label style={labelStyle}>Lote (opcional)</label><input value={lote} onChange={e => setLote(e.target.value)} placeholder="Ej: L-2026-0341" style={fieldStyle} /></div>
         <div><label style={labelStyle}>Ubicación (opcional)</label><input value={ubic} onChange={e => setUbic(e.target.value)} placeholder="Ej: Cámara 1" style={fieldStyle} /></div>
+
+        {/* Imprimir etiqueta — no requiere guardar primero */}
+        <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>Etiqueta de producción</span>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+            {supportsWebUSB() && (
+              <button disabled={!puedeImprimir || printingEtiqueta} onClick={() => handlePrintEtiqueta('usb')} style={{ ...btnEtiqueta, opacity: puedeImprimir ? 1 : 0.5 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>print</span>
+                {printingEtiqueta ? 'Imprimiendo...' : 'Imprimir'}
+              </button>
+            )}
+            {supportsWebBluetooth() && (
+              <button disabled={!puedeImprimir || printingEtiqueta} onClick={() => handlePrintEtiqueta('bluetooth')} style={{ ...btnEtiquetaSecundario, opacity: puedeImprimir ? 1 : 0.5 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>bluetooth</span>
+                Bluetooth
+              </button>
+            )}
+            <button disabled={!puedeImprimir || printingEtiqueta} onClick={handleDownloadEtiqueta} style={{ ...btnEtiquetaSecundario, opacity: puedeImprimir ? 1 : 0.5 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>download</span>
+              Descargar .bin
+            </button>
+          </div>
+          {!puedeImprimir && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Completá producto y fecha de vencimiento para imprimir</span>}
+          {etiquetaError && <span style={{ fontSize: 11, color: '#ef4444' }}>{etiquetaError}</span>}
+        </div>
       </div>
       <div style={{ padding: '4px 16px 16px' }}>
         <button disabled={!nombre.trim() || !fechaVenc || saving} onClick={handleSave} style={{
@@ -668,6 +761,15 @@ export default function HaccpPage() {
   const { isAdmin } = usePermisos()
   const isDesktop = useIsDesktop()
 
+  const RESTAURANTE_ID = useRestauranteId()
+  const [restauranteNombre, setRestauranteNombre] = useState('')
+  useEffect(() => {
+    if (!RESTAURANTE_ID) return
+    const supabase = createClient()
+    supabase.from('restaurantes').select('nombre').eq('id', RESTAURANTE_ID).maybeSingle()
+      .then(({ data }) => setRestauranteNombre(data?.nombre ?? ''))
+  }, [RESTAURANTE_ID])
+
   const [view, setView] = useState<View>('main')
   const [tab, setTab] = useState<Tab>('temperaturas')
 
@@ -799,7 +901,7 @@ export default function HaccpPage() {
   if (view === 'nuevoVenc') {
     return (
       <>
-        <NuevoVencView onSave={handleCrearVenc} onBack={() => setView('main')} />
+        <NuevoVencView onSave={handleCrearVenc} onBack={() => setView('main')} restauranteNombre={restauranteNombre} />
         {toast && <Toast msg={toast} onDone={() => setToast('')} />}
       </>
     )

@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useAuth } from '@/lib/auth/context'
+import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, supportsWebUSB, supportsWebBluetooth } from '@/lib/print/escpos'
 import type { MisePlaceItem, MisePrioridad } from '@/types'
 
 // ── Exported interfaces ───────────────────────────────────────
@@ -50,6 +52,27 @@ function nextPrio(current: string): MisePrioridad {
 }
 
 function capPlaza(p: string) { return p.charAt(0).toUpperCase() + p.slice(1) }
+
+function addDays(base: Date, days: number): Date {
+  const d = new Date(base)
+  d.setDate(d.getDate() + days)
+  return d
+}
+function fmtFechaCorta(d: Date): string {
+  return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+function fmtFechaISO(d: Date): string {
+  return d.toISOString().slice(0, 10)
+}
+
+const btnEtiqueta: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 8,
+  fontSize: 11, fontWeight: 700, fontFamily: 'inherit', border: '1px solid rgba(67,97,160,.3)',
+  background: 'rgba(67,97,160,.08)', color: '#4361a0', cursor: 'pointer',
+}
+const btnEtiquetaSecundario: React.CSSProperties = {
+  ...btnEtiqueta, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-2)',
+}
 
 // ── Stock dots (5) — used in cierre ──────────────────────────
 function StockDots({ cantActual, target }: { cantActual: number | null; target: number }) {
@@ -128,21 +151,23 @@ interface ProductoMiseCardProps {
   reg: { completado: boolean; cantidad_actual: number | null } | undefined
   fecha: string
   turno: string
-  recetaInfo?: { porciones?: number | null; pesoPorcion?: number | null }
+  recetaInfo?: { porciones?: number | null; pesoPorcion?: number | null; vidaUtilDias?: number | null }
   platoPlazo: PlatoPlaza[]
   hasTareaPendiente: boolean
   rendimientoPromedio?: number | null
   regCierreAnterior?: number | null
+  restauranteNombre: string
   onUpsert: (id: string, fecha: string, turno: string, d: { completado?: boolean; cantidad_actual?: number | null }) => Promise<void>
   onCrearTarea: (params: CrearTareaParams) => Promise<void>
   onPrioChange: (item: MisePlaceItem, prio: MisePrioridad) => void
   onDelete: (id: string) => Promise<void>
+  onCrearVencimiento: (params: { producto_nombre: string; fecha_vencimiento: string; fecha_apertura: string }) => Promise<void>
 }
 
 export function ProductoMiseCard({
   item, reg, fecha, turno, recetaInfo, platoPlazo, hasTareaPendiente,
-  rendimientoPromedio, regCierreAnterior,
-  onUpsert, onCrearTarea, onPrioChange, onDelete,
+  rendimientoPromedio, regCierreAnterior, restauranteNombre,
+  onUpsert, onCrearTarea, onPrioChange, onDelete, onCrearVencimiento,
 }: ProductoMiseCardProps) {
   const esCierre = turno === 'cierre'
   const [cantInput, setCantInput] = useState(reg?.cantidad_actual?.toString() ?? '')
@@ -172,6 +197,73 @@ export function ProductoMiseCard({
   const deficit = tieneRecipiente && stockDisplay !== null
     ? Math.max(0, (item.recipiente_capacidad ?? 0) - stockDisplay)
     : null
+
+  // ── Etiqueta de producción (imprimible al marcar como lista) ──
+  const { perfil } = useAuth()
+  const [diasOverride, setDiasOverride] = useState<number | null>(null)
+  const [printingEtiqueta, setPrintingEtiqueta] = useState(false)
+  const [etiquetaError, setEtiquetaError] = useState<string | null>(null)
+  const [vencCreado, setVencCreado] = useState(false)
+  const [creandoVenc, setCreandoVenc] = useState(false)
+
+  const diasCaducidad = diasOverride ?? recetaInfo?.vidaUtilDias ?? 3
+  const fechaCaducidad = addDays(new Date(), diasCaducidad)
+  const responsable = perfil ? `${perfil.nombre} ${perfil.apellido}`.trim() : null
+
+  async function buildEtiquetaBytes() {
+    return fetchEscPosBytes({
+      mode: 'etiqueta',
+      data: {
+        restaurante: restauranteNombre || 'KitchenOS',
+        nombreProduccion: item.nombre,
+        fechaElaboracion: fmtFechaCorta(new Date()),
+        fechaCaducidad: fmtFechaCorta(fechaCaducidad),
+        responsable,
+      },
+    })
+  }
+
+  async function handlePrintEtiqueta(method: 'usb' | 'bluetooth') {
+    setPrintingEtiqueta(true)
+    setEtiquetaError(null)
+    try {
+      const bytes = await buildEtiquetaBytes()
+      if (method === 'usb') await printViaUSB(bytes)
+      else await printViaBluetooth(bytes)
+    } catch (e: unknown) {
+      setEtiquetaError(e instanceof Error ? e.message : 'Error al imprimir')
+    } finally {
+      setPrintingEtiqueta(false)
+    }
+  }
+
+  async function handleDownloadEtiqueta() {
+    setPrintingEtiqueta(true)
+    setEtiquetaError(null)
+    try {
+      const bytes = await buildEtiquetaBytes()
+      downloadEscPosBytes(bytes, `etiqueta-${item.nombre.toLowerCase().replace(/\s+/g, '-')}.bin`)
+    } catch (e: unknown) {
+      setEtiquetaError(e instanceof Error ? e.message : 'Error al descargar')
+    } finally {
+      setPrintingEtiqueta(false)
+    }
+  }
+
+  async function handleCrearVencDesdeEtiqueta() {
+    if (creandoVenc || vencCreado) return
+    setCreandoVenc(true)
+    try {
+      await onCrearVencimiento({
+        producto_nombre: item.nombre,
+        fecha_vencimiento: fmtFechaISO(fechaCaducidad),
+        fecha_apertura: fmtFechaISO(new Date()),
+      })
+      setVencCreado(true)
+    } finally {
+      setCreandoVenc(false)
+    }
+  }
 
   async function handleCrearTarea(cantidadOverride?: number) {
     if (creating) return
@@ -297,6 +389,61 @@ export function ProductoMiseCard({
           </button>
         )}
       </div>
+
+      {/* ── Etiqueta de producción — visible al marcar como lista ── */}
+      {checked && (
+        <div style={{ padding: '0 12px 10px', paddingLeft: 44, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
+            <span style={{ fontSize: 10, color: 'var(--text-3)' }}>Caduca en</span>
+            <input
+              type="number"
+              min={1}
+              value={diasCaducidad}
+              onChange={e => setDiasOverride(e.target.value === '' ? null : parseInt(e.target.value))}
+              style={{
+                width: 40, padding: '3px 4px', borderRadius: 6, textAlign: 'center',
+                border: '1px solid var(--border)', background: 'var(--bg)',
+                fontSize: 11, fontWeight: 700, color: 'var(--text-1)', fontFamily: "'DM Mono', monospace",
+              }}
+            />
+            <span style={{ fontSize: 10, color: 'var(--text-3)' }}>días ({fmtFechaCorta(fechaCaducidad)})</span>
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+            {supportsWebUSB() && (
+              <button onClick={() => handlePrintEtiqueta('usb')} disabled={printingEtiqueta} style={btnEtiqueta}>
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>print</span>
+                {printingEtiqueta ? 'Imprimiendo...' : 'Imprimir etiqueta'}
+              </button>
+            )}
+            {supportsWebBluetooth() && (
+              <button onClick={() => handlePrintEtiqueta('bluetooth')} disabled={printingEtiqueta} style={btnEtiquetaSecundario}>
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>bluetooth</span>
+                Bluetooth
+              </button>
+            )}
+            <button onClick={handleDownloadEtiqueta} disabled={printingEtiqueta} style={btnEtiquetaSecundario}>
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>download</span>
+              Descargar .bin
+            </button>
+          </div>
+          <button
+            onClick={handleCrearVencDesdeEtiqueta}
+            disabled={creandoVenc || vencCreado}
+            style={{
+              ...btnEtiquetaSecundario, justifyContent: 'center',
+              color: vencCreado ? '#22c55e' : 'var(--text-2)',
+              borderColor: vencCreado ? 'rgba(34,197,94,.3)' : 'var(--border)',
+              background: vencCreado ? 'rgba(34,197,94,.08)' : 'var(--bg)',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>
+              {vencCreado ? 'check_circle' : 'event'}
+            </span>
+            {vencCreado ? 'Vencimiento creado en HACCP' : creandoVenc ? 'Creando...' : 'Crear vencimiento en HACCP'}
+          </button>
+          {etiquetaError && <span style={{ fontSize: 10, color: '#ef4444' }}>{etiquetaError}</span>}
+        </div>
+      )}
 
       {/* ── Info row — apertura estándar (sin recipiente) ── */}
       {!esCierre && !checked && !tieneRecipiente && (

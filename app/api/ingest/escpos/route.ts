@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 /**
  * POST /api/ingest/escpos
  *
- * Dos modos:
- *   1. { mode: 'generate', tipo: 'cocina'|'cliente', comanda | cuenta } → devuelve bytes ESC/POS en base64
- *   2. { mode: 'ingest', raw: string, restaurante_id: uuid }  → parsea texto de POS legacy (stub)
+ * Tres modos:
+ *   1. { mode: 'generate', tipo: 'cocina'|'cliente'|'cierre_caja', data } → devuelve bytes ESC/POS en base64
+ *   2. { mode: 'etiqueta', data: TicketEtiqueta } → etiqueta chica de producción (mise/HACCP), devuelve bytes en base64
+ *   3. { mode: 'ingest', raw: string, restaurante_id: uuid }  → parsea texto de POS legacy (stub)
  *
  * ESC/POS specs usados:
  *   ESC @ (0x1B 0x40)  — init
@@ -150,6 +151,87 @@ function buildTicketCliente(t: TicketCliente): number[] {
   return bytes
 }
 
+// ── Ticket de cierre de caja (M1) ───────────────────────────────────────────────
+
+interface TicketCierreCaja {
+  nombreLocal: string
+  fechaApertura: string   // dd/mm/aaaa HH:mm
+  fechaCierre: string     // dd/mm/aaaa HH:mm
+  abiertaPor?: string | null
+  cerradaPor?: string | null
+  montoInicial: number
+  medios: { nombre: string; esperado: number; declarado: number; diferencia: number }[]
+  diferenciaTotal: number
+  notas?: string | null
+}
+
+function buildTicketCierreCaja(t: TicketCierreCaja): number[] {
+  const ANCHO = 42
+  const fmt = (n: number) => `$${Math.round(n).toLocaleString('es-AR')}`
+
+  const bytes: number[] = [
+    ...init(),
+    ...center(), ...doubleHeight(), ...bold(true),
+    ...line(t.nombreLocal.slice(0, 20)),
+    ...normal(), ...bold(false),
+    ...center(), ...bold(true), ...line('CIERRE DE CAJA'), ...bold(false),
+    ...line(`Apertura: ${t.fechaApertura}`),
+    ...line(`Cierre:   ${t.fechaCierre}`),
+    ...divider(),
+    ...left(),
+  ]
+  if (t.abiertaPor) bytes.push(...line(`Abrió: ${t.abiertaPor}`))
+  if (t.cerradaPor) bytes.push(...line(`Cerró: ${t.cerradaPor}`))
+  bytes.push(...line(padRight('Fondo inicial', fmt(t.montoInicial), ANCHO)))
+  bytes.push(...divider())
+
+  bytes.push(...bold(true),
+    ...line(padRight('Medio', 'Esp/Decl/Dif', ANCHO)),
+    ...bold(false))
+  for (const m of t.medios) {
+    bytes.push(...line(m.nombre.slice(0, ANCHO)))
+    bytes.push(...line(padRight(`  Esperado`, fmt(m.esperado), ANCHO)))
+    bytes.push(...line(padRight(`  Declarado`, fmt(m.declarado), ANCHO)))
+    bytes.push(...line(padRight(`  Diferencia`, fmt(m.diferencia), ANCHO)))
+  }
+
+  bytes.push(...divider())
+  bytes.push(...bold(true), ...line(padRight('DIFERENCIA TOTAL', fmt(t.diferenciaTotal), ANCHO)), ...bold(false))
+  if (t.notas) bytes.push(...divider(), ...line(`Notas: ${t.notas}`))
+
+  bytes.push(...blank(), ...blank(), ...cut())
+  return bytes
+}
+
+// ── Etiqueta de producción (mise / HACCP) ──────────────────────────────────────
+
+interface TicketEtiqueta {
+  restaurante: string
+  nombreProduccion: string
+  fechaElaboracion: string   // dd/mm/aaaa
+  fechaCaducidad: string     // dd/mm/aaaa
+  responsable?: string | null
+}
+
+function buildTicketEtiqueta(t: TicketEtiqueta): number[] {
+  const bytes: number[] = [
+    ...init(),
+    ...center(), ...bold(true),
+    ...line(t.restaurante.slice(0, 32)),
+    ...bold(false), ...normal(),
+    ...divider(),
+    ...left(), ...doubleHeight(), ...bold(true),
+    ...line(t.nombreProduccion.slice(0, 21)),
+    ...normal(), ...bold(false),
+    ...blank(),
+    ...bold(true), ...line(`Elaborado: ${t.fechaElaboracion}`),
+    ...line(`Caduca:    ${t.fechaCaducidad}`), ...bold(false),
+  ]
+  if (t.responsable) bytes.push(...line(`Responsable: ${t.responsable}`))
+  bytes.push(...divider(), ...blank(), ...cut())
+  return bytes
+}
+
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -170,8 +252,10 @@ export async function POST(req: NextRequest) {
         bytes = buildTicketCocina(body.data as TicketCocina)
       } else if (tipo === 'cliente') {
         bytes = buildTicketCliente(body.data as TicketCliente)
+      } else if (tipo === 'cierre_caja') {
+        bytes = buildTicketCierreCaja(body.data as TicketCierreCaja)
       } else {
-        return NextResponse.json({ error: 'tipo debe ser "cocina" o "cliente"' }, { status: 400 })
+        return NextResponse.json({ error: 'tipo debe ser "cocina", "cliente" o "cierre_caja"' }, { status: 400 })
       }
     } catch (e: unknown) {
       return NextResponse.json({ error: e instanceof Error ? e.message : 'Error generando ticket' }, { status: 500 })
@@ -180,6 +264,22 @@ export async function POST(req: NextRequest) {
     // Devolver como base64 para que el cliente pueda enviarlo a una impresora WebUSB o Bluetooth
     const base64 = Buffer.from(bytes).toString('base64')
     return NextResponse.json({ ok: true, tipo, bytes: base64, byteLength: bytes.length })
+  }
+
+  if (mode === 'etiqueta') {
+    let bytes: number[]
+    try {
+      const data = body.data as TicketEtiqueta
+      if (!data?.nombreProduccion || !data?.fechaCaducidad) {
+        return NextResponse.json({ error: 'nombreProduccion y fechaCaducidad son requeridos' }, { status: 400 })
+      }
+      bytes = buildTicketEtiqueta(data)
+    } catch (e: unknown) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : 'Error generando etiqueta' }, { status: 500 })
+    }
+
+    const base64 = Buffer.from(bytes).toString('base64')
+    return NextResponse.json({ ok: true, tipo: 'etiqueta', bytes: base64, byteLength: bytes.length })
   }
 
   // mode: 'ingest' — parseo de texto POS legacy (stub mejorado)
