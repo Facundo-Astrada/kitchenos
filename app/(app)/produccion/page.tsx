@@ -15,6 +15,8 @@ import type { StatusProduccion, CategoriaPlato, PlatoComponente, Tarea } from '@
 import { CATEGORIAS_PLATO } from '@/types'
 import MermaBottomSheet from '@/components/merma/MermaBottomSheet'
 import { useMerma } from '@/lib/hooks/useMerma'
+import { PLAZA_TO_SECCION } from '@/components/mise/ProductoMiseCard'
+import SugerenciaProduccionSheet from '@/components/produccion/SugerenciaProduccionSheet'
 
 // ── Helpers ─────────────────────────────────────────────────
 function fmtDate(d: Date) {
@@ -68,6 +70,8 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
   const { menus: catalogoMenus } = useMenus()
   const [showMenuPicker, setShowMenuPicker] = useState(false)
   useSheetOpenWhen(showMenuPicker)
+  const [showSugerencia, setShowSugerencia] = useState(false)
+  useSheetOpenWhen(showSugerencia)
   const [cargandoMenu, setCargandoMenu] = useState(false)
   const puedeDelegar = authPerfil?.rol === 'admin' || authPerfil?.rol === 'chef'
   const [fecha, setFecha] = useState(() => fmtDate(new Date()))
@@ -195,6 +199,45 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
       showToast('Error: ' + msg)
     } finally {
       setCargandoMenu(false)
+    }
+  }
+
+  // ── E1: convertir la sugerencia de producción (motor de reglas) en tareas de OPS ──
+  async function confirmarSugerencia(
+    items: { recetaId: string; nombre: string; plaza: string; cantidad: number; unidad: string }[],
+    fechaSugerida: string,
+    diaLabel: string,
+  ) {
+    if (!RESTAURANTE_ID || items.length === 0) { setShowSugerencia(false); return }
+    try {
+      const supabase = createClient()
+      const rows = items.map((it, i) => ({
+        titulo: it.nombre,
+        descripcion: `Sugerido por ventas históricas de los ${diaLabel}`,
+        status: 'pendiente',
+        estado: 'pendiente',
+        prioridad: 'media',
+        categoria: 'produccion',
+        modo: 'carta',
+        seccion: PLAZA_TO_SECCION[it.plaza] ?? 'general',
+        plaza: it.plaza,
+        asignado_a: null,
+        receta_id: it.recetaId,
+        cantidad: it.cantidad,
+        turno_fecha: fechaSugerida,
+        orden: i,
+        restaurante_id: RESTAURANTE_ID,
+      }))
+      const { error } = await supabase.from('tareas').insert(rows)
+      if (error) throw error
+      refetchTareas()
+      setShowSugerencia(false)
+      showToast(`${rows.length} ${rows.length === 1 ? 'tarea creada' : 'tareas creadas'} para ${diaLabel}`)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message
+        : (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message)
+        : 'desconocido'
+      showToast('Error: ' + msg)
     }
   }
 
@@ -350,6 +393,14 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
             <h1 style={{ fontSize: 17, fontWeight: 700, color: '#fff', margin: 0 }}>Planificación</h1>
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <button
+              data-coach-target="produccion-sugerencia"
+              onClick={() => setShowSugerencia(true)}
+              style={{ background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 15 }}>auto_awesome</span>
+              Sugerir producción
+            </button>
             <button onClick={() => setShowMenuPicker(true)} style={{ background: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 700, color: 'var(--navy)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 15 }}>menu_book</span>
               Cargar menú
@@ -552,6 +603,16 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
         }}
         prefill={mermaPrefill}
       />
+
+      {/* ── E1: sugerencia de producción (motor de reglas sobre ventas históricas) ── */}
+      {showSugerencia && typeof document !== 'undefined' && createPortal(
+        <SugerenciaProduccionSheet
+          tareasExistentes={tareas}
+          onConfirm={confirmarSugerencia}
+          onClose={() => setShowSugerencia(false)}
+        />,
+        document.body,
+      )}
 
       {/* ── Fase 2: selector de menú del catálogo (portal para escapar de overflow/transform/BottomNav) ── */}
       {showMenuPicker && typeof document !== 'undefined' && createPortal(

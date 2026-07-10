@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { COACH_HIGHLIGHT_IDS } from '@/lib/coach/highlights'
+import { calcularSugerenciaProduccion } from '@/lib/produccion/sugerencia'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 // ── Rate limit en memoria (best-effort por instancia serverless) ──────────
@@ -277,6 +278,17 @@ const COACH_TOOLS = [
       required: ['producto', 'cantidad', 'unidad', 'motivo'],
     },
   },
+  {
+    name: 'sugerir_produccion',
+    description: 'Calcula qué producir para un día futuro según el promedio de ventas históricas de ese mismo día de semana menos el stock actual de mise. Usar cuando el usuario pregunta algo tipo "¿qué produzco mañana?" o "¿qué conviene hacer para el viernes?". Es el mismo motor (misma fuente de datos) que el botón "Sugerir producción" de OPS → Planificación.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        fecha: { type: 'string', description: 'Fecha objetivo en formato YYYY-MM-DD. Si no se especifica, se usa mañana.' },
+      },
+      required: [],
+    },
+  },
 ]
 
 function turnoActual(): 'apertura' | 'servicio' | 'cierre' {
@@ -416,6 +428,23 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
       return result
     }
 
+    if (name === 'sugerir_produccion') {
+      let fechaObjetivo = String(input.fecha ?? '').trim()
+      if (!fechaObjetivo) {
+        const d = new Date()
+        d.setDate(d.getDate() + 1)
+        fechaObjetivo = d.toISOString().slice(0, 10)
+      }
+      const resultado = await calcularSugerenciaProduccion({ supabase, restauranteId, fechaObjetivo, semanas: 8 })
+      if (resultado.sugerencias.length === 0) {
+        return `No encontré suficiente historial de ventas de ${resultado.diaSemanaLabel}s vinculado a recetas activas del mise para sugerir producción de ${fechaObjetivo}. Puede que falten ventas cargadas o que los platos vendidos no tengan una receta con el mismo nombre.`
+      }
+      const lineas = resultado.sugerencias.slice(0, 10).map(s =>
+        `- ${s.nombre}: vendés en promedio ${s.promedioVenta} los ${resultado.diaSemanaLabel} (${s.muestras} muestras), tenés ${s.stockActual} en stock → sugerido producir ${s.sugerido} ${s.unidad}${s.plaza ? ` (${s.plaza})` : ''}`
+      ).join('\n')
+      return `Sugerencia de producción para ${resultado.diaSemanaLabel} ${fechaObjetivo}:\n${lineas}\n\n(Misma fuente que el botón "Sugerir producción" en OPS → Planificación — si el usuario quiere crear las tareas, decile que las convierta en tareas desde ahí.)`
+    }
+
     return `Error: herramienta desconocida "${name}".`
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'desconocido'
@@ -481,10 +510,11 @@ export async function POST(req: NextRequest) {
   }
 
   dynamicBlock += `\n\n## Acciones ejecutables
-Tenés herramientas para EJECUTAR acciones reales: crear_tarea, marcar_86, registrar_merma.
-- Usalas SOLO cuando el usuario pide explícitamente hacer la acción ("creá una tarea…", "se acabó el…", "se tiraron 2 kg de…").
+Tenés herramientas para EJECUTAR acciones reales: crear_tarea, marcar_86, registrar_merma, buscar_receta, sugerir_produccion.
+- Usalas SOLO cuando el usuario pide explícitamente hacer la acción ("creá una tarea…", "se acabó el…", "se tiraron 2 kg de…", "¿cómo se hace…?", "¿qué produzco mañana?").
 - Después de ejecutar, confirmá en una frase breve en texto plano (sin JSON, sin markdown) lo que hiciste.
-- Si faltan datos para ejecutar (ej. cantidad de la merma), preguntá antes de llamar la herramienta.`
+- Si faltan datos para ejecutar (ej. cantidad de la merma), preguntá antes de llamar la herramienta.
+- sugerir_produccion es de solo lectura (no crea nada) — después de mostrar los números, si el usuario quiere convertirlos en tareas, decile que use el botón "Sugerir producción" en OPS → Planificación (ahí sí puede editar cantidades y confirmar).`
 
   // Loop agéntico: hasta 4 vueltas (modelo → tool → resultado → modelo).
   const convo: AnthropicMsg[] = Array.isArray(messages) ? [...messages] : []
