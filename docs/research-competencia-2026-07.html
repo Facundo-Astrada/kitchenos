@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 20mm 18mm 20mm 18mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2937; font-size: 10.8px; line-height: 1.6; margin: 0;
+  }
+
+  /* Portada generada en CSS */
+  .cover {
+    background: linear-gradient(150deg, #1a2a47, #101c33);
+    color: #fff;
+    padding: 40px 36px 36px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    page-break-after: avoid;
+  }
+  .cover-badge {
+    display: inline-block;
+    background: rgba(231,160,73,.18);
+    border: 1px solid rgba(231,160,73,.45);
+    color: #e7a049;
+    font-size: 9.5px; font-weight: 700;
+    letter-spacing: .14em; text-transform: uppercase;
+    padding: 5px 13px; border-radius: 999px; margin-bottom: 18px;
+  }
+  .cover h1 {
+    color: #fff; font-size: 28px; border: none; margin: 0 0 10px;
+    font-weight: 800; line-height: 1.1;
+  }
+  .cover-sub {
+    font-size: 13px; color: #c5cfe3; margin: 0 0 22px; max-width: 60ch;
+  }
+  .cover-meta {
+    display: flex; gap: 24px; border-top: 1px solid rgba(255,255,255,.12);
+    padding-top: 18px; margin-top: 8px;
+  }
+  .cover-meta-item { font-size: 9.5px; color: #8ea0bb; }
+  .cover-meta-item strong { display: block; color: #e0e9f4; font-size: 11px; margin-bottom: 2px; }
+
+  /* Headings */
+  h1 {
+    color: #1c2d4a; font-size: 20px;
+    border-bottom: 3px solid #1c2d4a; padding-bottom: 6px;
+    margin: 32px 0 14px; page-break-after: avoid;
+  }
+  h2 {
+    color: #1c2d4a; font-size: 15px; margin: 26px 0 8px;
+    border-left: 4px solid #4361a0; padding-left: 10px;
+    page-break-after: avoid;
+  }
+  h3 {
+    color: #4361a0; font-size: 12.5px; margin: 18px 0 6px;
+    page-break-after: avoid;
+  }
+  h4 { color: #374151; font-size: 11px; margin: 12px 0 4px; font-weight: 700; page-break-after: avoid; }
+
+  p { margin: 6px 0 8px; }
+  ul, ol { margin: 6px 0 10px; padding-left: 20px; }
+  li { margin: 3px 0; }
+  strong { color: #111827; }
+  a { color: #4361a0; text-decoration: none; }
+  em { color: #374151; }
+
+  code {
+    background: #f1f3f7; color: #1c2d4a;
+    padding: 1px 5px; border-radius: 4px;
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 10px;
+  }
+  pre {
+    background: #f6f7f9; border: 1px solid #e3e6ec; border-radius: 8px;
+    padding: 12px 14px; overflow-x: auto; page-break-inside: avoid;
+    margin: 10px 0;
+  }
+  pre code { background: none; padding: 0; color: #334155; line-height: 1.4; font-size: 9.5px; }
+
+  blockquote {
+    border-left: 4px solid #4361a0; background: #f4f6fb;
+    margin: 10px 0; padding: 8px 14px;
+    color: #374151; border-radius: 0 6px 6px 0; font-style: italic;
+  }
+  hr { border: none; border-top: 1px solid #e3e6ec; margin: 22px 0; }
+
+  /* Tablas */
+  table {
+    border-collapse: collapse; width: 100%;
+    margin: 10px 0 16px; font-size: 9.8px;
+    page-break-inside: avoid;
+  }
+  th {
+    background: #1c2d4a; color: #fff;
+    text-align: left; padding: 7px 9px; font-weight: 700;
+    font-size: 9.2px;
+  }
+  td {
+    border: 1px solid #e3e6ec; padding: 5px 9px;
+    vertical-align: top; line-height: 1.45;
+  }
+  tbody tr:nth-child(even) { background: #f8f9fb; }
+
+  /* Emojis de la tabla comparativa — centrar */
+  td:not(:first-child) { text-align: center; }
+  /* Pero la tabla de gaps y backlog no centra */
+  .no-center td { text-align: left; }
+</style>
+</head><body>
+
+<div class="cover">
+  <div class="cover-badge">Research de competencia · Julio 2026</div>
+  <h1>K-OS vs 9 plataformas<br>de gestión gastronómica</h1>
+  <div class="cover-sub">Fichas individuales · tabla comparativa · gaps detectados · backlog priorizado para escalar K-OS en el mercado LATAM.</div>
+  <div class="cover-meta">
+    <div class="cover-meta-item"><strong>Plataformas inspeccionadas</strong>Fudo · CajaOS · bcnsoft · Artics · Frambuesa · Ganapán · Iristrace · Cuiner · Yurest</div>
+    <div class="cover-meta-item"><strong>Fecha</strong>5 de julio de 2026</div>
+    <div class="cover-meta-item"><strong>Método</strong>Inspección directa de sitios oficiales (~27 páginas)</div>
+  </div>
+</div>
+
+<h1>Research de competencia — K-OS vs 9 plataformas de gestión gastronómica</h1>
+<p><strong>Fecha:</strong> 5 de julio de 2026 <strong>Método:</strong> inspección directa de los sitios oficiales (home, funcionalidades, precios, registro/demo, recursos descargables). Los precios en ARS son los publicados a esta fecha.</p>
+<p><strong>Conclusión ejecutiva:</strong> el mercado argentino está saturado de POS-first (Fudo, CajaOS, bcnsoft, Ganapán, Frambuesa, Artics compiten por la caja, la mesa y la factura). El back-of-house profundo — recetario con food cost vivo, mise en place, producción, HACCP, compras con OCR — solo lo hace <strong>Yurest (España, enterprise, sin precios públicos)</strong> y parcialmente Iristrace (checklists enterprise). <strong>Nadie ocupa ese lugar en Argentina/LATAM a precio accesible: ese es el océano azul de K-OS.</strong> Los gaps reales de K-OS están en la capa de cobro/fiscal (en curso), el canal online (carta QR pública, tienda, delivery) y el CRM/fidelización.</p>
+<hr/>
+<h2>1. Fichas individuales</h2>
+<h3>1.1 Fudo — fu.do/es-ar</h3>
+<table><thead><tr><th>Campo</th><th>Detalle</th></tr></thead><tbody><tr><td><strong>Propuesta de valor</strong></td><td>"Vos encargate de la comida. Fudo resuelve el resto." Software para restaurantes, bares, cafés, pizzerías, foodtrucks y dark kitchens. El líder de la categoría en Argentina.</td></tr><tr><td><strong>Target</strong></td><td>Independientes y multisucursal (plan dedicado).</td></tr></tbody></table>
+<p><strong>Módulos core:</strong> POS mostrador + mesas (mapa de salas, traslado de consumos, asignación de camareros), arqueo de caja (incl. arqueo ciego), múltiples cajas y turnos, stock con recetas e ingredientes/sub-ingredientes (costo y margen automáticos, bloqueo de venta sin stock, mermas, conteo de inventario), gastos con categorías y estado de resultados, clientes y proveedores con <strong>cuentas corrientes</strong>, KDS con umbrales de demora y alertas sonoras, delivery (Rappi/PedidosYa + tienda online propia), facturación electrónica ARCA + impresoras fiscales, carta QR, balanzas, app móvil iOS/Android, app para comensales, <strong>usuarios ilimitados en todos los planes</strong>, API pública.</p>
+<p><strong>Dashboards:</strong> reportes de ventas por día/hora/canal/medio de pago/desempeño del equipo, ranking de productos con margen, consumo promedio y desperdicio de stock, variación de precios de compras, <strong>mapa de calor de ventas por hora en el salón</strong>, export a Excel.</p>
+<p><strong>Integraciones:</strong> Mercado Pago (QR, tickets), Rappi, PedidosYa, Rapiboy (repartidores on-demand), Meta Ads, WhatsApp (chatbot), API general.</p>
+<p><strong>Plantillas/recursos:</strong> hub de recursos con 4 herramientas IA gratuitas (analista de reseñas, especialista en Google, experto en menú, diseñador de imágenes) + checklists descargables (apertura/cierre de barra, fin de mes) + plantillas de menú. Capacitaciones gratuitas ilimitadas.</p>
+<p><strong>Onboarding:</strong> self-service real — "Probar gratis" sin tarjeta, un solo formulario (negocio, nombre, teléfono, email, contraseña). Login directo a app-v2.fu.do.</p>
+<p><strong>Precios (públicos):</strong> Inicial $20.900 / Avanzado $41.000 (agrega stock, recetas, clientes/proveedores, reportes) / Pro $65.000 (multi-caja, estado de resultados, listas de precios, API) / Multisucursal a consultar. Módulos aparte: KDS $19.500, Mesas $8.500, Facturación $13.500, Delivery Apps $19.500, <strong>Recepcionista IA $55.000</strong>. Descuentos 5–15% por suscripción/pago anual.</p>
+<p><strong>Diferenciador único:</strong> el <strong>ecosistema de agentes IA comerciales</strong> (Vendedor IA que convierte WhatsApp en ventas 24/7, Recepcionista IA que agenda reservas) y "Tu Delivery" (tienda online con 1,9% por transacción + chatbot + repartidores on-demand) — atacan la facturación del cliente, no solo su operación.</p>
+<hr/>
+<h3>1.2 CajaOS — cajaos.com</h3>
+<table><thead><tr><th>Campo</th><th>Detalle</th></tr></thead><tbody><tr><td><strong>Propuesta de valor</strong></td><td>"El punto de venta y gestión 100% web hecho por comerciantes." Storytelling de fundador-comerciante como sello de confianza.</td></tr><tr><td><strong>Target</strong></td><td>Pymes multi-rubro (kioscos, farmacias, carnicerías…) con plan específico gastronomía.</td></tr></tbody></table>
+<p><strong>Módulos core:</strong> facturación ARCA automática <strong>sin límite de comprobantes</strong>, stock en tiempo real con alertas, mapa visual de mesas (libre/ocupada/esperando cuenta), comandas digitales a pantalla de cocina (cualquier tablet con internet, sin hardware especial), app de mozos sin límite de usuarios, carta online QR, división de cuenta entre comensales, productos pesables con balanza, códigos de barra, permisos por usuario, cierre de caja por turno, cuentas corrientes de clientes, carga masiva Excel/CSV.</p>
+<p><strong>Dashboards:</strong> básicos — cierre de caja por turno, ventas por mesa y método de pago. Punto débil.</p>
+<p><strong>Integraciones:</strong> Mercado Pago (QR + transferencias en tiempo real). <strong>Sin delivery apps (en roadmap), sin recetas/insumos en resto.</strong></p>
+<p><strong>Onboarding:</strong> trial 14 días sin tarjeta, <code>/registro</code> self-service, soporte humano por WhatsApp desde el día 1.</p>
+<p><strong>Precios:</strong> Starter $35.000/mes · Resto $49.000/mes. Sin contrato mínimo, migración asistida gratis.</p>
+<p><strong>Diferenciador único:</strong> ARCA ilimitado incluido en el precio base (los demás lo cobran aparte) + narrativa "hecho por comerciantes" con soporte WhatsApp humano.</p>
+<hr/>
+<h3>1.3 bcnsoft (BCN Resto) — bcnsoft.com.ar</h3>
+<table><thead><tr><th>Campo</th><th>Detalle</th></tr></thead><tbody><tr><td><strong>Propuesta de valor</strong></td><td>Suite "todo en uno" multi-producto (bcn soft/resto/pedidos/mayoristas/manager). +2500 clientes. Enfoque consultivo de venta.</td></tr><tr><td><strong>Target</strong></td><td>Gastronómicos establecidos, franquicias y multisucursal (BCN Manager).</td></tr></tbody></table>
+<p><strong>Módulos core:</strong> mesas multi-salón con reservas, app mozos, mostrador con <strong>monitor llamador</strong>, delivery con tienda online propia y <strong>trazabilidad de repartidores</strong>, stock unitario + materia prima, turnos de caja, comanderas por zona de preparación, facturación ARCA + libro IVA ventas, clientes con plan de puntos y cumpleaños, proveedores con cuentas corrientes, <strong>control de deudas con alertas de vencimiento</strong>, <strong>bancos y conciliaciones (transferencias, echeq)</strong>, <strong>módulo RRHH completo: legajo, adelantos, liquidación de sueldos, consumo interno, fichada, horas extra</strong>.</p>
+<p><strong>Dashboards:</strong> "Panel de Control a Distancia" — ventas por canal en tiempo real, estado de cajas, stock, pedidos activos, auditorías.</p>
+<p><strong>Plantillas/recursos (los mejores del grupo local):</strong> 7 planillas .xlsx descargables (control de caja, inventario con stock mínimo, food cost por plato, control de repartidores, preventistas, comparador de sucursales, delivery propio vs apps) + 8 calculadoras web interactivas (food cost, KPIs, punto de equilibrio, recargo por medio de pago, monotributo, comparador de sucursales). Motor de captación de leads.</p>
+<p><strong>Onboarding:</strong> alta fricción — "Solicitar demo" con formulario y llamado de diagnóstico en 24 hs. Software instalable Windows (no cloud-native).</p>
+<p><strong>Precios:</strong> $109.900/mes (o $54.900/mes pagando anual) + IVA + <strong>configuración inicial $109.900</strong> + tienda online 2% por venta. 2 licencias incluidas.</p>
+<p><strong>Diferenciador único:</strong> profundidad administrativa argentina — RRHH con liquidación de sueldos, bancos/echeqs/conciliaciones y deudas a proveedores. Y la estrategia de contenidos con planillas gratuitas.</p>
+<hr/>
+<h3>1.4 Artics — artics.com.ar</h3>
+<table><thead><tr><th>Campo</th><th>Detalle</th></tr></thead><tbody><tr><td><strong>Propuesta de valor</strong></td><td>"Sistema POS de nueva generación, 100% offline." Es una <strong>agencia digital</strong> (web, SEO, Odoo) que comercializa un POS gastronómico como un servicio más.</td></tr><tr><td><strong>Target</strong></td><td>Restaurantes y cadenas; venta consultiva por WhatsApp.</td></tr></tbody></table>
+<p><strong>Módulos core:</strong> mesas visuales, <strong>QR self-ordering sin app</strong>, comandas KOT automáticas por cocina (múltiples cocinas simultáneas), recetas con descuento automático de ingredientes, <strong>control anti-fraude con logs auditados</strong>, delivery + reservas integrados, dividir/unir cuentas, app de mozos gratis, facturación AFIP A/B/C con controladores fiscales homologados, <strong>multi-moneda (pesos/dólares)</strong>, programa de puntos + CRM, propinas configurables.</p>
+<p><strong>Dashboards:</strong> ventas, rentabilidad y rendimiento (sin detalle público).</p>
+<p><strong>Onboarding:</strong> sin trial ni registro; todo via WhatsApp. <strong>Sin precios públicos</strong> (Starter/Professional/Enterprise "a consultar"). Recursos gratis: solo una guía de marketing web (no gastronómica).</p>
+<p><strong>Diferenciador único:</strong> funcionamiento <strong>100% offline</strong> y el énfasis anti-fraude (logs auditados) — argumentos de venta para locales con internet inestable y dueños desconfiados.</p>
+<hr/>
+<h3>1.5 Frambuesa — frambuesa.app</h3>
+<table><thead><tr><th>Campo</th><th>Detalle</th></tr></thead><tbody><tr><td><strong>Propuesta de valor</strong></td><td>"Manejá todo tu local gastronómico. Gratis." El disruptor low-cost, 100% web, autogestión total.</td></tr><tr><td><strong>Target</strong></td><td>Locales chicos (restaurante, bar, café, panadería, rotisería) en LATAM, primero Argentina.</td></tr></tbody></table>
+<p><strong>Módulos core:</strong> POS + caja con arqueo automático, mesas, delivery por WhatsApp, menú QR sin login, stock/insumos y recetas (plan Pro), CRM e historial de clientes, <strong>gift cards en todos los planes</strong>, cupones y promociones <strong>con métricas</strong>, multisucursal, roles y permisos, conector de impresión Windows.</p>
+<p><strong>Integraciones:</strong> ARCA como complemento opcional ($29.900/mes), Mercado Pago/QR/transferencia, login con Google. Sin PedidosYa/Rappi.</p>
+<p><strong>Onboarding (el mejor del grupo):</strong> registro con Google en un paso, sin tarjeta, "en menos de un minuto", 14 días con todo desbloqueado, los datos se conservan si no elegís plan. El formulario pregunta "¿qué querés resolver primero?" para personalizar la activación.</p>
+<p><strong>Precios:</strong> Start $9.900/mes · Pro $32.900/mes (stock, CRM, reportes) · Facturación $29.900 · Combo $52.900. Por sucursal.</p>
+<p><strong>Táctica destacable:</strong> página <code>/comparison</code> pública comparándose contra "otros sistemas" (legacy, POS con abono, apps QR, planillas) — y presume de <strong>"Importador IA: foto del menú genera el catálogo automático"</strong>, lo mismo que K-OS ya hace con carta/recetas.</p>
+<p><strong>Diferenciador único:</strong> precio de entrada casi gratis + fricción cero + gift cards incluidas. Compite por el segmento que los demás ignoran.</p>
+<hr/>
+<h3>1.6 Ganapán — ganapan.com.ar</h3>
+<table><thead><tr><th>Campo</th><th>Detalle</th></tr></thead><tbody><tr><td><strong>Propuesta de valor</strong></td><td>"Sistema todo incluido. Sin módulos adicionales." Tarifa plana única contra el modelo modular de Fudo.</td></tr><tr><td><strong>Target</strong></td><td>Restaurantes, bares y cafés chicos (+50 negocios activos).</td></tr></tbody></table>
+<p><strong>Módulos core:</strong> pedidos (mesas/mostrador/app), mapa de mesas con mozos, control de caja y arqueos, app mozos, carta QR, <strong>recetas con costos y márgenes</strong>, stock automático con alertas de faltantes, clientes y proveedores con cuenta corriente, <strong>carta web con cobro integrado sin comisiones</strong>, gastos, estadísticas, facturación digital. Documentación pública completa (docs de producto por módulo).</p>
+<p><strong>Onboarding:</strong> "Probar gratis" sin datos de pago en &lt;1 minuto + <strong>"Ver demo sin registrarme"</strong> (demo pública instantánea, único del grupo).</p>
+<p><strong>Precios:</strong> $25.000/mes, un único plan todo incluido. Migración automática de productos desde el sistema anterior.</p>
+<p><strong>Diferenciador único:</strong> la demo pública sin registro y la promesa anti-módulos ("todo incluido") como posicionamiento directo contra Fudo.</p>
+<hr/>
+<h3>1.7 Iristrace — iristrace.com</h3>
+<table><thead><tr><th>Campo</th><th>Detalle</th></tr></thead><tbody><tr><td><strong>Propuesta de valor</strong></td><td>Digitalización de registros obligatorios, checklists y auditorías. No es un POS: es una plataforma de calidad operativa multi-sector.</td></tr><tr><td><strong>Target</strong></td><td>Gerentes de operaciones/calidad, cadenas y franquicias (enterprise, España/Europa).</td></tr></tbody></table>
+<p><strong>Módulos core:</strong> checklists digitales (limpieza, apertura/cierre, capacitación, control de plagas), auditorías HACCP/APPCC, formularios (protocolos de incidentes, manuales de recetas), planes de acción como subtareas, workflows disparados por condiciones ("checklist completado con problemas" → genera checklist en otro departamento o notifica).</p>
+<p><strong>Features de motor de checklists (referencia técnica para K-OS):</strong> plantillas <strong>versionadas</strong> (cambiás la plantilla sin perder datos históricos), inicio por <strong>código QR</strong> en el lugar físico, tipos de pregunta variados con fotos y comentarios, <strong>lógica condicional</strong> (preguntas que aparecen según respuestas), <strong>scoring simple y avanzado</strong> (ponderación por categoría, puntaje agregado de auditoría), títulos dinámicos, respuestas estándar reutilizables, tags por turno/mes para segmentar analítica, permisos por rol <strong>y por estado del flujo</strong>, scheduling con recurrencia y vencimientos.</p>
+<p><strong>Dashboards:</strong> reportes, dashboards e integraciones BI genéricas.</p>
+<p><strong>Onboarding:</strong> trial 30 días self-service o demo personalizada. Apps iOS/Android. <strong>Sin precios públicos.</strong></p>
+<p><strong>Diferenciador único:</strong> el motor de checklists enterprise (scoring, condicionales, workflows, versionado) — nadie más del grupo lo tiene y es directamente robable para el módulo Checklist/HACCP de K-OS.</p>
+<hr/>
+<h3>1.8 Cuiner — cuiner.com</h3>
+<table><thead><tr><th>Campo</th><th>Detalle</th></tr></thead><tbody><tr><td><strong>Propuesta de valor</strong></td><td>"Solución completa para todo el ciclo de venta en un grupo de restauración", comunicación bidireccional local↔central. Desde 1998.</td></tr><tr><td><strong>Target</strong></td><td>Grupos, cadenas y franquicias (España). También hoteles, catering, discotecas.</td></tr></tbody></table>
+<p><strong>Módulos core:</strong> TPV iOS/Windows (LITE mono-local, PRO multi-local con scripting VB, control de presencia, editor de pantallas), Comander (comandas), <strong>Dispatcher (KDS con dos modos: Cocina —coordina zonas de preparación y tiempos de servicio— y Pase —el pase recibe automáticamente lo que cocina va tachando—, con narración de comandas por voz)</strong>, Controller (web: cajas últimos 7 días + cuadro de mando con <strong>30+ widgets</strong>, comparativas por día/semana/mes/año, export Excel), Carta Digital, <strong>Reservas</strong> (widget web, 5 vistas incl. plano drag-and-drop, confirmaciones automáticas anti no-show, sync bidireccional con TPV — €21–29/mes), QuieroFactura, CuinerPAY, stocks y compras, escandallos, <strong>órdenes de fabricación</strong>, <strong>pedidos automáticos a proveedores</strong>, fidelización.</p>
+<p><strong>Onboarding:</strong> demo por formulario + teléfono. Sin precios públicos (salvo Reservas).</p>
+<p><strong>Diferenciador único:</strong> el KDS de doble nivel cocina→pase con sincronización automática y avisos por voz, y el módulo de reservas con vistas de ocupación de cocina.</p>
+<hr/>
+<h3>1.9 Yurest — yurest.com  ⚠️ el competidor más parecido a K-OS</h3>
+<table><thead><tr><th>Campo</th><th>Detalle</th></tr></thead><tbody><tr><td><strong>Propuesta de valor</strong></td><td>"El software que todo hostelero necesita para gestionar mejor" — ERP de back-of-house: compras, cocina, stocks, RRHH, calidad y finanzas. <strong>No es POS: se integra con los TPVs del mercado.</strong></td></tr><tr><td><strong>Target</strong></td><td>Independientes, grupos 10+ locales y cadenas con cocina central (España).</td></tr></tbody></table>
+<p><strong>Módulos core:</strong></p>
+<ul><li><strong>Compras:</strong> pedidos centralizados (ahorro hasta 12%), control de precios en tiempo real con <strong>alertas por desviación de precios pactados</strong>, comparación automática de precios entre proveedores.</li><li><strong>Escáner OCR:</strong> foto de albarán/factura → datos automáticos (idéntico al OCR de K-OS).</li><li><strong>Cocina:</strong> recetas estandarizadas con escandallos que se actualizan solos con el último precio de compra, mermas, trazabilidad con etiquetas digitales, <strong>videos y fotos por paso para formación del equipo</strong>.</li><li><strong>Stocks:</strong> entrada por OCR + salida vinculada a ventas del TPV, alertas de mínimos, recarga automática de cámaras.</li><li><strong>Analítica:</strong> ingeniería de menús (platos rentables), ventas por turno, mix de productos.</li><li><strong>Financiero:</strong> EBITDA, ratios, food cost real y margen de contribución por plato.</li><li><strong>Calidad:</strong> checklists con timestamps y firmas (audit trail), APPCC digital con registro automático de temperaturas, auditorías remotas con fotos, gestor documental con firma digital, <strong>etiquetado automático con lote y caducidad</strong>, incidencias/averías con fotos y estados.</li><li><strong>RRHH:</strong> fichaje desde app/TPV, planificador de turnos con alertas de solapamiento y cumplimiento legal, vacaciones con aprobación 1-click, horas extra auditables para nómina, contratos en cloud, firma digital con validez legal.</li><li><strong>Cocina central:</strong> órdenes de producción calculadas cruzando <strong>ventas reales + escandallos + previsión</strong>, pedidos internos entre locales consolidados, trazabilidad 360° (lote entrada → producción → albarán de salida).</li></ul>
+<p><strong>Onboarding:</strong> solo demo (<code>/peticion-demo/</code>). Sin precios públicos. Descargables: masterclass de cocina central, guía "7 errores al escalar", calculadora de ahorro.</p>
+<p><strong>Diferenciador único:</strong> el único que cierra el loop completo compra→receta→stock→venta→producción sugerida, con RRHH y APPCC en la misma plataforma. <strong>Es el modelo a seguir para K-OS — pero vende enterprise en España; en LATAM ese espacio está vacío.</strong></p>
+<hr/>
+<h2>2. Tabla comparativa — módulos vs plataformas</h2>
+<p>Leyenda: ✅ lo tiene · 🟡 parcial/limitado/addon · ❌ no lo tiene/no visible. F=Fudo, C=CajaOS, B=bcnsoft, A=Artics, Fr=Frambuesa, G=Ganapán, I=Iristrace, Cu=Cuiner, Y=Yurest.</p>
+<table><thead><tr><th>Módulo / feature</th><th>F</th><th>C</th><th>B</th><th>A</th><th>Fr</th><th>G</th><th>I</th><th>Cu</th><th>Y</th><th><strong>K-OS</strong></th></tr></thead><tbody><tr><td>POS mostrador / caja / arqueo</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td><td>❌</td><td>🟡 (cuentas/pagos sin arqueo)</td></tr><tr><td>Mapa de mesas / salón</td><td>🟡 addon</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td><td>❌</td><td>✅</td></tr><tr><td>Comandas + app mozos</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td><td>❌</td><td>✅ (modo mozo)</td></tr><tr><td>KDS</td><td>🟡 addon</td><td>✅</td><td>🟡 comanderas</td><td>✅</td><td>🟡</td><td>❌</td><td>❌</td><td>✅ (cocina+pase)</td><td>❌</td><td>✅ (estaciones, bump, offline)</td></tr><tr><td>Facturación electrónica ARCA</td><td>🟡 addon</td><td>✅ incluida</td><td>✅</td><td>✅</td><td>🟡 addon</td><td>✅</td><td>❌</td><td>🟡 ES</td><td>❌</td><td>🟡 en curso (config_fiscal)</td></tr><tr><td>Stock / inventario</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>🟡 Pro</td><td>✅</td><td>❌</td><td>✅</td><td>✅</td><td>✅</td></tr><tr><td>Recetas / escandallos / food cost</td><td>✅</td><td>❌</td><td>🟡</td><td>✅</td><td>🟡 Pro</td><td>✅</td><td>❌</td><td>✅</td><td>✅</td><td>✅✅ (el más profundo)</td></tr><tr><td>OCR de facturas con IA</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>🟡 menú</td><td>❌</td><td>❌</td><td>❌</td><td>✅</td><td>✅</td></tr><tr><td>Compras / pedidos a proveedores</td><td>🟡</td><td>❌</td><td>✅</td><td>❌</td><td>❌</td><td>🟡</td><td>❌</td><td>✅ auto</td><td>✅</td><td>✅</td></tr><tr><td>Comparador de precios entre proveedores</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>✅</td><td>🟡 (precio_historial sin comparador)</td></tr><tr><td>Mermas / desperdicio</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>✅</td><td>✅</td></tr><tr><td>Mise en place / producción diaria</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>🟡 órd. fabricación</td><td>✅</td><td>✅✅ (único con OPS por plaza)</td></tr><tr><td>Checklists apertura/cierre/rutinas</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>✅✅</td><td>❌</td><td>✅</td><td>✅</td></tr><tr><td>Scoring/condicionales en checklists</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>✅</td><td>❌</td><td>🟡</td><td>❌</td></tr><tr><td>HACCP/APPCC (temperaturas, vencimientos)</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>✅</td><td>❌</td><td>✅</td><td>✅</td></tr><tr><td>Etiquetado con lote/caducidad</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>✅</td><td>❌</td></tr><tr><td>Pase de turno (comunicación)</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>🟡 incidencias</td><td>❌</td><td>✅ averías</td><td>✅</td></tr><tr><td>Carta QR pública para clientes</td><td>✅</td><td>✅</td><td>✅</td><td>✅ QR-order</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td><td>❌</td><td>❌</td></tr><tr><td>Tienda online / delivery propio</td><td>✅ 1,9%</td><td>❌</td><td>✅ 2%</td><td>✅</td><td>🟡 WhatsApp</td><td>✅ sin comisión</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td></tr><tr><td>Integración PedidosYa/Rappi</td><td>✅</td><td>❌ roadmap</td><td>❌</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td></tr><tr><td>Mercado Pago</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>🟡</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td></tr><tr><td>Reservas</td><td>🟡 vía IA</td><td>❌</td><td>✅</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td><td>✅✅</td><td>❌</td><td>❌</td></tr><tr><td>CRM / fidelización / puntos / cupones</td><td>✅</td><td>🟡 ctas ctes</td><td>✅ puntos</td><td>✅</td><td>✅ gift cards</td><td>🟡</td><td>❌</td><td>✅</td><td>❌</td><td>❌</td></tr><tr><td>Cuentas corrientes (clientes/proveedores)</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td><td>❌</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td></tr><tr><td>RRHH: fichaje / horas</td><td>❌</td><td>❌</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>🟡 presencia</td><td>✅</td><td>🟡 (turnos sin fichaje)</td></tr><tr><td>RRHH: liquidación/nómina/contratos</td><td>❌</td><td>❌</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>✅</td><td>❌</td></tr><tr><td>Reportes / dashboards</td><td>✅</td><td>🟡</td><td>✅</td><td>✅</td><td>🟡</td><td>✅</td><td>✅</td><td>✅ 30+ widgets</td><td>✅</td><td>✅ (8 tabs, CMV, presupuesto)</td></tr><tr><td>Export Excel de reportes</td><td>✅</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>✅</td><td>✅</td><td>❌</td><td>🟡 (stock sí, reportes no)</td></tr><tr><td>Multisucursal / cocina central</td><td>✅ plan</td><td>🟡</td><td>✅ Manager</td><td>✅</td><td>✅ Pro</td><td>❌</td><td>✅</td><td>✅✅</td><td>✅✅</td><td>❌</td></tr><tr><td>IA operativa (coach, OCR, import)</td><td>🟡 marketing</td><td>❌</td><td>❌</td><td>❌</td><td>🟡 import</td><td>❌</td><td>❌</td><td>❌</td><td>🟡 OCR</td><td>✅✅ (Coach con tools)</td></tr><tr><td>Agentes IA de venta (WhatsApp)</td><td>✅✅</td><td>❌</td><td>❌</td><td>🟡 bot</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td><td>❌</td></tr><tr><td>Trial self-service sin tarjeta</td><td>✅</td><td>✅ 14d</td><td>❌</td><td>❌</td><td>✅ 14d</td><td>✅ + demo pública</td><td>✅ 30d</td><td>❌</td><td>❌</td><td>✅ (registro abierto)</td></tr><tr><td>Precios públicos</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td><td>✅</td><td>❌</td><td>🟡</td><td>❌</td><td>❌</td></tr><tr><td>Plantillas/calculadoras públicas (lead magnets)</td><td>✅</td><td>❌</td><td>✅✅</td><td>🟡</td><td>✅ guías</td><td>🟡 docs</td><td>❌</td><td>❌</td><td>✅</td><td>❌</td></tr></tbody></table>
+<p><strong>Lectura rápida:</strong> K-OS ya es el mejor del grupo en la fila "cocina" (recetario, mise, HACCP, merma, pase, coach IA) y competitivo en salón/KDS. Pierde en todo lo que mira al <strong>cliente final</strong> (QR público, tienda, delivery, reservas, fidelización) y en la capa <strong>dinero</strong> (arqueo, medios de pago, ARCA, cuentas corrientes).</p>
+<hr/>
+<h2>3. Gaps — lo que la competencia tiene y K-OS no</h2>
+<p><strong>Capa dinero / fiscal</strong></p>
+<ol><li>Facturación electrónica ARCA operativa (todos los locales la tienen; CajaOS la incluye ilimitada). <em>Ya decidida la arquitectura adapter — en curso.</em></li><li>Arqueo/cierre de caja por turno (Fudo tiene hasta arqueo ciego).</li><li>Integración Mercado Pago (QR, transferencias en tiempo real).</li><li>Cuentas corrientes de clientes y proveedores con alertas de vencimiento (bcnsoft, Fudo).</li><li>Multi-moneda (Artics).</li></ol>
+<p><strong>Canal cliente</strong></p>
+<ol><li>Carta QR pública (todos los POS la tienen; K-OS tiene la carta interna con fotos — falta solo la vista pública).</li><li>Tienda online / delivery propio con cobro (Fudo 1,9%, bcnsoft 2%, Ganapán sin comisión).</li><li>Integración PedidosYa/Rappi (Fudo, Artics).</li><li>Reservas con widget y confirmaciones anti no-show (Cuiner es la referencia).</li><li>CRM/fidelización: puntos, cupones con métricas, gift cards, cumpleaños (Frambuesa, bcnsoft, Fudo).</li><li>Agentes IA de venta/recepción por WhatsApp (Fudo — lo cobra $55.000/mes él solo).</li></ol>
+<p><strong>Operación / BOH</strong></p>
+<ol><li>Scoring y lógica condicional en checklists + workflows por resultado (Iristrace). K-OS tiene el checklist pero es plano.</li><li>Etiquetado imprimible con lote y fecha de caducidad (Yurest) — K-OS ya tiene <code>haccp_vencimientos</code> + impresión ESC/POS: está a un paso.</li><li>Comparador de precios entre proveedores + alertas de desviación sobre precio pactado (Yurest) — K-OS ya tiene <code>precio_historial</code> y detección de variación en facturas: falta la vista comparativa.</li><li>Producción sugerida cruzando ventas reales + previsión (Yurest calcula la orden de producción exacta) — K-OS tiene <code>demanda_viva</code> y ventas importadas: falta cerrar el loop.</li><li>Fichaje real (clock-in con horas trabajadas → costo laboral) — hoy es localStorage decorativo.</li><li>Multisucursal / cocina central con pedidos internos entre locales (Yurest, Cuiner, bcnsoft Manager).</li><li>Videos/fotos por paso de receta para formación (Yurest; K-OS tiene foto de receta, no por paso).</li><li>Recetas con bloqueo de venta sin stock disponible (Fudo).</li></ol>
+<p><strong>Go-to-market (no producto, pero pesa igual)</strong></p>
+<ol><li>Precios públicos y página de planes (6 de 9 los publican).</li><li>Página comparativa pública "K-OS vs otros" (Frambuesa).</li><li>Plantillas y calculadoras gratuitas como lead magnets (bcnsoft: 7 planillas + 8 calculadoras; Fudo: hub IA + checklists; Yurest: masterclass + calculadora de ahorro).</li><li>Demo pública sin registro (Ganapán) — K-OS ya tiene El Rescoldo seedeado: es casi gratis exponerlo como demo read-only.</li><li>Reportes exportables a Excel (Fudo, Cuiner, Iristrace).</li><li>Mapa de calor de ventas por hora/mesa (Fudo).</li></ol>
+<hr/>
+<h2>4. Backlog priorizado para K-OS</h2>
+<h3>4.1 Quick wins (bajo esfuerzo, alto impacto visible)</h3>
+<table><thead><tr><th>#</th><th>Qué</th><th>Referencia</th><th>Por qué suma</th><th>Esfuerzo</th></tr></thead><tbody><tr><td>Q1</td><td><strong>Carta QR pública read-only</strong> (<code>/carta/publica/[slug]</code> con fotos, precios, tags dietarios)</td><td>Todos; Frambuesa "QR sin login"</td><td>La carta ya existe con fotos y categorías dinámicas; es la feature que el 100% de la competencia usa como gancho y a K-OS le falta. Habilita el QR en mesa sin tocar nada del BOH.</td><td>S</td></tr><tr><td>Q2</td><td><strong>Demo pública sin registro</strong> usando El Rescoldo (usuario demo read-only o auto-login)</td><td>Ganapán "Ver demo sin registrarme"</td><td>La cuenta demo ya está seedeada en todos los módulos. Convierte curiosos en leads sin fricción.</td><td>S</td></tr><tr><td>Q3</td><td><strong>Export Excel/CSV en Reportes</strong> (CMV, compras, food cost)</td><td>Fudo, Cuiner</td><td>Los dueños viven en Excel; hoy solo stock exporta. xlsx ya está en el stack.</td><td>S</td></tr><tr><td>Q4</td><td><strong>Etiquetas de producción imprimibles</strong> (nombre, lote/fecha elaboración, caducidad) desde mise/HACCP vía ESC/POS ya implementado</td><td>Yurest etiquetado</td><td>Cierra HACCP end-to-end con hardware que ya soportamos. Nadie local lo tiene.</td><td>S/M</td></tr><tr><td>Q5</td><td><strong>Comparador de precios por producto entre proveedores</strong> (vista sobre <code>precio_historial</code> + badge "pagaste X% más que el mejor precio")</td><td>Yurest compras</td><td>Los datos ya están cargados por el OCR; es solo una vista + alerta. Argumento de venta duro: "K-OS te ahorra plata en compras".</td><td>M</td></tr><tr><td>Q6</td><td><strong>Landing con precios públicos + página "K-OS vs otros"</strong></td><td>Frambuesa /comparison; 6/9 publican precios</td><td>Sin precios públicos K-OS queda en el clúster "demo con vendedor" (bcnsoft, Cuiner) que es justo el modelo viejo.</td><td>S</td></tr><tr><td>Q7</td><td><strong>Calculadoras públicas como lead magnets</strong> (food cost, punto de equilibrio, delivery propio vs apps) reutilizando la lógica del recetario</td><td>bcnsoft herramientas</td><td>Captación orgánica barata; la matemática ya existe en el producto.</td><td>S/M</td></tr></tbody></table>
+<h3>4.2 Mid-term (requiere desarrollo, claramente rentable)</h3>
+<table><thead><tr><th>#</th><th>Qué</th><th>Referencia</th><th>Por qué suma</th><th>Esfuerzo</th></tr></thead><tbody><tr><td>M1</td><td><strong>Cierre/arqueo de caja por turno</strong> sobre <code>cuentas</code>/<code>pagos</code>/<code>medios_pago</code> (apertura, retiros, cierre con diferencias, arqueo ciego opcional)</td><td>Fudo, Ganapán</td><td>Es el eslabón que falta para que el salón de K-OS reemplace un POS de verdad. Las tablas ya existen.</td><td>M</td></tr><tr><td>M2</td><td><strong>Facturación ARCA</strong> (terminar el adapter fiscal ya decidido) + Mercado Pago QR</td><td>CajaOS (ilimitada incluida)</td><td>Sin factura no hay reemplazo de POS en Argentina. Incluirla sin límite (à la CajaOS) es un golpe directo a Fudo que la cobra como módulo.</td><td>L (en curso)</td></tr><tr><td>M3</td><td><strong>Fichaje real</strong> (clock-in/out desde el celular → horas trabajadas → costo laboral en Reportes junto al CMV)</td><td>Yurest fichajes, bcnsoft fichada</td><td>K-OS ya tiene equipo, puestos y turnos; el fichaje convierte Reportes en P&amp;L real (comida + labor = los dos costos grandes).</td><td>M</td></tr><tr><td>M4</td><td><strong>Checklists nivel Iristrace</strong>: scoring de auditorías, lógica condicional, foto obligatoria por ítem, plantillas versionadas, workflow "falló → genera tarea"</td><td>Iristrace</td><td>Eleva el checklist de K-OS de operativo a auditable — clave para venderle a franquicias y para bromatología. El motor de checklist ya existe.</td><td>M</td></tr><tr><td>M5</td><td><strong>Cuentas corrientes de proveedores + vencimientos de pago</strong> (agenda de deudas con alertas; ya existe <code>condicion_pago</code> en facturas)</td><td>bcnsoft control de deudas</td><td>El dato ya se captura en cada factura; falta la vista "cuánto debo y cuándo". Dolor real de dueño.</td><td>M</td></tr><tr><td>M6</td><td><strong>CRM liviano + cupones/fidelización</strong> (base de clientes desde <code>cuentas</code>, cumpleaños, cupón con métrica de redención)</td><td>Frambuesa, bcnsoft puntos</td><td>Prerrequisito del canal online (M7) y retención del comensal.</td><td>M</td></tr><tr><td>M7</td><td><strong>Pedido QR en mesa / takeaway</strong> (el comensal pide desde la carta pública Q1 → entra como comanda al KDS existente)</td><td>Artics QR self-ordering</td><td>Reusa toda la cadena comanda→KDS ya construida; monetizable como módulo.</td><td>M/L</td></tr><tr><td>M8</td><td><strong>Reservas simples</strong> (widget público + vista día/servicio + confirmación por WhatsApp)</td><td>Cuiner Reservas (€21–29/mes como producto aparte)</td><td>Cuiner demuestra que se vende solo como módulo standalone. Integra con el mapa de mesas existente.</td><td>M/L</td></tr></tbody></table>
+<h3>4.3 Apuestas estratégicas (diferenciar, no igualar)</h3>
+<table><thead><tr><th>#</th><th>Qué</th><th>Referencia</th><th>Por qué diferencia</th><th>Esfuerzo</th></tr></thead><tbody><tr><td>E1</td><td><strong>Producción sugerida con IA</strong> — cerrar el loop ventas importadas + <code>demanda_viva</code> + recetas + mise: "para el viernes vas a necesitar 40 porc de bondiola; hoy tenés 12; producí 28"</td><td>Yurest (lo hace con reglas, sin IA, solo enterprise)</td><td>Es la síntesis de todo lo que K-OS ya tiene y nadie más puede copiar rápido: recetario + mise + ventas + coach. Convierte a K-OS de registro a <strong>copiloto que decide la producción</strong>.</td><td>M/L</td></tr><tr><td>E2</td><td><strong>Kitchen Coach por WhatsApp</strong> — el coach existente (con tools: crear tarea, 86, merma) accesible por WhatsApp para el dueño/chef fuera del local</td><td>Fudo cobra $55k/mes por su Recepcionista IA (que solo agenda)</td><td>Fudo puso el precio de referencia de un agente IA. El de K-OS opera el restaurante, no contesta mensajes. Pricing premium claro.</td><td>M/L</td></tr><tr><td>E3</td><td><strong>Multisucursal + cocina central</strong> (pedidos internos entre locales, órdenes de producción consolidadas, comparador de sucursales)</td><td>Yurest, Cuiner CENTRAL, bcn Manager</td><td>Es lo que permite subir de $25–65k/mes a tickets enterprise y retener a los clientes que crecen. Requiere revisar <code>mi_restaurante_id()</code> → concepto de "grupo".</td><td>L</td></tr><tr><td>E4</td><td><strong>Posicionamiento "OS de cocina" integrable a POS existentes</strong> — importar ventas automáticamente desde Fudo/Maxirest (API de Fudo es pública) en vez de solo Excel</td><td>Yurest ("se integra con los principales TPVs")</td><td>Cambia la venta de "reemplazá tu Fudo" (guerra frontal) a "sumá K-OS a tu Fudo" (sin fricción de migración). El importador de ventas ya existe; falta el conector directo.</td><td>M</td></tr><tr><td>E5</td><td><strong>HACCP certificable + auditoría para franquicias</strong> (combinando M4 + Q4 + gestor documental con firma)</td><td>Iristrace + Yurest calidad</td><td>En LATAM no existe un Iristrace accesible. Bromatología + franquicias que auditan locales = segmento sin proveedor local.</td><td>L</td></tr></tbody></table>
+<h3>Secuencia sugerida</h3>
+<ol><li><strong>Ahora (30 días):</strong> Q1 carta QR pública → Q2 demo pública → Q3 export Excel → Q6 precios públicos. Todo S, todo visible en ventas.</li><li><strong>Siguiente (60–90 días):</strong> M1 arqueo + M2 ARCA (cierran "K-OS reemplaza tu POS") + Q4/Q5 (refuerzan el diferencial BOH).</li><li><strong>Después:</strong> E1 producción sugerida como bandera de marketing ("el único sistema que te dice qué producir"), M3 fichaje para el P&amp;L completo, y E4 como estrategia de entrada a locales que ya tienen Fudo.</li></ol>
+<hr/>
+<h2>Apéndice — precios publicados (jul 2026, ARS salvo indicación)</h2>
+<table><thead><tr><th>Plataforma</th><th>Entrada</th><th>Completo</th><th>Modelo</th></tr></thead><tbody><tr><td>Frambuesa</td><td>$9.900</td><td>$52.900 (Pro+ARCA)</td><td>Freemium por sucursal</td></tr><tr><td>Ganapán</td><td>$25.000</td><td>$25.000</td><td>Tarifa plana única</td></tr><tr><td>Fudo</td><td>$20.900</td><td>$65.000 + módulos ($8.5k–$55k c/u)</td><td>Modular</td></tr><tr><td>CajaOS</td><td>$35.000</td><td>$49.000 (Resto, ARCA incl.)</td><td>2 planes</td></tr><tr><td>bcnsoft</td><td>$54.900 (anual)</td><td>$109.900 + setup $109.900</td><td>Licencia + setup</td></tr><tr><td>Artics / Cuiner / Yurest / Iristrace</td><td>—</td><td>—</td><td>Sin precios públicos (venta consultiva)</td></tr></tbody></table>
+<p><strong>Ventana de pricing para K-OS:</strong> entre $35k y $65k/mes hay espacio para un plan "Cocina" (BOH puro, sin fiscal) y un plan "Completo" (con salón+fiscal), con el Coach IA como diferenciador del plan alto — usando los $55k/mes del agente IA de Fudo como ancla de valor.</p>
+
+</body></html>
