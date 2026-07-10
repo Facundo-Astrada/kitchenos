@@ -10,7 +10,11 @@ import { createClient } from '@/lib/supabase/client'
 import { ProductoMiseCard, PLAZA_TO_SECCION } from '@/components/mise/ProductoMiseCard'
 import type { PlatoPlaza, CrearTareaParams } from '@/components/mise/ProductoMiseCard'
 import { useProduccionRegistros } from '@/lib/hooks/useProduccionRegistros'
-import type { Plaza, MisePlaceItem, MisePrioridad, ChecklistSeccionConfig, RutinaFrecuencia } from '@/types'
+import { useHaccp } from '@/lib/hooks/useHaccp'
+import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
+import PhotoPicker from '@/components/ui/PhotoPicker'
+import SectionEditor from '@/components/checklist/SectionEditor'
+import type { Plaza, MisePlaceItem, MisePrioridad, ChecklistSeccionConfig, RutinaFrecuencia, ChecklistRutina, ChecklistRutinaRegistro, RutinaCondicion } from '@/types'
 
 // ── Constants ──
 const PLAZAS: Plaza[] = ['parrilla', 'frios', 'calientes', 'pase', 'pasteleria', 'panaderia', 'general']
@@ -84,15 +88,17 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     fetchAll, fetchRegistros,
     agregarSeccion, actualizarSeccion, eliminarSeccion, reordenarSecciones,
     agregarItem, actualizarItem, eliminarItem, upsertRegistro,
-    agregarRutina, eliminarRutina, toggleRutina,
+    agregarRutina, actualizarRutina, eliminarRutina, toggleRutina,
+    registrarAuditoriaRutina, guardarAuditoriaPasada,
   } = useChecklist()
   const { recetas } = useRecetas()
   const { tareas, agregarTarea, cambiarEstado: cambiarEstadoTarea } = useTareas()
   const { rendimientoMap } = useProduccionRegistros()
+  const { crearVencimiento } = useHaccp()
 
-  // Build receta info map (id → { porciones, pesoPorcion }) for MiseCard display
+  // Build receta info map (id → { porciones, pesoPorcion, vidaUtilDias }) for MiseCard display
   const recetaInfoMap = useMemo(() => {
-    const m: Record<string, { porciones?: number | null; pesoPorcion?: number | null }> = {}
+    const m: Record<string, { porciones?: number | null; pesoPorcion?: number | null; vidaUtilDias?: number | null }> = {}
     for (const r of recetas) {
       const ings = r.ingredientes ?? []
       const porciones = r.porciones ?? null
@@ -105,10 +111,20 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         }, 0)
         if (totalG > 0) pesoPorcion = Math.round(totalG / porciones)
       }
-      m[r.id] = { porciones, pesoPorcion }
+      m[r.id] = { porciones, pesoPorcion, vidaUtilDias: r.vida_util_dias ?? null }
     }
     return m
   }, [recetas])
+
+  // Nombre real del restaurante para la etiqueta impresa (evita el placeholder "KitchenOS")
+  const RESTAURANTE_ID = useRestauranteId()
+  const [restauranteNombre, setRestauranteNombre] = useState('')
+  useEffect(() => {
+    if (!RESTAURANTE_ID) return
+    const supabase = createClient()
+    supabase.from('restaurantes').select('nombre').eq('id', RESTAURANTE_ID).maybeSingle()
+      .then(({ data }) => setRestauranteNombre(data?.nombre ?? ''))
+  }, [RESTAURANTE_ID])
 
   // ── plato_plazas map (receta_id → PlatoPlaza[]) ──────────────
   const [platoPlazoMap, setPlatoPlazoMap] = useState<Record<string, PlatoPlaza[]>>({})
@@ -163,6 +179,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const [showAddSheet, setShowAddSheet] = useState<string | null>(null)
   const [showSectionEditor, setShowSectionEditor] = useState(false)
   const [showAddRutina, setShowAddRutina] = useState(false)
+  const [editRutina, setEditRutina] = useState<ChecklistRutina | null>(null)
+  const [fotoAuditoriaPend, setFotoAuditoriaPend] = useState<Record<string, string>>({})
   const [toast, setToast] = useState<string | null>(null)
   const [pendientesApertura, setPendientesApertura] = useState<MisePlaceItem[]>([])
   const [regCierreAnteriorMap, setRegCierreAnteriorMap] = useState<Record<string, number | null>>({})
@@ -315,6 +333,87 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     rutinaRegistros.forEach(r => { if (r.completado) s.add(r.rutina_id) })
     return s
   }, [rutinaRegistros])
+
+  // ── Auditoría (M4): rutinas con puntaje configurado son ítems de auditoría ──
+  const rutinaRegMap = useMemo(() => {
+    const m: Record<string, typeof rutinaRegistros[number]> = {}
+    rutinaRegistros.forEach(r => { m[r.rutina_id] = r })
+    return m
+  }, [rutinaRegistros])
+  // Ítems de auditoría de HOY que además cumplen su condicional (si tienen una)
+  const rutinasAuditoriaVisibles = useMemo(() => plazaRutinasHoy.filter(r => {
+    if (r.puntaje == null) return false
+    if (!r.condicion) return true
+    return rutinaRegMap[r.condicion.dependeDeId]?.estado === r.condicion.mostrarSiEstado
+  }), [plazaRutinasHoy, rutinaRegMap])
+  const visibleAuditIds = useMemo(() => new Set(rutinasAuditoriaVisibles.map(r => r.id)), [rutinasAuditoriaVisibles])
+  // Ítems de auditoría disponibles como "depende de" (excluye al que se está editando)
+  const rutinasAuditoriaDisponibles = useMemo(() =>
+    plazaRutinas.filter(r => r.puntaje != null),
+    [plazaRutinas])
+  const auditoriaResumen = useMemo(() => {
+    let obtenido = 0, posible = 0, evaluados = 0, fallidos = 0
+    for (const r of rutinasAuditoriaVisibles) {
+      const p = r.puntaje ?? 0
+      posible += p
+      const reg = rutinaRegMap[r.id]
+      if (reg?.estado === 'ok') { obtenido += p; evaluados++ }
+      else if (reg?.estado === 'fallo') { evaluados++; fallidos++ }
+    }
+    const total = rutinasAuditoriaVisibles.length
+    return {
+      obtenido, posible, evaluados, fallidos, total,
+      score: posible > 0 ? Math.round((obtenido / posible) * 100) : null,
+      completa: total > 0 && evaluados === total,
+    }
+  }, [rutinasAuditoriaVisibles, rutinaRegMap])
+
+  // Guarda el snapshot de la pasada cuando se terminan de evaluar todos los ítems aplicables del día
+  const auditoriaGuardadaRef = useRef<string>('')
+  useEffect(() => {
+    if (!plaza || tab !== 'rutina' || !auditoriaResumen.completa) return
+    const key = `${plaza}-${fecha}-${auditoriaResumen.obtenido}-${auditoriaResumen.fallidos}`
+    if (auditoriaGuardadaRef.current === key) return
+    auditoriaGuardadaRef.current = key
+    guardarAuditoriaPasada({
+      plaza, fecha,
+      puntaje_obtenido: auditoriaResumen.obtenido,
+      puntaje_posible: auditoriaResumen.posible,
+      score: auditoriaResumen.score ?? 0,
+      items_evaluados: auditoriaResumen.evaluados,
+      items_fallidos: auditoriaResumen.fallidos,
+      usuario_id: authPerfil?.miembro_id ?? null,
+    }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plaza, tab, fecha, auditoriaResumen.completa, auditoriaResumen.obtenido, auditoriaResumen.posible, auditoriaResumen.evaluados, auditoriaResumen.fallidos, auditoriaResumen.score, authPerfil?.miembro_id])
+
+  const handleAuditoriaEstado = useCallback(async (rut: ChecklistRutina, estado: 'ok' | 'fallo') => {
+    const fotoUrl = fotoAuditoriaPend[rut.id] ?? null
+    await registrarAuditoriaRutina(rut.id, fecha, estado, fotoUrl)
+    if (estado === 'fallo') {
+      const titulo = `Auditoría: ${rut.nombre}`
+      const yaExiste = tareas.some(t => t.turno_fecha === fecha && t.titulo === titulo && t.estado !== 'listo')
+      if (!yaExiste) {
+        await agregarTarea({
+          titulo,
+          descripcion: 'Ítem de auditoría marcado como falla — revisar y resolver.',
+          status: 'pendiente',
+          prioridad: 'alta',
+          categoria: 'rutina',
+          plaza: rut.plaza,
+          receta_id: null,
+          seccion: 'general',
+          modo: 'carta',
+          turno_fecha: fecha,
+          estado: 'pendiente',
+          cantidad: null,
+          asignado_a: null, creado_por: authPerfil?.miembro_id ?? null,
+          fecha_limite: null, tiempo_estimado_min: null, checklist: [],
+        })
+        setToast(`Tarea creada: revisar "${rut.nombre}"`)
+      }
+    }
+  }, [fotoAuditoriaPend, fecha, registrarAuditoriaRutina, tareas, agregarTarea, authPerfil])
 
   const total = plazaItems.length
   const done = plazaItems.filter(i => regMap[i.id]?.completado).length
@@ -489,6 +588,19 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       }
     }
   }, [agregarTarea, authPerfil, today])
+
+  const handleCrearVencimientoDesdeMise = useCallback(async (params: { producto_nombre: string; fecha_vencimiento: string; fecha_apertura: string }) => {
+    await crearVencimiento({
+      producto_nombre: params.producto_nombre,
+      fecha_vencimiento: params.fecha_vencimiento,
+      fecha_apertura: params.fecha_apertura,
+      lote: null,
+      ubicacion: null,
+      status: 'vigente',
+      usuario_id: null,
+      producto_id: null,
+    })
+  }, [crearVencimiento])
 
   // ── Plaza selector ──
   if (!plaza) {
@@ -755,8 +867,10 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                     hasTareaPendiente={tareasHoySet.has(item.nombre.toLowerCase())}
                     rendimientoPromedio={item.receta_id ? rendimientoMap[item.receta_id] : null}
                     regCierreAnterior={regCierreAnteriorMap[item.id] ?? null}
+                    restauranteNombre={restauranteNombre}
                     onUpsert={handleMiseUpsert}
                     onCrearTarea={handleCrearTarea}
+                    onCrearVencimiento={handleCrearVencimientoDesdeMise}
                     onPrioChange={async (i, prio) => {
                       await actualizarItem(i.id, { prioridad: prio })
                       if ((prio === 'sp' || prio === 'p') && !tareasHoySet.has(i.nombre.toLowerCase())) {
@@ -917,45 +1031,92 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         {/* ── RUTINA ── */}
         {!loading && tab === 'rutina' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {auditoriaResumen.total > 0 && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginBottom: 4,
+                background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14,
+              }}>
+                <span className="material-symbols-outlined" style={{
+                  fontSize: 20,
+                  color: auditoriaResumen.score == null ? 'var(--text-3)' : auditoriaResumen.score >= 90 ? '#22c55e' : auditoriaResumen.score >= 70 ? '#f97316' : '#ef4444',
+                }}>fact_check</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>
+                    Auditoría de hoy — {auditoriaResumen.evaluados}/{auditoriaResumen.total} evaluados
+                  </div>
+                  <div style={{ height: 4, background: 'var(--border)', borderRadius: 99, overflow: 'hidden', marginTop: 4 }}>
+                    <div style={{
+                      width: `${auditoriaResumen.total > 0 ? (auditoriaResumen.evaluados / auditoriaResumen.total) * 100 : 0}%`,
+                      height: '100%', borderRadius: 99, transition: 'width .3s',
+                      background: auditoriaResumen.score == null ? 'var(--text-3)' : auditoriaResumen.score >= 90 ? '#22c55e' : auditoriaResumen.score >= 70 ? '#f97316' : '#ef4444',
+                    }} />
+                  </div>
+                </div>
+                {auditoriaResumen.score != null && (
+                  <span style={{
+                    fontSize: 15, fontWeight: 800, fontFamily: "'DM Mono', monospace",
+                    color: auditoriaResumen.score >= 90 ? '#22c55e' : auditoriaResumen.score >= 70 ? '#f97316' : '#ef4444',
+                  }}>{auditoriaResumen.score}%</span>
+                )}
+              </div>
+            )}
             {plazaRutinasHoy.length === 0 && (
               <div style={{ padding: '40px 12px', textAlign: 'center', fontSize: 13, color: 'var(--text-3)' }}>
                 {plazaRutinas.length === 0 ? 'Sin tareas de rutina configuradas' : 'Sin rutinas para hoy'}
               </div>
             )}
-            {plazaRutinasHoy.map(rut => {
-              const done = rutinaRegSet.has(rut.id)
-              const lastDone = daysAgo(rut.ultima_vez ?? null)
-              return (
-                <div key={rut.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px',
-                  background: done ? 'rgba(34,197,94,.04)' : 'var(--surface)',
-                  border: `1px solid ${done ? 'rgba(34,197,94,.22)' : 'var(--border)'}`,
-                  borderRadius: 14, opacity: done ? 0.7 : 1, transition: 'all .2s',
-                }}>
-                  <button onClick={() => toggleRutina(rut.id, fecha, !done)} style={{ ...btnReset, flexShrink: 0 }}>
-                    <span className="material-symbols-outlined" style={{
-                      fontSize: 24, color: done ? '#22c55e' : 'var(--border)', transition: 'color .15s',
-                    }}>{done ? 'check_circle' : 'radio_button_unchecked'}</span>
-                  </button>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)', textDecoration: done ? 'line-through' : 'none' }}>
-                      {rut.nombre}
+            {plazaRutinasHoy
+              .filter(r => r.puntaje == null || visibleAuditIds.has(r.id))
+              .map(rut => rut.puntaje != null ? (
+                <AuditoriaRutinaRow
+                  key={rut.id}
+                  rut={rut}
+                  reg={rutinaRegMap[rut.id]}
+                  fotoPendiente={fotoAuditoriaPend[rut.id] ?? null}
+                  fecha={fecha}
+                  onFotoUploaded={url => setFotoAuditoriaPend(prev => ({ ...prev, [rut.id]: url }))}
+                  onEstado={estado => handleAuditoriaEstado(rut, estado)}
+                  onUndo={() => toggleRutina(rut.id, fecha, false)}
+                  onEdit={() => setEditRutina(rut)}
+                  onDelete={() => eliminarRutina(rut.id)}
+                />
+              ) : (() => {
+                const done = rutinaRegSet.has(rut.id)
+                const lastDone = daysAgo(rut.ultima_vez ?? null)
+                return (
+                  <div key={rut.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px',
+                    background: done ? 'rgba(34,197,94,.04)' : 'var(--surface)',
+                    border: `1px solid ${done ? 'rgba(34,197,94,.22)' : 'var(--border)'}`,
+                    borderRadius: 14, opacity: done ? 0.7 : 1, transition: 'all .2s',
+                  }}>
+                    <button onClick={() => toggleRutina(rut.id, fecha, !done)} style={{ ...btnReset, flexShrink: 0 }}>
+                      <span className="material-symbols-outlined" style={{
+                        fontSize: 24, color: done ? '#22c55e' : 'var(--border)', transition: 'color .15s',
+                      }}>{done ? 'check_circle' : 'radio_button_unchecked'}</span>
+                    </button>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)', textDecoration: done ? 'line-through' : 'none' }}>
+                        {rut.nombre}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>
+                        {FREQ_LABELS[rut.frecuencia as RutinaFrecuencia]}{lastDone ? ` · Últ: ${lastDone}` : ' · Nunca hecha'}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>
-                      {FREQ_LABELS[rut.frecuencia as RutinaFrecuencia]}{lastDone ? ` · Últ: ${lastDone}` : ' · Nunca hecha'}
-                    </div>
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
+                      background: rut.frecuencia === 'diaria' ? 'rgba(239,68,68,.1)' : rut.frecuencia === 'semanal' ? 'rgba(59,130,246,.1)' : 'rgba(148,163,184,.1)',
+                      color: rut.frecuencia === 'diaria' ? '#ef4444' : rut.frecuencia === 'semanal' ? '#3b82f6' : '#94a3b8',
+                    }}>{FREQ_LABELS[rut.frecuencia as RutinaFrecuencia].toUpperCase()}</span>
+                    <button onClick={() => setEditRutina(rut)} style={{ ...btnReset, flexShrink: 0 }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--text-3)', opacity: 0.5 }}>tune</span>
+                    </button>
+                    <button onClick={() => eliminarRutina(rut.id)} style={{ ...btnReset, flexShrink: 0 }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)', opacity: 0.35 }}>close</span>
+                    </button>
                   </div>
-                  <span style={{
-                    fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
-                    background: rut.frecuencia === 'diaria' ? 'rgba(239,68,68,.1)' : rut.frecuencia === 'semanal' ? 'rgba(59,130,246,.1)' : 'rgba(148,163,184,.1)',
-                    color: rut.frecuencia === 'diaria' ? '#ef4444' : rut.frecuencia === 'semanal' ? '#3b82f6' : '#94a3b8',
-                  }}>{FREQ_LABELS[rut.frecuencia as RutinaFrecuencia].toUpperCase()}</span>
-                  <button onClick={() => eliminarRutina(rut.id)} style={{ ...btnReset, flexShrink: 0 }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)', opacity: 0.35 }}>close</span>
-                  </button>
-                </div>
-              )
-            })}
+                )
+              })())}
             <button onClick={() => setShowAddRutina(true)} style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '8px 4px',
               background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', marginTop: 4,
@@ -1031,7 +1192,21 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         />
       )}
       {showAddRutina && (
-        <AddRutinaSheet plaza={plaza} onSave={async d => { await agregarRutina(d); setShowAddRutina(false) }} onClose={() => setShowAddRutina(false)} />
+        <AddRutinaSheet
+          plaza={plaza}
+          rutinasAuditoria={rutinasAuditoriaDisponibles}
+          onSave={async d => { await agregarRutina(d); setShowAddRutina(false) }}
+          onClose={() => setShowAddRutina(false)}
+        />
+      )}
+      {editRutina && (
+        <AddRutinaSheet
+          plaza={plaza}
+          editing={editRutina}
+          rutinasAuditoria={rutinasAuditoriaDisponibles.filter(r => r.id !== editRutina.id)}
+          onSave={async d => { await actualizarRutina(editRutina.id, { nombre: d.nombre, frecuencia: d.frecuencia, puntaje: d.puntaje, requiere_foto: d.requiere_foto, condicion: d.condicion }); setEditRutina(null) }}
+          onClose={() => setEditRutina(null)}
+        />
       )}
 
       {/* Toast */}
@@ -1191,137 +1366,229 @@ function AddItemSheet({ seccionId, seccionNombre, plaza, recetas, onSave, onClos
 }
 
 // ══════════════════════════════════════════════════════════════
-// Add Rutina Sheet
+// Auditoría — fila de rutina con puntaje (M4, jul 2026)
 // ══════════════════════════════════════════════════════════════
-function AddRutinaSheet({ plaza, onSave, onClose }: {
-  plaza: Plaza
-  onSave: (d: { nombre: string; plaza: Plaza; frecuencia: RutinaFrecuencia }) => Promise<void>
-  onClose: () => void
+function AuditoriaRutinaRow({ rut, reg, fotoPendiente, fecha, onFotoUploaded, onEstado, onUndo, onEdit, onDelete }: {
+  rut: ChecklistRutina
+  reg: ChecklistRutinaRegistro | undefined
+  fotoPendiente: string | null
+  fecha: string
+  onFotoUploaded: (url: string) => void
+  onEstado: (estado: 'ok' | 'fallo') => Promise<void>
+  onUndo: () => void
+  onEdit: () => void
+  onDelete: () => void
 }) {
-  const [nombre, setNombre] = useState('')
-  const [frecuencia, setFrecuencia] = useState<RutinaFrecuencia>('semanal')
-  const [saving, setSaving] = useState(false)
+  const [saving, setSaving] = useState<'ok' | 'fallo' | null>(null)
+  const respondido = reg?.estado === 'ok' || reg?.estado === 'fallo'
+  const fotoLista = fotoPendiente ?? reg?.foto_url ?? null
+  const puedeResponder = !rut.requiere_foto || !!fotoLista
+
+  async function handleClick(estado: 'ok' | 'fallo') {
+    if (!puedeResponder || saving) return
+    setSaving(estado)
+    try { await onEstado(estado) } finally { setSaving(null) }
+  }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)' }} />
-      <div style={{ position: 'relative', background: 'var(--surface)', borderTopLeftRadius: 20, borderTopRightRadius: 20 }}>
-        <div style={{ padding: '20px 16px 0' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
-            <div style={{ width: 36, height: 4, borderRadius: 99, background: 'var(--border)' }} />
-          </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginBottom: 14 }}>Agregar tarea de rutina</div>
-          <div style={{ marginBottom: 14 }}>
-            <label style={lbl}>Nombre</label>
-            <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Limpieza de campana..." style={{ ...inp, marginTop: 6 }} autoFocus />
-          </div>
-          <div style={{ marginBottom: 14 }}>
-            <label style={lbl}>Frecuencia</label>
-            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-              {(['diaria', 'semanal', 'quincenal', 'mensual'] as RutinaFrecuencia[]).map(f => (
-                <button key={f} onClick={() => setFrecuencia(f)} style={{
-                  flex: 1, padding: '8px 0', borderRadius: 10, border: 'none', cursor: 'pointer',
-                  fontFamily: 'inherit', fontSize: 10, fontWeight: 700,
-                  background: frecuencia === f ? 'var(--navy)' : 'var(--bg)',
-                  color: frecuencia === f ? '#fff' : 'var(--text-3)', transition: 'all .15s',
-                }}>{FREQ_LABELS[f]}</button>
-              ))}
-            </div>
+    <div style={{
+      padding: '11px 12px',
+      background: reg?.estado === 'fallo' ? 'rgba(239,68,68,.05)' : reg?.estado === 'ok' ? 'rgba(34,197,94,.04)' : 'var(--surface)',
+      border: `1px solid ${reg?.estado === 'fallo' ? 'rgba(239,68,68,.25)' : reg?.estado === 'ok' ? 'rgba(34,197,94,.22)' : 'var(--border)'}`,
+      borderRadius: 14, transition: 'all .2s',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#8b5cf6', flexShrink: 0, marginTop: 1 }}>verified</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{rut.nombre}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1, display: 'flex', gap: 6, alignItems: 'center' }}>
+            <span>{FREQ_LABELS[rut.frecuencia as RutinaFrecuencia]} · {rut.puntaje} pts</span>
+            {rut.requiere_foto && <span className="material-symbols-outlined" style={{ fontSize: 12 }}>photo_camera</span>}
           </div>
         </div>
-        <div style={{ padding: '12px 16px', paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))', borderTop: '1px solid var(--border)' }}>
-          <button
-            onClick={async () => { if (!nombre.trim()) return; setSaving(true); try { await onSave({ nombre: nombre.trim(), plaza, frecuencia }) } finally { setSaving(false) } }}
-            disabled={!nombre.trim() || saving}
-            style={{ width: '100%', padding: '14px 0', borderRadius: 14, border: 'none', background: nombre.trim() ? 'linear-gradient(135deg, var(--navy), #4361a0)' : 'var(--border)', color: nombre.trim() ? '#fff' : 'var(--text-3)', fontSize: 15, fontWeight: 700, fontFamily: 'inherit', cursor: nombre.trim() ? 'pointer' : 'default', opacity: saving ? 0.6 : 1 }}
-          >
-            {saving ? 'Guardando...' : 'Agregar'}
+        <button onClick={onEdit} style={{ ...btnReset, flexShrink: 0 }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--text-3)', opacity: 0.5 }}>tune</span>
+        </button>
+        <button onClick={onDelete} style={{ ...btnReset, flexShrink: 0 }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)', opacity: 0.35 }}>close</span>
+        </button>
+      </div>
+
+      {respondido ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, paddingLeft: 30 }}>
+          <span style={{
+            fontSize: 10, fontWeight: 800, padding: '3px 9px', borderRadius: 6, textTransform: 'uppercase',
+            background: reg?.estado === 'ok' ? 'rgba(34,197,94,.13)' : 'rgba(239,68,68,.13)',
+            color: reg?.estado === 'ok' ? '#22c55e' : '#ef4444',
+          }}>{reg?.estado === 'ok' ? 'OK' : 'Falla'}</span>
+          {reg?.foto_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={reg.foto_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'cover' }} />
+          )}
+          <button onClick={onUndo} style={{ ...btnReset, marginLeft: 'auto' }}>
+            <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>Deshacer</span>
           </button>
         </div>
-      </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, paddingLeft: 30 }}>
+          {rut.requiere_foto && (
+            <PhotoPicker
+              currentUrl={fotoLista}
+              path={`checklists/${rut.id}-${fecha}`}
+              onUploaded={onFotoUploaded}
+              size={40}
+            />
+          )}
+          <div style={{ display: 'flex', gap: 6, flex: 1 }}>
+            <button
+              onClick={() => handleClick('ok')}
+              disabled={!puedeResponder || saving !== null}
+              style={{
+                flex: 1, padding: '8px 0', borderRadius: 10, border: 'none', cursor: puedeResponder ? 'pointer' : 'default',
+                fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                background: 'rgba(34,197,94,.13)', color: '#22c55e', opacity: puedeResponder ? 1 : 0.4,
+              }}
+            >{saving === 'ok' ? '...' : 'OK'}</button>
+            <button
+              onClick={() => handleClick('fallo')}
+              disabled={!puedeResponder || saving !== null}
+              style={{
+                flex: 1, padding: '8px 0', borderRadius: 10, border: 'none', cursor: puedeResponder ? 'pointer' : 'default',
+                fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                background: 'rgba(239,68,68,.13)', color: '#ef4444', opacity: puedeResponder ? 1 : 0.4,
+              }}
+            >{saving === 'fallo' ? '...' : 'Falla'}</button>
+          </div>
+          {rut.requiere_foto && !fotoLista && (
+            <span style={{ fontSize: 9, color: 'var(--text-3)', flexShrink: 0 }}>Foto obligatoria</span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
 // ══════════════════════════════════════════════════════════════
-// Section Editor
+// Add / Edit Rutina Sheet
 // ══════════════════════════════════════════════════════════════
-const ICON_OPTIONS = ['kitchen', 'inventory_2', 'severe_cold', 'countertops', 'local_bar', 'cake', 'thermostat', 'shelves', 'water_drop', 'local_fire_department', 'blender', 'grocery']
-
-function SectionEditor({ secciones, items, plaza, onAdd, onUpdate, onDelete, onReorder, onClose }: {
-  secciones: ChecklistSeccionConfig[]; items: MisePlaceItem[]; plaza: Plaza
-  onAdd: (d: { nombre: string; icono: string; orden: number; plaza: Plaza }) => Promise<string>
-  onUpdate: (id: string, d: Partial<{ nombre: string; icono: string; orden: number }>) => Promise<void>
-  onDelete: (id: string) => Promise<void>
-  onReorder: (u: { id: string; orden: number }[]) => Promise<void>
+function AddRutinaSheet({ plaza, editing, rutinasAuditoria, onSave, onClose }: {
+  plaza: Plaza
+  editing?: ChecklistRutina
+  rutinasAuditoria: ChecklistRutina[]
+  onSave: (d: {
+    nombre: string; plaza: Plaza; frecuencia: RutinaFrecuencia
+    puntaje?: number | null; requiere_foto?: boolean; condicion?: RutinaCondicion | null
+  }) => Promise<void>
   onClose: () => void
 }) {
-  const [editList, setEditList] = useState(secciones.map(s => ({ ...s })))
-  const [newName, setNewName] = useState('')
-  const [newIcon, setNewIcon] = useState('inventory_2')
+  const [nombre, setNombre] = useState(editing?.nombre ?? '')
+  const [frecuencia, setFrecuencia] = useState<RutinaFrecuencia>((editing?.frecuencia as RutinaFrecuencia) ?? 'semanal')
+  const [esAuditoria, setEsAuditoria] = useState(editing?.puntaje != null)
+  const [puntaje, setPuntaje] = useState(editing?.puntaje != null ? String(editing.puntaje) : '10')
+  const [requiereFoto, setRequiereFoto] = useState(editing?.requiere_foto ?? false)
+  const [dependeDeId, setDependeDeId] = useState(editing?.condicion?.dependeDeId ?? '')
+  const [mostrarSi, setMostrarSi] = useState<'ok' | 'fallo'>(editing?.condicion?.mostrarSiEstado ?? 'fallo')
   const [saving, setSaving] = useState(false)
 
-  const moveUp = (idx: number) => { if (idx === 0) return; const l = [...editList]; [l[idx-1], l[idx]] = [l[idx], l[idx-1]]; setEditList(l) }
-  const moveDown = (idx: number) => { if (idx >= editList.length-1) return; const l = [...editList]; [l[idx], l[idx+1]] = [l[idx+1], l[idx]]; setEditList(l) }
+  // Rutinas sincronizadas desde HACCP (dias_semana/dia_mes) no deben perder su nombre/frecuencia acá
+  const bloqueado = editing != null && (editing.dias_semana != null || editing.dia_mes != null)
 
   const handleSave = async () => {
+    if (!nombre.trim()) return
     setSaving(true)
     try {
-      const currentIds = new Set(editList.map(s => s.id))
-      for (const o of secciones) { if (!currentIds.has(o.id)) await onDelete(o.id) }
-      for (const s of editList.filter(s => s.id.startsWith('new_'))) {
-        const idx = editList.indexOf(s)
-        s.id = await onAdd({ nombre: s.nombre, icono: s.icono, orden: idx, plaza })
-      }
-      const updates: { id: string; orden: number }[] = []
-      for (let i = 0; i < editList.length; i++) {
-        const s = editList[i]
-        if (s.id.startsWith('new_')) continue
-        const o = secciones.find(x => x.id === s.id)
-        if (o && (o.nombre !== s.nombre || o.icono !== s.icono)) await onUpdate(s.id, { nombre: s.nombre, icono: s.icono })
-        updates.push({ id: s.id, orden: i })
-      }
-      if (updates.length) await onReorder(updates)
-      onClose()
+      await onSave({
+        nombre: nombre.trim(), plaza, frecuencia,
+        puntaje: esAuditoria ? (parseFloat(puntaje) || 0) : null,
+        requiere_foto: esAuditoria ? requiereFoto : false,
+        condicion: esAuditoria && dependeDeId ? { dependeDeId, mostrarSiEstado: mostrarSi } : null,
+      })
     } finally { setSaving(false) }
   }
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)' }} />
-      <div style={{ position: 'relative', background: 'var(--surface)', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'relative', background: 'var(--surface)', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
         <div style={{ flex: 1, overflow: 'auto', padding: '20px 16px 0' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
             <div style={{ width: 36, height: 4, borderRadius: 99, background: 'var(--border)' }} />
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginBottom: 14 }}>Editar secciones</div>
-          {editList.map((sec, idx) => {
-            const hasItems = items.some(i => i.seccion_id === sec.id)
-            return (
-              <div key={sec.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                <select value={sec.icono} onChange={e => { const l = [...editList]; l[idx] = { ...l[idx], icono: e.target.value }; setEditList(l) }} style={{ ...inp, width: 44, padding: '6px 2px', fontSize: 11 }}>
-                  {ICON_OPTIONS.map(ic => <option key={ic} value={ic}>{ic.slice(0, 8)}</option>)}
-                </select>
-                <input value={sec.nombre} onChange={e => { const l = [...editList]; l[idx] = { ...l[idx], nombre: e.target.value }; setEditList(l) }} style={{ ...inp, flex: 1, padding: '6px 8px', fontSize: 13 }} />
-                <button onClick={() => moveUp(idx)} disabled={idx === 0} style={{ ...btnReset, opacity: idx === 0 ? 0.2 : 1 }}><span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)' }}>arrow_upward</span></button>
-                <button onClick={() => moveDown(idx)} disabled={idx >= editList.length-1} style={{ ...btnReset, opacity: idx >= editList.length-1 ? 0.2 : 1 }}><span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)' }}>arrow_downward</span></button>
-                <button onClick={() => { if (!hasItems) setEditList(editList.filter((_, i) => i !== idx)) }} disabled={hasItems} style={{ ...btnReset, opacity: hasItems ? 0.15 : 1 }}><span className="material-symbols-outlined" style={{ fontSize: 18, color: '#ef4444' }}>delete</span></button>
-              </div>
-            )
-          })}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0' }}>
-            <select value={newIcon} onChange={e => setNewIcon(e.target.value)} style={{ ...inp, width: 44, padding: '6px 2px', fontSize: 11 }}>
-              {ICON_OPTIONS.map(ic => <option key={ic} value={ic}>{ic.slice(0, 8)}</option>)}
-            </select>
-            <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && newName.trim()) { setEditList([...editList, { id: `new_${Date.now()}`, nombre: newName.trim(), icono: newIcon, orden: editList.length, plaza, restaurante_id: '', created_at: '' }]); setNewName('') } }} placeholder="Nueva sección..." style={{ ...inp, flex: 1, padding: '6px 8px', fontSize: 13 }} />
-            <button onClick={() => { if (!newName.trim()) return; setEditList([...editList, { id: `new_${Date.now()}`, nombre: newName.trim(), icono: newIcon, orden: editList.length, plaza, restaurante_id: '', created_at: '' }]); setNewName('') }} disabled={!newName.trim()} style={{ ...btnReset, background: '#4361a0', borderRadius: 8, padding: 6, opacity: newName.trim() ? 1 : 0.3 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#fff' }}>add</span>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', marginBottom: 14 }}>
+            {editing ? 'Editar tarea de rutina' : 'Agregar tarea de rutina'}
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={lbl}>Nombre</label>
+            <input value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: Limpieza de campana..." style={{ ...inp, marginTop: 6, opacity: bloqueado ? 0.6 : 1 }} disabled={bloqueado} autoFocus={!editing} />
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={lbl}>Frecuencia</label>
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              {(['diaria', 'semanal', 'quincenal', 'mensual'] as RutinaFrecuencia[]).map(f => (
+                <button key={f} onClick={() => !bloqueado && setFrecuencia(f)} disabled={bloqueado} style={{
+                  flex: 1, padding: '8px 0', borderRadius: 10, border: 'none', cursor: bloqueado ? 'default' : 'pointer',
+                  fontFamily: 'inherit', fontSize: 10, fontWeight: 700, opacity: bloqueado ? 0.6 : 1,
+                  background: frecuencia === f ? 'var(--navy)' : 'var(--bg)',
+                  color: frecuencia === f ? '#fff' : 'var(--text-3)', transition: 'all .15s',
+                }}>{FREQ_LABELS[f]}</button>
+              ))}
+            </div>
+            {bloqueado && <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 5 }}>Sincronizada desde HACCP → Limpieza — el nombre y la frecuencia se editan ahí.</div>}
+          </div>
+
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginBottom: 14 }}>
+            <button onClick={() => setEsAuditoria(v => !v)} style={{
+              display: 'flex', alignItems: 'center', gap: 8, width: '100%', background: 'none', border: 'none',
+              cursor: 'pointer', fontFamily: 'inherit', padding: 0, marginBottom: esAuditoria ? 12 : 0,
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: esAuditoria ? '#8b5cf6' : 'var(--text-3)' }}>
+                {esAuditoria ? 'toggle_on' : 'toggle_off'}
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Ítem de auditoría (con puntaje)</span>
             </button>
+
+            {esAuditoria && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <label style={lbl}>Puntaje</label>
+                  <input type="number" value={puntaje} onChange={e => setPuntaje(e.target.value)} style={{ ...inp, marginTop: 6, fontFamily: "'DM Mono', monospace" }} />
+                </div>
+                <button onClick={() => setRequiereFoto(v => !v)} style={{
+                  display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0,
+                }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 18, color: requiereFoto ? '#8b5cf6' : 'var(--text-3)' }}>
+                    {requiereFoto ? 'check_box' : 'check_box_outline_blank'}
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>Requiere foto obligatoria</span>
+                </button>
+                {rutinasAuditoria.length > 0 && (
+                  <div>
+                    <label style={lbl}>Mostrar solo si (opcional)</label>
+                    <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                      <select value={dependeDeId} onChange={e => setDependeDeId(e.target.value)} style={{ ...inp, flex: 2 }}>
+                        <option value="">Siempre visible</option>
+                        {rutinasAuditoria.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+                      </select>
+                      {dependeDeId && (
+                        <select value={mostrarSi} onChange={e => setMostrarSi(e.target.value as 'ok' | 'fallo')} style={{ ...inp, flex: 1 }}>
+                          <option value="fallo">= Falla</option>
+                          <option value="ok">= OK</option>
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
         <div style={{ padding: '12px 16px', paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))', borderTop: '1px solid var(--border)' }}>
-          <button onClick={handleSave} disabled={saving} style={{ width: '100%', padding: '14px 0', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg, var(--navy), #4361a0)', color: '#fff', fontSize: 15, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
-            {saving ? 'Guardando...' : 'Guardar'}
+          <button
+            onClick={handleSave}
+            disabled={!nombre.trim() || saving}
+            style={{ width: '100%', padding: '14px 0', borderRadius: 14, border: 'none', background: nombre.trim() ? 'linear-gradient(135deg, var(--navy), #4361a0)' : 'var(--border)', color: nombre.trim() ? '#fff' : 'var(--text-3)', fontSize: 15, fontWeight: 700, fontFamily: 'inherit', cursor: nombre.trim() ? 'pointer' : 'default', opacity: saving ? 0.6 : 1 }}
+          >
+            {saving ? 'Guardando...' : editing ? 'Guardar cambios' : 'Agregar'}
           </button>
         </div>
       </div>

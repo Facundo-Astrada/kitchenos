@@ -565,7 +565,14 @@ export interface MisePlaceRegistro {
 // ── Rutinas de mantenimiento ──
 export type RutinaFrecuencia = 'diaria' | 'semanal' | 'quincenal' | 'mensual'
 
-// DB: checklist_rutina (id, nombre, frecuencia, plaza, restaurante_id, created_at, ultima_vez, orden, dias_semana, dia_mes)
+// Auditoría (M4, jul 2026): condicion muestra este ítem solo si otra rutina de auditoría
+// (con puntaje) ya fue respondida con el estado indicado. NULL = siempre visible.
+export interface RutinaCondicion {
+  dependeDeId: string
+  mostrarSiEstado: 'ok' | 'fallo'
+}
+
+// DB: checklist_rutina (id, nombre, frecuencia, plaza, restaurante_id, created_at, ultima_vez, orden, dias_semana, dia_mes, puntaje, requiere_foto, condicion)
 export interface ChecklistRutina {
   id: string
   nombre: string
@@ -577,15 +584,38 @@ export interface ChecklistRutina {
   dia_mes?: number | null         // 1-31; rutina mensual (ej. limpieza sincronizada desde HACCP)
   restaurante_id: string
   created_at: string
+  // Auditoría (M4, jul 2026) — NULL/false = rutina normal, sin cambios de comportamiento
+  puntaje?: number | null
+  requiere_foto: boolean
+  condicion?: RutinaCondicion | null
 }
 
-// DB: checklist_rutina_registros (id, rutina_id, fecha, completado, usuario_id)
+// DB: checklist_rutina_registros (id, rutina_id, fecha, completado, usuario_id, estado, foto_url)
 export interface ChecklistRutinaRegistro {
   id: string
   rutina_id: string
   fecha: string
   completado: boolean
   usuario_id?: string | null
+  // Auditoría (M4, jul 2026) — solo se usan si la rutina tiene puntaje
+  estado?: 'ok' | 'fallo' | null
+  foto_url?: string | null
+}
+
+// DB: checklist_auditorias (id, restaurante_id, plaza, fecha, puntaje_obtenido, puntaje_posible, score, items_evaluados, items_fallidos, usuario_id, created_at)
+// Snapshot de una pasada de auditoría de una plaza en un día — se recalcula/upsert-ea al cerrar la pasada.
+export interface ChecklistAuditoria {
+  id: string
+  restaurante_id: string
+  plaza: string
+  fecha: string
+  puntaje_obtenido: number
+  puntaje_posible: number
+  score: number
+  items_evaluados: number
+  items_fallidos: number
+  usuario_id?: string | null
+  created_at: string
 }
 
 // ── Equipo & Puestos ─────────────────────────────────────────

@@ -24,11 +24,36 @@ import {
   type PeriodoPresupuesto,
   type RendimientoPlaza,
 } from '@/lib/hooks/useReportes'
+import {
+  usePreciosProveedores,
+  type ComparadorPrecioProducto,
+  type TopSobreprecioItem,
+} from '@/lib/hooks/usePreciosProveedores'
+import { useCajaTurno } from '@/lib/hooks/useCajaTurno'
+import { useMediosPago } from '@/lib/hooks/useMediosPago'
+import { useChecklist } from '@/lib/hooks/useChecklist'
+import type { CajaTurno, ChecklistAuditoria } from '@/types'
 
-type Tab = 'resumen' | 'cmv' | 'presupuesto' | 'rendimiento' | 'foodcost' | 'compras' | 'precios' | 'produccion'
+type Tab = 'resumen' | 'cmv' | 'presupuesto' | 'rendimiento' | 'foodcost' | 'compras' | 'precios' | 'produccion' | 'caja' | 'auditoria'
 
 // Tabs con export a Excel (Q3) — contextual al tab activo, mismos números que el render.
-const TABS_EXPORTABLES: Tab[] = ['cmv', 'compras', 'foodcost', 'presupuesto', 'rendimiento']
+const TABS_EXPORTABLES: Tab[] = ['cmv', 'compras', 'foodcost', 'presupuesto', 'rendimiento', 'caja', 'auditoria']
+
+// Rango de fechas simple para el histórico de auditorías — mismos períodos que el selector, sin comparación vs. anterior.
+function rangoAuditoria(periodo: Periodo): { from: string; to: string } {
+  const now = new Date()
+  const to = now.toISOString().slice(0, 10)
+  if (periodo === 'semana') {
+    const d = new Date(now); d.setDate(d.getDate() - 7)
+    return { from: d.toISOString().slice(0, 10), to }
+  }
+  if (periodo === 'mes') {
+    return { from: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10), to }
+  }
+  const pm = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const endPrev = new Date(now.getFullYear(), now.getMonth(), 0)
+  return { from: pm.toISOString().slice(0, 10), to: endPrev.toISOString().slice(0, 10) }
+}
 
 const PERIODOS: { key: Periodo; label: string }[] = [
   { key: 'semana', label: 'Esta semana' },
@@ -45,7 +70,14 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'compras', label: 'Compras', icon: 'shopping_cart' },
   { key: 'precios', label: 'Precios', icon: 'trending_up' },
   { key: 'produccion', label: 'Producción', icon: 'factory' },
+  { key: 'caja', label: 'Caja', icon: 'point_of_sale' },
+  { key: 'auditoria', label: 'Auditoría', icon: 'fact_check' },
 ]
+
+const PLAZA_LABELS: Record<string, string> = {
+  parrilla: 'Parrilla', frios: 'Fríos', calientes: 'Calientes',
+  pase: 'Pase', pasteleria: 'Pastelería', panaderia: 'Panadería', general: 'General',
+}
 
 const PRESU_LABELS: Record<PeriodoPresupuesto, string> = {
   semanal: 'Semanal', mensual: 'Mensual', trimestral: 'Trimestral', semestral: 'Semestral', anual: 'Anual',
@@ -82,6 +114,10 @@ export default function ReportesPage() {
   const { puedeVer } = usePermisos()
   const RESTAURANTE_ID = useRestauranteId()
   const { loading, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchPresupuestos, savePresupuesto, fetchRendimiento } = useReportes()
+  const { fetchComparador } = usePreciosProveedores()
+  const { fetchHistorial } = useCajaTurno()
+  const { medios } = useMediosPago()
+  const { fetchAuditorias } = useChecklist()
   const isDesktop = useIsDesktop()
 
   const [periodo, setPeriodo] = useState<Periodo>('mes')
@@ -95,10 +131,21 @@ export default function ReportesPage() {
       .then(({ data }) => setRestauranteNombre(data?.nombre ?? ''))
   }, [RESTAURANTE_ID])
 
+  // Nombres de equipo para mostrar quién abrió/cerró cada caja (tab Caja)
+  const [nombresEquipo, setNombresEquipo] = useState<Record<string, string>>({})
+  useEffect(() => {
+    if (!RESTAURANTE_ID) return
+    const supabase = createClient()
+    supabase.from('equipo_miembros').select('id, nombre, apellido').eq('restaurante_id', RESTAURANTE_ID)
+      .then(({ data }) => setNombresEquipo(Object.fromEntries(
+        (data ?? []).map((m: { id: string; nombre: string; apellido: string }) => [m.id, `${m.nombre} ${m.apellido}`.trim()])
+      )))
+  }, [RESTAURANTE_ID])
+
   useEffect(() => {
     function handleSetTab(e: Event) {
       const { tab: t } = (e as CustomEvent<{ tab: string }>).detail
-      if (['resumen','cmv','presupuesto','rendimiento','foodcost','compras','precios','produccion'].includes(t)) setTab(t as Tab)
+      if (['resumen','cmv','presupuesto','rendimiento','foodcost','compras','precios','produccion','caja','auditoria'].includes(t)) setTab(t as Tab)
     }
     window.addEventListener('kc-set-tab', handleSetTab)
     return () => window.removeEventListener('kc-set-tab', handleSetTab)
@@ -111,10 +158,13 @@ export default function ReportesPage() {
   const [foodCostData, setFoodCostData] = useState<FoodCostItem[]>([])
   const [comprasData, setComprasData] = useState<{ proveedores: CompraProveedor[]; facturas: FacturaResumen[] }>({ proveedores: [], facturas: [] })
   const [preciosData, setPreciosData] = useState<{ productos: PrecioEvolucion[]; inflacionCocina: number }>({ productos: [], inflacionCocina: 0 })
+  const [comparadorData, setComparadorData] = useState<{ comparador: ComparadorPrecioProducto[]; topSobreprecio: TopSobreprecioItem[] }>({ comparador: [], topSobreprecio: [] })
   const [produccionData, setProduccionData] = useState<ProduccionData>({ recetasProducidas: [], ingredientesMasUsados: [], horasEstimadas: 0 })
   const [cmvData, setCmvData] = useState<CMVData | null>(null)
   const [presuData, setPresuData] = useState<PresupuestoRow[]>([])
   const [rendData, setRendData] = useState<RendimientoPlaza[]>([])
+  const [cajaHistorial, setCajaHistorial] = useState<CajaTurno[]>([])
+  const [auditoriaHistorial, setAuditoriaHistorial] = useState<ChecklistAuditoria[]>([])
 
   const [tabLoading, setTabLoading] = useState(false)
 
@@ -135,10 +185,14 @@ export default function ReportesPage() {
         .map(p => ({ proveedor: p.proveedor, total: Math.round(p.total) }))
     }
     if (preciosData.inflacionCocina > 0) ctx.inflacionCocina = Math.round(preciosData.inflacionCocina)
+    if (comparadorData.topSobreprecio.length > 0) {
+      ctx.ahorroPotencialTotal = Math.round(comparadorData.topSobreprecio.reduce((s, t) => s + t.ahorroPotencial, 0))
+    }
     if (cmvData) ctx.cmvPct = Math.round(cmvData.cmvPct ?? 0)
+    if (cajaHistorial.length > 0) ctx.diferenciaUltimoCierre = Math.round(cajaHistorial[0].diferencia_total ?? 0)
     localStorage.setItem('kc_screen_context', JSON.stringify(ctx))
     return () => localStorage.removeItem('kc_screen_context')
-  }, [tab, periodo, resumen, foodCostData, comprasData, preciosData, cmvData])
+  }, [tab, periodo, resumen, foodCostData, comprasData, preciosData, comparadorData, cmvData, cajaHistorial])
 
   // Lazy fetch per tab
   const loadTab = useCallback(async (t: Tab, p: Periodo) => {
@@ -163,6 +217,8 @@ export default function ReportesPage() {
         case 'precios': {
           const pr = await fetchPrecios()
           setPreciosData(pr)
+          const cmp = await fetchComparador()
+          setComparadorData(cmp)
           break
         }
         case 'produccion': {
@@ -185,13 +241,24 @@ export default function ReportesPage() {
           setRendData(r)
           break
         }
+        case 'caja': {
+          const h = await fetchHistorial()
+          setCajaHistorial(h)
+          break
+        }
+        case 'auditoria': {
+          const { from, to } = rangoAuditoria(p)
+          const a = await fetchAuditorias(from, to)
+          setAuditoriaHistorial(a)
+          break
+        }
       }
     } catch (e) {
       console.error('Error loading tab:', e)
     } finally {
       setTabLoading(false)
     }
-  }, [fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchPresupuestos, fetchRendimiento])
+  }, [fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchComparador, fetchProduccion, fetchCMV, fetchPresupuestos, fetchRendimiento, fetchHistorial, fetchAuditorias])
 
   useEffect(() => {
     loadTab(tab, periodo)
@@ -296,6 +363,91 @@ export default function ReportesPage() {
     }]
   }
 
+  function medioNombre(id: string): string {
+    return medios.find(m => m.id === id)?.nombre ?? id
+  }
+
+  function hojasCaja(): HojaExcel[] {
+    const detalle: Record<string, string | number>[] = []
+    for (const c of cajaHistorial) {
+      const medioIds = new Set([
+        ...Object.keys(c.montos_esperados ?? {}),
+        ...Object.keys(c.montos_declarados ?? {}),
+      ])
+      for (const medioId of medioIds) {
+        const esperado = c.montos_esperados?.[medioId] ?? 0
+        const declarado = c.montos_declarados?.[medioId] ?? 0
+        detalle.push({
+          'Cierre': c.fecha_cierre ?? '',
+          'Medio': medioNombre(medioId),
+          'Esperado': Math.round(esperado),
+          'Declarado': Math.round(declarado),
+          'Diferencia': Math.round(declarado - esperado),
+        })
+      }
+    }
+    return [
+      {
+        nombre: 'Cierres',
+        filas: cajaHistorial.map(c => ({
+          'Apertura': c.fecha_apertura,
+          'Cierre': c.fecha_cierre ?? '',
+          'Abrió': c.abierta_por ? (nombresEquipo[c.abierta_por] ?? c.abierta_por) : '—',
+          'Cerró': c.cerrada_por ? (nombresEquipo[c.cerrada_por] ?? c.cerrada_por) : '—',
+          'Fondo inicial': c.monto_inicial,
+          'Diferencia total': c.diferencia_total ?? 0,
+          'Arqueo ciego': c.arqueo_ciego ? 'Sí' : 'No',
+          'Notas': c.notas ?? '',
+        })),
+      },
+      { nombre: 'Detalle por medio', filas: detalle },
+    ]
+  }
+
+  function hojasAuditoria(): HojaExcel[] {
+    return [{
+      nombre: 'Auditorías',
+      filas: auditoriaHistorial.map(a => ({
+        'Fecha': a.fecha,
+        'Plaza': PLAZA_LABELS[a.plaza] ?? a.plaza,
+        'Score %': a.score,
+        'Puntaje obtenido': a.puntaje_obtenido,
+        'Puntaje posible': a.puntaje_posible,
+        'Ítems evaluados': a.items_evaluados,
+        'Ítems fallidos': a.items_fallidos,
+      })),
+    }]
+  }
+
+  async function exportAuditoriaPDF() {
+    const { default: jsPDF } = await import('jspdf')
+    const { default: autoTable } = await import('jspdf-autotable')
+    const doc = new jsPDF()
+    doc.setFillColor(30, 41, 59)
+    doc.rect(0, 0, 210, 32, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFontSize(18)
+    doc.text(`Reporte de Auditoría — ${restauranteNombre || 'KitchenOS'}`, 14, 15)
+    doc.setFontSize(10)
+    doc.text(`Período: ${PERIODOS.find(p => p.key === periodo)?.label ?? periodo} · Generado: ${fechaArchivo()}`, 14, 25)
+
+    doc.setTextColor(0, 0, 0)
+    autoTable(doc, {
+      startY: 38,
+      head: [['Fecha', 'Plaza', 'Score', 'Evaluados', 'Fallidos']],
+      body: auditoriaHistorial.map(a => [
+        a.fecha, PLAZA_LABELS[a.plaza] ?? a.plaza, `${a.score}%`, String(a.items_evaluados), String(a.items_fallidos),
+      ]),
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [30, 41, 59] },
+    })
+
+    doc.setFontSize(7)
+    doc.setTextColor(150)
+    doc.text('Generado por KitchenOS — Checklists nivel auditoría', 14, 285)
+    doc.save(`auditoria_${fechaArchivo()}.pdf`)
+  }
+
   function handleExportar() {
     let hojas: HojaExcel[] = []
     let slug = ''
@@ -305,6 +457,8 @@ export default function ReportesPage() {
       case 'foodcost': hojas = hojasFoodCost(); slug = 'food_cost'; break
       case 'presupuesto': hojas = hojasPresupuesto(); slug = 'presupuesto'; break
       case 'rendimiento': hojas = hojasRendimiento(); slug = 'rendimiento'; break
+      case 'caja': hojas = hojasCaja(); slug = 'caja'; break
+      case 'auditoria': hojas = hojasAuditoria(); slug = 'auditoria'; break
       default: return
     }
     if (!hojas.length) return
@@ -498,55 +652,124 @@ export default function ReportesPage() {
 
   function renderPrecios() {
     const { productos, inflacionCocina } = preciosData
-    if (!productos.length) return <EmptyState icon="trending_up" text="Sin datos de evolución de precios" />
+    const { comparador, topSobreprecio } = comparadorData
+    if (!productos.length && !comparador.length) return <EmptyState icon="trending_up" text="Sin datos de precios — importá facturas para ver la evolución" />
+
+    const ahorroTotal = topSobreprecio.reduce((s, t) => s + t.ahorroPotencial, 0)
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {/* Inflation KPI */}
-        <div style={{
-          background: 'var(--surface)', borderRadius: 12, padding: 14,
-          border: '1px solid var(--border)',
-        }}>
-          <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 4 }}>Inflación Cocina (promedio)</div>
-          <div style={{ fontSize: 26, fontWeight: 700, color: variacionColor(inflacionCocina) }}>
-            {inflacionCocina > 0 ? '+' : ''}{fmtPct(inflacionCocina)}
+        {productos.length > 0 && (
+          <div style={{
+            background: 'var(--surface)', borderRadius: 12, padding: 14,
+            border: '1px solid var(--border)',
+          }}>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 4 }}>Inflación Cocina (promedio)</div>
+            <div style={{ fontSize: 26, fontWeight: 700, color: variacionColor(inflacionCocina) }}>
+              {inflacionCocina > 0 ? '+' : ''}{fmtPct(inflacionCocina)}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Price table */}
-        <div style={{
-          background: 'var(--surface)', borderRadius: 12,
-          border: '1px solid var(--border)', overflow: 'hidden',
-        }}>
+        {productos.length > 0 && (
           <div style={{
-            display: 'grid', gridTemplateColumns: '1fr 75px 75px 65px',
-            padding: '10px 12px', borderBottom: '1px solid var(--border)',
-            fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase',
+            background: 'var(--surface)', borderRadius: 12,
+            border: '1px solid var(--border)', overflow: 'hidden',
           }}>
-            <span>Producto</span>
-            <span style={{ textAlign: 'right' }}>Anterior</span>
-            <span style={{ textAlign: 'right' }}>Actual</span>
-            <span style={{ textAlign: 'right' }}>Var%</span>
-          </div>
-          {productos.slice(0, 20).map((item, i) => (
-            <div key={i} style={{
+            <div style={{
               display: 'grid', gridTemplateColumns: '1fr 75px 75px 65px',
-              padding: '10px 12px',
-              borderBottom: i < Math.min(productos.length, 20) - 1 ? '1px solid var(--border)' : 'none',
-              fontSize: 13,
+              padding: '10px 12px', borderBottom: '1px solid var(--border)',
+              fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase',
             }}>
-              <span style={{ color: 'var(--text-1)', fontWeight: 500 }}>{item.producto}</span>
-              <span style={{ textAlign: 'right', color: 'var(--text-3)' }}>{fmtMoney(item.precio_anterior)}</span>
-              <span style={{ textAlign: 'right', color: 'var(--text-2)' }}>{fmtMoney(item.precio_actual)}</span>
-              <span style={{
-                textAlign: 'right', fontWeight: 600,
-                color: variacionColor(item.variacion_pct),
-              }}>
-                {item.variacion_pct > 0 ? '+' : ''}{fmtPct(item.variacion_pct)}
-              </span>
+              <span>Producto</span>
+              <span style={{ textAlign: 'right' }}>Anterior</span>
+              <span style={{ textAlign: 'right' }}>Actual</span>
+              <span style={{ textAlign: 'right' }}>Var%</span>
             </div>
-          ))}
-        </div>
+            {productos.slice(0, 20).map((item, i) => (
+              <div key={i} style={{
+                display: 'grid', gridTemplateColumns: '1fr 75px 75px 65px',
+                padding: '10px 12px',
+                borderBottom: i < Math.min(productos.length, 20) - 1 ? '1px solid var(--border)' : 'none',
+                fontSize: 13,
+              }}>
+                <span style={{ color: 'var(--text-1)', fontWeight: 500 }}>{item.producto}</span>
+                <span style={{ textAlign: 'right', color: 'var(--text-3)' }}>{fmtMoney(item.precio_anterior)}</span>
+                <span style={{ textAlign: 'right', color: 'var(--text-2)' }}>{fmtMoney(item.precio_actual)}</span>
+                <span style={{
+                  textAlign: 'right', fontWeight: 600,
+                  color: variacionColor(item.variacion_pct),
+                }}>
+                  {item.variacion_pct > 0 ? '+' : ''}{fmtPct(item.variacion_pct)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Top 10 sobreprecio — alerta agregada, "número de marketing" (Q5) */}
+        {topSobreprecio.length > 0 && (
+          <div style={{
+            background: 'rgba(220,38,38,.06)', borderRadius: 12, padding: 14,
+            border: '1px solid rgba(220,38,38,.25)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#dc2626' }}>savings</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Ahorro potencial (últimos 90 días)</span>
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: '#dc2626', marginBottom: 10 }}>{fmtMoney(ahorroTotal)}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10 }}>
+              Top {topSobreprecio.length} productos donde pagaste por encima del mejor precio disponible entre tus proveedores
+            </div>
+            {topSobreprecio.map((t, i) => (
+              <div key={i} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '8px 0', borderTop: i > 0 ? '1px solid rgba(220,38,38,.12)' : 'none',
+              }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.producto}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Mejor: {t.mejorProveedor} a {fmtMoney(t.mejorPrecio)}/{t.unidad}</div>
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#dc2626', flexShrink: 0, marginLeft: 10 }}>{fmtMoney(t.ahorroPotencial)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Comparador de precios por proveedor (Q5) */}
+        {comparador.length > 0 && (
+          <div style={{
+            background: 'var(--surface)', borderRadius: 12,
+            border: '1px solid var(--border)', overflow: 'hidden',
+          }}>
+            <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Comparador de precios por proveedor</span>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>Últimos 90 días · solo productos comprados a 2 o más proveedores</div>
+            </div>
+            {comparador.slice(0, 20).map((c, i) => (
+              <div key={i} style={{
+                padding: '10px 12px',
+                borderBottom: i < Math.min(comparador.length, 20) - 1 ? '1px solid var(--border)' : 'none',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{c.producto}</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-3)' }}>/{c.unidad}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                  <span style={{ color: '#16a34a' }}>
+                    Mejor: {c.mejorProveedor} — {fmtMoney(c.mejorPrecio)}
+                  </span>
+                  <span style={{ color: c.deltaUltimoPct > 0.5 ? '#dc2626' : 'var(--text-3)', fontWeight: 600 }}>
+                    Último: {c.ultimoPagado.proveedor} — {fmtMoney(c.ultimoPagado.precio)}
+                    {c.deltaUltimoPct > 0.5 ? ` (+${fmtPct(c.deltaUltimoPct)})` : ''}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     )
   }
@@ -661,7 +884,15 @@ export default function ReportesPage() {
           <KpiCard label="Compras (costo)" value={c.compras} prev={c.comprasAnterior} icon="shopping_cart" suffix="$" />
           <KpiCard label="Margen bruto" value={c.margenBruto} icon="trending_up" suffix="$" />
           <KpiCard label="Ticket promedio" value={Math.round(c.ticketPromedio)} icon="receipt" suffix="$" />
+          {esAdmin && c.costoLaboral !== null && (
+            <KpiCard label="Costo laboral" value={c.costoLaboral} prev={c.costoLaboralAnterior ?? undefined} icon="badge" suffix="$" />
+          )}
         </div>
+        {esAdmin && c.costoLaboral === null && (
+          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, lineHeight: 1.5, gridColumn: isDesktop ? '1 / -1' : undefined }}>
+            Cargá el costo por hora de tu equipo (Turnos → Equipo → editar miembro) para ver el costo laboral del período.
+          </p>
+        )}
       </div>
     )
   }
@@ -755,6 +986,113 @@ export default function ReportesPage() {
             </div>
           )
         })}
+      </div>
+    )
+  }
+
+  function renderCaja() {
+    if (!cajaHistorial.length) return <EmptyState icon="point_of_sale" text="Todavía no hay cierres de caja registrados" />
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {cajaHistorial.map(c => {
+          const diferencia = c.diferencia_total ?? 0
+          const col = diferencia === 0 ? '#16a34a' : diferencia > 0 ? '#16a34a' : '#dc2626'
+          const medioIds = Object.keys(c.montos_declarados ?? {})
+          return (
+            <div key={c.id} style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
+                  {c.fecha_cierre ? new Date(c.fecha_cierre).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                </span>
+                <span style={{ fontSize: 16, fontWeight: 800, color: col }}>
+                  {diferencia > 0 ? '+' : ''}{fmtMoney(diferencia)}
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 8 }}>
+                {c.fecha_cierre ? new Date(c.fecha_cierre).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : ''}
+                {' · '}Abrió {c.abierta_por ? (nombresEquipo[c.abierta_por] ?? '—') : '—'}
+                {' · '}Cerró {c.cerrada_por ? (nombresEquipo[c.cerrada_por] ?? '—') : '—'}
+                {c.arqueo_ciego && ' · arqueo ciego'}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {medioIds.map(medioId => {
+                  const esperado = c.montos_esperados?.[medioId] ?? 0
+                  const declarado = c.montos_declarados?.[medioId] ?? 0
+                  const diff = declarado - esperado
+                  return (
+                    <div key={medioId} style={{ flex: '1 1 120px', background: 'var(--bg)', borderRadius: 8, padding: '6px 10px' }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase' }}>{medioNombre(medioId)}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: diff === 0 ? 'var(--text-1)' : diff > 0 ? '#16a34a' : '#dc2626' }}>
+                        {fmtMoney(declarado)}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              {c.notas && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8, fontStyle: 'italic' }}>{c.notas}</div>}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  function scoreColor(score: number) {
+    if (score >= 90) return '#16a34a'
+    if (score >= 70) return '#f97316'
+    return '#dc2626'
+  }
+
+  function renderAuditoria() {
+    if (!auditoriaHistorial.length) {
+      return <EmptyState icon="fact_check" text="Todavía no hay pasadas de auditoría cerradas en este período. Se registran desde Checklist → Rutina, configurando puntaje en un ítem." />
+    }
+    const porFecha = [...auditoriaHistorial].sort((a, b) => a.fecha.localeCompare(b.fecha))
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 16, border: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Evolución del score</span>
+            <button onClick={exportAuditoriaPDF} style={{
+              display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--accent)', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', padding: 0,
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 15 }}>picture_as_pdf</span>
+              Exportar PDF
+            </button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 100 }}>
+            {porFecha.map(a => (
+              <div key={a.id} title={`${a.fecha} · ${PLAZA_LABELS[a.plaza] ?? a.plaza} · ${a.score}%`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, height: '100%', justifyContent: 'flex-end' }}>
+                <div style={{ width: '100%', height: `${Math.max(a.score, 3)}%`, background: scoreColor(a.score), borderRadius: '4px 4px 0 0', transition: 'height .3s' }} />
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+            <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{porFecha[0]?.fecha}</span>
+            <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{porFecha[porFecha.length - 1]?.fecha}</span>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {[...auditoriaHistorial].sort((a, b) => b.fecha.localeCompare(a.fecha)).map(a => (
+            <div key={a.id} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+              background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12,
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
+                  {new Date(a.fecha + 'T12:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  {' · '}{PLAZA_LABELS[a.plaza] ?? a.plaza}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+                  {a.items_evaluados} evaluados{a.items_fallidos > 0 ? ` · ${a.items_fallidos} fallidos` : ''}
+                </div>
+              </div>
+              <span style={{ fontSize: 16, fontWeight: 800, color: scoreColor(a.score), fontFamily: "'DM Mono', monospace" }}>{a.score}%</span>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }
@@ -881,6 +1219,8 @@ export default function ReportesPage() {
             {tab === 'compras' && renderCompras()}
             {tab === 'precios' && renderPrecios()}
             {tab === 'produccion' && renderProduccion()}
+            {tab === 'caja' && renderCaja()}
+            {tab === 'auditoria' && renderAuditoria()}
           </>
         )}
       </div>

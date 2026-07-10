@@ -5,7 +5,7 @@ import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import type {
   MisePlaceItem, MisePlaceRegistro, ChecklistSeccionConfig, ChecklistSeccionTipo,
-  ChecklistRutina, ChecklistRutinaRegistro,
+  ChecklistRutina, ChecklistRutinaRegistro, ChecklistAuditoria, RutinaCondicion,
   Plaza, MisePrioridad, RutinaFrecuencia,
 } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
@@ -251,7 +251,11 @@ export function useChecklist() {
   }
 
   // ── Rutinas CRUD ──
-  async function agregarRutina(datos: { nombre: string; plaza: Plaza; frecuencia: RutinaFrecuencia; orden?: number; dias_semana?: number[] | null; dia_mes?: number | null }) {
+  async function agregarRutina(datos: {
+    nombre: string; plaza: Plaza; frecuencia: RutinaFrecuencia; orden?: number
+    dias_semana?: number[] | null; dia_mes?: number | null
+    puntaje?: number | null; requiere_foto?: boolean; condicion?: RutinaCondicion | null
+  }) {
     try {
       const { error } = await supabase.from('checklist_rutina').insert({
         ...datos, orden: datos.orden ?? 0, restaurante_id: RESTAURANTE_ID,
@@ -261,6 +265,21 @@ export function useChecklist() {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al agregar rutina'
       console.error('[useChecklist] agregarRutina Error:', msg)
+      throw new Error(msg)
+    }
+  }
+
+  async function actualizarRutina(id: string, datos: Partial<{
+    nombre: string; frecuencia: RutinaFrecuencia
+    puntaje: number | null; requiere_foto: boolean; condicion: RutinaCondicion | null
+  }>) {
+    try {
+      const { error } = await supabase.from('checklist_rutina').update(datos).eq('id', id)
+      if (error) throw error
+      await mutateConfig()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al actualizar rutina'
+      console.error('[useChecklist] actualizarRutina Error:', msg)
       throw new Error(msg)
     }
   }
@@ -299,11 +318,69 @@ export function useChecklist() {
     }
   }
 
+  // ── Auditoría (M4, jul 2026) ──
+  // Registra la respuesta de un ítem de auditoría (rutina con puntaje). completado siempre true;
+  // estado distingue ok/fallo. No usar para rutinas sin puntaje — para esas, toggleRutina alcanza.
+  async function registrarAuditoriaRutina(rutinaId: string, fecha: string, estado: 'ok' | 'fallo', fotoUrl: string | null) {
+    try {
+      const { error: upsErr } = await supabase.from('checklist_rutina_registros').upsert({
+        rutina_id: rutinaId, fecha, completado: true, estado, foto_url: fotoUrl,
+      }, { onConflict: 'rutina_id,fecha' })
+      if (upsErr) throw upsErr
+      const { error: updErr } = await supabase.from('checklist_rutina').update({ ultima_vez: new Date().toISOString() }).eq('id', rutinaId)
+      if (updErr) throw updErr
+      await Promise.all([fetchRutinaRegistros(fecha), mutateConfig()])
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al registrar auditoría'
+      console.error('[useChecklist] registrarAuditoriaRutina Error:', msg)
+      throw new Error(msg)
+    }
+  }
+
+  // Snapshot agregado de una pasada de auditoría (plaza+fecha) — se re-escribe si se corrige un ítem después.
+  async function guardarAuditoriaPasada(datos: {
+    plaza: string; fecha: string
+    puntaje_obtenido: number; puntaje_posible: number; score: number
+    items_evaluados: number; items_fallidos: number; usuario_id: string | null
+  }) {
+    try {
+      const { error } = await supabase.from('checklist_auditorias').upsert({
+        ...datos, restaurante_id: RESTAURANTE_ID,
+      }, { onConflict: 'restaurante_id,plaza,fecha' })
+      if (error) throw error
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al guardar la auditoría'
+      console.error('[useChecklist] guardarAuditoriaPasada Error:', msg)
+      throw new Error(msg)
+    }
+  }
+
+  // useCallback: reportes/page.tsx la usa como dependencia de su propio useCallback (loadTab) —
+  // sin memoizar, cada render generaría una referencia nueva y dispararía un loop de renders.
+  const fetchAuditorias = useCallback(async (desde: string, hasta?: string): Promise<ChecklistAuditoria[]> => {
+    if (!RESTAURANTE_ID) return []
+    try {
+      let q = supabase.from('checklist_auditorias').select('*')
+        .eq('restaurante_id', RESTAURANTE_ID)
+        .gte('fecha', desde)
+        .order('fecha', { ascending: true })
+      if (hasta) q = q.lte('fecha', hasta)
+      const { data, error } = await q
+      if (error) throw error
+      return (data ?? []) as ChecklistAuditoria[]
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al cargar el histórico de auditorías'
+      console.error('[useChecklist] fetchAuditorias Error:', msg)
+      throw new Error(msg)
+    }
+  }, [RESTAURANTE_ID, supabase])
+
   return {
     secciones, items, registros, rutinas, rutinaRegistros, loading, error,
     fetchAll, fetchRegistros, fetchRutinaRegistros,
     agregarSeccion, actualizarSeccion, eliminarSeccion, reordenarSecciones,
     agregarItem, actualizarItem, eliminarItem, upsertRegistro,
-    agregarRutina, eliminarRutina, toggleRutina,
+    agregarRutina, actualizarRutina, eliminarRutina, toggleRutina,
+    registrarAuditoriaRutina, guardarAuditoriaPasada, fetchAuditorias,
   }
 }

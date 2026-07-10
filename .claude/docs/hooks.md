@@ -16,6 +16,19 @@
 
 6. **`navigator.usb` y `navigator.bluetooth` NO están en el DOM lib de TS por defecto (jul 2026).** Estos browser APIs (Web USB / Web Bluetooth) no tienen tipos en `lib.dom.d.ts` estándar. Patrón correcto: declarar interfaces mínimas locales y castear el navigator: `(navigator as Navigator & { usb?: UsbApi }).usb`. No instalar `@types/w3c-web-usb` (rompe el build Next.js). Pasó en `salon/page.tsx` al agregar impresión ESC/POS.
 
+8. **Filtrar una tabla hija por columna del padre: embed con `!inner`, NO 2 queries — pero con paginación manual (jul 2026).** [[feedback_postgrest_join]] (memoria) documentaba que `.select('*, recetas(*)').eq('recetas.restaurante_id', X)` NO filtra la tabla principal — cierto para un embed normal (left join). Pero con `!inner` el embed se vuelve INNER JOIN y **sí filtra la tabla principal**, confirmado con `curl` directo contra PostgREST:
+   ```ts
+   // ✅ pagos/factura_items no tienen restaurante_id propio (tablas hijas) — esto SÍ filtra:
+   supabase.from('pagos')
+     .select('medio_id, monto, cuentas!inner(restaurante_id)')
+     .eq('cuentas.restaurante_id', RESTAURANTE_ID)
+   ```
+   **Gotcha aparte:** PostgREST devuelve máx. **1000 filas por request pase lo que pase** (`Content-Range: 0-999/*`), incluso con `.limit(5000)` explícito — un restaurante con miles de renglones de factura en una ventana de 90 días (Bros: ~3000) trunca silenciosamente. Hay que paginar con `.range(from, from+999)` en loop hasta que la página devuelva menos de 1000 filas. Y si en cambio se arma el filtro con `.in('factura_id', ids)` sobre cientos de UUIDs, la query-string se pasa de largo → 400 de PostgREST (pasó con ~125 facturas ≈ 5000 caracteres en la URL); el embed `!inner` de arriba evita este problema de raíz. Encontrado implementando `usePreciosProveedores.ts` (Q5) y `useCajaTurno.ts` (M1) con datos reales de Bros.
+
+9. **Columna `GENERATED ALWAYS` → nunca mandarla en INSERT/UPDATE, y un `catch { /* no bloquea */ }` la puede esconder por completo (jul 2026).** Postgres rechaza con 400 (`code: '428C9'`, `"column X can only be updated to DEFAULT"`) cualquier INSERT/UPDATE que incluya un valor explícito para una columna `GENERATED ALWAYS AS (...)` — aunque el valor calculado en el cliente coincida exactamente con lo que la DB calcularía. `turnos_personal.horas_total` es `GENERATED ALWAYS AS (EXTRACT(epoch FROM (salida-entrada))/3600)`: mandar `horas_total` calculado a mano en el payload de `marcarSalida` rompía el UPDATE con 400 — pero como la función estaba envuelta en el patrón "no bloquea el flujo visual" (`try { await marcarSalida(...) } catch {}`), el error quedaba **completamente silenciado**: la UI mostraba el turno cerrado (localStorage limpio) pero `salida` nunca se guardaba en DB. Se detectó solo al cruzar contra la base con `curl`/SQL directo después de una verificación en browser que parecía exitosa. **Fix:** no incluir la columna generada en ningún payload — dejar que la DB la calcule sola. Antes de usar este patrón "no bloquea" en una escritura nueva, verificar una vez contra la DB (no solo contra la UI) que el efecto se persistió. Pasó implementando fichaje real (M3).
+
+10. **Función de hook usada dentro del array de deps de un `useCallback`/`useEffect` de OTRO componente → tiene que estar en `useCallback` en el hook, sin excepción (jul 2026).** La mayoría de las funciones CRUD de los hooks de KitchenOS (`agregarX`, `actualizarX`, etc.) son funciones async planas, no `useCallback` — está bien mientras solo se llamen desde `onClick` handlers. Pero si una pantalla las mete en el array de deps de su propio `useCallback` (patrón `loadTab` de `reportes/page.tsx`, que arma un dispatcher por tab y cada `fetchX` de cada hook va en sus deps), una función sin memoizar genera una referencia nueva en cada render → el `useCallback` que la usa se recrea → el `useEffect` que lo llama se re-dispara → nuevo render → loop infinito (`Maximum update depth exceeded` en consola, la pantalla se queda en "Cargando…" para siempre). Pasó con `fetchAuditorias` (nueva en `useChecklist.ts`, M4): al agregarla al `loadTab` de Reportes sin envolverla en `useCallback(..., [RESTAURANTE_ID, supabase])` (como sí tienen `fetchRegistros`/`fetchRutinaRegistros`/`fetchAll` en el mismo hook), la tab "Auditoría" nunca terminaba de cargar. **Regla:** toda función de un hook que se vaya a usar en Reportes (o en cualquier `loadTab`-style dispatcher) tiene que ser `useCallback` — revisar el patrón de `useReportes.ts`/`useCajaTurno.ts` (todas sus `fetchX` ya son `useCallback`) antes de sumar una función nueva a ese switch.
+
 ## Anti-patrón: funciones internas usadas como JSX en React (jun 2026)
 
 **Síntoma:** el teclado se cierra al escribir el primer carácter en un input; el focus se pierde; un formulario se "resetea" solo.
@@ -95,6 +108,8 @@ export function useXxx() {
 2. Carga el perfil desde DB cuando `user` cambia: `user_restaurantes` (rol, restaurante_id) → `equipo_miembros` (nombre, plaza).
 
 `useRestauranteId()` devuelve `''` mientras `loading=true` o sin perfil cargado.
+
+**`proxy.ts` rebota `/register` (y `/login`) a `/` si ya hay sesión activa** (jul 2026) — un `<Link href="/register">` dentro de la app logueada (ej. un banner "crear tu cuenta" en la sesión demo de Q2) nunca llega a destino: el middleware ve `user` no-null y redirige a home antes de renderizar la página. **Fix:** cerrar sesión primero y recién ahí navegar. `signOut()` ahora acepta un `redirectTo` opcional (default `/login`) para estos casos: `signOut('/register')`. Pasó con `DemoBanner`.
 
 ## `kc_screen_context` — patrón para Kitchen Coach (junio 2026)
 
