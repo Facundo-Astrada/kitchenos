@@ -494,4 +494,21 @@ export const TOURS: Record<string, TourStep[]> = {
       description: 'Abrí al Kitchen Coach en cualquier momento para consultar qué productos están en riesgo, pedir consejos de reposición o entender cómo el stock impacta el food cost de tus recetas.',
     },
   ],
+  salon: [
+    {
+      targetId: 'salon-topbar',
+      title: 'El salón de un vistazo',
+      description: 'Acá ves el total en curso de todas las cuentas abiertas. Los íconos de la derecha te llevan al KDS de cocina, a la caja del turno y a la configuración de mesas.',
+    },
+    {
+      targetId: 'salon-mapa',
+      title: 'Mapa de mesas',
+      description: 'Cada mesa muestra su número, capacidad y estado por color: gris libre, azul ocupada, rojo con cuenta pedida. El punto verde avisa que hay platos listos esperando para servir. Tocá una mesa para abrir su cuenta y tomar el pedido.',
+    },
+    {
+      targetId: null,
+      title: '¡Ya conocés el Salón!',
+      description: 'Preguntame por el estado de una mesa, cuánto lleva una cuenta abierta o pedime ideas para acomodar un evento grande.',
+    },
+  ],
 }

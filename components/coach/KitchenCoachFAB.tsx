@@ -113,6 +113,11 @@ const SUGGESTIONS_BY_SCREEN: Record<string, Suggestion[]> = {
     { label: '¿Algún equipo está fuera de temperatura?', action: 'send' },
     { label: 'Ayudame a preparar una auditoría de bromatología', action: 'send' },
   ],
+  salon: [
+    { label: 'Ver recorrido del Salón', action: 'tour' },
+    { label: '¿Cuántas mesas están ocupadas ahora?', action: 'send' },
+    { label: '¿Cómo organizo un evento con mesas grandes?', action: 'send' },
+  ],
 }
 
 const DEFAULT_SUGGESTIONS: Suggestion[] = [

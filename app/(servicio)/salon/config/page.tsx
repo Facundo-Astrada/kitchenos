@@ -1,75 +1,344 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
+import { useMesas } from '@/lib/hooks/useMesas'
+import type { Mesa, MesaForma } from '@/types'
 
 type Tab = 'mesas' | 'medios' | 'estaciones'
+type Tamano = 'chico' | 'mediano' | 'grande'
 
-interface Mesa       { id: string; numero: string; sector: string; capacidad: number; estado: string }
 interface MedioPago  { id: string; nombre: string; activo: boolean }
 interface Estacion   { id: string; nombre: string; pantalla_asignada: string }
 
-// ── Mesa form (nivel módulo) ─────────────────────────────────────────────────
-function MesaForm({
-  form, setForm, onGuardar, onCancelar, guardando,
+const inputStyle: React.CSSProperties = {
+  minHeight: 44, borderRadius: 10, background: '#111', color: '#fff',
+  border: '1px solid #2a2a2a', padding: '0 12px', fontSize: 15, width: '100%',
+}
+
+// ── Editor de mesas — canvas drag (Sesión 3 C3, jul 2026) ────────────────────
+
+const FORMAS: { id: MesaForma; label: string; icon: string }[] = [
+  { id: 'cuadrada', label: 'Cuadrada', icon: 'crop_square' },
+  { id: 'redonda', label: 'Redonda', icon: 'circle' },
+  { id: 'rectangular', label: 'Rectangular', icon: 'crop_landscape' },
+]
+
+const TAMANOS: { id: Tamano; label: string; ancho: number; alto: number }[] = [
+  { id: 'chico', label: 'Chica', ancho: 6, alto: 6 },
+  { id: 'mediano', label: 'Mediana', ancho: 9, alto: 9 },
+  { id: 'grande', label: 'Grande', ancho: 13, alto: 13 },
+]
+
+function tamanoDesde(mesa: Pick<Mesa, 'ancho' | 'alto' | 'forma'>): Tamano {
+  const base = mesa.forma === 'rectangular' ? mesa.alto : mesa.ancho
+  let mejor: Tamano = 'mediano'
+  let mejorDist = Infinity
+  for (const t of TAMANOS) {
+    const d = Math.abs(t.ancho - base)
+    if (d < mejorDist) { mejorDist = d; mejor = t.id }
+  }
+  return mejor
+}
+
+function dimsDesde(tamano: Tamano, forma: MesaForma): { ancho: number; alto: number } {
+  const t = TAMANOS.find(x => x.id === tamano) ?? TAMANOS[1]
+  return forma === 'rectangular' ? { ancho: t.ancho * 1.6, alto: t.alto } : { ancho: t.ancho, alto: t.alto }
+}
+
+function ROTACIONES(): number[] { return [0, 45, 90] }
+
+function MesaCanvasItem({
+  mesa, selected, dragPos, onSelect, onDragMove, onDragEnd,
 }: {
-  form: Partial<Mesa>
-  setForm: React.Dispatch<React.SetStateAction<Partial<Mesa>>>
-  onGuardar: () => void
-  onCancelar: () => void
-  guardando: boolean
+  mesa: Mesa
+  selected: boolean
+  dragPos: { x: number; y: number } | null
+  onSelect: (mesa: Mesa) => void
+  onDragMove: (id: string, x: number, y: number) => void
+  onDragEnd: (id: string, x: number, y: number) => void
 }) {
+  const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number; moved: boolean; canvasW: number; canvasH: number } | null>(null)
+
+  function onPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const canvas = e.currentTarget.closest('[data-canvas]') as HTMLElement | null
+    const rect = canvas?.getBoundingClientRect()
+    dragRef.current = {
+      startX: e.clientX, startY: e.clientY,
+      startPosX: mesa.pos_x, startPosY: mesa.pos_y,
+      moved: false,
+      canvasW: rect?.width ?? 1, canvasH: rect?.height ?? 1,
+    }
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
+    const dr = dragRef.current
+    if (!dr) return
+    const dx = e.clientX - dr.startX
+    const dy = e.clientY - dr.startY
+    if (!dr.moved && Math.hypot(dx, dy) < 8) return
+    dr.moved = true
+    const x = Math.min(94, Math.max(0, dr.startPosX + (dx / dr.canvasW) * 100))
+    const y = Math.min(94, Math.max(0, dr.startPosY + (dy / dr.canvasH) * 100))
+    onDragMove(mesa.id, x, y)
+  }
+
+  function onPointerUp() {
+    const dr = dragRef.current
+    dragRef.current = null
+    if (dr?.moved && dragPos) onDragEnd(mesa.id, dragPos.x, dragPos.y)
+    else onSelect(mesa)
+  }
+
+  const x = dragPos?.x ?? mesa.pos_x
+  const y = dragPos?.y ?? mesa.pos_y
+  const anchoUi = Math.max(mesa.ancho, 5)
+  const altoUi = Math.max(mesa.alto, 5)
+
   return (
-    <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, display: 'flex', flexDirection: 'column', gap: 12, border: '1px solid var(--accent)' }}>
-      <p style={{ fontWeight: 700, color: 'var(--text-1)' }}>{form.id ? 'Editar mesa' : 'Nueva mesa'}</p>
+    <button
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      style={{
+        position: 'absolute',
+        left: `${x}%`,
+        top: `${y}%`,
+        width: `${anchoUi}%`,
+        aspectRatio: mesa.forma === 'rectangular' ? `${anchoUi} / ${altoUi}` : '1 / 1',
+        borderRadius: mesa.forma === 'redonda' ? '50%' : 10,
+        transform: `rotate(${mesa.rotacion}deg)`,
+        background: selected ? 'var(--accent)' : '#2a2a2a',
+        border: selected ? '2px solid #fff' : '1px solid #444',
+        color: '#fff',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
+        touchAction: 'none',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        cursor: 'grab',
+        minWidth: 64, minHeight: 64,
+      }}
+    >
+      <span style={{ fontSize: 16, fontWeight: 700, transform: `rotate(${-mesa.rotacion}deg)` }}>{mesa.numero}</span>
+      <span style={{ fontSize: 11, opacity: 0.75, transform: `rotate(${-mesa.rotacion}deg)` }}>{mesa.capacidad ?? '-'}p</span>
+    </button>
+  )
+}
+
+function MesaPanel({
+  mesa, onChange, onDelete, onCerrar,
+}: {
+  mesa: Mesa
+  onChange: (id: string, datos: Partial<Mesa>) => void
+  onDelete: (id: string) => void
+  onCerrar: () => void
+}) {
+  const tamano = tamanoDesde(mesa)
+
+  return (
+    <div style={{ background: '#1a1a1a', borderRadius: '16px 16px 0 0', padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 14, borderTop: '1px solid #2a2a2a' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <p style={{ fontWeight: 700, color: '#fff', fontSize: 16 }}>Mesa {mesa.numero}</p>
+        <button onClick={onCerrar} style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 14, minHeight: 44 }}>Listo</button>
+      </div>
+
       <div style={{ display: 'flex', gap: 10 }}>
         <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Número / nombre</span>
-          <input value={form.numero ?? ''} onChange={e => setForm(p => ({ ...p, numero: e.target.value }))}
-            placeholder="1, A1, Barra..." style={inputStyle} />
+          <span style={{ fontSize: 12, color: '#888' }}>Número / nombre</span>
+          <input value={mesa.numero} onChange={e => onChange(mesa.id, { numero: e.target.value })} style={inputStyle} />
         </label>
         <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Sector</span>
-          <input value={form.sector ?? ''} onChange={e => setForm(p => ({ ...p, sector: e.target.value }))}
-            placeholder="Salón, Terraza..." style={inputStyle} />
+          <span style={{ fontSize: 12, color: '#888' }}>Sector</span>
+          <input value={mesa.sector ?? ''} onChange={e => onChange(mesa.id, { sector: e.target.value })} placeholder="Salón, Terraza..." style={inputStyle} />
         </label>
-        <label style={{ width: 80, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Capacidad</span>
-          <input type="number" min={1} value={form.capacidad ?? 4} onChange={e => setForm(p => ({ ...p, capacidad: parseInt(e.target.value) || 4 }))}
-            style={inputStyle} />
+        <label style={{ width: 76, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 12, color: '#888' }}>Cap.</span>
+          <input type="number" min={1} value={mesa.capacidad ?? 4} onChange={e => onChange(mesa.id, { capacidad: parseInt(e.target.value) || 4 })} style={inputStyle} />
         </label>
       </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={onCancelar} style={{ flex: 1, minHeight: 44, borderRadius: 10, background: 'var(--bg)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
-          Cancelar
-        </button>
-        <button onClick={onGuardar} disabled={guardando || !form.numero}
-          style={{ flex: 2, minHeight: 44, borderRadius: 10, background: 'var(--navy)', color: '#fff', fontWeight: 700, opacity: guardando ? 0.6 : 1 }}>
-          {guardando ? 'Guardando...' : 'Guardar'}
-        </button>
+
+      <div>
+        <p style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>Forma</p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {FORMAS.map(f => {
+            const activo = mesa.forma === f.id
+            const dims = dimsDesde(tamano, f.id)
+            return (
+              <button
+                key={f.id}
+                onClick={() => onChange(mesa.id, { forma: f.id, ...dims })}
+                style={{
+                  flex: 1, minHeight: 64, borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
+                  background: activo ? 'var(--accent)' : '#111', border: activo ? '1px solid var(--accent)' : '1px solid #2a2a2a', color: '#fff',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 22 }}>{f.icon}</span>
+                <span style={{ fontSize: 11 }}>{f.label}</span>
+              </button>
+            )
+          })}
+        </div>
       </div>
+
+      <div>
+        <p style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>Tamaño</p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {TAMANOS.map(t => {
+            const activo = tamano === t.id
+            return (
+              <button
+                key={t.id}
+                onClick={() => onChange(mesa.id, dimsDesde(t.id, mesa.forma))}
+                style={{ flex: 1, minHeight: 64, borderRadius: 10, background: activo ? 'var(--accent)' : '#111', border: activo ? '1px solid var(--accent)' : '1px solid #2a2a2a', color: '#fff', fontSize: 13, fontWeight: 600 }}
+              >
+                {t.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div>
+        <p style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>Rotación</p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {ROTACIONES().map(r => {
+            const activo = mesa.rotacion === r
+            return (
+              <button
+                key={r}
+                onClick={() => onChange(mesa.id, { rotacion: r })}
+                style={{ flex: 1, minHeight: 64, borderRadius: 10, background: activo ? 'var(--accent)' : '#111', border: activo ? '1px solid var(--accent)' : '1px solid #2a2a2a', color: '#fff', fontSize: 13, fontWeight: 600 }}
+              >
+                {r}°
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <button
+        onClick={() => onDelete(mesa.id)}
+        style={{ minHeight: 48, borderRadius: 10, background: '#2a1a1a', border: '1px solid #4a2a2a', color: '#e57373', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>delete</span> Eliminar mesa
+      </button>
     </div>
   )
 }
 
-const inputStyle: React.CSSProperties = {
-  minHeight: 44, borderRadius: 10, background: 'var(--bg)', color: 'var(--text-1)',
-  border: '1px solid var(--border)', padding: '0 12px', fontSize: 15, width: '100%',
+function EditorMesas() {
+  const RID = useRestauranteId()
+  const { mesas, loading, crearMesa, actualizarMesa, eliminarMesa, guardarLayout } = useMesas()
+  const [seleccionId, setSeleccionId] = useState<string | null>(null)
+  const [dragPos, setDragPos] = useState<{ id: string; x: number; y: number } | null>(null)
+  const [creando, setCreando] = useState(false)
+
+  const seleccionada = mesas.find(m => m.id === seleccionId) ?? null
+
+  async function onCrear() {
+    if (!RID) return
+    setCreando(true)
+    try {
+      const numero = String(mesas.length + 1)
+      const id = await crearMesa({
+        numero, sector: 'Salón', capacidad: 4, forma: 'cuadrada', ancho: 9, alto: 9, rotacion: 0,
+        pos_x: 40, pos_y: 40,
+      })
+      setSeleccionId(id)
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Error al crear la mesa')
+    } finally {
+      setCreando(false)
+    }
+  }
+
+  function onChangeMesa(id: string, datos: Partial<Mesa>) {
+    actualizarMesa(id, datos).catch((e: unknown) => alert(e instanceof Error ? e.message : 'Error al guardar'))
+  }
+
+  function onDragMove(id: string, x: number, y: number) {
+    setDragPos({ id, x, y })
+  }
+
+  async function onDragEnd(id: string, x: number, y: number) {
+    setDragPos(null)
+    try {
+      await guardarLayout([{ id, pos_x: x, pos_y: y }])
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Error al guardar la posición')
+    }
+  }
+
+  async function onDelete(id: string) {
+    if (!confirm('¿Eliminar esta mesa?')) return
+    setSeleccionId(null)
+    try { await eliminarMesa(id) } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error al eliminar') }
+  }
+
+  if (loading) return <p style={{ color: '#666', textAlign: 'center', padding: 32 }}>Cargando mesas...</p>
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <p style={{ fontSize: 13, color: '#888' }}>Arrastrá las mesas para armar el plano de tu salón</p>
+        <button
+          onClick={onCrear}
+          disabled={creando}
+          style={{ minHeight: 40, padding: '0 14px', borderRadius: 10, background: 'var(--accent)', color: '#fff', fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, opacity: creando ? 0.6 : 1 }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span> Mesa
+        </button>
+      </div>
+
+      <div
+        data-canvas
+        style={{
+          position: 'relative', flex: 1, minHeight: 420, background: '#161616',
+          border: '1px solid #2a2a2a', borderRadius: 14, overflow: 'hidden',
+          backgroundImage: 'radial-gradient(circle, #232323 1px, transparent 1px)', backgroundSize: '24px 24px',
+        }}
+      >
+        {mesas.length === 0 && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#555' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 40 }}>table_restaurant</span>
+            <p>Sin mesas todavía — tocá "+ Mesa" para agregar la primera</p>
+          </div>
+        )}
+        {mesas.map(m => (
+          <MesaCanvasItem
+            key={m.id}
+            mesa={m}
+            selected={seleccionId === m.id}
+            dragPos={dragPos?.id === m.id ? { x: dragPos.x, y: dragPos.y } : null}
+            onSelect={mesa => setSeleccionId(mesa.id)}
+            onDragMove={onDragMove}
+            onDragEnd={onDragEnd}
+          />
+        ))}
+      </div>
+
+      {seleccionada && (
+        <MesaPanel
+          mesa={seleccionada}
+          onChange={onChangeMesa}
+          onDelete={onDelete}
+          onCerrar={() => setSeleccionId(null)}
+        />
+      )}
+    </div>
+  )
 }
+
+// ── Página ─────────────────────────────────────────────────────────────────
 
 export default function SalonConfigPage() {
   const router  = useRouter()
   const RID     = useRestauranteId()
   const supabase = createClient()
   const [tab,    setTab]    = useState<Tab>('mesas')
-
-  // Mesas
-  const [mesas,    setMesas]    = useState<Mesa[]>([])
-  const [mesaForm, setMesaForm] = useState<Partial<Mesa>>({})
-  const [showMesaForm, setShowMesaForm] = useState(false)
-  const [guardandoMesa, setGuardandoMesa] = useState(false)
 
   // Medios de pago
   const [medios,      setMedios]      = useState<MedioPago[]>([])
@@ -80,14 +349,6 @@ export default function SalonConfigPage() {
   const [estaciones,    setEstaciones]    = useState<Estacion[]>([])
   const [nuevaEstacion, setNuevaEstacion] = useState('')
   const [guardandoEst,  setGuardandoEst]  = useState(false)
-
-  // ── Fetch ────────────────────────────────────────────────────────────────────
-
-  const fetchMesas = useCallback(async () => {
-    if (!RID) return
-    const { data } = await supabase.from('mesas').select('*').eq('restaurante_id', RID).order('sector').order('numero')
-    setMesas((data ?? []) as Mesa[])
-  }, [RID, supabase])
 
   const fetchMedios = useCallback(async () => {
     if (!RID) return
@@ -101,30 +362,7 @@ export default function SalonConfigPage() {
     setEstaciones((data ?? []) as Estacion[])
   }, [RID, supabase])
 
-  useEffect(() => { fetchMesas(); fetchMedios(); fetchEstaciones() }, [fetchMesas, fetchMedios, fetchEstaciones])
-
-  // ── Mesas ────────────────────────────────────────────────────────────────────
-
-  async function guardarMesa() {
-    if (!RID || !mesaForm.numero) return
-    setGuardandoMesa(true)
-    try {
-      if (mesaForm.id) {
-        await supabase.from('mesas').update({ numero: mesaForm.numero, sector: mesaForm.sector ?? '', capacidad: mesaForm.capacidad ?? 4 }).eq('id', mesaForm.id)
-      } else {
-        await supabase.from('mesas').insert({ restaurante_id: RID, numero: mesaForm.numero, sector: mesaForm.sector ?? 'Salón', capacidad: mesaForm.capacidad ?? 4, estado: 'libre' })
-      }
-      setMesaForm({})
-      setShowMesaForm(false)
-      await fetchMesas()
-    } finally { setGuardandoMesa(false) }
-  }
-
-  async function eliminarMesa(id: string) {
-    if (!confirm('¿Eliminar esta mesa?')) return
-    await supabase.from('mesas').delete().eq('id', id)
-    await fetchMesas()
-  }
+  useEffect(() => { fetchMedios(); fetchEstaciones() }, [fetchMedios, fetchEstaciones])
 
   // ── Medios de pago ───────────────────────────────────────────────────────────
 
@@ -167,29 +405,17 @@ export default function SalonConfigPage() {
     await fetchEstaciones()
   }
 
-  // ── Sectores agrupados ───────────────────────────────────────────────────────
-
-  const sectores = useMemo(() => {
-    const map: Record<string, Mesa[]> = {}
-    for (const m of mesas) {
-      const s = m.sector || 'Sin sector'
-      if (!map[s]) map[s] = []
-      map[s].push(m)
-    }
-    return map
-  }, [mesas])
-
   // ── UI ───────────────────────────────────────────────────────────────────────
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
-    flex: 1, minHeight: 44, background: active ? 'var(--navy)' : 'transparent',
-    color: active ? '#fff' : 'var(--text-2)', border: 'none', fontWeight: active ? 700 : 500, fontSize: 14,
+    flex: 1, minHeight: 44, background: active ? '#1c2d4a' : 'transparent',
+    color: active ? '#fff' : '#aaa', border: 'none', fontWeight: active ? 700 : 500, fontSize: 14,
   })
 
   return (
     <div style={{ background: '#111', minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-      <div style={{ background: 'var(--navy)', padding: '46px 16px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ background: '#1c2d4a', padding: '46px 16px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
         <button onClick={() => router.back()} style={{ background: 'none', border: 'none', color: '#fff', minWidth: 44, minHeight: 44 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 28 }}>arrow_back</span>
         </button>
@@ -205,52 +431,10 @@ export default function SalonConfigPage() {
         ))}
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ flex: 1, overflowY: tab === 'mesas' ? 'hidden' : 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 14, minHeight: 0 }}>
 
         {/* ── MESAS ─────────────────────────────────────────────────────────── */}
-        {tab === 'mesas' && (
-          <>
-            {showMesaForm
-              ? <MesaForm form={mesaForm} setForm={setMesaForm} onGuardar={guardarMesa} onCancelar={() => { setShowMesaForm(false); setMesaForm({}) }} guardando={guardandoMesa} />
-              : (
-                <button onClick={() => { setMesaForm({}); setShowMesaForm(true) }}
-                  style={{ minHeight: 52, borderRadius: 12, background: '#1a1a1a', border: '1.5px dashed #333', color: '#aaa', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                  <span className="material-symbols-outlined">add</span> Agregar mesa
-                </button>
-              )
-            }
-
-            {Object.entries(sectores).map(([sector, mesasDelSector]) => (
-              <div key={sector}>
-                <p style={{ color: '#666', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>{sector}</p>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
-                  {mesasDelSector.map(m => (
-                    <div key={m.id} style={{ background: '#1a1a1a', borderRadius: 12, padding: '12px 14px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                        <p style={{ color: '#fff', fontWeight: 700, fontSize: 18 }}>Mesa {m.numero}</p>
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          <button onClick={() => { setMesaForm(m); setShowMesaForm(true) }}
-                            style={{ background: 'none', border: 'none', color: '#aaa', padding: 4 }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>edit</span>
-                          </button>
-                          <button onClick={() => eliminarMesa(m.id)}
-                            style={{ background: 'none', border: 'none', color: '#e57373', padding: 4 }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>delete</span>
-                          </button>
-                        </div>
-                      </div>
-                      <p style={{ color: '#666', fontSize: 13 }}>{m.capacidad} pers.</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-
-            {mesas.length === 0 && !showMesaForm && (
-              <p style={{ color: '#555', textAlign: 'center', padding: 32 }}>No hay mesas configuradas aún</p>
-            )}
-          </>
-        )}
+        {tab === 'mesas' && <EditorMesas />}
 
         {/* ── MEDIOS DE PAGO ───────────────────────────────────────────────── */}
         {tab === 'medios' && (
@@ -261,7 +445,7 @@ export default function SalonConfigPage() {
                 placeholder="Efectivo, Débito, MP, QR..."
                 style={{ ...inputStyle, flex: 1 }} />
               <button onClick={guardarMedio} disabled={guardandoMedio || !nuevoMedio.trim()}
-                style={{ minWidth: 52, minHeight: 44, borderRadius: 10, background: 'var(--navy)', color: '#fff', fontWeight: 700, opacity: guardandoMedio ? 0.6 : 1 }}>
+                style={{ minWidth: 52, minHeight: 44, borderRadius: 10, background: '#1c2d4a', color: '#fff', fontWeight: 700, opacity: guardandoMedio ? 0.6 : 1 }}>
                 <span className="material-symbols-outlined">add</span>
               </button>
             </div>
@@ -297,7 +481,7 @@ export default function SalonConfigPage() {
                 placeholder="Parrilla, Frío, Pastelería..."
                 style={{ ...inputStyle, flex: 1 }} />
               <button onClick={guardarEstacion} disabled={guardandoEst || !nuevaEstacion.trim()}
-                style={{ minWidth: 52, minHeight: 44, borderRadius: 10, background: 'var(--navy)', color: '#fff', fontWeight: 700, opacity: guardandoEst ? 0.6 : 1 }}>
+                style={{ minWidth: 52, minHeight: 44, borderRadius: 10, background: '#1c2d4a', color: '#fff', fontWeight: 700, opacity: guardandoEst ? 0.6 : 1 }}>
                 <span className="material-symbols-outlined">add</span>
               </button>
             </div>
@@ -328,4 +512,3 @@ export default function SalonConfigPage() {
     </div>
   )
 }
-

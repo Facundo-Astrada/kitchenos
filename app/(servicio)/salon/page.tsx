@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useMesas } from '@/lib/hooks/useMesas'
 import { useCarta } from '@/lib/hooks/useCarta'
@@ -8,6 +8,7 @@ import { useComandas, type NuevoComandaItem } from '@/lib/hooks/useComandas'
 import { useCuenta, calcularResumen, type PagoInput, type ResultadoFiscal } from '@/lib/hooks/useCuenta'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
 import { useOnlineStatus } from '@/lib/offline/useOnlineStatus'
+import KitchenCoachFAB from '@/components/coach/KitchenCoachFAB'
 import type { Mesa, CartaItem, EstadoMesa, TipoModificador, Comanda, EstadoComandaItem } from '@/types'
 
 // ─── helpers visuales ─────────────────────────────────────────────────────────
@@ -58,6 +59,10 @@ function PedidoEnCursoPanel({ comandas }: { comandas: Comanda[] }) {
 }
 
 function MesaBoton({ mesa, hayListos, onTap }: { mesa: Mesa; hayListos: boolean; onTap: (mesa: Mesa) => void }) {
+  const anchoUi = Math.max(mesa.ancho ?? 9, 6)
+  const altoUi = Math.max(mesa.alto ?? 9, 6)
+  const forma = mesa.forma ?? 'cuadrada'
+  const rotacion = mesa.rotacion ?? 0
   return (
     <button
       onClick={() => onTap(mesa)}
@@ -65,9 +70,12 @@ function MesaBoton({ mesa, hayListos, onTap }: { mesa: Mesa; hayListos: boolean;
         position: 'absolute',
         left: `${mesa.pos_x}%`,
         top: `${mesa.pos_y}%`,
-        width: 72,
-        height: 72,
-        borderRadius: 16,
+        width: `${anchoUi}%`,
+        aspectRatio: forma === 'rectangular' ? `${anchoUi} / ${altoUi}` : '1 / 1',
+        minWidth: 64,
+        minHeight: 64,
+        borderRadius: forma === 'redonda' ? '50%' : 16,
+        transform: `rotate(${rotacion}deg)`,
         background: ESTADO_MESA_COLOR[mesa.estado],
         border: `2px solid ${hayListos ? '#2e7d32' : 'rgba(255,255,255,0.15)'}`,
         color: '#fff',
@@ -78,8 +86,8 @@ function MesaBoton({ mesa, hayListos, onTap }: { mesa: Mesa; hayListos: boolean;
         gap: 2,
       }}
     >
-      <span style={{ fontSize: 22, fontWeight: 700 }}>{mesa.numero}</span>
-      <span style={{ fontSize: 12, opacity: 0.8 }}>{mesa.capacidad ?? '-'}p</span>
+      <span style={{ fontSize: 22, fontWeight: 700, transform: `rotate(${-rotacion}deg)` }}>{mesa.numero}</span>
+      <span style={{ fontSize: 12, opacity: 0.8, transform: `rotate(${-rotacion}deg)` }}>{mesa.capacidad ?? '-'}p</span>
       {hayListos && (
         <span style={{ position: 'absolute', top: -6, right: -6, width: 16, height: 16, borderRadius: '50%', background: '#2e7d32', border: '2px solid #111' }} />
       )}
@@ -911,6 +919,21 @@ export default function SalonPage() {
     return set
   }, [comandas])
 
+  // Kitchen Coach (Sesión 3 C4, jul 2026) — contexto solo en el mapa del salón, NO en KDS
+  // (regla de ui.md: cero distracciones en la pantalla de despacho).
+  const totalEnCurso = useMemo(() => calcularResumen(comandas).subtotal, [comandas])
+  useEffect(() => {
+    if (vista !== 'mapa') return
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'salon',
+      mesasOcupadas: mesas.filter(m => m.estado !== 'libre').length,
+      mesasLibres: mesas.filter(m => m.estado === 'libre').length,
+      cuentasPedidas: mesas.filter(m => m.estado === 'cuenta_pedida').length,
+      kpis: { totalEnCurso: Math.round(totalEnCurso) },
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [vista, mesas, totalEnCurso])
+
   async function onTapMesa(mesa: Mesa) {
     try {
       const id = await abrirCuenta(mesa.id)
@@ -999,12 +1022,23 @@ export default function SalonPage() {
   if (vista === 'mapa') {
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '46px 16px 14px', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <p style={{ fontSize: 24, fontWeight: 700, color: '#fff' }}>Salón</p>
-          <button onClick={() => router.push('/salon/config')}
-            style={{ minWidth: 44, minHeight: 44, background: '#1a1a1a', borderRadius: 12, border: 'none', color: '#aaa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 24 }}>settings</span>
-          </button>
+        <div data-coach-target="salon-topbar" style={{ padding: '46px 16px 14px', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <div>
+            <p style={{ fontSize: 24, fontWeight: 700, color: '#fff', lineHeight: 1.1 }}>Salón</p>
+            {totalEnCurso > 0 && (
+              <p style={{ fontSize: 13, color: '#4caf50', fontWeight: 600, marginTop: 2 }}>{formatPesos(totalEnCurso)} en curso</p>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => router.push('/kds')} title="Ir a KDS" aria-label="Ir a KDS"
+              style={{ minWidth: 44, minHeight: 44, background: '#1a1a1a', borderRadius: 12, border: 'none', color: '#aaa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 24 }}>kitchen</span>
+            </button>
+            <button onClick={() => router.push('/salon/config')} title="Configurar mesas" aria-label="Configurar mesas"
+              style={{ minWidth: 44, minHeight: 44, background: '#1a1a1a', borderRadius: 12, border: 'none', color: '#aaa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 24 }}>settings</span>
+            </button>
+          </div>
         </div>
         {mesas.length === 0 ? (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 }}>
@@ -1019,12 +1053,13 @@ export default function SalonPage() {
             </button>
           </div>
         ) : (
-          <div style={{ flex: 1, overflow: 'auto', position: 'relative', minHeight: 600 }}>
+          <div data-coach-target="salon-mapa" style={{ flex: 1, overflow: 'auto', position: 'relative', minHeight: 600 }}>
             {mesas.map(m => (
               <MesaBoton key={m.id} mesa={m} hayListos={mesasConListos.has(m.id)} onTap={onTapMesa} />
             ))}
           </div>
         )}
+        <KitchenCoachFAB />
       </div>
     )
   }

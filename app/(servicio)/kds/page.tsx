@@ -12,7 +12,7 @@ const ESTADO_ITEM_LABEL: Record<EstadoComandaItem, string> = {
   pendiente: 'Pendiente',
   en_prep: 'En prep',
   listo: 'Listo',
-  bumpeado: 'Bumpeado',
+  bumpeado: 'Despachado',
 }
 
 const ESTADO_ITEM_COLOR: Record<EstadoComandaItem, string> = {
@@ -153,7 +153,7 @@ function ComandaCard({
         </div>
         <div style={{ textAlign: 'right' }}>
           {comanda.held
-            ? <span style={{ fontSize: 16, fontWeight: 800, color: '#fff', letterSpacing: 1 }}>EN HOLD</span>
+            ? <span style={{ fontSize: 16, fontWeight: 800, color: '#fff', letterSpacing: 1 }}>EN ESPERA</span>
             : <p style={{ fontSize: 24, fontWeight: 800, color: '#fff' }}>{firedMs ? formatearTiempo(segundos) : '—'}</p>
           }
         </div>
@@ -171,10 +171,10 @@ function ComandaCard({
         {comanda.held
           ? (
             <button
-              onClick={() => onBumpComanda(comanda.id)}  // reuse handler — Fire = misma fn con held=false
+              onClick={() => onBumpComanda(comanda.id)}  // reuse handler — Marchar = misma fn con held=false
               style={{ width: '100%', minHeight: 64, borderRadius: 12, background: '#4361a0', color: '#fff', fontSize: 20, fontWeight: 800, letterSpacing: 1 }}
             >
-              FIRE — Marchar
+              MARCHAR
             </button>
           )
           : (
@@ -182,7 +182,7 @@ function ComandaCard({
               onClick={() => onBumpComanda(comanda.id)}
               style={{ width: '100%', minHeight: 56, borderRadius: 12, background: '#2a2a2a', color: '#fff', fontSize: 18, fontWeight: 700 }}
             >
-              BUMP COMANDA
+              DESPACHAR COMANDA
             </button>
           )
         }
@@ -215,7 +215,7 @@ function AllDayPanel({ tarjetas, onCerrar }: { tarjetas: Comanda[]; onCerrar: ()
         style={{ width: '100%', background: '#1a1a1a', borderRadius: '16px 16px 0 0', maxHeight: '60vh', display: 'flex', flexDirection: 'column' }}
       >
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #2a2a2a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <span style={{ fontSize: 20, fontWeight: 800, color: '#fff' }}>All-day</span>
+          <span style={{ fontSize: 20, fontWeight: 800, color: '#fff' }}>Consolidado</span>
           <button onClick={onCerrar} style={{ background: 'none', color: '#aaa', fontSize: 14 }}>Cerrar</button>
         </div>
         <div style={{ overflowY: 'auto', flex: 1, padding: '8px 20px 24px' }}>
@@ -260,12 +260,12 @@ function RecallPanel({
         style={{ width: '100%', background: '#1a1a1a', borderRadius: '16px 16px 0 0', maxHeight: '65vh', display: 'flex', flexDirection: 'column' }}
       >
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #2a2a2a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <span style={{ fontSize: 20, fontWeight: 800, color: '#fff' }}>Recall — últimos 30 min</span>
+          <span style={{ fontSize: 20, fontWeight: 800, color: '#fff' }}>Recuperar — últimos 30 min</span>
           <button onClick={onCerrar} style={{ background: 'none', color: '#aaa', fontSize: 14 }}>Cerrar</button>
         </div>
         <div style={{ overflowY: 'auto', flex: 1, padding: '8px 20px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {comandasRecientes.length === 0
-            ? <p style={{ color: '#666', textAlign: 'center', marginTop: 24 }}>Sin comandas bumpeadas recientes</p>
+            ? <p style={{ color: '#666', textAlign: 'center', marginTop: 24 }}>Sin comandas despachadas recientes</p>
             : comandasRecientes.map(c => {
               const nombreMesa = c.mesa ? `Mesa ${c.mesa.numero}` : c.origen
               const items = (c.items ?? []).map(i => `${i.cantidad}× ${i.carta_item?.nombre ?? '?'}`).join(', ')
@@ -318,7 +318,7 @@ function MetricasPanel({ tarjetas, comandasRecientes, onCerrar }: { tarjetas: Co
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           {[
             { label: 'Tiempo promedio', value: fmtSeg(stats.promedio), icon: 'timer', color: '#c9a227' },
-            { label: 'Platos bumpeados', value: String(stats.bumpeados), icon: 'done_all', color: '#4caf50' },
+            { label: 'Platos despachados', value: String(stats.bumpeados), icon: 'done_all', color: '#4caf50' },
             { label: 'Pendientes', value: String(stats.pendientes), icon: 'hourglass_empty', color: '#e57373' },
             { label: 'En preparación', value: String(stats.enPrep), icon: 'local_fire_department', color: '#ff9800' },
           ].map(s => (
@@ -430,21 +430,21 @@ export default function KdsPage() {
       {/* Header */}
       <div style={{ padding: '46px 16px 14px', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <p style={{ fontSize: 22, fontWeight: 700, color: '#fff', flex: 1 }}>{estacionActual?.nombre ?? 'KDS'}</p>
-        {/* All-day */}
+        {/* Consolidado (ex All-day) */}
         <button
           onClick={() => setAllDayOpen(true)}
           style={{ minHeight: 44, padding: '0 14px', borderRadius: 10, background: '#1a1a1a', color: '#fff', fontSize: 14, fontWeight: 600 }}
         >
           <span className="material-symbols-outlined" style={{ fontSize: 20, verticalAlign: 'middle', marginRight: 4 }}>table_rows</span>
-          All-day
+          Consolidado
         </button>
-        {/* Recall */}
+        {/* Recuperar (ex Recall) */}
         <button
           onClick={() => setRecallOpen(true)}
           style={{ minHeight: 44, padding: '0 14px', borderRadius: 10, background: '#1a1a1a', color: '#fff', fontSize: 14, fontWeight: 600 }}
         >
           <span className="material-symbols-outlined" style={{ fontSize: 20, verticalAlign: 'middle', marginRight: 4 }}>history</span>
-          Recall
+          Recuperar
         </button>
         {/* Mute */}
         <button

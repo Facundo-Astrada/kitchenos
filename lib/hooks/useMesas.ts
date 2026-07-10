@@ -98,6 +98,54 @@ export function useMesas() {
     }
   }
 
+  // ── Editor de mesas tipo canvas (jul 2026, Sesión 3 C3) ──
+  type MesaDatos = { numero: string; sector: string | null; capacidad: number | null; forma: string; ancho: number; alto: number; rotacion: number; pos_x: number; pos_y: number }
+
+  async function crearMesa(datos: MesaDatos): Promise<string> {
+    try {
+      const { data, error } = await supabase.from('mesas').insert({
+        ...datos, restaurante_id: RESTAURANTE_ID, estado: 'libre',
+      }).select('id').single()
+      if (error) throw error
+      await mutate()
+      return data.id as string
+    } catch (e: unknown) {
+      throw new Error(errMsg(e, 'Error al crear mesa'))
+    }
+  }
+
+  async function actualizarMesa(id: string, datos: Partial<MesaDatos>) {
+    try {
+      const { error } = await supabase.from('mesas').update(datos).eq('id', id)
+      if (error) throw error
+      await mutate()
+    } catch (e: unknown) {
+      throw new Error(errMsg(e, 'Error al actualizar mesa'))
+    }
+  }
+
+  async function eliminarMesa(id: string) {
+    try {
+      const { error } = await supabase.from('mesas').delete().eq('id', id)
+      if (error) throw error
+      await mutate()
+    } catch (e: unknown) {
+      throw new Error(errMsg(e, 'Error al eliminar mesa'))
+    }
+  }
+
+  /** Guardado batch de posición/tamaño/rotación al soltar en el canvas — sin modal por drag. */
+  async function guardarLayout(cambios: { id: string; pos_x: number; pos_y: number; ancho?: number; alto?: number; rotacion?: number }[]) {
+    try {
+      await Promise.all(cambios.map(({ id, ...datos }) =>
+        supabase.from('mesas').update(datos).eq('id', id).then(({ error }) => { if (error) throw error })
+      ))
+      await mutate()
+    } catch (e: unknown) {
+      throw new Error(errMsg(e, 'Error al guardar la posición de las mesas'))
+    }
+  }
+
   return {
     mesas,
     loading,
@@ -105,5 +153,9 @@ export function useMesas() {
     refetch: useCallback(() => { mutate() }, [mutate]),
     abrirCuenta,
     liberarMesa,
+    crearMesa,
+    actualizarMesa,
+    eliminarMesa,
+    guardarLayout,
   }
 }

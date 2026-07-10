@@ -1,0 +1,8 @@
+ALTER TABLE mesas ADD COLUMN IF NOT EXISTS forma TEXT NOT NULL DEFAULT 'cuadrada';
+-- forma ∈ 'cuadrada' | 'redonda' | 'rectangular'
+ALTER TABLE mesas ADD COLUMN IF NOT EXISTS ancho NUMERIC NOT NULL DEFAULT 8;
+ALTER TABLE mesas ADD COLUMN IF NOT EXISTS alto NUMERIC NOT NULL DEFAULT 8;
+ALTER TABLE mesas ADD COLUMN IF NOT EXISTS rotacion INT NOT NULL DEFAULT 0;
+-- rotacion ∈ 0 | 45 | 90
+
+NOTIFY pgrst, 'reload schema';

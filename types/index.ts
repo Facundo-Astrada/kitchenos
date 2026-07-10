@@ -882,7 +882,9 @@ export interface EventoCocina {
 // ── Salón — Mesas ────────────────────────────────────────────
 export type EstadoMesa = 'libre' | 'ocupada' | 'cuenta_pedida'
 
-// DB: mesas (id, restaurante_id, numero, sector, capacidad, estado, pos_x, pos_y, created_at)
+export type MesaForma = 'cuadrada' | 'redonda' | 'rectangular'
+
+// DB: mesas (id, restaurante_id, numero, sector, capacidad, estado, pos_x, pos_y, created_at, forma, ancho, alto, rotacion)
 export interface Mesa {
   id: string
   restaurante_id: string
@@ -893,6 +895,11 @@ export interface Mesa {
   pos_x: number
   pos_y: number
   created_at: string
+  // Editor de mesas tipo canvas (jul 2026, Sesión 3 C3)
+  forma: MesaForma
+  ancho: number     // % del ancho del canvas
+  alto: number      // % del alto del canvas
+  rotacion: number  // 0 | 45 | 90
 }
 
 // ── Salón — Cuentas ──────────────────────────────────────────
