@@ -21,6 +21,8 @@ import CarritoCompras, { type CartItem } from '@/components/stock/CarritoCompras
 import MultiSelectFiltro from '@/components/stock/MultiSelectFiltro'
 import { usePedidos } from '@/lib/hooks/usePedidos'
 import { useProveedores } from '@/lib/hooks/useProveedores'
+import { usePreciosProveedores, type ComparadorPrecioProducto } from '@/lib/hooks/usePreciosProveedores'
+import { canonUnit } from '@/lib/hooks/useRecetas'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import type { MisePlaceItem, MisePlaceRegistro } from '@/types'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
@@ -164,6 +166,12 @@ export default function StockPage() {
   const { categorias, agregarCategoria } = useCategoriasProducto()
   const { crearPedido } = usePedidos()
   const { proveedores } = useProveedores()
+  const { fetchComparador } = usePreciosProveedores()
+  const [comparadorPrecios, setComparadorPrecios] = useState<ComparadorPrecioProducto[]>([])
+  useEffect(() => {
+    if (!RESTAURANTE_ID) return
+    fetchComparador().then(r => setComparadorPrecios(r.comparador))
+  }, [RESTAURANTE_ID, fetchComparador])
   const { puedeEditar, puedeEliminar, isAdmin } = usePermisos()
   const canEdit = isAdmin || puedeEditar('stock')
   const isDesktop = useIsDesktop()
@@ -259,6 +267,22 @@ export default function StockPage() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [showUnidadCompra, setShowUnidadCompra] = useState(false)
+
+  // Badge de sobreprecio vs. otros proveedores (Q5) — solo para el producto en edición
+  const badgeSobreprecio = useMemo(() => {
+    if (!editingProducto || !editingProducto.precio_unitario) return null
+    const u = canonUnit(editingProducto.unidad)
+    const match = comparadorPrecios.find(c => c.productoId === editingProducto.id && c.unidad === u)
+    if (!match) return null
+    const precioActual = editingProducto.precio_unitario
+    if (precioActual <= match.mejorPrecio * 1.01) return null   // ya es el mejor precio (o casi)
+    return {
+      deltaPct: ((precioActual - match.mejorPrecio) / match.mejorPrecio) * 100,
+      mejorProveedor: match.mejorProveedor,
+      mejorPrecio: match.mejorPrecio,
+      mejorFecha: match.mejorFecha,
+    }
+  }, [editingProducto, comparadorPrecios])
 
   // Delete confirm
   const [deleteId, setDeleteId] = useState<string | null>(null)
@@ -1653,6 +1677,20 @@ export default function StockPage() {
                   placeholder="0"
                   style={{ ...inputStyle, borderColor: 'rgba(28,45,74,.3)' }} />
               </label>
+
+              {/* Badge sobreprecio vs. otros proveedores (Q5) */}
+              {badgeSobreprecio && (
+                <div style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', borderRadius: 10,
+                  background: 'rgba(220,38,38,.06)', border: '1px solid rgba(220,38,38,.25)',
+                }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#dc2626', flexShrink: 0 }}>trending_up</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-1)', lineHeight: 1.4 }}>
+                    Pagaste <strong style={{ color: '#dc2626' }}>{badgeSobreprecio.deltaPct.toFixed(0)}% más</strong> que el mejor precio reciente
+                    ({badgeSobreprecio.mejorProveedor}, {fmtPrecio(badgeSobreprecio.mejorPrecio)} el {new Date(badgeSobreprecio.mejorFecha + 'T12:00:00').toLocaleDateString('es-AR')})
+                  </span>
+                </div>
+              )}
 
               {/* ── Producción interna ── */}
               <div style={{ background: form.es_produccion ? 'rgba(16,185,129,.06)' : 'var(--bg)', border: `1px solid ${form.es_produccion ? 'rgba(16,185,129,.3)' : 'var(--border)'}`, borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
