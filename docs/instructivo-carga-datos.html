@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 18mm 15mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         color: #1f2937; font-size: 11.5px; line-height: 1.55; margin: 0; }
+  h1 { color: #1c2d4a; font-size: 22px; border-bottom: 3px solid #1c2d4a; padding-bottom: 6px;
+       margin: 28px 0 14px; page-break-after: avoid; }
+  h2 { color: #1c2d4a; font-size: 16px; margin: 22px 0 8px; page-break-after: avoid; }
+  h3 { color: #4361a0; font-size: 13.5px; margin: 16px 0 6px; page-break-after: avoid; }
+  h4 { color: #4361a0; font-size: 12px; margin: 12px 0 4px; page-break-after: avoid; }
+  p { margin: 6px 0; }
+  ul, ol { margin: 6px 0 10px; padding-left: 20px; }
+  li { margin: 3px 0; }
+  strong { color: #111827; }
+  a { color: #4361a0; text-decoration: none; }
+  code { background: #f1f3f7; color: #1c2d4a; padding: 1px 5px; border-radius: 4px;
+         font-family: "Cascadia Code", Consolas, monospace; font-size: 10.5px; }
+  pre { background: #f6f7f9; border: 1px solid #e3e6ec; border-radius: 8px; padding: 12px 14px;
+        overflow-x: auto; page-break-inside: avoid; }
+  pre code { background: none; padding: 0; color: #334155; line-height: 1.4; }
+  blockquote { border-left: 4px solid #4361a0; background: #f4f6fb; margin: 10px 0;
+               padding: 8px 14px; color: #374151; border-radius: 0 6px 6px 0; }
+  hr { border: none; border-top: 1px solid #e3e6ec; margin: 18px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 14px; font-size: 10.5px;
+          page-break-inside: avoid; }
+  th { background: #1c2d4a; color: #fff; text-align: left; padding: 7px 10px; font-weight: 600; }
+  td { border: 1px solid #e3e6ec; padding: 6px 10px; vertical-align: top; }
+  tbody tr:nth-child(even) { background: #f8f9fb; }
+  .cover { background: #1c2d4a; color: #fff; padding: 34px 30px; border-radius: 12px; margin-bottom: 8px; }
+  .cover h1 { color: #fff; border: none; margin: 0 0 6px; font-size: 26px; }
+  .cover p { color: #c7d0e2; margin: 0; font-size: 12px; }
+</style></head><body>
+<div class="cover">
+  <h1>Instructivo de carga de datos</h1>
+  <p>KitchenOS · Guía para administradores y equipo del día a día</p>
+</div>
+<h1>Instructivo de carga de datos — KitchenOS</h1>
+<blockquote>Guía práctica para poner en marcha tu restaurante en KitchenOS y mantenerlo al día. Pensada para dos perfiles: <strong>el administrador</strong> (dueño, encargado o chef que gestiona la empresa) y <strong>el equipo del día a día</strong> (cocina, salón, compras). No hace falta saber de tecnología. Si seguís el orden, la app se arma casi sola.</blockquote>
+<hr/>
+<h2>Cómo leer esta guía</h2>
+<ul><li><strong>Si sos el administrador</strong>, leé todo de arriba hacia abajo. Vas a cargar los datos una vez al inicio (con el historial) y después mantenerlos semana a semana.</li><li><strong>Si sos del equipo</strong>, andá directo a la sección que te toca. Cada módulo aclara qué te resuelve en el servicio.</li></ul>
+<p>La idea de fondo es simple:</p>
+<blockquote><strong>Primero le contás a KitchenOS qué comprás y a cuánto. A partir de ahí, la app sabe qué tenés, cuánto te cuesta cada plato, a cuánto conviene venderlo y cuánto ganaste de verdad.</strong></blockquote>
+<hr/>
+<h2>Glosario rápido</h2>
+<table><thead><tr><th>Término</th><th>Qué significa</th></tr></thead><tbody><tr><td><strong>Food cost</strong></td><td>El porcentaje del precio de venta que se va en ingredientes. Si un plato sale $1.000 y los ingredientes cuestan $280, el food cost es 28%.</td></tr><tr><td><strong>CMV</strong></td><td>Costo de mercadería vendida: cuánto gastaste en insumos en un período, medido contra lo que vendiste.</td></tr><tr><td><strong>86</strong></td><td>Término de cocina: un plato "está en 86" cuando no se puede vender (se acabó, faltó insumo). Marcarlo en la carta avisa a todo el equipo al instante.</td></tr><tr><td><strong>Mise en place</strong></td><td>Las preparaciones previas al servicio: fondos, salsas base, cortes, marinadas. Lo que se deja listo antes de que lleguen los comensales.</td></tr><tr><td><strong>Plaza</strong></td><td>Estación de cocina: parrilla, fríos, calientes, repostería, etc. Cada plaza tiene su propio mise y sus propias tareas.</td></tr><tr><td><strong>Cuenta corriente</strong></td><td>Compra a crédito con el proveedor: la mercadería entra pero se paga después (30, 60 días). Aparece en el tab "Por pagar" de Facturas.</td></tr></tbody></table>
+<hr/>
+<h2>El orden importa</h2>
+<p>Los datos se cargan en este orden, porque cada uno se apoya en el anterior:</p>
+<pre><code>1. FACTURAS   →  qué compraste y a cuánto
+2. STOCK      →  qué tenés hoy y cuándo se acaba   (se arma solo desde las facturas)
+3. RECETARIO  →  cuánto cuesta producir cada cosa
+4. CARTA      →  a cuánto lo vendés y cómo se ofrece
+5. VENTAS     →  cuánto vendiste de verdad</code></pre>
+<p>No se puede saltear pasos sin perder precisión. Sin facturas no hay precios; sin precios no hay food cost; sin food cost no podés saber si un plato te deja ganancia.</p>
+<blockquote>💡 <strong>Buena noticia:</strong> no tenés que cargar todo a mano. Las facturas construyen el stock, las recetas leen los precios del stock y la carta lee el costo de las recetas. Tu trabajo es cargar bien la base y revisar.</blockquote>
+<p>Y hay una segunda etapa: una vez que la base está cargada, el equipo opera el día a día sobre esos datos (producción, mise, pase, merma, pedidos). Esa parte está al final de la guía, en <strong>Etapa 2 — Operación diaria</strong>.</p>
+<hr/>
+<h2>Paso 0 — Antes de cargar</h2>
+<h3>El asistente de primeros pasos</h3>
+<p>Si abrís la app con la cuenta vacía (sin facturas, productos ni recetas), se activa <strong>automáticamente un wizard de 5 pasos</strong> que te guía por la carga inicial: facturas → stock → recetario → carta → ventas. Es el camino más corto para arrancar desde cero.</p>
+<h3>Crear el equipo</h3>
+<p>Antes de cargar datos, conviene invitar a las personas que van a operar la app:</p>
+<ol><li>Andá a <strong>Turnos → Equipo</strong>.</li><li>Tocá <strong>Invitar por email</strong>: ingresás el nombre, el email y el rol.</li><li>El invitado recibe un link, setea su contraseña y entra ya vinculado al restaurante.</li></ol>
+<h3>Qué ve cada uno</h3>
+<p>Los módulos visibles dependen del <strong>puesto</strong> asignado (configurable en Configuración). El administrador ve todo. Un cocinero puede ver solo OPS y Pase; un encargado de compras, solo Facturas, Stock y Pedidos. El puesto se puede cambiar en cualquier momento.</p>
+<hr/>
+<h1>ETAPA 1 — Carga de gestión</h1>
+<blockquote><strong>La hace el administrador</strong> (dueño, encargado o chef). Una vez al inicio con el historial, y después se mantiene semana a semana. Es la base sobre la que después trabaja todo el equipo.</blockquote>
+<hr/>
+<h1>1 · FACTURAS</h1>
+<blockquote><strong>Quién la carga:</strong> el administrador o el encargado de compras.</blockquote>
+<p>!<a href="shots/facturas.png">Módulo Facturas</a></p>
+<p><strong>Es el primer dato y el más importante.</strong> Todo lo demás depende de las facturas: el stock, los precios, el historial de compras, el food cost real y los reportes. Sin facturas, KitchenOS funciona; <strong>con facturas, se vuelve inteligente.</strong></p>
+<h2>Cómo cargarlas</h2>
+<p>Hay tres formas y se pueden combinar libremente.</p>
+<h3>Forma 1 — Subir el Excel de tu sistema de gestión <em>(la mejor para cargar el historial)</em></h3>
+<p>Si usás Fudo, Maxirest, Bistrosoft u otro sistema con módulo de compras:</p>
+<ol><li>Exportá el cierre del mes como Excel desde tu sistema.</li><li>En KitchenOS, andá a <strong>Facturas → Importar masivo</strong> (o al tile <strong>Importar</strong> del inicio).</li><li>Subí el archivo y revisá antes de confirmar.</li></ol>
+<p><strong>Tips:</strong></p>
+<ul><li>💡 <strong>En Fudo:</strong> entrá a <em>Gastos → filtrá por mes → Exportar Excel</em>. El archivo trae dos hojas y el sistema necesita las dos.</li><li>💡 Si el Excel tiene varias hojas, la app elige sola la que tiene más información. Podés corregir la elección.</li><li>💡 <strong>Cargá mes a mes, en orden cronológico.</strong> La app guarda todo el historial, pero usa siempre el <strong>precio más reciente</strong> para calcular costos. Si cargás diciembre antes que junio, va a tomar los precios de diciembre como los vigentes.</li></ul>
+<h3>Forma 2 — Sacarle una foto o subir el PDF <em>(para la factura del día a día)</em></h3>
+<ol><li>En <strong>Facturas</strong>, tocá el botón <strong>+</strong>.</li><li>Sacá una foto a la factura o subí el PDF.</li><li>La app lee sola el proveedor, número, fecha, tipo, los productos con cantidad y precio, el total y la condición de pago.</li><li><strong>Siempre revisás en una pantalla antes de confirmar.</strong></li></ol>
+<p><strong>Tips:</strong></p>
+<ul><li>💡 Sale mejor con <strong>luz pareja y la factura plana</strong>. Si está arrugada o torcida puede fallar en algún renglón — por eso siempre hay pantalla de revisión.</li><li>💡 Los <strong>remitos</strong> de verdulería o mercado también sirven, aunque no tengan número formal.</li><li>💡 Para proveedores informales que no dan factura (pescadería del puerto, productor local), cargá una <strong>factura manual</strong> con lo que pagaste: igual actualiza el precio del producto.</li></ul>
+<h3>Forma 3 — Carga manual</h3>
+<p>Tocá <strong>+</strong> en Facturas y completá los campos a mano. Útil para compras muy chicas o sin papel.</p>
+<h2>Filtro de privacidad <em>(importante si usás Fudo)</em></h2>
+<p>Fudo anota sueldos, adelantos y pagos a socios como si fueran "gastos", mezclados con la mercadería. KitchenOS los detecta y los deja afuera solo.</p>
+<ul><li>En <strong>Facturas</strong>, tocá el <strong>botón con forma de escudo 🛡️</strong>.</li><li>Agregá los nombres de las personas o proveedores que <strong>no</strong> querés cargar (el socio, "Empleado", etc.).</li><li>Queda guardado y se aplica a todas las importaciones de ahí en adelante.</li></ul>
+<h2>Qué pasa en la app cuando cargás una factura</h2>
+<table><thead><tr><th>Se actualiza solo…</th><th>Qué pasa</th></tr></thead><tbody><tr><td><strong>Stock</strong></td><td>Cada producto se crea o se actualiza: si ya existe, le refresca el precio; si no, lo crea con precio, unidad y categoría.</td></tr><tr><td><strong>Precios / Inflación</strong></td><td>Guarda el precio por unidad. En Reportes ves la evolución mes a mes de cada producto.</td></tr><tr><td><strong>Proveedores</strong></td><td>Si el proveedor no existía, se crea solo.</td></tr><tr><td><strong>Reportes (CMV, Compras, Presupuesto)</strong></td><td>Las compras entran al costo de mercadería y a los rankings de gasto.</td></tr><tr><td><strong>Pedidos</strong></td><td>Cuando le pedís a un proveedor, te sugiere lo que más le comprás.</td></tr><tr><td><strong>Food cost de recetas</strong></td><td>Si sube el precio de un insumo, el costo de toda receta que lo use se recalcula solo.</td></tr></tbody></table>
+<h2>Qué te resuelve en la práctica</h2>
+<p><strong>Si sos el administrador</strong></p>
+<ul><li>Saber cuánto gastaste en el mes, por proveedor y categoría, <strong>sin armar una planilla</strong>.</li><li>Ver qué productos subieron y cuánto — clave para decidir cuándo ajustar la carta.</li><li>Detectar facturas impagas o cuentas corrientes pendientes.</li><li>Tener el CMV del mes sin que el chef reporte nada.</li></ul>
+<p><strong>Si sos el encargado de compras</strong></p>
+<ul><li>No recargar cada producto al stock a mano: la factura lo hace.</li><li>Comparar el precio de esta semana contra el del mes pasado.</li><li>Detectar faltantes de una entrega cruzando la factura con el stock.</li></ul>
+<p><strong>Si sos emprendedor sin contador</strong></p>
+<ul><li>Todos los gastos de mercadería con una foto.</li><li>Historial ordenado para presentar en un crédito o balance.</li></ul>
+<h2>Funciones extra que conviene conocer</h2>
+<ol><li><strong>Alerta de subas de precio.</strong> Al confirmar una factura, si un producto subió más de lo esperado, la app avisa: <em>"Tomate perita subió 34% vs la última compra"</em>. Aceptás o corregís antes de guardar.</li><li><strong>Cuentas por pagar.</strong> Un tab <strong>Por pagar</strong> en Facturas y un indicador en el inicio te muestran cuánto le debés a cada proveedor.</li><li><strong>Reconciliación factura ↔ pedido.</strong> Podés vincular la factura que llega con el pedido que hiciste por KitchenOS para detectar diferencias de precio o cantidad.</li></ol>
+<hr/>
+<h1>2 · STOCK / INVENTARIO</h1>
+<blockquote><strong>Quién lo carga:</strong> el administrador lo configura; el equipo lo cuenta en el día a día.</blockquote>
+<p>!<a href="shots/stock.png">Módulo Stock</a></p>
+<p><strong>Es el segundo dato, y en gran parte se arma solo a partir de las facturas.</strong> Mientras Facturas responde <em>"qué compré y a cuánto"</em>, el Stock responde <em>"qué tengo hoy y cuándo se me acaba"</em>. Es la base del food cost, las alertas de reposición y los pedidos.</p>
+<h2>Cómo cargarlo</h2>
+<p>Cuatro caminos, de menos a más trabajo manual.</p>
+<h3>Camino 1 — Automático desde las facturas <em>(el preferido)</em></h3>
+<p>Si ya cargaste facturas, <strong>el stock ya existe</strong>: cada producto facturado se creó con su precio, unidad y categoría.</p>
+<p>Si quedó incompleto o desordenado, usá <strong>Stock → Rebuild</strong>: borra los productos y los reconstruye desde todas las facturas, con el precio más reciente de cada uno.</p>
+<ul><li>⚠️ <strong>Rebuild reconstruye todo desde las facturas.</strong> Los productos que cargaste a mano, los conteos del Stockear y las correcciones de unidad que no vengan de factura se pierden. Usalo al armar la base, no como mantenimiento de rutina.</li><li>💡 Si no hay facturas cargadas, Rebuild no borra nada.</li></ul>
+<h3>Camino 2 — Importar tu propio Excel de inventario</h3>
+<p>En <strong>Stock → Importar</strong>, subís tu Excel/CSV. La app reconoce las columnas (nombre, precio, unidad, categoría, stock actual, mínimo) aunque se llamen distinto, y te deja revisar.</p>
+<ul><li>💡 No hace falta un formato específico.</li><li>💡 Para productos "por unidad", cargá la medida unitaria para que el food cost calcule bien.</li></ul>
+<h3>Camino 3 — Modo rápido para hacer el inventario <em>(stock-take)</em></h3>
+<p>En <strong>Stock → Stockear</strong>: elegís el sector y la app te va mostrando producto por producto, en pantalla grande, para que cargues la cantidad real contada. Pensado para recorrer la heladera o el depósito con el celular.</p>
+<h3>Camino 4 — Manual, uno por uno</h3>
+<p>Tocá <strong>+</strong> y cargá nombre, categoría, unidad, stock actual, mínimo, crítico y precio. Para altas sueltas o cosas que no vienen de factura.</p>
+<h2>Qué pasa en la app</h2>
+<table><thead><tr><th>Módulo</th><th>Qué pasa</th></tr></thead><tbody><tr><td><strong>Inicio</strong></td><td>Lo que está en crítico o bajo aparece en "Stock crítico" y en la campana de alertas.</td></tr><tr><td><strong>Recetario</strong></td><td>El precio del producto alimenta el costo de cada ingrediente → food cost real.</td></tr><tr><td><strong>Carta</strong></td><td>El food cost de cada plato sale de los productos de sus recetas.</td></tr><tr><td><strong>Pedidos</strong></td><td>Lo bajo/crítico es lo que te sugiere pedir.</td></tr><tr><td><strong>Merma</strong></td><td>Al registrar una merma, se descuenta del stock solo.</td></tr><tr><td><strong>Mise / Producción</strong></td><td>Las cantidades "por unidad" se calculan con la medida del producto.</td></tr><tr><td><strong>Reportes</strong></td><td>Valorización del inventario y comparación de precios.</td></tr></tbody></table>
+<h2>Qué te resuelve en la práctica</h2>
+<p><strong>Si sos el administrador</strong></p>
+<ul><li>Saber <strong>cuánta plata tenés parada</strong> en mercadería ahora.</li><li>Que nadie cargue el inventario a mano: las facturas lo construyen.</li><li>Food cost confiable porque los precios están al día.</li></ul>
+<p><strong>Si sos el encargado o chef</strong></p>
+<ul><li>Ver de un vistazo qué está por agotarse <strong>antes</strong> de que falte en pleno servicio.</li><li>Hacer el inventario físico con el celu en vez de planilla y lápiz.</li><li>Detectar diferencias entre el sistema y la heladera (mermas, desperdicio).</li></ul>
+<p><strong>Si sos emprendedor</strong></p>
+<ul><li>Arrancar sin cargar nada: subís facturas y ya tenés stock.</li><li>Saber qué reponer sin depender de la memoria.</li></ul>
+<h2>Funciones extra que conviene conocer</h2>
+<ol><li><strong>Producciones internas como ítem de stock.</strong> Caldos, masas, fondos, salsas base — cosas que se producen y nunca aparecen en factura. Al crear el producto lo marcás como <strong>"producción interna"</strong> y le vinculás una receta: el costo se toma solo de esa receta. Lleva un badge "Producción" en la lista.</li><li><strong>Mínimo y crítico sugeridos.</strong> En vez de cargar los umbrales a mano, la app los sugiere según <strong>cuánto y cada cuánto comprás</strong> cada producto. Botón <strong>"Sugerir mínimos"</strong>.</li><li><strong>Alerta de stock inmóvil (capital dormido).</strong> Detecta productos <strong>sin compras hace mucho</strong> que todavía tienen stock: <em>"Tenés $X parados en productos que no rotan"</em>. Sirve para no sobre-comprar y detectar mercadería por vencer.</li></ol>
+<hr/>
+<h1>3 · RECETARIO</h1>
+<blockquote><strong>Quién lo carga:</strong> el administrador o el chef.</blockquote>
+<p>!<a href="shots/recetario.png">Módulo Recetario</a></p>
+<p><strong>Es el dato que convierte el stock en rentabilidad.</strong> Con los productos costeados (de las facturas), el recetario calcula <strong>cuánto cuesta cada plato</strong> y, contra el precio de venta, su <strong>food cost</strong>. Sin recetas, KitchenOS sabe qué comprás; con recetas, sabe <strong>si ganás plata con cada plato</strong>.</p>
+<h2>Cómo cargarlo</h2>
+<p>Cuatro caminos, combinables.</p>
+<h3>Camino 1 — Importar fichas técnicas con IA <em>(el más rápido)</em></h3>
+<p>En <strong>Recetario → Importar</strong>, subí una foto, PDF o texto de la ficha técnica. La app extrae <strong>nombre, ingredientes con cantidad y unidad, procedimiento y porciones</strong>. Podés cargar varias fichas de una.</p>
+<ul><li>💡 Después de importar, la app intenta <strong>vincular cada ingrediente a un producto del stock</strong> para traer el costo real. Los que no encuentra quedan marcados para que los revises.</li></ul>
+<h3>Camino 2 — Carga manual</h3>
+<p>Tocá <strong>+</strong> y cargá nombre, porciones, precio de venta, ingredientes (el buscador trae los productos del stock) y procedimiento. El food cost se calcula en vivo.</p>
+<h3>Camino 3 — Ideas (borradores) → completar con IA</h3>
+<p>En el tab <strong>Ideas</strong> anotás solo el nombre de un plato. Después, con <strong>"Completar con IA"</strong>, pegás los ingredientes y pasos y la app completa la receta (podés dictarlos con el micrófono del teclado de tu celular).</p>
+<h3>Camino 4 — Desde la Carta</h3>
+<p>Cuando armás un plato y buscás un componente que todavía no existe como receta, lo creás como <strong>borrador</strong> ahí mismo y queda vinculado.</p>
+<h2>Qué pasa en la app</h2>
+<table><thead><tr><th>Módulo</th><th>Qué pasa</th></tr></thead><tbody><tr><td><strong>Carta</strong></td><td>El food cost de cada plato sale de las recetas que lo componen.</td></tr><tr><td><strong>Stock</strong></td><td>Los ingredientes leen el precio del producto; una producción interna toma su costo de la receta.</td></tr><tr><td><strong>Mise / Producción</strong></td><td>Las recetas de un plato definen qué se produce y en qué cantidad por plaza.</td></tr><tr><td><strong>Pase / Tareas</strong></td><td>Una receta se puede mandar a producir como tarea.</td></tr><tr><td><strong>Reportes</strong></td><td>Food cost promedio, recetas más caras, evolución del costo por inflación.</td></tr></tbody></table>
+<h2>Qué te resuelve en la práctica</h2>
+<p><strong>Si sos el administrador</strong></p>
+<ul><li>Food cost <strong>real</strong> de cada plato, no estimado.</li><li>Ver al instante qué recetas dejaron de ser rentables cuando suben los insumos.</li><li>Estandarizar: que el plato salga igual lo haga quien lo haga.</li></ul>
+<p><strong>Si sos chef o cocinero</strong></p>
+<ul><li>Todas las fichas técnicas en el celular, no en una carpeta que se moja.</li><li>Escalar una receta a la cantidad a producir sin recalcular a mano.</li><li>Cargar recetas sin pelearte con planillas: foto y listo.</li></ul>
+<p><strong>Si sos emprendedor</strong></p>
+<ul><li>Poner precios con fundamento, no "a ojo".</li><li>Detectar qué plato conviene empujar y cuál hace perder plata.</li></ul>
+<h2>Funciones extra que conviene conocer</h2>
+<ol><li><strong>Escalado de receta.</strong> En el detalle, con <strong>"Producir N porciones"</strong>, las cantidades de cada ingrediente se recalculan al instante. Para producir 80 porciones de salsa sin calculadora.</li><li><strong>Salud del recetario.</strong> Un panel agrupa las recetas con <strong>costeo incompleto</strong>, <strong>food cost crítico (&gt;35%)</strong> o <strong>sin precio de venta</strong>, con acceso directo para corregir cada una.</li><li><strong>Sugerir precio de venta.</strong> Le decís un food cost objetivo (ej. 30%) y la app te sugiere a cuánto vender el plato. Clave para reajustar la carta rápido con la inflación.</li></ol>
+<hr/>
+<h1>4 · CARTA</h1>
+<blockquote><strong>Quién la carga:</strong> el administrador define precios; el equipo marca disponibilidad (86) en el día.</blockquote>
+<p>!<a href="shots/carta.png">Módulo Carta</a></p>
+<p><strong>Es la capa que junta todo y mira al cliente.</strong> Si el recetario calcula cuánto cuesta un plato, la Carta define <strong>a cuánto lo vendés, cómo se agrupa y si está disponible</strong>. Es el puente entre la cocina y el salón.</p>
+<blockquote>Jerarquía: ingrediente → receta → <strong>plato</strong> → menú.</blockquote>
+<h2>Cómo cargarla</h2>
+<h3>Camino 1 — Importar con IA <em>(el más rápido)</em></h3>
+<p>En <strong>Carta → Importar</strong>, subí una foto de la carta impresa, PDF, Excel o texto. La app extrae <strong>nombre, componentes, porciones, precio y tags dietarios</strong> (S/TACC, vegano, vegetariano, keto, picante, sin lactosa).</p>
+<ul><li>💡 En el preview, cada componente se vincula solo a una receta/producto; lo que no encuentra se crea como borrador.</li></ul>
+<h3>Camino 2 — Crear un plato a mano</h3>
+<p>Tocá <strong>+ Nuevo</strong> y cargá nombre, precio, categoría, tags y composición (buscador de recetas/productos). El <strong>food cost se calcula en vivo</strong>.</p>
+<h3>Camino 3 — Menús y eventos</h3>
+<p>El mismo editor crea Menús fijos o Eventos: preparaciones por curso, con plaza, prioridad y cantidad. Es lo que después se <strong>activa en Planificación</strong> para producir.</p>
+<h2>Qué pasa en la app</h2>
+<table><thead><tr><th>Módulo</th><th>Qué pasa</th></tr></thead><tbody><tr><td><strong>Recetario</strong></td><td>Cada plato lee el food cost de sus recetas; un cambio de costo se refleja solo.</td></tr><tr><td><strong>Mise / Producción</strong></td><td>Asignar un componente a OPS crea o actualiza el ítem de mise por plaza.</td></tr><tr><td><strong>Planificación</strong></td><td>Activar un menú genera las tareas de producción del día.</td></tr><tr><td><strong>Pase / Servicio</strong></td><td>El <strong>86</strong> le avisa al equipo qué plato no sale.</td></tr><tr><td><strong>Reportes / Ventas</strong></td><td>El precio de venta es la base del CMV, el margen y el ticket promedio.</td></tr></tbody></table>
+<h2>Qué te resuelve en la práctica</h2>
+<p><strong>Si sos el administrador</strong></p>
+<ul><li>Ver food cost y margen de cada plato <strong>al lado de su precio</strong> y decidir con datos.</li><li>Subir la carta entera con una foto, sin tipear decenas de platos.</li><li>Saber qué platos rinden y cuáles repensar.</li></ul>
+<p><strong>Si sos chef o encargado</strong></p>
+<ul><li>Marcar <strong>86</strong> al instante y que todo el equipo lo vea.</li><li>Carta siempre sincronizada con lo que la cocina puede producir.</li></ul>
+<p><strong>Para el salón / comensal</strong></p>
+<ul><li>Carta clara, con tags dietarios y sin platos que "no hay".</li></ul>
+<h2>Funciones extra que conviene conocer</h2>
+<blockquote>Las tres viven en <strong>Carta → Rentabilidad</strong>.</blockquote>
+<ol><li><strong>Ingeniería de menú.</strong> Cruza <strong>ventas</strong> (popularidad) × <strong>margen</strong> (rentabilidad) y clasifica cada plato en <strong>Estrella / Caballo / Puzzle / Perro</strong>, con una recomendación por cada uno (mantener, reprecio, promocionar, sacar). <em>Sin ventas cargadas, clasifica solo por rentabilidad.</em></li><li><strong>Reprecio por inflación (en lote).</strong> Definís un food cost objetivo y la app lista los platos que se pasaron y sugiere el nuevo precio. Aplicás de a uno o todos juntos.</li><li><strong>Salud de la carta.</strong> Agrupa los platos a revisar: <strong>sin receta vinculada</strong>, <strong>margen negativo</strong>, <strong>en 86</strong> y <strong>sin categoría</strong>.</li></ol>
+<hr/>
+<h1>5 · VENTAS</h1>
+<blockquote><strong>Quién las carga:</strong> el administrador o el encargado, al cierre.</blockquote>
+<p><strong>Es el dato que cierra el círculo.</strong> Facturas, Stock, Recetario y Carta responden <em>"cuánto cuesta y a cuánto vendo"</em>; <strong>Ventas responde "cuánto vendí de verdad"</strong>. Transforma los food cost teóricos en rentabilidad real: con ventas cargadas, KitchenOS sabe tu CMV, tu ticket promedio y qué platos se mueven.</p>
+<h2>Cómo cargarlas</h2>
+<h3>Camino 1 — Importar desde tu POS <em>(lo más común)</em></h3>
+<p>En <strong>Ventas → Importar</strong>, subí el Excel/CSV del cierre. Lee el total y, si está el detalle, los platos vendidos con cantidad y precio. Revisás antes de guardar.</p>
+<ul><li>💡 Usá el reporte de <strong>"productos vendidos"</strong> (no solo el total): así se carga el mix y se desbloquea la ingeniería de menú.</li><li>💡 Cargá por período cerrado (día/semana/mes).</li></ul>
+<h3>Camino 2 — Pegar texto</h3>
+<p>Pegás el texto del cierre o de un WhatsApp y la app lo estructura sola: total, cubiertos y platos. Si usás el celular, podés dictar el texto con el micrófono del teclado antes de pegar.</p>
+<h3>Camino 3 — Cierre rápido del día</h3>
+<p>Botón <strong>"Cargar cierre del día"</strong> en Resumen: fecha + total + cubiertos en un toque. Para el cierre simple de cada noche.</p>
+<h2>Qué pasa en la app</h2>
+<table><thead><tr><th>Módulo</th><th>Qué pasa</th></tr></thead><tbody><tr><td><strong>Reportes → CMV</strong></td><td>Ventas × compras del período → costo de mercadería y food cost real.</td></tr><tr><td><strong>Reportes → Presupuesto vs Real</strong></td><td>Ventas reales contra el objetivo.</td></tr><tr><td><strong>Carta → Ingeniería de menú</strong></td><td>Los platos vendidos dan la popularidad que clasifica cada plato.</td></tr><tr><td><strong>Reportes → Rendimiento</strong></td><td>Ticket promedio, cubiertos y evolución.</td></tr></tbody></table>
+<h2>Qué te resuelve en la práctica</h2>
+<p><strong>Si sos el administrador</strong></p>
+<ul><li>Food cost <strong>real</strong> del mes (no el teórico): cuánto de cada $100 vendido se fue en mercadería.</li><li>Ticket promedio y su evolución.</li><li>Qué platos sostienen la facturación y cuáles casi no se venden.</li></ul>
+<p><strong>Si sos chef o encargado</strong></p>
+<ul><li>Saber qué se vende para producir acorde.</li><li>Justificar decisiones de carta con números.</li></ul>
+<p><strong>Si sos emprendedor</strong></p>
+<ul><li>Foto clara de ingresos vs costos, sin planillas.</li><li>Medir si una promo o un cambio de precio funcionó.</li></ul>
+<h2>Funciones extra que conviene conocer</h2>
+<ol><li><strong>Ranking de platos vendidos.</strong> El tab <strong>Platos</strong> muestra los más y menos vendidos del período con su <strong>% de participación</strong> sobre la facturación (top en verde, cola en rojo).</li><li><strong>Food cost teórico del período.</strong> Cruza los platos vendidos × el costo de su receta y te dice cuánto <strong>deberías</strong> haber gastado. Comparado con tus compras reales, revela la fuga (merma, porciones de más, robo).</li><li><strong>Cierre diario rápido + alerta de días sin cargar.</strong> Cargás el total del día en un toque y la app te avisa cuántos días del mes quedaron sin ventas — porque con huecos el CMV y el ticket promedio mienten.</li></ol>
+<hr/>
+<h1>6 · REPORTES — LO QUE TE DEVUELVE LA CARGA</h1>
+<blockquote><strong>Quién lo usa:</strong> el administrador, al cierre de cada período.</blockquote>
+<p>!<a href="shots/reportes.png">Módulo Reportes</a></p>
+<p><strong>Acá está el pago de todo el esfuerzo de carga.</strong> Con facturas, ventas y recetario cargados, Reportes te muestra si el negocio da plata — sin armar una sola planilla.</p>
+<h2>Qué encontrás</h2>
+<p><strong>CMV del mes (Costo de Mercadería Vendida)</strong> Cruza tus compras (de las facturas) contra tus ventas del período y calcula cuánto de cada peso vendido se fue en mercadería. El número que todo dueño necesita saber. Se alimenta de: facturas + ventas.</p>
+<p><strong>Inflación de cocina</strong> Evolución del precio de cada producto mes a mes. Ves al instante qué insumos subieron más y cuándo conviene ajustar la carta o buscar alternativa de proveedor. Se alimenta de: facturas.</p>
+<p><strong>Presupuesto vs Real</strong> Definís un objetivo de gasto o de ventas por período (semanal/mensual/trimestral) y la app lo contrasta contra los números reales. Se configura directamente en la pantalla de Reportes. Se alimenta de: facturas + ventas.</p>
+<p><strong>Valorización del stock</strong> Cuánta plata tenés parada en la heladera y el depósito ahora mismo, calculada con los precios de la última factura de cada producto. Se alimenta de: stock + facturas.</p>
+<h2>Qué te resuelve en la práctica</h2>
+<p><strong>Para el dueño / administrador</strong></p>
+<ul><li>Saber si el mes fue rentable, en números, sin depender de la memoria o del contador.</li><li>Ver cuándo conviene subir precios: si el costo del bife subió 20%, el food cost de los platos con bife ya lo refleja.</li><li>Detectar si una promo o un evento mejoró el ticket promedio.</li><li>Controlar el presupuesto de compras sin planillas.</li></ul>
+<blockquote>💡 <strong>Si los números parecen raros</strong>, casi siempre falta alguno de estos tres datos: facturas del mes completo, ventas del período o recetas con ingredientes vinculados al stock. Revisá el panel "Salud del recetario" y el tab "Por cargar" en Ventas.</blockquote>
+<hr/>
+<h1>ETAPA 2 — Operación diaria</h1>
+<blockquote><strong>La hace el equipo</strong> (cocina, salón, compras) durante el servicio. Se apoya sobre los datos que cargó el administrador en la Etapa 1: produce lo que define la carta, descuenta del stock, pide a los proveedores que ya están cargados.</blockquote>
+<p>A diferencia de la Etapa 1 (que se hace una vez y se mantiene), esta etapa es <strong>del día a día</strong>: se usa en cada turno, en el celular, durante el servicio.</p>
+<hr/>
+<h2>7 · OPS / PRODUCCIÓN Y MISE</h2>
+<blockquote><strong>Quién lo usa:</strong> todo el equipo de cocina. El administrador o chef planifica; los cocineros ejecutan.</blockquote>
+<p>!<a href="shots/mise.png">Módulo OPS / Mise</a></p>
+<p><strong>Es el centro de la operación diaria.</strong> Acá se decide y se sigue <strong>qué hay que producir hoy</strong>, <strong>qué mise en place</strong> dejar listo y <strong>cómo se reparte el trabajo por plaza</strong>. Vive en una sola pantalla (<strong>Operaciones</strong>) con tres pestañas.</p>
+<h3>Las tres pestañas</h3>
+<p><strong>1 · Producción</strong> — La lista de tareas del día: qué se cocina o se prepara, con su <strong>prioridad</strong> (crítica/alta/media/baja), la <strong>plaza</strong> que la hace y quién la tiene asignada. Cada tarea se <strong>tilda en verde</strong> cuando está lista, y el equipo ve el avance del turno en tiempo real.</p>
+<ul><li>💡 Lo que queda sin terminar <strong>se arrastra al día siguiente</strong> (un día), para que nada se pierda.</li></ul>
+<p><strong>2 · Mise</strong> — El checklist de <strong>mise en place</strong> por plaza: las preparaciones previas que hay que dejar listas antes del servicio. Calcula <strong>cuánto producir</strong> según el recipiente y el tamaño de porción, y muestra el <strong>déficit</strong> ("te faltan 20 porciones, producí 1,5 kg"). Tiene una sub-pestaña <strong>Rutina</strong> con las tareas que se repiten (limpieza, controles) el día que corresponde.</p>
+<p><strong>3 · Planificación</strong> — Donde se arma la producción a futuro. Se <strong>activa un menú o evento</strong> (los que cargaste en la Carta) y eso <strong>genera solas las tareas de producción</strong> del día, repartidas por plaza. También se planifica por fecha.</p>
+<h3>Cómo se carga / se usa</h3>
+<ul><li><strong>Crear una tarea suelta:</strong> botón <strong>+</strong> → título, plaza, prioridad, a quién se la asignás.</li><li><strong>Generar producción desde un menú:</strong> pestaña Planificación → elegís el menú → <strong>Activar</strong> → aparecen las tareas en Producción.</li><li><strong>Mandar a producir una receta:</strong> desde el Recetario o la Carta, una receta se puede enviar como tarea de producción.</li></ul>
+<h3>Qué te resuelve</h3>
+<p><strong>Para el chef / encargado</strong></p>
+<ul><li>Repartir el trabajo por plaza sin papelitos ni gritos.</li><li>Ver el avance del turno de un vistazo: qué está listo y qué falta.</li><li>Que el mise se calcule solo (cuánto producir), sin cuentas a mano.</li></ul>
+<p><strong>Para el cocinero</strong></p>
+<ul><li>Saber exactamente qué le toca hacer hoy, en su plaza, sin preguntar.</li><li>Tildar lo que va terminando y que el equipo lo vea.</li></ul>
+<p><strong>Para el dueño</strong></p>
+<ul><li>Que la producción salga de la carta automáticamente, estandarizada.</li></ul>
+<hr/>
+<h2>8 · PASE / SERVICIO</h2>
+<blockquote><strong>Quién lo usa:</strong> toda la cocina y el pase, durante el servicio.</blockquote>
+<p>!<a href="shots/pase.png">Módulo Pase</a></p>
+<p><strong>Es la "radio" de la cocina en tiempo real.</strong> Reemplaza los gritos y los papelitos del servicio: un canal donde el equipo se comunica al instante qué pasa en cada plaza.</p>
+<h3>Cómo se usa</h3>
+<ul><li>Escribís un mensaje y lo ves todo el equipo al toque.</li><li>Podés <strong>mencionar a alguien</strong> con <code>@nombre</code> o a una plaza con <code>#parrilla</code>, <code>#fríos</code>, <code>#calientes</code>, etc.</li><li>Hay <strong>mensajes rápidos</strong> de un toque: <em>Falta stock</em>, <em>Producción pendiente</em>, <em>Equipo roto</em>, <em>Reserva especial</em>, <em>Limpieza pendiente</em>, <em>Todo OK</em>.</li><li>Cada mensaje puede llevar <strong>prioridad</strong> para que lo urgente resalte.</li></ul>
+<h3>Qué te resuelve</h3>
+<p><strong>Para el equipo de cocina</strong></p>
+<ul><li>Comunicar un 86, un faltante o un problema sin frenar el servicio.</li><li>Que quede registro de lo que pasó en el turno (no se pierde en el ruido).</li></ul>
+<p><strong>Para el chef / encargado</strong></p>
+<ul><li>Coordinar plazas sin estar físicamente en cada una.</li><li>Avisar reservas especiales o cambios a todos de una.</li></ul>
+<hr/>
+<h2>9 · MERMA</h2>
+<blockquote><strong>Quién lo usa:</strong> cocina y encargados, en el momento en que algo se desperdicia.</blockquote>
+<p>!<a href="shots/merma.png">Módulo Merma</a></p>
+<p><strong>Es donde se registra lo que se desperdicia o se descarta</strong>, para que el stock y el food cost no mientan. Cada merma que cargás <strong>se descuenta sola del stock</strong> y suma a la estadística de pérdidas.</p>
+<h3>Cómo se carga</h3>
+<p>Botón <strong>+</strong> → elegís el producto, la cantidad, el <strong>motivo</strong> (vencimiento, mal estado, error de preparación, devolución, etc.) y el turno. La app calcula el <strong>costo estimado</strong> de lo perdido con el precio del producto.</p>
+<ul><li>💡 Tenés vistas por <strong>Hoy / Semana / Mes / Todo</strong> para ver cuánta plata se fue en desperdicio.</li></ul>
+<h3>Qué te resuelve</h3>
+<p><strong>Para el dueño / administrador</strong></p>
+<ul><li>Saber <strong>cuánto se pierde de verdad</strong> y por qué — la merma es plata que se va sin venderse.</li><li>Cruzar la merma con el food cost teórico para encontrar la fuga.</li></ul>
+<p><strong>Para el chef / cocinero</strong></p>
+<ul><li>Que el stock refleje la realidad (lo que se tiró no está más en la heladera).</li><li>Detectar si un producto se desperdicia siempre por la misma razón (compra de más, mala rotación).</li></ul>
+<hr/>
+<h2>10 · PEDIDOS</h2>
+<blockquote><strong>Quién lo usa:</strong> el encargado de compras o el chef.</blockquote>
+<p>!<a href="shots/pedidos.png">Módulo Pedidos</a></p>
+<p><strong>Es donde armás los pedidos a proveedores</strong>, apoyándote en lo que la app ya sabe: qué está bajo en stock, qué le comprás siempre a cada proveedor y a qué precio.</p>
+<h3>Cómo se arma</h3>
+<ol><li>Elegís el <strong>proveedor</strong> (de los que ya se crearon solos con las facturas).</li><li>La app te <strong>sugiere los productos</strong> que más le comprás y los que están <strong>bajos o críticos</strong> en stock, con un precio estimado.</li><li>Ajustás cantidades y confirmás.</li><li>Lo <strong>enviás por WhatsApp</strong> o lo <strong>exportás en PDF</strong> directo al proveedor.</li></ol>
+<p>Cada pedido tiene un estado: <strong>Borrador → Enviado → Parcial → Recibido</strong>.</p>
+<ul><li>💡 Cuando llega la mercadería y cargás la factura, podés <strong>vincularla al pedido</strong> para detectar diferencias entre lo que pediste y lo que te facturaron.</li><li>💡 <strong>Para mandar el pedido por WhatsApp</strong>, cargale el teléfono al proveedor en el módulo <strong>Proveedores</strong>. Los proveedores que se crean solos desde las facturas nacen sin teléfono.</li></ul>
+<h3>Qué te resuelve</h3>
+<p><strong>Para el encargado de compras</strong></p>
+<ul><li>Armar el pedido en minutos, sin revisar la heladera producto por producto.</li><li>Mandarlo por WhatsApp sin tipear la lista a mano.</li><li>No olvidarte de reponer lo que está por agotarse.</li></ul>
+<p><strong>Para el dueño</strong></p>
+<ul><li>Pedidos con precio estimado: sabés cuánto vas a gastar antes de comprar.</li><li>Control de lo pedido vs lo recibido.</li></ul>
+<hr/>
+<h2>11 · SALÓN / KDS <em>(en prueba)</em></h2>
+<blockquote><strong>Quién lo usa:</strong> el mozo/cajero (salón) y el cocinero (KDS).</blockquote>
+<p>La app incluye una <strong>vista de servicio</strong> pensada para el turno en vivo: funciona en tablet o celular, con alto contraste y botones grandes.</p>
+<p><strong>Qué tiene:</strong></p>
+<ul><li><strong>Mapa de mesas:</strong> abrís la mesa, cargás los ítems de la carta y mandás la comanda a cocina.</li><li><strong>Pantalla KDS (Kitchen Display System):</strong> la cocina ve las comandas en tiempo real por estación, las tilda o las "bumpea" al pasarlas.</li><li><strong>Cobro multi-medio:</strong> efectivo, tarjeta, transferencia o combinado. Genera el resumen del ticket.</li><li><strong>86 bidireccional:</strong> lo que el encargado marca como 86 en la carta no se puede pedir en el salón, y lo que se agota en el KDS actualiza la carta automáticamente.</li></ul>
+<blockquote>Esta funcionalidad está en prueba activa. El flujo completo se documenta aparte.</blockquote>
+<hr/>
+<h1>Problemas frecuentes</h1>
+<h2>"El food cost me da bajísimo / un ingrediente no suma al costo"</h2>
+<p>Casi siempre es un producto cargado <strong>"por unidad"</strong> con precio que en realidad es por kg o litro. La app detecta la inconsistencia y excluye esa línea del costo para no inflarlo, pero eso deja ese ingrediente fuera del cálculo.</p>
+<p><strong>Cómo corregirlo:</strong> andá a <strong>Stock → filtro "Unidades a revisar"</strong>: aparecen todos los productos con unidad <code>u</code> y precio alto. Seleccioná la unidad real (kg, l, g, ml) y aplicá los cambios en lote. El food cost de las recetas que usan ese producto se recalcula solo.</p>
+<h2>"Cargué los meses de facturas desordenados"</h2>
+<p>No hay problema: reimportá el mes que faltaba. Después, para que los precios vigentes queden bien, corré <strong>Stock → Rebuild</strong>: reconstruye el stock usando el precio más reciente de cada producto en todo el historial de facturas.</p>
+<h2>"Importé un archivo equivocado"</h2>
+<p>Las importaciones de <strong>stock</strong> y <strong>proveedores</strong> se pueden deshacer. Aparece un banner justo después del import con el botón <strong>Deshacer</strong>: lo tocás y se revierten los cambios de ese archivo.</p>
+<h2>"Quedaron ingredientes sin vincular al stock"</h2>
+<p>Después de importar recetas, la app corre un <strong>vínculo automático</strong> que empareja cada ingrediente con el producto del stock más parecido. Los que no matchean quedan sin costo. Para revisarlos: <strong>Recetario → Salud del recetario</strong> (agrupa todas las recetas con costeo incompleto). Entrás a cada receta y buscás el producto correcto en el campo del ingrediente.</p>
+<hr/>
+<h1>Resumen — la rutina recomendada</h1>
+<p><strong>Al arrancar (una sola vez):</strong></p>
+<ol><li>Cargá el historial de <strong>facturas</strong> mes a mes, en orden.</li><li>Hacé un <strong>Rebuild</strong> del stock para que se arme desde las facturas.</li><li>Cargá o importá tu <strong>recetario</strong> y revisá los ingredientes sin vincular.</li><li>Subí tu <strong>carta</strong> y poné los precios.</li><li>Cargá el historial de <strong>ventas</strong> con detalle de platos.</li></ol>
+<p><strong>Cada semana:</strong></p>
+<ul><li>Subí las <strong>facturas</strong> nuevas (foto o Excel).</li><li>Revisá las <strong>alertas de precio</strong> y de stock.</li><li>Cargá las <strong>ventas</strong> del período.</li></ul>
+<p><strong>Cada día (equipo — Etapa 2):</strong></p>
+<ul><li>Revisá la <strong>Producción</strong> del día en OPS y tildá lo que va saliendo.</li><li>Dejá listo el <strong>mise</strong> de tu plaza.</li><li>Usá el <strong>Pase</strong> para comunicar 86, faltantes o problemas.</li><li>Marcá <strong>86</strong> en la carta lo que no sale.</li><li>Registrá <strong>merma</strong> cuando se descarta algo.</li><li>Armá los <strong>pedidos</strong> a proveedor de lo que está bajo.</li><li>Hacé el <strong>cierre del día</strong> en Ventas.</li></ul>
+<blockquote>Si seguís esta rutina, KitchenOS te devuelve food cost real, CMV, alertas de reposición y rentabilidad por plato <strong>sin que tengas que armar una sola planilla.</strong></blockquote>
+<hr/>
+<h1>Tabla resumen — qué, dónde y con qué frecuencia</h1>
+<blockquote>Para imprimir y pegar en la cocina o la oficina.</blockquote>
+<table><thead><tr><th>Dato</th><th>Dónde se carga</th><th>Quién</th><th>Frecuencia</th></tr></thead><tbody><tr><td><strong>Facturas</strong></td><td>Facturas → <strong>+</strong> (foto/PDF) o → Importar masivo (Excel)</td><td>Administrador / encargado de compras</td><td>Por cada compra; cierre de mes</td></tr><tr><td><strong>Conteo de stock</strong></td><td>Stock → <strong>Stockear</strong></td><td>Encargado / equipo</td><td>Semanal o por turno</td></tr><tr><td><strong>Recetas</strong></td><td>Recetario → Importar (IA) o <strong>+</strong></td><td>Chef / administrador</td><td>Al inicio; cuando cambia la oferta</td></tr><tr><td><strong>Precios de carta</strong></td><td>Carta → editar plato → precio</td><td>Administrador</td><td>Cuando cambia el costo o la estrategia</td></tr><tr><td><strong>Ventas</strong></td><td>Ventas → Importar (Excel POS) o Cierre del día</td><td>Administrador / encargado</td><td>Diario o semanal</td></tr><tr><td><strong>Merma</strong></td><td>Merma → <strong>+</strong></td><td>Cocinero / encargado</td><td>Cada vez que se descarta algo</td></tr><tr><td><strong>Pedidos a proveedores</strong></td><td>Pedidos → Nuevo pedido</td><td>Encargado de compras</td><td>Según necesidad / stock bajo</td></tr><tr><td><strong>86</strong></td><td>Carta → marcar 86 en el plato</td><td>Cualquier persona del equipo</td><td>Cuando sale o vuelve un plato</td></tr></tbody></table>
+
+</body></html>
