@@ -8,6 +8,10 @@ import { useComandas, type NuevoComandaItem } from '@/lib/hooks/useComandas'
 import { useCuenta, calcularResumen, type PagoInput, type ResultadoFiscal } from '@/lib/hooks/useCuenta'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
 import { useOnlineStatus } from '@/lib/offline/useOnlineStatus'
+import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
+import { createClient } from '@/lib/supabase/client'
+import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, supportsWebUSB, supportsWebBluetooth } from '@/lib/print/escpos'
+import VistaCaja from '@/components/salon/VistaCaja'
 import KitchenCoachFAB from '@/components/coach/KitchenCoachFAB'
 import type { Mesa, CartaItem, EstadoMesa, TipoModificador, Comanda, EstadoComandaItem } from '@/types'
 
@@ -229,99 +233,6 @@ interface LineaPago {
   monto: string      // string para el input
 }
 
-// ── ESC/POS tipos mínimos (Web USB / Bluetooth no están en el DOM lib por defecto) ──
-
-interface PrinterUsbEp { direction: string; type: string; endpointNumber: number }
-interface PrinterUsbIface {
-  interfaceNumber: number
-  alternates: { interfaceClass: number; endpoints: PrinterUsbEp[] }[]
-}
-interface PrinterUsbDevice {
-  vendorId: number; productId: number
-  configuration: { interfaces: PrinterUsbIface[] } | null
-  open(): Promise<void>; selectConfiguration(n: number): Promise<void>
-  claimInterface(n: number): Promise<void>; releaseInterface(n: number): Promise<void>
-  transferOut(ep: number, data: Uint8Array): Promise<unknown>
-}
-interface PrinterBleChar { writeValueWithoutResponse(data: Uint8Array): Promise<void> }
-interface PrinterBleGattServer {
-  getPrimaryService(s: string): Promise<{ getCharacteristic(c: string): Promise<PrinterBleChar> }>
-}
-interface PrinterBleDevice {
-  id?: string
-  gatt?: { connect(): Promise<PrinterBleGattServer> }
-}
-
-async function fetchEscPosBytes(payload: object): Promise<Uint8Array> {
-  const res = await fetch('/api/ingest/escpos', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  const json = await res.json() as { ok: boolean; bytes: string; error?: string }
-  if (!json.ok) throw new Error(json.error ?? 'Error generando ticket')
-  const raw = atob(json.bytes)
-  const arr = new Uint8Array(raw.length)
-  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i)
-  return arr
-}
-
-const BLE_SERVICE = '000018f0-0000-1000-8000-00805f9b34fb'
-const BLE_CHAR    = '00002af1-0000-1000-8000-00805f9b34fb'
-
-async function printViaUSB(bytes: Uint8Array): Promise<void> {
-  type UsbApi = {
-    getDevices(): Promise<PrinterUsbDevice[]>
-    requestDevice(o: { filters: unknown[] }): Promise<PrinterUsbDevice>
-  }
-  const usb = (navigator as Navigator & { usb?: UsbApi }).usb
-  if (!usb) throw new Error('WebUSB no disponible en este navegador')
-  const saved = localStorage.getItem('kos_printer_usb')
-  let device: PrinterUsbDevice | undefined
-  const all = await usb.getDevices()
-  if (saved) {
-    const { vendorId, productId } = JSON.parse(saved) as { vendorId: number; productId: number }
-    device = all.find(d => d.vendorId === vendorId && d.productId === productId)
-  }
-  if (!device) {
-    device = await usb.requestDevice({ filters: [] })
-    localStorage.setItem('kos_printer_usb', JSON.stringify({ vendorId: device.vendorId, productId: device.productId }))
-  }
-  await device.open()
-  if (!device.configuration) await device.selectConfiguration(1)
-  let ifaceNum = 0, epNum = 1
-  for (const iface of device.configuration?.interfaces ?? []) {
-    for (const alt of iface.alternates) {
-      if (alt.interfaceClass === 7) {
-        ifaceNum = iface.interfaceNumber
-        const ep = alt.endpoints.find(e => e.direction === 'out' && e.type === 'bulk')
-        if (ep) epNum = ep.endpointNumber
-      }
-    }
-  }
-  await device.claimInterface(ifaceNum)
-  try {
-    for (let i = 0; i < bytes.length; i += 512) await device.transferOut(epNum, bytes.slice(i, i + 512))
-  } finally {
-    await device.releaseInterface(ifaceNum)
-  }
-}
-
-async function printViaBluetooth(bytes: Uint8Array): Promise<void> {
-  type BtApi = {
-    requestDevice(o: { acceptAllDevices?: boolean; optionalServices?: string[] }): Promise<PrinterBleDevice>
-  }
-  const bt = (navigator as Navigator & { bluetooth?: BtApi }).bluetooth
-  if (!bt) throw new Error('Web Bluetooth no disponible en este navegador')
-  const device = await bt.requestDevice({ acceptAllDevices: true, optionalServices: [BLE_SERVICE] })
-  if (device.id) localStorage.setItem('kos_printer_bt', device.id)
-  const server = await device.gatt?.connect()
-  if (!server) throw new Error('No se pudo conectar al dispositivo Bluetooth')
-  const service = await server.getPrimaryService(BLE_SERVICE)
-  const char = await service.getCharacteristic(BLE_CHAR)
-  for (let i = 0; i < bytes.length; i += 512) await char.writeValueWithoutResponse(bytes.slice(i, i + 512))
-}
-
 // ── Ticket post-cobro ────────────────────────────────────────────────────────
 
 function TicketCobro({
@@ -339,16 +250,25 @@ function TicketCobro({
 }) {
   const hora = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
 
+  const RESTAURANTE_ID = useRestauranteId()
+  const [nombreLocal, setNombreLocal] = useState('KitchenOS')
+  useEffect(() => {
+    if (!RESTAURANTE_ID) return
+    const supabase = createClient()
+    supabase.from('restaurantes').select('nombre').eq('id', RESTAURANTE_ID).maybeSingle()
+      .then(({ data }) => { if (data?.nombre) setNombreLocal(data.nombre) })
+  }, [RESTAURANTE_ID])
+
   const [printing, setPrinting] = useState(false)
   const [printError, setPrintError] = useState<string | null>(null)
-  const supportsUSB = typeof navigator !== 'undefined' && 'usb' in navigator
-  const supportsBT  = typeof navigator !== 'undefined' && 'bluetooth' in navigator
+  const supportsUSB = supportsWebUSB()
+  const supportsBT  = supportsWebBluetooth()
 
   function ticketPayload() {
     return {
       mode: 'generate', tipo: 'cliente',
       data: {
-        nombreLocal: 'KitchenOS',
+        nombreLocal,
         mesa: String(mesa.numero),
         items: resumenLineas.map(l => ({
           nombre: l.nombre, cantidad: l.cantidad,
@@ -384,11 +304,7 @@ function TicketCobro({
     setPrintError(null)
     try {
       const bytes = await fetchEscPosBytes(ticketPayload())
-      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/octet-stream' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url; a.download = `ticket-mesa-${mesa.numero}.bin`; a.click()
-      URL.revokeObjectURL(url)
+      downloadEscPosBytes(bytes, `ticket-mesa-${mesa.numero}.bin`)
     } catch (e: unknown) {
       setPrintError(e instanceof Error ? e.message : 'Error al descargar')
     } finally {
@@ -868,7 +784,7 @@ function VistaCuenta({
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 
-type Vista = 'mapa' | 'mesa' | 'cuenta'
+type Vista = 'mapa' | 'mesa' | 'cuenta' | 'caja'
 
 export default function SalonPage() {
   const router  = useRouter()
@@ -1034,6 +950,10 @@ export default function SalonPage() {
               style={{ minWidth: 44, minHeight: 44, background: '#1a1a1a', borderRadius: 12, border: 'none', color: '#aaa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 24 }}>kitchen</span>
             </button>
+            <button onClick={() => setVista('caja')} title="Caja" aria-label="Caja"
+              style={{ minWidth: 44, minHeight: 44, background: '#1a1a1a', borderRadius: 12, border: 'none', color: '#aaa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 24 }}>point_of_sale</span>
+            </button>
             <button onClick={() => router.push('/salon/config')} title="Configurar mesas" aria-label="Configurar mesas"
               style={{ minWidth: 44, minHeight: 44, background: '#1a1a1a', borderRadius: 12, border: 'none', color: '#aaa', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 24 }}>settings</span>
@@ -1062,6 +982,12 @@ export default function SalonPage() {
         <KitchenCoachFAB />
       </div>
     )
+  }
+
+  // ── Vista caja ────────────────────────────────────────────────────────────
+
+  if (vista === 'caja') {
+    return <VistaCaja onVolver={() => setVista('mapa')} />
   }
 
   // ── Vista cuenta ──────────────────────────────────────────────────────────
