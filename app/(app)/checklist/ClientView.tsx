@@ -250,6 +250,19 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       }),
     [secciones, plaza])
 
+  // Sub-secciones (jul 2026): plazaSecciones sigue plano (raíces + hijas); acá
+  // se separan para renderizar cada raíz como card y sus hijas anidadas adentro.
+  const rootSecciones = useMemo(() => plazaSecciones.filter(s => !s.parent_id), [plazaSecciones])
+  const childSeccionesByParent = useMemo(() => {
+    const m: Record<string, ChecklistSeccionConfig[]> = {}
+    for (const s of plazaSecciones) {
+      if (!s.parent_id) continue
+      ;(m[s.parent_id] ??= []).push(s)
+    }
+    for (const k of Object.keys(m)) m[k].sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
+    return m
+  }, [plazaSecciones])
+
   const seedingRef = useRef(false)
   useEffect(() => {
     if (!plaza || loading || seedingRef.current) return
@@ -682,12 +695,99 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
               </div>
             )
           }
-          return plazaSecciones.map(sec => {
+          // Fila de un ítem del mise — usada tanto para los ítems propios de la
+          // sección raíz como para los de cada sub-sección. Invocada como
+          // función (no <Componente/>) para no perder foco/estado por remount.
+          function renderSecItems(itemsList: MisePlaceItem[]) {
+            return itemsList.map(item => (
+              <div
+                key={item.id}
+                onTouchStart={modoControl ? undefined : e => startLongPress(item, e.touches[0].clientY)}
+                onTouchMove={modoControl ? undefined : cancelLongPress}
+                onTouchEnd={modoControl ? undefined : cancelLongPress}
+                style={{
+                  opacity: dragging?.item.id === item.id ? 0.35 : 1,
+                  transition: 'opacity .15s',
+                  touchAction: dragging ? 'none' : 'auto',
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
+                }}
+              >
+                {modoControl ? (
+                  <button
+                    onClick={() => handleMiseUpsert(item.id, fecha, turno, { completado: !regMap[item.id]?.completado })}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '10px 4px', background: 'none', border: 'none', cursor: 'pointer',
+                      fontFamily: 'inherit', textAlign: 'left',
+                      borderBottom: '1px solid var(--border)',
+                      WebkitTapHighlightColor: 'transparent',
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{
+                      fontSize: 22, flexShrink: 0,
+                      color: regMap[item.id]?.completado ? '#22c55e' : 'var(--border)',
+                      transition: 'color .15s',
+                    }}>
+                      {regMap[item.id]?.completado ? 'check_circle' : 'radio_button_unchecked'}
+                    </span>
+                    <span style={{
+                      flex: 1, fontSize: 14, fontWeight: 600, color: 'var(--text-1)',
+                      textDecoration: regMap[item.id]?.completado ? 'line-through' : 'none',
+                      opacity: regMap[item.id]?.completado ? 0.55 : 1,
+                    }}>
+                      {item.nombre}
+                    </span>
+                    {item.cantidad > 0 && (
+                      <span style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0 }}>
+                        {item.cantidad} {item.unidad}
+                      </span>
+                    )}
+                  </button>
+                ) : (
+                  <ProductoMiseCard
+                    item={item}
+                    reg={regMap[item.id]}
+                    fecha={fecha}
+                    turno={turno}
+                    recetaInfo={item.receta_id ? recetaInfoMap[item.receta_id] : undefined}
+                    platoPlazo={item.receta_id ? (platoPlazoMap[item.receta_id] ?? []) : []}
+                    hasTareaPendiente={tareasHoySet.has(item.nombre.toLowerCase())}
+                    rendimientoPromedio={item.receta_id ? rendimientoMap[item.receta_id] : null}
+                    regCierreAnterior={regCierreAnteriorMap[item.id] ?? null}
+                    onUpsert={handleMiseUpsert}
+                    onCrearTarea={handleCrearTarea}
+                    onPrioChange={async (i, prio) => {
+                      await actualizarItem(i.id, { prioridad: prio })
+                      if ((prio === 'sp' || prio === 'p') && !tareasHoySet.has(i.nombre.toLowerCase())) {
+                        const plazoPlazas = i.receta_id ? (platoPlazoMap[i.receta_id] ?? []) : []
+                        const primaryPlaza = plazoPlazas.length > 0 ? plazoPlazas[0].plaza : i.plaza
+                        await handleCrearTarea({
+                          titulo: i.nombre,
+                          seccion: PLAZA_TO_SECCION[primaryPlaza] ?? 'general',
+                          prioridad: prio,
+                          cantidad: i.cantidad > 0 ? i.cantidad : null,
+                          receta_id: i.receta_id ?? null,
+                          plaza: primaryPlaza,
+                          plazas: plazoPlazas,
+                        })
+                      }
+                    }}
+                    onDelete={eliminarItem}
+                  />
+                )}
+              </div>
+            ))
+          }
+
+          return rootSecciones.map(sec => {
           const secItems = grouped[sec.id] ?? []
-          const secDone = secItems.filter(i => regMap[i.id]?.completado).length
+          const children = childSeccionesByParent[sec.id] ?? []
+          const allItemsInCard = [...secItems, ...children.flatMap(c => grouped[c.id] ?? [])]
+          const secDone = allItemsInCard.filter(i => regMap[i.id]?.completado).length
           const isCollapsed = collapsed[sec.id] ?? false
           const secColor = getSeccionColor(sec.nombre)
-          const secPct = secItems.length > 0 ? secDone / secItems.length : 0
+          const secPct = allItemsInCard.length > 0 ? secDone / allItemsInCard.length : 0
 
           const isDragTarget = dragging !== null && dragging.overSecId === sec.id && dragging.item.seccion_id !== sec.id
           return (
@@ -716,8 +816,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                 </span>
                 <span style={{
                   fontSize: 11, fontFamily: "'DM Mono', monospace", fontWeight: 700,
-                  color: secDone === secItems.length && secItems.length > 0 ? '#22c55e' : 'var(--text-3)',
-                }}>{secDone}/{secItems.length}</span>
+                  color: secDone === allItemsInCard.length && allItemsInCard.length > 0 ? '#22c55e' : 'var(--text-3)',
+                }}>{secDone}/{allItemsInCard.length}</span>
                 <span className="material-symbols-outlined" style={{
                   fontSize: 18, color: 'var(--text-3)',
                   transform: isCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform .15s',
@@ -731,90 +831,12 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
 
               {!isCollapsed && (
                 <div style={{ padding: '6px 10px 10px' }}>
-                  {secItems.length === 0 && (
+                  {secItems.length === 0 && children.length === 0 && (
                     <div style={{ padding: '8px 2px', fontSize: 12, color: 'var(--text-3)' }}>
                       Sin items en esta sección
                     </div>
                   )}
-                  {secItems.map(item => (
-                    <div
-                      key={item.id}
-                      onTouchStart={modoControl ? undefined : e => startLongPress(item, e.touches[0].clientY)}
-                      onTouchMove={modoControl ? undefined : cancelLongPress}
-                      onTouchEnd={modoControl ? undefined : cancelLongPress}
-                      style={{
-                        opacity: dragging?.item.id === item.id ? 0.35 : 1,
-                        transition: 'opacity .15s',
-                        touchAction: dragging ? 'none' : 'auto',
-                        userSelect: 'none',
-                        WebkitUserSelect: 'none',
-                      }}
-                    >
-                      {modoControl ? (
-                        <button
-                          onClick={() => handleMiseUpsert(item.id, fecha, turno, { completado: !regMap[item.id]?.completado })}
-                          style={{
-                            width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                            padding: '10px 4px', background: 'none', border: 'none', cursor: 'pointer',
-                            fontFamily: 'inherit', textAlign: 'left',
-                            borderBottom: '1px solid var(--border)',
-                            WebkitTapHighlightColor: 'transparent',
-                          }}
-                        >
-                          <span className="material-symbols-outlined" style={{
-                            fontSize: 22, flexShrink: 0,
-                            color: regMap[item.id]?.completado ? '#22c55e' : 'var(--border)',
-                            transition: 'color .15s',
-                          }}>
-                            {regMap[item.id]?.completado ? 'check_circle' : 'radio_button_unchecked'}
-                          </span>
-                          <span style={{
-                            flex: 1, fontSize: 14, fontWeight: 600, color: 'var(--text-1)',
-                            textDecoration: regMap[item.id]?.completado ? 'line-through' : 'none',
-                            opacity: regMap[item.id]?.completado ? 0.55 : 1,
-                          }}>
-                            {item.nombre}
-                          </span>
-                          {item.cantidad > 0 && (
-                            <span style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0 }}>
-                              {item.cantidad} {item.unidad}
-                            </span>
-                          )}
-                        </button>
-                      ) : (
-                        <ProductoMiseCard
-                          item={item}
-                          reg={regMap[item.id]}
-                          fecha={fecha}
-                          turno={turno}
-                          recetaInfo={item.receta_id ? recetaInfoMap[item.receta_id] : undefined}
-                          platoPlazo={item.receta_id ? (platoPlazoMap[item.receta_id] ?? []) : []}
-                          hasTareaPendiente={tareasHoySet.has(item.nombre.toLowerCase())}
-                          rendimientoPromedio={item.receta_id ? rendimientoMap[item.receta_id] : null}
-                          regCierreAnterior={regCierreAnteriorMap[item.id] ?? null}
-                          onUpsert={handleMiseUpsert}
-                          onCrearTarea={handleCrearTarea}
-                          onPrioChange={async (i, prio) => {
-                            await actualizarItem(i.id, { prioridad: prio })
-                            if ((prio === 'sp' || prio === 'p') && !tareasHoySet.has(i.nombre.toLowerCase())) {
-                              const plazoPlazas = i.receta_id ? (platoPlazoMap[i.receta_id] ?? []) : []
-                              const primaryPlaza = plazoPlazas.length > 0 ? plazoPlazas[0].plaza : i.plaza
-                              await handleCrearTarea({
-                                titulo: i.nombre,
-                                seccion: PLAZA_TO_SECCION[primaryPlaza] ?? 'general',
-                                prioridad: prio,
-                                cantidad: i.cantidad > 0 ? i.cantidad : null,
-                                receta_id: i.receta_id ?? null,
-                                plaza: primaryPlaza,
-                                plazas: plazoPlazas,
-                              })
-                            }
-                          }}
-                          onDelete={eliminarItem}
-                        />
-                      )}
-                    </div>
-                  ))}
+                  {renderSecItems(secItems)}
                   <button
                     data-coach-target="mise-fab-add"
                     onClick={() => setShowAddSheet(sec.id)}
@@ -826,6 +848,65 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                     <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>add</span>
                     <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)' }}>Agregar</span>
                   </button>
+
+                  {/* Sub-secciones (jul 2026) — anidadas dentro de la card de la raíz */}
+                  {children.map(child => {
+                    const childItems = grouped[child.id] ?? []
+                    const childDone = childItems.filter(i => regMap[i.id]?.completado).length
+                    const childCollapsed = collapsed[child.id] ?? false
+                    const childColor = getSeccionColor(child.nombre)
+                    const childIsDragTarget = dragging !== null && dragging.overSecId === child.id && dragging.item.seccion_id !== child.id
+                    return (
+                      <div
+                        key={child.id}
+                        ref={el => { if (el) secElRefs.current.set(child.id, el as HTMLDivElement); else secElRefs.current.delete(child.id) }}
+                        style={{
+                          marginTop: 10, marginLeft: 10, paddingLeft: 10,
+                          borderLeft: `2px solid ${childIsDragTarget ? 'var(--accent)' : 'var(--border)'}`,
+                        }}
+                      >
+                        <button
+                          onClick={() => setCollapsed(prev => ({ ...prev, [child.id]: !prev[child.id] }))}
+                          style={{
+                            width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                            padding: '4px 0', background: 'none', border: 'none', cursor: 'pointer',
+                            WebkitTapHighlightColor: 'transparent',
+                          }}
+                        >
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: childColor, flexShrink: 0 }} />
+                          <span style={{ flex: 1, textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                            {child.nombre}
+                          </span>
+                          <span style={{
+                            fontSize: 10, fontFamily: "'DM Mono', monospace", fontWeight: 700,
+                            color: childDone === childItems.length && childItems.length > 0 ? '#22c55e' : 'var(--text-3)',
+                          }}>{childDone}/{childItems.length}</span>
+                          <span className="material-symbols-outlined" style={{
+                            fontSize: 16, color: 'var(--text-3)',
+                            transform: childCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform .15s',
+                          }}>expand_more</span>
+                        </button>
+                        {!childCollapsed && (
+                          <div style={{ padding: '2px 0 6px' }}>
+                            {childItems.length === 0 && (
+                              <div style={{ padding: '6px 2px', fontSize: 11, color: 'var(--text-3)' }}>Sin items</div>
+                            )}
+                            {renderSecItems(childItems)}
+                            <button
+                              onClick={() => setShowAddSheet(child.id)}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 6, padding: '6px 4px',
+                                background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', marginTop: 2,
+                              }}
+                            >
+                              <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent)' }}>add</span>
+                              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)' }}>Agregar</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>

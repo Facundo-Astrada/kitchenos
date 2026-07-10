@@ -32,20 +32,14 @@ export default function PlazaRow(props: Props) {
     onQuitarPlaza, onAddSeccion, onSeedSecciones, onAddItem, onDeleteSeccion, onDeleteItem, onEditItem, onLimpieza } = props
   const [open, setOpen] = useState(true)
 
+  // `secciones` incluye raíces + sub-secciones (planas) — un item "sin sección"
+  // es el que no matchea ningún id conocido a ninguna profundidad.
   const seccionIds = useMemo(() => new Set(secciones.map(s => s.id)), [secciones])
-  const itemsBySeccion = useMemo(() => {
-    const map = new Map<string, MisePlaceItem[]>()
-    const sinSeccion: MisePlaceItem[] = []
-    for (const it of items) {
-      if (it.seccion_id && seccionIds.has(it.seccion_id)) {
-        const arr = map.get(it.seccion_id) ?? []
-        arr.push(it); map.set(it.seccion_id, arr)
-      } else {
-        sinSeccion.push(it)
-      }
-    }
-    return { map, sinSeccion }
-  }, [items, seccionIds])
+  const sinSeccion = useMemo(
+    () => items.filter(it => !it.seccion_id || !seccionIds.has(it.seccion_id)),
+    [items, seccionIds]
+  )
+  const seccionesRaiz = useMemo(() => secciones.filter(s => !s.parent_id), [secciones])
 
   return (
     <div style={{ borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface)' }}>
@@ -76,7 +70,7 @@ export default function PlazaRow(props: Props) {
 
       {open && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8, padding: '0 10px 10px' }}>
-          {secciones.length === 0 && itemsBySeccion.sinSeccion.length === 0 && (
+          {secciones.length === 0 && sinSeccion.length === 0 && (
             <div style={{ padding: '4px 4px 4px' }}>
               <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>Esta plaza no tiene secciones todavía.</p>
               <button
@@ -87,13 +81,15 @@ export default function PlazaRow(props: Props) {
               </button>
             </div>
           )}
-          {secciones.map(sec => (
+          {seccionesRaiz.map(sec => (
             <SeccionRow
               key={sec.id}
               seccion={sec}
               plaza={plaza}
-              items={itemsBySeccion.map.get(sec.id) ?? []}
-              isDropTarget={overSecId === sec.id}
+              allSecciones={secciones}
+              allItems={items}
+              depth={0}
+              overSecId={overSecId}
               registerDropZone={registerDropZone}
               draggingId={draggingId}
               onDragStart={onDragStart}
@@ -103,15 +99,17 @@ export default function PlazaRow(props: Props) {
               onDeleteSeccion={onDeleteSeccion}
               onDeleteItem={onDeleteItem}
               onEditItem={onEditItem}
-              onLimpieza={() => onLimpieza({ type: 'seccion', plaza, nombre: sec.nombre })}
+              onLimpieza={onLimpieza}
             />
           ))}
-          {itemsBySeccion.sinSeccion.length > 0 && (
+          {sinSeccion.length > 0 && (
             <SeccionRow
               seccion={null}
               plaza={plaza}
-              items={itemsBySeccion.sinSeccion}
-              isDropTarget={false}
+              allSecciones={secciones}
+              allItems={sinSeccion}
+              depth={0}
+              overSecId={overSecId}
               registerDropZone={registerDropZone}
               draggingId={draggingId}
               onDragStart={onDragStart}
@@ -121,7 +119,7 @@ export default function PlazaRow(props: Props) {
               onDeleteSeccion={() => {}}
               onDeleteItem={onDeleteItem}
               onEditItem={onEditItem}
-              onLimpieza={() => {}}
+              onLimpieza={onLimpieza}
             />
           )}
         </div>

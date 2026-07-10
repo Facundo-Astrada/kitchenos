@@ -503,6 +503,10 @@ export interface ChecklistSeccionConfig {
   // tratar ausencia como 'produccion'/[] (mismo default que la columna en DB).
   tipo?: ChecklistSeccionTipo
   producto_ids?: string[]
+  // Sub-secciones (jul 2026): NULL/undefined = sección raíz. v1 solo permite 1
+  // nivel — una fila con parent_id no puede a su vez ser padre (regla de UI,
+  // no DB). ON DELETE CASCADE: borrar el padre borra sus hijos.
+  parent_id?: string | null
 }
 
 // DB: checklist_items (id, plaza, seccion, nombre, cantidad, unidad, prioridad, receta_id, restaurante_id, created_at, seccion_id, ubicacion, orden, recipiente_nombre, recipiente_capacidad)

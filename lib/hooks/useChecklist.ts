@@ -134,7 +134,7 @@ export function useChecklist() {
   }, [mutateConfig, fetchRegistros, fetchRutinaRegistros])
 
   // ── Secciones CRUD ──
-  async function agregarSeccion(datos: { nombre: string; icono: string; orden: number; plaza: Plaza; tipo?: ChecklistSeccionTipo; producto_ids?: string[] }) {
+  async function agregarSeccion(datos: { nombre: string; icono: string; orden: number; plaza: Plaza; tipo?: ChecklistSeccionTipo; producto_ids?: string[]; parent_id?: string | null }) {
     try {
       const { data, error } = await supabase.from('checklist_secciones').insert({
         ...datos, restaurante_id: RESTAURANTE_ID,
@@ -149,7 +149,7 @@ export function useChecklist() {
     }
   }
 
-  async function actualizarSeccion(id: string, datos: Partial<{ nombre: string; icono: string; orden: number; tipo: ChecklistSeccionTipo; producto_ids: string[] }>) {
+  async function actualizarSeccion(id: string, datos: Partial<{ nombre: string; icono: string; orden: number; tipo: ChecklistSeccionTipo; producto_ids: string[]; parent_id: string | null }>) {
     try {
       const { error } = await supabase.from('checklist_secciones').update(datos).eq('id', id)
       if (error) throw error
