@@ -99,7 +99,7 @@ export function useMesas() {
   }
 
   // ── Editor de mesas tipo canvas (jul 2026, Sesión 3 C3) ──
-  type MesaDatos = { numero: string; sector: string | null; capacidad: number | null; forma: string; ancho: number; alto: number; rotacion: number; pos_x: number; pos_y: number }
+  type MesaDatos = { numero: string; sector: string | null; capacidad: number | null; forma: string; ancho: number; alto: number; rotacion: number; pos_x: number; pos_y: number; color?: string | null }
 
   async function crearMesa(datos: MesaDatos): Promise<string> {
     try {

@@ -7,7 +7,7 @@
 import { CSSProperties } from 'react'
 
 // Paleta de 6 colores derivados de la identidad KitchenOS
-const AVATAR_PALETTE = [
+export const AVATAR_PALETTE = [
   '#4361a0', // accent navy
   '#10b981', // green
   '#f97316', // orange

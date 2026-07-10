@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { useMesas } from '@/lib/hooks/useMesas'
+import { Sillas } from '@/components/salon/Sillas'
+import { AVATAR_PALETTE } from '@/components/ui'
 import type { Mesa, MesaForma } from '@/types'
 
 type Tab = 'mesas' | 'medios' | 'estaciones'
@@ -50,17 +52,24 @@ function dimsDesde(tamano: Tamano, forma: MesaForma): { ancho: number; alto: num
 
 function ROTACIONES(): number[] { return [0, 45, 90] }
 
+// Paleta de identidad (Avatar) + 2 tonos madera/piedra útiles para mobiliario de salón
+const MESA_COLORES = [...AVATAR_PALETTE, '#f59e0b', '#78716c']
+
 function MesaCanvasItem({
-  mesa, selected, dragPos, onSelect, onDragMove, onDragEnd,
+  mesa, selected, dragPos, resizeDims, onSelect, onDragMove, onDragEnd, onResizeMove, onResizeEnd,
 }: {
   mesa: Mesa
   selected: boolean
   dragPos: { x: number; y: number } | null
+  resizeDims: { ancho: number; alto: number } | null
   onSelect: (mesa: Mesa) => void
   onDragMove: (id: string, x: number, y: number) => void
   onDragEnd: (id: string, x: number, y: number) => void
+  onResizeMove: (id: string, ancho: number, alto: number) => void
+  onResizeEnd: (id: string, ancho: number, alto: number) => void
 }) {
   const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number; moved: boolean; canvasW: number; canvasH: number } | null>(null)
+  const resizeRef = useRef<{ startX: number; startY: number; startAncho: number; startAlto: number; canvasW: number; canvasH: number } | null>(null)
 
   function onPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -93,10 +102,41 @@ function MesaCanvasItem({
     else onSelect(mesa)
   }
 
+  function onResizePointerDown(e: React.PointerEvent<HTMLSpanElement>) {
+    e.stopPropagation()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const canvas = e.currentTarget.closest('[data-canvas]') as HTMLElement | null
+    const rect = canvas?.getBoundingClientRect()
+    resizeRef.current = {
+      startX: e.clientX, startY: e.clientY,
+      startAncho: mesa.ancho, startAlto: mesa.alto,
+      canvasW: rect?.width ?? 1, canvasH: rect?.height ?? 1,
+    }
+  }
+
+  function onResizePointerMove(e: React.PointerEvent<HTMLSpanElement>) {
+    e.stopPropagation()
+    const rr = resizeRef.current
+    if (!rr) return
+    const dx = e.clientX - rr.startX
+    const dy = e.clientY - rr.startY
+    const ancho = Math.min(70, Math.max(5, rr.startAncho + (dx / rr.canvasW) * 100))
+    const alto = Math.min(70, Math.max(5, rr.startAlto + (dy / rr.canvasH) * 100))
+    onResizeMove(mesa.id, ancho, alto)
+  }
+
+  function onResizePointerUp(e: React.PointerEvent<HTMLSpanElement>) {
+    e.stopPropagation()
+    const rr = resizeRef.current
+    resizeRef.current = null
+    if (rr && resizeDims) onResizeEnd(mesa.id, resizeDims.ancho, resizeDims.alto)
+  }
+
   const x = dragPos?.x ?? mesa.pos_x
   const y = dragPos?.y ?? mesa.pos_y
-  const anchoUi = Math.max(mesa.ancho, 5)
-  const altoUi = Math.max(mesa.alto, 5)
+  const anchoUi = Math.max(resizeDims?.ancho ?? mesa.ancho, 5)
+  const altoUi = Math.max(resizeDims?.alto ?? mesa.alto, 5)
+  const capacidad = mesa.capacidad ?? 4
 
   return (
     <button
@@ -108,11 +148,11 @@ function MesaCanvasItem({
         left: `${x}%`,
         top: `${y}%`,
         width: `${anchoUi}%`,
-        aspectRatio: mesa.forma === 'rectangular' ? `${anchoUi} / ${altoUi}` : '1 / 1',
+        aspectRatio: `${anchoUi} / ${altoUi}`,
         borderRadius: mesa.forma === 'redonda' ? '50%' : 10,
         transform: `rotate(${mesa.rotacion}deg)`,
-        background: selected ? 'var(--accent)' : '#2a2a2a',
-        border: selected ? '2px solid #fff' : '1px solid #444',
+        background: mesa.color ?? (selected ? 'var(--accent)' : '#2a2a2a'),
+        border: selected ? '2px solid #fff' : mesa.color ? '1px solid rgba(255,255,255,.3)' : '1px solid #444',
         color: '#fff',
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
         touchAction: 'none',
@@ -122,8 +162,24 @@ function MesaCanvasItem({
         minWidth: 64, minHeight: 64,
       }}
     >
+      <Sillas forma={mesa.forma} capacidad={capacidad} ancho={anchoUi} alto={altoUi} tamano={9} />
       <span style={{ fontSize: 16, fontWeight: 700, transform: `rotate(${-mesa.rotacion}deg)` }}>{mesa.numero}</span>
-      <span style={{ fontSize: 11, opacity: 0.75, transform: `rotate(${-mesa.rotacion}deg)` }}>{mesa.capacidad ?? '-'}p</span>
+      <span style={{ fontSize: 11, opacity: 0.75, transform: `rotate(${-mesa.rotacion}deg)` }}>{capacidad}p</span>
+      {selected && (
+        <span
+          onPointerDown={onResizePointerDown}
+          onPointerMove={onResizePointerMove}
+          onPointerUp={onResizePointerUp}
+          style={{
+            position: 'absolute', right: -11, bottom: -11, width: 24, height: 24, borderRadius: '50%',
+            background: '#fff', border: '2px solid var(--accent)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            touchAction: 'none', cursor: 'nwse-resize',
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent)', transform: `rotate(${-mesa.rotacion}deg)` }}>open_in_full</span>
+        </span>
+      )}
     </button>
   )
 }
@@ -202,6 +258,34 @@ function MesaPanel({
       </div>
 
       <div>
+        <p style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>Color</p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => onChange(mesa.id, { color: null })}
+            aria-label="Sin color"
+            style={{
+              width: 34, height: 34, borderRadius: '50%', background: '#111',
+              border: !mesa.color ? '2px solid #fff' : '1px solid #2a2a2a',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#666' }}>block</span>
+          </button>
+          {MESA_COLORES.map(c => (
+            <button
+              key={c}
+              onClick={() => onChange(mesa.id, { color: c })}
+              aria-label={c}
+              style={{
+                width: 34, height: 34, borderRadius: '50%', background: c,
+                border: mesa.color === c ? '2px solid #fff' : '1px solid rgba(255,255,255,.2)',
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div>
         <p style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>Rotación</p>
         <div style={{ display: 'flex', gap: 8 }}>
           {ROTACIONES().map(r => {
@@ -234,6 +318,7 @@ function EditorMesas() {
   const { mesas, loading, crearMesa, actualizarMesa, eliminarMesa, guardarLayout } = useMesas()
   const [seleccionId, setSeleccionId] = useState<string | null>(null)
   const [dragPos, setDragPos] = useState<{ id: string; x: number; y: number } | null>(null)
+  const [resizePos, setResizePos] = useState<{ id: string; ancho: number; alto: number } | null>(null)
   const [creando, setCreando] = useState(false)
 
   const seleccionada = mesas.find(m => m.id === seleccionId) ?? null
@@ -269,6 +354,19 @@ function EditorMesas() {
       await guardarLayout([{ id, pos_x: x, pos_y: y }])
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : 'Error al guardar la posición')
+    }
+  }
+
+  function onResizeMove(id: string, ancho: number, alto: number) {
+    setResizePos({ id, ancho, alto })
+  }
+
+  async function onResizeEnd(id: string, ancho: number, alto: number) {
+    setResizePos(null)
+    try {
+      await actualizarMesa(id, { ancho, alto })
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Error al guardar el tamaño')
     }
   }
 
@@ -313,9 +411,12 @@ function EditorMesas() {
             mesa={m}
             selected={seleccionId === m.id}
             dragPos={dragPos?.id === m.id ? { x: dragPos.x, y: dragPos.y } : null}
+            resizeDims={resizePos?.id === m.id ? { ancho: resizePos.ancho, alto: resizePos.alto } : null}
             onSelect={mesa => setSeleccionId(mesa.id)}
             onDragMove={onDragMove}
             onDragEnd={onDragEnd}
+            onResizeMove={onResizeMove}
+            onResizeEnd={onResizeEnd}
           />
         ))}
       </div>

@@ -914,7 +914,7 @@ export type EstadoMesa = 'libre' | 'ocupada' | 'cuenta_pedida'
 
 export type MesaForma = 'cuadrada' | 'redonda' | 'rectangular'
 
-// DB: mesas (id, restaurante_id, numero, sector, capacidad, estado, pos_x, pos_y, created_at, forma, ancho, alto, rotacion)
+// DB: mesas (id, restaurante_id, numero, sector, capacidad, estado, pos_x, pos_y, created_at, forma, ancho, alto, rotacion, color)
 export interface Mesa {
   id: string
   restaurante_id: string
@@ -930,6 +930,7 @@ export interface Mesa {
   ancho: number     // % del ancho del canvas
   alto: number      // % del alto del canvas
   rotacion: number  // 0 | 45 | 90
+  color?: string | null  // hex elegido por el usuario; null = color default por estado
 }
 
 // ── Salón — Cuentas ──────────────────────────────────────────

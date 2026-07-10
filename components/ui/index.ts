@@ -9,5 +9,5 @@ export type { FilterChip } from './FilterChips'
 
 export { EmptyState } from './EmptyState'
 export { HeaderAction } from './HeaderAction'
-export { Avatar } from './Avatar'
+export { Avatar, AVATAR_PALETTE } from './Avatar'
 export { Num } from './Num'

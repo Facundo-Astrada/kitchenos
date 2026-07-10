@@ -12,6 +12,7 @@ import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
 import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, supportsWebUSB, supportsWebBluetooth } from '@/lib/print/escpos'
 import VistaCaja from '@/components/salon/VistaCaja'
+import { Sillas } from '@/components/salon/Sillas'
 import KitchenCoachFAB from '@/components/coach/KitchenCoachFAB'
 import type { Mesa, CartaItem, EstadoMesa, TipoModificador, Comanda, EstadoComandaItem } from '@/types'
 
@@ -67,6 +68,15 @@ function MesaBoton({ mesa, hayListos, onTap }: { mesa: Mesa; hayListos: boolean;
   const altoUi = Math.max(mesa.alto ?? 9, 6)
   const forma = mesa.forma ?? 'cuadrada'
   const rotacion = mesa.rotacion ?? 0
+  const capacidad = mesa.capacidad ?? 4
+  // Libre: se ve el color de identidad elegido para la mesa. Ocupada/cuenta pedida: prioridad
+  // al color de estado (señal operativa), el color propio queda como anillo para no perder identidad.
+  const background = mesa.estado === 'libre' ? (mesa.color ?? ESTADO_MESA_COLOR.libre) : ESTADO_MESA_COLOR[mesa.estado]
+  const border = hayListos
+    ? '2px solid #2e7d32'
+    : mesa.color
+      ? `2px solid ${mesa.color}`
+      : '2px solid rgba(255,255,255,0.15)'
   return (
     <button
       onClick={() => onTap(mesa)}
@@ -75,13 +85,13 @@ function MesaBoton({ mesa, hayListos, onTap }: { mesa: Mesa; hayListos: boolean;
         left: `${mesa.pos_x}%`,
         top: `${mesa.pos_y}%`,
         width: `${anchoUi}%`,
-        aspectRatio: forma === 'rectangular' ? `${anchoUi} / ${altoUi}` : '1 / 1',
+        aspectRatio: `${anchoUi} / ${altoUi}`,
         minWidth: 64,
         minHeight: 64,
         borderRadius: forma === 'redonda' ? '50%' : 16,
         transform: `rotate(${rotacion}deg)`,
-        background: ESTADO_MESA_COLOR[mesa.estado],
-        border: `2px solid ${hayListos ? '#2e7d32' : 'rgba(255,255,255,0.15)'}`,
+        background,
+        border,
         color: '#fff',
         display: 'flex',
         flexDirection: 'column',
@@ -90,8 +100,9 @@ function MesaBoton({ mesa, hayListos, onTap }: { mesa: Mesa; hayListos: boolean;
         gap: 2,
       }}
     >
+      <Sillas forma={forma} capacidad={capacidad} ancho={anchoUi} alto={altoUi} tamano={12} />
       <span style={{ fontSize: 22, fontWeight: 700, transform: `rotate(${-rotacion}deg)` }}>{mesa.numero}</span>
-      <span style={{ fontSize: 12, opacity: 0.8, transform: `rotate(${-rotacion}deg)` }}>{mesa.capacidad ?? '-'}p</span>
+      <span style={{ fontSize: 12, opacity: 0.8, transform: `rotate(${-rotacion}deg)` }}>{capacidad}p</span>
       {hayListos && (
         <span style={{ position: 'absolute', top: -6, right: -6, width: 16, height: 16, borderRadius: '50%', background: '#2e7d32', border: '2px solid #111' }} />
       )}
