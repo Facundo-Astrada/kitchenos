@@ -1,3 +1,4 @@
+// @deprecated — usa /api/importador/facturas-universal (detecta Fudo nativamente). 2026-07-03.
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRestauranteId } from '@/lib/api/tenant'
