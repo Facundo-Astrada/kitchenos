@@ -62,11 +62,14 @@ export function useSalonElementos() {
   }
 
   async function actualizarElemento(id: string, datos: Partial<ElementoDatos>) {
+    // Optimista: pinta el cambio en el cache antes de ir a DB (drag/resize fluido, sin snap-back)
+    mutate(prev => (prev ?? []).map(el => el.id === id ? { ...el, ...datos } as SalonElemento : el), { revalidate: false })
     try {
       const { error } = await supabase.from('salon_elementos').update(datos).eq('id', id)
       if (error) throw error
       await mutate()
     } catch (e: unknown) {
+      await mutate() // revert al estado real de DB
       throw new Error(errMsg(e, 'Error al actualizar el elemento'))
     }
   }

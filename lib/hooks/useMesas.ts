@@ -115,11 +115,14 @@ export function useMesas() {
   }
 
   async function actualizarMesa(id: string, datos: Partial<MesaDatos>) {
+    // Optimista: pinta el cambio en el cache SWR antes de ir a DB (evita el "snap-back" al soltar)
+    mutate(prev => (prev ?? []).map(m => m.id === id ? { ...m, ...datos } as Mesa : m), { revalidate: false })
     try {
       const { error } = await supabase.from('mesas').update(datos).eq('id', id)
       if (error) throw error
       await mutate()
     } catch (e: unknown) {
+      await mutate() // revert al estado real de DB
       throw new Error(errMsg(e, 'Error al actualizar mesa'))
     }
   }
@@ -136,12 +139,19 @@ export function useMesas() {
 
   /** Guardado batch de posición/tamaño/rotación al soltar en el canvas — sin modal por drag. */
   async function guardarLayout(cambios: { id: string; pos_x: number; pos_y: number; ancho?: number; alto?: number; rotacion?: number }[]) {
+    // Optimista: aplica los cambios al cache antes del round-trip (drag fluido, sin snap-back)
+    const porId = new Map(cambios.map(c => [c.id, c]))
+    mutate(prev => (prev ?? []).map(m => {
+      const c = porId.get(m.id)
+      return c ? { ...m, ...c } as Mesa : m
+    }), { revalidate: false })
     try {
       await Promise.all(cambios.map(({ id, ...datos }) =>
         supabase.from('mesas').update(datos).eq('id', id).then(({ error }) => { if (error) throw error })
       ))
       await mutate()
     } catch (e: unknown) {
+      await mutate() // revert al estado real de DB
       throw new Error(errMsg(e, 'Error al guardar la posición de las mesas'))
     }
   }

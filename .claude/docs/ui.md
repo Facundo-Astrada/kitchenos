@@ -328,16 +328,17 @@ La vista de servicio (`app/(servicio)/`) tiene UX radicalmente distinta al dashb
 **Reglas:**
 - **Botones masivos** — mínimo 64px de alto, área táctil generosa. El cocinero/mozo toca con guantes y con urgencia.
 - **Swipe amplio** — las acciones principales (bump, recuperar, marchar) deben poder activarse con un swipe largo, no con un tap pequeño.
-- **Alto contraste** — fondo negro (`#000`) o gris muy oscuro (`#111`), texto blanco. En cocina hay mucha luz ambiental y pantallas grasientas.
+- **Alto contraste en KDS** — fondo gris muy oscuro (`#111`), texto blanco: en cocina hay mucha luz ambiental y pantallas grasientas. **Solo KDS es de fondo oscuro fijo.** **Salón sigue el tema de la app** (`var(--bg)`/`var(--surface)`/`var(--text-1)`) igual que las pantallas de gestión — se cambió en jul 2026 porque "entrar a Salón ponía toda la app en modo oscuro" (feedback del cliente). Ver "Tema por ruta" abajo.
 - **CERO menús desplegables durante el despacho** — ningún `<select>`, dropdown ni modal con múltiples opciones en la pantalla de KDS o mapa de mesas activo. Todas las acciones deben ser de 1 tap o 1 swipe.
 - **Fuente grande** — mínimo 18px en labels de ítem, 24px en nombres de plato.
 - **Sin animaciones de entrada costosas** — el KDS recibe updates en tiempo real; las animaciones de lista bloquean taps (ver regla de "Animaciones de lista").
 - **Tablet-first, no escritorio** — diseñar para pantalla 768-1024px horizontal. Desktop funciona, celular es secundario para KDS.
 - **Español siempre** — labels y tooltips en español argentino, incluso los que originalmente vinieron de convenciones POS en inglés: "EN HOLD"→"EN ESPERA", "All-day"→"Consolidado", "Recall"→"Recuperar", "Bumpeado"→"Despachado", "BUMP COMANDA"→"DESPACHAR COMANDA", "FIRE"→"MARCHAR" (jul 2026, Sesión 3 C5). Excepción: "86" (marcar agotado) es jerga de cocina ya asentada en toda la app, no se traduce.
 
-**Layout del route group (jul 2026, Sesión 3 C1):**
-- Mobile/tablet (**<1024px**): `position: fixed; inset: 0; background: #111; overflow: hidden` — ocupa toda la pantalla sin scroll global, como antes. Cada sub-vista maneja su propio scroll interno.
-- **Desktop (≥1024px)**: convive con el sidebar de gestión (`SidebarNav`, extraído de `DesktopShell.tsx` a `components/shell/SidebarNav.tsx` para reusarlo acá con `dark` prop → fondo `#161616` en vez de `var(--navy)`). `app/(servicio)/layout.tsx` detecta `useIsDesktop()` y arma un flex-row `SidebarNav + contenido`; en mobile/tablet devuelve el `contenido` solo, sin sidebar. El KDS/mapa de mesas sigue siendo tablet-first — el sidebar en desktop es una conveniencia de navegación, no un rediseño de la densidad de información.
+**Layout del route group + tema por ruta (jul 2026, Sesión 3 C1 · actualizado):**
+- `app/(servicio)/layout.tsx` decide el tema **según la ruta** con `usePathname()`: `esKds = pathname.startsWith('/kds')`. KDS → `background: '#111'`, `color: '#fff'`, `SidebarNav dark`. **Salón** → `background: 'var(--bg)'`, `color: 'var(--text-1)'`, `SidebarNav` normal (sigue el tema de la app).
+- Mobile/tablet (**<1024px**): `position: fixed; inset: 0; overflow: hidden` — ocupa toda la pantalla sin scroll global. Cada sub-vista maneja su propio scroll interno.
+- **Desktop (≥1024px)**: convive con el sidebar de gestión (`SidebarNav`, en `components/shell/SidebarNav.tsx`, con `dark` prop solo para KDS). `useIsDesktop()` arma un flex-row `SidebarNav + contenido`; en mobile/tablet devuelve el `contenido` solo. El KDS/mapa sigue siendo tablet-first.
 
 **Kitchen Coach — sí en Salón, no en KDS (jul 2026, Sesión 3 C4):**
 - **Salón** (`salon/page.tsx`, vista `'mapa'` únicamente): `<KitchenCoachFAB />` montado directo (sin `UiChromeProvider` — `useSheetCount()` tiene default `0` sin provider, no hace falta envolver). Contexto (`kc_screen_context`, screen `'salon'`): mesas ocupadas/libres, cuentas con `cuenta_pedida`, total en curso (`calcularResumen(comandas).subtotal`, ya usado para el cobro). Tour propio en `lib/coach/tours.ts` (`TOURS.salon`) con targets `data-coach-target="salon-topbar"` y `"salon-mapa"`.
@@ -346,14 +347,19 @@ La vista de servicio (`app/(servicio)/`) tiene UX radicalmente distinta al dashb
 **Qué NO hacer:**
 - No reusar el `BottomNav` de gestión en la vista de servicio.
 - No mostrar el Coach FAB en pantallas de KDS (distrae durante el despacho).
-- No usar `var(--navy)` como fondo — es para gestión. En servicio usar negro/gris oscuro (o `#161616` para el sidebar en desktop).
+- En **KDS** no usar tokens de tema — fondo oscuro fijo. En **Salón** sí usar tokens de tema (`var(--bg)`/`var(--surface)`/`var(--text-1)`/`var(--border)`); los únicos hex fijos permitidos son colores semánticos (verde listo `#2e7d32`, rojo cuenta `#a04343`, dorado propina `#c9a227`, madera mesa `#a9744f`) y el texto `#fff` **sobre botones de color** (accent/navy/rojo/verde). Texto sobre superficies siempre `var(--text-1/2/3)`.
 
-## Editor de mesas tipo canvas (Sesión 3 C3, jul 2026)
+## Editor del plano del salón — v2 con zoom/pan (Sesión 3 C3 jul 2026 · reescrito v2 jul 2026)
 
-`app/(servicio)/salon/config/page.tsx` (tab "Mesas"): editor visual de arrastrar y soltar, no un formulario con inputs de posición.
+`app/(servicio)/salon/config/page.tsx` (tab "Mesas"): editor visual tipo Planner 5D (2D, sin 3D). El mapa real de servicio (`salon/page.tsx`, vista `'mapa'`) usa el mismo canvas.
 
-- **Canvas** = `<div data-canvas>` con `position: relative`, fondo punteado (grid visual), las mesas se posicionan `absolute` por `pos_x`/`pos_y` (%, igual que el mapa real de `salon/page.tsx`).
-- **Drag** — mismo patrón "FAB draggable" de este doc: Pointer Events, threshold 8px (`Math.hypot(dx,dy) < 8` no cuenta como drag, abre el panel de edición en cambio), `touchAction: 'none'`, `setPointerCapture`. Mientras se arrastra, la posición vive en un state local (`dragPos`) — el guardado a DB (`guardarLayout`, `useMesas.ts`) es batch, solo al soltar (`onPointerUp`), no en cada `onPointerMove`.
-- **Panel de propiedades** (bottom sheet al seleccionar una mesa, sin drag): número, sector, capacidad, forma (3 chips con preview: cuadrada/redonda/rectangular, iconos `crop_square`/`circle`/`crop_landscape`), tamaño (chico/mediano/grande → mapea a `ancho`/`alto` reales vía `dimsDesde()`), rotación (0°/45°/90°).
-- **Render real de forma/tamaño/rotación**: tanto el editor (`MesaCanvasItem`) como el mapa real del salón (`MesaBoton` en `salon/page.tsx`) leen `mesa.forma`/`ancho`/`alto`/`rotacion` de DB — `border-radius: 50%` si `redonda`, `aspectRatio` si `rectangular`, `transform: rotate()` para la rotación (con contra-rotación en los textos internos para que el número/capacidad se sigan leyendo derechos).
-- Columnas nuevas documentadas en `columnas.md`.
+- **`components/salon/PanZoomCanvas.tsx`** — espacio de trabajo con zoom/pan, reusado por editor y mapa real. Mundo virtual fijo (`MUNDO_W=1200 × MUNDO_H=800`) dentro de un viewport `overflow: hidden`; un div interno (`data-canvas`) con `transform: translate(x,y) scale(z)` + `transformOrigin: '0 0'`. Zoom con rueda hacia el cursor (clamp 0.3–3), pinch de 2 dedos (Pointer Events), botones flotantes `+`/`−`/`fit_screen`. Pan arrastrando el fondo vacío. `fit()` inicial en `useLayoutEffect`. Prop `toolbarExtra` para inyectar botones extra (el editor mete "Deshacer"). **Clave matemática**: los ítems draggean con `dx / canvasRect.width * 100`; como `data-canvas` es el mundo ESCALADO, `getBoundingClientRect().width = 1200*scale` → la conversión a % sigue siendo correcta con cualquier zoom, sin tocar la lógica de los ítems.
+- **Las posiciones/tamaños siguen en % del mundo** (`pos_x/pos_y/ancho/alto`, 0–100) — sin migración de datos.
+- **Drag/resize con estado LOCAL al ítem** (`MesaCanvasItem`/`ElementoCanvasItem`, ambos `React.memo`): el overlay de posición vive en `useState` DENTRO del ítem, no en el padre → mover una mesa **no re-renderiza el resto del plano** (arreglo del "se traba"). El ítem hace `stopPropagation` en su `onPointerDown` para no disparar el pan del canvas. Commit a DB solo al soltar (`onCommitMove`/`onCommitResize`), vía callbacks estables (`useCallback` + refs) para no romper el `memo`.
+- **Updates optimistas** en `useMesas`/`useSalonElementos` (`mutate(prev => …, { revalidate: false })` antes del UPDATE) → sin "snap-back" al soltar. El overlay local se limpia con un `useEffect([mesa.pos_x, mesa.pos_y])` cuando el dato real alcanza al overlay.
+- **Deshacer (Ctrl/⌘+Z + botón en la toolbar del canvas)**: pila de thunks inversos en `useRef` (máx. 50) en `EditorSalon`. Cada commit (mover, redimensionar, cambio de propiedad, crear→borrar, borrar→recrear) pushea su reverso. Arregla el "expandí algo y no puedo volver atrás".
+- **Sin `minWidth`/`minHeight` px en los ítems del canvas** — el mínimo es en unidades de mundo (mesa 5%, elemento 3%); con `minWidth: 64` una mesa agrandada no se podía achicar. El handle de resize (esquina inf-der, visible al seleccionar) escala con el zoom.
+- **Elementos decorativos** (`salon_elementos`: barra, caja, parrilla, planta, pared) — mismo canvas/drag/resize que las mesas, config de tipos en `lib/salon/elementos.ts` (`ELEMENTO_TIPOS`, `elementoCfg`), compartida entre editor y mapa real. No clickeables en servicio (`pointerEvents: 'none'`, solo referencia visual).
+- **Sillas** (`components/salon/Sillas.tsx`): glifos top-down (asiento + respaldo) orientados hacia afuera de la mesa, derivados de `forma + capacidad + ancho/alto` (cero estado propio). Colores neutros que sirven en ambos temas.
+- **Estética**: mesa sin color propio = madera `#a9744f`; header + tabs del editor usan el patrón gestión (`var(--navy)` + `SegmentedTabs onDark`).
+- Columnas (`mesas.color`, tabla `salon_elementos`) documentadas en `columnas.md`.

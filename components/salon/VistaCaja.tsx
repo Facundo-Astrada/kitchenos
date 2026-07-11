@@ -218,7 +218,7 @@ export default function VistaCaja({ onVolver }: { onVolver: () => void }) {
   // ── Render ──
 
   const btnBack = (
-    <button onClick={onVolver} style={{ minWidth: 44, minHeight: 44, color: '#fff', background: 'transparent', border: 'none' }}>
+    <button onClick={onVolver} style={{ minWidth: 44, minHeight: 44, color: 'var(--text-1)', background: 'transparent', border: 'none' }}>
       <span className="material-symbols-outlined" style={{ fontSize: 28 }}>arrow_back</span>
     </button>
   )
@@ -226,7 +226,7 @@ export default function VistaCaja({ onVolver }: { onVolver: () => void }) {
   if (loading) {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ color: '#888' }}>Cargando caja...</span>
+        <span style={{ color: 'var(--text-2)' }}>Cargando caja...</span>
       </div>
     )
   }
@@ -237,20 +237,20 @@ export default function VistaCaja({ onVolver }: { onVolver: () => void }) {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '46px 16px 14px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
           {btnBack}
-          <span style={{ color: '#fff', fontSize: 20, fontWeight: 700 }}>Caja</span>
+          <span style={{ color: 'var(--text-1)', fontSize: 20, fontWeight: 700 }}>Caja</span>
         </div>
         <div style={{ flex: 1, padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ background: '#1a1a1a', borderRadius: 14, padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, textAlign: 'center' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 40, color: '#666' }}>point_of_sale</span>
-            <p style={{ color: '#fff', fontWeight: 700, fontSize: 17, margin: 0 }}>No hay caja abierta</p>
-            <p style={{ color: '#888', fontSize: 13, margin: 0 }}>Abrí la caja con el fondo inicial para empezar el turno</p>
+          <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, textAlign: 'center' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 40, color: 'var(--text-3)' }}>point_of_sale</span>
+            <p style={{ color: 'var(--text-1)', fontWeight: 700, fontSize: 17, margin: 0 }}>No hay caja abierta</p>
+            <p style={{ color: 'var(--text-2)', fontSize: 13, margin: 0 }}>Abrí la caja con el fondo inicial para empezar el turno</p>
           </div>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span style={{ color: '#aaa', fontSize: 13 }}>Fondo inicial ($)</span>
+            <span style={{ color: 'var(--text-2)', fontSize: 13 }}>Fondo inicial ($)</span>
             <input
               type="number" inputMode="decimal" value={montoInicial} onChange={e => setMontoInicial(e.target.value)}
               placeholder="0" autoFocus
-              style={{ minHeight: 56, borderRadius: 12, background: '#1a1a1a', color: '#fff', border: '1.5px solid #333', padding: '0 16px', fontSize: 22, fontWeight: 700 }}
+              style={{ minHeight: 56, borderRadius: 12, background: 'var(--surface)', color: 'var(--text-1)', border: '1.5px solid var(--border)', padding: '0 16px', fontSize: 22, fontWeight: 700 }}
             />
           </label>
           {errorAbrir && <p style={{ color: '#e57373', fontSize: 13 }}>{errorAbrir}</p>}
@@ -274,32 +274,32 @@ export default function VistaCaja({ onVolver }: { onVolver: () => void }) {
             <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#2e7d32', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 40, color: '#fff' }}>check_circle</span>
             </div>
-            <p style={{ fontSize: 24, fontWeight: 800, color: '#fff' }}>Caja cerrada</p>
+            <p style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-1)' }}>Caja cerrada</p>
           </div>
 
-          <div style={{ background: '#1a1a1a', borderRadius: 14, overflow: 'hidden' }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 14, overflow: 'hidden' }}>
             {resumenCierre.medios.map((m, i) => (
-              <div key={i} style={{ padding: '10px 16px', borderBottom: i < resumenCierre.medios.length - 1 ? '1px solid #2a2a2a' : 'none' }}>
-                <p style={{ color: '#fff', fontWeight: 600, marginBottom: 4 }}>{m.nombre}</p>
+              <div key={i} style={{ padding: '10px 16px', borderBottom: i < resumenCierre.medios.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                <p style={{ color: 'var(--text-1)', fontWeight: 600, marginBottom: 4 }}>{m.nombre}</p>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                  <span style={{ color: '#888' }}>Esperado {fmt(m.esperado)}</span>
-                  <span style={{ color: '#888' }}>Declarado {fmt(m.declarado)}</span>
+                  <span style={{ color: 'var(--text-2)' }}>Esperado {fmt(m.esperado)}</span>
+                  <span style={{ color: 'var(--text-2)' }}>Declarado {fmt(m.declarado)}</span>
                   <span style={{ color: m.diferencia === 0 ? '#4caf50' : m.diferencia > 0 ? '#4caf50' : '#e57373', fontWeight: 700 }}>
                     {m.diferencia > 0 ? '+' : ''}{fmt(m.diferencia)}
                   </span>
                 </div>
               </div>
             ))}
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: '#222' }}>
-              <span style={{ color: '#fff', fontWeight: 800, fontSize: 16 }}>Diferencia total</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: 'var(--bg)' }}>
+              <span style={{ color: 'var(--text-1)', fontWeight: 800, fontSize: 16 }}>Diferencia total</span>
               <span style={{ color: resumenCierre.diferenciaTotal === 0 ? '#4caf50' : resumenCierre.diferenciaTotal > 0 ? '#4caf50' : '#e57373', fontWeight: 800, fontSize: 18 }}>
                 {resumenCierre.diferenciaTotal > 0 ? '+' : ''}{fmt(resumenCierre.diferenciaTotal)}
               </span>
             </div>
           </div>
 
-          <div style={{ background: '#1a1a1a', borderRadius: 14, padding: 16 }}>
-            <p style={{ color: '#aaa', fontSize: 13, marginBottom: 12 }}>Imprimir cierre</p>
+          <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 16 }}>
+            <p style={{ color: 'var(--text-2)', fontSize: 13, marginBottom: 12 }}>Imprimir cierre</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {supportsWebUSB() && (
                 <button onClick={() => { void handlePrint('usb') }} disabled={printing}
@@ -316,7 +316,7 @@ export default function VistaCaja({ onVolver }: { onVolver: () => void }) {
                 </button>
               )}
               <button onClick={() => { void handleDownload() }} disabled={printing}
-                style={{ minHeight: 64, borderRadius: 12, background: '#2a2a2a', border: 'none', color: '#fff', fontSize: 18, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: printing ? 0.6 : 1 }}>
+                style={{ minHeight: 64, borderRadius: 12, background: 'var(--border)', border: 'none', color: 'var(--text-1)', fontSize: 18, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: printing ? 0.6 : 1 }}>
                 <span className="material-symbols-outlined">download</span>
                 Descargar .bin
               </button>
@@ -326,7 +326,7 @@ export default function VistaCaja({ onVolver }: { onVolver: () => void }) {
         </div>
         <div style={{ padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0 }}>
           <button onClick={onVolver}
-            style={{ width: '100%', minHeight: 68, borderRadius: 14, background: '#1a1a1a', border: '2px solid #2a2a2a', color: '#fff', fontSize: 20, fontWeight: 700 }}>
+            style={{ width: '100%', minHeight: 68, borderRadius: 14, background: 'var(--surface)', border: '2px solid var(--border)', color: 'var(--text-1)', fontSize: 20, fontWeight: 700 }}>
             Volver al mapa
           </button>
         </div>
@@ -339,31 +339,31 @@ export default function VistaCaja({ onVolver }: { onVolver: () => void }) {
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div style={{ padding: '46px 16px 14px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={() => setSubVista('dashboard')} style={{ minWidth: 44, minHeight: 44, color: '#fff', background: 'transparent', border: 'none' }}>
+          <button onClick={() => setSubVista('dashboard')} style={{ minWidth: 44, minHeight: 44, color: 'var(--text-1)', background: 'transparent', border: 'none' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 28 }}>arrow_back</span>
           </button>
-          <span style={{ color: '#fff', fontSize: 20, fontWeight: 700 }}>Cerrar caja</span>
+          <span style={{ color: 'var(--text-1)', fontSize: 20, fontWeight: 700 }}>Cerrar caja</span>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <button onClick={() => setArqueoCiego(v => !v)} style={{
             display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 12,
-            border: `1px solid ${arqueoCiego ? '#4361a0' : '#333'}`, background: arqueoCiego ? 'rgba(67,97,160,.15)' : '#1a1a1a',
+            border: `1px solid ${arqueoCiego ? '#4361a0' : 'var(--border)'}`, background: arqueoCiego ? 'rgba(67,97,160,.15)' : 'var(--surface)',
           }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 22, color: arqueoCiego ? '#4361a0' : '#666' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 22, color: arqueoCiego ? '#4361a0' : 'var(--text-3)' }}>
               {arqueoCiego ? 'check_box' : 'check_box_outline_blank'}
             </span>
             <div style={{ textAlign: 'left' }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>Arqueo ciego</div>
-              <div style={{ fontSize: 11, color: '#888' }}>No muestra el esperado hasta declarar todos los medios</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>Arqueo ciego</div>
+              <div style={{ fontSize: 11, color: 'var(--text-2)' }}>No muestra el esperado hasta declarar todos los medios</div>
             </div>
           </button>
 
           {mediosConMovimiento.map(m => (
-            <div key={m.id} style={{ background: '#1a1a1a', borderRadius: 14, padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div key={m.id} style={{ background: 'var(--surface)', borderRadius: 14, padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <span style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>{m.nombre}</span>
+                <span style={{ color: 'var(--text-1)', fontWeight: 700, fontSize: 16 }}>{m.nombre}</span>
                 {(!arqueoCiego || todosDeclarados) && (
-                  <span style={{ color: '#888', fontSize: 12 }}>Esperado {fmt(esperadoPorMedio[m.id] ?? 0)}</span>
+                  <span style={{ color: 'var(--text-2)', fontSize: 12 }}>Esperado {fmt(esperadoPorMedio[m.id] ?? 0)}</span>
                 )}
               </div>
               <input
@@ -371,7 +371,7 @@ export default function VistaCaja({ onVolver }: { onVolver: () => void }) {
                 value={declarados[m.id] ?? ''}
                 onChange={e => setDeclarados(prev => ({ ...prev, [m.id]: e.target.value }))}
                 placeholder="Contá y declará el monto"
-                style={{ minHeight: 52, borderRadius: 10, background: '#2a2a2a', color: '#fff', border: 'none', padding: '0 14px', fontSize: 20, fontWeight: 700 }}
+                style={{ minHeight: 52, borderRadius: 10, background: 'var(--border)', color: 'var(--text-1)', border: 'none', padding: '0 14px', fontSize: 20, fontWeight: 700 }}
               />
               {todosDeclarados && (
                 <span style={{ fontSize: 12, fontWeight: 700, color: ((parseFloat(declarados[m.id]) || 0) - (esperadoPorMedio[m.id] ?? 0)) === 0 ? '#4caf50' : '#e57373' }}>
@@ -382,11 +382,11 @@ export default function VistaCaja({ onVolver }: { onVolver: () => void }) {
           ))}
 
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span style={{ color: '#aaa', fontSize: 13 }}>Notas (opcional)</span>
+            <span style={{ color: 'var(--text-2)', fontSize: 13 }}>Notas (opcional)</span>
             <textarea
               value={notasCierre} onChange={e => setNotasCierre(e.target.value)}
               rows={2} placeholder="Ej: faltante por vuelto mal dado"
-              style={{ borderRadius: 10, background: '#1a1a1a', color: '#fff', border: '1px solid #333', padding: 10, fontSize: 14, fontFamily: 'inherit', resize: 'none' }}
+              style={{ borderRadius: 10, background: 'var(--surface)', color: 'var(--text-1)', border: '1px solid var(--border)', padding: 10, fontSize: 14, fontFamily: 'inherit', resize: 'none' }}
             />
           </label>
 
@@ -395,7 +395,7 @@ export default function VistaCaja({ onVolver }: { onVolver: () => void }) {
         </div>
         <div style={{ padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0 }}>
           <button onClick={handleConfirmarCierre} disabled={!todosDeclarados || cerrando}
-            style={{ width: '100%', minHeight: 68, borderRadius: 14, background: todosDeclarados ? '#a04343' : '#2a2a2a', color: '#fff', fontSize: 20, fontWeight: 800, opacity: cerrando ? 0.6 : 1 }}>
+            style={{ width: '100%', minHeight: 68, borderRadius: 14, background: todosDeclarados ? '#a04343' : 'var(--border)', color: todosDeclarados ? '#fff' : 'var(--text-2)', fontSize: 20, fontWeight: 800, opacity: cerrando ? 0.6 : 1 }}>
             {cerrando ? 'Cerrando...' : 'Confirmar cierre'}
           </button>
         </div>
@@ -408,23 +408,23 @@ export default function VistaCaja({ onVolver }: { onVolver: () => void }) {
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div style={{ padding: '46px 16px 14px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={() => setSubVista('dashboard')} style={{ minWidth: 44, minHeight: 44, color: '#fff', background: 'transparent', border: 'none' }}>
+          <button onClick={() => setSubVista('dashboard')} style={{ minWidth: 44, minHeight: 44, color: 'var(--text-1)', background: 'transparent', border: 'none' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 28 }}>arrow_back</span>
           </button>
-          <span style={{ color: '#fff', fontSize: 20, fontWeight: 700 }}>{movTipo === 'retiro' ? 'Registrar retiro' : 'Registrar ingreso'}</span>
+          <span style={{ color: 'var(--text-1)', fontSize: 20, fontWeight: 700 }}>{movTipo === 'retiro' ? 'Registrar retiro' : 'Registrar ingreso'}</span>
         </div>
         <div style={{ flex: 1, padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => setMovTipo('retiro')} style={{ flex: 1, minHeight: 56, borderRadius: 12, background: movTipo === 'retiro' ? '#a04343' : '#2a2a2a', border: 'none', color: '#fff', fontSize: 16, fontWeight: 700 }}>Retiro</button>
-            <button onClick={() => setMovTipo('ingreso')} style={{ flex: 1, minHeight: 56, borderRadius: 12, background: movTipo === 'ingreso' ? '#2e7d32' : '#2a2a2a', border: 'none', color: '#fff', fontSize: 16, fontWeight: 700 }}>Ingreso</button>
+            <button onClick={() => setMovTipo('retiro')} style={{ flex: 1, minHeight: 56, borderRadius: 12, background: movTipo === 'retiro' ? '#a04343' : 'var(--border)', border: 'none', color: movTipo === 'retiro' ? '#fff' : 'var(--text-2)', fontSize: 16, fontWeight: 700 }}>Retiro</button>
+            <button onClick={() => setMovTipo('ingreso')} style={{ flex: 1, minHeight: 56, borderRadius: 12, background: movTipo === 'ingreso' ? '#2e7d32' : 'var(--border)', border: 'none', color: movTipo === 'ingreso' ? '#fff' : 'var(--text-2)', fontSize: 16, fontWeight: 700 }}>Ingreso</button>
           </div>
 
           <div>
-            <span style={{ color: '#aaa', fontSize: 13, display: 'block', marginBottom: 8 }}>Medio</span>
+            <span style={{ color: 'var(--text-2)', fontSize: 13, display: 'block', marginBottom: 8 }}>Medio</span>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               {medios.map(m => (
                 <button key={m.id} onClick={() => setMovMedioId(m.id)}
-                  style={{ flex: '1 1 auto', minHeight: 44, borderRadius: 10, background: movMedioId === m.id ? '#4361a0' : '#2a2a2a', border: `1.5px solid ${movMedioId === m.id ? '#4361a0' : 'transparent'}`, color: '#fff', fontSize: 15, fontWeight: 600 }}>
+                  style={{ flex: '1 1 auto', minHeight: 44, borderRadius: 10, background: movMedioId === m.id ? '#4361a0' : 'var(--border)', border: `1.5px solid ${movMedioId === m.id ? '#4361a0' : 'transparent'}`, color: movMedioId === m.id ? '#fff' : 'var(--text-1)', fontSize: 15, fontWeight: 600 }}>
                   {m.nombre}
                 </button>
               ))}
@@ -432,24 +432,24 @@ export default function VistaCaja({ onVolver }: { onVolver: () => void }) {
           </div>
 
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span style={{ color: '#aaa', fontSize: 13 }}>Monto ($)</span>
+            <span style={{ color: 'var(--text-2)', fontSize: 13 }}>Monto ($)</span>
             <input type="number" inputMode="decimal" value={movMonto} onChange={e => setMovMonto(e.target.value)}
               placeholder="0" autoFocus
-              style={{ minHeight: 56, borderRadius: 12, background: '#1a1a1a', color: '#fff', border: '1.5px solid #333', padding: '0 16px', fontSize: 22, fontWeight: 700 }} />
+              style={{ minHeight: 56, borderRadius: 12, background: 'var(--surface)', color: 'var(--text-1)', border: '1.5px solid var(--border)', padding: '0 16px', fontSize: 22, fontWeight: 700 }} />
           </label>
 
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <span style={{ color: '#aaa', fontSize: 13 }}>Motivo (opcional)</span>
+            <span style={{ color: 'var(--text-2)', fontSize: 13 }}>Motivo (opcional)</span>
             <input value={movMotivo} onChange={e => setMovMotivo(e.target.value)}
               placeholder={movTipo === 'retiro' ? 'Ej: pago a proveedor' : 'Ej: cambio para caja'}
-              style={{ minHeight: 52, borderRadius: 10, background: '#1a1a1a', color: '#fff', border: '1.5px solid #333', padding: '0 14px', fontSize: 15 }} />
+              style={{ minHeight: 52, borderRadius: 10, background: 'var(--surface)', color: 'var(--text-1)', border: '1.5px solid var(--border)', padding: '0 14px', fontSize: 15 }} />
           </label>
 
           {errorMov && <p style={{ color: '#e57373', fontSize: 13 }}>{errorMov}</p>}
         </div>
         <div style={{ padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0 }}>
           <button onClick={handleGuardarMovimiento} disabled={!movMedioId || !(parseFloat(movMonto) > 0) || guardandoMov}
-            style={{ width: '100%', minHeight: 68, borderRadius: 14, background: movMedioId && parseFloat(movMonto) > 0 ? '#2e7d32' : '#2a2a2a', color: '#fff', fontSize: 20, fontWeight: 800, opacity: guardandoMov ? 0.6 : 1 }}>
+            style={{ width: '100%', minHeight: 68, borderRadius: 14, background: movMedioId && parseFloat(movMonto) > 0 ? '#2e7d32' : 'var(--border)', color: movMedioId && parseFloat(movMonto) > 0 ? '#fff' : 'var(--text-2)', fontSize: 20, fontWeight: 800, opacity: guardandoMov ? 0.6 : 1 }}>
             {guardandoMov ? 'Guardando...' : 'Guardar movimiento'}
           </button>
         </div>
@@ -462,41 +462,41 @@ export default function VistaCaja({ onVolver }: { onVolver: () => void }) {
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ padding: '46px 16px 14px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
         {btnBack}
-        <span style={{ color: '#fff', fontSize: 20, fontWeight: 700 }}>Caja abierta</span>
+        <span style={{ color: 'var(--text-1)', fontSize: 20, fontWeight: 700 }}>Caja abierta</span>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ background: '#1a1a1a', borderRadius: 14, padding: 16 }}>
+        <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ color: '#aaa' }}>Fondo inicial</span>
-            <span style={{ color: '#fff', fontWeight: 700 }}>{fmt(cajaAbierta.monto_inicial)}</span>
+            <span style={{ color: 'var(--text-2)' }}>Fondo inicial</span>
+            <span style={{ color: 'var(--text-1)', fontWeight: 700 }}>{fmt(cajaAbierta.monto_inicial)}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ color: '#aaa' }}>Abierta desde</span>
-            <span style={{ color: '#fff' }}>{fmtFechaHora(cajaAbierta.fecha_apertura)}</span>
+            <span style={{ color: 'var(--text-2)' }}>Abierta desde</span>
+            <span style={{ color: 'var(--text-1)' }}>{fmtFechaHora(cajaAbierta.fecha_apertura)}</span>
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={() => abrirFormMovimiento('retiro')}
-            style={{ flex: 1, minHeight: 64, borderRadius: 12, background: '#1a1a1a', border: '1px solid #333', color: '#fff', fontSize: 15, fontWeight: 700, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+            style={{ flex: 1, minHeight: 64, borderRadius: 12, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-1)', fontSize: 15, fontWeight: 700, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
             <span className="material-symbols-outlined">remove_circle</span>
             Retiro
           </button>
           <button onClick={() => abrirFormMovimiento('ingreso')}
-            style={{ flex: 1, minHeight: 64, borderRadius: 12, background: '#1a1a1a', border: '1px solid #333', color: '#fff', fontSize: 15, fontWeight: 700, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+            style={{ flex: 1, minHeight: 64, borderRadius: 12, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-1)', fontSize: 15, fontWeight: 700, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
             <span className="material-symbols-outlined">add_circle</span>
             Ingreso
           </button>
         </div>
 
         {movimientos.length > 0 && (
-          <div style={{ background: '#1a1a1a', borderRadius: 14, overflow: 'hidden' }}>
-            <p style={{ color: '#888', fontSize: 12, padding: '10px 16px 4px' }}>Movimientos del turno</p>
+          <div style={{ background: 'var(--surface)', borderRadius: 14, overflow: 'hidden' }}>
+            <p style={{ color: 'var(--text-2)', fontSize: 12, padding: '10px 16px 4px' }}>Movimientos del turno</p>
             {movimientos.map(m => (
-              <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 16px', borderTop: '1px solid #2a2a2a' }}>
+              <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 16px', borderTop: '1px solid var(--border)' }}>
                 <div>
-                  <span style={{ color: '#fff', fontSize: 14 }}>{m.tipo === 'retiro' ? 'Retiro' : 'Ingreso'}</span>
-                  {m.motivo && <span style={{ color: '#888', fontSize: 12 }}> · {m.motivo}</span>}
+                  <span style={{ color: 'var(--text-1)', fontSize: 14 }}>{m.tipo === 'retiro' ? 'Retiro' : 'Ingreso'}</span>
+                  {m.motivo && <span style={{ color: 'var(--text-2)', fontSize: 12 }}> · {m.motivo}</span>}
                 </div>
                 <span style={{ color: m.tipo === 'retiro' ? '#e57373' : '#4caf50', fontWeight: 700 }}>
                   {m.tipo === 'retiro' ? '-' : '+'}{fmt(m.monto)}
