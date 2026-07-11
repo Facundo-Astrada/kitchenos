@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { useMesas } from '@/lib/hooks/useMesas'
+import { useSalonElementos } from '@/lib/hooks/useSalonElementos'
 import { Sillas } from '@/components/salon/Sillas'
+import { ELEMENTO_TIPOS, elementoCfg } from '@/lib/salon/elementos'
 import { AVATAR_PALETTE } from '@/components/ui'
-import type { Mesa, MesaForma } from '@/types'
+import type { Mesa, MesaForma, SalonElemento, ElementoTipo } from '@/types'
 
 type Tab = 'mesas' | 'medios' | 'estaciones'
 type Tamano = 'chico' | 'mediano' | 'grande'
@@ -313,17 +315,231 @@ function MesaPanel({
   )
 }
 
-function EditorMesas() {
+// ── Elementos decorativos (barra, caja, parrilla, planta, pared) ─────────────
+// Config de tipos (ELEMENTO_TIPOS, elementoCfg) vive en lib/salon/elementos.ts — compartida con el mapa real.
+
+function ElementoCanvasItem({
+  elemento, selected, dragPos, resizeDims, onSelect, onDragMove, onDragEnd, onResizeMove, onResizeEnd,
+}: {
+  elemento: SalonElemento
+  selected: boolean
+  dragPos: { x: number; y: number } | null
+  resizeDims: { ancho: number; alto: number } | null
+  onSelect: (elemento: SalonElemento) => void
+  onDragMove: (id: string, x: number, y: number) => void
+  onDragEnd: (id: string, x: number, y: number) => void
+  onResizeMove: (id: string, ancho: number, alto: number) => void
+  onResizeEnd: (id: string, ancho: number, alto: number) => void
+}) {
+  const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number; moved: boolean; canvasW: number; canvasH: number } | null>(null)
+  const resizeRef = useRef<{ startX: number; startY: number; startAncho: number; startAlto: number; canvasW: number; canvasH: number } | null>(null)
+
+  function onPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const canvas = e.currentTarget.closest('[data-canvas]') as HTMLElement | null
+    const rect = canvas?.getBoundingClientRect()
+    dragRef.current = {
+      startX: e.clientX, startY: e.clientY,
+      startPosX: elemento.pos_x, startPosY: elemento.pos_y,
+      moved: false,
+      canvasW: rect?.width ?? 1, canvasH: rect?.height ?? 1,
+    }
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
+    const dr = dragRef.current
+    if (!dr) return
+    const dx = e.clientX - dr.startX
+    const dy = e.clientY - dr.startY
+    if (!dr.moved && Math.hypot(dx, dy) < 8) return
+    dr.moved = true
+    const x = Math.min(96, Math.max(0, dr.startPosX + (dx / dr.canvasW) * 100))
+    const y = Math.min(96, Math.max(0, dr.startPosY + (dy / dr.canvasH) * 100))
+    onDragMove(elemento.id, x, y)
+  }
+
+  function onPointerUp() {
+    const dr = dragRef.current
+    dragRef.current = null
+    if (dr?.moved && dragPos) onDragEnd(elemento.id, dragPos.x, dragPos.y)
+    else onSelect(elemento)
+  }
+
+  function onResizePointerDown(e: React.PointerEvent<HTMLSpanElement>) {
+    e.stopPropagation()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const canvas = e.currentTarget.closest('[data-canvas]') as HTMLElement | null
+    const rect = canvas?.getBoundingClientRect()
+    resizeRef.current = {
+      startX: e.clientX, startY: e.clientY,
+      startAncho: elemento.ancho, startAlto: elemento.alto,
+      canvasW: rect?.width ?? 1, canvasH: rect?.height ?? 1,
+    }
+  }
+
+  function onResizePointerMove(e: React.PointerEvent<HTMLSpanElement>) {
+    e.stopPropagation()
+    const rr = resizeRef.current
+    if (!rr) return
+    const dx = e.clientX - rr.startX
+    const dy = e.clientY - rr.startY
+    const ancho = Math.min(80, Math.max(3, rr.startAncho + (dx / rr.canvasW) * 100))
+    const alto = Math.min(80, Math.max(3, rr.startAlto + (dy / rr.canvasH) * 100))
+    onResizeMove(elemento.id, ancho, alto)
+  }
+
+  function onResizePointerUp(e: React.PointerEvent<HTMLSpanElement>) {
+    e.stopPropagation()
+    const rr = resizeRef.current
+    resizeRef.current = null
+    if (rr && resizeDims) onResizeEnd(elemento.id, resizeDims.ancho, resizeDims.alto)
+  }
+
+  const cfg = elementoCfg(elemento.tipo)
+  const x = dragPos?.x ?? elemento.pos_x
+  const y = dragPos?.y ?? elemento.pos_y
+  const anchoUi = Math.max(resizeDims?.ancho ?? elemento.ancho, 3)
+  const altoUi = Math.max(resizeDims?.alto ?? elemento.alto, 3)
+
+  return (
+    <button
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      style={{
+        position: 'absolute',
+        left: `${x}%`,
+        top: `${y}%`,
+        width: `${anchoUi}%`,
+        aspectRatio: `${anchoUi} / ${altoUi}`,
+        borderRadius: elemento.tipo === 'planta' ? '50%' : 8,
+        transform: `rotate(${elemento.rotacion}deg)`,
+        background: elemento.color ?? cfg.color,
+        opacity: 0.88,
+        border: selected ? '2px solid #fff' : '1px dashed rgba(255,255,255,.3)',
+        color: '#fff',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
+        touchAction: 'none',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        cursor: 'grab',
+        minWidth: 36, minHeight: 24,
+      }}
+    >
+      <span className="material-symbols-outlined" style={{ fontSize: 18, transform: `rotate(${-elemento.rotacion}deg)` }}>{cfg.icon}</span>
+      {elemento.label && (
+        <span style={{ fontSize: 9, opacity: 0.85, whiteSpace: 'nowrap', transform: `rotate(${-elemento.rotacion}deg)` }}>{elemento.label}</span>
+      )}
+      {selected && (
+        <span
+          onPointerDown={onResizePointerDown}
+          onPointerMove={onResizePointerMove}
+          onPointerUp={onResizePointerUp}
+          style={{
+            position: 'absolute', right: -11, bottom: -11, width: 24, height: 24, borderRadius: '50%',
+            background: '#fff', border: '2px solid var(--accent)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            touchAction: 'none', cursor: 'nwse-resize',
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent)', transform: `rotate(${-elemento.rotacion}deg)` }}>open_in_full</span>
+        </span>
+      )}
+    </button>
+  )
+}
+
+function ElementoPanel({
+  elemento, onChange, onDelete, onCerrar,
+}: {
+  elemento: SalonElemento
+  onChange: (id: string, datos: Partial<SalonElemento>) => void
+  onDelete: (id: string) => void
+  onCerrar: () => void
+}) {
+  const cfg = elementoCfg(elemento.tipo)
+
+  return (
+    <div style={{ background: '#1a1a1a', borderRadius: '16px 16px 0 0', padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 14, borderTop: '1px solid #2a2a2a' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="material-symbols-outlined" style={{ color: 'var(--accent)' }}>{cfg.icon}</span>
+          <p style={{ fontWeight: 700, color: '#fff', fontSize: 16 }}>{cfg.label}</p>
+        </div>
+        <button onClick={onCerrar} style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 14, minHeight: 44 }}>Listo</button>
+      </div>
+
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span style={{ fontSize: 12, color: '#888' }}>Nombre (opcional)</span>
+        <input value={elemento.label ?? ''} onChange={e => onChange(elemento.id, { label: e.target.value || null })} placeholder={cfg.label} style={inputStyle} />
+      </label>
+
+      <div>
+        <p style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>Color</p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            onClick={() => onChange(elemento.id, { color: null })}
+            aria-label="Color por defecto"
+            style={{
+              width: 34, height: 34, borderRadius: '50%', background: cfg.color,
+              border: !elemento.color ? '2px solid #fff' : '1px solid #2a2a2a',
+            }}
+          />
+          {MESA_COLORES.map(c => (
+            <button
+              key={c}
+              onClick={() => onChange(elemento.id, { color: c })}
+              aria-label={c}
+              style={{
+                width: 34, height: 34, borderRadius: '50%', background: c,
+                border: elemento.color === c ? '2px solid #fff' : '1px solid rgba(255,255,255,.2)',
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p style={{ fontSize: 12, color: '#888', marginBottom: 6 }}>Rotación</p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {ROTACIONES().map(r => {
+            const activo = elemento.rotacion === r
+            return (
+              <button
+                key={r}
+                onClick={() => onChange(elemento.id, { rotacion: r })}
+                style={{ flex: 1, minHeight: 64, borderRadius: 10, background: activo ? 'var(--accent)' : '#111', border: activo ? '1px solid var(--accent)' : '1px solid #2a2a2a', color: '#fff', fontSize: 13, fontWeight: 600 }}
+              >
+                {r}°
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <button
+        onClick={() => onDelete(elemento.id)}
+        style={{ minHeight: 48, borderRadius: 10, background: '#2a1a1a', border: '1px solid #4a2a2a', color: '#e57373', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>delete</span> Eliminar
+      </button>
+    </div>
+  )
+}
+
+function EditorSalon() {
   const RID = useRestauranteId()
-  const { mesas, loading, crearMesa, actualizarMesa, eliminarMesa, guardarLayout } = useMesas()
-  const [seleccionId, setSeleccionId] = useState<string | null>(null)
+  const { mesas, loading: loadingMesas, crearMesa, actualizarMesa, eliminarMesa, guardarLayout } = useMesas()
+  const { elementos, loading: loadingElementos, crearElemento, actualizarElemento, eliminarElemento } = useSalonElementos()
+  const [seleccion, setSeleccion] = useState<{ kind: 'mesa' | 'elemento'; id: string } | null>(null)
   const [dragPos, setDragPos] = useState<{ id: string; x: number; y: number } | null>(null)
   const [resizePos, setResizePos] = useState<{ id: string; ancho: number; alto: number } | null>(null)
   const [creando, setCreando] = useState(false)
 
-  const seleccionada = mesas.find(m => m.id === seleccionId) ?? null
+  const mesaSeleccionada = seleccion?.kind === 'mesa' ? mesas.find(m => m.id === seleccion.id) ?? null : null
+  const elementoSeleccionado = seleccion?.kind === 'elemento' ? elementos.find(e => e.id === seleccion.id) ?? null : null
 
-  async function onCrear() {
+  async function onCrearMesa() {
     if (!RID) return
     setCreando(true)
     try {
@@ -332,7 +548,7 @@ function EditorMesas() {
         numero, sector: 'Salón', capacidad: 4, forma: 'cuadrada', ancho: 9, alto: 9, rotacion: 0,
         pos_x: 40, pos_y: 40,
       })
-      setSeleccionId(id)
+      setSeleccion({ kind: 'mesa', id })
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : 'Error al crear la mesa')
     } finally {
@@ -340,18 +556,44 @@ function EditorMesas() {
     }
   }
 
+  async function onCrearElemento(tipo: ElementoTipo) {
+    if (!RID) return
+    const cfg = elementoCfg(tipo)
+    try {
+      const id = await crearElemento({
+        tipo, label: null, ancho: cfg.ancho, alto: cfg.alto, rotacion: 0, pos_x: 30, pos_y: 30,
+      })
+      setSeleccion({ kind: 'elemento', id })
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Error al crear el elemento')
+    }
+  }
+
   function onChangeMesa(id: string, datos: Partial<Mesa>) {
     actualizarMesa(id, datos).catch((e: unknown) => alert(e instanceof Error ? e.message : 'Error al guardar'))
+  }
+
+  function onChangeElemento(id: string, datos: Partial<SalonElemento>) {
+    actualizarElemento(id, datos).catch((e: unknown) => alert(e instanceof Error ? e.message : 'Error al guardar'))
   }
 
   function onDragMove(id: string, x: number, y: number) {
     setDragPos({ id, x, y })
   }
 
-  async function onDragEnd(id: string, x: number, y: number) {
+  async function onDragEndMesa(id: string, x: number, y: number) {
     setDragPos(null)
     try {
       await guardarLayout([{ id, pos_x: x, pos_y: y }])
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Error al guardar la posición')
+    }
+  }
+
+  async function onDragEndElemento(id: string, x: number, y: number) {
+    setDragPos(null)
+    try {
+      await actualizarElemento(id, { pos_x: x, pos_y: y })
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : 'Error al guardar la posición')
     }
@@ -361,7 +603,7 @@ function EditorMesas() {
     setResizePos({ id, ancho, alto })
   }
 
-  async function onResizeEnd(id: string, ancho: number, alto: number) {
+  async function onResizeEndMesa(id: string, ancho: number, alto: number) {
     setResizePos(null)
     try {
       await actualizarMesa(id, { ancho, alto })
@@ -370,25 +612,54 @@ function EditorMesas() {
     }
   }
 
-  async function onDelete(id: string) {
+  async function onResizeEndElemento(id: string, ancho: number, alto: number) {
+    setResizePos(null)
+    try {
+      await actualizarElemento(id, { ancho, alto })
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Error al guardar el tamaño')
+    }
+  }
+
+  async function onDeleteMesa(id: string) {
     if (!confirm('¿Eliminar esta mesa?')) return
-    setSeleccionId(null)
+    setSeleccion(null)
     try { await eliminarMesa(id) } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error al eliminar') }
   }
 
-  if (loading) return <p style={{ color: '#666', textAlign: 'center', padding: 32 }}>Cargando mesas...</p>
+  async function onDeleteElemento(id: string) {
+    if (!confirm('¿Eliminar este elemento?')) return
+    setSeleccion(null)
+    try { await eliminarElemento(id) } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error al eliminar') }
+  }
+
+  if (loadingMesas || loadingElementos) return <p style={{ color: '#666', textAlign: 'center', padding: 32 }}>Cargando plano...</p>
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, minHeight: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <p style={{ fontSize: 13, color: '#888' }}>Arrastrá las mesas para armar el plano de tu salón</p>
+        <p style={{ fontSize: 13, color: '#888' }}>Arrastrá para armar el plano de tu salón</p>
         <button
-          onClick={onCrear}
+          onClick={onCrearMesa}
           disabled={creando}
           style={{ minHeight: 40, padding: '0 14px', borderRadius: 10, background: 'var(--accent)', color: '#fff', fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, opacity: creando ? 0.6 : 1 }}
         >
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span> Mesa
         </button>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
+        {ELEMENTO_TIPOS.map(t => (
+          <button
+            key={t.id}
+            onClick={() => onCrearElemento(t.id)}
+            title={`Agregar ${t.label}`}
+            style={{ flexShrink: 0, minHeight: 40, padding: '0 12px', borderRadius: 10, background: '#1a1a1a', border: '1px solid #2a2a2a', color: '#aaa', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{t.icon}</span>
+            <span style={{ fontSize: 12 }}>{t.label}</span>
+          </button>
+        ))}
       </div>
 
       <div
@@ -399,34 +670,56 @@ function EditorMesas() {
           backgroundImage: 'radial-gradient(circle, #232323 1px, transparent 1px)', backgroundSize: '24px 24px',
         }}
       >
-        {mesas.length === 0 && (
+        {mesas.length === 0 && elementos.length === 0 && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#555' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 40 }}>table_restaurant</span>
             <p>Sin mesas todavía — tocá "+ Mesa" para agregar la primera</p>
           </div>
         )}
+        {elementos.map(el => (
+          <ElementoCanvasItem
+            key={el.id}
+            elemento={el}
+            selected={seleccion?.kind === 'elemento' && seleccion.id === el.id}
+            dragPos={dragPos?.id === el.id ? { x: dragPos.x, y: dragPos.y } : null}
+            resizeDims={resizePos?.id === el.id ? { ancho: resizePos.ancho, alto: resizePos.alto } : null}
+            onSelect={elemento => setSeleccion({ kind: 'elemento', id: elemento.id })}
+            onDragMove={onDragMove}
+            onDragEnd={onDragEndElemento}
+            onResizeMove={onResizeMove}
+            onResizeEnd={onResizeEndElemento}
+          />
+        ))}
         {mesas.map(m => (
           <MesaCanvasItem
             key={m.id}
             mesa={m}
-            selected={seleccionId === m.id}
+            selected={seleccion?.kind === 'mesa' && seleccion.id === m.id}
             dragPos={dragPos?.id === m.id ? { x: dragPos.x, y: dragPos.y } : null}
             resizeDims={resizePos?.id === m.id ? { ancho: resizePos.ancho, alto: resizePos.alto } : null}
-            onSelect={mesa => setSeleccionId(mesa.id)}
+            onSelect={mesa => setSeleccion({ kind: 'mesa', id: mesa.id })}
             onDragMove={onDragMove}
-            onDragEnd={onDragEnd}
+            onDragEnd={onDragEndMesa}
             onResizeMove={onResizeMove}
-            onResizeEnd={onResizeEnd}
+            onResizeEnd={onResizeEndMesa}
           />
         ))}
       </div>
 
-      {seleccionada && (
+      {mesaSeleccionada && (
         <MesaPanel
-          mesa={seleccionada}
+          mesa={mesaSeleccionada}
           onChange={onChangeMesa}
-          onDelete={onDelete}
-          onCerrar={() => setSeleccionId(null)}
+          onDelete={onDeleteMesa}
+          onCerrar={() => setSeleccion(null)}
+        />
+      )}
+      {elementoSeleccionado && (
+        <ElementoPanel
+          elemento={elementoSeleccionado}
+          onChange={onChangeElemento}
+          onDelete={onDeleteElemento}
+          onCerrar={() => setSeleccion(null)}
         />
       )}
     </div>
@@ -535,7 +828,7 @@ export default function SalonConfigPage() {
       <div style={{ flex: 1, overflowY: tab === 'mesas' ? 'hidden' : 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 14, minHeight: 0 }}>
 
         {/* ── MESAS ─────────────────────────────────────────────────────────── */}
-        {tab === 'mesas' && <EditorMesas />}
+        {tab === 'mesas' && <EditorSalon />}
 
         {/* ── MEDIOS DE PAGO ───────────────────────────────────────────────── */}
         {tab === 'medios' && (

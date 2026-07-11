@@ -3,6 +3,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useMesas } from '@/lib/hooks/useMesas'
+import { useSalonElementos } from '@/lib/hooks/useSalonElementos'
+import { elementoCfg } from '@/lib/salon/elementos'
 import { useCarta } from '@/lib/hooks/useCarta'
 import { useComandas, type NuevoComandaItem } from '@/lib/hooks/useComandas'
 import { useCuenta, calcularResumen, type PagoInput, type ResultadoFiscal } from '@/lib/hooks/useCuenta'
@@ -14,7 +16,7 @@ import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, 
 import VistaCaja from '@/components/salon/VistaCaja'
 import { Sillas } from '@/components/salon/Sillas'
 import KitchenCoachFAB from '@/components/coach/KitchenCoachFAB'
-import type { Mesa, CartaItem, EstadoMesa, TipoModificador, Comanda, EstadoComandaItem } from '@/types'
+import type { Mesa, CartaItem, EstadoMesa, TipoModificador, Comanda, EstadoComandaItem, SalonElemento } from '@/types'
 
 // ─── helpers visuales ─────────────────────────────────────────────────────────
 
@@ -38,8 +40,22 @@ const ESTADO_MESA_COLOR: Record<EstadoMesa, string> = {
   cuenta_pedida: '#a04343',
 }
 
+const ESTADO_MESA_LABEL: Record<EstadoMesa, string> = {
+  libre: 'Libre',
+  ocupada: 'Ocupada',
+  cuenta_pedida: 'Cuenta pedida',
+}
+
 function formatPesos(n: number) {
   return `$${Math.round(n).toLocaleString('es-AR')}`
+}
+
+function formatDesde(iso: string): string {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
+  if (mins < 60) return `hace ${mins} min`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return `hace ${h}h ${m}min`
 }
 
 // ─── sub-componentes (nivel módulo) ──────────────────────────────────────────
@@ -107,6 +123,181 @@ function MesaBoton({ mesa, hayListos, onTap }: { mesa: Mesa; hayListos: boolean;
         <span style={{ position: 'absolute', top: -6, right: -6, width: 16, height: 16, borderRadius: '50%', background: '#2e7d32', border: '2px solid #111' }} />
       )}
     </button>
+  )
+}
+
+/** Elemento decorativo del plano (barra, caja, parrilla, planta, pared) — no clickeable, solo referencia visual. */
+function ElementoDecorativo({ elemento }: { elemento: SalonElemento }) {
+  const cfg = elementoCfg(elemento.tipo)
+  const anchoUi = Math.max(elemento.ancho, 3)
+  const altoUi = Math.max(elemento.alto, 3)
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: `${elemento.pos_x}%`,
+        top: `${elemento.pos_y}%`,
+        width: `${anchoUi}%`,
+        aspectRatio: `${anchoUi} / ${altoUi}`,
+        borderRadius: elemento.tipo === 'planta' ? '50%' : 8,
+        transform: `rotate(${elemento.rotacion}deg)`,
+        background: elemento.color ?? cfg.color,
+        opacity: 0.88,
+        border: '1px dashed rgba(255,255,255,.2)',
+        color: '#fff',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
+        minWidth: 30, minHeight: 20,
+        pointerEvents: 'none',
+      }}
+    >
+      <span className="material-symbols-outlined" style={{ fontSize: 16, transform: `rotate(${-elemento.rotacion}deg)` }}>{cfg.icon}</span>
+      {elemento.label && (
+        <span style={{ fontSize: 9, opacity: 0.85, whiteSpace: 'nowrap', transform: `rotate(${-elemento.rotacion}deg)` }}>{elemento.label}</span>
+      )}
+    </div>
+  )
+}
+
+interface CuentaInfo {
+  mozoNombre: string | null
+  abiertaAt: string | null
+}
+
+/** Sheet de información al tocar una mesa — no crea ni modifica nada, solo consulta. */
+function MesaInfoSheet({
+  mesa, comandas, onCerrar, onAbrirPedido, onCobrar,
+}: {
+  mesa: Mesa
+  comandas: Comanda[]
+  onCerrar: () => void
+  onAbrirPedido: (mesa: Mesa) => void
+  onCobrar: (mesa: Mesa) => void
+}) {
+  const [cuentaInfo, setCuentaInfo] = useState<CuentaInfo | null>(null)
+  const [cargando, setCargando] = useState(mesa.estado !== 'libre')
+  const [, forceTick] = useState(0)
+
+  useEffect(() => {
+    if (mesa.estado === 'libre') { setCuentaInfo(null); setCargando(false); return }
+    let cancelado = false
+    setCargando(true)
+    const supabase = createClient()
+    supabase
+      .from('cuentas')
+      .select('abierta_at, equipo_miembros(nombre)')
+      .eq('mesa_id', mesa.id)
+      .eq('estado', 'abierta')
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelado) return
+        const equipo = data?.equipo_miembros as unknown as { nombre?: string } | { nombre?: string }[] | null
+        const mozoNombre = Array.isArray(equipo) ? equipo[0]?.nombre ?? null : equipo?.nombre ?? null
+        setCuentaInfo(data ? { mozoNombre, abiertaAt: data.abierta_at as string | null } : null)
+        setCargando(false)
+      })
+    return () => { cancelado = true }
+  }, [mesa.id, mesa.estado])
+
+  // Refresca el texto "hace X min" cada 30s mientras el sheet está abierto
+  useEffect(() => {
+    if (!cuentaInfo?.abiertaAt) return
+    const t = setInterval(() => forceTick(x => x + 1), 30000)
+    return () => clearInterval(t)
+  }, [cuentaInfo?.abiertaAt])
+
+  const comandasMesa = useMemo(
+    () => comandas.filter(c => c.mesa_id === mesa.id && (c.items?.length ?? 0) > 0),
+    [comandas, mesa.id]
+  )
+  const resumen = useMemo(() => calcularResumen(comandasMesa), [comandasMesa])
+  const items = comandasMesa.flatMap(c => c.items ?? [])
+  const pendientes = items.filter(i => i.estado === 'pendiente' || i.estado === 'en_prep').length
+  const listos = items.filter(i => i.estado === 'listo').length
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 60, display: 'flex', alignItems: 'flex-end' }} onClick={onCerrar}>
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ background: '#161616', width: '100%', borderRadius: '20px 20px 0 0', display: 'flex', flexDirection: 'column', gap: 16, padding: '20px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 20px)' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 48, height: 48, borderRadius: 14, background: mesa.color ?? '#2a2a2a', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <span style={{ fontSize: 20, fontWeight: 800, color: '#fff' }}>{mesa.numero}</span>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}>Mesa {mesa.numero}</p>
+            <p style={{ fontSize: 13, color: '#888' }}>{mesa.sector || 'Salón'} · {mesa.capacidad ?? 4} personas</p>
+          </div>
+          <span style={{ fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 20, color: '#fff', background: ESTADO_MESA_COLOR[mesa.estado], flexShrink: 0 }}>
+            {ESTADO_MESA_LABEL[mesa.estado]}
+          </span>
+          <button onClick={onCerrar} style={{ minWidth: 40, minHeight: 40, background: 'transparent', border: 'none', color: '#888', flexShrink: 0 }}>
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        {cargando ? (
+          <p style={{ color: '#666', fontSize: 14 }}>Cargando...</p>
+        ) : (mesa.estado !== 'libre' && (cuentaInfo?.mozoNombre || cuentaInfo?.abiertaAt)) && (
+          <div style={{ display: 'flex', gap: 24 }}>
+            {cuentaInfo?.mozoNombre && (
+              <div>
+                <p style={{ fontSize: 12, color: '#888' }}>Mozo</p>
+                <p style={{ fontSize: 15, color: '#fff', fontWeight: 600 }}>{cuentaInfo.mozoNombre}</p>
+              </div>
+            )}
+            {cuentaInfo?.abiertaAt && (
+              <div>
+                <p style={{ fontSize: 12, color: '#888' }}>Abierta</p>
+                <p style={{ fontSize: 15, color: '#fff', fontWeight: 600 }}>{formatDesde(cuentaInfo.abiertaAt)}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {comandasMesa.length > 0 && (
+          <div style={{ background: '#1a1a1a', borderRadius: 14, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 14, color: '#aaa' }}>Total en curso</span>
+              <span style={{ fontSize: 20, fontWeight: 800, color: '#4caf50' }}>{formatPesos(resumen.subtotal)}</span>
+            </div>
+            {(pendientes > 0 || listos > 0) && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                {pendientes > 0 && (
+                  <span style={{ fontSize: 13, color: '#a07a20', background: 'rgba(160,122,32,0.15)', borderRadius: 8, padding: '4px 10px' }}>
+                    {pendientes} en cocina
+                  </span>
+                )}
+                {listos > 0 && (
+                  <span style={{ fontSize: 13, color: '#4caf50', background: 'rgba(76,175,80,0.15)', borderRadius: 8, padding: '4px 10px' }}>
+                    {listos} listo{listos > 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          {mesa.estado === 'libre' ? (
+            <button onClick={() => onAbrirPedido(mesa)} style={{ flex: 1, minHeight: 56, borderRadius: 12, background: '#4361a0', color: '#fff', fontSize: 17, fontWeight: 700 }}>
+              Abrir mesa
+            </button>
+          ) : (
+            <>
+              <button onClick={() => onAbrirPedido(mesa)} style={{ flex: 1, minHeight: 56, borderRadius: 12, background: '#2a2a2a', color: '#fff', fontSize: 16, fontWeight: 600 }}>
+                Ver comanda
+              </button>
+              {comandasMesa.length > 0 && (
+                <button onClick={() => onCobrar(mesa)} style={{ flex: 1, minHeight: 56, borderRadius: 12, background: '#a04343', color: '#fff', fontSize: 16, fontWeight: 700 }}>
+                  Cobrar
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -800,12 +991,14 @@ type Vista = 'mapa' | 'mesa' | 'cuenta' | 'caja'
 export default function SalonPage() {
   const router  = useRouter()
   const { mesas, loading: loadingMesas, abrirCuenta, liberarMesa } = useMesas()
+  const { elementos } = useSalonElementos()
   const { items: cartaItems, loading: loadingCarta } = useCarta()
   const { comandas, crearComanda, agregarItems, enviarComanda } = useComandas()
   const { pedirCuenta } = useCuenta()
   const online = useOnlineStatus()
 
   const [vista, setVista] = useState<Vista>('mapa')
+  const [mesaInfo, setMesaInfo] = useState<Mesa | null>(null)
   const [mesaActiva, setMesaActiva] = useState<Mesa | null>(null)
   const [cuentaId, setCuentaId] = useState<string | null>(null)
   const [busqueda, setBusqueda] = useState('')
@@ -861,13 +1054,19 @@ export default function SalonPage() {
     return () => localStorage.removeItem('kc_screen_context')
   }, [vista, mesas, totalEnCurso])
 
-  async function onTapMesa(mesa: Mesa) {
+  // Tocar una mesa solo abre el sheet de info — no crea ni modifica nada todavía.
+  function onTapMesa(mesa: Mesa) {
+    setMesaInfo(mesa)
+  }
+
+  async function abrirYEntrarMesa(mesa: Mesa, irACobro: boolean) {
     try {
       const id = await abrirCuenta(mesa.id)
       setCuentaId(id)
       setMesaActiva(mesa)
       setDraft([])
-      setVista('mesa')
+      setMesaInfo(null)
+      setVista(irACobro ? 'cuenta' : 'mesa')
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : 'Error al abrir la mesa')
     }
@@ -985,10 +1184,22 @@ export default function SalonPage() {
           </div>
         ) : (
           <div data-coach-target="salon-mapa" style={{ flex: 1, overflow: 'auto', position: 'relative', minHeight: 600 }}>
+            {elementos.map(el => (
+              <ElementoDecorativo key={el.id} elemento={el} />
+            ))}
             {mesas.map(m => (
               <MesaBoton key={m.id} mesa={m} hayListos={mesasConListos.has(m.id)} onTap={onTapMesa} />
             ))}
           </div>
+        )}
+        {mesaInfo && (
+          <MesaInfoSheet
+            mesa={mesaInfo}
+            comandas={comandas}
+            onCerrar={() => setMesaInfo(null)}
+            onAbrirPedido={m => abrirYEntrarMesa(m, false)}
+            onCobrar={m => abrirYEntrarMesa(m, true)}
+          />
         )}
         <KitchenCoachFAB />
       </div>

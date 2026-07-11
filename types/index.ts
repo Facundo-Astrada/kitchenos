@@ -933,6 +933,24 @@ export interface Mesa {
   color?: string | null  // hex elegido por el usuario; null = color default por estado
 }
 
+// ── Salón — Elementos decorativos (barra, caja, parrilla, planta, pared) ──────
+export type ElementoTipo = 'barra' | 'caja' | 'parrilla' | 'planta' | 'pared' | 'otro'
+
+// DB: salon_elementos (id, restaurante_id, tipo, label, pos_x, pos_y, ancho, alto, rotacion, color, created_at)
+export interface SalonElemento {
+  id: string
+  restaurante_id: string
+  tipo: ElementoTipo
+  label?: string | null
+  pos_x: number
+  pos_y: number
+  ancho: number
+  alto: number
+  rotacion: number
+  color?: string | null
+  created_at: string
+}
+
 // ── Salón — Cuentas ──────────────────────────────────────────
 export type EstadoCuenta = 'abierta' | 'cerrada'
 
