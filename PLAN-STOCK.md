@@ -1,5 +1,7 @@
 # PLAN-STOCK — Auditoría + features de inventario (jul 2026)
 
+> **Estado:** F1 ✅ · F2 ✅ (+ fix de coma decimal en 8 inputs, no estaba en el plan original) · F3 ✅ · F4 ✅ · F5 pendiente · F6 pendiente.
+
 > Ejecutar por fases, en orden. Cada fase termina con `npm run build` verde antes de seguir.
 > Skills: `/supabase-check` antes de cada query nueva · `/add-rls` para tablas nuevas · `/pr-review` al final · `/deploy` para cerrar.
 > Gotchas obligatorios: `NOTIFY pgrst, 'reload schema';` al final de toda migración (hooks.md #1) · scripts `.mjs` sin tipos TS (hooks.md #7).
