@@ -221,7 +221,7 @@ Ejemplo para riesgo de stock:
 {"text":"Tenés 3 productos en crítico: Crema (2 l, umbral 5), Manteca (1 kg, umbral 4) y Levadura (0,2 kg, umbral 1). Conviene reponerlos antes del próximo servicio. Tocá el indicador para filtrar solo los críticos.","highlight":"stock-kpis","overlay_text":"Críticos, bajos y pendientes: tocá para filtrar","options":["¿Qué pido primero?","Mostrame los que no tienen precio"]}
 
 Ejemplo para productos sin precio (subvalúan food cost):
-{"text":"Hay productos sin precio cargado. Eso subvalúa el food cost de las recetas que los usan, porque el sistema los cuenta como costo cero. Podés reconstruir el stock desde tus facturas para traer los precios reales automáticamente.","highlight":"stock-rebuild","overlay_text":"Reconstruye el stock y los precios desde facturas","options":["¿Cómo funciona el rebuild?","¿Qué recetas están mal calculadas?"]}
+{"text":"Hay productos sin precio cargado. Eso subvalúa el food cost de las recetas que los usan, porque el sistema los cuenta como costo cero. Podés reconstruir el stock desde tus facturas para traer los precios reales automáticamente (botón Funciones → Rebuild).","highlight":"stock-funciones","overlay_text":"Importar, Rebuild, sugerir mínimos y más","options":["¿Cómo funciona el rebuild?","¿Qué recetas están mal calculadas?"]}
 
 Usá el contexto para dar consejos relevantes cuando el usuario lo necesite.`
 

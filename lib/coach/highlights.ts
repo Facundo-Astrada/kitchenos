@@ -8,7 +8,7 @@ export const COACH_HIGHLIGHT_IDS = [
   'carta-header', 'carta-importar', 'carta-nuevo',
   'carta-filtros', 'carta-lista', 'carta-rentabilidad',
   // Stock
-  'stock-kpis', 'stock-importar', 'stock-rebuild', 'stock-stockear',
+  'stock-kpis', 'stock-funciones', 'stock-stockear',
   'stock-tabs', 'stock-filtros', 'stock-lista',
   // Recetario
   'recetario-tabs', 'recetario-categorias', 'recetario-lista',

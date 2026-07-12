@@ -479,14 +479,9 @@ export const TOURS: Record<string, TourStep[]> = {
       description: 'El modo rápido para hacer el inventario físico por sector. Elegís una categoría (Carnes, Verduras...) y recorrés la lista uno por uno actualizando cantidades sin abrir el formulario completo. Ideal para el recuento de cierre o inicio de turno.',
     },
     {
-      targetId: 'stock-importar',
-      title: 'Importar desde Excel',
-      description: 'Si tu proveedor te manda una lista en Excel o CSV, podés importarla directamente. El sistema mapea las columnas y actualiza los productos sin que tengas que cargar uno por uno.',
-    },
-    {
-      targetId: 'stock-rebuild',
-      title: 'Rebuild desde facturas',
-      description: 'Si cargaste facturas pero el stock está vacío o con precios viejos, Rebuild reconstruye todo automáticamente: crea los productos que faltan, actualiza precios desde las facturas más recientes y los vincula a las recetas. Borra el stock anterior — usalo con cuidado.',
+      targetId: 'stock-funciones',
+      title: 'Funciones de inventario',
+      description: 'Acá está todo lo demás: importar desde Excel/factura, exportar, sugerir mínimos, actualizar precios desde la última factura de cada producto, asignar sector físico y Rebuild (reconstruye el stock completo desde las facturas cargadas — borra lo anterior, usalo con cuidado).',
     },
     {
       targetId: null,

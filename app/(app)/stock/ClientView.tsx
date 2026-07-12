@@ -13,7 +13,6 @@ import { useStockSectores } from '@/lib/hooks/useStockSectores'
 import { sinTildes } from '@/lib/stock/precios'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import PageHeader from '@/components/shell/PageHeader'
-import ActionButton from '@/components/shell/ActionButton'
 import MermaBottomSheet from '@/components/merma/MermaBottomSheet'
 import { useMerma } from '@/lib/hooks/useMerma'
 import { createClient } from '@/lib/supabase/client'
@@ -303,6 +302,7 @@ export default function StockPage() {
   // Delete confirm
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [showImportador, setShowImportador] = useState(false)
+  const [showFunciones, setShowFunciones] = useState(false)
   const [showRebuildModal, setShowRebuildModal] = useState(false)
   const [rebuildPreview, setRebuildPreview] = useState<{
     productos: Array<{ nombre: string; precio_unitario: number; unidad: string; categoria: string; proveedor_nombre: string | null; ocurrencias: number }>
@@ -523,6 +523,47 @@ export default function StockPage() {
   const [quickValue, setQuickValue] = useState('')
   const quickRef = useRef<HTMLInputElement>(null)
   const [quickSector, setQuickSector] = useState<string | null>(null)
+  const [quickSectorId, setQuickSectorId] = useState<string | null>(null)
+
+  // ── Alta rápida de producto nuevo DENTRO de Stockear ──
+  // Para sobrantes/producción que aparecen recorriendo un sector físico
+  // (congelado, envasado al vacío, en heladera, en almacén) y todavía no
+  // existen como producto — se cargan ahí mismo, sin salir del recorrido.
+  const [showQuickAddProducto, setShowQuickAddProducto] = useState(false)
+  const [quickAddForm, setQuickAddForm] = useState({ nombre: '', cantidad: '', unidad: 'kg', sector_id: '' })
+  const [quickAddSaving, setQuickAddSaving] = useState(false)
+  const [quickAddError, setQuickAddError] = useState<string | null>(null)
+
+  function abrirQuickAdd() {
+    setQuickAddForm({ nombre: '', cantidad: '', unidad: 'kg', sector_id: quickSectorId ?? '' })
+    setQuickAddError(null)
+    setShowQuickAddProducto(true)
+  }
+
+  async function guardarQuickAdd() {
+    if (!quickAddForm.nombre.trim()) { setQuickAddError('El nombre es obligatorio'); return }
+    setQuickAddSaving(true)
+    setQuickAddError(null)
+    try {
+      await agregarProducto({
+        nombre: quickAddForm.nombre.trim(),
+        categoria: 'Otros',
+        unidad: quickAddForm.unidad,
+        stock_actual: parseNumAR(quickAddForm.cantidad) ?? 0,
+        stock_minimo: 0,
+        stock_critico: 0,
+        activo: true,
+        precio_unitario: 0,
+        sector_id: quickAddForm.sector_id || null,
+      })
+      setShowQuickAddProducto(false)
+      setSugToast(`«${quickAddForm.nombre.trim()}» agregado al stock`)
+      setTimeout(() => setSugToast(null), 2500)
+    } catch (e) {
+      setQuickAddError(e instanceof Error ? e.message : 'Error al guardar')
+    }
+    setQuickAddSaving(false)
+  }
   const [showSectorSelect, setShowSectorSelect] = useState(false)
   const [quickChangedCount, setQuickChangedCount] = useState(0)
 
@@ -724,6 +765,19 @@ export default function StockPage() {
   // Corrección masiva de unidades (A3)
   const [unidadEdits, setUnidadEdits] = useState<Record<string, string>>({})
   const [unidadSaving, setUnidadSaving] = useState(false)
+
+  // Banner "unidades sospechosas": se puede ignorar — reaparece solo si el
+  // conteo crece por encima de lo que ya se vio (no queda oculto para siempre).
+  const [unidadBannerDismissedCount, setUnidadBannerDismissedCount] = useState(0)
+  useEffect(() => {
+    if (!RESTAURANTE_ID) return
+    const stored = localStorage.getItem(`stock_unidad_banner_dismissed_${RESTAURANTE_ID}`)
+    setUnidadBannerDismissedCount(stored ? parseInt(stored, 10) || 0 : 0)
+  }, [RESTAURANTE_ID])
+  function dismissUnidadBanner() {
+    setUnidadBannerDismissedCount(nUnidadSospechosa)
+    if (RESTAURANTE_ID) localStorage.setItem(`stock_unidad_banner_dismissed_${RESTAURANTE_ID}`, String(nUnidadSospechosa))
+  }
 
   // Paste desde Excel (desktop)
   const [pasteRows, setPasteRows] = useState<PasteRow[]>([])
@@ -1154,63 +1208,6 @@ export default function StockPage() {
                 <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.07em' }}>Unidades</span>
               </button>
             )}
-            <ActionButton icon="table_view" label="Excel" variant="secondary" onClick={exportXLSX} />
-            <ActionButton icon="picture_as_pdf" label="PDF" variant="secondary" onClick={exportPDF} />
-            <button
-              data-coach-target="stock-importar"
-              onClick={() => setShowImportador(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, background: 'rgba(255,255,255,.15)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>upload_file</span>
-              Importar
-            </button>
-            <button
-              onClick={() => planillaFileRef.current?.click()}
-              title="Importar planilla de stock (Excel con múltiples hojas)"
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, background: 'rgba(255,255,255,.15)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>table_chart</span>
-              Planilla
-            </button>
-            {isAdmin && (
-              <button
-                onClick={abrirSugerir}
-                title="Sugerir stock mínimo y crítico desde la frecuencia de compra"
-                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, background: 'rgba(255,255,255,.15)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>tune</span>
-                Sugerir mínimos
-              </button>
-            )}
-            {isAdmin && (
-              <button
-                onClick={abrirSyncPrecios}
-                title="Actualizar precios de stock desde la última factura de cada producto"
-                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, background: 'rgba(255,255,255,.15)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>price_change</span>
-                Actualizar precios
-              </button>
-            )}
-            <button
-              data-coach-target="stock-rebuild"
-              onClick={abrirRebuildPreview}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, background: 'rgba(239,68,68,.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,.3)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
-              title="Borrar stock y reconstruir desde facturas"
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>refresh</span>
-              Rebuild
-            </button>
-            {canEdit && sectores.length > 0 && (
-              <button
-                onClick={() => setAsignandoSector(true)}
-                title="Asignar sector físico a varios productos a la vez"
-                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, background: 'rgba(255,255,255,.15)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>shelves</span>
-                Asignar sector
-              </button>
-            )}
             <button
               data-coach-target="stock-stockear"
               onClick={() => setShowSectorSelect(v => !v)}
@@ -1218,6 +1215,14 @@ export default function StockPage() {
             >
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>speed</span>
               Stockear
+            </button>
+            <button
+              data-coach-target="stock-funciones"
+              onClick={() => setShowFunciones(v => !v)}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, background: 'rgba(255,255,255,.15)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>apps</span>
+              Funciones
             </button>
           </div>
           {/* Fade indicator — right edge */}
@@ -1434,7 +1439,7 @@ export default function StockPage() {
       )}
 
       {/* ── Banner CTA: unidades sospechosas ── */}
-      {activeTab === 'insumos' && nUnidadSospechosa > 0 && estadoFilter !== 'unidad' && (
+      {activeTab === 'insumos' && nUnidadSospechosa > unidadBannerDismissedCount && estadoFilter !== 'unidad' && (
         <div style={{
           margin: '8px 12px 0', padding: '12px 14px',
           background: 'linear-gradient(135deg, rgba(245,158,11,.12), rgba(234,179,8,.08))',
@@ -1455,6 +1460,14 @@ export default function StockPage() {
             style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
           >
             Revisar
+          </button>
+          <button
+            onClick={dismissUnidadBanner}
+            title="Ignorar por ahora — vuelve a aparecer si hay más productos nuevos con este problema"
+            aria-label="Ignorar aviso"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0, display: 'flex' }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)' }}>close</span>
           </button>
         </div>
       )}
@@ -2109,13 +2122,61 @@ export default function StockPage() {
         prefill={mermaPrefill}
       />
 
+      {/* ── Panel de funciones (Excel/PDF/Importar/Planilla/Sugerir/Precios/Rebuild/Sector) ── */}
+      {showFunciones && (
+        <div onClick={() => setShowFunciones(false)} style={{ position: 'fixed', inset: 0, zIndex: 150 }}>
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: 'absolute', top: 'calc(var(--header-top, 46px) + 92px)',
+              left: isDesktop ? 'auto' : 16, right: 16,
+              width: isDesktop ? 300 : 'auto',
+              background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16,
+              boxShadow: '0 16px 48px rgba(0,0,0,.32)', overflow: 'hidden', maxHeight: '70vh',
+              display: 'flex', flexDirection: 'column',
+            }}
+          >
+            <div style={{ overflowY: 'auto', padding: 6 }}>
+              {[
+                { icon: 'table_view', label: 'Excel', onClick: exportXLSX },
+                { icon: 'picture_as_pdf', label: 'PDF', onClick: exportPDF },
+                { icon: 'upload_file', label: 'Importar facturas', onClick: () => setShowImportador(true) },
+                { icon: 'table_chart', label: 'Importar planilla', onClick: () => planillaFileRef.current?.click() },
+                ...(isAdmin ? [{ icon: 'tune', label: 'Sugerir mínimos', onClick: abrirSugerir }] : []),
+                ...(isAdmin ? [{ icon: 'price_change', label: 'Actualizar precios', onClick: abrirSyncPrecios }] : []),
+                ...(canEdit && sectores.length > 0 ? [{ icon: 'shelves', label: 'Asignar sector', onClick: () => setAsignandoSector(true) }] : []),
+              ].map(fn => (
+                <button
+                  key={fn.label}
+                  onClick={() => { setShowFunciones(false); fn.onClick() }}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px', background: 'none', border: 'none', borderRadius: 10, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 19, color: 'var(--text-2)' }}>{fn.icon}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{fn.label}</span>
+                </button>
+              ))}
+              <div style={{ height: 1, background: 'var(--border)', margin: '4px 8px' }} />
+              <button
+                onClick={() => { setShowFunciones(false); abrirRebuildPreview() }}
+                title="Borrar stock y reconstruir desde facturas"
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px', background: 'none', border: 'none', borderRadius: 10, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 19, color: '#ef4444' }}>refresh</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#ef4444' }}>Rebuild (reconstruir desde facturas)</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Sector selector ── */}
       {showSectorSelect && (() => {
         // fuera_de_uso nunca aparece en el recorrido de Stockear.
         const stockeables = filtered.filter(p => !p.fuera_de_uso)
-        const startQuick = (list: ProductoConEstado[], sectorLabel: string | null) => {
+        const startQuick = (list: ProductoConEstado[], sectorLabel: string | null, sectorId: string | null = null) => {
           const ordenado = sortByEstado(list)
           setQuickSector(sectorLabel)
+          setQuickSectorId(sectorId)
           setQuickOrder(ordenado.map(p => p.id))
           setQuickIdx(0)
           setQuickChangedCount(0)
@@ -2150,7 +2211,7 @@ export default function StockPage() {
                     const criticos = items.filter(p => p.estado === 'critico').length
                     return (
                       <button key={sec.id}
-                        onClick={() => startQuick(items, sec.nombre)}
+                        onClick={() => startQuick(items, sec.nombre, sec.id)}
                         disabled={items.length === 0}
                         style={{ padding: '12px 16px', borderRadius: 12, background: 'var(--bg)', border: '1px solid var(--border)', fontSize: 14, fontWeight: 600, cursor: items.length === 0 ? 'default' : 'pointer', textAlign: 'left', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'space-between', opacity: items.length === 0 ? 0.5 : 1 }}
                       >
@@ -2349,7 +2410,16 @@ export default function StockPage() {
                     {quickSector && <div style={{ color: 'rgba(255,255,255,.5)', fontSize: 11 }}>{quickSector}</div>}
                   </div>
                 </div>
-                <span style={{ color: 'rgba(255,255,255,.5)', fontSize: 12, fontWeight: 600 }}>{quickIdx + 1}/{quickItems.length}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button
+                    onPointerDown={e => { e.preventDefault(); abrirQuickAdd() }}
+                    title="Agregar algo que encontraste y todavía no está en el stock"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}
+                  >
+                    <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.85)', fontSize: 22 }}>add_circle</span>
+                  </button>
+                  <span style={{ color: 'rgba(255,255,255,.5)', fontSize: 12, fontWeight: 600 }}>{quickIdx + 1}/{quickItems.length}</span>
+                </div>
               </div>
               <div style={{ height: 3, background: 'rgba(255,255,255,.15)', borderRadius: 99, marginTop: 10, overflow: 'hidden' }}>
                 <div style={{ height: '100%', background: '#22c55e', borderRadius: 99, width: `${((quickIdx + 1) / quickItems.length) * 100}%`, transition: 'width .3s' }} />
@@ -2426,6 +2496,82 @@ export default function StockPage() {
           </SheetChrome>
         )
       })()}
+
+      {/* ── Alta rápida de producto nuevo (desde Stockear) ── */}
+      {showQuickAddProducto && (
+        <SheetChrome>
+        <div onClick={() => !quickAddSaving && setShowQuickAddProducto(false)} style={{ position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-end' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', width: '100%', padding: '20px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 20px)' }}>
+            <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 16px' }} />
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>Agregar producto nuevo</div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 16 }}>Para algo que encontraste y todavía no está en el stock — sobrante, congelado, envasado al vacío…</div>
+
+            {quickAddError && (
+              <div style={{ background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#ef4444' }}>
+                {quickAddError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={lblStyle}>Nombre *</span>
+                <input
+                  value={quickAddForm.nombre}
+                  onChange={e => setQuickAddForm(f => ({ ...f, nombre: e.target.value }))}
+                  placeholder="Ej: Fondo de ave sobrante"
+                  autoFocus
+                  style={inputStyle}
+                />
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={lblStyle}>Cantidad</span>
+                  <input
+                    type="text" inputMode="decimal"
+                    value={quickAddForm.cantidad}
+                    onChange={e => setQuickAddForm(f => ({ ...f, cantidad: e.target.value }))}
+                    placeholder="0"
+                    style={inputStyle}
+                  />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={lblStyle}>Unidad</span>
+                  <select
+                    value={quickAddForm.unidad}
+                    onChange={e => setQuickAddForm(f => ({ ...f, unidad: e.target.value }))}
+                    style={{ ...inputStyle, appearance: 'auto', cursor: 'pointer' }}
+                  >
+                    {UNIDADES_USO.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </label>
+              </div>
+              {sectores.length > 0 && (
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={lblStyle}>Sector físico</span>
+                  <select
+                    value={quickAddForm.sector_id}
+                    onChange={e => setQuickAddForm(f => ({ ...f, sector_id: e.target.value }))}
+                    style={{ ...inputStyle, appearance: 'auto', cursor: 'pointer' }}
+                  >
+                    <option value="">Sin sector</option>
+                    {sectores.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                  </select>
+                </label>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+              <button onClick={() => setShowQuickAddProducto(false)} disabled={quickAddSaving} style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: 13, fontSize: 13, fontWeight: 700, color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                Cancelar
+              </button>
+              <button onClick={guardarQuickAdd} disabled={quickAddSaving || !quickAddForm.nombre.trim()} style={{ flex: 2, background: 'var(--navy)', border: 'none', borderRadius: 10, padding: 13, fontSize: 14, fontWeight: 700, color: '#fff', cursor: 'pointer', fontFamily: 'inherit', opacity: (quickAddSaving || !quickAddForm.nombre.trim()) ? 0.6 : 1 }}>
+                {quickAddSaving ? 'Guardando…' : 'Agregar al stock'}
+              </button>
+            </div>
+          </div>
+        </div>
+        </SheetChrome>
+      )}
 
       {showQuickSummary && (
         <div style={{ position: 'fixed', bottom: 'var(--toast-bottom)', left: '50%', transform: 'translateX(-50%)', zIndex: 200, background: 'var(--navy)', color: '#fff', borderRadius: 12, padding: '10px 20px', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', boxShadow: '0 4px 20px rgba(0,0,0,.3)', display: 'flex', alignItems: 'center', gap: 8 }}>
