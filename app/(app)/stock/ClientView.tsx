@@ -10,6 +10,7 @@ import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
 import { useRecetas } from '@/lib/hooks/useRecetas'
 import { useCategoriasProducto } from '@/lib/hooks/useCategoriasProducto'
 import { useStockSectores } from '@/lib/hooks/useStockSectores'
+import { sinTildes } from '@/lib/stock/precios'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import PageHeader from '@/components/shell/PageHeader'
 import ActionButton from '@/components/shell/ActionButton'
@@ -280,6 +281,7 @@ export default function StockPage() {
   const [form, setForm] = useState<FormData>(FORM_EMPTY)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const [duplicadoWarn, setDuplicadoWarn] = useState<ProductoConEstado | null>(null)
   const [showUnidadCompra, setShowUnidadCompra] = useState(false)
 
   // Badge de sobreprecio vs. otros proveedores (Q5) — solo para el producto en edición
@@ -593,6 +595,59 @@ export default function StockPage() {
   const [sugApplying, setSugApplying] = useState(false)
   const [sugToast, setSugToast] = useState<string | null>(null)
 
+  // ── Actualizar precios desde facturas (F5) ──
+  type PrecioDesfasado = { producto_id: string; nombre: string; unidad: string; precio_actual: number; precio_nuevo: number; fecha: string | null; factura_id: string; delta_pct: number }
+  const [showSyncPrecios, setShowSyncPrecios] = useState(false)
+  const [syncLoading, setSyncLoading] = useState(false)
+  const [desfasados, setDesfasados] = useState<PrecioDesfasado[]>([])
+  const [desfSelected, setDesfSelected] = useState<Set<string>>(new Set())
+  const [syncApplying, setSyncApplying] = useState(false)
+
+  async function abrirSyncPrecios() {
+    setShowSyncPrecios(true)
+    setSyncLoading(true)
+    setDesfasados([])
+    try {
+      const res = await fetch('/api/stock/sync-precios-facturas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'preview' }),
+      })
+      const data = await res.json()
+      const list: PrecioDesfasado[] = data.desfasados ?? []
+      setDesfasados(list)
+      setDesfSelected(new Set(list.map((d: PrecioDesfasado) => d.producto_id)))
+    } catch {
+      setDesfasados([])
+    }
+    setSyncLoading(false)
+  }
+
+  async function aplicarSyncPrecios() {
+    setSyncApplying(true)
+    try {
+      const elegidos = desfasados.filter(d => desfSelected.has(d.producto_id))
+      const res = await fetch('/api/stock/sync-precios-facturas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'apply',
+          items: elegidos.map(d => ({ producto_id: d.producto_id, precio_nuevo: d.precio_nuevo, factura_id: d.factura_id })),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Error al aplicar')
+      setShowSyncPrecios(false)
+      setSugToast(`${data.actualizados} precio${data.actualizados !== 1 ? 's' : ''} actualizado${data.actualizados !== 1 ? 's' : ''}`)
+      setTimeout(() => setSugToast(null), 3000)
+      refetch()
+    } catch (e) {
+      setSugToast('Error al actualizar precios: ' + (e instanceof Error ? e.message : 'desconocido'))
+      setTimeout(() => setSugToast(null), 3500)
+    }
+    setSyncApplying(false)
+  }
+
   async function abrirSugerir() {
     setShowSugerir(true)
     setSugLoading(true)
@@ -872,11 +927,13 @@ export default function StockPage() {
     setEditingProducto(null)
     setForm(FORM_EMPTY)
     setFormError(null)
+    setDuplicadoWarn(null)
     setShowUnidadCompra(false)
     setModalOpen(true)
   }
 
   function openEdit(p: ProductoConEstado) {
+    setDuplicadoWarn(null)
     setEditingProducto(p)
     setForm({
       nombre: p.nombre,
@@ -901,8 +958,16 @@ export default function StockPage() {
 
   async function handleSave() {
     if (!form.nombre.trim()) { setFormError('El nombre es obligatorio'); return }
-    setSaving(true)
     setFormError(null)
+    setDuplicadoWarn(null)
+    // Guardia anti-duplicados solo al CREAR — comparación insensible a mayúsculas/tildes
+    // contra los productos ya cargados (Sal/sal, Limon/Limón, etc. — ver F6 del plan de stock).
+    if (!editingProducto) {
+      const nombreNorm = sinTildes(form.nombre.trim().toLowerCase())
+      const existente = productos.find(p => p.activo && sinTildes(p.nombre.trim().toLowerCase()) === nombreNorm)
+      if (existente) { setDuplicadoWarn(existente); return }
+    }
+    setSaving(true)
     try {
       const datos = {
         nombre: form.nombre.trim(),
@@ -1115,6 +1180,16 @@ export default function StockPage() {
               >
                 <span className="material-symbols-outlined" style={{ fontSize: 16 }}>tune</span>
                 Sugerir mínimos
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                onClick={abrirSyncPrecios}
+                title="Actualizar precios de stock desde la última factura de cada producto"
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, background: 'rgba(255,255,255,.15)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>price_change</span>
+                Actualizar precios
               </button>
             )}
             <button
@@ -1733,6 +1808,20 @@ export default function StockPage() {
             {formError && (
               <div style={{ background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#ef4444' }}>
                 {formError}
+              </div>
+            )}
+            {duplicadoWarn && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.3)', borderRadius: 8, padding: '8px 12px', marginBottom: 12 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#d97706', flexShrink: 0 }}>content_copy</span>
+                <span style={{ fontSize: 12, color: 'var(--text-1)', flex: 1 }}>
+                  Ya existe <strong>«{duplicadoWarn.nombre}»</strong> en el stock
+                </span>
+                <button
+                  onClick={() => openEdit(duplicadoWarn)}
+                  style={{ flexShrink: 0, background: 'none', border: '1px solid rgba(245,158,11,.5)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#d97706', fontFamily: 'inherit' }}
+                >
+                  Abrir
+                </button>
               </div>
             )}
 
@@ -2409,6 +2498,73 @@ export default function StockPage() {
                 <button onClick={aplicarSugerencias} disabled={sugApplying || sugSelected.size === 0}
                   style={{ width: '100%', background: 'var(--navy)', border: 'none', borderRadius: 10, padding: '12px 16px', fontSize: 14, fontWeight: 700, color: '#fff', cursor: 'pointer', opacity: (sugApplying || sugSelected.size === 0) ? 0.6 : 1, fontFamily: 'inherit' }}>
                   {sugApplying ? 'Aplicando…' : `Aplicar a ${sugSelected.size} producto${sugSelected.size !== 1 ? 's' : ''}`}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Actualizar precios desde facturas ── */}
+      {showSyncPrecios && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(0,0,0,.6)' }}
+          onClick={() => !syncApplying && setShowSyncPrecios(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: 16, width: '100%', maxWidth: 560, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 8px 40px rgba(0,0,0,.4)' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>Actualizar precios</h3>
+                <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--text-3)' }}>Comparado con la última factura de cada producto — no toca stock ni umbrales</p>
+              </div>
+              <button onClick={() => !syncApplying && setShowSyncPrecios(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-2)' }}>
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div style={{ overflow: 'auto', flex: 1, padding: syncLoading || desfasados.length === 0 ? 24 : '8px 12px' }}>
+              {syncLoading ? (
+                <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-2)', fontSize: 13 }}>Comparando contra facturas…</div>
+              ) : desfasados.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-3)', fontSize: 13 }}>
+                  Todos los precios están al día con la última factura de cada producto.
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 8px 8px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)' }}>
+                    <span>{desfSelected.size} de {desfasados.length} seleccionados</span>
+                    <button onClick={() => setDesfSelected(desfSelected.size === desfasados.length ? new Set() : new Set(desfasados.map(d => d.producto_id)))}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: 11, fontWeight: 700, fontFamily: 'inherit' }}>
+                      {desfSelected.size === desfasados.length ? 'Ninguno' : 'Todos'}
+                    </button>
+                  </div>
+                  {desfasados.map(d => {
+                    const sel = desfSelected.has(d.producto_id)
+                    const sube = d.delta_pct > 0
+                    return (
+                      <button key={d.producto_id} onClick={() => setDesfSelected(prev => { const n = new Set(prev); if (n.has(d.producto_id)) n.delete(d.producto_id); else n.add(d.producto_id); return n })}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '9px 10px', background: 'none', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        <input type="checkbox" checked={sel} readOnly style={{ width: 16, height: 16, accentColor: 'var(--navy)', flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.nombre}</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-3)' }}>
+                            {fmtPrecio(d.precio_actual)} → {fmtPrecio(d.precio_nuevo)} / {d.unidad}
+                            {d.fecha && ` · factura ${new Date(d.fecha + 'T12:00').toLocaleDateString('es-AR')}`}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: sube ? '#ef4444' : '#10b981', flexShrink: 0 }}>
+                          {sube ? '+' : ''}{d.delta_pct}%
+                        </div>
+                      </button>
+                    )
+                  })}
+                </>
+              )}
+            </div>
+
+            {desfasados.length > 0 && (
+              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)' }}>
+                <button onClick={aplicarSyncPrecios} disabled={syncApplying || desfSelected.size === 0}
+                  style={{ width: '100%', background: 'var(--navy)', border: 'none', borderRadius: 10, padding: '12px 16px', fontSize: 14, fontWeight: 700, color: '#fff', cursor: 'pointer', opacity: (syncApplying || desfSelected.size === 0) ? 0.6 : 1, fontFamily: 'inherit' }}>
+                  {syncApplying ? 'Aplicando…' : `Actualizar ${desfSelected.size} precio${desfSelected.size !== 1 ? 's' : ''}`}
                 </button>
               </div>
             )}

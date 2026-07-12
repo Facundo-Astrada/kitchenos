@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRestauranteId } from '@/lib/api/tenant'
+import { fetchAllRows } from '@/lib/supabase/paginate'
 
 // Normaliza una cantidad a la familia de unidad del producto (peso→kg, volumen→l).
 // Best-effort: si las familias no coinciden, devuelve la cantidad cruda.
@@ -41,28 +42,31 @@ export async function POST() {
   )
   if (candidatos.length === 0) return NextResponse.json({ sugerencias: [] })
 
-  // Facturas del restaurante (id → fecha)
-  const { data: facturas } = await admin
-    .from('facturas')
-    .select('id, fecha_factura, created_at')
-    .eq('restaurante_id', restauranteId)
+  // Facturas del restaurante (id → fecha) — paginado: PostgREST trunca a 1000
+  // filas sin .range(), y un restaurante con mucho volumen (Bros: 2800) perdía
+  // las facturas más recientes en un orden no garantizado.
+  const facturas = await fetchAllRows<{ id: string; fecha_factura: string | null; created_at: string }>((from, to) =>
+    admin.from('facturas').select('id, fecha_factura, created_at').eq('restaurante_id', restauranteId).range(from, to)
+  )
   const facturaFecha = new Map<string, string>()
-  for (const f of facturas ?? []) {
-    facturaFecha.set(f.id as string, (f.fecha_factura as string) || String(f.created_at).slice(0, 10))
+  for (const f of facturas) {
+    facturaFecha.set(f.id, f.fecha_factura || String(f.created_at).slice(0, 10))
   }
   const facturaIds = Array.from(facturaFecha.keys())
   if (facturaIds.length === 0) return NextResponse.json({ sugerencias: [] })
 
-  // Items de factura (en lotes de 300 ids para no exceder límites)
+  // Items de factura (en lotes de 300 ids, cada lote paginado)
   type FItem = { producto_id: string | null; producto_nombre: string; cantidad: number; unidad: string | null; factura_id: string }
   const items: FItem[] = []
   for (let i = 0; i < facturaIds.length; i += 300) {
     const slice = facturaIds.slice(i, i + 300)
-    const { data } = await admin
-      .from('factura_items')
-      .select('producto_id, producto_nombre, cantidad, unidad, factura_id')
-      .in('factura_id', slice)
-    for (const it of data ?? []) items.push(it as FItem)
+    const batch = await fetchAllRows<FItem>((from, to) =>
+      admin.from('factura_items')
+        .select('producto_id, producto_nombre, cantidad, unidad, factura_id')
+        .in('factura_id', slice)
+        .range(from, to)
+    )
+    items.push(...batch)
   }
 
   // Agrupar compras por producto (por id, o por nombre normalizado)

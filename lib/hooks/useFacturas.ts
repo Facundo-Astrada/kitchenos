@@ -7,48 +7,15 @@ import type {
   CondicionPago, PrecioHistorial,
 } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
+import { normalizeForStock, matchesWholeWord, sinTildes } from '@/lib/stock/precios'
 
 const PAGE_SIZE = 20
-
-// Normalize units to base metric (kg or l) for stock
-function normalizeForStock(item: { cantidad: number; unidad: string; precio_unitario: number; peso_kg?: number }): {
-  cantidad_stock: number; unidad_stock: string; precio_stock: number
-} {
-  const u = item.unidad.toLowerCase().trim()
-  if (['kg', 'kilo', 'kilos', 'kilogramo', 'kilogramos'].includes(u))
-    return { cantidad_stock: item.cantidad, unidad_stock: 'kg', precio_stock: item.precio_unitario }
-  if (['g', 'gr', 'gramo', 'gramos'].includes(u))
-    return { cantidad_stock: item.cantidad / 1000, unidad_stock: 'kg', precio_stock: item.precio_unitario * 1000 }
-  if (['mg'].includes(u))
-    return { cantidad_stock: item.cantidad / 1000000, unidad_stock: 'kg', precio_stock: item.precio_unitario * 1000000 }
-  if (['l', 'lt', 'lts', 'litro', 'litros'].includes(u))
-    return { cantidad_stock: item.cantidad, unidad_stock: 'l', precio_stock: item.precio_unitario }
-  if (['ml', 'cc', 'cm3'].includes(u))
-    return { cantidad_stock: item.cantidad / 1000, unidad_stock: 'l', precio_stock: item.precio_unitario * 1000 }
-  // Non-metric unit with peso_kg equivalence → always normalize to kg
-  if (item.peso_kg && item.peso_kg > 0)
-    return { cantidad_stock: item.cantidad * item.peso_kg, unidad_stock: 'kg', precio_stock: item.precio_unitario / item.peso_kg }
-  // No conversion available — keep as-is
-  return { cantidad_stock: item.cantidad, unidad_stock: item.unidad, precio_stock: item.precio_unitario }
-}
 
 // Normalize product names: trim, collapse spaces, title case
 function normalizeName(name: string): string {
   return name.trim().replace(/\s+/g, ' ')
     .toLowerCase()
     .replace(/(^|\s)\S/g, c => c.toUpperCase())
-}
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-// El nombre del producto aparece como secuencia de PALABRAS COMPLETAS dentro del
-// ítem de factura (más descriptivo). Evita falsos positivos tipo "Lino" matcheando
-// dentro de "Cacao alcalino" (que un .includes() plano sí dejaría pasar).
-function matchesWholeWord(haystackLower: string, needleLower: string): boolean {
-  const re = new RegExp(`(^|\\s)${escapeRegex(needleLower)}(\\s|$)`)
-  return re.test(haystackLower)
 }
 
 // Infer product category from name
@@ -227,15 +194,18 @@ export function useFacturas() {
 
         // Try to match existing product (case-insensitive exact, then partial)
         if (!productoId) {
+          // sinTildes en ambos lados: "Limon" (factura) debe matchear "Limón" (producto) — antes
+          // creaban productos gemelos por un simple acento.
+          const nombreLowerSinTildes = sinTildes(nombreLower)
           const match =
-            productosExistentes.find(p => p.nombre.toLowerCase() === nombreLower) ??
+            productosExistentes.find(p => sinTildes(p.nombre.toLowerCase()) === nombreLowerSinTildes) ??
             // Match parcial seguro: el ítem de factura (más descriptivo) CONTIENE el nombre
             // canónico del producto. Ej: "Aceite De Oliva Extra Virgen 5l" → "Aceite De Oliva".
             // Guard de longitud (≥4) para no matchear nombres base muy cortos.
             // (Antes era al revés y "Tomate" pisaba "Extracto De Tomate" — falso positivo.)
             productosExistentes.find(p => {
-              const pn = p.nombre.toLowerCase()
-              return pn.length >= 4 && matchesWholeWord(nombreLower, pn)
+              const pn = sinTildes(p.nombre.toLowerCase())
+              return pn.length >= 4 && matchesWholeWord(nombreLowerSinTildes, pn)
             })
           if (match) {
             productoId = match.id

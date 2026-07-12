@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRestauranteId } from '@/lib/api/tenant'
 import * as XLSX from 'xlsx'
 import { randomUUID } from 'crypto'
+import { calcularDesfasadosDeItemsNuevos, aplicarDesfasados } from '@/lib/stock/syncPrecios'
 
 export const maxDuration = 60
 
@@ -687,6 +688,24 @@ async function insertBatch(
   for (let i = 0; i < itemsFinal.length; i += BATCH) {
     const { error } = await admin.from('factura_items').insert(itemsFinal.slice(i, i + BATCH))
     if (error) return NextResponse.json({ error: `Error insertando items: ${error.message}` }, { status: 500 })
+  }
+
+  // Sync de precios best-effort — solo sobre los ítems recién insertados (no relee
+  // la historia completa de facturas, así que es rápido sin importar el volumen del
+  // restaurante). Un fallo acá nunca debe romper la respuesta del import.
+  try {
+    const restId = facturasFinal[0]?.restaurante_id
+    if (restId) {
+      const facturaFecha = new Map<string, string>()
+      const hoy = new Date().toISOString().slice(0, 10)
+      for (const f of facturasFinal) facturaFecha.set(f.id, f.fecha_factura || hoy)
+      const desfasados = await calcularDesfasadosDeItemsNuevos(admin, restId, itemsFinal, facturaFecha)
+      if (desfasados.length > 0) {
+        await aplicarDesfasados(admin, restId, desfasados.map(d => ({ producto_id: d.producto_id, precio_nuevo: d.precio_nuevo, factura_id: d.factura_id })))
+      }
+    }
+  } catch (e) {
+    console.error('[facturas-universal] sync de precios post-import falló (no bloqueante):', e)
   }
 
   return NextResponse.json({
