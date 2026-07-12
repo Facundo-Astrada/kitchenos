@@ -258,8 +258,8 @@ export default function StockPage() {
   const [editThr, setEditThr] = useState<{ id: string; min: string; crit: string } | null>(null)
   const guardarUmbrales = useCallback(async () => {
     if (!editThr) return
-    const min = parseFloat(editThr.min) || 0
-    const crit = parseFloat(editThr.crit) || 0
+    const min = parseNumAR(editThr.min) ?? 0
+    const crit = parseNumAR(editThr.crit) ?? 0
     try {
       await actualizarProducto(editThr.id, { stock_minimo: min, stock_critico: crit })
     } catch { /* noop */ }
@@ -775,8 +775,8 @@ export default function StockPage() {
   }
 
   async function commitEdit(id: string) {
-    const val = parseFloat(editValue)
-    if (!isNaN(val) && val >= 0) await actualizarStock(id, val)
+    const val = parseNumAR(editValue)
+    if (val != null && val >= 0) await actualizarStock(id, val)
     setEditingId(null)
   }
 
@@ -821,13 +821,13 @@ export default function StockPage() {
         nombre: form.nombre.trim(),
         categoria: form.categoria,
         unidad: form.unidad,
-        stock_actual: parseFloat(form.stock_actual) || 0,
-        stock_minimo: parseFloat(form.stock_minimo) || 0,
-        stock_critico: parseFloat(form.stock_critico) || 0,
+        stock_actual: parseNumAR(form.stock_actual) ?? 0,
+        stock_minimo: parseNumAR(form.stock_minimo) ?? 0,
+        stock_critico: parseNumAR(form.stock_critico) ?? 0,
         activo: true,
-        precio_unitario: parseFloat(form.precio_unitario) || 0,
+        precio_unitario: parseNumAR(form.precio_unitario) ?? 0,
         unidad_compra: showUnidadCompra && form.unidad_compra.trim() ? form.unidad_compra.trim() : null,
-        cantidad_por_envase: showUnidadCompra && form.cantidad_por_envase ? parseFloat(form.cantidad_por_envase) || null : null,
+        cantidad_por_envase: showUnidadCompra && form.cantidad_por_envase ? parseNumAR(form.cantidad_por_envase) : null,
         unidad_uso: showUnidadCompra && form.unidad_uso ? form.unidad_uso : null,
         es_produccion: form.es_produccion,
         receta_id: form.es_produccion && form.receta_id ? form.receta_id : null,
@@ -1460,7 +1460,8 @@ export default function StockPage() {
                         {editingId === p.id ? (
                           <input
                             ref={inputRef}
-                            type="number"
+                            type="text"
+                            inputMode="decimal"
                             value={editValue}
                             onChange={e => setEditValue(e.target.value)}
                             onBlur={() => commitEdit(p.id)}
@@ -1490,13 +1491,13 @@ export default function StockPage() {
                         {editThr?.id === p.id ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 3 }} onClick={e => e.stopPropagation()}>
                             <input
-                              type="number" value={editThr.min} autoFocus
+                              type="text" inputMode="decimal" value={editThr.min} autoFocus
                               onChange={e => setEditThr(t => t && { ...t, min: e.target.value })}
                               onKeyDown={e => { if (e.key === 'Enter') guardarUmbrales(); if (e.key === 'Escape') setEditThr(null) }}
                               style={{ width: 30, textAlign: 'center', fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--bg)', color: '#d97706', border: '1px solid var(--border)', borderRadius: 5, padding: '2px 1px', outline: 'none' }}
                             />
                             <input
-                              type="number" value={editThr.crit}
+                              type="text" inputMode="decimal" value={editThr.crit}
                               onChange={e => setEditThr(t => t && { ...t, crit: e.target.value })}
                               onKeyDown={e => { if (e.key === 'Enter') guardarUmbrales(); if (e.key === 'Escape') setEditThr(null) }}
                               style={{ width: 30, textAlign: 'center', fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--bg)', color: '#dc2626', border: '1px solid var(--border)', borderRadius: 5, padding: '2px 1px', outline: 'none' }}
@@ -1665,7 +1666,7 @@ export default function StockPage() {
                 <span style={{ ...lblStyle, color: 'var(--navy)' }}>
                   {form.es_produccion ? 'Costo unitario ($) — desde receta' : 'Precio unitario ($)'}
                 </span>
-                <input type="number" min="0" step="0.01" value={form.precio_unitario} onChange={e => setForm(f => ({ ...f, precio_unitario: e.target.value }))}
+                <input type="text" inputMode="decimal" value={form.precio_unitario} onChange={e => setForm(f => ({ ...f, precio_unitario: e.target.value }))}
                   placeholder="0"
                   style={{ ...inputStyle, borderColor: 'rgba(28,45,74,.3)' }} />
               </label>
@@ -1757,15 +1758,15 @@ export default function StockPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={lblStyle}>Stock actual</span>
-                  <input type="number" min="0" value={form.stock_actual} onChange={e => setForm(f => ({ ...f, stock_actual: e.target.value }))} style={inputStyle} />
+                  <input type="text" inputMode="decimal" value={form.stock_actual} onChange={e => setForm(f => ({ ...f, stock_actual: e.target.value }))} style={inputStyle} />
                 </label>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={{ ...lblStyle, color: 'rgba(245,158,11,.9)' }}>Mínimo</span>
-                  <input type="number" min="0" value={form.stock_minimo} onChange={e => setForm(f => ({ ...f, stock_minimo: e.target.value }))} style={{ ...inputStyle, borderColor: 'rgba(245,158,11,.4)' }} />
+                  <input type="text" inputMode="decimal" value={form.stock_minimo} onChange={e => setForm(f => ({ ...f, stock_minimo: e.target.value }))} style={{ ...inputStyle, borderColor: 'rgba(245,158,11,.4)' }} />
                 </label>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={{ ...lblStyle, color: 'rgba(239,68,68,.9)' }}>Crítico</span>
-                  <input type="number" min="0" value={form.stock_critico} onChange={e => setForm(f => ({ ...f, stock_critico: e.target.value }))} style={{ ...inputStyle, borderColor: 'rgba(239,68,68,.4)' }} />
+                  <input type="text" inputMode="decimal" value={form.stock_critico} onChange={e => setForm(f => ({ ...f, stock_critico: e.target.value }))} style={{ ...inputStyle, borderColor: 'rgba(239,68,68,.4)' }} />
                 </label>
               </div>
 
@@ -1798,7 +1799,7 @@ export default function StockPage() {
                     <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       <span style={lblStyle}>Cantidad por envase</span>
                       <input
-                        type="number" min="1" step="1"
+                        type="text" inputMode="numeric"
                         value={form.cantidad_por_envase}
                         onChange={e => setForm(f => ({ ...f, cantidad_por_envase: e.target.value }))}
                         placeholder="100"
@@ -1929,8 +1930,8 @@ export default function StockPage() {
       {quickMode && quickItems.length > 0 && (() => {
         const p = quickItems[quickIdx]
         if (!p) { setQuickMode(false); return null }
-        const enteredVal = parseFloat(quickValue)
-        const diff = !isNaN(enteredVal) && enteredVal !== p.stock_actual ? enteredVal - p.stock_actual : null
+        const enteredVal = parseNumAR(quickValue)
+        const diff = enteredVal != null && enteredVal !== p.stock_actual ? enteredVal - p.stock_actual : null
         const isLast = quickIdx === quickItems.length - 1
 
         // Foco síncrono (dentro del gesto del usuario) para que iOS no cierre el
@@ -1949,8 +1950,8 @@ export default function StockPage() {
 
         function saveAndNext(skip = false) {
           if (!skip) {
-            const v = parseFloat(quickValue)
-            if (!isNaN(v) && v >= 0) {
+            const v = parseNumAR(quickValue)
+            if (v != null && v >= 0) {
               actualizarStock(p.id, v)
               setQuickChangedCount(c => c + 1)
             }
@@ -2011,7 +2012,7 @@ export default function StockPage() {
                 <div style={{ position: 'relative' }}>
                   <input
                     ref={quickRef}
-                    type="number"
+                    type="text"
                     inputMode="decimal"
                     value={quickValue}
                     onChange={e => setQuickValue(e.target.value)}
