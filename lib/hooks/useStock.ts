@@ -11,6 +11,8 @@ export type ProductoConEstado = Producto & {
 }
 
 function calcEstado(p: Producto): 'ok' | 'bajo' | 'critico' {
+  // Fuera de uso nunca genera alertas — sigue existiendo (vale capital) pero no se opera.
+  if (p.fuera_de_uso) return 'ok'
   if (p.stock_actual <= p.stock_critico) return 'critico'
   if (p.stock_actual <= p.stock_minimo) return 'bajo'
   return 'ok'

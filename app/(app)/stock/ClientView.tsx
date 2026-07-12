@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation'
 import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
 import { useRecetas } from '@/lib/hooks/useRecetas'
 import { useCategoriasProducto } from '@/lib/hooks/useCategoriasProducto'
+import { useStockSectores } from '@/lib/hooks/useStockSectores'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import PageHeader from '@/components/shell/PageHeader'
 import ActionButton from '@/components/shell/ActionButton'
@@ -92,8 +93,9 @@ function esUnidadSospechosa(p: { unidad: string; precio_unitario: number | null 
 
 // !p.precio_unitario cubre 0, null y undefined — antes algunos chequeos usaban
 // `=== 0` estricto y no contaban los productos con precio NULL como pendientes.
-function esPendiente(p: { stock_actual: number; precio_unitario: number | null }): boolean {
-  return p.stock_actual === 0 && !p.precio_unitario
+// fuera_de_uso nunca es "pendiente" — no genera ruido operativo.
+function esPendiente(p: { stock_actual: number; precio_unitario: number | null; fuera_de_uso?: boolean | null }): boolean {
+  return !p.fuera_de_uso && p.stock_actual === 0 && !p.precio_unitario
 }
 type SortMode = 'default' | 'valor_desc'
 
@@ -112,6 +114,8 @@ interface FormData {
   // producción interna (opcional)
   es_produccion: boolean
   receta_id: string
+  sector_id: string
+  fuera_de_uso: boolean
 }
 
 const FORM_EMPTY: FormData = {
@@ -127,6 +131,8 @@ const FORM_EMPTY: FormData = {
   unidad_uso: '',
   es_produccion: false,
   receta_id: '',
+  sector_id: '',
+  fuera_de_uso: false,
 }
 
 function fmtPrecio(n: number) {
@@ -170,6 +176,7 @@ export default function StockPage() {
   const { productos, loading, error, actualizarStock, agregarProducto, actualizarProducto, eliminarProducto, refetch } = useStock()
   const { recetas } = useRecetas()
   const { categorias, agregarCategoria } = useCategoriasProducto()
+  const { sectores, agregarSector } = useStockSectores()
   const { crearPedido } = usePedidos()
   const { proveedores } = useProveedores()
   const { fetchComparador } = usePreciosProveedores()
@@ -246,6 +253,7 @@ export default function StockPage() {
   const [search, setSearch] = useState('')
   const [catFilters, setCatFilters] = useState<string[]>([])
   const [provFilters, setProvFilters] = useState<string[]>([])
+  const [secFilters, setSecFilters] = useState<string[]>([])
   const [estadoFilter, setEstadoFilter] = useState<FiltroEstado>('all')
   const [sortMode, setSortMode] = useState<SortMode>('default')
 
@@ -516,6 +524,66 @@ export default function StockPage() {
   const [showSectorSelect, setShowSectorSelect] = useState(false)
   const [quickChangedCount, setQuickChangedCount] = useState(0)
 
+  // ── Crear sector físico inline (desde el sheet de Stockear) ──
+  const SECTOR_ICONOS = ['shelves', 'ac_unit', 'kitchen', 'severe_cold', 'skillet', 'wine_bar']
+  const [showCrearSector, setShowCrearSector] = useState(false)
+  const [nuevoSectorNombre, setNuevoSectorNombre] = useState('')
+  const [nuevoSectorIcono, setNuevoSectorIcono] = useState(SECTOR_ICONOS[0])
+  const [creandoSector, setCreandoSector] = useState(false)
+
+  async function handleCrearSector() {
+    if (!nuevoSectorNombre.trim()) return
+    setCreandoSector(true)
+    try {
+      await agregarSector(nuevoSectorNombre.trim(), nuevoSectorIcono)
+      setNuevoSectorNombre('')
+      setNuevoSectorIcono(SECTOR_ICONOS[0])
+      setShowCrearSector(false)
+    } catch { /* noop */ }
+    setCreandoSector(false)
+  }
+
+  // ── Asignación masiva de sector ──
+  const [asignandoSector, setAsignandoSector] = useState(false)
+  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
+  const [sectorParaAsignar, setSectorParaAsignar] = useState('')
+  const [asignSaving, setAsignSaving] = useState(false)
+
+  function toggleSeleccionado(id: string) {
+    setSeleccionados(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function cerrarAsignacion() {
+    setAsignandoSector(false)
+    setSeleccionados(new Set())
+    setSectorParaAsignar('')
+  }
+
+  async function aplicarAsignacionSector() {
+    if (!seleccionados.size || !sectorParaAsignar) return
+    setAsignSaving(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('productos')
+        .update({ sector_id: sectorParaAsignar })
+        .in('id', Array.from(seleccionados))
+      if (error) throw error
+      setSugToast(`${seleccionados.size} producto${seleccionados.size !== 1 ? 's' : ''} asignado${seleccionados.size !== 1 ? 's' : ''} a sector`)
+      setTimeout(() => setSugToast(null), 3000)
+      cerrarAsignacion()
+      refetch()
+    } catch (e) {
+      setSugToast('Error al asignar sector: ' + (e instanceof Error ? e.message : 'desconocido'))
+      setTimeout(() => setSugToast(null), 3500)
+    }
+    setAsignSaving(false)
+  }
+
   // ── Sugerir mínimos (Feature 2) ──
   type Sugerencia = { id: string; nombre: string; unidad: string; entregas: number; sugerido_minimo: number; sugerido_critico: number }
   const [showSugerir, setShowSugerir] = useState(false)
@@ -658,6 +726,22 @@ export default function StockPage() {
     return opts
   }, [productos, proveedores])
 
+  // Opciones de filtro de sector físico (con conteo) — incluye "Sin sector"
+  const secOpciones = useMemo(() => {
+    const nombre = new Map(sectores.map(s => [s.id, s.nombre]))
+    const cnt = new Map<string, number>()
+    for (const p of productos) {
+      const key = p.sector_id ?? '__sin__'
+      cnt.set(key, (cnt.get(key) ?? 0) + 1)
+    }
+    const opts = Array.from(cnt.entries())
+      .filter(([k]) => k !== '__sin__')
+      .map(([id, count]) => ({ value: id, label: nombre.get(id) ?? 'Sector', count }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'es'))
+    if (cnt.has('__sin__')) opts.push({ value: '__sin__', label: 'Sin sector', count: cnt.get('__sin__')! })
+    return opts
+  }, [productos, sectores])
+
   // Filtered + sorted list
   const filtered = useMemo(() => {
     let list = productos
@@ -672,6 +756,7 @@ export default function StockPage() {
     }
     if (catFilters.length) list = list.filter(p => catFilters.includes(p.categoria))
     if (provFilters.length) list = list.filter(p => provFilters.includes(p.proveedor_id ?? '__sin__'))
+    if (secFilters.length) list = list.filter(p => secFilters.includes(p.sector_id ?? '__sin__'))
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(p => p.nombre.toLowerCase().includes(q))
@@ -680,7 +765,7 @@ export default function StockPage() {
       list = [...list].sort((a, b) => valorStock(b) - valorStock(a))
     }
     return list
-  }, [productos, estadoFilter, catFilters, provFilters, search, sortMode, esInmovil, inmovilLoaded])
+  }, [productos, estadoFilter, catFilters, provFilters, secFilters, search, sortMode, esInmovil, inmovilLoaded])
 
   const totalDormido = useMemo(
     () => estadoFilter === 'inmovil' ? filtered.reduce((s, p) => s + valorStock(p), 0) : 0,
@@ -806,6 +891,8 @@ export default function StockPage() {
       unidad_uso: p.unidad_uso ?? '',
       es_produccion: !!p.es_produccion,
       receta_id: p.receta_id ?? '',
+      sector_id: p.sector_id ?? '',
+      fuera_de_uso: !!p.fuera_de_uso,
     })
     setShowUnidadCompra(!!(p.unidad_compra || p.cantidad_por_envase))
     setFormError(null)
@@ -831,6 +918,8 @@ export default function StockPage() {
         unidad_uso: showUnidadCompra && form.unidad_uso ? form.unidad_uso : null,
         es_produccion: form.es_produccion,
         receta_id: form.es_produccion && form.receta_id ? form.receta_id : null,
+        sector_id: form.sector_id || null,
+        fuera_de_uso: form.fuera_de_uso,
       }
       if (editingProducto) {
         // No tocar proveedor_id acá — se edita aparte, no en este form.
@@ -906,6 +995,9 @@ export default function StockPage() {
 
   // ── Estado badge ──
   function estadoBadge(p: ProductoConEstado) {
+    if (p.fuera_de_uso) return (
+      <span style={{ background: 'rgba(148,163,184,.15)', border: '1px solid rgba(148,163,184,.3)', borderRadius: 6, padding: '2px 6px', fontSize: 9, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>Fuera de uso</span>
+    )
     if (esPendiente(p)) return (
       <span style={{ background: 'rgba(239,68,68,.12)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 6, padding: '2px 6px', fontSize: 9, fontWeight: 700, color: '#fca5a5', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>Pendiente</span>
     )
@@ -932,6 +1024,7 @@ export default function StockPage() {
         'Stock crítico': p.stock_critico,
         'Precio unitario': p.precio_unitario,
         'Estado': p.estado,
+        'Fuera de uso': p.fuera_de_uso ? 'Sí' : 'No',
         'Activo': p.activo ? 'Sí' : 'No',
       })),
     }])
@@ -1081,6 +1174,15 @@ export default function StockPage() {
                   seleccionadas={provFilters}
                   onChange={setProvFilters}
                 />
+                {sectores.length > 0 && (
+                  <MultiSelectFiltro
+                    label="Sector"
+                    icon="shelves"
+                    opciones={secOpciones}
+                    seleccionadas={secFilters}
+                    onChange={setSecFilters}
+                  />
+                )}
                 <button
                   onClick={() => setSortMode(s => s === 'valor_desc' ? 'default' : 'valor_desc')}
                   title={sortMode === 'valor_desc' ? 'Orden por valor activo' : 'Ordenar por valor'}
@@ -1394,6 +1496,7 @@ export default function StockPage() {
                         ? 'rgba(239,68,68,0.07)'
                         : i % 2 === 0 ? 'var(--surface)' : 'var(--bg)',
                       cursor: canEdit ? 'pointer' : 'default',
+                      opacity: p.fuera_de_uso ? 0.55 : 1,
                     }}
                   >
                     {/* Producto */}
@@ -1528,6 +1631,7 @@ export default function StockPage() {
                     {isAdmin && (
                     <td style={{ padding: '11px 4px', textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                        {!p.fuera_de_uso && (
                         <button
                           onClick={(e) => { e.stopPropagation(); addToCart(p) }}
                           aria-label="Agregar al carrito de compras"
@@ -1539,6 +1643,7 @@ export default function StockPage() {
                             {cart.some(it => it.producto_id === p.id) ? 'shopping_cart' : 'add_shopping_cart'}
                           </span>
                         </button>
+                        )}
                         <button
                           onClick={(e) => { e.stopPropagation(); openMerma(p) }}
                           aria-label="Registrar merma"
@@ -1663,6 +1768,18 @@ export default function StockPage() {
               </div>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={lblStyle}>Sector físico</span>
+                <select
+                  value={form.sector_id}
+                  onChange={e => setForm(f => ({ ...f, sector_id: e.target.value }))}
+                  style={{ ...inputStyle, appearance: 'auto', cursor: 'pointer' }}
+                >
+                  <option value="">Sin sector</option>
+                  {sectores.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                </select>
+              </label>
+
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ ...lblStyle, color: 'var(--navy)' }}>
                   {form.es_produccion ? 'Costo unitario ($) — desde receta' : 'Precio unitario ($)'}
                 </span>
@@ -1754,6 +1871,20 @@ export default function StockPage() {
                   )
                 })()}
               </div>
+
+              {/* ── Fuera de uso ── */}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', background: form.fuera_de_uso ? 'rgba(148,163,184,.1)' : 'var(--bg)', border: `1px solid ${form.fuera_de_uso ? 'rgba(148,163,184,.35)' : 'var(--border)'}`, borderRadius: 10, padding: 12 }}>
+                <input
+                  type="checkbox"
+                  checked={form.fuera_de_uso}
+                  onChange={e => setForm(f => ({ ...f, fuera_de_uso: e.target.checked }))}
+                  style={{ width: 18, height: 18, accentColor: '#64748b', flexShrink: 0 }}
+                />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Fuera de uso</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>No genera alertas ni aparece en Stockear — sigue contando en el valor del stock</div>
+                </div>
+              </label>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1880,30 +2011,120 @@ export default function StockPage() {
       />
 
       {/* ── Sector selector ── */}
-      {showSectorSelect && (
+      {showSectorSelect && (() => {
+        // fuera_de_uso nunca aparece en el recorrido de Stockear.
+        const stockeables = filtered.filter(p => !p.fuera_de_uso)
+        const startQuick = (list: ProductoConEstado[], sectorLabel: string | null) => {
+          const ordenado = sortByEstado(list)
+          setQuickSector(sectorLabel)
+          setQuickOrder(ordenado.map(p => p.id))
+          setQuickIdx(0)
+          setQuickChangedCount(0)
+          setQuickValue(String(ordenado[0]?.stock_actual ?? ''))
+          setQuickMode(true)
+          setShowSectorSelect(false)
+        }
+        return (
         <SheetChrome>
         <div onClick={() => setShowSectorSelect(false)} style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-end' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '20px 16px 0', flexShrink: 0 }}>
               <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 16px' }} />
-              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>¿Qué sector vas a stockear?</div>
-              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 14 }}>Filtrá por sector para agilizar el recorrido</div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>¿Qué sector vas a stockear?</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 14 }}>Filtrá por sector para agilizar el recorrido</div>
+                </div>
+                {canEdit && sectores.length > 0 && (
+                  <button
+                    onClick={() => { setShowSectorSelect(false); setAsignandoSector(true) }}
+                    style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, padding: 0 }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 15 }}>checklist</span>
+                    Asignar
+                  </button>
+                )}
+              </div>
             </div>
             <div style={{ overflowY: 'auto', flex: 1, padding: '0 16px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <button
-                onClick={() => { const list = sortByEstado(filtered); setQuickSector(null); setQuickOrder(list.map(p => p.id)); setQuickIdx(0); setQuickChangedCount(0); setQuickValue(String(list[0]?.stock_actual ?? '')); setQuickMode(true); setShowSectorSelect(false) }}
+                onClick={() => startQuick(stockeables, null)}
                 style={{ padding: '13px 16px', borderRadius: 12, background: 'var(--navy)', border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 10 }}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }}>inventory_2</span>
-                Todo el stock ({filtered.length} productos)
+                Todo el stock ({stockeables.length} productos)
               </button>
+
+              {sectores.length > 0 && (
+                <>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', marginTop: 4 }}>Por sector físico</div>
+                  {sectores.map(sec => {
+                    const items = stockeables.filter(p => p.sector_id === sec.id)
+                    const criticos = items.filter(p => p.estado === 'critico').length
+                    return (
+                      <button key={sec.id}
+                        onClick={() => startQuick(items, sec.nombre)}
+                        disabled={items.length === 0}
+                        style={{ padding: '12px 16px', borderRadius: 12, background: 'var(--bg)', border: '1px solid var(--border)', fontSize: 14, fontWeight: 600, cursor: items.length === 0 ? 'default' : 'pointer', textAlign: 'left', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'space-between', opacity: items.length === 0 ? 0.5 : 1 }}
+                      >
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-1)' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'var(--accent)' }}>{sec.icono}</span>
+                          {sec.nombre}
+                        </span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          {criticos > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: '#ef4444', background: 'rgba(239,68,68,.1)', padding: '2px 7px', borderRadius: 99 }}>{criticos} crítico{criticos > 1 ? 's' : ''}</span>}
+                          <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{items.length} prod.</span>
+                        </span>
+                      </button>
+                    )
+                  })}
+                </>
+              )}
+
+              {canEdit && !showCrearSector && (
+                <button
+                  onClick={() => setShowCrearSector(true)}
+                  style={{ padding: '10px 16px', borderRadius: 12, background: 'none', border: '1px dashed var(--border)', fontSize: 12, fontWeight: 700, color: 'var(--text-3)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
+                  Crear sector físico
+                </button>
+              )}
+              {canEdit && showCrearSector && (
+                <div style={{ padding: 12, borderRadius: 12, background: 'var(--bg)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <input
+                    value={nuevoSectorNombre}
+                    onChange={e => setNuevoSectorNombre(e.target.value)}
+                    placeholder="Ej: Cámara frigorífica, Cava…"
+                    autoFocus
+                    style={{ ...inputStyle, fontSize: 13 }}
+                  />
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {SECTOR_ICONOS.map(ic => (
+                      <button key={ic} onClick={() => setNuevoSectorIcono(ic)}
+                        style={{ width: 36, height: 36, borderRadius: 8, background: nuevoSectorIcono === ic ? 'var(--accent)' : 'var(--surface)', border: `1px solid ${nuevoSectorIcono === ic ? 'var(--accent)' : 'var(--border)'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 18, color: nuevoSectorIcono === ic ? '#fff' : 'var(--text-2)' }}>{ic}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => { setShowCrearSector(false); setNuevoSectorNombre('') }} style={{ flex: 1, padding: 10, borderRadius: 8, background: 'none', border: '1px solid var(--border)', fontSize: 12, fontWeight: 700, color: 'var(--text-3)', cursor: 'pointer', fontFamily: 'inherit' }}>Cancelar</button>
+                    <button onClick={handleCrearSector} disabled={creandoSector || !nuevoSectorNombre.trim()} style={{ flex: 1, padding: 10, borderRadius: 8, background: 'var(--accent)', border: 'none', fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer', fontFamily: 'inherit', opacity: !nuevoSectorNombre.trim() ? 0.5 : 1 }}>
+                      {creandoSector ? 'Creando…' : 'Crear'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {sectores.length > 0 && <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', marginTop: 4 }}>Por categoría</div>}
               {categoriasFiltro.map(cat => {
-                const count = filtered.filter(p => p.categoria === cat).length
-                const criticos = filtered.filter(p => p.categoria === cat && p.estado === 'critico').length
+                const count = stockeables.filter(p => p.categoria === cat).length
+                const criticos = stockeables.filter(p => p.categoria === cat && p.estado === 'critico').length
                 return (
                   <button key={cat}
-                    onClick={() => { const list = sortByEstado(filtered.filter(p => p.categoria === cat)); setQuickSector(cat); setQuickOrder(list.map(p => p.id)); setQuickIdx(0); setQuickChangedCount(0); setQuickValue(String(list[0]?.stock_actual ?? '')); setQuickMode(true); setShowSectorSelect(false) }}
+                    onClick={() => startQuick(stockeables.filter(p => p.categoria === cat), cat)}
                     style={{ padding: '12px 16px', borderRadius: 12, background: 'var(--bg)', border: '1px solid var(--border)', fontSize: 14, fontWeight: 600, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
                   >
                     <span style={{ color: 'var(--text-1)' }}>{cat}</span>
@@ -1919,6 +2140,65 @@ export default function StockPage() {
             <div style={{ padding: '8px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0 }}>
               <button onClick={() => setShowSectorSelect(false)} style={{ width: '100%', padding: 12, borderRadius: 12, background: 'transparent', border: '1px solid var(--border)', fontSize: 13, color: 'var(--text-3)', cursor: 'pointer', fontFamily: 'inherit' }}>
                 Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+        </SheetChrome>
+        )
+      })()}
+
+      {/* ── Asignación masiva de sector ── */}
+      {asignandoSector && (
+        <SheetChrome>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>Asignar sector</div>
+              <div style={{ color: 'rgba(255,255,255,.5)', fontSize: 11 }}>Tocá los productos para seleccionarlos</div>
+            </div>
+            <button onClick={cerrarAsignacion} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+              <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>close</span>
+            </button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+            {filtered.filter(p => !p.fuera_de_uso).map(p => {
+              const sel = seleccionados.has(p.id)
+              const secActual = sectores.find(s => s.id === p.sector_id)
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => toggleSeleccionado(p.id)}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: sel ? 'rgba(67,97,160,.1)' : 'transparent', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 20, color: sel ? 'var(--accent)' : 'var(--text-3)' }}>
+                    {sel ? 'check_box' : 'check_box_outline_blank'}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{secActual ? secActual.nombre : 'Sin sector'}</div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+          <div style={{ padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0, borderTop: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>{seleccionados.size} seleccionado{seleccionados.size !== 1 ? 's' : ''}</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <select
+                value={sectorParaAsignar}
+                onChange={e => setSectorParaAsignar(e.target.value)}
+                style={{ ...inputStyle, flex: 1, appearance: 'auto', cursor: 'pointer' }}
+              >
+                <option value="">Elegir sector…</option>
+                {sectores.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+              </select>
+              <button
+                onClick={aplicarAsignacionSector}
+                disabled={!seleccionados.size || !sectorParaAsignar || asignSaving}
+                style={{ padding: '0 18px', borderRadius: 10, background: (!seleccionados.size || !sectorParaAsignar) ? 'var(--border)' : 'var(--navy)', border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: (!seleccionados.size || !sectorParaAsignar) ? 'default' : 'pointer', fontFamily: 'inherit' }}
+              >
+                {asignSaving ? 'Guardando…' : 'Asignar'}
               </button>
             </div>
           </div>

@@ -179,7 +179,7 @@ export interface CategoriaProducto {
   icono?: string | null
 }
 
-// DB: productos (id, nombre, categoria, categoria_id, unidad, unidad_uso, unidad_compra, cantidad_por_envase, stock_actual, stock_minimo, stock_critico, precio_unitario, proveedor_id, restaurante_id, activo, created_at, updated_at)
+// DB: productos (id, nombre, categoria, categoria_id, unidad, unidad_uso, unidad_compra, cantidad_por_envase, stock_actual, stock_minimo, stock_critico, precio_unitario, proveedor_id, sector_id, fuera_de_uso, restaurante_id, activo, created_at, updated_at)
 export interface Producto {
   id: string
   nombre: string
@@ -196,10 +196,22 @@ export interface Producto {
   proveedor_id?: string | null
   es_produccion?: boolean | null
   receta_id?: string | null
+  sector_id?: string | null
+  fuera_de_uso?: boolean
   restaurante_id: string
   activo: boolean
   created_at: string
   updated_at?: string | null
+}
+
+// DB: stock_sectores (id, restaurante_id, nombre, icono, orden, created_at)
+export interface StockSector {
+  id: string
+  restaurante_id: string
+  nombre: string
+  icono: string
+  orden: number
+  created_at?: string | null
 }
 
 // ── HACCP ───────────────────────────────────────────────────

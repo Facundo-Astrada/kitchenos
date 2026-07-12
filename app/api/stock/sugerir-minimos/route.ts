@@ -28,16 +28,16 @@ export async function POST() {
   const { restauranteId } = tenant
   const admin = createAdminClient()
 
-  // Productos candidatos: activos, sin umbral cargado, no producciones
+  // Productos candidatos: activos, sin umbral cargado, no producciones, no fuera de uso
   const { data: productos, error: prodErr } = await admin
     .from('productos')
-    .select('id, nombre, unidad, stock_minimo, stock_critico, es_produccion')
+    .select('id, nombre, unidad, stock_minimo, stock_critico, es_produccion, fuera_de_uso')
     .eq('restaurante_id', restauranteId)
     .eq('activo', true)
   if (prodErr) return NextResponse.json({ error: prodErr.message }, { status: 500 })
 
   const candidatos = (productos ?? []).filter(
-    p => !p.es_produccion && (p.stock_minimo ?? 0) === 0 && (p.stock_critico ?? 0) === 0
+    p => !p.es_produccion && !p.fuera_de_uso && (p.stock_minimo ?? 0) === 0 && (p.stock_critico ?? 0) === 0
   )
   if (candidatos.length === 0) return NextResponse.json({ sugerencias: [] })
 
