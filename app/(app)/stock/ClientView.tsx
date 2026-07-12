@@ -2312,18 +2312,19 @@ export default function StockPage() {
             {filtered.filter(p => !p.fuera_de_uso).map(p => {
               const sel = seleccionados.has(p.id)
               const secActual = sectores.find(s => s.id === p.sector_id)
+              const yaUbicado = !!secActual
               return (
                 <button
                   key={p.id}
                   onClick={() => toggleSeleccionado(p.id)}
-                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: sel ? 'rgba(67,97,160,.1)' : 'transparent', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: sel ? 'rgba(67,97,160,.1)' : 'transparent', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', opacity: yaUbicado && !sel ? 0.5 : 1 }}
                 >
                   <span className="material-symbols-outlined" style={{ fontSize: 20, color: sel ? 'var(--accent)' : 'var(--text-3)' }}>
                     {sel ? 'check_box' : 'check_box_outline_blank'}
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</div>
-                    <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{secActual ? secActual.nombre : 'Sin sector'}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', textDecoration: yaUbicado && !sel ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</div>
+                    <div style={{ fontSize: 10, color: yaUbicado ? 'var(--accent)' : 'var(--text-3)', fontWeight: yaUbicado ? 700 : 400 }}>{secActual ? secActual.nombre : 'Sin sector'}</div>
                   </div>
                 </button>
               )
