@@ -1,6 +1,6 @@
 # PLAN-STOCK — Auditoría + features de inventario (jul 2026)
 
-> **Estado:** F1 ✅ · F2 ✅ (+ fix de coma decimal en 8 inputs, no estaba en el plan original) · F3 ✅ · F4 ✅ · F5 pendiente · F6 pendiente.
+> **Estado:** F1 ✅ · F2 ✅ (+ fix de coma decimal en 8 inputs) · F3 ✅ · F4 ✅ · F5 ✅ (+ arreglado bug de paginación 1000 filas encontrado en el camino, afectaba también a `sugerir-minimos`) · F6 ✅ código (script `--apply` NO corrido — pendiente de confirmación del usuario sobre datos reales).
 
 > Ejecutar por fases, en orden. Cada fase termina con `npm run build` verde antes de seguir.
 > Skills: `/supabase-check` antes de cada query nueva · `/add-rls` para tablas nuevas · `/pr-review` al final · `/deploy` para cerrar.
