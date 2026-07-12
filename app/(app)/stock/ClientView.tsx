@@ -1126,6 +1126,16 @@ export default function StockPage() {
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>refresh</span>
               Rebuild
             </button>
+            {canEdit && sectores.length > 0 && (
+              <button
+                onClick={() => setAsignandoSector(true)}
+                title="Asignar sector físico a varios productos a la vez"
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, background: 'rgba(255,255,255,.15)', color: '#fff', border: '1px solid rgba(255,255,255,.25)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>shelves</span>
+                Asignar sector
+              </button>
+            )}
             <button
               data-coach-target="stock-stockear"
               onClick={() => setShowSectorSelect(v => !v)}
@@ -2030,21 +2040,8 @@ export default function StockPage() {
           <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '20px 16px 0', flexShrink: 0 }}>
               <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 16px' }} />
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-                <div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>¿Qué sector vas a stockear?</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 14 }}>Filtrá por sector para agilizar el recorrido</div>
-                </div>
-                {canEdit && sectores.length > 0 && (
-                  <button
-                    onClick={() => { setShowSectorSelect(false); setAsignandoSector(true) }}
-                    style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, padding: 0 }}
-                  >
-                    <span className="material-symbols-outlined" style={{ fontSize: 15 }}>checklist</span>
-                    Asignar
-                  </button>
-                )}
-              </div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>¿Qué sector vas a stockear?</div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 14 }}>Filtrá por sector para agilizar el recorrido</div>
             </div>
             <div style={{ overflowY: 'auto', flex: 1, padding: '0 16px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
