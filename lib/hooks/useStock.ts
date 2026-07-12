@@ -53,7 +53,7 @@ export function useStock() {
     if (!RESTAURANTE_ID) return
     const channel = supabase
       .channel(`stock-rt-${RESTAURANTE_ID}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, () => mutate())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'productos', filter: `restaurante_id=eq.${RESTAURANTE_ID}` }, () => mutate())
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [RESTAURANTE_ID, supabase, mutate])

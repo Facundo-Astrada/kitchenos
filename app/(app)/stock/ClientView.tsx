@@ -89,6 +89,12 @@ function esUnidadSospechosa(p: { unidad: string; precio_unitario: number | null 
   const esU = u === 'u' || u === 'unidad' || u === 'unidades' || u === 'un'
   return esU && (p.precio_unitario ?? 0) > PRECIO_SOSPECHOSO_UMBRAL
 }
+
+// !p.precio_unitario cubre 0, null y undefined — antes algunos chequeos usaban
+// `=== 0` estricto y no contaban los productos con precio NULL como pendientes.
+function esPendiente(p: { stock_actual: number; precio_unitario: number | null }): boolean {
+  return p.stock_actual === 0 && !p.precio_unitario
+}
 type SortMode = 'default' | 'valor_desc'
 
 interface FormData {
@@ -301,6 +307,41 @@ export default function StockPage() {
     proveedores_creados: number
     ingredientes_vinculados: number
   } | null>(null)
+
+  const abrirRebuildPreview = useCallback(async () => {
+    setShowRebuildModal(true)
+    setRebuildLoading(true)
+    setRebuildResult(null)
+    try {
+      const res = await fetch('/api/importador/productos-desde-facturas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restaurante_id: RESTAURANTE_ID, mode: 'preview' }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        setRebuildPreview({
+          productos: [],
+          total_productos: 0,
+          total_proveedores_nuevos: 0,
+          message: data.error || `Error HTTP ${res.status}`,
+        })
+      } else {
+        setRebuildPreview({
+          productos: data.productos ?? [],
+          total_productos: data.total_productos ?? 0,
+          total_proveedores_nuevos: data.total_proveedores_nuevos ?? 0,
+          message: data.message,
+        })
+      }
+    } catch (e) {
+      setRebuildPreview({
+        productos: [], total_productos: 0, total_proveedores_nuevos: 0,
+        message: 'Error de red: ' + (e instanceof Error ? e.message : 'desconocido'),
+      })
+    }
+    setRebuildLoading(false)
+  }, [RESTAURANTE_ID])
 
   // ── Planilla import ──────────────────────────────────────────
   type PlanillaConfianza = 'exacto' | 'parcial' | 'nuevo'
@@ -621,7 +662,7 @@ export default function StockPage() {
   const filtered = useMemo(() => {
     let list = productos
     if (estadoFilter === 'pendiente') {
-      list = productos.filter(p => p.stock_actual === 0 && p.precio_unitario === 0)
+      list = productos.filter(esPendiente)
     } else if (estadoFilter === 'inmovil') {
       list = inmovilLoaded ? productos.filter(esInmovil) : []
     } else if (estadoFilter === 'unidad') {
@@ -656,7 +697,7 @@ export default function StockPage() {
 
   const nCritico = useMemo(() => productos.filter(p => p.estado === 'critico').length, [productos])
   const nBajo = useMemo(() => productos.filter(p => p.estado === 'bajo').length, [productos])
-  const nPendiente = useMemo(() => productos.filter(p => p.stock_actual === 0 && p.precio_unitario === 0).length, [productos])
+  const nPendiente = useMemo(() => productos.filter(esPendiente).length, [productos])
   const nUnidadSospechosa = useMemo(() => productos.filter(esUnidadSospechosa).length, [productos])
 
   useEffect(() => {
@@ -784,7 +825,6 @@ export default function StockPage() {
         stock_minimo: parseFloat(form.stock_minimo) || 0,
         stock_critico: parseFloat(form.stock_critico) || 0,
         activo: true,
-        proveedor_id: null,
         precio_unitario: parseFloat(form.precio_unitario) || 0,
         unidad_compra: showUnidadCompra && form.unidad_compra.trim() ? form.unidad_compra.trim() : null,
         cantidad_por_envase: showUnidadCompra && form.cantidad_por_envase ? parseFloat(form.cantidad_por_envase) || null : null,
@@ -793,9 +833,10 @@ export default function StockPage() {
         receta_id: form.es_produccion && form.receta_id ? form.receta_id : null,
       }
       if (editingProducto) {
+        // No tocar proveedor_id acá — se edita aparte, no en este form.
         await actualizarProducto(editingProducto.id, datos)
       } else {
-        await agregarProducto(datos)
+        await agregarProducto({ ...datos, proveedor_id: null })
       }
       setModalOpen(false)
     } catch (e: unknown) {
@@ -865,7 +906,7 @@ export default function StockPage() {
 
   // ── Estado badge ──
   function estadoBadge(p: ProductoConEstado) {
-    if (p.stock_actual === 0 && p.precio_unitario === 0) return (
+    if (esPendiente(p)) return (
       <span style={{ background: 'rgba(239,68,68,.12)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 6, padding: '2px 6px', fontSize: 9, fontWeight: 700, color: '#fca5a5', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>Pendiente</span>
     )
     if (p.estado === 'critico') return (
@@ -985,23 +1026,7 @@ export default function StockPage() {
             )}
             <button
               data-coach-target="stock-rebuild"
-              onClick={async () => {
-                setShowRebuildModal(true)
-                setRebuildLoading(true)
-                setRebuildResult(null)
-                try {
-                  const res = await fetch('/api/importador/productos-desde-facturas', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ restaurante_id: RESTAURANTE_ID, mode: 'preview' }),
-                  })
-                  const data = await res.json()
-                  setRebuildPreview(data)
-                } catch {
-                  setRebuildPreview({ productos: [], total_productos: 0, total_proveedores_nuevos: 0, message: 'Error al cargar preview' })
-                }
-                setRebuildLoading(false)
-              }}
+              onClick={abrirRebuildPreview}
               style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, background: 'rgba(239,68,68,.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,.3)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
               title="Borrar stock y reconstruir desde facturas"
             >
@@ -1209,40 +1234,7 @@ export default function StockPage() {
             </div>
           </div>
           <button
-            onClick={async () => {
-              setShowRebuildModal(true)
-              setRebuildLoading(true)
-              setRebuildResult(null)
-              try {
-                const res = await fetch('/api/importador/productos-desde-facturas', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ restaurante_id: RESTAURANTE_ID, mode: 'preview' }),
-                })
-                const data = await res.json()
-                if (!res.ok || data.error) {
-                  setRebuildPreview({
-                    productos: [],
-                    total_productos: 0,
-                    total_proveedores_nuevos: 0,
-                    message: data.error || `Error HTTP ${res.status}`,
-                  })
-                } else {
-                  setRebuildPreview({
-                    productos: data.productos ?? [],
-                    total_productos: data.total_productos ?? 0,
-                    total_proveedores_nuevos: data.total_proveedores_nuevos ?? 0,
-                    message: data.message,
-                  })
-                }
-              } catch (e) {
-                setRebuildPreview({
-                  productos: [], total_productos: 0, total_proveedores_nuevos: 0,
-                  message: 'Error de red: ' + (e instanceof Error ? e.message : 'desconocido'),
-                })
-              }
-              setRebuildLoading(false)
-            }}
+            onClick={abrirRebuildPreview}
             style={{
               padding: '8px 14px', borderRadius: 8, border: 'none',
               background: 'var(--accent)', color: 'white', fontWeight: 700, fontSize: 12,
@@ -1398,7 +1390,7 @@ export default function StockPage() {
                     onDoubleClick={() => canEdit && openEdit(p)}
                     style={{
                       borderBottom: '1px solid var(--border)',
-                      background: (p.stock_actual === 0 && p.precio_unitario === 0)
+                      background: esPendiente(p)
                         ? 'rgba(239,68,68,0.07)'
                         : i % 2 === 0 ? 'var(--surface)' : 'var(--bg)',
                       cursor: canEdit ? 'pointer' : 'default',
@@ -1941,6 +1933,20 @@ export default function StockPage() {
         const diff = !isNaN(enteredVal) && enteredVal !== p.stock_actual ? enteredVal - p.stock_actual : null
         const isLast = quickIdx === quickItems.length - 1
 
+        // Foco síncrono (dentro del gesto del usuario) para que iOS no cierre el
+        // teclado al cambiar de producto — el setTimeout queda solo de fallback.
+        function focusQuickInput() {
+          quickRef.current?.focus()
+          quickRef.current?.select()
+        }
+
+        function goToIdx(idx: number) {
+          setQuickIdx(idx)
+          setQuickValue(String(quickItems[idx]?.stock_actual ?? ''))
+          focusQuickInput()
+          setTimeout(focusQuickInput, 30)
+        }
+
         function saveAndNext(skip = false) {
           if (!skip) {
             const v = parseFloat(quickValue)
@@ -1950,15 +1956,16 @@ export default function StockPage() {
             }
           }
           if (!isLast) {
-            const next = quickIdx + 1
-            setQuickIdx(next)
-            setQuickValue(String(quickItems[next]?.stock_actual ?? ''))
-            setTimeout(() => { quickRef.current?.focus(); quickRef.current?.select() }, 30)
+            goToIdx(quickIdx + 1)
           } else {
             setQuickMode(false)
             setShowQuickSummary(true)
             setTimeout(() => setShowQuickSummary(false), 3000)
           }
+        }
+
+        function goBack() {
+          if (quickIdx > 0) goToIdx(quickIdx - 1)
         }
 
         return (
@@ -1992,6 +1999,15 @@ export default function StockPage() {
                 <span style={{ color: 'var(--text-3)', margin: '0 6px' }}>·</span>Mín: {p.stock_minimo}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button
+                  onMouseDown={e => e.preventDefault()}
+                  onPointerDown={e => { e.preventDefault(); goBack() }}
+                  disabled={quickIdx === 0}
+                  title="Producto anterior"
+                  style={{ width: 64, height: 64, borderRadius: 18, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: quickIdx > 0 ? 'pointer' : 'default', flexShrink: 0, opacity: quickIdx > 0 ? 1 : 0.4 }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 30, color: 'var(--text-2)' }}>arrow_back</span>
+                </button>
                 <div style={{ position: 'relative' }}>
                   <input
                     ref={quickRef}
@@ -2013,6 +2029,7 @@ export default function StockPage() {
                   )}
                 </div>
                 <button
+                  onMouseDown={e => e.preventDefault()}
                   onPointerDown={e => { e.preventDefault(); saveAndNext() }}
                   style={{ width: 64, height: 64, borderRadius: 18, background: 'var(--navy)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, boxShadow: '0 4px 14px rgba(28,45,74,.35)' }}
                 >
@@ -2024,23 +2041,14 @@ export default function StockPage() {
 
             <div style={{ padding: '16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', display: 'flex', gap: 8, flexShrink: 0 }}>
               <button
-                onPointerDown={e => { e.preventDefault(); if (quickIdx > 0) { const prev = quickIdx - 1; setQuickIdx(prev); setQuickValue(String(quickItems[prev]?.stock_actual ?? '')); setTimeout(() => { quickRef.current?.focus(); quickRef.current?.select() }, 30) } }}
-                disabled={quickIdx === 0}
-                title="Volver al producto anterior para corregir un peso mal cargado"
-                style={{ flex: 1, minWidth: 0, height: 48, borderRadius: 10, background: quickIdx > 0 ? 'rgba(67,97,160,.12)' : 'var(--surface)', border: `1px solid ${quickIdx > 0 ? 'var(--accent)' : 'var(--border)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '0 8px', fontSize: 13, fontWeight: 700, color: quickIdx > 0 ? 'var(--accent)' : 'var(--text-3)', fontFamily: 'inherit', cursor: quickIdx > 0 ? 'pointer' : 'default', opacity: quickIdx > 0 ? 1 : 0.4 }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 18, flexShrink: 0 }}>undo</span>
-                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {quickIdx > 0 ? `Corregir: ${quickItems[quickIdx - 1]?.nombre ?? 'anterior'}` : 'Atrás'}
-                </span>
-              </button>
-              <button
+                onMouseDown={e => e.preventDefault()}
                 onPointerDown={e => { e.preventDefault(); saveAndNext(true) }}
                 style={{ flex: 1, height: 48, borderRadius: 10, background: 'var(--bg)', border: '1px solid var(--border)', fontSize: 13, fontWeight: 600, color: 'var(--text-3)', cursor: 'pointer', fontFamily: 'inherit' }}
               >
                 Saltar
               </button>
               <button
+                onMouseDown={e => e.preventDefault()}
                 onPointerDown={e => { e.preventDefault(); saveAndNext() }}
                 style={{ flex: 2, height: 48, borderRadius: 10, background: 'var(--navy)', border: 'none', fontSize: 15, fontWeight: 700, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}
               >

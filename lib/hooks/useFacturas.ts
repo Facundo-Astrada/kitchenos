@@ -39,6 +39,18 @@ function normalizeName(name: string): string {
     .replace(/(^|\s)\S/g, c => c.toUpperCase())
 }
 
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// El nombre del producto aparece como secuencia de PALABRAS COMPLETAS dentro del
+// ítem de factura (más descriptivo). Evita falsos positivos tipo "Lino" matcheando
+// dentro de "Cacao alcalino" (que un .includes() plano sí dejaría pasar).
+function matchesWholeWord(haystackLower: string, needleLower: string): boolean {
+  const re = new RegExp(`(^|\\s)${escapeRegex(needleLower)}(\\s|$)`)
+  return re.test(haystackLower)
+}
+
 // Infer product category from name
 function inferCategoria(nombre: string): string {
   const n = nombre.toLowerCase()
@@ -200,6 +212,13 @@ export function useFacturas() {
       let productosCreados = 0
       const itemsToInsert: Record<string, unknown>[] = []
 
+      // Recetas del restaurante (para propagar precio a ingredientes) — una sola vez, no por ítem.
+      const { data: recetasData } = await supabase
+        .from('recetas')
+        .select('id')
+        .eq('restaurante_id', RESTAURANTE_ID)
+      const recetaIds = (recetasData ?? []).map((r: { id: string }) => r.id)
+
       for (const item of datos.items) {
         const nombreNorm = normalizeName(item.producto_nombre)
         const nombreLower = nombreNorm.toLowerCase()
@@ -216,7 +235,7 @@ export function useFacturas() {
             // (Antes era al revés y "Tomate" pisaba "Extracto De Tomate" — falso positivo.)
             productosExistentes.find(p => {
               const pn = p.nombre.toLowerCase()
-              return pn.length >= 4 && nombreLower.includes(pn)
+              return pn.length >= 4 && matchesWholeWord(nombreLower, pn)
             })
           if (match) {
             productoId = match.id
@@ -259,15 +278,13 @@ export function useFacturas() {
             restaurante_id: RESTAURANTE_ID,
           })
 
-          // Update ingredientes only in recipes belonging to THIS restaurant
-          const { data: recetasData } = await supabase
-            .from('recetas')
-            .select('id')
-            .eq('restaurante_id', RESTAURANTE_ID)
-          const recetaIds = (recetasData ?? []).map((r: { id: string }) => r.id)
+          // Update ingredientes only in recipes belonging to THIS restaurant.
+          // costo_unitario usa precio_stock (normalizado a kg/l), NO item.precio_unitario
+          // (que viene en la unidad cruda de la factura, ej. por gramo) — si no, el costo
+          // del ingrediente queda hasta 1000x menor a lo real.
           if (recetaIds.length > 0) {
             await supabase.from('ingredientes')
-              .update({ costo_unitario: item.precio_unitario })
+              .update({ costo_unitario: precio_stock })
               .ilike('nombre', nombreNorm)
               .in('receta_id', recetaIds)
           }
