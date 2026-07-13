@@ -24,9 +24,10 @@ interface BucketProps {
   onDragMove: (x: number, y: number) => void
   onDragEnd: () => void
   onMoverA: (productoId: string, sectorId: string | null, estanteId: string | null) => void
+  onEliminarProducto: (id: string) => void
 }
 
-function Bucket({ zoneKeyStr, sectorId, estanteId, productos, sectoresTodos, estantesTodos, isOver, draggingId, registerDropZone, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA }: BucketProps) {
+function Bucket({ zoneKeyStr, sectorId, estanteId, productos, sectoresTodos, estantesTodos, isOver, draggingId, registerDropZone, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA, onEliminarProducto }: BucketProps) {
   return (
     <div
       ref={el => registerDropZone(zoneKeyStr, el, sectorId, estanteId)}
@@ -50,6 +51,7 @@ function Bucket({ zoneKeyStr, sectorId, estanteId, productos, sectoresTodos, est
             onDragMove={onDragMove}
             onDragEnd={onDragEnd}
             onMoverA={onMoverA}
+            onEliminar={onEliminarProducto}
           />
         ))}
         {productos.length === 0 && (
@@ -75,12 +77,13 @@ interface EstanteBoxProps {
   onDragMove: (x: number, y: number) => void
   onDragEnd: () => void
   onMoverA: (productoId: string, sectorId: string | null, estanteId: string | null) => void
+  onEliminarProducto: (id: string) => void
   onRenombrar: (id: string, nombre: string) => void
   onEliminar: (id: string) => void
   onReordenar: (id: string, dir: 1 | -1) => void
 }
 
-function EstanteBox({ estante, productos, sectoresTodos, estantesTodos, overZoneKey, draggingId, esPrimero, esUltimo, registerDropZone, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA, onRenombrar, onEliminar, onReordenar }: EstanteBoxProps) {
+function EstanteBox({ estante, productos, sectoresTodos, estantesTodos, overZoneKey, draggingId, esPrimero, esUltimo, registerDropZone, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA, onEliminarProducto, onRenombrar, onEliminar, onReordenar }: EstanteBoxProps) {
   const [editando, setEditando] = useState(false)
   const [nombre, setNombre] = useState(estante.nombre)
   const key = zoneKey(estante.sector_id, estante.id)
@@ -136,6 +139,7 @@ function EstanteBox({ estante, productos, sectoresTodos, estantesTodos, overZone
         onDragMove={onDragMove}
         onDragEnd={onDragEnd}
         onMoverA={onMoverA}
+        onEliminarProducto={onEliminarProducto}
       />
     </div>
   )
@@ -158,6 +162,7 @@ interface ColumnProps {
   onDragMove: (x: number, y: number) => void
   onDragEnd: () => void
   onMoverA: (productoId: string, sectorId: string | null, estanteId: string | null) => void
+  onEliminarProducto: (id: string) => void
   onAgregarEstante: (sectorId: string, nombre: string) => void
   onRenombrarEstante: (id: string, nombre: string) => void
   onEliminarEstante: (id: string) => void
@@ -165,6 +170,8 @@ interface ColumnProps {
   onOrdenarAlfabetico: (sectorId: string | null, estanteId: string | null) => void
   onEliminarSector?: () => void
   ultimoConteoAt?: string | null
+  collapsed: boolean
+  onToggleCollapse: () => void
 }
 
 function fmtConteoRel(iso: string | null | undefined): string {
@@ -180,9 +187,9 @@ export default function StockBoardColumn(props: ColumnProps) {
   const {
     sectorId, nombre, icono, estantesDelSector, productosSinEstante, productosPorEstante,
     sectoresTodos, estantesTodos, overZoneKey, draggingId,
-    registerDropZone, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA,
+    registerDropZone, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA, onEliminarProducto,
     onAgregarEstante, onRenombrarEstante, onEliminarEstante, onReordenarEstante, onOrdenarAlfabetico,
-    onEliminarSector, ultimoConteoAt,
+    onEliminarSector, ultimoConteoAt, collapsed, onToggleCollapse,
   } = props
 
   const [addingEstante, setAddingEstante] = useState(false)
@@ -199,10 +206,38 @@ export default function StockBoardColumn(props: ColumnProps) {
     }
   }
 
+  // Columna colapsada: strip angosto, pero SIGUE siendo drop zone (va a "sin
+  // estante" del sector) — así se puede arrastrar hasta acá sin tener que
+  // expandirla primero.
+  if (collapsed) {
+    const isOver = overZoneKey === raizKey
+    return (
+      <div
+        ref={el => registerDropZone(raizKey, el, sectorId, null)}
+        onClick={onToggleCollapse}
+        title={`Expandir ${nombre}`}
+        style={{
+          width: 46, flexShrink: 0, borderRadius: 10, cursor: 'pointer',
+          border: `1.5px dashed ${isOver ? 'var(--accent)' : 'var(--border)'}`,
+          background: isOver ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'var(--surface)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '12px 4px',
+        }}
+      >
+        {icono && <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>{icono}</span>}
+        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace" }}>{total}</span>
+        <span style={{ writingMode: 'vertical-rl', fontSize: 11.5, fontWeight: 800, color: 'var(--text-1)', whiteSpace: 'nowrap' }}>{nombre}</span>
+        <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--text-3)', marginTop: 'auto' }}>chevron_right</span>
+      </div>
+    )
+  }
+
   return (
     <div style={{ width: 260, flexShrink: 0, display: 'flex', flexDirection: 'column', maxHeight: '100%' }}>
       <div style={{ padding: '4px 4px 8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={onToggleCollapse} title="Colapsar" style={miniBtn}>
+            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>chevron_left</span>
+          </button>
           {icono && <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>{icono}</span>}
           <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</span>
           <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace" }}>{total}</span>
@@ -216,7 +251,7 @@ export default function StockBoardColumn(props: ColumnProps) {
           )}
         </div>
         {sectorId && (
-          <div style={{ fontSize: 10, fontWeight: 500, color: ultimoConteoAt ? 'var(--text-3)' : '#d97706', marginTop: 2, paddingLeft: 22 }}>
+          <div style={{ fontSize: 10, fontWeight: 500, color: ultimoConteoAt ? 'var(--text-3)' : '#d97706', marginTop: 2, paddingLeft: 28 }}>
             {fmtConteoRel(ultimoConteoAt)}
           </div>
         )}
@@ -240,6 +275,7 @@ export default function StockBoardColumn(props: ColumnProps) {
             onDragMove={onDragMove}
             onDragEnd={onDragEnd}
             onMoverA={onMoverA}
+            onEliminarProducto={onEliminarProducto}
             onRenombrar={onRenombrarEstante}
             onEliminar={onEliminarEstante}
             onReordenar={onReordenarEstante}
@@ -265,6 +301,7 @@ export default function StockBoardColumn(props: ColumnProps) {
           onDragMove={onDragMove}
           onDragEnd={onDragEnd}
           onMoverA={onMoverA}
+          onEliminarProducto={onEliminarProducto}
         />
 
         {sectorId && (

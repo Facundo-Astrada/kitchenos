@@ -1,15 +1,20 @@
 'use client'
 
-import { useRef, useState, useCallback, useMemo } from 'react'
+import { useRef, useState, useCallback, useMemo, useEffect } from 'react'
 import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
 import { useStockSectores } from '@/lib/hooks/useStockSectores'
 import { useStockEstantes } from '@/lib/hooks/useStockEstantes'
+import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import StockBoardColumn from './StockBoardColumn'
 
 const SECTOR_ICONOS = ['shelves', 'ac_unit', 'kitchen', 'severe_cold', 'skillet', 'wine_bar']
+const SIN_SECTOR_KEY = '__sin_sector__'
+const AUTOSCROLL_EDGE = 70
+const AUTOSCROLL_MAX_SPEED = 16
 
 export default function StockBoard() {
-  const { productos, loading: loadingStock, moverProductosBoard } = useStock()
+  const RESTAURANTE_ID = useRestauranteId()
+  const { productos, loading: loadingStock, moverProductosBoard, eliminarProducto } = useStock()
   const { sectores, loading: loadingSec, agregarSector, eliminarSector } = useStockSectores()
   const { estantes, loading: loadingEst, agregarEstante, renombrarEstante, eliminarEstante, reordenarEstantes } = useStockEstantes()
 
@@ -22,6 +27,46 @@ export default function StockBoard() {
   const dropZonesRef = useRef<Map<string, { el: HTMLElement; sectorId: string | null; estanteId: string | null }>>(new Map())
   const cardRefsRef = useRef<Map<string, HTMLElement>>(new Map())
   const lastPointerRef = useRef({ x: 0, y: 0 })
+
+  // ── Auto-scroll horizontal al arrastrar cerca del borde ──
+  const boardScrollRef = useRef<HTMLDivElement>(null)
+  const isDraggingRef = useRef(false)
+  const autoScrollFrameRef = useRef<number | null>(null)
+
+  const autoScrollTick = useCallback(() => {
+    if (!isDraggingRef.current) { autoScrollFrameRef.current = null; return }
+    const el = boardScrollRef.current
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      const x = lastPointerRef.current.x
+      if (x < rect.left + AUTOSCROLL_EDGE) {
+        const intensity = Math.min(1, (rect.left + AUTOSCROLL_EDGE - x) / AUTOSCROLL_EDGE)
+        el.scrollLeft -= AUTOSCROLL_MAX_SPEED * intensity
+      } else if (x > rect.right - AUTOSCROLL_EDGE) {
+        const intensity = Math.min(1, (x - (rect.right - AUTOSCROLL_EDGE)) / AUTOSCROLL_EDGE)
+        el.scrollLeft += AUTOSCROLL_MAX_SPEED * intensity
+      }
+    }
+    autoScrollFrameRef.current = requestAnimationFrame(autoScrollTick)
+  }, [])
+
+  // ── Columnas colapsadas (persistido por restaurante) ──
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    if (!RESTAURANTE_ID) return
+    try {
+      const raw = localStorage.getItem(`stock_board_collapsed_${RESTAURANTE_ID}`)
+      setCollapsedIds(raw ? new Set(JSON.parse(raw)) : new Set())
+    } catch { setCollapsedIds(new Set()) }
+  }, [RESTAURANTE_ID])
+  const toggleCollapse = useCallback((key: string) => {
+    setCollapsedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key); else next.add(key)
+      if (RESTAURANTE_ID) localStorage.setItem(`stock_board_collapsed_${RESTAURANTE_ID}`, JSON.stringify(Array.from(next)))
+      return next
+    })
+  }, [RESTAURANTE_ID])
 
   // ── Búsqueda ──
   const [search, setSearch] = useState('')
@@ -54,7 +99,9 @@ export default function StockBoard() {
   const onDragStart = useCallback((p: ProductoConEstado) => {
     if (q) return // no reordenar mientras hay un filtro activo (índices quedarían mal)
     setDraggingProducto(p)
-  }, [q])
+    isDraggingRef.current = true
+    if (autoScrollFrameRef.current == null) autoScrollFrameRef.current = requestAnimationFrame(autoScrollTick)
+  }, [q, autoScrollTick])
 
   const onDragMove = useCallback((x: number, y: number) => {
     lastPointerRef.current = { x, y }
@@ -78,6 +125,8 @@ export default function StockBoard() {
   }
 
   const onDragEnd = useCallback(async () => {
+    isDraggingRef.current = false
+    if (autoScrollFrameRef.current != null) { cancelAnimationFrame(autoScrollFrameRef.current); autoScrollFrameRef.current = null }
     const dragged = draggingProducto
     const key = overZoneKey
     setDraggingProducto(null); setGhostPos(null); setOverZoneKey(null)
@@ -137,6 +186,14 @@ export default function StockBoard() {
     try { await reordenarEstantes(ids) } catch (e) { console.error('[StockBoard] error reordenando estantes', e) }
   }, [estantes, reordenarEstantes])
 
+  useEffect(() => {
+    return () => { if (autoScrollFrameRef.current != null) cancelAnimationFrame(autoScrollFrameRef.current) }
+  }, [])
+
+  const handleEliminarProducto = useCallback(async (id: string) => {
+    try { await eliminarProducto(id) } catch (e) { console.error('[StockBoard] error eliminando producto', e) }
+  }, [eliminarProducto])
+
   async function handleAgregarSector() {
     if (!nuevoSectorNombre.trim()) return
     try {
@@ -184,7 +241,7 @@ export default function StockBoard() {
       </div>
 
       {/* Columnas */}
-      <div style={{ flex: 1, minHeight: 0, overflowX: 'auto', overflowY: 'hidden' }}>
+      <div ref={boardScrollRef} style={{ flex: 1, minHeight: 0, overflowX: 'auto', overflowY: 'hidden' }}>
         <div style={{ display: 'flex', gap: 14, height: '100%', paddingBottom: 8 }}>
           <StockBoardColumn
             sectorId={null}
@@ -202,11 +259,14 @@ export default function StockBoard() {
             onDragMove={onDragMove}
             onDragEnd={onDragEnd}
             onMoverA={onMoverA}
+            onEliminarProducto={handleEliminarProducto}
             onAgregarEstante={agregarEstante}
             onRenombrarEstante={renombrarEstante}
             onEliminarEstante={eliminarEstante}
             onReordenarEstante={onReordenarEstante}
             onOrdenarAlfabetico={() => onOrdenarColumna(null)}
+            collapsed={collapsedIds.has(SIN_SECTOR_KEY)}
+            onToggleCollapse={() => toggleCollapse(SIN_SECTOR_KEY)}
           />
 
           {sectores.map(sec => {
@@ -235,6 +295,7 @@ export default function StockBoard() {
                 onDragMove={onDragMove}
                 onDragEnd={onDragEnd}
                 onMoverA={onMoverA}
+                onEliminarProducto={handleEliminarProducto}
                 onAgregarEstante={agregarEstante}
                 onRenombrarEstante={renombrarEstante}
                 onEliminarEstante={eliminarEstante}
@@ -242,6 +303,8 @@ export default function StockBoard() {
                 onOrdenarAlfabetico={() => onOrdenarColumna(sec.id)}
                 onEliminarSector={() => handleEliminarSector(sec.id, sec.nombre)}
                 ultimoConteoAt={sec.ultimo_conteo_at}
+                collapsed={collapsedIds.has(sec.id)}
+                onToggleCollapse={() => toggleCollapse(sec.id)}
               />
             )
           })}

@@ -20,9 +20,10 @@ interface Props {
   onDragMove: (x: number, y: number) => void
   onDragEnd: () => void
   onMoverA: (productoId: string, sectorId: string | null, estanteId: string | null) => void
+  onEliminar: (productoId: string) => void
 }
 
-export default function StockBoardCard({ producto, isDragging, sectores, estantes, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA }: Props) {
+export default function StockBoardCard({ producto, isDragging, sectores, estantes, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA, onEliminar }: Props) {
   const start = useRef<{ x: number; y: number } | null>(null)
   const active = useRef(false)
   const [showMenu, setShowMenu] = useState(false)
@@ -67,6 +68,11 @@ export default function StockBoardCard({ producto, isDragging, sectores, estante
   function confirmarMover() {
     onMoverA(producto.id, moverSector || null, moverEstante || null)
     setShowMenu(false)
+  }
+
+  function handleEliminar() {
+    setShowMenu(false)
+    if (confirm(`¿Eliminar "${producto.nombre}" del stock?`)) onEliminar(producto.id)
   }
 
   return (
@@ -129,6 +135,14 @@ export default function StockBoardCard({ producto, isDragging, sectores, estante
             style={{ marginTop: 2, padding: '7px 10px', borderRadius: 7, border: 'none', background: 'var(--navy)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
           >
             Mover
+          </button>
+          <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
+          <button
+            onClick={handleEliminar}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 4px', borderRadius: 7, border: 'none', background: 'none', color: '#dc2626', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>delete</span>
+            Eliminar del stock
           </button>
         </div>
       )}
