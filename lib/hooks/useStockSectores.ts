@@ -51,6 +51,12 @@ export function useStockSectores() {
     mutate(prev => prev?.filter(s => s.id !== id), { revalidate: false })
   }
 
+  async function actualizarSector(id: string, datos: { nombre?: string; icono?: string }) {
+    mutate(prev => prev?.map(s => s.id === id ? { ...s, ...datos } : s), { revalidate: false })
+    const { error } = await supabase.from('stock_sectores').update(datos).eq('id', id)
+    if (error) { console.error('[useStockSectores] actualizarSector error:', error.message); throw error }
+  }
+
   // Se llama al terminar (llegar al final) un recorrido de Stockear scopeado a
   // ESTE sector — no con "Todo el stock" ni por categoría.
   async function marcarConteo(id: string) {
@@ -65,6 +71,7 @@ export function useStockSectores() {
     loading,
     agregarSector,
     eliminarSector,
+    actualizarSector,
     marcarConteo,
     refetch: useCallback(() => { mutate() }, [mutate]),
   }

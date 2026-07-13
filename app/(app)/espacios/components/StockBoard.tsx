@@ -5,9 +5,8 @@ import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
 import { useStockSectores } from '@/lib/hooks/useStockSectores'
 import { useStockEstantes } from '@/lib/hooks/useStockEstantes'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
-import StockBoardColumn, { StockBoardCollapsedChip } from './StockBoardColumn'
+import StockBoardColumn, { StockBoardCollapsedChip, SECTOR_ICONOS } from './StockBoardColumn'
 
-const SECTOR_ICONOS = ['shelves', 'ac_unit', 'kitchen', 'severe_cold', 'skillet', 'wine_bar']
 const SIN_SECTOR_KEY = '__sin_sector__'
 const AUTOSCROLL_EDGE = 70
 const AUTOSCROLL_MAX_SPEED = 16
@@ -15,7 +14,7 @@ const AUTOSCROLL_MAX_SPEED = 16
 export default function StockBoard() {
   const RESTAURANTE_ID = useRestauranteId()
   const { productos, loading: loadingStock, moverProductosBoard, eliminarProducto } = useStock()
-  const { sectores, loading: loadingSec, agregarSector, eliminarSector } = useStockSectores()
+  const { sectores, loading: loadingSec, agregarSector, eliminarSector, actualizarSector } = useStockSectores()
   const { estantes, loading: loadingEst, agregarEstante, renombrarEstante, eliminarEstante, reordenarEstantes } = useStockEstantes()
 
   const loading = loadingStock || loadingSec || loadingEst
@@ -245,6 +244,10 @@ export default function StockBoard() {
     try { await eliminarSector(sectorId) } catch (e) { console.error('[StockBoard] error eliminando sector', e) }
   }
 
+  async function handleEditarSector(sectorId: string, nombre: string, icono: string) {
+    try { await actualizarSector(sectorId, { nombre, icono }) } catch (e) { console.error('[StockBoard] error editando sector', e) }
+  }
+
   if (loading) {
     return <p style={{ color: 'var(--text-3)', fontSize: 14, padding: 24 }}>Cargando board de stock…</p>
   }
@@ -413,6 +416,7 @@ export default function StockBoard() {
                 onReordenarEstante={onReordenarEstante}
                 onOrdenarAlfabetico={() => onOrdenarColumna(sec.id)}
                 onEliminarSector={() => handleEliminarSector(sec.id, sec.nombre)}
+                onEditarSector={(nombre, icono) => handleEditarSector(sec.id, nombre, icono)}
                 ultimoConteoAt={sec.ultimo_conteo_at}
                 onToggleCollapse={() => toggleCollapse(sec.id)}
                 selectedIds={selectedIds}
@@ -433,12 +437,12 @@ export default function StockBoard() {
                   placeholder="Ej: Cámara, Cava…"
                   style={{ fontSize: 13, padding: '7px 9px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', fontFamily: 'inherit' }}
                 />
-                <div style={{ display: 'flex', gap: 5 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                   {SECTOR_ICONOS.map(ic => (
                     <button key={ic} onClick={() => setNuevoSectorIcono(ic)}
-                      style={{ width: 30, height: 30, borderRadius: 7, background: nuevoSectorIcono === ic ? 'var(--accent)' : 'var(--bg)', border: `1px solid ${nuevoSectorIcono === ic ? 'var(--accent)' : 'var(--border)'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      style={{ width: 28, height: 28, borderRadius: 7, background: nuevoSectorIcono === ic ? 'var(--accent)' : 'var(--bg)', border: `1px solid ${nuevoSectorIcono === ic ? 'var(--accent)' : 'var(--border)'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     >
-                      <span className="material-symbols-outlined" style={{ fontSize: 15, color: nuevoSectorIcono === ic ? '#fff' : 'var(--text-2)' }}>{ic}</span>
+                      <span className="material-symbols-outlined" style={{ fontSize: 14, color: nuevoSectorIcono === ic ? '#fff' : 'var(--text-2)' }}>{ic}</span>
                     </button>
                   ))}
                 </div>

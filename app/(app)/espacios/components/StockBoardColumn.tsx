@@ -5,6 +5,17 @@ import type { ProductoConEstado } from '@/lib/hooks/useStock'
 import type { StockSector, StockEstante } from '@/types'
 import StockBoardCard from './StockBoardCard'
 
+// Preset de íconos para sectores físicos de stock — cubre almacenamiento en
+// frío/seco, producción, bebidas y zonas comunes de cocina/restaurante.
+export const SECTOR_ICONOS = [
+  'shelves', 'warehouse', 'inventory_2',
+  'ac_unit', 'kitchen', 'severe_cold', 'icecream',
+  'skillet', 'outdoor_grill', 'soup_kitchen', 'countertops',
+  'wine_bar', 'liquor', 'local_bar', 'local_cafe',
+  'bakery_dining', 'set_meal', 'egg',
+  'cleaning_services',
+]
+
 export function zoneKey(sectorId: string | null, estanteId: string | null): string {
   return `${sectorId ?? 'none'}::${estanteId ?? 'none'}`
 }
@@ -177,6 +188,7 @@ interface ColumnProps {
   onReordenarEstante: (id: string, dir: 1 | -1) => void
   onOrdenarAlfabetico: (sectorId: string | null, estanteId: string | null) => void
   onEliminarSector?: () => void
+  onEditarSector?: (nombre: string, icono: string) => void
   ultimoConteoAt?: string | null
   onToggleCollapse: () => void
   selectedIds: Set<string>
@@ -198,14 +210,28 @@ export default function StockBoardColumn(props: ColumnProps) {
     sectoresTodos, estantesTodos, overZoneKey, draggingId,
     registerDropZone, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA, onEliminarProducto,
     onAgregarEstante, onRenombrarEstante, onEliminarEstante, onReordenarEstante, onOrdenarAlfabetico,
-    onEliminarSector, ultimoConteoAt, onToggleCollapse, selectedIds, onToggleSelect,
+    onEliminarSector, onEditarSector, ultimoConteoAt, onToggleCollapse, selectedIds, onToggleSelect,
   } = props
 
   const [addingEstante, setAddingEstante] = useState(false)
   const [nuevoNombre, setNuevoNombre] = useState('')
+  const [editandoSector, setEditandoSector] = useState(false)
+  const [editNombre, setEditNombre] = useState(nombre)
+  const [editIcono, setEditIcono] = useState(icono ?? SECTOR_ICONOS[0])
 
   const total = productosSinEstante.length + estantesDelSector.reduce((s, e) => s + (productosPorEstante.get(e.id)?.length ?? 0), 0)
   const raizKey = zoneKey(sectorId, null)
+
+  function abrirEdicionSector() {
+    setEditNombre(nombre)
+    setEditIcono(icono ?? SECTOR_ICONOS[0])
+    setEditandoSector(true)
+  }
+
+  function guardarSector() {
+    if (editNombre.trim() && onEditarSector) onEditarSector(editNombre.trim(), editIcono)
+    setEditandoSector(false)
+  }
 
   function guardarEstante() {
     if (nuevoNombre.trim() && sectorId) {
@@ -218,26 +244,58 @@ export default function StockBoardColumn(props: ColumnProps) {
   return (
     <div style={{ width: 260, flexShrink: 0, display: 'flex', flexDirection: 'column', maxHeight: '100%' }}>
       <div style={{ padding: '4px 4px 8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button onClick={onToggleCollapse} title="Colapsar" style={miniBtn}>
-            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>chevron_left</span>
-          </button>
-          {icono && <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>{icono}</span>}
-          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</span>
-          <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace" }}>{total}</span>
-          <button onClick={() => onOrdenarAlfabetico(sectorId, null)} title="Ordenar A-Z" style={miniBtn}>
-            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>sort_by_alpha</span>
-          </button>
-          {sectorId && onEliminarSector && (
-            <button onClick={onEliminarSector} title="Eliminar sector" style={miniBtn}>
-              <span className="material-symbols-outlined" style={{ fontSize: 15 }}>delete</span>
-            </button>
-          )}
-        </div>
-        {sectorId && (
-          <div style={{ fontSize: 10, fontWeight: 500, color: ultimoConteoAt ? 'var(--text-3)' : '#d97706', marginTop: 2, paddingLeft: 28 }}>
-            {fmtConteoRel(ultimoConteoAt)}
+        {editandoSector ? (
+          <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <input
+              autoFocus
+              value={editNombre}
+              onChange={e => setEditNombre(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') guardarSector(); if (e.key === 'Escape') setEditandoSector(false) }}
+              style={{ fontSize: 12.5, fontWeight: 700, padding: '6px 8px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-1)', fontFamily: 'inherit' }}
+            />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {SECTOR_ICONOS.map(ic => (
+                <button key={ic} onClick={() => setEditIcono(ic)}
+                  style={{ width: 26, height: 26, borderRadius: 6, background: editIcono === ic ? 'var(--accent)' : 'var(--surface)', border: `1px solid ${editIcono === ic ? 'var(--accent)' : 'var(--border)'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 14, color: editIcono === ic ? '#fff' : 'var(--text-2)' }}>{ic}</span>
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => setEditandoSector(false)} style={{ flex: 1, padding: '6px 0', borderRadius: 7, border: '1px solid var(--border)', background: 'none', color: 'var(--text-2)', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Cancelar</button>
+              <button onClick={guardarSector} disabled={!editNombre.trim()} style={{ flex: 1, padding: '6px 0', borderRadius: 7, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: !editNombre.trim() ? 0.5 : 1 }}>Guardar</button>
+            </div>
           </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button onClick={onToggleCollapse} title="Colapsar" style={miniBtn}>
+                <span className="material-symbols-outlined" style={{ fontSize: 15 }}>chevron_left</span>
+              </button>
+              {icono && <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>{icono}</span>}
+              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</span>
+              <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace" }}>{total}</span>
+              <button onClick={() => onOrdenarAlfabetico(sectorId, null)} title="Ordenar A-Z" style={miniBtn}>
+                <span className="material-symbols-outlined" style={{ fontSize: 15 }}>sort_by_alpha</span>
+              </button>
+              {sectorId && onEditarSector && (
+                <button onClick={abrirEdicionSector} title="Editar sector" style={miniBtn}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 15 }}>edit</span>
+                </button>
+              )}
+              {sectorId && onEliminarSector && (
+                <button onClick={onEliminarSector} title="Eliminar sector" style={miniBtn}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 15 }}>delete</span>
+                </button>
+              )}
+            </div>
+            {sectorId && (
+              <div style={{ fontSize: 10, fontWeight: 500, color: ultimoConteoAt ? 'var(--text-3)' : '#d97706', marginTop: 2, paddingLeft: 28 }}>
+                {fmtConteoRel(ultimoConteoAt)}
+              </div>
+            )}
+          </>
         )}
       </div>
 
