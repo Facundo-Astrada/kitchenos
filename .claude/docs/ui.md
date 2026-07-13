@@ -308,6 +308,16 @@ function onPointerUp() {
 - `touchAction: 'none'` en el botón para evitar scroll accidental
 - `user-select: none; -webkit-user-select: none` para evitar selección de texto
 
+## Boards Kanban desktop — multi-select y columnas colapsables (jul 2026)
+
+Patrones nuevos del board de Stock en Mesa de Trabajo (`espacios/components/StockBoard*.tsx`), reutilizables en cualquier board drag&drop futuro:
+
+**Multi-select con Ctrl/Cmd+clic** — convención estándar de escritorio (Explorer/Finder/Gmail), no checkboxes visibles por default. En el `onPointerDown` de la card, si `e.ctrlKey || e.metaKey` se togglea la selección y se corta ahí (no se inicia drag); el drag normal de un solo ítem se deshabilita mientras hay selección activa, para no generar ambigüedad de gesto entre "arrastro 1" y "arrastro los N seleccionados".
+
+**Columnas colapsables → fila de chips que envuelve, NO tiras verticales altas.** Una primera versión colapsaba cada columna a una tira vertical angosta pero de altura completa — con muchas columnas cerradas se veían como una hilera de "palitos" confusa (feedback real: "esto es confuso... arrastrar un producto... no se puede mover por fuera de la pantalla visible"). El fix correcto: las columnas colapsadas se sacan del row de scroll horizontal y se renderizan aparte, como una fila de chips (`flexWrap: 'wrap'`) que va ocupando el ancho disponible de arriba hacia abajo — expandir un chip lo saca de esa fila y restaura la columna completa en el board. IDs colapsados persistidos en `localStorage` (`..._collapsed_${RESTAURANTE_ID}`).
+
+**Auto-scroll en los bordes durante drag** — necesario en cualquier board más ancho que la pantalla. Un loop `requestAnimationFrame` leyendo la posición del puntero desde un `ref` (no desde React state, para que siga corriendo aunque el puntero deje de moverse) mueve el `scrollLeft`/`scrollTop` del contenedor cuando el puntero está a menos de ~70px de un borde, con velocidad proporcional a la cercanía al borde.
+
 ## Loading y estado vacío — obligatorios en toda página
 
 ```tsx
