@@ -171,13 +171,23 @@ function fmtFechaRel(fecha: string): string {
   return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
 }
 
+// Última vez que se completó un recorrido de Stockear de este sector (stock_sectores.ultimo_conteo_at).
+function fmtConteoRel(iso: string | null | undefined): string {
+  if (!iso) return 'Nunca contado'
+  const dias = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
+  if (dias <= 0) return 'Contado hoy'
+  if (dias === 1) return 'Contado ayer'
+  if (dias < 30) return `Contado hace ${dias} días`
+  return `Contado el ${new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}`
+}
+
 export default function StockPage() {
   const router = useRouter()
   const RESTAURANTE_ID = useRestauranteId()
   const { productos, loading, error, actualizarStock, agregarProducto, actualizarProducto, eliminarProducto, refetch } = useStock()
   const { recetas } = useRecetas()
   const { categorias, agregarCategoria } = useCategoriasProducto()
-  const { sectores, agregarSector } = useStockSectores()
+  const { sectores, agregarSector, marcarConteo } = useStockSectores()
   const { estantes } = useStockEstantes()
   const { crearPedido } = usePedidos()
   const { proveedores } = useProveedores()
@@ -2235,13 +2245,16 @@ export default function StockPage() {
                       <button key={sec.id}
                         onClick={() => startQuick(items, sec.nombre, sec.id)}
                         disabled={items.length === 0}
-                        style={{ padding: '12px 16px', borderRadius: 12, background: 'var(--bg)', border: '1px solid var(--border)', fontSize: 14, fontWeight: 600, cursor: items.length === 0 ? 'default' : 'pointer', textAlign: 'left', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'space-between', opacity: items.length === 0 ? 0.5 : 1 }}
+                        style={{ padding: '10px 16px', borderRadius: 12, background: 'var(--bg)', border: '1px solid var(--border)', fontSize: 14, fontWeight: 600, cursor: items.length === 0 ? 'default' : 'pointer', textAlign: 'left', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'space-between', opacity: items.length === 0 ? 0.5 : 1 }}
                       >
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-1)' }}>
-                          <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'var(--accent)' }}>{sec.icono}</span>
-                          {sec.nombre}
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-1)', minWidth: 0 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'var(--accent)', flexShrink: 0 }}>{sec.icono}</span>
+                          <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                            <span>{sec.nombre}</span>
+                            <span style={{ fontSize: 10, fontWeight: 500, color: sec.ultimo_conteo_at ? 'var(--text-3)' : '#d97706' }}>{fmtConteoRel(sec.ultimo_conteo_at)}</span>
+                          </span>
                         </span>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                           {criticos > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: '#ef4444', background: 'rgba(239,68,68,.1)', padding: '2px 7px', borderRadius: 99 }}>{criticos} crítico{criticos > 1 ? 's' : ''}</span>}
                           <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{items.length} prod.</span>
                         </span>
@@ -2412,6 +2425,8 @@ export default function StockPage() {
             setQuickMode(false)
             setShowQuickSummary(true)
             setTimeout(() => setShowQuickSummary(false), 3000)
+            // Recorrido completo de un sector físico (no "Todo el stock" ni categoría) → marca la fecha de conteo.
+            if (quickSectorId) marcarConteo(quickSectorId)
           }
         }
 

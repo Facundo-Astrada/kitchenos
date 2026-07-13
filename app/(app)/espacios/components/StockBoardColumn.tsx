@@ -164,6 +164,16 @@ interface ColumnProps {
   onReordenarEstante: (id: string, dir: 1 | -1) => void
   onOrdenarAlfabetico: (sectorId: string | null, estanteId: string | null) => void
   onEliminarSector?: () => void
+  ultimoConteoAt?: string | null
+}
+
+function fmtConteoRel(iso: string | null | undefined): string {
+  if (!iso) return 'Nunca contado'
+  const dias = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000)
+  if (dias <= 0) return 'Contado hoy'
+  if (dias === 1) return 'Contado ayer'
+  if (dias < 30) return `Contado hace ${dias} días`
+  return `Contado el ${new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}`
 }
 
 export default function StockBoardColumn(props: ColumnProps) {
@@ -172,7 +182,7 @@ export default function StockBoardColumn(props: ColumnProps) {
     sectoresTodos, estantesTodos, overZoneKey, draggingId,
     registerDropZone, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA,
     onAgregarEstante, onRenombrarEstante, onEliminarEstante, onReordenarEstante, onOrdenarAlfabetico,
-    onEliminarSector,
+    onEliminarSector, ultimoConteoAt,
   } = props
 
   const [addingEstante, setAddingEstante] = useState(false)
@@ -191,17 +201,24 @@ export default function StockBoardColumn(props: ColumnProps) {
 
   return (
     <div style={{ width: 260, flexShrink: 0, display: 'flex', flexDirection: 'column', maxHeight: '100%' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 4px 8px' }}>
-        {icono && <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>{icono}</span>}
-        <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</span>
-        <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace" }}>{total}</span>
-        <button onClick={() => onOrdenarAlfabetico(sectorId, null)} title="Ordenar A-Z" style={miniBtn}>
-          <span className="material-symbols-outlined" style={{ fontSize: 15 }}>sort_by_alpha</span>
-        </button>
-        {sectorId && onEliminarSector && (
-          <button onClick={onEliminarSector} title="Eliminar sector" style={miniBtn}>
-            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>delete</span>
+      <div style={{ padding: '4px 4px 8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {icono && <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>{icono}</span>}
+          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nombre}</span>
+          <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace" }}>{total}</span>
+          <button onClick={() => onOrdenarAlfabetico(sectorId, null)} title="Ordenar A-Z" style={miniBtn}>
+            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>sort_by_alpha</span>
           </button>
+          {sectorId && onEliminarSector && (
+            <button onClick={onEliminarSector} title="Eliminar sector" style={miniBtn}>
+              <span className="material-symbols-outlined" style={{ fontSize: 15 }}>delete</span>
+            </button>
+          )}
+        </div>
+        {sectorId && (
+          <div style={{ fontSize: 10, fontWeight: 500, color: ultimoConteoAt ? 'var(--text-3)' : '#d97706', marginTop: 2, paddingLeft: 22 }}>
+            {fmtConteoRel(ultimoConteoAt)}
+          </div>
         )}
       </div>
 

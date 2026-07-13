@@ -206,7 +206,7 @@ export interface Producto {
   updated_at?: string | null
 }
 
-// DB: stock_sectores (id, restaurante_id, nombre, icono, orden, created_at)
+// DB: stock_sectores (id, restaurante_id, nombre, icono, orden, created_at, ultimo_conteo_at)
 export interface StockSector {
   id: string
   restaurante_id: string
@@ -214,6 +214,7 @@ export interface StockSector {
   icono: string
   orden: number
   created_at?: string | null
+  ultimo_conteo_at?: string | null
 }
 
 // DB: stock_estantes (id, restaurante_id, sector_id, nombre, orden, created_at)

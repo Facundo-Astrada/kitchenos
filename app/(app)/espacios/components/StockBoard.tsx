@@ -241,6 +241,7 @@ export default function StockBoard() {
                 onReordenarEstante={onReordenarEstante}
                 onOrdenarAlfabetico={() => onOrdenarColumna(sec.id)}
                 onEliminarSector={() => handleEliminarSector(sec.id, sec.nombre)}
+                ultimoConteoAt={sec.ultimo_conteo_at}
               />
             )
           })}
