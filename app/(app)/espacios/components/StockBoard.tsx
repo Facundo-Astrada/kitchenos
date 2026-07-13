@@ -71,6 +71,22 @@ export default function StockBoard() {
   // ── Búsqueda ──
   const [search, setSearch] = useState('')
 
+  // ── Selección múltiple (Ctrl/Cmd+clic) para mover varios productos juntos ──
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkSector, setBulkSector] = useState('')
+  const [bulkEstante, setBulkEstante] = useState('')
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }, [])
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set())
+    setBulkSector(''); setBulkEstante('')
+  }, [])
+
   // ── Nuevo sector ──
   const [addingSector, setAddingSector] = useState(false)
   const [nuevoSectorNombre, setNuevoSectorNombre] = useState('')
@@ -98,10 +114,11 @@ export default function StockBoard() {
 
   const onDragStart = useCallback((p: ProductoConEstado) => {
     if (q) return // no reordenar mientras hay un filtro activo (índices quedarían mal)
+    if (selectedIds.size > 0) return // con selección múltiple activa, mover es vía la barra "Mover a…"
     setDraggingProducto(p)
     isDraggingRef.current = true
     if (autoScrollFrameRef.current == null) autoScrollFrameRef.current = requestAnimationFrame(autoScrollTick)
-  }, [q, autoScrollTick])
+  }, [q, selectedIds, autoScrollTick])
 
   const onDragMove = useCallback((x: number, y: number) => {
     lastPointerRef.current = { x, y }
@@ -159,6 +176,23 @@ export default function StockBoard() {
       console.error('[StockBoard] error en Mover a…', e)
     }
   }, [productosOrdenados, moverProductosBoard])
+
+  const onMoverSeleccionados = useCallback(async () => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    const sectorId = bulkSector || null
+    const estanteId = bulkEstante || null
+    const bucketIds = productosOrdenados
+      .filter(p => (p.sector_id ?? null) === sectorId && (p.estante_id ?? null) === estanteId && !selectedIds.has(p.id))
+      .map(p => p.id)
+    const nuevoOrden = [...bucketIds, ...ids]
+    try {
+      await moverProductosBoard(nuevoOrden.map((id, idx) => ({ id, sector_id: sectorId, estante_id: estanteId, orden_sector: idx })))
+      clearSelection()
+    } catch (e) {
+      console.error('[StockBoard] error moviendo seleccionados', e)
+    }
+  }, [selectedIds, bulkSector, bulkEstante, productosOrdenados, moverProductosBoard, clearSelection])
 
   const onOrdenarColumna = useCallback(async (sectorId: string | null) => {
     const buckets = new Set<string | null>([null])
@@ -233,12 +267,57 @@ export default function StockBoard() {
             </button>
           )}
         </div>
-        {q && (
+        {q && selectedIds.size === 0 && (
           <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '6px 2px 0' }}>
             {productosVisibles.length} resultado{productosVisibles.length !== 1 ? 's' : ''} — arrastrar está desactivado con un filtro activo, usá el menú &quot;⋮&quot; de cada producto para moverlo.
           </p>
         )}
+        {selectedIds.size === 0 && !q && (
+          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '6px 2px 0' }}>
+            Ctrl+clic (⌘+clic en Mac) sobre varios productos para seleccionarlos y moverlos juntos.
+          </p>
+        )}
       </div>
+
+      {/* Barra de selección múltiple */}
+      {selectedIds.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '8px 12px', margin: '0 4px 14px', background: 'color-mix(in srgb, var(--accent) 8%, var(--surface))', border: '1px solid var(--accent)', borderRadius: 10, flexShrink: 0 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)', whiteSpace: 'nowrap' }}>
+            {selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}
+          </span>
+          <select
+            value={bulkSector}
+            onChange={e => { setBulkSector(e.target.value); setBulkEstante('') }}
+            style={{ fontSize: 12, padding: '6px 8px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', fontFamily: 'inherit', cursor: 'pointer' }}
+          >
+            <option value="">Sin sector</option>
+            {sectores.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+          </select>
+          {bulkSector && estantes.filter(e => e.sector_id === bulkSector).length > 0 && (
+            <select
+              value={bulkEstante}
+              onChange={e => setBulkEstante(e.target.value)}
+              style={{ fontSize: 12, padding: '6px 8px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', fontFamily: 'inherit', cursor: 'pointer' }}
+            >
+              <option value="">Sin estante</option>
+              {estantes.filter(e => e.sector_id === bulkSector).map(es => <option key={es.id} value={es.id}>{es.nombre}</option>)}
+            </select>
+          )}
+          <button
+            onClick={onMoverSeleccionados}
+            style={{ padding: '7px 14px', borderRadius: 7, border: 'none', background: 'var(--navy)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            Mover
+          </button>
+          <button
+            onClick={clearSelection}
+            title="Cancelar selección"
+            style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
+          </button>
+        </div>
+      )}
 
       {/* Sectores colapsados: fila de chips que se acomodan solos (wrap), no
           ocupan toda la altura del board como las tiras verticales de antes. */}
@@ -296,6 +375,8 @@ export default function StockBoard() {
               onReordenarEstante={onReordenarEstante}
               onOrdenarAlfabetico={() => onOrdenarColumna(null)}
               onToggleCollapse={() => toggleCollapse(SIN_SECTOR_KEY)}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
             />
           )}
 
@@ -334,6 +415,8 @@ export default function StockBoard() {
                 onEliminarSector={() => handleEliminarSector(sec.id, sec.nombre)}
                 ultimoConteoAt={sec.ultimo_conteo_at}
                 onToggleCollapse={() => toggleCollapse(sec.id)}
+                selectedIds={selectedIds}
+                onToggleSelect={toggleSelect}
               />
             )
           })}

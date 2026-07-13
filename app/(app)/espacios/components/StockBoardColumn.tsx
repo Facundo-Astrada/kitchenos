@@ -25,9 +25,11 @@ interface BucketProps {
   onDragEnd: () => void
   onMoverA: (productoId: string, sectorId: string | null, estanteId: string | null) => void
   onEliminarProducto: (id: string) => void
+  selectedIds: Set<string>
+  onToggleSelect: (id: string) => void
 }
 
-function Bucket({ zoneKeyStr, sectorId, estanteId, productos, sectoresTodos, estantesTodos, isOver, draggingId, registerDropZone, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA, onEliminarProducto }: BucketProps) {
+function Bucket({ zoneKeyStr, sectorId, estanteId, productos, sectoresTodos, estantesTodos, isOver, draggingId, registerDropZone, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA, onEliminarProducto, selectedIds, onToggleSelect }: BucketProps) {
   return (
     <div
       ref={el => registerDropZone(zoneKeyStr, el, sectorId, estanteId)}
@@ -44,6 +46,7 @@ function Bucket({ zoneKeyStr, sectorId, estanteId, productos, sectoresTodos, est
             key={p.id}
             producto={p}
             isDragging={draggingId === p.id}
+            selected={selectedIds.has(p.id)}
             sectores={sectoresTodos}
             estantes={estantesTodos}
             registerCardRef={registerCardRef}
@@ -52,6 +55,7 @@ function Bucket({ zoneKeyStr, sectorId, estanteId, productos, sectoresTodos, est
             onDragEnd={onDragEnd}
             onMoverA={onMoverA}
             onEliminar={onEliminarProducto}
+            onToggleSelect={onToggleSelect}
           />
         ))}
         {productos.length === 0 && (
@@ -81,9 +85,11 @@ interface EstanteBoxProps {
   onRenombrar: (id: string, nombre: string) => void
   onEliminar: (id: string) => void
   onReordenar: (id: string, dir: 1 | -1) => void
+  selectedIds: Set<string>
+  onToggleSelect: (id: string) => void
 }
 
-function EstanteBox({ estante, productos, sectoresTodos, estantesTodos, overZoneKey, draggingId, esPrimero, esUltimo, registerDropZone, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA, onEliminarProducto, onRenombrar, onEliminar, onReordenar }: EstanteBoxProps) {
+function EstanteBox({ estante, productos, sectoresTodos, estantesTodos, overZoneKey, draggingId, esPrimero, esUltimo, registerDropZone, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA, onEliminarProducto, onRenombrar, onEliminar, onReordenar, selectedIds, onToggleSelect }: EstanteBoxProps) {
   const [editando, setEditando] = useState(false)
   const [nombre, setNombre] = useState(estante.nombre)
   const key = zoneKey(estante.sector_id, estante.id)
@@ -140,6 +146,8 @@ function EstanteBox({ estante, productos, sectoresTodos, estantesTodos, overZone
         onDragEnd={onDragEnd}
         onMoverA={onMoverA}
         onEliminarProducto={onEliminarProducto}
+        selectedIds={selectedIds}
+        onToggleSelect={onToggleSelect}
       />
     </div>
   )
@@ -171,6 +179,8 @@ interface ColumnProps {
   onEliminarSector?: () => void
   ultimoConteoAt?: string | null
   onToggleCollapse: () => void
+  selectedIds: Set<string>
+  onToggleSelect: (id: string) => void
 }
 
 function fmtConteoRel(iso: string | null | undefined): string {
@@ -188,7 +198,7 @@ export default function StockBoardColumn(props: ColumnProps) {
     sectoresTodos, estantesTodos, overZoneKey, draggingId,
     registerDropZone, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA, onEliminarProducto,
     onAgregarEstante, onRenombrarEstante, onEliminarEstante, onReordenarEstante, onOrdenarAlfabetico,
-    onEliminarSector, ultimoConteoAt, onToggleCollapse,
+    onEliminarSector, ultimoConteoAt, onToggleCollapse, selectedIds, onToggleSelect,
   } = props
 
   const [addingEstante, setAddingEstante] = useState(false)
@@ -253,6 +263,8 @@ export default function StockBoardColumn(props: ColumnProps) {
             onRenombrar={onRenombrarEstante}
             onEliminar={onEliminarEstante}
             onReordenar={onReordenarEstante}
+            selectedIds={selectedIds}
+            onToggleSelect={onToggleSelect}
           />
         ))}
 
@@ -276,6 +288,8 @@ export default function StockBoardColumn(props: ColumnProps) {
           onDragEnd={onDragEnd}
           onMoverA={onMoverA}
           onEliminarProducto={onEliminarProducto}
+          selectedIds={selectedIds}
+          onToggleSelect={onToggleSelect}
         />
 
         {sectorId && (

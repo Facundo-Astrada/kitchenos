@@ -13,6 +13,7 @@ const ESTADO_COLOR: Record<string, string> = {
 interface Props {
   producto: ProductoConEstado
   isDragging: boolean
+  selected: boolean
   sectores: StockSector[]
   estantes: StockEstante[]
   registerCardRef: (id: string, el: HTMLElement | null) => void
@@ -21,9 +22,10 @@ interface Props {
   onDragEnd: () => void
   onMoverA: (productoId: string, sectorId: string | null, estanteId: string | null) => void
   onEliminar: (productoId: string) => void
+  onToggleSelect: (productoId: string) => void
 }
 
-export default function StockBoardCard({ producto, isDragging, sectores, estantes, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA, onEliminar }: Props) {
+export default function StockBoardCard({ producto, isDragging, selected, sectores, estantes, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA, onEliminar, onToggleSelect }: Props) {
   const start = useRef<{ x: number; y: number } | null>(null)
   const active = useRef(false)
   const [showMenu, setShowMenu] = useState(false)
@@ -34,6 +36,9 @@ export default function StockBoardCard({ producto, isDragging, sectores, estante
 
   function onPointerDown(e: React.PointerEvent) {
     if ((e.target as HTMLElement).closest('[data-no-drag]')) return
+    // Ctrl/Cmd+clic: selección múltiple, sin iniciar drag — mismo estándar que
+    // Explorer/Finder/Gmail.
+    if (e.ctrlKey || e.metaKey) { onToggleSelect(producto.id); return }
     e.currentTarget.setPointerCapture(e.pointerId)
     start.current = { x: e.clientX, y: e.clientY }
     active.current = false
@@ -86,13 +91,16 @@ export default function StockBoardCard({ producto, isDragging, sectores, estante
         position: 'relative',
         display: 'flex', alignItems: 'center', gap: 6,
         padding: '7px 8px', borderRadius: 8,
-        background: 'var(--surface)', border: '1px solid var(--border)',
+        background: selected ? 'color-mix(in srgb, var(--accent) 14%, var(--surface))' : 'var(--surface)',
+        border: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
         cursor: isDragging ? 'grabbing' : 'grab',
         opacity: isDragging ? 0.35 : 1,
         touchAction: 'none', userSelect: 'none',
       }}
     >
-      <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--text-3)', flexShrink: 0 }}>drag_indicator</span>
+      <span className="material-symbols-outlined" style={{ fontSize: 15, color: selected ? 'var(--accent)' : 'var(--text-3)', flexShrink: 0 }}>
+        {selected ? 'check_box' : 'drag_indicator'}
+      </span>
       <span style={{ width: 6, height: 6, borderRadius: 99, background: ESTADO_COLOR[producto.estado], flexShrink: 0 }} />
       <span style={{ fontSize: 12.5, color: 'var(--text-1)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {producto.nombre}
