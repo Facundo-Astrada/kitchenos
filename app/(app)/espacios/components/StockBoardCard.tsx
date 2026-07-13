@@ -72,7 +72,7 @@ export default function StockBoardCard({ producto, isDragging, sectores, estante
 
   function handleEliminar() {
     setShowMenu(false)
-    if (confirm(`¿Eliminar "${producto.nombre}" del stock?`)) onEliminar(producto.id)
+    onEliminar(producto.id)
   }
 
   return (
