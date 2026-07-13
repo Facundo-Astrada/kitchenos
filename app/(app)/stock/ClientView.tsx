@@ -98,7 +98,7 @@ function esUnidadSospechosa(p: { unidad: string; precio_unitario: number | null 
 function esPendiente(p: { stock_actual: number; precio_unitario: number | null; fuera_de_uso?: boolean | null }): boolean {
   return !p.fuera_de_uso && p.stock_actual === 0 && !p.precio_unitario
 }
-type SortMode = 'default' | 'valor_desc'
+type SortMode = 'default' | 'valor_desc' | 'nombre_asc' | 'nombre_desc'
 
 interface FormData {
   nombre: string
@@ -886,6 +886,10 @@ export default function StockPage() {
     }
     if (sortMode === 'valor_desc') {
       list = [...list].sort((a, b) => valorStock(b) - valorStock(a))
+    } else if (sortMode === 'nombre_asc') {
+      list = [...list].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+    } else if (sortMode === 'nombre_desc') {
+      list = [...list].sort((a, b) => b.nombre.localeCompare(a.nombre, 'es'))
     }
     return list
   }, [productos, estadoFilter, catFilters, provFilters, secFilters, search, sortMode, esInmovil, inmovilLoaded])
@@ -1590,7 +1594,16 @@ export default function StockPage() {
           </colgroup>
           <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
             <tr>
-              <th style={{ ...thStyle, background: 'var(--navy)', textAlign: 'left', paddingLeft: 12, color: 'rgba(255,255,255,.7)' }}>Producto</th>
+              <th
+                onClick={() => setSortMode(s => s === 'nombre_asc' ? 'nombre_desc' : s === 'nombre_desc' ? 'default' : 'nombre_asc')}
+                title="Ordenar alfabéticamente"
+                style={{ ...thStyle, background: 'var(--navy)', textAlign: 'left', paddingLeft: 12, color: 'rgba(255,255,255,.7)', cursor: 'pointer', userSelect: 'none' }}
+              >
+                Producto
+                <span className="material-symbols-outlined" style={{ fontSize: 14, verticalAlign: 'middle', marginLeft: 2, color: sortMode === 'nombre_asc' || sortMode === 'nombre_desc' ? '#fff' : 'rgba(255,255,255,.35)' }}>
+                  {sortMode === 'nombre_desc' ? 'arrow_downward' : 'arrow_upward'}
+                </span>
+              </th>
               {isDesktop && <th style={{ ...thStyle, background: 'var(--navy)', textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Categoría</th>}
               {isDesktop && <th style={{ ...thStyle, background: 'var(--navy)', textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Nivel</th>}
               {isAdmin && <th style={{ ...thStyle, background: 'var(--navy)', textAlign: 'right', paddingRight: 8 }}>Precio</th>}
