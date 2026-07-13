@@ -122,6 +122,38 @@ export function useStock() {
     }
   }
 
+  // Mover/reordenar productos en el board de Stock (Mesa de trabajo): drag entre
+  // sectores/estantes y drag-to-reorder dentro de una columna. Se llama con la
+  // lista COMPLETA de cambios resultante del drop (no solo el ítem arrastrado) —
+  // el caller recalcula orden_sector como el índice final de cada columna afectada.
+  async function moverProductosBoard(
+    cambios: Array<{ id: string; sector_id: string | null; estante_id: string | null; orden_sector: number }>
+  ) {
+    if (cambios.length === 0) return
+    mutate(prev => {
+      if (!prev) return prev
+      const map = new Map(cambios.map(c => [c.id, c]))
+      return prev.map(p => {
+        const c = map.get(p.id)
+        return c ? { ...p, sector_id: c.sector_id, estante_id: c.estante_id, orden_sector: c.orden_sector } : p
+      })
+    }, { revalidate: false })
+    try {
+      const results = await Promise.all(cambios.map(c =>
+        supabase.from('productos')
+          .update({ sector_id: c.sector_id, estante_id: c.estante_id, orden_sector: c.orden_sector })
+          .eq('id', c.id)
+      ))
+      const primerError = results.find(r => r.error)?.error
+      if (primerError) throw primerError
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al mover productos'
+      console.error('[useStock] moverProductosBoard Error:', msg)
+      mutate() // algo falló — volver a pedir el estado real
+      throw new Error(msg)
+    }
+  }
+
   async function eliminarProducto(id: string) {
     try {
       const { error } = await supabase
@@ -146,5 +178,6 @@ export function useStock() {
     actualizarStock,
     actualizarProducto,
     eliminarProducto,
+    moverProductosBoard,
   }
 }

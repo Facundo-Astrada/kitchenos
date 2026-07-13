@@ -9,6 +9,14 @@ import EspacioCard from './components/EspacioCard'
 import LimpiezaPanel from './components/LimpiezaPanel'
 import ItemEditPanel from './components/ItemEditPanel'
 import SectionEditor from '@/components/checklist/SectionEditor'
+import StockBoard from './components/StockBoard'
+import { SegmentedTabs } from '@/components/ui'
+import type { SegmentedTab } from '@/components/ui'
+
+const MESA_TABS: SegmentedTab<'produccion' | 'stock'>[] = [
+  { id: 'produccion', label: 'Producción', icon: 'restaurant_menu' },
+  { id: 'stock', label: 'Stock', icon: 'inventory_2' },
+]
 
 const DEFAULT_SECCIONES_BOARD = [
   { nombre: 'Heladera',       icono: 'kitchen',     orden: 0 },
@@ -23,6 +31,9 @@ export default function EspaciosClientView() {
   const isDesktop = useIsDesktop()
   const { espacios, espacioPlazas, plazasUsadas, loading: loadingEsp, agregarEspacio, actualizarEspacio, eliminarEspacio, asignarPlaza, quitarPlaza } = useEspacios()
   const { secciones, items, rutinas, loading: loadingCk, agregarSeccion, actualizarSeccion, eliminarSeccion, reordenarSecciones, agregarItem, eliminarItem, actualizarItem, agregarRutina, eliminarRutina } = useChecklist()
+
+  // ── Tab principal: Producción (espacios/plazas) | Stock (board de sectores) ──
+  const [activeMainTab, setActiveMainTab] = useState<'produccion' | 'stock'>('produccion')
 
   // ── Editor de secciones (agregar/renombrar/reordenar/borrar) — mismo componente que Mise ──
   const [sectionEditorPlaza, setSectionEditorPlaza] = useState<Plaza | null>(null)
@@ -160,30 +171,41 @@ export default function EspaciosClientView() {
     <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
       {/* Header */}
       <div style={{ background: 'var(--navy)', padding: '28px 28px 18px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
           <span className="material-symbols-outlined" style={{ color: 'white', fontSize: 26 }}>dashboard</span>
           <div>
             <h1 style={{ color: 'white', fontWeight: 800, fontSize: 20, letterSpacing: '-0.02em', margin: 0 }}>Mesa de trabajo</h1>
             <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 2 }}>Organizá espacios, plazas y producciones</p>
           </div>
-          <div style={{ marginLeft: 'auto' }}>
-            <button
-              onClick={() => setShowNuevoEspacio(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)',
-                color: 'white', borderRadius: 10, padding: '8px 14px',
-                cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
-              Nuevo espacio
-            </button>
-          </div>
+          {activeMainTab === 'produccion' && (
+            <div style={{ marginLeft: 'auto' }}>
+              <button
+                onClick={() => setShowNuevoEspacio(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)',
+                  color: 'white', borderRadius: 10, padding: '8px 14px',
+                  cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
+                Nuevo espacio
+              </button>
+            </div>
+          )}
         </div>
+        <SegmentedTabs tabs={MESA_TABS} active={activeMainTab} onChange={setActiveMainTab} style={{ maxWidth: 340 }} />
       </div>
 
-      {/* Board */}
+      {/* Stock board */}
+      {activeMainTab === 'stock' && (
+        <div style={{ padding: '20px 24px', height: 'calc(100dvh - 132px)' }}>
+          <StockBoard />
+        </div>
+      )}
+
+      {/* Board de producción */}
+      {activeMainTab === 'produccion' && (
       <div style={{ padding: 24 }}>
         {loading && (
           <p style={{ color: 'var(--text-3)', fontSize: 14 }}>Cargando espacios…</p>
@@ -230,6 +252,7 @@ export default function EspaciosClientView() {
           })}
         </div>
       </div>
+      )}
 
       {/* Ghost drag */}
       {draggingItem && ghostPos && (

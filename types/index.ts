@@ -179,7 +179,7 @@ export interface CategoriaProducto {
   icono?: string | null
 }
 
-// DB: productos (id, nombre, categoria, categoria_id, unidad, unidad_uso, unidad_compra, cantidad_por_envase, stock_actual, stock_minimo, stock_critico, precio_unitario, proveedor_id, sector_id, fuera_de_uso, restaurante_id, activo, created_at, updated_at)
+// DB: productos (id, nombre, categoria, categoria_id, unidad, unidad_uso, unidad_compra, cantidad_por_envase, stock_actual, stock_minimo, stock_critico, precio_unitario, proveedor_id, sector_id, fuera_de_uso, estante_id, orden_sector, restaurante_id, activo, created_at, updated_at)
 export interface Producto {
   id: string
   nombre: string
@@ -198,6 +198,8 @@ export interface Producto {
   receta_id?: string | null
   sector_id?: string | null
   fuera_de_uso?: boolean
+  estante_id?: string | null
+  orden_sector?: number
   restaurante_id: string
   activo: boolean
   created_at: string
@@ -210,6 +212,16 @@ export interface StockSector {
   restaurante_id: string
   nombre: string
   icono: string
+  orden: number
+  created_at?: string | null
+}
+
+// DB: stock_estantes (id, restaurante_id, sector_id, nombre, orden, created_at)
+export interface StockEstante {
+  id: string
+  restaurante_id: string
+  sector_id: string
+  nombre: string
   orden: number
   created_at?: string | null
 }

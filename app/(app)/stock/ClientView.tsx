@@ -10,6 +10,7 @@ import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
 import { useRecetas } from '@/lib/hooks/useRecetas'
 import { useCategoriasProducto } from '@/lib/hooks/useCategoriasProducto'
 import { useStockSectores } from '@/lib/hooks/useStockSectores'
+import { useStockEstantes } from '@/lib/hooks/useStockEstantes'
 import { sinTildes } from '@/lib/stock/precios'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import PageHeader from '@/components/shell/PageHeader'
@@ -177,6 +178,7 @@ export default function StockPage() {
   const { recetas } = useRecetas()
   const { categorias, agregarCategoria } = useCategoriasProducto()
   const { sectores, agregarSector } = useStockSectores()
+  const { estantes } = useStockEstantes()
   const { crearPedido } = usePedidos()
   const { proveedores } = useProveedores()
   const { fetchComparador } = usePreciosProveedores()
@@ -931,6 +933,26 @@ export default function StockPage() {
     return [...arr].sort((a, b) =>
       (order[a.estado as keyof typeof order] ?? 2) - (order[b.estado as keyof typeof order] ?? 2))
   }, [])
+  // Recorrido de un SECTOR FÍSICO con layout definido en el board de Mesa de
+  // trabajo: sigue el orden real (estante por estante, después orden_sector
+  // dentro del estante) en vez de crítico-primero — así el usuario camina el
+  // sector una sola vez sin ir y volver. "Sin estante" queda al final para
+  // no interrumpir el recorrido ya organizado. "Todo el stock" y categorías
+  // siguen usando sortByEstado.
+  const sortBySectorLayout = useCallback((arr: ProductoConEstado[], sectorId: string) => {
+    const estantesDelSector = estantes.filter(e => e.sector_id === sectorId).sort((a, b) => a.orden - b.orden)
+    const estanteIdx = new Map(estantesDelSector.map((e, i) => [e.id, i]))
+    const sinEstante = estantesDelSector.length
+    return [...arr].sort((a, b) => {
+      const ia = a.estante_id != null ? (estanteIdx.get(a.estante_id) ?? sinEstante) : sinEstante
+      const ib = b.estante_id != null ? (estanteIdx.get(b.estante_id) ?? sinEstante) : sinEstante
+      if (ia !== ib) return ia - ib
+      const oa = a.orden_sector ?? 0
+      const ob = b.orden_sector ?? 0
+      if (oa !== ob) return oa - ob
+      return a.nombre.localeCompare(b.nombre, 'es')
+    })
+  }, [estantes])
   // Productos del stockeo en curso, en el orden congelado pero con datos en vivo
   // (al volver atrás muestra el valor ya guardado, para poder corregirlo).
   const quickItems = useMemo(() => {
@@ -2174,7 +2196,7 @@ export default function StockPage() {
         // fuera_de_uso nunca aparece en el recorrido de Stockear.
         const stockeables = filtered.filter(p => !p.fuera_de_uso)
         const startQuick = (list: ProductoConEstado[], sectorLabel: string | null, sectorId: string | null = null) => {
-          const ordenado = sortByEstado(list)
+          const ordenado = sectorId ? sortBySectorLayout(list, sectorId) : sortByEstado(list)
           setQuickSector(sectorLabel)
           setQuickSectorId(sectorId)
           setQuickOrder(ordenado.map(p => p.id))
