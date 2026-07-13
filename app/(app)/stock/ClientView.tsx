@@ -117,6 +117,7 @@ interface FormData {
   receta_id: string
   sector_id: string
   fuera_de_uso: boolean
+  proveedor_id: string
 }
 
 const FORM_EMPTY: FormData = {
@@ -134,6 +135,7 @@ const FORM_EMPTY: FormData = {
   receta_id: '',
   sector_id: '',
   fuera_de_uso: false,
+  proveedor_id: '',
 }
 
 function fmtPrecio(n: number) {
@@ -1036,6 +1038,7 @@ export default function StockPage() {
       receta_id: p.receta_id ?? '',
       sector_id: p.sector_id ?? '',
       fuera_de_uso: !!p.fuera_de_uso,
+      proveedor_id: p.proveedor_id ?? '',
     })
     setShowUnidadCompra(!!(p.unidad_compra || p.cantidad_por_envase))
     setFormError(null)
@@ -1071,12 +1074,12 @@ export default function StockPage() {
         receta_id: form.es_produccion && form.receta_id ? form.receta_id : null,
         sector_id: form.sector_id || null,
         fuera_de_uso: form.fuera_de_uso,
+        proveedor_id: form.proveedor_id || null,
       }
       if (editingProducto) {
-        // No tocar proveedor_id acá — se edita aparte, no en este form.
         await actualizarProducto(editingProducto.id, datos)
       } else {
-        await agregarProducto({ ...datos, proveedor_id: null })
+        await agregarProducto(datos)
       }
       setModalOpen(false)
     } catch (e: unknown) {
@@ -1911,17 +1914,30 @@ export default function StockPage() {
                 </label>
               </div>
 
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={lblStyle}>Sector físico</span>
-                <select
-                  value={form.sector_id}
-                  onChange={e => setForm(f => ({ ...f, sector_id: e.target.value }))}
-                  style={{ ...inputStyle, appearance: 'auto', cursor: 'pointer' }}
-                >
-                  <option value="">Sin sector</option>
-                  {sectores.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                </select>
-              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={lblStyle}>Sector físico</span>
+                  <select
+                    value={form.sector_id}
+                    onChange={e => setForm(f => ({ ...f, sector_id: e.target.value }))}
+                    style={{ ...inputStyle, appearance: 'auto', cursor: 'pointer' }}
+                  >
+                    <option value="">Sin sector</option>
+                    {sectores.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                  </select>
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={lblStyle}>Proveedor</span>
+                  <select
+                    value={form.proveedor_id}
+                    onChange={e => setForm(f => ({ ...f, proveedor_id: e.target.value }))}
+                    style={{ ...inputStyle, appearance: 'auto', cursor: 'pointer' }}
+                  >
+                    <option value="">Sin proveedor</option>
+                    {proveedores.map(pr => <option key={pr.id} value={pr.id}>{pr.nombre}</option>)}
+                  </select>
+                </label>
+              </div>
 
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ ...lblStyle, color: 'var(--navy)' }}>
