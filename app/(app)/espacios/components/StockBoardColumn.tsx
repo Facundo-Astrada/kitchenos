@@ -170,7 +170,6 @@ interface ColumnProps {
   onOrdenarAlfabetico: (sectorId: string | null, estanteId: string | null) => void
   onEliminarSector?: () => void
   ultimoConteoAt?: string | null
-  collapsed: boolean
   onToggleCollapse: () => void
 }
 
@@ -189,7 +188,7 @@ export default function StockBoardColumn(props: ColumnProps) {
     sectoresTodos, estantesTodos, overZoneKey, draggingId,
     registerDropZone, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA, onEliminarProducto,
     onAgregarEstante, onRenombrarEstante, onEliminarEstante, onReordenarEstante, onOrdenarAlfabetico,
-    onEliminarSector, ultimoConteoAt, collapsed, onToggleCollapse,
+    onEliminarSector, ultimoConteoAt, onToggleCollapse,
   } = props
 
   const [addingEstante, setAddingEstante] = useState(false)
@@ -204,31 +203,6 @@ export default function StockBoardColumn(props: ColumnProps) {
       setNuevoNombre('')
       setAddingEstante(false)
     }
-  }
-
-  // Columna colapsada: strip angosto, pero SIGUE siendo drop zone (va a "sin
-  // estante" del sector) — así se puede arrastrar hasta acá sin tener que
-  // expandirla primero.
-  if (collapsed) {
-    const isOver = overZoneKey === raizKey
-    return (
-      <div
-        ref={el => registerDropZone(raizKey, el, sectorId, null)}
-        onClick={onToggleCollapse}
-        title={`Expandir ${nombre}`}
-        style={{
-          width: 46, flexShrink: 0, borderRadius: 10, cursor: 'pointer',
-          border: `1.5px dashed ${isOver ? 'var(--accent)' : 'var(--border)'}`,
-          background: isOver ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'var(--surface)',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '12px 4px',
-        }}
-      >
-        {icono && <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>{icono}</span>}
-        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace" }}>{total}</span>
-        <span style={{ writingMode: 'vertical-rl', fontSize: 11.5, fontWeight: 800, color: 'var(--text-1)', whiteSpace: 'nowrap' }}>{nombre}</span>
-        <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--text-3)', marginTop: 'auto' }}>chevron_right</span>
-      </div>
-    )
   }
 
   return (
@@ -337,4 +311,40 @@ export default function StockBoardColumn(props: ColumnProps) {
 const miniBtn: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)',
   display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 3, flexShrink: 0, borderRadius: 5,
+}
+
+interface CollapsedChipProps {
+  sectorId: string | null
+  nombre: string
+  icono?: string
+  total: number
+  overZoneKey: string | null
+  registerDropZone: (key: string, el: HTMLElement | null, sectorId: string | null, estanteId: string | null) => void
+  onExpand: () => void
+}
+
+// Fila de chips (wrap) para sectores colapsados — reemplaza las tiras
+// verticales angostas, que con muchos sectores quedaban confusas y ocupaban
+// toda la altura del board. Sigue siendo drop zone (va a "sin estante").
+export function StockBoardCollapsedChip({ sectorId, nombre, icono, total, overZoneKey, registerDropZone, onExpand }: CollapsedChipProps) {
+  const key = zoneKey(sectorId, null)
+  const isOver = overZoneKey === key
+  return (
+    <button
+      ref={el => registerDropZone(key, el, sectorId, null)}
+      onClick={onExpand}
+      title={`Expandir ${nombre}`}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px 7px 12px', borderRadius: 10,
+        border: `1.5px dashed ${isOver ? 'var(--accent)' : 'var(--border)'}`,
+        background: isOver ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'var(--surface)',
+        cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
+      }}
+    >
+      {icono && <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--accent)' }}>{icono}</span>}
+      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)', whiteSpace: 'nowrap' }}>{nombre}</span>
+      <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace" }}>{total}</span>
+      <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)' }}>chevron_right</span>
+    </button>
+  )
 }

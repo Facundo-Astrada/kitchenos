@@ -5,7 +5,7 @@ import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
 import { useStockSectores } from '@/lib/hooks/useStockSectores'
 import { useStockEstantes } from '@/lib/hooks/useStockEstantes'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
-import StockBoardColumn from './StockBoardColumn'
+import StockBoardColumn, { StockBoardCollapsedChip } from './StockBoardColumn'
 
 const SECTOR_ICONOS = ['shelves', 'ac_unit', 'kitchen', 'severe_cold', 'skillet', 'wine_bar']
 const SIN_SECTOR_KEY = '__sin_sector__'
@@ -240,36 +240,66 @@ export default function StockBoard() {
         )}
       </div>
 
-      {/* Columnas */}
+      {/* Sectores colapsados: fila de chips que se acomodan solos (wrap), no
+          ocupan toda la altura del board como las tiras verticales de antes. */}
+      {(collapsedIds.has(SIN_SECTOR_KEY) || sectores.some(s => collapsedIds.has(s.id))) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '0 4px 14px', flexShrink: 0 }}>
+          {collapsedIds.has(SIN_SECTOR_KEY) && (
+            <StockBoardCollapsedChip
+              sectorId={null}
+              nombre="Sin sector"
+              total={productosVisibles.filter(p => !p.sector_id).length}
+              overZoneKey={overZoneKey}
+              registerDropZone={registerDropZone}
+              onExpand={() => toggleCollapse(SIN_SECTOR_KEY)}
+            />
+          )}
+          {sectores.filter(sec => collapsedIds.has(sec.id)).map(sec => (
+            <StockBoardCollapsedChip
+              key={sec.id}
+              sectorId={sec.id}
+              nombre={sec.nombre}
+              icono={sec.icono}
+              total={productosVisibles.filter(p => p.sector_id === sec.id).length}
+              overZoneKey={overZoneKey}
+              registerDropZone={registerDropZone}
+              onExpand={() => toggleCollapse(sec.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Columnas expandidas */}
       <div ref={boardScrollRef} style={{ flex: 1, minHeight: 0, overflowX: 'auto', overflowY: 'hidden' }}>
         <div style={{ display: 'flex', gap: 14, height: '100%', paddingBottom: 8 }}>
-          <StockBoardColumn
-            sectorId={null}
-            nombre="Sin sector"
-            estantesDelSector={[]}
-            productosSinEstante={productosVisibles.filter(p => !p.sector_id)}
-            productosPorEstante={new Map()}
-            sectoresTodos={sectores}
-            estantesTodos={estantes}
-            overZoneKey={overZoneKey}
-            draggingId={draggingProducto?.id ?? null}
-            registerDropZone={registerDropZone}
-            registerCardRef={registerCardRef}
-            onDragStart={onDragStart}
-            onDragMove={onDragMove}
-            onDragEnd={onDragEnd}
-            onMoverA={onMoverA}
-            onEliminarProducto={handleEliminarProducto}
-            onAgregarEstante={agregarEstante}
-            onRenombrarEstante={renombrarEstante}
-            onEliminarEstante={eliminarEstante}
-            onReordenarEstante={onReordenarEstante}
-            onOrdenarAlfabetico={() => onOrdenarColumna(null)}
-            collapsed={collapsedIds.has(SIN_SECTOR_KEY)}
-            onToggleCollapse={() => toggleCollapse(SIN_SECTOR_KEY)}
-          />
+          {!collapsedIds.has(SIN_SECTOR_KEY) && (
+            <StockBoardColumn
+              sectorId={null}
+              nombre="Sin sector"
+              estantesDelSector={[]}
+              productosSinEstante={productosVisibles.filter(p => !p.sector_id)}
+              productosPorEstante={new Map()}
+              sectoresTodos={sectores}
+              estantesTodos={estantes}
+              overZoneKey={overZoneKey}
+              draggingId={draggingProducto?.id ?? null}
+              registerDropZone={registerDropZone}
+              registerCardRef={registerCardRef}
+              onDragStart={onDragStart}
+              onDragMove={onDragMove}
+              onDragEnd={onDragEnd}
+              onMoverA={onMoverA}
+              onEliminarProducto={handleEliminarProducto}
+              onAgregarEstante={agregarEstante}
+              onRenombrarEstante={renombrarEstante}
+              onEliminarEstante={eliminarEstante}
+              onReordenarEstante={onReordenarEstante}
+              onOrdenarAlfabetico={() => onOrdenarColumna(null)}
+              onToggleCollapse={() => toggleCollapse(SIN_SECTOR_KEY)}
+            />
+          )}
 
-          {sectores.map(sec => {
+          {sectores.filter(sec => !collapsedIds.has(sec.id)).map(sec => {
             const estantesDelSector = estantes.filter(e => e.sector_id === sec.id).sort((a, b) => a.orden - b.orden)
             const productosPorEstante = new Map<string, ProductoConEstado[]>()
             for (const es of estantesDelSector) {
@@ -303,7 +333,6 @@ export default function StockBoard() {
                 onOrdenarAlfabetico={() => onOrdenarColumna(sec.id)}
                 onEliminarSector={() => handleEliminarSector(sec.id, sec.nombre)}
                 ultimoConteoAt={sec.ultimo_conteo_at}
-                collapsed={collapsedIds.has(sec.id)}
                 onToggleCollapse={() => toggleCollapse(sec.id)}
               />
             )
