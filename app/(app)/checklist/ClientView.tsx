@@ -436,14 +436,13 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     }, {} as Record<string, { total: number; done: number }>)
   }, [items, registros])
 
-  // Set of item names that already have a pending/in-progress tarea today
+  // Set of checklist_item_ids that already have a pending/in-progress tarea today
   const tareasHoySet = useMemo(() => {
     const today = new Date().toISOString().split('T')[0]
     const s = new Set<string>()
     for (const t of tareas) {
-      if (t.turno_fecha === today && t.estado !== 'listo') {
-        const nombre = t.titulo.replace(/^Producción: /, '')
-        s.add(nombre.toLowerCase())
+      if (t.turno_fecha === today && t.estado !== 'listo' && t.checklist_item_id) {
+        s.add(t.checklist_item_id)
       }
     }
     return s
@@ -536,22 +535,17 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   ) => {
     await upsertRegistro(itemId, fecha, turno, d)
     if (d.completado === undefined) return
-    const item = items.find(i => i.id === itemId)
-    if (!item) return
-    const nombreLower = item.nombre.toLowerCase()
-    const matchingTarea = tareas.find(t =>
-      t.turno_fecha === today &&
-      t.titulo.replace(/^Producción:\s*/, '').toLowerCase() === nombreLower
-    )
-    if (matchingTarea) {
-      await cambiarEstadoTarea(matchingTarea.id, d.completado ? 'listo' : 'pendiente')
+    // Vínculo por FK (checklist_item_id), no por título. Refleja el tilde del mise
+    // en la(s) tarea(s) de producción originadas por este item.
+    const matchingTareas = tareas.filter(t => t.turno_fecha === today && t.checklist_item_id === itemId)
+    for (const mt of matchingTareas) {
+      await cambiarEstadoTarea(mt.id, d.completado ? 'listo' : 'pendiente')
     }
-  }, [upsertRegistro, items, tareas, cambiarEstadoTarea, today])
+  }, [upsertRegistro, tareas, cambiarEstadoTarea, today])
 
   const handleCrearTarea = useCallback(async (params: CrearTareaParams) => {
-    const titulo = `Producción: ${params.titulo}`
     await agregarTarea({
-      titulo,
+      titulo: params.titulo,
       descripcion: params.cantidad != null ? `Preparar ${params.cantidad}` : null,
       status: 'pendiente',
       prioridad: params.prioridad === 'sp' ? 'alta' : params.prioridad === 'p' ? 'media' : 'baja',
@@ -563,6 +557,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       turno_fecha: today,
       estado: 'pendiente',
       cantidad: params.cantidad,
+      checklist_item_id: params.checklist_item_id,
       asignado_a: null, creado_por: authPerfil?.miembro_id ?? null,
       fecha_limite: null, tiempo_estimado_min: null, checklist: [],
     })
@@ -582,6 +577,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           turno_fecha: today,
           estado: 'pendiente',
           cantidad: null,
+          checklist_item_id: params.checklist_item_id,
           asignado_a: null, creado_por: authPerfil?.miembro_id ?? null,
           fecha_limite: null, tiempo_estimado_min: null, checklist: [],
         })
@@ -864,7 +860,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                     turno={turno}
                     recetaInfo={item.receta_id ? recetaInfoMap[item.receta_id] : undefined}
                     platoPlazo={item.receta_id ? (platoPlazoMap[item.receta_id] ?? []) : []}
-                    hasTareaPendiente={tareasHoySet.has(item.nombre.toLowerCase())}
+                    hasTareaPendiente={tareasHoySet.has(item.id)}
                     rendimientoPromedio={item.receta_id ? rendimientoMap[item.receta_id] : null}
                     regCierreAnterior={regCierreAnteriorMap[item.id] ?? null}
                     restauranteNombre={restauranteNombre}
@@ -873,7 +869,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                     onCrearVencimiento={handleCrearVencimientoDesdeMise}
                     onPrioChange={async (i, prio) => {
                       await actualizarItem(i.id, { prioridad: prio })
-                      if ((prio === 'sp' || prio === 'p') && !tareasHoySet.has(i.nombre.toLowerCase())) {
+                      if ((prio === 'sp' || prio === 'p') && !tareasHoySet.has(i.id)) {
                         const plazoPlazas = i.receta_id ? (platoPlazoMap[i.receta_id] ?? []) : []
                         const primaryPlaza = plazoPlazas.length > 0 ? plazoPlazas[0].plaza : i.plaza
                         await handleCrearTarea({
@@ -884,6 +880,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                           receta_id: i.receta_id ?? null,
                           plaza: primaryPlaza,
                           plazas: plazoPlazas,
+                          checklist_item_id: i.id,
                         })
                       }
                     }}
@@ -1161,7 +1158,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           plaza={plaza}
           recetas={recetas.map(r => ({ ...r, porciones: r.porciones ?? undefined }))}
           onSave={async d => {
-            await agregarItem(d)
+            const nuevoItemId = await agregarItem(d)
             if (d.prioridad === 'sp' || d.prioridad === 'p') {
               const plazoPlazas = d.receta_id ? (platoPlazoMap[d.receta_id] ?? []) : []
               const primaryPlaza = plazoPlazas.length > 0 ? plazoPlazas[0].plaza : d.plaza
@@ -1173,6 +1170,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                 receta_id: d.receta_id ?? null,
                 plaza: primaryPlaza,
                 plazas: plazoPlazas,
+                checklist_item_id: nuevoItemId ?? null,
               })
               setToast(`Agregado a checklist y tareas: ${d.nombre}`)
             } else {

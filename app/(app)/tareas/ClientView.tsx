@@ -6,26 +6,11 @@ import { useTareas } from '@/lib/hooks/useTareas'
 import { useRecetas } from '@/lib/hooks/useRecetas'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
+import { syncMiseDesdeTarea } from '@/lib/ops/syncMise'
 import { OpsToggle } from '@/components/ops/OpsToggle'
 import { SeccionOps } from '@/components/ops/SeccionOps'
 import { EventoBanner } from '@/components/ops/EventoBanner'
 import type { Tarea, OpsModo, OpsEstado, TareaPrioridad } from '@/types'
-
-// Cuando una tarea de producción cambia de estado, refleja en checklist_registros
-// Solo aplica a tareas con prefijo "Producción: " (creadas desde Mise)
-async function syncMiseCompletado(nombreMise: string, fecha: string, completado: boolean) {
-  const supabase = createClient()
-  const { data: miseItems } = await supabase
-    .from('checklist_items')
-    .select('id')
-    .ilike('nombre', nombreMise)
-  for (const mi of miseItems ?? []) {
-    await supabase.from('checklist_registros').upsert(
-      { checklist_item_id: mi.id, fecha, turno: 'apertura', completado },
-      { onConflict: 'checklist_item_id,fecha,turno' }
-    )
-  }
-}
 
 const PRIO_SORT: Record<string, number> = { critica: 0, alta: 1, media: 2, baja: 3 }
 
@@ -205,14 +190,12 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   }, [agregarTarea, tareas, modo, today, perfil])
 
   // ── Sync bidireccional con Mise ───────────────────────────────
-  // Al cambiar estado de tarea, refleja en checklist_registros si tiene prefijo "Producción: "
+  // Al cambiar estado de tarea, refleja en checklist_registros el item vinculado por FK.
   const handleEstadoChange = useCallback(async (id: string, estado: OpsEstado) => {
     await cambiarEstado(id, estado)
     const tarea = tareas.find(t => t.id === id)
-    if (!tarea) return
-    const nombreMise = tarea.titulo.replace(/^Producción:\s*/, '')
-    if (nombreMise === tarea.titulo) return // sin prefijo → no es de mise
-    await syncMiseCompletado(nombreMise, today, estado === 'listo')
+    if (!tarea?.checklist_item_id) return
+    await syncMiseDesdeTarea(createClient(), tarea.checklist_item_id, today, estado === 'listo')
   }, [cambiarEstado, tareas, today])
 
   // ── Generar lista desde evento ────────────────────────────────

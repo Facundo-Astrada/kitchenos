@@ -24,6 +24,7 @@ export interface CrearTareaParams {
   receta_id: string | null
   plaza: string          // raw plaza name → tarea.plaza field
   plazas: PlatoPlaza[]   // multi-plaza sub-tasks
+  checklist_item_id: string | null  // FK al item del mise que origina la tarea
 }
 
 // ── Internal config ───────────────────────────────────────────
@@ -283,6 +284,7 @@ export function ProductoMiseCard({
         receta_id: item.receta_id ?? null,
         plaza: primaryPlaza,
         plazas: platoPlazo,
+        checklist_item_id: item.id,
       })
       setProdOpen(false)
       setSuccessMsg(capPlaza(primaryPlaza) + (platoPlazo.length > 1 ? ` +${platoPlazo.length - 1}` : ''))

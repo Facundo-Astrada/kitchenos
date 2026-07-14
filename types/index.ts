@@ -455,6 +455,7 @@ export interface Tarea {
   turno_fecha?: string | null
   orden?: number | null
   menu_id?: string | null
+  checklist_item_id?: string | null
 }
 
 // ── Pase de turno ───────────────────────────────────────────
