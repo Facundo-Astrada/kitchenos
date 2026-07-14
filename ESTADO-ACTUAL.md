@@ -105,6 +105,10 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 
 ## 4. Implementado en Últimas Sesiones
 
+### Sesión 2026-07-14 — Stock: cambiar proveedor de un producto + ordenar A-Z
+
+Dos pedidos cortos de seguimiento sobre el módulo de Stock, cada uno commiteado y deployado por separado. **Cambiar proveedor:** el modal de crear/editar producto (`app/(app)/stock/ClientView.tsx`) suma un selector "Proveedor" en el mismo grid que "Sector físico" — `FormData`/`FORM_EMPTY` ganan `proveedor_id`, `openEdit` lo precarga desde `p.proveedor_id`, y `handleSave` ya no lo excluye del payload (antes se dejaba afuera a propósito para no pisarlo con `null` al editar sin querer — ahora se guarda explícito, tanto al editar como al crear). **Orden A-Z:** el header "Producto" de la tabla ahora es clickeable — cicla `nombre_asc → nombre_desc → default` (2 valores nuevos en `SortMode`), con una flecha (`arrow_upward`/`arrow_downward`) que indica la dirección activa; el orden "default" sigue siendo por categoría+nombre (viene así de la query del hook `useStock`), así que este sort explícito por nombre es un modo aparte, mismo patrón que el botón ya existente de "ordenar por valor". `npm run build` limpio en los dos. Commits `07a08d2` (proveedor) y `9e50f42` (orden A-Z), push directo a `main`.
+
 ### Sesión 2026-07-12/13 — Stock: auditoría completa (F1-F6) + Mesa de Trabajo: board de Stock nuevo (`PLAN-STOCK.md`)
 
 Sesión larga arrancada de un pedido de auditoría general de Stock ("busca mejoras, errores, que los costos tengan un precio correcto y relacionado al de facturas, busca duplicados") que terminó sumando una feature nueva grande a Mesa de Trabajo.
