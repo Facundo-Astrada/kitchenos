@@ -4,6 +4,17 @@ Lista priorizada de todo lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL
 
 ---
 
+## 🔵 OPS — Consolidación (P0-P2, 14 jul 2026)
+
+Ver `PLAN-OPS-CONSOLIDACION-2026-07.md`. **Hecho y deployado:** P0.1 FK `tareas.checklist_item_id` (Mise↔Tarea por id, no por título "Producción: "; helper `lib/ops/syncMise.ts`) · P0.2 retiro de la planilla legacy (`platos_compuestos`/`produccion_diaria`, `useProduccion.ts` borrado; Planificación = fecha+calendario+Cargar menú+Sugerir producción+MenuActivoView) · P1.1 el badge de prioridad del mise ya no auto-crea tareas al ciclar · P1.2 `demanda_viva` leída en `ProductoMiseCard` (chip "Pedidas hoy" + suma al déficit) · P1.3 badge de tareas pendientes en el tab Producción · P2.1 copy "SP"=Súper prioridad · P2.3 `useProduccionSugerida` borrado (quitado de `ItemOps`).
+
+**Diferido (no bloqueante):**
+- **Reset de `demanda_viva` al aperturar** la plaza (hoy solo se lee; el salón la incrementa vía `/api/salon/prep-list-update`, nadie la resetea).
+- **"Copiar a otro día" e "Ingredientes consolidados"**: se quitaron con la planilla legacy (ataban a `produccion_diaria`). Reimplementar sobre `tareas` **si el usuario los pide**.
+- **Auto-seed de secciones default del mise** (`DEFAULT_SECCIONES` en `checklist/ClientView.tsx`): seedea 4 secciones al abrir una plaza vacía. Bajo impacto (solo la plaza abierta, y hacen falta para cargar ítems). Revisar solo si molesta.
+
+---
+
 ## 🟠 Alto — Seguridad y UX
 
 > **Planes activos:** `PLAN-STOCK.md` ✅ **completo** (F1-F6, 12-13 jul — auditoría, sectores físicos, sync de precios, fusión de duplicados) + Mesa de Trabajo suma board de Stock (fuera del plan original, pedido durante la misma sesión) · `PLAN-UI-IDENTIDAD-2026-07.md` ✅ **completo** (D0–D10, 6 jul) · `PLAN-ROADMAP-COMPETENCIA-2026-07.md` ⏳ en curso (Q1 carta QR ✅ · Q2 demo pública ✅ · Q3 export Excel Reportes ✅, 6 jul · Q4 etiquetas ESC/POS ✅ · Q5 comparador de precios ✅ · M1 arqueo de caja ✅ · M5 cuentas por pagar ✅ · M3 fichaje real ✅ · M4 checklists nivel auditoría ✅, 7–9 jul · E1 producción sugerida con IA ✅, 10 jul; sigue M6/M7/M8/E2/E4 según tracción) · `PLAN-MEJORAS-AUDITORIA-2026-07.md` (A/B/C — B2 fiscal y A7 dictado quedan abiertos) · `PLAN-MEJORAS-RECETARIO-CARTA-OPS-2026-07.md` ✅ **completo** (Keystone + Tandas A/B/C/D, 7 jul) · `PLAN-MEJORAS-OPS-SALON-MESA-2026-07.md` ✅ **completo** (Sesión 1 OPS+Recetario · Sesión 2 Mesa de Trabajo · Sesión 3 Salón+KDS), 9–10 jul · `PLAN-WEB-ESCRITORIO.md` 🟡 Fase 0 hecha, Fase 1/2 parcial, Fase 3/4 sin empezar · `RLS-PLAN.md` ✅ en la práctica (44 tablas, ver `.claude/docs/rls.md`) — checklist del archivo desincronizada, corregida el 8 jul.
