@@ -5,7 +5,6 @@ import { RecetaDrawer } from './RecetaDrawer'
 import { ProduccionSheet } from './ProduccionSheet'
 import { QuickAdd } from './QuickAdd'
 import { useProduccionRegistros } from '@/lib/hooks/useProduccionRegistros'
-import { useProduccionSugerida } from '@/lib/hooks/useProduccionSugerida'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { useAuth } from '@/lib/auth/context'
 import { createClient } from '@/lib/supabase/client'
@@ -53,7 +52,7 @@ interface ItemOpsProps {
   showPrioChip?: boolean
 }
 
-export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, depth = 0, modo, showSeccionChip, showPrioChip }: ItemOpsProps) {
+export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, depth = 0, showSeccionChip, showPrioChip }: ItemOpsProps) {
   const [expanded, setExpanded] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [prodSheetOpen, setProdSheetOpen] = useState(false)
@@ -64,55 +63,31 @@ export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, depth 
   const [stockAlerts, setStockAlerts] = useState<StockAlert[]>([])
   const [stockLoaded, setStockLoaded] = useState(false)
 
-  // Sugerencia de producción (lazy, loaded once on first expand, solo carta + admin/chef)
-  const [sugerencia, setSugerencia] = useState<{ ventas_prom: number; sugerido: number } | null>(null)
-
   const { registrar } = useProduccionRegistros()
-  const { getSugerencia } = useProduccionSugerida()
   const { user, perfil } = useAuth()
   const RESTAURANTE_ID = useRestauranteId()
 
-  // Lazy load on first expand (solo top-level con receta_id)
+  // Lazy load de alertas de stock on first expand (solo top-level con receta_id)
   useEffect(() => {
     if (!expanded || depth !== 0 || stockLoaded) return
     setStockLoaded(true)
+    if (!item.receta_id || !RESTAURANTE_ID) return
 
     const sb = createClient()
-    const cantidadActual = item.cantidad ?? 0
-
-    const fetches: Promise<void>[] = []
-
-    // Feature 1 — stock alerts
-    if (item.receta_id && RESTAURANTE_ID) {
-      fetches.push(
-        Promise.all([
-          sb.from('ingredientes').select('nombre').eq('receta_id', item.receta_id),
-          sb.from('productos').select('nombre, stock_actual, stock_minimo, unidad').eq('restaurante_id', RESTAURANTE_ID),
-        ]).then(([{ data: ings }, { data: prods }]) => {
-          if (!ings || !prods) return
-          const ingNames = ings.map(i => (i.nombre ?? '').toLowerCase())
-          const alerts = prods.filter(p => {
-            const pn = (p.nombre ?? '').toLowerCase()
-            return ingNames.some(n => n.includes(pn) || pn.includes(n)) &&
-              (p.stock_actual ?? 0) < (p.stock_minimo ?? 0)
-          })
-          setStockAlerts(alerts as StockAlert[])
-        })
-      )
-    }
-
-    // Feature 2 — sugerencia por ventas (solo carta, admin/chef)
-    const modoActual = modo ?? (typeof window !== 'undefined' ? (localStorage.getItem('ops_modo') as OpsModo) ?? 'carta' : 'carta')
-    if (item.receta_id && modoActual === 'carta') {
-      fetches.push(
-        getSugerencia(cantidadActual).then(s => {
-          if (s) setSugerencia({ ventas_prom: s.ventas_prom, sugerido: s.sugerido })
-        })
-      )
-    }
-
-    Promise.all(fetches)
-  }, [expanded, depth, stockLoaded, item.receta_id, item.cantidad, RESTAURANTE_ID, modo, getSugerencia])
+    Promise.all([
+      sb.from('ingredientes').select('nombre').eq('receta_id', item.receta_id),
+      sb.from('productos').select('nombre, stock_actual, stock_minimo, unidad').eq('restaurante_id', RESTAURANTE_ID),
+    ]).then(([{ data: ings }, { data: prods }]) => {
+      if (!ings || !prods) return
+      const ingNames = ings.map(i => (i.nombre ?? '').toLowerCase())
+      const alerts = prods.filter(p => {
+        const pn = (p.nombre ?? '').toLowerCase()
+        return ingNames.some(n => n.includes(pn) || pn.includes(n)) &&
+          (p.stock_actual ?? 0) < (p.stock_minimo ?? 0)
+      })
+      setStockAlerts(alerts as StockAlert[])
+    })
+  }, [expanded, depth, stockLoaded, item.receta_id, RESTAURANTE_ID])
 
   const estado: OpsEstado = (item.estado as OpsEstado) ?? 'pendiente'
   const st = ESTADO_STYLE[estado]
@@ -248,11 +223,6 @@ export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, depth 
           {item.cantidad != null && (
             <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace" }}>
               {item.cantidad} ×
-            </span>
-          )}
-          {sugerencia && depth === 0 && (
-            <span style={{ fontSize: 10, color: 'var(--text-3)', display: 'block', marginTop: 1 }}>
-              Prom: {sugerencia.ventas_prom} pax · Sugerido: {sugerencia.sugerido}
             </span>
           )}
         </div>

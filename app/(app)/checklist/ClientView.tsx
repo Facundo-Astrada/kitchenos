@@ -1312,7 +1312,7 @@ function AddItemSheet({ seccionId, seccionNombre, plaza, recetas, onSave, onClos
               })}
             </div>
             <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 5 }}>
-              {prioridad === 'sp' ? 'Sin Preparar — urgente, irá a tareas' : prioridad === 'p' ? 'Preparar — irá a tareas' : prioridad === 'ref' ? 'Refrigerar/Controlar' : 'Todo bien — sin acción requerida'}
+              {prioridad === 'sp' ? 'Súper prioridad — urgente, irá a tareas' : prioridad === 'p' ? 'Prioridad — irá a tareas' : prioridad === 'ref' ? 'Refuerzo — controlar' : 'OK — sin acción requerida'}
             </div>
           </div>
 
