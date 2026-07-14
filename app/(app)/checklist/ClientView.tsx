@@ -868,21 +868,10 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                     onCrearTarea={handleCrearTarea}
                     onCrearVencimiento={handleCrearVencimientoDesdeMise}
                     onPrioChange={async (i, prio) => {
+                      // Solo cambia la prioridad. La creación de tarea es explícita
+                      // (panel de producción de la card / AddItemSheet), no un efecto
+                      // del ciclo del badge — evita tareas fantasma por un tap de más.
                       await actualizarItem(i.id, { prioridad: prio })
-                      if ((prio === 'sp' || prio === 'p') && !tareasHoySet.has(i.id)) {
-                        const plazoPlazas = i.receta_id ? (platoPlazoMap[i.receta_id] ?? []) : []
-                        const primaryPlaza = plazoPlazas.length > 0 ? plazoPlazas[0].plaza : i.plaza
-                        await handleCrearTarea({
-                          titulo: i.nombre,
-                          seccion: PLAZA_TO_SECCION[primaryPlaza] ?? 'general',
-                          prioridad: prio,
-                          cantidad: i.cantidad > 0 ? i.cantidad : null,
-                          receta_id: i.receta_id ?? null,
-                          plaza: primaryPlaza,
-                          plazas: plazoPlazas,
-                          checklist_item_id: i.id,
-                        })
-                      }
                     }}
                     onDelete={eliminarItem}
                   />

@@ -554,6 +554,7 @@ export interface MisePlaceItem {
   recipiente_capacidad?: number | null
   peso_porcion?: number | null
   peso_porcion_unidad?: string | null
+  demanda_viva?: number | null
 }
 
 // ── Espacios físicos (mesa de trabajo) ───────────────────────

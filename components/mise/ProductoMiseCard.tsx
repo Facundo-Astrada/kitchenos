@@ -194,9 +194,12 @@ export function ProductoMiseCard({
   const porciones = recetaInfo?.porciones ?? null
   const primaryPlaza = platoPlazo.length > 0 ? platoPlazo[0].plaza : item.plaza
 
+  // Demanda viva: porciones pedidas desde el salón en el turno actual (prep-list-update).
+  // Se suma al target del recipiente para que "falta producir" contemple lo ya vendido.
+  const demandaViva = item.demanda_viva ?? 0
   const tieneRecipiente = !!(item.recipiente_nombre && item.recipiente_capacidad != null)
   const deficit = tieneRecipiente && stockDisplay !== null
-    ? Math.max(0, (item.recipiente_capacidad ?? 0) - stockDisplay)
+    ? Math.max(0, (item.recipiente_capacidad ?? 0) + demandaViva - stockDisplay)
     : null
 
   // ── Etiqueta de producción (imprimible al marcar como lista) ──
@@ -331,6 +334,15 @@ export function ProductoMiseCard({
           </span>
           {item.receta_id && !checked && (
             <span style={{ fontSize: 9, color: '#4361a0', fontWeight: 600 }}>receta</span>
+          )}
+          {demandaViva > 0 && !checked && (
+            <span style={{
+              marginLeft: item.receta_id ? 6 : 0, fontSize: 9, fontWeight: 700,
+              padding: '1px 6px', borderRadius: 99,
+              background: 'rgba(249,115,22,.13)', color: '#f97316',
+            }}>
+              Pedidas hoy: {demandaViva}
+            </span>
           )}
         </div>
 

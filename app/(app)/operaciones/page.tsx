@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import ChecklistPage from '@/app/(app)/checklist/ClientView'
 import TareasPage from '@/app/(app)/tareas/ClientView'
 import { ProduccionView } from '@/app/(app)/produccion/page'
@@ -21,6 +21,11 @@ export default function OperacionesPage() {
   const [tab, setTab] = useState<Tab>('produccion')
   // useTareas es SWR (cacheado) — comparte cache con el tab Producción, costo ~0.
   const { tareas } = useTareas()
+  // Tareas de hoy sin completar → badge en el tab Producción (ver el efecto sin cambiar de tab)
+  const pendientesProduccion = useMemo(() => {
+    const hoy = new Date().toISOString().split('T')[0]
+    return tareas.filter(t => t.turno_fecha === hoy && !t.parent_id && t.estado !== 'listo').length
+  }, [tareas])
   // Lazy-mount: cada tab se monta recién en su primera visita y de ahí en más
   // se mantiene (display:none preserva el estado). Evita disparar los ~10 hooks
   // de los 3 sub-módulos en paralelo al entrar a OPS.
@@ -99,10 +104,20 @@ export default function OperacionesPage() {
                 color: tab === t.id ? 'var(--navy)' : 'rgba(255,255,255,.65)',
                 transition: 'all .15s',
                 WebkitTapHighlightColor: 'transparent',
+                position: 'relative',
               }}
             >
               <span className="material-symbols-outlined" style={{ fontSize: 14 }}>{t.icon}</span>
               {t.label}
+              {t.id === 'produccion' && pendientesProduccion > 0 && (
+                <span style={{
+                  minWidth: 16, height: 16, padding: '0 4px', borderRadius: 99,
+                  background: '#ef4444', color: '#fff', fontSize: 9, fontWeight: 800,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {pendientesProduccion}
+                </span>
+              )}
             </button>
           ))}
         </div>
