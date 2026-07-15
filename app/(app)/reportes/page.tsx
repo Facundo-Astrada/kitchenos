@@ -1,7 +1,7 @@
 'use client'
 
 import PageTransition from '@/components/PageTransition'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { useAuth } from '@/lib/auth/context'
@@ -32,9 +32,11 @@ import {
 import { useCajaTurno } from '@/lib/hooks/useCajaTurno'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
 import { useChecklist } from '@/lib/hooks/useChecklist'
+import { useReporteVentas, type ReporteVentas } from '@/lib/hooks/useReporteVentas'
+import { useCarta } from '@/lib/hooks/useCarta'
 import type { CajaTurno, ChecklistAuditoria } from '@/types'
 
-type Tab = 'resumen' | 'cmv' | 'presupuesto' | 'rendimiento' | 'foodcost' | 'compras' | 'precios' | 'produccion' | 'caja' | 'auditoria'
+type Tab = 'resumen' | 'ventas' | 'cmv' | 'presupuesto' | 'rendimiento' | 'foodcost' | 'compras' | 'precios' | 'produccion' | 'caja' | 'auditoria'
 
 // Tabs con export a Excel (Q3) — contextual al tab activo, mismos números que el render.
 const TABS_EXPORTABLES: Tab[] = ['cmv', 'compras', 'foodcost', 'presupuesto', 'rendimiento', 'caja', 'auditoria']
@@ -63,6 +65,7 @@ const PERIODOS: { key: Periodo; label: string }[] = [
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'resumen', label: 'Resumen', icon: 'dashboard' },
+  { key: 'ventas', label: 'Ventas', icon: 'point_of_sale' },
   { key: 'cmv', label: 'CMV', icon: 'savings' },
   { key: 'presupuesto', label: 'Presupuesto', icon: 'account_balance_wallet' },
   { key: 'rendimiento', label: 'Rendimiento', icon: 'speed' },
@@ -118,7 +121,18 @@ export default function ReportesPage() {
   const { fetchHistorial } = useCajaTurno()
   const { medios } = useMediosPago()
   const { fetchAuditorias } = useChecklist()
+  const { fetchReporte: fetchReporteVentas } = useReporteVentas()
+  const { items: cartaItemsRep } = useCarta()
   const isDesktop = useIsDesktop()
+
+  // Mapa carta_item_id → costo por porción (cubre platos 1:1 y compuestos) para
+  // el ranking de platos por GANANCIA — el diferenciador vs Fudo, que solo rankea
+  // por facturación porque no conoce el food cost.
+  const costoPorItem = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const it of cartaItemsRep) if (it.costo_porcion != null) m[it.id] = it.costo_porcion
+    return m
+  }, [cartaItemsRep])
 
   const [periodo, setPeriodo] = useState<Periodo>('mes')
   const [tab, setTab] = useState<Tab>('resumen')
@@ -145,7 +159,7 @@ export default function ReportesPage() {
   useEffect(() => {
     function handleSetTab(e: Event) {
       const { tab: t } = (e as CustomEvent<{ tab: string }>).detail
-      if (['resumen','cmv','presupuesto','rendimiento','foodcost','compras','precios','produccion','caja','auditoria'].includes(t)) setTab(t as Tab)
+      if (['resumen','ventas','cmv','presupuesto','rendimiento','foodcost','compras','precios','produccion','caja','auditoria'].includes(t)) setTab(t as Tab)
     }
     window.addEventListener('kc-set-tab', handleSetTab)
     return () => window.removeEventListener('kc-set-tab', handleSetTab)
@@ -165,6 +179,7 @@ export default function ReportesPage() {
   const [rendData, setRendData] = useState<RendimientoPlaza[]>([])
   const [cajaHistorial, setCajaHistorial] = useState<CajaTurno[]>([])
   const [auditoriaHistorial, setAuditoriaHistorial] = useState<ChecklistAuditoria[]>([])
+  const [ventasRep, setVentasRep] = useState<ReporteVentas | null>(null)
 
   const [tabLoading, setTabLoading] = useState(false)
 
@@ -202,6 +217,11 @@ export default function ReportesPage() {
         case 'resumen': {
           const r = await fetchResumen(p)
           setResumen(r)
+          break
+        }
+        case 'ventas': {
+          const v = await fetchReporteVentas(p)
+          setVentasRep(v)
           break
         }
         case 'foodcost': {
@@ -258,7 +278,7 @@ export default function ReportesPage() {
     } finally {
       setTabLoading(false)
     }
-  }, [fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchComparador, fetchProduccion, fetchCMV, fetchPresupuestos, fetchRendimiento, fetchHistorial, fetchAuditorias])
+  }, [fetchResumen, fetchReporteVentas, fetchFoodCost, fetchCompras, fetchPrecios, fetchComparador, fetchProduccion, fetchCMV, fetchPresupuestos, fetchRendimiento, fetchHistorial, fetchAuditorias])
 
   useEffect(() => {
     loadTab(tab, periodo)
@@ -543,6 +563,91 @@ export default function ReportesPage() {
           <KpiCard label="Productos en Stock" value={resumen.productosEnStock} icon="inventory_2" />
           <KpiCard label="Food Cost Prom." value={resumen.foodCostPromedio} icon="restaurant" suffix="%" />
         </div>
+      </div>
+    )
+  }
+
+  function renderVentas() {
+    const v = ventasRep
+    if (!v) return <EmptyState icon="point_of_sale" text="Sin datos para el período" />
+    if (v.cantVentas === 0) {
+      return <EmptyState icon="point_of_sale" text="Sin ventas cerradas en el período. Las ventas del Salón (mesas cobradas) alimentan este reporte." />
+    }
+    const card = (title: string, node: React.ReactNode) => (
+      <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 12 }}>{title}</div>
+        {node}
+      </div>
+    )
+    // Ranking de platos por GANANCIA (ingreso − costo food cost) — el diferenciador.
+    const platosConMargen = v.platosVendidos.map(p => {
+      const costoUnit = costoPorItem[p.carta_item_id]
+      const costoTotal = costoUnit != null ? costoUnit * p.cantidad : null
+      return { ...p, costoTotal, ganancia: costoTotal != null ? p.ingreso - costoTotal : null }
+    })
+    const rankGanancia = [...platosConMargen].filter(p => p.ganancia != null).sort((a, b) => (b.ganancia ?? 0) - (a.ganancia ?? 0)).slice(0, 12)
+    const conCosto = platosConMargen.filter(p => p.ganancia != null).length
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* KPIs */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+          <KpiCard label="Total ventas" value={v.totalVentas} prev={v.totalVentasPrev} icon="payments" suffix="$" />
+          <KpiCard label="Cant. de ventas" value={v.cantVentas} prev={v.cantVentasPrev} icon="receipt_long" />
+          <KpiCard label="Promedio por venta" value={v.promedioVenta} prev={v.promedioVentaPrev} icon="calculate" suffix="$" />
+          <KpiCard label="Personas" value={v.personas} icon="groups" />
+          <KpiCard label="Prom. por persona" value={v.promedioPersona} icon="person" suffix="$" />
+        </div>
+
+        <div style={isDesktop ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' } : { display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {v.evolucionDiaria.length > 0 && card('Evolución de ventas', <BarChart items={v.evolucionDiaria.map(d => ({ label: d.label, value: d.value, subLabel: fmtMoney(d.value) }))} maxVal={Math.max(...v.evolucionDiaria.map(d => d.value))} />)}
+          {v.porDiaSemana.some(d => d.value > 0) && card('Ventas por día de la semana', <BarChart items={v.porDiaSemana.map(d => ({ label: d.label, value: d.value, subLabel: fmtMoney(d.value) }))} maxVal={Math.max(...v.porDiaSemana.map(d => d.value))} />)}
+          {v.porHora.length > 0 && card('Ventas por hora', <BarChart items={v.porHora.map(d => ({ label: d.label, value: d.value, color: '#f97316', subLabel: fmtMoney(d.value) }))} maxVal={Math.max(...v.porHora.map(d => d.value))} />)}
+          {v.medios.length > 0 && card('Medios de pago', <BarChart items={v.medios.map(m => ({ label: m.nombre, value: m.monto, color: 'var(--accent)', subLabel: `${fmtMoney(m.monto)} · ${fmtPct(m.pct)}` }))} maxVal={Math.max(...v.medios.map(m => m.monto))} />)}
+          {v.origenes.length > 0 && card('Origen de las ventas', <BarChart items={v.origenes.map(o => ({ label: o.origen, value: o.monto, subLabel: `${fmtMoney(o.monto)} · ${fmtPct(o.pct)}` }))} maxVal={Math.max(...v.origenes.map(o => o.monto))} />)}
+          {v.meseros.length > 0 && card('Ranking de meseros', (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {v.meseros.map((m, i) => (
+                <div key={m.mozo_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i < v.meseros.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)', width: 18 }}>{i + 1}</span>
+                  <span style={{ flex: 1, fontSize: 13, color: 'var(--text-1)', fontWeight: 500 }}>{m.nombre}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{m.cantidad} vta{m.cantidad !== 1 ? 's' : ''}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy)' }}>{fmtMoney(m.ventas)}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* Diferenciador KOS: ranking por GANANCIA (no solo facturación) */}
+        {rankGanancia.length > 0 && (
+          <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#16a34a' }}>trending_up</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Platos por ganancia real</span>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 12 }}>Ingreso − food cost. Lo que un POS no puede calcular porque no conoce las recetas.</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 90px 90px', padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+              <span>Plato</span>
+              <span style={{ textAlign: 'right' }}>Vend.</span>
+              <span style={{ textAlign: 'right' }}>Ingreso</span>
+              <span style={{ textAlign: 'right' }}>Ganancia</span>
+            </div>
+            {rankGanancia.map((p, i) => (
+              <div key={p.carta_item_id} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 90px 90px', padding: '9px 0', borderBottom: i < rankGanancia.length - 1 ? '1px solid var(--border)' : 'none', fontSize: 13 }}>
+                <span style={{ color: 'var(--text-1)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</span>
+                <span style={{ textAlign: 'right', color: 'var(--text-2)' }}>{p.cantidad}</span>
+                <span style={{ textAlign: 'right', color: 'var(--text-2)' }}>{fmtMoney(p.ingreso)}</span>
+                <span style={{ textAlign: 'right', fontWeight: 700, color: '#16a34a' }}>{fmtMoney(p.ganancia ?? 0)}</span>
+              </div>
+            ))}
+            {conCosto < v.platosVendidos.length && (
+              <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 8 }}>
+                {v.platosVendidos.length - conCosto} plato(s) vendidos sin food cost cargado quedan fuera de este ranking — vinculá su receta en Carta.
+              </div>
+            )}
+          </div>
+        )}
       </div>
     )
   }
@@ -1212,6 +1317,7 @@ export default function ReportesPage() {
         ) : (
           <>
             {tab === 'resumen' && renderResumen()}
+            {tab === 'ventas' && renderVentas()}
             {tab === 'cmv' && renderCMV()}
             {tab === 'presupuesto' && renderPresupuesto()}
             {tab === 'rendimiento' && renderRendimiento()}
