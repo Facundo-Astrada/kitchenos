@@ -132,7 +132,7 @@ export interface FacturaItem {
   created_at: string
 }
 
-// DB: facturas (id, restaurante_id, proveedor_nombre, proveedor_cuit, numero_factura, tipo_factura, fecha_factura, fecha_carga, condicion_pago, subtotal, iva_total, total, imagen_url, status, notas, usuario_id, created_at)
+// DB: facturas (id, restaurante_id, proveedor_nombre, proveedor_cuit, numero_factura, tipo_factura, fecha_factura, fecha_carga, condicion_pago, subtotal, iva_total, total, imagen_url, status, notas, usuario_id, created_at, categoria_gasto_id, medio_pago_id, fecha_vencimiento)
 export interface Factura {
   id: string
   restaurante_id: string
@@ -151,6 +151,22 @@ export interface Factura {
   notas?: string | null
   usuario_id?: string | null
   pedido_id?: string | null
+  categoria_gasto_id?: string | null
+  medio_pago_id?: string | null
+  fecha_vencimiento?: string | null
+  created_at: string
+}
+
+// DB: categorias_gasto (id, restaurante_id, nombre, categoria_financiera, parent_id, activa, orden, created_at)
+export type CategoriaFinanciera = 'mercaderia' | 'operacional' | 'administrativo'
+export interface CategoriaGasto {
+  id: string
+  restaurante_id: string
+  nombre: string
+  categoria_financiera: CategoriaFinanciera
+  parent_id?: string | null
+  activa: boolean
+  orden: number
   created_at: string
 }
 
