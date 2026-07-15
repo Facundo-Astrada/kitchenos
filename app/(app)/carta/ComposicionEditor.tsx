@@ -690,11 +690,14 @@ function PlatoRecetasEditor({
     }
   }
 
+  // Gramaje por plato: escribe opsCantidad + opsUnidad (default 'g'). No toca `porciones`
+  // (que sigue en 1 para el cálculo de costo por porción).
   function saveStock(u: number) {
     const val = parseFloat(editingPorcionVal.replace(',', '.'))
-    if (!isNaN(val) && val > 0) {
-      setPlatoRecetas(prev => prev.map(pr => pr._uid === u ? { ...pr, porciones: val } : pr))
-    }
+    const ok = !isNaN(val) && val > 0
+    setPlatoRecetas(prev => prev.map(pr => pr._uid === u
+      ? { ...pr, opsCantidad: ok ? val : null, opsUnidad: ok ? (pr.opsUnidad || 'g') : null }
+      : pr))
     setEditingPorcionUid(null)
   }
 
@@ -748,21 +751,31 @@ function PlatoRecetasEditor({
                     </div>
                   </div>
 
-                  {/* Stock estándar */}
+                  {/* Gramaje por plato */}
                   {editingPorcionUid === pr._uid ? (
                     <input autoFocus type="number" value={editingPorcionVal}
                       onChange={e => setEditingPorcionVal(e.target.value)}
                       onBlur={() => saveStock(pr._uid)}
                       onKeyDown={e => { if (e.key === 'Enter') saveStock(pr._uid); if (e.key === 'Escape') setEditingPorcionUid(null) }}
+                      placeholder="30"
                       style={{ width: 64, textAlign: 'center', fontSize: 13, fontWeight: 700, border: '1.5px solid var(--accent)', borderRadius: 8, padding: '4px 6px', background: 'var(--surface)', color: 'var(--navy)', outline: 'none' }}
                     />
                   ) : (
-                    <button onClick={() => { setEditingPorcionUid(pr._uid); setEditingPorcionVal(String(pr.porciones)) }}
-                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg)', padding: '4px 9px', cursor: 'pointer', minWidth: 42 }}>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', fontFamily: 'monospace', lineHeight: 1 }}>
-                        {pr.porciones % 1 === 0 ? pr.porciones : pr.porciones.toFixed(1)}
-                      </span>
-                      <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 600, lineHeight: 1 }}>stock est.</span>
+                    <button onClick={() => { setEditingPorcionUid(pr._uid); setEditingPorcionVal(pr.opsCantidad != null ? String(pr.opsCantidad) : '') }}
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, border: `1px solid ${pr.opsCantidad != null ? 'var(--border)' : 'rgba(249,115,22,.4)'}`, borderRadius: 8, background: pr.opsCantidad != null ? 'var(--bg)' : 'rgba(249,115,22,.06)', padding: '4px 9px', cursor: 'pointer', minWidth: 46 }}>
+                      {pr.opsCantidad != null ? (
+                        <>
+                          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', fontFamily: 'monospace', lineHeight: 1 }}>
+                            {pr.opsCantidad}<span style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-3)', marginLeft: 1 }}>{pr.opsUnidad ?? 'g'}</span>
+                          </span>
+                          <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 600, lineHeight: 1 }}>por plato</span>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ fontSize: 13, fontWeight: 800, color: '#f97316', lineHeight: 1 }}>+ g</span>
+                          <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 600, lineHeight: 1 }}>por plato</span>
+                        </>
+                      )}
                     </button>
                   )}
 

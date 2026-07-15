@@ -484,6 +484,20 @@ export function useCarta() {
     }
   }, [fetchItems, supabase])
 
+  // Gramaje (u otra unidad) de una receta dentro del plato → plato_recetas.cantidad_ops/unidad_ops.
+  // Es el "cuántos gramos de esta receta van al plato" que se ve en la ficha derivada del recetario.
+  const actualizarPlatoRecetaOps = useCallback(async (platoRecetaId: string, datos: { cantidad_ops: number | null; unidad_ops: string | null }) => {
+    try {
+      const { error } = await supabase.from('plato_recetas').update(datos).eq('id', platoRecetaId)
+      if (error) throw error
+      await fetchItems()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al actualizar gramaje'
+      console.error('[useCarta] actualizarPlatoRecetaOps Error:', msg)
+      throw new Error(msg)
+    }
+  }, [fetchItems, supabase])
+
   const eliminarPlatoReceta = useCallback(async (platoRecetaId: string) => {
     try {
       const { error } = await supabase.from('plato_recetas').delete().eq('id', platoRecetaId)
@@ -561,7 +575,7 @@ export function useCarta() {
     fetchItems, crearItem, actualizarItem, actualizarTags,
     toggleDisponible, eliminarItem, marcar86PorNombre,
     duplicarItem,
-    agregarPlatoReceta, actualizarPlatoReceta, eliminarPlatoReceta,
+    agregarPlatoReceta, actualizarPlatoReceta, actualizarPlatoRecetaOps, eliminarPlatoReceta,
     agregarPlatoPackaging, eliminarPlatoPackaging,
   }
 }

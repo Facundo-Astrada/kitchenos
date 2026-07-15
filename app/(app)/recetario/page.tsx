@@ -6,6 +6,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useRecetas, calcFoodCost, type RecetaConCosto } from '@/lib/hooks/useRecetas'
+import { useCarta } from '@/lib/hooks/useCarta'
 import { useStock } from '@/lib/hooks/useStock'
 import { useCategoriasProducto } from '@/lib/hooks/useCategoriasProducto'
 import { usePermisos } from '@/lib/hooks/usePermisos'
@@ -220,13 +221,13 @@ export default function RecetarioPage() {
   const [search, setSearch] = useState('')
   const [catFilter, setCatFilter] = useState('')
   const [creando, setCreando] = useState(false)
-  const [tab, setTab] = useState<'recetas' | 'ideas'>('recetas')
+  const [tab, setTab] = useState<'recetas' | 'ideas' | 'platos'>('recetas')
 
   // Allow Kitchen Coach tour to switch tabs
   useEffect(() => {
     function handleSetTab(e: Event) {
       const { tab: t } = (e as CustomEvent<{ tab: string }>).detail
-      if (t === 'recetas' || t === 'ideas') { setTab(t); setCatFilter('') }
+      if (t === 'recetas' || t === 'ideas' || t === 'platos') { setTab(t); setCatFilter('') }
     }
     window.addEventListener('kc-set-tab', handleSetTab)
     return () => window.removeEventListener('kc-set-tab', handleSetTab)
@@ -451,6 +452,18 @@ export default function RecetarioPage() {
             }}>{recetasDraft.length}</span>
           )}
         </button>
+        <button
+          onClick={() => { setTab('platos'); setCatFilter('') }}
+          style={{
+            flex: 1, padding: '10px 0', border: 'none', background: 'none', cursor: 'pointer',
+            fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
+            color: tab === 'platos' ? 'var(--text-1)' : 'var(--text-3)',
+            borderBottom: tab === 'platos' ? '2px solid #f97316' : '2px solid transparent',
+            transition: 'all .15s',
+          }}
+        >
+          Platos
+        </button>
       </div>
 
       {/* Category tabs (solo en pestaña Recetas) */}
@@ -463,6 +476,9 @@ export default function RecetarioPage() {
 
       {/* Body */}
       <div data-coach-target="recetario-lista" style={{ flex: 1, overflowY: 'auto', padding: '12px 14px 24px' }}>
+        {tab === 'platos' ? (
+          <PlatosView search={search} isDesktop={isDesktop} isAdmin={isAdmin} onOpenReceta={(rid) => router.push(`/recetario/${rid}`)} />
+        ) : (<>
         {/* Salud del recetario */}
         {tab === 'recetas' && isAdmin && !loading && salud.total > 0 && (
           <div style={{ marginBottom: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
@@ -542,6 +558,7 @@ export default function RecetarioPage() {
             ))}
           </motion.div>
         )}
+        </>)}
       </div>
 
 
@@ -579,6 +596,129 @@ export default function RecetarioPage() {
 
     </div>
     </PageTransition>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════
+// PLATOS VIEW — ficha técnica derivada: platos de la Carta con sus recetas
+// componentes y el gramaje de cada una. Lee en vivo de useCarta (sin migración).
+// ════════════════════════════════════════════════════════════════════
+const UNIDADES_OPS = ['g', 'kg', 'u', 'ml', 'l', 'pax']
+const fmtMoneyP = (n: number) => n > 0 ? `$${Math.round(n).toLocaleString('es-AR')}` : '—'
+
+function PlatosView({ search, isDesktop, isAdmin, onOpenReceta }: {
+  search: string
+  isDesktop: boolean
+  isAdmin: boolean
+  onOpenReceta: (recetaId: string) => void
+}) {
+  const { items, loading, actualizarPlatoRecetaOps } = useCarta()
+  const [editing, setEditing] = useState<{ id: string; val: string; unit: string } | null>(null)
+
+  const platos = useMemo(() => {
+    let list = items.filter(i => i.plato_recetas.length > 0)
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      list = list.filter(p =>
+        p.nombre.toLowerCase().includes(q) ||
+        p.plato_recetas.some(pr => (pr.receta?.nombre ?? '').toLowerCase().includes(q))
+      )
+    }
+    return list
+  }, [items, search])
+
+  async function guardarGramaje(prId: string, valStr: string, unit: string) {
+    const n = parseFloat(valStr.replace(',', '.'))
+    await actualizarPlatoRecetaOps(prId, { cantidad_ops: isNaN(n) || n <= 0 ? null : n, unidad_ops: isNaN(n) || n <= 0 ? null : unit })
+    setEditing(null)
+  }
+
+  if (loading) return <EmptyMsg icon="hourglass_empty" text="Cargando platos…" />
+  if (platos.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: '48px 24px', color: '#94a3b8' }}>
+        <div style={{ fontSize: 28, marginBottom: 8 }}>🍽️</div>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>{search.trim() ? 'Sin resultados' : 'Sin platos compuestos'}</div>
+        <p style={{ fontSize: 11, marginTop: 6, color: '#64748b' }}>Los platos con recetas vinculadas desde la Carta aparecen acá como ficha técnica</p>
+      </div>
+    )
+  }
+
+  return (
+    <div style={isDesktop ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, alignItems: 'start' } : { display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {platos.map(p => {
+        const totalG = p.plato_recetas.reduce((s, pr) => {
+          if (pr.cantidad_ops == null) return s
+          if (pr.unidad_ops === 'g') return s + pr.cantidad_ops
+          if (pr.unidad_ops === 'kg') return s + pr.cantidad_ops * 1000
+          return s
+        }, 0)
+        const fc = p.food_cost_pct
+        const fcColor = fc == null ? 'var(--text-3)' : fc < FC_ALERT_OK ? '#16a34a' : fc <= FC_ALERT_HIGH ? '#d97706' : '#dc2626'
+        return (
+          <div key={p.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
+            {/* Header del plato */}
+            <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#f97316', flexShrink: 0, marginTop: 1 }}>restaurant</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{p.nombre}</div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{p.categoria}</span>
+                  {isAdmin && (p.precio_venta ?? 0) > 0 && <span style={{ fontSize: 11, color: 'var(--text-2)', fontFamily: "'DM Mono', monospace" }}>{fmtMoneyP(p.precio_venta)}</span>}
+                  {isAdmin && fc != null && <span style={{ fontSize: 11, fontWeight: 800, color: fcColor, fontFamily: "'DM Mono', monospace" }}>{fc.toFixed(0)}% FC</span>}
+                </div>
+              </div>
+              {totalG > 0 && (
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', fontFamily: "'DM Mono', monospace" }}>{totalG >= 1000 ? `${(totalG / 1000).toFixed(2)} kg` : `${Math.round(totalG)} g`}</div>
+                  <div style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 600 }}>total</div>
+                </div>
+              )}
+            </div>
+            {/* Recetas componentes con gramaje */}
+            <div>
+              {p.plato_recetas.map((pr, idx) => {
+                const isEditing = editing?.id === pr.id
+                const tieneG = pr.cantidad_ops != null
+                return (
+                  <div key={pr.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderTop: idx > 0 ? '1px solid var(--border)' : 'none' }}>
+                    <button onClick={() => onOpenReceta(pr.receta_id)} title="Abrir receta"
+                      style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', padding: 0 }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--accent)', flexShrink: 0 }}>menu_book</span>
+                      <span style={{ fontSize: 13, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.receta?.nombre ?? '—'}</span>
+                    </button>
+                    {isEditing ? (
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                        <input autoFocus type="number" value={editing.val}
+                          onChange={e => setEditing({ ...editing, val: e.target.value })}
+                          onKeyDown={e => { if (e.key === 'Enter') guardarGramaje(pr.id, editing.val, editing.unit); if (e.key === 'Escape') setEditing(null) }}
+                          style={{ width: 60, textAlign: 'center', fontSize: 13, fontWeight: 700, border: '1.5px solid var(--accent)', borderRadius: 8, padding: '4px 6px', background: 'var(--bg)', color: 'var(--text-1)', outline: 'none', fontFamily: "'DM Mono', monospace" }} />
+                        <select value={editing.unit} onChange={e => setEditing({ ...editing, unit: e.target.value })}
+                          style={{ fontSize: 12, border: '1px solid var(--border)', borderRadius: 8, padding: '4px 4px', background: 'var(--bg)', color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none' }}>
+                          {UNIDADES_OPS.map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                        <button onClick={() => guardarGramaje(pr.id, editing.val, editing.unit)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#16a34a', display: 'flex' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>check</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setEditing({ id: pr.id, val: tieneG ? String(pr.cantidad_ops) : '', unit: pr.unidad_ops || 'g' })}
+                        style={{ flexShrink: 0, border: `1px solid ${tieneG ? 'var(--border)' : 'rgba(249,115,22,.4)'}`, borderRadius: 8, background: tieneG ? 'var(--bg)' : 'rgba(249,115,22,.06)', padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit', minWidth: 52 }}>
+                        {tieneG ? (
+                          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', fontFamily: "'DM Mono', monospace" }}>{pr.cantidad_ops}<span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-3)', marginLeft: 2 }}>{pr.unidad_ops ?? 'g'}</span></span>
+                        ) : (
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#f97316' }}>+ g</span>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
