@@ -9,6 +9,7 @@ import { useCarta } from '@/lib/hooks/useCarta'
 import { useComandas, type NuevoComandaItem } from '@/lib/hooks/useComandas'
 import { useCuenta, calcularResumen, type PagoInput, type ResultadoFiscal } from '@/lib/hooks/useCuenta'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
+import { useCajaTurno } from '@/lib/hooks/useCajaTurno'
 import { useOnlineStatus } from '@/lib/offline/useOnlineStatus'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
@@ -672,6 +673,7 @@ function VistaCuenta({
 }) {
   const { cobrarCuenta } = useCuenta()
   const { medios } = useMediosPago()
+  const { cajaAbierta } = useCajaTurno()
 
   const resumen = useMemo(() => calcularResumen(comandas), [comandas])
 
@@ -752,7 +754,7 @@ function VistaCuenta({
         medio_id: l.medio_id,
         monto: Number(l.monto) || 0,
       }))
-      const { fiscal } = await cobrarCuenta({ cuentaId, mesaId: mesa.id, pagos, propina: propinaMonto, total: resumen.subtotal })
+      const { fiscal } = await cobrarCuenta({ cuentaId, mesaId: mesa.id, pagos, propina: propinaMonto, total: resumen.subtotal, cajaTurnoId: cajaAbierta?.id ?? null })
       setResultadoCobro({
         pagos: lineasPago.map(l => ({ nombre: mediosMap[l.medio_id] ?? 'Pago', monto: Number(l.monto) || 0 })),
         vuelto,

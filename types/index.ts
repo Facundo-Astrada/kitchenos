@@ -997,7 +997,7 @@ export interface SalonElemento {
 // ── Salón — Cuentas ──────────────────────────────────────────
 export type EstadoCuenta = 'abierta' | 'cerrada'
 
-// DB: cuentas (id, restaurante_id, mesa_id, estado, total, mozo_id, abierta_at, cerrada_at, created_at)
+// DB: cuentas (id, restaurante_id, mesa_id, estado, total, mozo_id, abierta_at, cerrada_at, created_at, cantidad_personas, cliente_nombre, facturado, caja_turno_id)
 export interface Cuenta {
   id: string
   restaurante_id: string
@@ -1008,6 +1008,10 @@ export interface Cuenta {
   abierta_at: string
   cerrada_at?: string | null
   created_at: string
+  cantidad_personas?: number | null
+  cliente_nombre?: string | null
+  facturado: boolean
+  caja_turno_id?: string | null
 }
 
 // ── Cobro ────────────────────────────────────────────────────

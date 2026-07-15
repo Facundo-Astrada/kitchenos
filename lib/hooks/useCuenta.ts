@@ -71,8 +71,10 @@ export function useCuenta() {
     pagos: PagoInput[]
     propina: number
     total: number    // subtotal (sin propina)
+    cajaTurnoId?: string | null
+    cantidadPersonas?: number | null
   }): Promise<{ fiscal?: ResultadoFiscal }> {
-    const { cuentaId, mesaId, pagos, propina, total } = params
+    const { cuentaId, mesaId, pagos, propina, total, cajaTurnoId, cantidadPersonas } = params
     try {
       // 1. Registrar pagos
       if (pagos.length > 0) {
@@ -91,7 +93,11 @@ export function useCuenta() {
       const totalConPropina = total + propina
       const { error: cuentaError } = await supabase
         .from('cuentas')
-        .update({ estado: 'cerrada', total: totalConPropina, cerrada_at: new Date().toISOString() })
+        .update({
+          estado: 'cerrada', total: totalConPropina, cerrada_at: new Date().toISOString(),
+          caja_turno_id: cajaTurnoId ?? null,
+          ...(cantidadPersonas != null ? { cantidad_personas: cantidadPersonas } : {}),
+        })
         .eq('id', cuentaId)
       if (cuentaError) throw cuentaError
 
@@ -129,6 +135,12 @@ export function useCuenta() {
       } catch (fe: unknown) {
         const msg = fe instanceof Error ? fe.message : 'Error fiscal'
         fiscal = { estado: 'pendiente', error: msg }
+      }
+
+      // 6. "Facturado" (pestaña Ventas) refleja la emisión fiscal real, no un
+      // flag manual — si no hay fiscal configurado queda 'pendiente' → false.
+      if (fiscal?.estado === 'emitido') {
+        await supabase.from('cuentas').update({ facturado: true }).eq('id', cuentaId)
       }
 
       return { fiscal }

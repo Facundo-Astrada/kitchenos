@@ -4,7 +4,10 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { useVentas, type NuevaVenta } from '@/lib/hooks/useVentas'
 import { useCarta } from '@/lib/hooks/useCarta'
-import type { Venta, VentaItem, OrigenVenta } from '@/types'
+import { useVentasCerradas, type VentaCerrada, type AdicionItem } from '@/lib/hooks/useVentasCerradas'
+import { useCajaTurno } from '@/lib/hooks/useCajaTurno'
+import { useMediosPago } from '@/lib/hooks/useMediosPago'
+import type { Venta, VentaItem, OrigenVenta, CajaTurno, CajaMovimiento } from '@/types'
 import { SegmentedTabs, FilterChips, EmptyState, Num } from '@/components/ui'
 import type { SegmentedTab, FilterChip } from '@/components/ui'
 
@@ -40,6 +43,13 @@ function fmtPrecio(n: number | null | undefined): string {
   return '$' + n.toLocaleString('es-AR', { maximumFractionDigits: 0 })
 }
 
+function fmtHora(iso: string): string {
+  return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+}
+function fmtFechaHora(iso: string): string {
+  return new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
 function fmtFecha(fecha: string): string {
   const hoy = fmtDate(new Date())
   const ayer = new Date()
@@ -63,7 +73,11 @@ const PERIODOS: FilterChip<Periodo>[] = [
   { value: 'todo', label: 'Todo' },
 ]
 
-const VENTAS_TABS: SegmentedTab<'resumen' | 'platos' | 'importar'>[] = [
+type VentasMainTab = 'ventas' | 'movimientos' | 'arqueos' | 'resumen' | 'platos' | 'importar'
+const VENTAS_TABS: SegmentedTab<VentasMainTab>[] = [
+  { id: 'ventas', label: 'Ventas' },
+  { id: 'movimientos', label: 'Movimientos de caja' },
+  { id: 'arqueos', label: 'Arqueos de Caja' },
   { id: 'resumen', label: 'Resumen' },
   { id: 'platos', label: 'Platos' },
   { id: 'importar', label: 'Importar' },
@@ -337,7 +351,7 @@ function parseSheetData(workbook: XLSX.WorkBook, sheetName: string, fileName: st
 export default function VentasPage() {
   const { ventas, loading, error, agregarVenta, eliminarVenta, fetchVentas } = useVentas()
   const { items: cartaItems } = useCarta()
-  const [tab, setTab] = useState<'resumen' | 'platos' | 'importar'>('resumen')
+  const [tab, setTab] = useState<VentasMainTab>('ventas')
   const [periodo, setPeriodo] = useState<Periodo>('mes')
   const [ventaDetalle, setVentaDetalle] = useState<Venta | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -626,6 +640,15 @@ export default function VentasPage() {
       <div style={{ background: 'var(--navy)', padding: '0 16px 12px' }}>
         <SegmentedTabs tabs={VENTAS_TABS} active={tab} onChange={setTab} />
       </div>
+
+      {/* ── TAB VENTAS (transaccional) ──────────────────── */}
+      {tab === 'ventas' && <VentasTransaccionalTab />}
+
+      {/* ── TAB MOVIMIENTOS DE CAJA ──────────────────────── */}
+      {tab === 'movimientos' && <MovimientosCajaTab />}
+
+      {/* ── TAB ARQUEOS DE CAJA ──────────────────────────── */}
+      {tab === 'arqueos' && <ArqueosCajaTab />}
 
       {/* ── TAB RESUMEN ─────────────────────────────────── */}
       {tab === 'resumen' && (
@@ -1529,6 +1552,521 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <div>
       <p className="text-[12px] font-semibold mb-1" style={{ color: 'var(--text-2)' }}>{label}</p>
       {children}
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════
+// Helpers compartidos por las 3 pestañas nuevas (Ventas / Movimientos / Arqueos)
+// ════════════════════════════════════════════════════════════════════
+const MESES_CAJA = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+
+function mesAnioRango(mes: number, anio: number): { desde: string; hasta: string } {
+  const desde = `${anio}-${String(mes).padStart(2, '0')}-01T00:00:00`
+  const hastaDate = new Date(anio, mes, 0)
+  const hasta = `${hastaDate.toISOString().slice(0, 10)}T23:59:59`
+  return { desde, hasta }
+}
+
+const selStyleCaja: React.CSSProperties = { padding: '7px 9px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 12, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none' }
+
+function MesAnioSelector({ mes, setMes, anio, setAnio }: { mes: number; setMes: (n: number) => void; anio: number; setAnio: (n: number) => void }) {
+  return (
+    <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+      <select value={mes} onChange={e => setMes(Number(e.target.value))} style={selStyleCaja}>
+        {MESES_CAJA.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+      </select>
+      <select value={anio} onChange={e => setAnio(Number(e.target.value))} style={selStyleCaja}>
+        {[anio - 1, anio, anio + 1].map(a => <option key={a} value={a}>{a}</option>)}
+      </select>
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════
+// VENTAS (transaccional) — log de cuentas cerradas por mesa/mozo. El
+// equivalente real a la pestaña "Ventas" de Fudo (no confundir con la tab
+// "Resumen", que es el importador de totales diarios). Lee de `cuentas`.
+// ════════════════════════════════════════════════════════════════════
+const ORIGEN_LABEL_VENTA: Record<string, string> = { salon: 'Mesas', mostrador: 'Mostrador', delivery: 'Delivery', marca: 'Marca' }
+
+function VentasTransaccionalTab() {
+  const { fetchPeriodo, fetchAdiciones, actualizarCuenta } = useVentasCerradas()
+  const now = new Date()
+  const [mes, setMes] = useState(now.getMonth() + 1)
+  const [anio, setAnio] = useState(now.getFullYear())
+  const [ventas, setVentas] = useState<VentaCerrada[]>([])
+  const [loading, setLoading] = useState(true)
+  const [estadoFiltro, setEstadoFiltro] = useState('')
+  const [origenFiltro, setOrigenFiltro] = useState('')
+  const [facturadoFiltro, setFacturadoFiltro] = useState('')
+  const [medioFiltro, setMedioFiltro] = useState('')
+  const [search, setSearch] = useState('')
+  const [seleccion, setSeleccion] = useState<VentaCerrada | null>(null)
+  const [adiciones, setAdiciones] = useState<AdicionItem[]>([])
+  const [adicionesLoading, setAdicionesLoading] = useState(false)
+  const [editando, setEditando] = useState(false)
+  const [editPersonas, setEditPersonas] = useState('')
+  const [editCliente, setEditCliente] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+
+  useEffect(() => {
+    let cancel = false
+    setLoading(true)
+    const { desde, hasta } = mesAnioRango(mes, anio)
+    fetchPeriodo(desde, hasta).then(rows => { if (!cancel) { setVentas(rows); setLoading(false) } })
+    return () => { cancel = true }
+  }, [mes, anio, fetchPeriodo])
+
+  const filtered = useMemo(() => {
+    let list = ventas
+    if (estadoFiltro) list = list.filter(v => v.estado === estadoFiltro)
+    if (origenFiltro) list = list.filter(v => v.origen === origenFiltro)
+    if (facturadoFiltro) list = list.filter(v => (facturadoFiltro === 'si') === v.facturado)
+    if (medioFiltro) list = list.filter(v => v.medios.some(m => m.nombre === medioFiltro))
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      list = list.filter(v =>
+        (v.mozo_nombre ?? '').toLowerCase().includes(q) ||
+        (v.cliente_nombre ?? '').toLowerCase().includes(q) ||
+        (v.mesa_numero ?? '').toLowerCase().includes(q)
+      )
+    }
+    return list
+  }, [ventas, estadoFiltro, origenFiltro, facturadoFiltro, medioFiltro, search])
+
+  const mediosDisponibles = useMemo(() => Array.from(new Set(ventas.flatMap(v => v.medios.map(m => m.nombre)))), [ventas])
+
+  const kpis = useMemo(() => {
+    const n = filtered.length
+    const total = filtered.reduce((s, v) => s + v.total, 0)
+    const personas = filtered.reduce((s, v) => s + (v.cantidad_personas ?? 0), 0)
+    return { n, promedioVenta: n > 0 ? total / n : 0, personas, promedioPersona: personas > 0 ? total / personas : 0, total }
+  }, [filtered])
+
+  function abrirDetalle(v: VentaCerrada) {
+    setSeleccion(v); setEditando(false)
+    setAdicionesLoading(true)
+    fetchAdiciones(v.id).then(a => setAdiciones(a)).finally(() => setAdicionesLoading(false))
+  }
+
+  function startEdit() {
+    if (!seleccion) return
+    setEditPersonas(seleccion.cantidad_personas != null ? String(seleccion.cantidad_personas) : '')
+    setEditCliente(seleccion.cliente_nombre ?? '')
+    setEditando(true)
+  }
+
+  async function guardarEdit() {
+    if (!seleccion) return
+    setSavingEdit(true)
+    try {
+      const personas = editPersonas.trim() ? parseInt(editPersonas, 10) : null
+      const cliente = editCliente.trim() || null
+      await actualizarCuenta(seleccion.id, { cantidad_personas: personas, cliente_nombre: cliente })
+      const actualizada = { ...seleccion, cantidad_personas: personas, cliente_nombre: cliente }
+      setSeleccion(actualizada)
+      setVentas(prev => prev.map(v => v.id === actualizada.id ? actualizada : v))
+      setEditando(false)
+    } finally { setSavingEdit(false) }
+  }
+
+  async function toggleFacturado() {
+    if (!seleccion) return
+    const nuevo = !seleccion.facturado
+    await actualizarCuenta(seleccion.id, { facturado: nuevo })
+    const actualizada = { ...seleccion, facturado: nuevo }
+    setSeleccion(actualizada)
+    setVentas(prev => prev.map(v => v.id === actualizada.id ? actualizada : v))
+  }
+
+  if (seleccion) {
+    const rows: [string, string][] = [
+      ['Hora inicio', fmtFechaHora(seleccion.abierta_at)],
+      ['Hora de cierre', seleccion.cerrada_at ? fmtFechaHora(seleccion.cerrada_at) : '—'],
+      ['Tipo', ORIGEN_LABEL_VENTA[seleccion.origen ?? ''] ?? '—'],
+      ['Estado', seleccion.estado === 'cerrada' ? 'Cerrada' : 'Abierta'],
+      ['Caja', seleccion.caja_estado ? (seleccion.caja_estado === 'abierta' ? 'Turno abierto' : 'Turno cerrado') : 'Sin turno vinculado'],
+      ['Mesa', seleccion.mesa_numero ?? '—'],
+      ['Mozo', seleccion.mozo_nombre ?? '—'],
+    ]
+    return (
+      <div className="px-4 pb-8">
+        <button onClick={() => setSeleccion(null)} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: 13, fontWeight: 600, padding: '12px 0', fontFamily: 'inherit' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>Volver
+        </button>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 16, marginBottom: 12 }}>
+          <div className="flex items-center justify-between mb-3">
+            <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-1)' }}>{fmtPrecio(seleccion.total)}</span>
+            <button onClick={toggleFacturado} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, background: seleccion.facturado ? 'rgba(67,97,160,.12)' : 'rgba(100,116,139,.12)', color: seleccion.facturado ? '#4361a0' : '#64748b' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>receipt</span>
+              {seleccion.facturado ? 'Facturado' : 'No facturado'}
+            </button>
+          </div>
+          {rows.map(([label, val]) => (
+            <div key={label} className="flex justify-between py-1" style={{ fontSize: 13, borderTop: '1px solid var(--border)' }}>
+              <span style={{ color: 'var(--text-3)' }}>{label}</span>
+              <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{val}</span>
+            </div>
+          ))}
+
+          {/* Personas / Cliente — editable */}
+          {editando ? (
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+              <div className="flex gap-2 mb-2">
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', marginBottom: 3 }}>PERSONAS</div>
+                  <input type="number" value={editPersonas} onChange={e => setEditPersonas(e.target.value)} placeholder="—"
+                    style={{ width: '100%', padding: '7px 9px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+                <div style={{ flex: 2 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', marginBottom: 3 }}>CLIENTE</div>
+                  <input value={editCliente} onChange={e => setEditCliente(e.target.value)} placeholder="Nombre del cliente"
+                    style={{ width: '100%', padding: '7px 9px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setEditando(false)} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-2)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancelar</button>
+                <button onClick={guardarEdit} disabled={savingEdit} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: '#16a34a', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: savingEdit ? .6 : 1 }}>{savingEdit ? '…' : 'Guardar'}</button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-between items-center py-1" style={{ fontSize: 13, borderTop: '1px solid var(--border)', marginTop: 4 }}>
+              <span style={{ color: 'var(--text-3)' }}>Personas · Cliente</span>
+              <button onClick={startEdit} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>
+                {seleccion.cantidad_personas ?? '—'} pers. · {seleccion.cliente_nombre ?? 'sin cliente'}
+                <span className="material-symbols-outlined" style={{ fontSize: 15 }}>edit</span>
+              </button>
+            </div>
+          )}
+
+          {/* Medios de pago */}
+          {seleccion.medios.length > 0 && (
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', marginBottom: 6 }}>MEDIOS DE PAGO</div>
+              {seleccion.medios.map((m, i) => (
+                <div key={i} className="flex justify-between" style={{ fontSize: 12, marginBottom: 3 }}>
+                  <span style={{ color: 'var(--text-2)' }}>{m.nombre}</span>
+                  <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{fmtPrecio(m.monto)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Adiciones */}
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Adiciones</div>
+        {adicionesLoading ? (
+          <div className="py-6 text-center text-[13px]" style={{ color: 'var(--text-3)' }}>Cargando…</div>
+        ) : adiciones.length === 0 ? (
+          <div className="py-6 text-center text-[13px]" style={{ color: 'var(--text-3)' }}>Sin ítems registrados</div>
+        ) : (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+            {adiciones.map((a, i) => (
+              <div key={i} className="flex justify-between items-center" style={{ padding: '10px 12px', borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}>
+                <div>
+                  <div style={{ fontSize: 13, color: 'var(--text-1)', fontWeight: 600 }}>{a.nombre}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{a.cantidad} × {fmtPrecio(a.precio_unitario)}</div>
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy)' }}>{fmtPrecio(a.subtotal)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="px-4 pb-4">
+      <div className="pt-4 pb-3"><MesAnioSelector mes={mes} setMes={setMes} anio={anio} setAnio={setAnio} /></div>
+
+      <div className="flex gap-2 mb-3" style={{ flexWrap: 'wrap' }}>
+        <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={selStyleCaja}>
+          <option value="">Estado: todos</option>
+          <option value="abierta">Abierta</option>
+          <option value="cerrada">Cerrada</option>
+        </select>
+        <select value={origenFiltro} onChange={e => setOrigenFiltro(e.target.value)} style={selStyleCaja}>
+          <option value="">Tipo: todos</option>
+          {Object.entries(ORIGEN_LABEL_VENTA).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+        </select>
+        <select value={facturadoFiltro} onChange={e => setFacturadoFiltro(e.target.value)} style={selStyleCaja}>
+          <option value="">Facturación: todas</option>
+          <option value="si">Facturado</option>
+          <option value="no">No facturado</option>
+        </select>
+        {mediosDisponibles.length > 0 && (
+          <select value={medioFiltro} onChange={e => setMedioFiltro(e.target.value)} style={selStyleCaja}>
+            <option value="">Medio: todos</option>
+            {mediosDisponibles.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        )}
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar mozo, cliente o mesa…"
+          style={{ ...selStyleCaja, flex: 1, minWidth: 160 }} />
+      </div>
+
+      <div className="flex gap-3 pb-4 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+        <StatCard icon="receipt_long" label="Ventas" value={String(kpis.n)} color="var(--accent)" />
+        <StatCard icon="calculate" label="Prom. por venta" value={fmtPrecio(kpis.promedioVenta)} color="#0ea5e9" />
+        <StatCard icon="groups" label="Personas" value={String(kpis.personas || '—')} color="#10b981" />
+        <StatCard icon="person" label="Prom. por persona" value={fmtPrecio(kpis.promedioPersona)} color="#f97316" />
+        <StatCard icon="payments" label="Total" value={fmtPrecio(kpis.total)} color="var(--navy)" />
+      </div>
+
+      {loading ? (
+        <div className="py-10 text-center text-[13px]" style={{ color: 'var(--text-3)' }}>Cargando…</div>
+      ) : filtered.length === 0 ? (
+        <EmptyState icon="receipt_long" title="Sin ventas" subtitle="No hay ventas cerradas en este período con estos filtros" />
+      ) : (
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+          {filtered.map((v, i) => (
+            <button key={v.id} onClick={() => abrirDetalle(v)}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '11px 12px', border: 'none', borderTop: i > 0 ? '1px solid var(--border)' : 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="flex items-center gap-1.5">
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
+                    {v.mesa_numero ? `Mesa ${v.mesa_numero}` : (ORIGEN_LABEL_VENTA[v.origen ?? ''] ?? 'Venta')}
+                  </span>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: v.estado === 'cerrada' ? 'rgba(16,185,129,.12)' : 'rgba(245,158,11,.12)', color: v.estado === 'cerrada' ? '#059669' : '#d97706' }}>
+                    {v.estado === 'cerrada' ? 'Cerrada' : 'Abierta'}
+                  </span>
+                  {v.facturado && <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#4361a0' }} title="Facturado">receipt</span>}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+                  {v.mozo_nombre ?? '—'} · {fmtHora(v.abierta_at)}{v.cerrada_at ? ' – ' + fmtHora(v.cerrada_at) : ''}
+                </div>
+              </div>
+              <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--navy)', fontFamily: "'DM Mono', monospace" }}>{fmtPrecio(v.total)}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════
+// MOVIMIENTOS DE CAJA — ingresos/egresos manuales, historial filtrable
+// (hasta ahora solo se veían en vivo dentro del turno abierto en Salón).
+// ════════════════════════════════════════════════════════════════════
+type MovimientoConMedio = CajaMovimiento & { medio_nombre: string | null; caja_estado: 'abierta' | 'cerrada' | null }
+
+function MovimientosCajaTab() {
+  const { fetchMovimientosPeriodo } = useCajaTurno()
+  const now = new Date()
+  const [mes, setMes] = useState(now.getMonth() + 1)
+  const [anio, setAnio] = useState(now.getFullYear())
+  const [movimientos, setMovimientos] = useState<MovimientoConMedio[]>([])
+  const [loading, setLoading] = useState(true)
+  const [tipoFiltro, setTipoFiltro] = useState('')
+
+  useEffect(() => {
+    let cancel = false
+    setLoading(true)
+    const { desde, hasta } = mesAnioRango(mes, anio)
+    fetchMovimientosPeriodo(desde, hasta).then(rows => { if (!cancel) { setMovimientos(rows); setLoading(false) } })
+    return () => { cancel = true }
+  }, [mes, anio, fetchMovimientosPeriodo])
+
+  const filtered = useMemo(() => tipoFiltro ? movimientos.filter(m => m.tipo === tipoFiltro) : movimientos, [movimientos, tipoFiltro])
+
+  const balance = useMemo(() => filtered.reduce((s, m) => s + (m.tipo === 'ingreso' ? m.monto : -m.monto), 0), [filtered])
+
+  return (
+    <div className="px-4 pb-4">
+      <div className="pt-4 pb-3"><MesAnioSelector mes={mes} setMes={setMes} anio={anio} setAnio={setAnio} /></div>
+
+      <div className="flex gap-2 mb-3" style={{ flexWrap: 'wrap' }}>
+        <select value={tipoFiltro} onChange={e => setTipoFiltro(e.target.value)} style={selStyleCaja}>
+          <option value="">Tipo: todos</option>
+          <option value="ingreso">Ingreso</option>
+          <option value="retiro">Retiro</option>
+        </select>
+      </div>
+
+      <div className="flex gap-3 pb-4">
+        <StatCard icon="account_balance" label="Balance" value={fmtPrecio(balance)} color={balance >= 0 ? '#16a34a' : '#dc2626'} />
+        <StatCard icon="receipt_long" label="Registros" value={String(filtered.length)} color="var(--accent)" />
+      </div>
+
+      {loading ? (
+        <div className="py-10 text-center text-[13px]" style={{ color: 'var(--text-3)' }}>Cargando…</div>
+      ) : filtered.length === 0 ? (
+        <EmptyState icon="account_balance" title="Sin movimientos" subtitle="No hay ingresos ni retiros manuales en este período" />
+      ) : (
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+          {filtered.map((m, i) => (
+            <div key={m.id} className="flex items-center gap-3" style={{ padding: '11px 12px', borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18, color: m.tipo === 'ingreso' ? '#16a34a' : '#dc2626' }}>
+                {m.tipo === 'ingreso' ? 'arrow_downward' : 'arrow_upward'}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{m.motivo || (m.tipo === 'ingreso' ? 'Ingreso' : 'Retiro')}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                  {fmtFechaHora(m.created_at)}{m.medio_nombre ? ' · ' + m.medio_nombre : ''}{m.caja_estado === 'abierta' ? ' · turno abierto' : ''}
+                </div>
+              </div>
+              <span style={{ fontSize: 14, fontWeight: 800, color: m.tipo === 'ingreso' ? '#16a34a' : '#dc2626', fontFamily: "'DM Mono', monospace" }}>
+                {m.tipo === 'ingreso' ? '+' : '−'}{fmtPrecio(m.monto)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════
+// ARQUEOS DE CAJA — historial de aperturas/cierres de turno, con KPIs.
+// KOS soporta UN turno abierto por restaurante a la vez (a diferencia de
+// Fudo, que permite varias cajas con nombre simultáneas) — el KPI "Saldo
+// actual" refleja eso: lo que hay en el turno abierto ahora mismo, si hay uno.
+// ════════════════════════════════════════════════════════════════════
+function ArqueosCajaTab() {
+  const { fetchTodasCajas, cajaAbierta, calcularEsperado } = useCajaTurno()
+  const { medios } = useMediosPago()
+  const now = new Date()
+  const [mes, setMes] = useState(now.getMonth() + 1)
+  const [anio, setAnio] = useState(now.getFullYear())
+  const [cajas, setCajas] = useState<CajaTurno[]>([])
+  const [loading, setLoading] = useState(true)
+  const [estadoFiltro, setEstadoFiltro] = useState('')
+  const [seleccion, setSeleccion] = useState<CajaTurno | null>(null)
+  const [saldoActual, setSaldoActual] = useState<number | null>(null)
+
+  useEffect(() => {
+    let cancel = false
+    setLoading(true)
+    const { desde, hasta } = mesAnioRango(mes, anio)
+    fetchTodasCajas(desde, hasta).then(rows => { if (!cancel) { setCajas(rows); setLoading(false) } })
+    return () => { cancel = true }
+  }, [mes, anio, fetchTodasCajas])
+
+  useEffect(() => {
+    let cancel = false
+    if (!cajaAbierta) { setSaldoActual(null); return }
+    calcularEsperado(cajaAbierta).then(esperado => {
+      if (cancel) return
+      const totalEsperado = Object.values(esperado).reduce((s, v) => s + v, 0)
+      setSaldoActual(cajaAbierta.monto_inicial + totalEsperado)
+    })
+    return () => { cancel = true }
+  }, [cajaAbierta, calcularEsperado])
+
+  const filtered = useMemo(() => estadoFiltro ? cajas.filter(c => c.estado === estadoFiltro) : cajas, [cajas, estadoFiltro])
+
+  const kpis = useMemo(() => {
+    let ingresos = 0, egresos = 0, totalVentas = 0
+    for (const c of filtered) {
+      const decl = c.montos_declarados
+      if (decl) totalVentas += Object.values(decl).reduce((s, v) => s + v, 0)
+    }
+    return { cajas: filtered.length, ingresos, egresos, totalVentas }
+  }, [filtered])
+
+  const medioNombre = (id: string) => medios.find(m => m.id === id)?.nombre ?? id
+
+  if (seleccion) {
+    const esp = seleccion.montos_esperados ?? {}
+    const decl = seleccion.montos_declarados ?? {}
+    const medioIds = Array.from(new Set([...Object.keys(esp), ...Object.keys(decl)]))
+    return (
+      <div className="px-4 pb-8">
+        <button onClick={() => setSeleccion(null)} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: 13, fontWeight: 600, padding: '12px 0', fontFamily: 'inherit' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>Volver
+        </button>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 16, marginBottom: 12 }}>
+          {[
+            ['Apertura', fmtFechaHora(seleccion.fecha_apertura)],
+            ['Cierre', seleccion.fecha_cierre ? fmtFechaHora(seleccion.fecha_cierre) : '—'],
+            ['Estado', seleccion.estado === 'abierta' ? 'Abierta' : 'Cerrada'],
+            ['Abierta por', seleccion.abierta_por ?? '—'],
+            ['Cerrada por', seleccion.cerrada_por ?? '—'],
+            ['Monto inicial', fmtPrecio(seleccion.monto_inicial)],
+            ['Diferencia total', seleccion.diferencia_total != null ? fmtPrecio(seleccion.diferencia_total) : '—'],
+            ['Arqueo ciego', seleccion.arqueo_ciego ? 'Sí' : 'No'],
+          ].map(([label, val]) => (
+            <div key={label} className="flex justify-between py-1" style={{ fontSize: 13, borderTop: '1px solid var(--border)' }}>
+              <span style={{ color: 'var(--text-3)' }}>{label}</span>
+              <span style={{ color: 'var(--text-1)', fontWeight: 600 }}>{val}</span>
+            </div>
+          ))}
+          {seleccion.notas && (
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', marginBottom: 3 }}>NOTAS</div>
+              <div style={{ fontSize: 12, color: 'var(--text-1)' }}>{seleccion.notas}</div>
+            </div>
+          )}
+        </div>
+        {medioIds.length > 0 && (
+          <>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Por medio de pago</div>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+              {medioIds.map((id, i) => {
+                const e = esp[id] ?? 0, d = decl[id] ?? 0, diff = d - e
+                return (
+                  <div key={id} style={{ padding: '10px 12px', borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>{medioNombre(id)}</div>
+                    <div className="flex justify-between" style={{ fontSize: 12, color: 'var(--text-2)' }}>
+                      <span>Sistema: {fmtPrecio(e)}</span>
+                      <span>Usuario: {fmtPrecio(d)}</span>
+                      <span style={{ fontWeight: 700, color: diff === 0 ? 'var(--text-3)' : diff > 0 ? '#16a34a' : '#dc2626' }}>{diff === 0 ? '$0' : (diff > 0 ? '+' : '') + fmtPrecio(diff)}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="px-4 pb-4">
+      <div className="pt-4 pb-3"><MesAnioSelector mes={mes} setMes={setMes} anio={anio} setAnio={setAnio} /></div>
+
+      <div className="flex gap-2 mb-3" style={{ flexWrap: 'wrap' }}>
+        <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={selStyleCaja}>
+          <option value="">Estado: todos</option>
+          <option value="abierta">Abierta</option>
+          <option value="cerrada">Cerrada</option>
+        </select>
+      </div>
+
+      <div className="flex gap-3 pb-4 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+        <StatCard icon="point_of_sale" label="Turnos" value={String(kpis.cajas)} color="var(--accent)" />
+        <StatCard icon="savings" label="Saldo actual" value={saldoActual != null ? fmtPrecio(saldoActual) : '—'} color="#16a34a" />
+        <StatCard icon="payments" label="Declarado (cerrados)" value={fmtPrecio(kpis.totalVentas)} color="var(--navy)" />
+      </div>
+
+      {loading ? (
+        <div className="py-10 text-center text-[13px]" style={{ color: 'var(--text-3)' }}>Cargando…</div>
+      ) : filtered.length === 0 ? (
+        <EmptyState icon="point_of_sale" title="Sin arqueos" subtitle="No hay turnos de caja en este período" />
+      ) : (
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+          {filtered.map((c, i) => (
+            <button key={c.id} onClick={() => setSeleccion(c)}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '11px 12px', border: 'none', borderTop: i > 0 ? '1px solid var(--border)' : 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18, color: c.estado === 'abierta' ? '#d97706' : 'var(--text-3)' }}>point_of_sale</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{fmtFechaHora(c.fecha_apertura)}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{c.estado === 'abierta' ? 'Abierta' : `Cerrada · ${c.fecha_cierre ? fmtFechaHora(c.fecha_cierre) : ''}`}</div>
+              </div>
+              {c.diferencia_total != null ? (
+                <span style={{ fontSize: 13, fontWeight: 800, color: c.diferencia_total === 0 ? 'var(--text-3)' : c.diferencia_total > 0 ? '#16a34a' : '#dc2626', fontFamily: "'DM Mono', monospace" }}>
+                  {c.diferencia_total === 0 ? '$0' : (c.diferencia_total > 0 ? '+' : '') + fmtPrecio(c.diferencia_total)}
+                </span>
+              ) : (
+                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>—</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

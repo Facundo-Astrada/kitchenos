@@ -158,11 +158,43 @@ export function useCajaTurno() {
     return (data ?? []) as CajaTurno[]
   }, [RESTAURANTE_ID, supabase])
 
+  // Todos los turnos (abiertos y cerrados) en un rango — para la pestaña "Arqueos
+  // de Caja" (Fudo muestra ambos estados, no solo los cerrados). Ordena por
+  // fecha_apertura porque los abiertos no tienen fecha_cierre.
+  const fetchTodasCajas = useCallback(async (desde: string, hasta: string, estado?: 'abierta' | 'cerrada'): Promise<CajaTurno[]> => {
+    if (!RESTAURANTE_ID) return []
+    let query = supabase.from('cajas_turnos').select('*')
+      .eq('restaurante_id', RESTAURANTE_ID)
+      .gte('fecha_apertura', desde).lte('fecha_apertura', hasta)
+      .order('fecha_apertura', { ascending: false })
+    if (estado) query = query.eq('estado', estado)
+    const { data, error } = await query
+    if (error) throw new Error(errMsg(error, 'Error al cargar los arqueos'))
+    return (data ?? []) as CajaTurno[]
+  }, [RESTAURANTE_ID, supabase])
+
+  // Movimientos manuales (ingreso/retiro) en un rango, de cualquier turno —
+  // pestaña "Movimientos de caja". caja_movimientos no tiene restaurante_id
+  // propio (hija de cajas_turnos) → filtra vía embed !inner.
+  const fetchMovimientosPeriodo = useCallback(async (desde: string, hasta: string): Promise<(CajaMovimiento & { medio_nombre: string | null; caja_estado: 'abierta' | 'cerrada' | null })[]> => {
+    if (!RESTAURANTE_ID) return []
+    const { data, error } = await supabase
+      .from('caja_movimientos')
+      .select('*, medio:medios_pago(nombre), cajas_turnos!inner(restaurante_id, estado)')
+      .eq('cajas_turnos.restaurante_id', RESTAURANTE_ID)
+      .gte('created_at', desde).lte('created_at', hasta)
+      .order('created_at', { ascending: false })
+      .limit(1000)
+    if (error) throw new Error(errMsg(error, 'Error al cargar movimientos'))
+    return ((data ?? []) as unknown as (CajaMovimiento & { medio: { nombre: string } | null; cajas_turnos: { estado: 'abierta' | 'cerrada' } })[])
+      .map(m => ({ ...m, medio_nombre: m.medio?.nombre ?? null, caja_estado: m.cajas_turnos?.estado ?? null }))
+  }, [RESTAURANTE_ID, supabase])
+
   return {
     cajaAbierta, loading,
     abrirCaja, cerrarCaja,
-    registrarMovimiento, fetchMovimientos,
-    calcularEsperado, fetchHistorial,
+    registrarMovimiento, fetchMovimientos, fetchMovimientosPeriodo,
+    calcularEsperado, fetchHistorial, fetchTodasCajas,
     refetch: mutate,
   }
 }
