@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useMesas } from '@/lib/hooks/useMesas'
 import { useSalonElementos } from '@/lib/hooks/useSalonElementos'
@@ -10,6 +10,8 @@ import { useComandas, type NuevoComandaItem } from '@/lib/hooks/useComandas'
 import { useCuenta, calcularResumen, type PagoInput, type ResultadoFiscal } from '@/lib/hooks/useCuenta'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
 import { useCajaTurno } from '@/lib/hooks/useCajaTurno'
+import { useClientes } from '@/lib/hooks/useClientes'
+import { useCuentaCorriente } from '@/lib/hooks/useCuentaCorriente'
 import { useOnlineStatus } from '@/lib/offline/useOnlineStatus'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
@@ -674,6 +676,15 @@ function VistaCuenta({
   const { cobrarCuenta } = useCuenta()
   const { medios } = useMediosPago()
   const { cajaAbierta } = useCajaTurno()
+  const { clientes, crearCliente } = useClientes()
+  const { registrarMovimiento } = useCuentaCorriente()
+
+  // "Cuenta corriente" es un medio de pago más (fila en medios_pago) — cuando
+  // se usa, además del pago normal se registra un cargo en cuenta_corriente_movimientos.
+  // Requiere elegir/crear un cliente para saber a quién cargarle el fiado.
+  const [clienteId, setClienteId] = useState<string | null>(null)
+  const [clienteSearch, setClienteSearch] = useState('')
+  const [clienteBusy, setClienteBusy] = useState(false)
 
   const resumen = useMemo(() => calcularResumen(comandas), [comandas])
 
@@ -708,15 +719,37 @@ function VistaCuenta({
   )
   const faltante = total - sumaCobrada
   const vuelto = sumaCobrada > total ? sumaCobrada - total : 0
-  const cobradoCompleto = sumaCobrada >= total && lineasPago.every(l => l.medio_id)
 
   const mediosMap = useMemo(() =>
     Object.fromEntries(medios.map(m => [m.id, m.nombre])),
     [medios]
   )
+  const esFiadoMedio = useCallback((medioId: string) => /cuenta corriente|fiado|cta\.?\s*cte/i.test(mediosMap[medioId] ?? ''), [mediosMap])
+  const lineasFiado = useMemo(() => lineasPago.filter(l => esFiadoMedio(l.medio_id)), [lineasPago, esFiadoMedio])
+  const requiereCliente = lineasFiado.length > 0
+
+  const cobradoCompleto = sumaCobrada >= total && lineasPago.every(l => l.medio_id) && (!requiereCliente || !!clienteId)
+
+  const clienteMatches = useMemo(() => {
+    if (!clienteSearch.trim()) return []
+    const q = clienteSearch.trim().toLowerCase()
+    return clientes.filter(c => c.nombre.toLowerCase().includes(q)).slice(0, 6)
+  }, [clienteSearch, clientes])
+  const clienteElegido = useMemo(() => clientes.find(c => c.id === clienteId) ?? null, [clientes, clienteId])
+
+  async function elegirOCrearCliente(nombre: string, existenteId?: string) {
+    if (existenteId) { setClienteId(existenteId); setClienteSearch(''); return }
+    setClienteBusy(true)
+    try {
+      const id = await crearCliente({ nombre })
+      setClienteId(id)
+      setClienteSearch('')
+    } finally { setClienteBusy(false) }
+  }
 
   // Al entrar al cobro inicializar con una línea por el total completo
   function abrirCobro() {
+    setClienteId(null); setClienteSearch('')
     if (medios.length > 0) {
       setLineasPago([{ id: '1', medio_id: medios[0].id, monto: String(Math.round(total)) }])
     } else {
@@ -754,7 +787,17 @@ function VistaCuenta({
         medio_id: l.medio_id,
         monto: Number(l.monto) || 0,
       }))
-      const { fiscal } = await cobrarCuenta({ cuentaId, mesaId: mesa.id, pagos, propina: propinaMonto, total: resumen.subtotal, cajaTurnoId: cajaAbierta?.id ?? null })
+      const { fiscal } = await cobrarCuenta({ cuentaId, mesaId: mesa.id, pagos, propina: propinaMonto, total: resumen.subtotal, cajaTurnoId: cajaAbierta?.id ?? null, clienteId })
+
+      // Fiado: además del pago normal (ya registrado arriba, cuenta como ingreso
+      // real en caja/reportes igual que en Fudo), cargar la deuda al cliente.
+      if (lineasFiado.length > 0 && clienteId) {
+        await Promise.all(lineasFiado.map(l => registrarMovimiento({
+          clienteId, tipo: 'cargo', monto: Number(l.monto) || 0,
+          cuentaId, medioPagoId: l.medio_id, descripcion: `Venta mesa ${mesa.numero}`,
+        }).catch(() => {})))
+      }
+
       setResultadoCobro({
         pagos: lineasPago.map(l => ({ nombre: mediosMap[l.medio_id] ?? 'Pago', monto: Number(l.monto) || 0 })),
         vuelto,
@@ -861,6 +904,47 @@ function VistaCuenta({
               <span className="material-symbols-outlined">add</span>
               Agregar otro medio
             </button>
+          )}
+
+          {/* Cliente — obligatorio si hay una línea a Cuenta corriente/Fiado */}
+          {requiereCliente && (
+            <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <span style={{ color: 'var(--text-2)', fontSize: 13 }}>Cliente (fiado)</span>
+              {clienteElegido ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 52, borderRadius: 10, background: '#4361a0', padding: '0 14px' }}>
+                  <span style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>{clienteElegido.nombre}</span>
+                  <button onClick={() => setClienteId(null)} style={{ minWidth: 36, minHeight: 36, background: 'transparent', border: 'none', color: '#fff' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>close</span>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    value={clienteSearch}
+                    onChange={e => setClienteSearch(e.target.value)}
+                    placeholder="Buscar cliente…"
+                    style={{ minHeight: 52, borderRadius: 10, background: 'var(--border)', color: 'var(--text-1)', border: 'none', padding: '0 14px', fontSize: 16 }}
+                  />
+                  {clienteSearch.trim() && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {clienteMatches.map(c => (
+                        <button key={c.id} onClick={() => elegirOCrearCliente(c.nombre, c.id)}
+                          style={{ minHeight: 48, borderRadius: 10, background: 'var(--border)', border: 'none', color: 'var(--text-1)', fontSize: 15, fontWeight: 600, textAlign: 'left', padding: '0 14px' }}>
+                          {c.nombre}
+                        </button>
+                      ))}
+                      {!clientes.some(c => c.nombre.toLowerCase() === clienteSearch.trim().toLowerCase()) && (
+                        <button onClick={() => elegirOCrearCliente(clienteSearch.trim())} disabled={clienteBusy}
+                          style={{ minHeight: 48, borderRadius: 10, background: 'transparent', border: '1.5px dashed #4361a0', color: '#4361a0', fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: clienteBusy ? 0.6 : 1 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
+                          Crear cliente "{clienteSearch.trim()}"
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           )}
 
           {/* Estado del cobro */}

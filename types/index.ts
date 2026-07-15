@@ -997,7 +997,7 @@ export interface SalonElemento {
 // ── Salón — Cuentas ──────────────────────────────────────────
 export type EstadoCuenta = 'abierta' | 'cerrada'
 
-// DB: cuentas (id, restaurante_id, mesa_id, estado, total, mozo_id, abierta_at, cerrada_at, created_at, cantidad_personas, cliente_nombre, facturado, caja_turno_id)
+// DB: cuentas (id, restaurante_id, mesa_id, estado, total, mozo_id, abierta_at, cerrada_at, created_at, cantidad_personas, cliente_nombre, facturado, caja_turno_id, cliente_id)
 export interface Cuenta {
   id: string
   restaurante_id: string
@@ -1012,6 +1012,36 @@ export interface Cuenta {
   cliente_nombre?: string | null
   facturado: boolean
   caja_turno_id?: string | null
+  cliente_id?: string | null
+}
+
+// DB: clientes (id, restaurante_id, nombre, telefono, email, origen, notas, activo, created_at)
+export interface Cliente {
+  id: string
+  restaurante_id: string
+  nombre: string
+  telefono?: string | null
+  email?: string | null
+  origen: string
+  notas?: string | null
+  activo: boolean
+  created_at: string
+}
+
+// DB: cuenta_corriente_movimientos (id, restaurante_id, cliente_id, cuenta_id, tipo, monto, medio_pago_id, descripcion, creado_por, fecha_pago, created_at)
+export type TipoMovimientoCC = 'cargo' | 'pago'
+export interface CuentaCorrienteMovimiento {
+  id: string
+  restaurante_id: string
+  cliente_id: string
+  cuenta_id?: string | null
+  tipo: TipoMovimientoCC
+  monto: number
+  medio_pago_id?: string | null
+  descripcion?: string | null
+  creado_por?: string | null
+  fecha_pago?: string | null
+  created_at: string
 }
 
 // ── Cobro ────────────────────────────────────────────────────

@@ -73,8 +73,9 @@ export function useCuenta() {
     total: number    // subtotal (sin propina)
     cajaTurnoId?: string | null
     cantidadPersonas?: number | null
+    clienteId?: string | null
   }): Promise<{ fiscal?: ResultadoFiscal }> {
-    const { cuentaId, mesaId, pagos, propina, total, cajaTurnoId, cantidadPersonas } = params
+    const { cuentaId, mesaId, pagos, propina, total, cajaTurnoId, cantidadPersonas, clienteId } = params
     try {
       // 1. Registrar pagos
       if (pagos.length > 0) {
@@ -96,6 +97,7 @@ export function useCuenta() {
         .update({
           estado: 'cerrada', total: totalConPropina, cerrada_at: new Date().toISOString(),
           caja_turno_id: cajaTurnoId ?? null,
+          cliente_id: clienteId ?? null,
           ...(cantidadPersonas != null ? { cantidad_personas: cantidadPersonas } : {}),
         })
         .eq('id', cuentaId)
