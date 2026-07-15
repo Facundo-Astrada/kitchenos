@@ -123,6 +123,9 @@ interface AIResult {
   iva_total: number
   total: number
   notas: string | null
+  categoria_gasto_id?: string | null
+  medio_pago_id?: string | null
+  fecha_vencimiento?: string | null
   proveedor_es_persona?: boolean
   items_excluidos?: { concepto: string; motivo: string }[]
   alerta_privacidad?: string | null
@@ -328,10 +331,12 @@ function ImportSelector({ onSelect, onFile }: {
 }
 
 // ── Confirm View ─────────────────────────────────────────────
-function ConfirmView({ result, productos, proveedores, onConfirm, onCancel, saving }: {
+function ConfirmView({ result, productos, proveedores, categoriasGasto = [], mediosPago = [], onConfirm, onCancel, saving }: {
   result: AIResult
   productos: { id: string; nombre: string; precio_unitario?: number; unidad: string }[]
   proveedores: { id: string; nombre: string; cuit?: string | null }[]
+  categoriasGasto?: CategoriaGasto[]
+  mediosPago?: MedioPago[]
   onConfirm: (data: AIResult) => void
   onCancel: () => void
   saving: boolean
@@ -559,6 +564,36 @@ function ConfirmView({ result, productos, proveedores, onConfirm, onCancel, savi
                   <option value="30dias">30 dias</option>
                   <option value="60dias">60 dias</option>
                   <option value="cuenta_corriente">Cta. corriente</option>
+                </select>
+              </div>
+            </div>
+            {COND_A_CREDITO.has(data.condicion_pago) && (
+              <Field label="Fecha de vencimiento" value={data.fecha_vencimiento || ''} type="date"
+                onChange={v => setData(p => ({ ...p, fecha_vencimiento: v || null }))} />
+            )}
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <div className="text-[10px] font-bold mb-1" style={{ color: 'var(--text-3)' }}>Categoría de gasto</div>
+                <select
+                  value={data.categoria_gasto_id ?? ''}
+                  onChange={e => setData(p => ({ ...p, categoria_gasto_id: e.target.value || null }))}
+                  className="w-full rounded-[8px] px-2 py-[6px] text-[13px] border-none outline-none"
+                  style={{ background: 'var(--bg)', color: 'var(--text)', fontFamily: 'inherit' }}
+                >
+                  <option value="">Sin categorizar</option>
+                  {categoriasGasto.filter(c => c.activa).map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                </select>
+              </div>
+              <div className="flex-1">
+                <div className="text-[10px] font-bold mb-1" style={{ color: 'var(--text-3)' }}>Medio de pago</div>
+                <select
+                  value={data.medio_pago_id ?? ''}
+                  onChange={e => setData(p => ({ ...p, medio_pago_id: e.target.value || null }))}
+                  className="w-full rounded-[8px] px-2 py-[6px] text-[13px] border-none outline-none"
+                  style={{ background: 'var(--bg)', color: 'var(--text)', fontFamily: 'inherit' }}
+                >
+                  <option value="">Sin especificar</option>
+                  {mediosPago.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
                 </select>
               </div>
             </div>
@@ -2884,6 +2919,9 @@ export default function FacturasPage() {
         total: data.total,
         condicion_pago: data.condicion_pago,
         notas: data.notas,
+        categoria_gasto_id: data.categoria_gasto_id,
+        medio_pago_id: data.medio_pago_id,
+        fecha_vencimiento: data.fecha_vencimiento,
         items: data.items.map(it => ({
           producto_nombre: it.producto_nombre,
           producto_id: it.producto_id,
@@ -2983,6 +3021,8 @@ export default function FacturasPage() {
             precio_unitario: p.precio_unitario ?? 0,
           }))}
           proveedores={proveedores.map(p => ({ id: p.id, nombre: p.nombre, cuit: null }))}
+          categoriasGasto={categoriasGasto}
+          mediosPago={mediosPago}
           onConfirm={handleConfirm}
           onCancel={() => { setView('import'); setAiResult(null) }}
           saving={saving}
