@@ -6,6 +6,9 @@ import { useFacturas } from '@/lib/hooks/useFacturas'
 import { useStock } from '@/lib/hooks/useStock'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import { usePedidos } from '@/lib/hooks/usePedidos'
+import { useCategoriasGasto, CATEGORIA_FINANCIERA_LABELS } from '@/lib/hooks/useCategoriasGasto'
+import { useMediosPago } from '@/lib/hooks/useMediosPago'
+import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import ProveedoresPage from '@/app/(app)/proveedores/page'
 import ImageCropModal from '@/components/ui/ImageCropModal'
 import BulkUploadDrawer from '@/components/facturas/BulkUploadDrawer'
@@ -15,7 +18,7 @@ import { createClient } from '@/lib/supabase/client'
 import { calcularVencimientoFactura, type VencimientoFactura } from '@/lib/utils'
 import type {
   Factura, FacturaItem, FacturaStatus, TipoFactura, CondicionPago,
-  Pedido, PedidoItem,
+  Pedido, PedidoItem, CategoriaGasto, CategoriaFinanciera, MedioPago,
 } from '@/types'
 
 // ── Weight unit helpers ──────────────────────────────────────
@@ -146,7 +149,9 @@ interface ListaAIResult {
   _demo?: boolean
 }
 
-type MainTab = 'facturas' | 'listas' | 'proveedores'
+type MainTab = 'facturas' | 'recepcion' | 'categorias' | 'listas' | 'proveedores'
+const MAIN_TABS = ['facturas', 'recepcion', 'categorias', 'listas', 'proveedores'] as const
+const TAB_LABELS: Record<MainTab, string> = { facturas: 'Gastos', recepcion: 'Recepción', categorias: 'Cat. de Gastos', listas: 'Listas', proveedores: 'Proveedores' }
 
 // ── Vencimiento badge (cuentas por pagar) ─────────────────────
 const VENC_CONFIG: Record<VencimientoFactura['urgencia'], { bg: string; color: string }> = {
@@ -972,13 +977,15 @@ function ReconciliacionPedido({ factura, facturaItems, onVincular }: {
 }
 
 // ── Detail View ──────────────────────────────────────────────
-function DetailView({ factura, onBack, onStatusChange, onDelete, onUpdate, onVincularPedido }: {
+function DetailView({ factura, onBack, onStatusChange, onDelete, onUpdate, onVincularPedido, categoriasGasto = [], mediosPago = [] }: {
   factura: Factura
   onBack: () => void
   onStatusChange: (status: FacturaStatus) => void
   onDelete: () => void
-  onUpdate?: (data: Partial<Factura>, items: { producto_nombre: string; producto_id?: string | null; cantidad: number; unidad: string; precio_unitario: number; alicuota_iva: number; subtotal: number; precio_anterior?: number | null }[]) => Promise<void>
+  onUpdate?: (data: Partial<Factura>, items?: { producto_nombre: string; producto_id?: string | null; cantidad: number; unidad: string; precio_unitario: number; alicuota_iva: number; subtotal: number; precio_anterior?: number | null }[]) => Promise<void>
   onVincularPedido?: (pedidoId: string | null) => Promise<void>
+  categoriasGasto?: CategoriaGasto[]
+  mediosPago?: MedioPago[]
 }) {
   const { fetchItems } = useFacturas()
   const [items, setItems] = useState<FacturaItem[]>([])
@@ -1000,9 +1007,23 @@ function DetailView({ factura, onBack, onStatusChange, onDelete, onUpdate, onVin
       numero_factura: factura.numero_factura || '',
       condicion_pago: factura.condicion_pago || 'contado',
       notas: factura.notas || '',
+      categoria_gasto_id: factura.categoria_gasto_id ?? null,
+      medio_pago_id: factura.medio_pago_id ?? null,
+      fecha_vencimiento: factura.fecha_vencimiento ?? null,
     })
     setEditItems(items.map(it => ({ ...it })))
     setEditing(true)
+  }
+
+  // Asignación rápida de categoría sin entrar a "Editar" — cierra el loop de
+  // las facturas sin categorizar directamente desde el detalle.
+  const [quickCatId, setQuickCatId] = useState('')
+  const [quickCatSaving, setQuickCatSaving] = useState(false)
+  async function asignarCategoriaRapido() {
+    if (!quickCatId || !onUpdate) return
+    setQuickCatSaving(true)
+    try { await onUpdate({ categoria_gasto_id: quickCatId }) }
+    finally { setQuickCatSaving(false) }
   }
 
   function cancelEdit() {
@@ -1118,7 +1139,7 @@ function DetailView({ factura, onBack, onStatusChange, onDelete, onUpdate, onVin
                 </select>
               </div>
             </div>
-            <div>
+            <div className="mb-2">
               <div className="text-[10px] font-bold mb-1" style={{ color: 'var(--text-3)' }}>CONDICIÓN DE PAGO</div>
               <select value={editData.condicion_pago ?? 'contado'} onChange={e => setEditData(d => ({ ...d, condicion_pago: e.target.value as CondicionPago }))} style={inStyle}>
                 <option value="contado">Contado</option>
@@ -1126,6 +1147,28 @@ function DetailView({ factura, onBack, onStatusChange, onDelete, onUpdate, onVin
                 <option value="60dias">60 días</option>
                 <option value="cuenta_corriente">Cuenta corriente</option>
               </select>
+            </div>
+            {COND_A_CREDITO.has(String(editData.condicion_pago ?? '')) && (
+              <div className="mb-2">
+                <div className="text-[10px] font-bold mb-1" style={{ color: 'var(--text-3)' }}>FECHA DE VENCIMIENTO</div>
+                <input type="date" value={editData.fecha_vencimiento ?? ''} onChange={e => setEditData(d => ({ ...d, fecha_vencimiento: e.target.value || null }))} style={inStyle} />
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-2 mb-2">
+              <div>
+                <div className="text-[10px] font-bold mb-1" style={{ color: 'var(--text-3)' }}>CATEGORÍA DE GASTO</div>
+                <select value={editData.categoria_gasto_id ?? ''} onChange={e => setEditData(d => ({ ...d, categoria_gasto_id: e.target.value || null }))} style={inStyle}>
+                  <option value="">Sin categorizar</option>
+                  {categoriasGasto.filter(c => c.activa).map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold mb-1" style={{ color: 'var(--text-3)' }}>MEDIO DE PAGO</div>
+                <select value={editData.medio_pago_id ?? ''} onChange={e => setEditData(d => ({ ...d, medio_pago_id: e.target.value || null }))} style={inStyle}>
+                  <option value="">Sin especificar</option>
+                  {mediosPago.map(m => <option key={m.id} value={m.id}>{m.nombre}</option>)}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -1211,7 +1254,39 @@ function DetailView({ factura, onBack, onStatusChange, onDelete, onUpdate, onVin
             <div><span style={{ color: 'var(--text-3)' }}>N:</span> <span className="font-medium" style={{ color: 'var(--text)' }}>{factura.numero_factura || '—'}</span></div>
             <div><span style={{ color: 'var(--text-3)' }}>Pago:</span> <span className="font-medium" style={{ color: 'var(--text)' }}>{factura.condicion_pago}</span></div>
             <div><span style={{ color: 'var(--text-3)' }}>Total:</span> <span className="font-bold" style={{ color: 'var(--navy)' }}>{fmt(factura.total)}</span></div>
+            {factura.fecha_vencimiento && (
+              <div><span style={{ color: 'var(--text-3)' }}>Vence:</span> <span className="font-medium" style={{ color: 'var(--text)' }}>{fmtFecha(factura.fecha_vencimiento)}</span></div>
+            )}
           </div>
+        </div>
+
+        {/* Categoría de gasto */}
+        <div className="rounded-[12px] p-3 mb-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+          <div className="text-[10px] font-bold mb-2" style={{ color: 'var(--text-3)' }}>CATEGORÍA DE GASTO</div>
+          {(() => {
+            const cat = factura.categoria_gasto_id ? categoriasGasto.find(c => c.id === factura.categoria_gasto_id) : null
+            if (cat) {
+              return (
+                <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 99, background: `${FINANCIERA_COLOR[cat.categoria_financiera]}18`, color: FINANCIERA_COLOR[cat.categoria_financiera] }}>
+                  {cat.nombre}
+                </span>
+              )
+            }
+            if (!onUpdate) return <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Sin categorizar</span>
+            return (
+              <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+                <select value={quickCatId} onChange={e => setQuickCatId(e.target.value)}
+                  style={{ ...inStyle, flex: 1, minWidth: 140, padding: '7px 9px' }}>
+                  <option value="">Elegir categoría…</option>
+                  {categoriasGasto.filter(c => c.activa).map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                </select>
+                <button onClick={asignarCategoriaRapido} disabled={!quickCatId || quickCatSaving}
+                  style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: quickCatId ? 'var(--navy)' : 'var(--border)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: quickCatId ? 'pointer' : 'default', fontFamily: 'inherit', opacity: quickCatSaving ? .6 : 1 }}>
+                  {quickCatSaving ? '…' : 'Asignar'}
+                </button>
+              </div>
+            )
+          })()}
         </div>
 
         {/* Items */}
@@ -2165,11 +2240,343 @@ function ManualEntryView({ onSubmit, onBack, proveedores }: {
   )
 }
 
+// ════════════════════════════════════════════════════════════
+// CAT. DE GASTOS — ABM de categorías + asignación masiva por proveedor
+// ════════════════════════════════════════════════════════════
+const FINANCIERA_COLOR: Record<CategoriaFinanciera, string> = {
+  mercaderia: '#059669', operacional: '#4361a0', administrativo: '#d97706',
+}
+
+function CategoriasGastoView({ showToast }: { showToast: (msg: string) => void }) {
+  const { categorias, loading, proveedoresSinCategoria, loadingSinCat, crearCategoria, actualizarCategoria, desactivarCategoria, asignarCategoriaAProveedor } = useCategoriasGasto()
+  const [search, setSearch] = useState('')
+  const [estado, setEstado] = useState<'activas' | 'todas'>('activas')
+  const [creando, setCreando] = useState(false)
+  const [nuevoNombre, setNuevoNombre] = useState('')
+  const [nuevaFinanciera, setNuevaFinanciera] = useState<CategoriaFinanciera>('mercaderia')
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editNombre, setEditNombre] = useState('')
+  const [editFinanciera, setEditFinanciera] = useState<CategoriaFinanciera>('mercaderia')
+  const [saving, setSaving] = useState(false)
+  const [sinCatOpen, setSinCatOpen] = useState(true)
+  const [asignando, setAsignando] = useState<Record<string, string>>({}) // proveedor -> categoriaId elegida
+  const [asignandoBusy, setAsignandoBusy] = useState<string | null>(null)
+  const [provSearch, setProvSearch] = useState('')
+
+  const filtered = useMemo(() => {
+    let list = categorias
+    if (estado === 'activas') list = list.filter(c => c.activa)
+    if (search.trim()) { const q = search.trim().toLowerCase(); list = list.filter(c => c.nombre.toLowerCase().includes(q)) }
+    return list
+  }, [categorias, estado, search])
+
+  const provFiltered = useMemo(() => {
+    if (!provSearch.trim()) return proveedoresSinCategoria
+    const q = provSearch.trim().toLowerCase()
+    return proveedoresSinCategoria.filter(p => p.proveedor_nombre.toLowerCase().includes(q))
+  }, [proveedoresSinCategoria, provSearch])
+
+  async function handleCrear() {
+    if (!nuevoNombre.trim() || saving) return
+    setSaving(true)
+    try {
+      await crearCategoria(nuevoNombre, nuevaFinanciera)
+      setNuevoNombre(''); setCreando(false)
+      showToast('✓ Categoría creada')
+    } catch (e) { showToast('Error: ' + (e instanceof Error ? e.message : 'desconocido')) }
+    finally { setSaving(false) }
+  }
+
+  async function handleGuardarEdit(id: string) {
+    if (!editNombre.trim() || saving) return
+    setSaving(true)
+    try {
+      await actualizarCategoria(id, { nombre: editNombre.trim(), categoria_financiera: editFinanciera })
+      setEditId(null)
+      showToast('✓ Categoría actualizada')
+    } catch (e) { showToast('Error: ' + (e instanceof Error ? e.message : 'desconocido')) }
+    finally { setSaving(false) }
+  }
+
+  async function handleAsignar(proveedor: string) {
+    const catId = asignando[proveedor]
+    if (!catId) return
+    setAsignandoBusy(proveedor)
+    try {
+      await asignarCategoriaAProveedor(proveedor, catId)
+      showToast(`✓ "${proveedor}" categorizado`)
+    } catch (e) { showToast('Error: ' + (e instanceof Error ? e.message : 'desconocido')) }
+    finally { setAsignandoBusy(null) }
+  }
+
+  const selStyle: React.CSSProperties = { padding: '7px 9px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 12, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none' }
+
+  return (
+    <div className="flex-1 overflow-y-auto" style={{ padding: 16 }}>
+      {/* Sin categorizar */}
+      {(loadingSinCat || proveedoresSinCategoria.length > 0) && (
+        <div style={{ marginBottom: 18, background: 'var(--surface)', border: '1px solid rgba(217,119,6,.35)', borderRadius: 14, overflow: 'hidden' }}>
+          <button onClick={() => setSinCatOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '11px 12px', background: 'rgba(217,119,6,.06)', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#d97706' }}>label_off</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Proveedores sin categorizar</span>
+            {!loadingSinCat && <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: '#d97706', borderRadius: 99, padding: '1px 7px' }}>{proveedoresSinCategoria.length}</span>}
+            <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)', marginLeft: 'auto', transform: sinCatOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }}>expand_more</span>
+          </button>
+          {sinCatOpen && (
+            <div style={{ borderTop: '1px solid var(--border)' }}>
+              <div style={{ padding: '8px 12px' }}>
+                <input value={provSearch} onChange={e => setProvSearch(e.target.value)} placeholder="Buscar proveedor…"
+                  style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 12, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
+              </div>
+              {loadingSinCat ? (
+                <div style={{ padding: '12px', fontSize: 12, color: 'var(--text-3)' }}>Cargando…</div>
+              ) : provFiltered.length === 0 ? (
+                <div style={{ padding: '12px', fontSize: 12, color: 'var(--text-3)' }}>Sin resultados</div>
+              ) : (
+                <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+                  {provFiltered.map((p, i) => (
+                    <div key={p.proveedor_nombre} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', borderTop: i > 0 ? '1px solid var(--border)' : 'none', flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1, minWidth: 140 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{p.proveedor_nombre}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{p.n} factura{p.n !== 1 ? 's' : ''} · {fmt(p.total)}</div>
+                      </div>
+                      <select value={asignando[p.proveedor_nombre] ?? ''} onChange={e => setAsignando(prev => ({ ...prev, [p.proveedor_nombre]: e.target.value }))} style={selStyle}>
+                        <option value="">Categoría…</option>
+                        {categorias.filter(c => c.activa).map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                      </select>
+                      <button onClick={() => handleAsignar(p.proveedor_nombre)} disabled={!asignando[p.proveedor_nombre] || asignandoBusy === p.proveedor_nombre}
+                        style={{ padding: '7px 12px', borderRadius: 8, border: 'none', background: asignando[p.proveedor_nombre] ? 'var(--navy)' : 'var(--border)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: asignando[p.proveedor_nombre] ? 'pointer' : 'default', fontFamily: 'inherit', opacity: asignandoBusy === p.proveedor_nombre ? .6 : 1 }}>
+                        {asignandoBusy === p.proveedor_nombre ? '…' : 'Asignar'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Buscador + estado + nueva */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar categoría…"
+          style={{ flex: 1, minWidth: 160, padding: '9px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 13, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none' }} />
+        <select value={estado} onChange={e => setEstado(e.target.value as 'activas' | 'todas')} style={{ ...selStyle, padding: '9px 10px' }}>
+          <option value="activas">Activas</option>
+          <option value="todas">Todas</option>
+        </select>
+        <button onClick={() => setCreando(v => !v)}
+          style={{ padding: '9px 14px', borderRadius: 10, border: 'none', background: '#dc580c', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>Nueva categoría
+        </button>
+      </div>
+
+      {creando && (
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 12, marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input autoFocus value={nuevoNombre} onChange={e => setNuevoNombre(e.target.value)} placeholder="Nombre de la categoría"
+            style={{ flex: 1, minWidth: 160, padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none' }} />
+          <select value={nuevaFinanciera} onChange={e => setNuevaFinanciera(e.target.value as CategoriaFinanciera)} style={selStyle}>
+            {(Object.keys(CATEGORIA_FINANCIERA_LABELS) as CategoriaFinanciera[]).map(k => <option key={k} value={k}>{CATEGORIA_FINANCIERA_LABELS[k]}</option>)}
+          </select>
+          <button onClick={handleCrear} disabled={!nuevoNombre.trim() || saving}
+            style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#16a34a', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: saving ? .6 : 1 }}>Crear</button>
+          <button onClick={() => { setCreando(false); setNuevoNombre('') }} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-2)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancelar</button>
+        </div>
+      )}
+
+      {/* Lista de categorías */}
+      {loading ? (
+        <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-3)' }}>Cargando…</div>
+      ) : filtered.length === 0 ? (
+        <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-3)' }}>Sin categorías</div>
+      ) : (
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+          {filtered.map((c, i) => {
+            const isEdit = editId === c.id
+            return (
+              <div key={c.id} style={{ padding: '10px 12px', borderTop: i > 0 ? '1px solid var(--border)' : 'none', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', opacity: c.activa ? 1 : .5 }}>
+                {isEdit ? (
+                  <>
+                    <input autoFocus value={editNombre} onChange={e => setEditNombre(e.target.value)} style={{ flex: 1, minWidth: 140, padding: '7px 9px', borderRadius: 8, border: '1px solid var(--accent)', background: 'var(--bg)', fontSize: 13, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none' }} />
+                    <select value={editFinanciera} onChange={e => setEditFinanciera(e.target.value as CategoriaFinanciera)} style={selStyle}>
+                      {(Object.keys(CATEGORIA_FINANCIERA_LABELS) as CategoriaFinanciera[]).map(k => <option key={k} value={k}>{CATEGORIA_FINANCIERA_LABELS[k]}</option>)}
+                    </select>
+                    <button onClick={() => handleGuardarEdit(c.id)} disabled={saving} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: '#16a34a', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Guardar</button>
+                    <button onClick={() => setEditId(null)} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-2)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>×</button>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ flex: 1, minWidth: 140, fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{c.nombre}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: `${FINANCIERA_COLOR[c.categoria_financiera]}18`, color: FINANCIERA_COLOR[c.categoria_financiera] }}>
+                      {CATEGORIA_FINANCIERA_LABELS[c.categoria_financiera]}
+                    </span>
+                    <button onClick={() => { setEditId(c.id); setEditNombre(c.nombre); setEditFinanciera(c.categoria_financiera) }} title="Editar"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-3)', display: 'flex' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>
+                    </button>
+                    <button onClick={() => desactivarCategoria(c.id).then(() => showToast(c.activa ? 'Categoría desactivada' : ''))} title={c.activa ? 'Desactivar' : 'Inactiva'}
+                      disabled={!c.activa}
+                      style={{ background: 'none', border: 'none', cursor: c.activa ? 'pointer' : 'default', padding: 4, color: 'var(--text-3)', display: 'flex' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{c.activa ? 'visibility' : 'visibility_off'}</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════
+// RECEPCIÓN — log de documentos cargados: origen (imagen/manual/import)
+// + estado de conciliación de stock. Período mensual (mismo patrón que Fudo).
+// ════════════════════════════════════════════════════════════
+interface DocRecepcion {
+  id: string
+  proveedor_nombre: string
+  fecha_factura: string
+  fecha_carga: string
+  numero_factura: string | null
+  total: number
+  imagen_url: string | null
+  nItems: number
+  nItemsVinculados: number
+}
+
+function RecepcionView() {
+  const RESTAURANTE_ID_LOCAL = useRestauranteId()
+  const supabase = useMemo(() => createClient(), [])
+  const now = new Date()
+  const [mes, setMes] = useState(now.getMonth() + 1)
+  const [anio, setAnio] = useState(now.getFullYear())
+  const [search, setSearch] = useState('')
+  const [docs, setDocs] = useState<DocRecepcion[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!RESTAURANTE_ID_LOCAL) return
+    let cancel = false
+    setLoading(true)
+    ;(async () => {
+      const desde = `${anio}-${String(mes).padStart(2, '0')}-01`
+      const hastaDate = new Date(anio, mes, 0)
+      const hasta = hastaDate.toISOString().slice(0, 10)
+      const { data: facs } = await supabase.from('facturas')
+        .select('id, proveedor_nombre, fecha_factura, fecha_carga, numero_factura, total, imagen_url')
+        .eq('restaurante_id', RESTAURANTE_ID_LOCAL)
+        .gte('fecha_factura', desde).lte('fecha_factura', hasta)
+        .order('fecha_factura', { ascending: false })
+        .limit(1000)
+      const rows = (facs ?? []) as { id: string; proveedor_nombre: string; fecha_factura: string; fecha_carga: string; numero_factura: string | null; total: number; imagen_url: string | null }[]
+      if (rows.length === 0) { if (!cancel) { setDocs([]); setLoading(false) } return }
+      const ids = rows.map(r => r.id)
+      const itemsMap = new Map<string, { n: number; vinculados: number }>()
+      for (let i = 0; i < ids.length; i += 200) {
+        const chunk = ids.slice(i, i + 200)
+        const { data: items } = await supabase.from('factura_items').select('factura_id, producto_id').in('factura_id', chunk)
+        for (const it of (items ?? []) as { factura_id: string; producto_id: string | null }[]) {
+          const g = itemsMap.get(it.factura_id) ?? { n: 0, vinculados: 0 }
+          g.n++
+          if (it.producto_id) g.vinculados++
+          itemsMap.set(it.factura_id, g)
+        }
+      }
+      if (!cancel) {
+        setDocs(rows.map(r => ({ ...r, nItems: itemsMap.get(r.id)?.n ?? 0, nItemsVinculados: itemsMap.get(r.id)?.vinculados ?? 0 })))
+        setLoading(false)
+      }
+    })()
+    return () => { cancel = true }
+  }, [RESTAURANTE_ID_LOCAL, mes, anio, supabase])
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return docs
+    const q = search.trim().toLowerCase()
+    return docs.filter(d => d.proveedor_nombre.toLowerCase().includes(q))
+  }, [docs, search])
+
+  const kpis = useMemo(() => {
+    const total = docs.length
+    const conImagen = docs.filter(d => !!d.imagen_url).length
+    const stockConciliado = docs.filter(d => d.nItems > 0 && d.nItemsVinculados === d.nItems).length
+    const totalPeriodo = docs.reduce((s, d) => s + (d.total ?? 0), 0)
+    return { total, conImagen, stockConciliado, totalPeriodo }
+  }, [docs])
+
+  const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+  const selStyle: React.CSSProperties = { padding: '7px 9px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 12, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none' }
+
+  return (
+    <div className="flex-1 overflow-y-auto" style={{ padding: 16 }}>
+      {/* Selector de período */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <select value={mes} onChange={e => setMes(Number(e.target.value))} style={selStyle}>
+          {MESES.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+        </select>
+        <select value={anio} onChange={e => setAnio(Number(e.target.value))} style={selStyle}>
+          {[anio - 1, anio, anio + 1].map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por proveedor…"
+          style={{ flex: 1, minWidth: 160, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 12, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none' }} />
+      </div>
+
+      {/* KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 8, marginBottom: 14 }}>
+        {[
+          { label: 'Total documentos', value: String(kpis.total), icon: 'description', color: 'var(--text-1)' },
+          { label: 'Con imagen/PDF', value: String(kpis.conImagen), icon: 'photo_camera', color: '#4361a0' },
+          { label: 'Stock conciliado', value: String(kpis.stockConciliado), icon: 'inventory_2', color: '#16a34a' },
+          { label: 'Total del período', value: fmt(kpis.totalPeriodo), icon: 'payments', color: 'var(--navy)' },
+        ].map(k => (
+          <div key={k.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '9px 10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 14, color: k.color }}>{k.icon}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{k.label}</span>
+            </div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: k.color, fontFamily: "'DM Mono', monospace" }}>{k.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {loading ? (
+        <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-3)' }}>Cargando…</div>
+      ) : filtered.length === 0 ? (
+        <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: 'var(--text-3)' }}>Sin documentos en este período</div>
+      ) : (
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+          {filtered.map((d, i) => (
+            <div key={d.id} style={{ padding: '10px 12px', borderTop: i > 0 ? '1px solid var(--border)' : 'none', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 160 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{d.proveedor_nombre}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmtFecha(d.fecha_factura)}{d.numero_factura ? ` · N° ${d.numero_factura}` : ''}</div>
+              </div>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 99, background: d.imagen_url ? 'rgba(67,97,160,.12)' : 'rgba(100,116,139,.12)', color: d.imagen_url ? '#4361a0' : '#64748b' }}>
+                {d.imagen_url ? 'Con imagen' : 'Import/manual'}
+              </span>
+              {d.nItems > 0 && (
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 99, background: d.nItemsVinculados === d.nItems ? 'rgba(22,163,74,.12)' : 'rgba(217,119,6,.12)', color: d.nItemsVinculados === d.nItems ? '#16a34a' : '#d97706' }}>
+                  Stock {d.nItemsVinculados}/{d.nItems}
+                </span>
+              )}
+              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy)', fontFamily: "'DM Mono', monospace", marginLeft: 'auto' }}>{fmt(d.total)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main Page ────────────────────────────────────────────────
 export default function FacturasPage() {
   const { facturas, loading, crearFactura, actualizarFactura, actualizarStatus, eliminarFactura, fetchItems, fetchFacturas, hasMore, fetchMore, totalCount, fetchPorPagar, vincularPedido } = useFacturas()
   const { productos, refetch: refetchStock } = useStock()
   const { proveedores } = useProveedores()
+  const { categorias: categoriasGasto } = useCategoriasGasto()
+  const { medios: mediosPago } = useMediosPago()
   const isDesktop = useIsDesktop()
   const [mainTab, setMainTab] = useState<MainTab>('facturas')
   const [view, setView] = useState<View>('list')
@@ -2177,7 +2584,7 @@ export default function FacturasPage() {
   useEffect(() => {
     function handleSetTab(e: Event) {
       const { tab: t } = (e as CustomEvent<{ tab: string }>).detail
-      if (t === 'facturas' || t === 'listas' || t === 'proveedores') setMainTab(t as MainTab)
+      if (t === 'facturas' || t === 'listas' || t === 'proveedores' || t === 'recepcion' || t === 'categorias') setMainTab(t as MainTab)
     }
     window.addEventListener('kc-set-tab', handleSetTab)
     return () => window.removeEventListener('kc-set-tab', handleSetTab)
@@ -2189,6 +2596,9 @@ export default function FacturasPage() {
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [filtro, setFiltro] = useState<'todas' | 'semana' | 'mes' | 'por_pagar'>('todas')
+  const [catFiltroId, setCatFiltroId] = useState('')
+  const [estadoFiltro, setEstadoFiltro] = useState('')
+  const [proveedorFiltro, setProveedorFiltro] = useState('')
   const [porPagar, setPorPagar] = useState<Factura[]>([])
   const [porPagarLoading, setPorPagarLoading] = useState(false)
   const [selectedFactura, setSelectedFactura] = useState<Factura | null>(null)
@@ -2231,10 +2641,18 @@ export default function FacturasPage() {
 
   // Filter facturas
   const facturasFiltradas = useMemo(() => {
-    if (filtro === 'todas') return facturas
-    const desde = filtro === 'semana' ? inicioSemana() : inicioMes()
-    return facturas.filter(f => (f.fecha_factura || f.created_at.slice(0, 10)) >= desde)
-  }, [facturas, filtro])
+    let list = facturas
+    if (filtro !== 'todas' && filtro !== 'por_pagar') {
+      const desde = filtro === 'semana' ? inicioSemana() : inicioMes()
+      list = list.filter(f => (f.fecha_factura || f.created_at.slice(0, 10)) >= desde)
+    }
+    if (catFiltroId) list = list.filter(f => f.categoria_gasto_id === catFiltroId)
+    if (estadoFiltro) list = list.filter(f => (f.status ?? 'pendiente') === estadoFiltro)
+    if (proveedorFiltro) list = list.filter(f => f.proveedor_nombre === proveedorFiltro)
+    return list
+  }, [facturas, filtro, catFiltroId, estadoFiltro, proveedorFiltro])
+
+  const categoriasGastoMap = useMemo(() => Object.fromEntries(categoriasGasto.map(c => [c.id, c])), [categoriasGasto])
 
   // Summary
   const resumen = useMemo(() => {
@@ -2244,7 +2662,8 @@ export default function FacturasPage() {
     return { total, count: ff.length, proveedores }
   }, [facturasFiltradas])
 
-  // Cargar cuentas por pagar al activar el filtro (y al cambiar facturas: marcar pagada, nueva factura)
+  // Cargar cuentas por pagar: siempre en la tab Gastos (alimenta los KPIs A vencer/
+  // Vencidos/A pagar, no solo el chip "Por pagar") y al cambiar facturas (marcar pagada, nueva factura).
   const recargarPorPagar = useCallback(async () => {
     setPorPagarLoading(true)
     setPorPagar(await fetchPorPagar())
@@ -2252,8 +2671,8 @@ export default function FacturasPage() {
   }, [fetchPorPagar])
 
   useEffect(() => {
-    if (filtro === 'por_pagar') recargarPorPagar()
-  }, [filtro, facturas, recargarPorPagar])
+    if (mainTab === 'facturas') recargarPorPagar()
+  }, [mainTab, facturas, recargarPorPagar])
 
   // Vencimiento por factura (30/60 días desde fecha_factura; cuenta_corriente = sin_fecha)
   const vencimientos = useMemo(() => {
@@ -2296,6 +2715,21 @@ export default function FacturasPage() {
     }
     return { vencidas, vencidasTotal, estaSemana, estaSemanaTotal }
   }, [porPagar, vencimientos])
+
+  // KPIs estilo Fudo: A vencer / Vencidos / A pagar / Total pagado. "A vencer" y
+  // "Vencidos" salen de porPagar (todas las facturas a crédito, no paginado); "Total
+  // pagado" sobre el conjunto filtrado actual (mismo alcance/caveat que "resumen").
+  const kpisGasto = useMemo(() => {
+    let totalPagado = 0
+    for (const f of facturasFiltradas) if (f.status === 'pagada') totalPagado += f.total
+    const vencidas = porPagar.filter(f => vencimientos.get(f.id)?.urgencia === 'vencida')
+    const aVencer = porPagar.filter(f => vencimientos.get(f.id)?.urgencia !== 'vencida')
+    return {
+      aVencerN: aVencer.length, aVencerTotal: aVencer.reduce((s, f) => s + f.total, 0),
+      vencidasN: vencidas.length, vencidasTotal: vencidas.reduce((s, f) => s + f.total, 0),
+      totalPagado,
+    }
+  }, [facturasFiltradas, porPagar, vencimientos])
 
   async function marcarPagadaRapido(f: Factura) {
     try {
@@ -2482,6 +2916,8 @@ export default function FacturasPage() {
     return (
       <DetailView
         factura={selectedFactura}
+        categoriasGasto={categoriasGasto}
+        mediosPago={mediosPago}
         onBack={() => { setView('list'); setSelectedFactura(null) }}
         onStatusChange={async (status) => {
           await actualizarStatus(selectedFactura.id, status)
@@ -2677,12 +3113,12 @@ export default function FacturasPage() {
       <div className="flex flex-col h-full">
         <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 0', flexShrink: 0 }}>
           <h1 className="text-white text-[18px] font-bold m-0 mb-3">Compras</h1>
-          <div className="flex gap-[6px] pb-[10px]">
-            {(['facturas', 'listas', 'proveedores'] as const).map(t => (
+          <div className="flex gap-[6px] pb-[10px]" style={{ flexWrap: 'wrap' }}>
+            {MAIN_TABS.map(t => (
               <button key={t} onClick={() => setMainTab(t)}
                 className="px-[12px] py-[5px] rounded-full border-none cursor-pointer text-[12px] font-semibold"
                 style={{ background: mainTab === t ? 'white' : 'rgba(255,255,255,0.15)', color: mainTab === t ? 'var(--navy)' : 'rgba(255,255,255,0.7)' }}>
-                {t === 'facturas' ? 'Facturas' : t === 'listas' ? 'Listas' : 'Proveedores'}
+                {TAB_LABELS[t]}
               </button>
             ))}
           </div>
@@ -2705,12 +3141,12 @@ export default function FacturasPage() {
           <h1 className="text-white text-[18px] font-bold m-0 mb-3">Compras</h1>
 
           {/* Tab pills */}
-          <div className="flex gap-[6px] pb-[10px]">
-            {(['facturas', 'listas', 'proveedores'] as const).map(t => (
+          <div className="flex gap-[6px] pb-[10px]" style={{ flexWrap: 'wrap' }}>
+            {MAIN_TABS.map(t => (
               <button key={t} onClick={() => setMainTab(t)}
                 className="px-[12px] py-[5px] rounded-full border-none cursor-pointer text-[12px] font-semibold"
                 style={{ background: mainTab === t ? 'white' : 'rgba(255,255,255,0.15)', color: mainTab === t ? 'var(--navy)' : 'rgba(255,255,255,0.7)' }}>
-                {t === 'facturas' ? 'Facturas' : t === 'listas' ? 'Listas' : 'Proveedores'}
+                {TAB_LABELS[t]}
               </button>
             ))}
           </div>
@@ -2724,6 +3160,56 @@ export default function FacturasPage() {
             style={{ background: toast.startsWith('\u2713') ? '#10b981' : '#ef4444' }}>
             {toast}
           </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Cat. de Gastos tab ──
+  if (mainTab === 'categorias') {
+    return (
+      <div className="flex flex-col h-full">
+        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 0', flexShrink: 0 }}>
+          <h1 className="text-white text-[18px] font-bold m-0 mb-3">Compras</h1>
+          <div className="flex gap-[6px] pb-[10px]" style={{ flexWrap: 'wrap' }}>
+            {MAIN_TABS.map(t => (
+              <button key={t} onClick={() => setMainTab(t)}
+                className="px-[12px] py-[5px] rounded-full border-none cursor-pointer text-[12px] font-semibold"
+                style={{ background: mainTab === t ? 'white' : 'rgba(255,255,255,0.15)', color: mainTab === t ? 'var(--navy)' : 'rgba(255,255,255,0.7)' }}>
+                {TAB_LABELS[t]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <CategoriasGastoView showToast={showToast} />
+        {toast && (
+          <div className="fixed top-[60px] left-4 right-4 z-[300] rounded-[12px] p-[12px_16px] text-[13px] font-semibold text-white text-center"
+            style={{ background: toast.startsWith('✓') ? '#10b981' : '#ef4444' }}>{toast}</div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Recepción tab ──
+  if (mainTab === 'recepcion') {
+    return (
+      <div className="flex flex-col h-full">
+        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 0', flexShrink: 0 }}>
+          <h1 className="text-white text-[18px] font-bold m-0 mb-3">Compras</h1>
+          <div className="flex gap-[6px] pb-[10px]" style={{ flexWrap: 'wrap' }}>
+            {MAIN_TABS.map(t => (
+              <button key={t} onClick={() => setMainTab(t)}
+                className="px-[12px] py-[5px] rounded-full border-none cursor-pointer text-[12px] font-semibold"
+                style={{ background: mainTab === t ? 'white' : 'rgba(255,255,255,0.15)', color: mainTab === t ? 'var(--navy)' : 'rgba(255,255,255,0.7)' }}>
+                {TAB_LABELS[t]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <RecepcionView />
+        {toast && (
+          <div className="fixed top-[60px] left-4 right-4 z-[300] rounded-[12px] p-[12px_16px] text-[13px] font-semibold text-white text-center"
+            style={{ background: toast.startsWith('✓') ? '#10b981' : '#ef4444' }}>{toast}</div>
         )}
       </div>
     )
@@ -2756,12 +3242,12 @@ export default function FacturasPage() {
         </div>
 
         {/* Tab pills */}
-        <div data-coach-target="facturas-tabs" className="flex gap-[6px] mb-3">
-          {(['facturas', 'listas', 'proveedores'] as const).map(t => (
+        <div data-coach-target="facturas-tabs" className="flex gap-[6px] mb-3" style={{ flexWrap: 'wrap' }}>
+          {MAIN_TABS.map(t => (
             <button key={t} onClick={() => setMainTab(t)}
               className="px-[12px] py-[5px] rounded-full border-none cursor-pointer text-[12px] font-semibold"
               style={{ background: mainTab === t ? 'white' : 'rgba(255,255,255,0.15)', color: mainTab === t ? 'var(--navy)' : 'rgba(255,255,255,0.7)' }}>
-              {t === 'facturas' ? 'Facturas' : t === 'listas' ? 'Listas' : 'Proveedores'}
+              {TAB_LABELS[t]}
             </button>
           ))}
         </div>
@@ -2794,6 +3280,55 @@ export default function FacturasPage() {
             </button>
           ))}
         </div>
+
+        {/* Filtros: categoría / estado / proveedor */}
+        <div className="flex gap-[6px] pb-[12px]" style={{ flexWrap: 'wrap' }}>
+          {(() => {
+            const selSt: React.CSSProperties = { padding: '5px 9px', borderRadius: 8, border: '1px solid rgba(255,255,255,.25)', background: 'rgba(255,255,255,.12)', color: '#fff', fontSize: 11, fontWeight: 600, fontFamily: 'inherit', outline: 'none' }
+            return (
+              <>
+                <select value={catFiltroId} onChange={e => setCatFiltroId(e.target.value)} style={selSt}>
+                  <option value="" style={{ color: '#000' }}>Categoría: todas</option>
+                  {categoriasGasto.map(c => <option key={c.id} value={c.id} style={{ color: '#000' }}>{c.nombre}</option>)}
+                </select>
+                <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={selSt}>
+                  <option value="" style={{ color: '#000' }}>Estado: todos</option>
+                  {(['pendiente', 'confirmada', 'pagada', 'observada'] as FacturaStatus[]).map(s => (
+                    <option key={s} value={s} style={{ color: '#000' }}>{STATUS_CONFIG[s].label}</option>
+                  ))}
+                </select>
+                <select value={proveedorFiltro} onChange={e => setProveedorFiltro(e.target.value)} style={{ ...selSt, maxWidth: 180 }}>
+                  <option value="" style={{ color: '#000' }}>Proveedor: todos</option>
+                  {proveedores.map(p => <option key={p.id} value={p.nombre} style={{ color: '#000' }}>{p.nombre}</option>)}
+                </select>
+                {(catFiltroId || estadoFiltro || proveedorFiltro) && (
+                  <button onClick={() => { setCatFiltroId(''); setEstadoFiltro(''); setProveedorFiltro('') }}
+                    style={{ ...selSt, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 13 }}>close</span>Limpiar
+                  </button>
+                )}
+              </>
+            )
+          })()}
+        </div>
+      </div>
+
+      {/* KPIs estilo Fudo: A vencer / Vencidos / A pagar / Total pagado */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 8, padding: '12px 16px 0' }}>
+        {[
+          { label: 'A vencer', value: `${kpisGasto.aVencerN} · ${fmt(kpisGasto.aVencerTotal)}`, icon: 'schedule', color: '#4361a0' },
+          { label: 'Vencidos', value: `${kpisGasto.vencidasN} · ${fmt(kpisGasto.vencidasTotal)}`, icon: 'error', color: kpisGasto.vencidasN > 0 ? '#dc2626' : 'var(--text-3)' },
+          { label: 'A pagar', value: fmt(totalPorPagar), icon: 'account_balance_wallet', color: '#d97706' },
+          { label: 'Total pagado', value: fmt(kpisGasto.totalPagado), icon: 'task_alt', color: '#16a34a' },
+        ].map(k => (
+          <div key={k.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '9px 10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 14, color: k.color }}>{k.icon}</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{k.label}</span>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: k.color, fontFamily: "'DM Mono', monospace" }}>{k.value}</div>
+          </div>
+        ))}
       </div>
 
       {/* List */}
@@ -2873,6 +3408,7 @@ export default function FacturasPage() {
                 <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em' }}>N° Factura</th>
                 <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Tipo</th>
                 <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Pago</th>
+                <th style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Categoría</th>
                 <th style={{ padding: '10px 16px', textAlign: 'right', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Total</th>
                 <th style={{ padding: '10px 16px', textAlign: 'center', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Estado</th>
               </tr>
@@ -2880,6 +3416,7 @@ export default function FacturasPage() {
             <tbody>
               {facturasFiltradas.map((f, i) => {
                 const st = STATUS_CONFIG[f.status as FacturaStatus] || STATUS_CONFIG.pendiente
+                const cat = f.categoria_gasto_id ? categoriasGastoMap[f.categoria_gasto_id] : null
                 return (
                   <tr
                     key={f.id}
@@ -2898,6 +3435,13 @@ export default function FacturasPage() {
                     <td style={{ padding: '11px 12px', fontSize: 12, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace' " }}>{f.numero_factura ?? '—'}</td>
                     <td style={{ padding: '11px 12px', fontSize: 12, color: 'var(--text-2)' }}>{TIPO_LABELS[f.tipo_factura as TipoFactura] || f.tipo_factura}</td>
                     <td style={{ padding: '11px 12px', fontSize: 12, color: 'var(--text-2)' }}>{f.condicion_pago === 'cuenta_corriente' ? 'Cta. cte.' : 'Contado'}</td>
+                    <td style={{ padding: '11px 12px' }}>
+                      {cat ? (
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 99, background: `${FINANCIERA_COLOR[cat.categoria_financiera]}18`, color: FINANCIERA_COLOR[cat.categoria_financiera], whiteSpace: 'nowrap' }}>{cat.nombre}</span>
+                      ) : (
+                        <span style={{ fontSize: 11, color: 'var(--text-3)' }}>—</span>
+                      )}
+                    </td>
                     <td style={{ padding: '11px 16px', fontSize: 14, fontWeight: 700, color: 'var(--navy)', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt(f.total)}</td>
                     <td style={{ padding: '11px 16px', textAlign: 'center' }}>
                       <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 5, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>{st.label}</span>

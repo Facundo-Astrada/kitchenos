@@ -63,20 +63,28 @@ export interface VencimientoFactura {
 }
 
 /**
- * Vencimiento de pago de una factura a crédito: `30dias`/`60dias` cuentan desde
- * `fecha_factura`. `cuenta_corriente` no tiene plazo fijo (se salda al arreglo con
- * el proveedor) → `sin_fecha`, no se le inventa una fecha. `contado`/`pagada` no
- * aplican acá (no deberían llegar a esta función).
+ * Vencimiento de pago de una factura a crédito. Prioridad:
+ * 1. `fecha_vencimiento` real (columna cargada a mano o por importador) — la fuente
+ *    de verdad cuando existe.
+ * 2. Inferido: `30dias`/`60dias` cuentan desde `fecha_factura`.
+ * `cuenta_corriente` sin `fecha_vencimiento` no tiene plazo fijo (se salda al
+ * arreglo con el proveedor) → `sin_fecha`, no se le inventa una fecha.
+ * `contado`/`pagada` no aplican acá (no deberían llegar a esta función).
  */
-export function calcularVencimientoFactura(f: { fecha_factura: string; condicion_pago?: string | null }): VencimientoFactura {
-  const dias = f.condicion_pago === '30dias' ? 30 : f.condicion_pago === '60dias' ? 60 : null
-  if (dias === null) return { fecha: null, diasRestantes: null, urgencia: 'sin_fecha' }
+export function calcularVencimientoFactura(f: { fecha_factura: string; condicion_pago?: string | null; fecha_vencimiento?: string | null }): VencimientoFactura {
+  let fechaVenc: string | null = f.fecha_vencimiento ?? null
+  if (!fechaVenc) {
+    const dias = f.condicion_pago === '30dias' ? 30 : f.condicion_pago === '60dias' ? 60 : null
+    if (dias === null) return { fecha: null, diasRestantes: null, urgencia: 'sin_fecha' }
+    const venc = new Date(f.fecha_factura + 'T12:00:00')
+    venc.setDate(venc.getDate() + dias)
+    fechaVenc = venc.toISOString().slice(0, 10)
+  }
 
-  const venc = new Date(f.fecha_factura + 'T12:00:00')
-  venc.setDate(venc.getDate() + dias)
+  const venc = new Date(fechaVenc + 'T12:00:00')
   const hoy = new Date()
   hoy.setHours(12, 0, 0, 0)
   const diasRestantes = Math.round((venc.getTime() - hoy.getTime()) / 86400000)
   const urgencia: UrgenciaVencimiento = diasRestantes < 0 ? 'vencida' : diasRestantes <= 7 ? 'esta_semana' : 'proximamente'
-  return { fecha: venc.toISOString().slice(0, 10), diasRestantes, urgencia }
+  return { fecha: fechaVenc, diasRestantes, urgencia }
 }

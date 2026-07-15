@@ -110,6 +110,9 @@ export function useFacturas() {
     condicion_pago: CondicionPago
     imagen_url?: string | null
     notas?: string | null
+    categoria_gasto_id?: string | null
+    medio_pago_id?: string | null
+    fecha_vencimiento?: string | null
     items: {
       producto_nombre: string
       producto_id?: string | null
@@ -152,6 +155,9 @@ export function useFacturas() {
         imagen_url: datos.imagen_url || null,
         status: 'confirmada',
         notas: datos.notas || null,
+        categoria_gasto_id: datos.categoria_gasto_id || null,
+        medio_pago_id: datos.medio_pago_id || null,
+        fecha_vencimiento: datos.fecha_vencimiento || null,
         restaurante_id: RESTAURANTE_ID,
       }).select('id').single()
 
