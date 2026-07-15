@@ -39,6 +39,7 @@ export interface CartaItemDB {
   id: string
   nombre: string
   descripcion: string | null
+  procedimiento: string | null
   precio_venta: number
   categoria: string
   receta_id: string | null

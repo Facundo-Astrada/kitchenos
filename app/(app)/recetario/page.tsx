@@ -213,7 +213,7 @@ export default function RecetarioPage() {
   const RESTAURANTE_ID = useRestauranteId()
   const { recetas, loading, error, agregarReceta, agregarIngrediente, actualizarReceta, eliminarReceta, publicarReceta } = useRecetas()
   const { productos: stockProductos, agregarProducto } = useStock()
-  const { items: cartaItems, loading: cartaLoading, actualizarPlatoRecetaOps } = useCarta()
+  const { items: cartaItems, loading: cartaLoading, actualizarPlatoRecetaOps, actualizarItem: actualizarCartaItem } = useCarta()
   const { categorias: catDB } = useCategoriasProducto()
   const { puedeEditar, isAdmin } = usePermisos()
   const canEdit = isAdmin || puedeEditar('recetas')
@@ -492,7 +492,7 @@ export default function RecetarioPage() {
       {/* Body */}
       <div data-coach-target="recetario-lista" style={{ flex: 1, overflowY: 'auto', padding: '12px 14px 24px' }}>
         {tab === 'platos' ? (
-          <PlatosView platos={platosCompuestos} loading={cartaLoading} actualizarPlatoRecetaOps={actualizarPlatoRecetaOps} search={search} catFilter={catFilter} isDesktop={isDesktop} isAdmin={isAdmin} onOpenReceta={(rid) => router.push(`/recetario/${rid}`)} />
+          <PlatosView platos={platosCompuestos} loading={cartaLoading} actualizarPlatoRecetaOps={actualizarPlatoRecetaOps} actualizarItem={actualizarCartaItem} search={search} catFilter={catFilter} isDesktop={isDesktop} isAdmin={isAdmin} canEdit={canEdit} onOpenReceta={(rid) => router.push(`/recetario/${rid}`)} />
         ) : (<>
         {/* Salud del recetario */}
         {tab === 'recetas' && isAdmin && !loading && salud.total > 0 && (
@@ -618,20 +618,31 @@ export default function RecetarioPage() {
 // PLATOS VIEW — ficha técnica derivada: platos de la Carta con sus recetas
 // componentes y el gramaje de cada una. Lee en vivo de useCarta (sin migración).
 // ════════════════════════════════════════════════════════════════════
-const UNIDADES_OPS = ['g', 'kg', 'u', 'ml', 'l', 'pax']
 const fmtMoneyP = (n: number) => n > 0 ? `$${Math.round(n).toLocaleString('es-AR')}` : '—'
+// Gramos de un componente SOLO si la unidad es de peso (g/kg). 'pax'/'u' no cuentan
+// para el gramaje del plato ni para el total — se piden como "+ g".
+const gramosDe = (cant: number | null | undefined, unidad: string | null | undefined): number | null => {
+  if (cant == null) return null
+  if (unidad === 'g') return cant
+  if (unidad === 'kg') return cant * 1000
+  return null
+}
 
-function PlatosView({ platos: allPlatos, loading, actualizarPlatoRecetaOps, search, catFilter, isDesktop, isAdmin, onOpenReceta }: {
+function PlatosView({ platos: allPlatos, loading, actualizarPlatoRecetaOps, actualizarItem, search, catFilter, isDesktop, isAdmin, canEdit, onOpenReceta }: {
   platos: CartaItemEnriquecido[]
   loading: boolean
   actualizarPlatoRecetaOps: (id: string, datos: { cantidad_ops: number | null; unidad_ops: string | null }) => Promise<void>
+  actualizarItem: (id: string, datos: { procedimiento?: string | null }) => Promise<void>
   search: string
   catFilter: string
   isDesktop: boolean
   isAdmin: boolean
+  canEdit: boolean
   onOpenReceta: (recetaId: string) => void
 }) {
-  const [editing, setEditing] = useState<{ id: string; val: string; unit: string } | null>(null)
+  const [editing, setEditing] = useState<{ id: string; val: string } | null>(null)
+  const [procEdit, setProcEdit] = useState<{ id: string; val: string } | null>(null)
+  const [procSaving, setProcSaving] = useState(false)
 
   const platos = useMemo(() => {
     let list = allPlatos
@@ -646,10 +657,19 @@ function PlatosView({ platos: allPlatos, loading, actualizarPlatoRecetaOps, sear
     return list
   }, [allPlatos, catFilter, search])
 
-  async function guardarGramaje(prId: string, valStr: string, unit: string) {
+  // El gramaje por plato se guarda siempre en gramos (unidad fija 'g').
+  async function guardarGramaje(prId: string, valStr: string) {
     const n = parseFloat(valStr.replace(',', '.'))
-    await actualizarPlatoRecetaOps(prId, { cantidad_ops: isNaN(n) || n <= 0 ? null : n, unidad_ops: isNaN(n) || n <= 0 ? null : unit })
+    const ok = !isNaN(n) && n > 0
+    await actualizarPlatoRecetaOps(prId, { cantidad_ops: ok ? n : null, unidad_ops: ok ? 'g' : null })
     setEditing(null)
+  }
+
+  async function guardarProc(id: string) {
+    if (!procEdit) return
+    setProcSaving(true)
+    try { await actualizarItem(id, { procedimiento: procEdit.val.trim() || null }) }
+    finally { setProcSaving(false); setProcEdit(null) }
   }
 
   if (loading) return <EmptyMsg icon="hourglass_empty" text="Cargando platos…" />
@@ -666,12 +686,7 @@ function PlatosView({ platos: allPlatos, loading, actualizarPlatoRecetaOps, sear
   return (
     <div style={isDesktop ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, alignItems: 'start' } : { display: 'flex', flexDirection: 'column', gap: 10 }}>
       {platos.map(p => {
-        const totalG = p.plato_recetas.reduce((s, pr) => {
-          if (pr.cantidad_ops == null) return s
-          if (pr.unidad_ops === 'g') return s + pr.cantidad_ops
-          if (pr.unidad_ops === 'kg') return s + pr.cantidad_ops * 1000
-          return s
-        }, 0)
+        const totalG = p.plato_recetas.reduce((s, pr) => s + (gramosDe(pr.cantidad_ops, pr.unidad_ops) ?? 0), 0)
         const fc = p.food_cost_pct
         const fcColor = fc == null ? 'var(--text-3)' : fc < FC_ALERT_OK ? '#16a34a' : fc <= FC_ALERT_HIGH ? '#d97706' : '#dc2626'
         return (
@@ -698,7 +713,8 @@ function PlatosView({ platos: allPlatos, loading, actualizarPlatoRecetaOps, sear
             <div>
               {p.plato_recetas.map((pr, idx) => {
                 const isEditing = editing?.id === pr.id
-                const tieneG = pr.cantidad_ops != null
+                const g = gramosDe(pr.cantidad_ops, pr.unidad_ops)
+                const tieneG = g != null
                 return (
                   <div key={pr.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderTop: idx > 0 ? '1px solid var(--border)' : 'none' }}>
                     <button onClick={() => onOpenReceta(pr.receta_id)} title="Abrir receta"
@@ -710,21 +726,20 @@ function PlatosView({ platos: allPlatos, loading, actualizarPlatoRecetaOps, sear
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
                         <input autoFocus type="number" value={editing.val}
                           onChange={e => setEditing({ ...editing, val: e.target.value })}
-                          onKeyDown={e => { if (e.key === 'Enter') guardarGramaje(pr.id, editing.val, editing.unit); if (e.key === 'Escape') setEditing(null) }}
+                          onBlur={() => guardarGramaje(pr.id, editing.val)}
+                          onKeyDown={e => { if (e.key === 'Enter') guardarGramaje(pr.id, editing.val); if (e.key === 'Escape') setEditing(null) }}
+                          placeholder="30"
                           style={{ width: 60, textAlign: 'center', fontSize: 13, fontWeight: 700, border: '1.5px solid var(--accent)', borderRadius: 8, padding: '4px 6px', background: 'var(--bg)', color: 'var(--text-1)', outline: 'none', fontFamily: "'DM Mono', monospace" }} />
-                        <select value={editing.unit} onChange={e => setEditing({ ...editing, unit: e.target.value })}
-                          style={{ fontSize: 12, border: '1px solid var(--border)', borderRadius: 8, padding: '4px 4px', background: 'var(--bg)', color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none' }}>
-                          {UNIDADES_OPS.map(u => <option key={u} value={u}>{u}</option>)}
-                        </select>
-                        <button onClick={() => guardarGramaje(pr.id, editing.val, editing.unit)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#16a34a', display: 'flex' }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)' }}>g</span>
+                        <button onMouseDown={e => { e.preventDefault(); guardarGramaje(pr.id, editing.val) }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#16a34a', display: 'flex' }}>
                           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>check</span>
                         </button>
                       </div>
                     ) : (
-                      <button onClick={() => setEditing({ id: pr.id, val: tieneG ? String(pr.cantidad_ops) : '', unit: pr.unidad_ops || 'g' })}
+                      <button onClick={() => setEditing({ id: pr.id, val: tieneG ? String(g) : '' })}
                         style={{ flexShrink: 0, border: `1px solid ${tieneG ? 'var(--border)' : 'rgba(249,115,22,.4)'}`, borderRadius: 8, background: tieneG ? 'var(--bg)' : 'rgba(249,115,22,.06)', padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit', minWidth: 52 }}>
                         {tieneG ? (
-                          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', fontFamily: "'DM Mono', monospace" }}>{pr.cantidad_ops}<span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-3)', marginLeft: 2 }}>{pr.unidad_ops ?? 'g'}</span></span>
+                          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', fontFamily: "'DM Mono', monospace" }}>{g}<span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-3)', marginLeft: 2 }}>g</span></span>
                         ) : (
                           <span style={{ fontSize: 11, fontWeight: 700, color: '#f97316' }}>+ g</span>
                         )}
@@ -733,6 +748,41 @@ function PlatosView({ platos: allPlatos, loading, actualizarPlatoRecetaOps, sear
                   </div>
                 )
               })}
+            </div>
+
+            {/* Procedimiento del plato */}
+            <div style={{ borderTop: '1px solid var(--border)', padding: '10px 14px' }}>
+              {procEdit?.id === p.id ? (
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Procedimiento</div>
+                  <textarea autoFocus value={procEdit.val} onChange={e => setProcEdit({ id: p.id, val: e.target.value })}
+                    placeholder="Armado del plato, emplatado, temperaturas…" rows={4}
+                    style={{ width: '100%', padding: '9px 11px', borderRadius: 9, border: '1.5px solid var(--accent)', background: 'var(--bg)', fontSize: 13, color: 'var(--text-1)', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none', resize: 'vertical', lineHeight: 1.5 }} />
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
+                    <button onClick={() => setProcEdit(null)} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-2)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancelar</button>
+                    <button onClick={() => guardarProc(p.id)} disabled={procSaving} style={{ padding: '6px 16px', borderRadius: 8, border: 'none', background: '#16a34a', color: '#fff', fontSize: 12, fontWeight: 700, cursor: procSaving ? 'default' : 'pointer', fontFamily: 'inherit', opacity: procSaving ? .6 : 1 }}>{procSaving ? '…' : 'Guardar'}</button>
+                  </div>
+                </div>
+              ) : p.procedimiento ? (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Procedimiento</span>
+                    {canEdit && (
+                      <button onClick={() => setProcEdit({ id: p.id, val: p.procedimiento ?? '' })} title="Editar procedimiento"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-3)', display: 'flex' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 15 }}>edit</span>
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{p.procedimiento}</div>
+                </div>
+              ) : canEdit ? (
+                <button onClick={() => setProcEdit({ id: p.id, val: '' })}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, color: 'var(--accent)', fontSize: 12, fontWeight: 600 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
+                  Agregar procedimiento
+                </button>
+              ) : null}
             </div>
           </div>
         )

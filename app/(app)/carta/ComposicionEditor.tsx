@@ -690,13 +690,14 @@ function PlatoRecetasEditor({
     }
   }
 
-  // Gramaje por plato: escribe opsCantidad + opsUnidad (default 'g'). No toca `porciones`
-  // (que sigue en 1 para el cálculo de costo por porción).
+  // Gramaje por plato: escribe opsCantidad + opsUnidad SIEMPRE en gramos ('g').
+  // No toca `porciones` (que sigue en 1 para el cálculo de costo por porción).
+  // Solo gramos: 'pax'/'u' rompen el total del plato en el recetario.
   function saveStock(u: number) {
     const val = parseFloat(editingPorcionVal.replace(',', '.'))
     const ok = !isNaN(val) && val > 0
     setPlatoRecetas(prev => prev.map(pr => pr._uid === u
-      ? { ...pr, opsCantidad: ok ? val : null, opsUnidad: ok ? (pr.opsUnidad || 'g') : null }
+      ? { ...pr, opsCantidad: ok ? val : null, opsUnidad: ok ? 'g' : null }
       : pr))
     setEditingPorcionUid(null)
   }
@@ -724,6 +725,8 @@ function PlatoRecetasEditor({
             const opsActiva = opsPanelUid === pr._uid
             const opsConf = pr.opsPlaza && pr.opsSeccion
             const plazaCfg = PLAZAS_OPS.find(p => p.id === pr.opsPlaza)
+            // Gramaje por plato: solo cuenta si está en gramos (pax/u rompen el total)
+            const tieneG = pr.opsCantidad != null && pr.opsUnidad === 'g'
 
             return (
               <div key={pr._uid}>
@@ -761,12 +764,12 @@ function PlatoRecetasEditor({
                       style={{ width: 64, textAlign: 'center', fontSize: 13, fontWeight: 700, border: '1.5px solid var(--accent)', borderRadius: 8, padding: '4px 6px', background: 'var(--surface)', color: 'var(--navy)', outline: 'none' }}
                     />
                   ) : (
-                    <button onClick={() => { setEditingPorcionUid(pr._uid); setEditingPorcionVal(pr.opsCantidad != null ? String(pr.opsCantidad) : '') }}
-                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, border: `1px solid ${pr.opsCantidad != null ? 'var(--border)' : 'rgba(249,115,22,.4)'}`, borderRadius: 8, background: pr.opsCantidad != null ? 'var(--bg)' : 'rgba(249,115,22,.06)', padding: '4px 9px', cursor: 'pointer', minWidth: 46 }}>
-                      {pr.opsCantidad != null ? (
+                    <button onClick={() => { setEditingPorcionUid(pr._uid); setEditingPorcionVal(tieneG ? String(pr.opsCantidad) : '') }}
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, border: `1px solid ${tieneG ? 'var(--border)' : 'rgba(249,115,22,.4)'}`, borderRadius: 8, background: tieneG ? 'var(--bg)' : 'rgba(249,115,22,.06)', padding: '4px 9px', cursor: 'pointer', minWidth: 46 }}>
+                      {tieneG ? (
                         <>
                           <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', fontFamily: 'monospace', lineHeight: 1 }}>
-                            {pr.opsCantidad}<span style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-3)', marginLeft: 1 }}>{pr.opsUnidad ?? 'g'}</span>
+                            {pr.opsCantidad}<span style={{ fontSize: 9, fontWeight: 600, color: 'var(--text-3)', marginLeft: 1 }}>g</span>
                           </span>
                           <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 600, lineHeight: 1 }}>por plato</span>
                         </>
