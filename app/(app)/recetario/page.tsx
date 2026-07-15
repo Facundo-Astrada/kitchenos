@@ -213,7 +213,7 @@ export default function RecetarioPage() {
   const RESTAURANTE_ID = useRestauranteId()
   const { recetas, loading, error, agregarReceta, agregarIngrediente, actualizarReceta, eliminarReceta, publicarReceta } = useRecetas()
   const { productos: stockProductos, agregarProducto } = useStock()
-  const { items: cartaItems, loading: cartaLoading, actualizarPlatoRecetaOps, actualizarItem: actualizarCartaItem } = useCarta()
+  const { items: cartaItems, loading: cartaLoading, actualizarPlatoRecetaOps, actualizarItem: actualizarCartaItem, agregarPlatoReceta, eliminarPlatoReceta } = useCarta()
   const { categorias: catDB } = useCategoriasProducto()
   const { puedeEditar, isAdmin } = usePermisos()
   const canEdit = isAdmin || puedeEditar('recetas')
@@ -492,7 +492,7 @@ export default function RecetarioPage() {
       {/* Body */}
       <div data-coach-target="recetario-lista" style={{ flex: 1, overflowY: 'auto', padding: '12px 14px 24px' }}>
         {tab === 'platos' ? (
-          <PlatosView platos={platosCompuestos} loading={cartaLoading} actualizarPlatoRecetaOps={actualizarPlatoRecetaOps} actualizarItem={actualizarCartaItem} search={search} catFilter={catFilter} isDesktop={isDesktop} isAdmin={isAdmin} canEdit={canEdit} onOpenReceta={(rid) => router.push(`/recetario/${rid}`)} />
+          <PlatosView platos={platosCompuestos} recetas={recetasPublicadas} loading={cartaLoading} actualizarPlatoRecetaOps={actualizarPlatoRecetaOps} actualizarItem={actualizarCartaItem} agregarPlatoReceta={agregarPlatoReceta} eliminarPlatoReceta={eliminarPlatoReceta} search={search} catFilter={catFilter} isDesktop={isDesktop} isAdmin={isAdmin} canEdit={canEdit} onOpenReceta={(rid) => router.push(`/recetario/${rid}`)} />
         ) : (<>
         {/* Salud del recetario */}
         {tab === 'recetas' && isAdmin && !loading && salud.total > 0 && (
@@ -628,11 +628,14 @@ const gramosDe = (cant: number | null | undefined, unidad: string | null | undef
   return null
 }
 
-function PlatosView({ platos: allPlatos, loading, actualizarPlatoRecetaOps, actualizarItem, search, catFilter, isDesktop, isAdmin, canEdit, onOpenReceta }: {
+function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoRecetaOps, actualizarItem, agregarPlatoReceta, eliminarPlatoReceta, search, catFilter, isDesktop, isAdmin, canEdit, onOpenReceta }: {
   platos: CartaItemEnriquecido[]
+  recetas: RecetaConCosto[]
   loading: boolean
   actualizarPlatoRecetaOps: (id: string, datos: { cantidad_ops: number | null; unidad_ops: string | null }) => Promise<void>
   actualizarItem: (id: string, datos: { procedimiento?: string | null }) => Promise<void>
+  agregarPlatoReceta: (platoId: string, recetaId: string, porciones: number) => Promise<void>
+  eliminarPlatoReceta: (platoRecetaId: string) => Promise<void>
   search: string
   catFilter: string
   isDesktop: boolean
@@ -643,6 +646,9 @@ function PlatosView({ platos: allPlatos, loading, actualizarPlatoRecetaOps, actu
   const [editing, setEditing] = useState<{ id: string; val: string } | null>(null)
   const [procEdit, setProcEdit] = useState<{ id: string; val: string } | null>(null)
   const [procSaving, setProcSaving] = useState(false)
+  const [addingTo, setAddingTo] = useState<string | null>(null)   // plato id con buscador abierto
+  const [addSearch, setAddSearch] = useState('')
+  const [busy, setBusy] = useState(false)
 
   const platos = useMemo(() => {
     let list = allPlatos
@@ -670,6 +676,16 @@ function PlatosView({ platos: allPlatos, loading, actualizarPlatoRecetaOps, actu
     setProcSaving(true)
     try { await actualizarItem(id, { procedimiento: procEdit.val.trim() || null }) }
     finally { setProcSaving(false); setProcEdit(null) }
+  }
+
+  async function quitarReceta(prId: string) {
+    setBusy(true)
+    try { await eliminarPlatoReceta(prId) } finally { setBusy(false) }
+  }
+  async function sumarReceta(platoId: string, recetaId: string) {
+    setBusy(true)
+    try { await agregarPlatoReceta(platoId, recetaId, 1); setAddingTo(null); setAddSearch('') }
+    finally { setBusy(false) }
   }
 
   if (loading) return <EmptyMsg icon="hourglass_empty" text="Cargando platos…" />
@@ -745,10 +761,51 @@ function PlatosView({ platos: allPlatos, loading, actualizarPlatoRecetaOps, actu
                         )}
                       </button>
                     )}
+                    {canEdit && (
+                      <button onClick={() => quitarReceta(pr.id)} disabled={busy} title="Quitar del plato"
+                        style={{ background: 'none', border: 'none', cursor: busy ? 'default' : 'pointer', padding: 2, color: 'var(--text-3)', flexShrink: 0, display: 'flex' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+                      </button>
+                    )}
                   </div>
                 )
               })}
             </div>
+
+            {/* Agregar receta al plato */}
+            {canEdit && (
+              <div style={{ borderTop: '1px solid var(--border)' }}>
+                {addingTo === p.id ? (
+                  <div style={{ padding: '8px 12px' }}>
+                    <input autoFocus value={addSearch} onChange={e => setAddSearch(e.target.value)}
+                      placeholder="Buscar receta para agregar…"
+                      style={{ width: '100%', padding: '8px 11px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, color: 'var(--text-1)', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />
+                    <div style={{ maxHeight: 200, overflowY: 'auto', marginTop: 6 }}>
+                      {(() => {
+                        const linked = new Set(p.plato_recetas.map(pr => pr.receta_id))
+                        const q = addSearch.trim().toLowerCase()
+                        const res = recetas.filter(r => !linked.has(r.id) && (!q || r.nombre.toLowerCase().includes(q))).slice(0, 12)
+                        if (res.length === 0) return <div style={{ padding: '8px 4px', fontSize: 12, color: 'var(--text-3)' }}>{q ? 'Sin recetas que coincidan' : 'Escribí para buscar…'}</div>
+                        return res.map(r => (
+                          <button key={r.id} onClick={() => sumarReceta(p.id, r.id)} disabled={busy}
+                            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 6px', border: 'none', background: 'none', cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit', borderRadius: 8 }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--accent)' }}>menu_book</span>
+                            <span style={{ fontSize: 13, color: 'var(--text-1)' }}>{r.nombre}</span>
+                          </button>
+                        ))
+                      })()}
+                    </div>
+                    <button onClick={() => { setAddingTo(null); setAddSearch('') }} style={{ marginTop: 4, fontSize: 12, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 0' }}>Cerrar</button>
+                  </div>
+                ) : (
+                  <button onClick={() => { setAddingTo(p.id); setAddSearch('') }}
+                    style={{ width: '100%', padding: '9px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
+                    Agregar receta
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Procedimiento del plato */}
             <div style={{ borderTop: '1px solid var(--border)', padding: '10px 14px' }}>
