@@ -17,6 +17,10 @@ import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import ImportadorFichasTecnicas from '@/components/importador/ImportadorFichasTecnicas'
 import { HeaderAction } from '@/components/ui'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
+import {
+  CargaRapidaIngredientes, TotalesRapidosBar, nuevaFilaRapida, filasToIngredientesData,
+  type FilaIngredienteRapido,
+} from '@/components/recetas/CargaRapidaIngredientes'
 
 const UNIDADES = ['kg', 'g', 'l', 'ml', 'u']
 
@@ -222,6 +226,7 @@ export default function RecetarioPage() {
   const [search, setSearch] = useState('')
   const [catFilter, setCatFilter] = useState('')
   const [creando, setCreando] = useState(false)
+  const [cargaRapida, setCargaRapida] = useState(false)
   const [tab, setTab] = useState<'recetas' | 'ideas' | 'platos'>('recetas')
 
   // Allow Kitchen Coach tour to switch tabs
@@ -383,6 +388,23 @@ export default function RecetarioPage() {
     )
   }
 
+  if (cargaRapida) {
+    return (
+      <CargaRapidaScreen
+        categorias={categorias}
+        stockProductos={stockProductos}
+        recetasDisponibles={recetasPublicadas}
+        agregarReceta={agregarReceta}
+        onClose={() => setCargaRapida(false)}
+        onCreated={(id, asDraft) => {
+          setCargaRapida(false)
+          if (asDraft) { setTab('ideas') }
+          else { router.push(`/recetario/${id}`) }
+        }}
+      />
+    )
+  }
+
   return (
     <PageTransition>
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -416,6 +438,13 @@ export default function RecetarioPage() {
             >
               <span className="material-symbols-outlined" style={{ fontSize: 17, color: '#10b981' }}>link</span>
             </button>
+            {canEdit && (
+              <button onClick={() => setCargaRapida(true)} title="Carga rápida — ingredientes/subrecetas al toque"
+                style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 8, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 17, color: '#f97316' }}>bolt</span>
+              </button>
+            )}
             <HeaderAction label="Nueva" icon="add" onClick={() => setCreando(true)} />
           </div>
         </div>
@@ -492,7 +521,7 @@ export default function RecetarioPage() {
       {/* Body */}
       <div data-coach-target="recetario-lista" style={{ flex: 1, overflowY: 'auto', padding: '12px 14px 24px' }}>
         {tab === 'platos' ? (
-          <PlatosView platos={platosCompuestos} recetas={recetasPublicadas} loading={cartaLoading} actualizarPlatoRecetaOps={actualizarPlatoRecetaOps} actualizarItem={actualizarCartaItem} agregarPlatoReceta={agregarPlatoReceta} eliminarPlatoReceta={eliminarPlatoReceta} agregarReceta={agregarReceta} search={search} catFilter={catFilter} isDesktop={isDesktop} isAdmin={isAdmin} canEdit={canEdit} onOpenReceta={(rid) => router.push(`/recetario/${rid}`)} />
+          <PlatosView platos={platosCompuestos} recetas={recetasPublicadas} loading={cartaLoading} actualizarPlatoRecetaOps={actualizarPlatoRecetaOps} actualizarItem={actualizarCartaItem} agregarPlatoReceta={agregarPlatoReceta} eliminarPlatoReceta={eliminarPlatoReceta} agregarReceta={agregarReceta} stockProductos={stockProductos} search={search} catFilter={catFilter} isDesktop={isDesktop} isAdmin={isAdmin} canEdit={canEdit} onOpenReceta={(rid) => router.push(`/recetario/${rid}`)} />
         ) : (<>
         {/* Salud del recetario */}
         {tab === 'recetas' && isAdmin && !loading && salud.total > 0 && (
@@ -632,7 +661,7 @@ const gramosDe = (cant: number | null | undefined, unidad: string | null | undef
   return null
 }
 
-function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoRecetaOps, actualizarItem, agregarPlatoReceta, eliminarPlatoReceta, agregarReceta, search, catFilter, isDesktop, isAdmin, canEdit, onOpenReceta }: {
+function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoRecetaOps, actualizarItem, agregarPlatoReceta, eliminarPlatoReceta, agregarReceta, stockProductos, search, catFilter, isDesktop, isAdmin, canEdit, onOpenReceta }: {
   platos: CartaItemEnriquecido[]
   recetas: RecetaConCosto[]
   loading: boolean
@@ -641,6 +670,7 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
   agregarPlatoReceta: (platoId: string, recetaId: string, porciones: number) => Promise<void>
   eliminarPlatoReceta: (platoRecetaId: string) => Promise<void>
   agregarReceta: (datos: any, ingredientesData?: any) => Promise<string>
+  stockProductos: { id: string; nombre: string; unidad: string; precio_unitario: number }[]
   search: string
   catFilter: string
   isDesktop: boolean
@@ -654,6 +684,8 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
   const [addingTo, setAddingTo] = useState<string | null>(null)   // plato id con buscador abierto
   const [addSearch, setAddSearch] = useState('')
   const [busy, setBusy] = useState(false)
+  // Carga rápida de ingredientes para una idea nueva, abierta inline dentro de un plato
+  const [ideaEnEdicion, setIdeaEnEdicion] = useState<{ platoId: string; nombre: string; filas: FilaIngredienteRapido[]; porciones: string } | null>(null)
 
   // El input de gramaje solo guarda en su onBlur/Enter — si el usuario cambia de tab
   // o navega afuera mientras está editando, React desmonta el input SIN disparar blur
@@ -706,19 +738,26 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
     try { await agregarPlatoReceta(platoId, recetaId, 1); setAddingTo(null); setAddSearch('') }
     finally { setBusy(false) }
   }
-  // Nombre tipeado que no matchea ninguna receta existente → se crea como Idea
-  // (borrador, sin ingredientes/procedimiento todavía) y se vincula al plato de una.
-  async function crearIdeaYVincular(platoId: string, nombre: string, categoria: string) {
+  // Nombre tipeado que no matchea ninguna receta existente → se abre la carga rápida
+  // de ingredientes/subrecetas ahí mismo; al guardar se crea como Idea (borrador) y
+  // queda vinculada al plato de una, ya con sus ingredientes cargados.
+  function abrirIdeaConIngredientes(platoId: string, nombre: string) {
+    setIdeaEnEdicion({ platoId, nombre, filas: [nuevaFilaRapida()], porciones: '1' })
+  }
+  async function guardarIdeaConIngredientes() {
+    if (!ideaEnEdicion) return
     setBusy(true)
     try {
+      const plato = platos.find(p => p.id === ideaEnEdicion.platoId)
       const nuevaId = await agregarReceta({
-        nombre,
-        categoria: categoria || 'Otros',
-        porciones: 1,
+        nombre: ideaEnEdicion.nombre,
+        categoria: plato?.categoria || 'Otros',
+        porciones: parseInt(ideaEnEdicion.porciones) || 1,
         status: 'draft',
         activa: true,
-      })
-      await agregarPlatoReceta(platoId, nuevaId, 1)
+      }, filasToIngredientesData(ideaEnEdicion.filas))
+      await agregarPlatoReceta(ideaEnEdicion.platoId, nuevaId, 1)
+      setIdeaEnEdicion(null)
       setAddingTo(null); setAddSearch('')
     } finally { setBusy(false) }
   }
@@ -811,7 +850,34 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
             {/* Agregar receta al plato */}
             {canEdit && (
               <div style={{ borderTop: '1px solid var(--border)' }}>
-                {addingTo === p.id ? (
+                {ideaEnEdicion?.platoId === p.id ? (
+                  <div style={{ padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#f97316', flexShrink: 0 }}>add_circle</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ideaEnEdicion.nombre}</span>
+                      <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 700 }}>PORC.</span>
+                      <input type="text" inputMode="numeric" value={ideaEnEdicion.porciones}
+                        onChange={e => setIdeaEnEdicion({ ...ideaEnEdicion, porciones: e.target.value.replace(/[^0-9]/g, '') })}
+                        style={{ width: 32, textAlign: 'center', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 2px', fontSize: 12, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--bg)', color: 'var(--text-1)', outline: 'none' }} />
+                    </div>
+                    <TotalesRapidosBar filas={ideaEnEdicion.filas} porciones={parseInt(ideaEnEdicion.porciones) || 1} />
+                    <CargaRapidaIngredientes
+                      filas={ideaEnEdicion.filas}
+                      onChange={filas => setIdeaEnEdicion({ ...ideaEnEdicion, filas })}
+                      stockProductos={stockProductos}
+                      recetasDisponibles={recetas}
+                      autoFocus
+                    />
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <button onClick={() => setIdeaEnEdicion(null)} disabled={busy}
+                        style={{ flex: 1, padding: 9, borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-2)', fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit' }}>Cancelar</button>
+                      <button onClick={guardarIdeaConIngredientes} disabled={busy}
+                        style={{ flex: 2, padding: 9, borderRadius: 9, border: 'none', background: '#f97316', color: '#fff', fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit' }}>
+                        {busy ? 'Guardando…' : 'Guardar y vincular'}
+                      </button>
+                    </div>
+                  </div>
+                ) : addingTo === p.id ? (
                   <div style={{ padding: '8px 12px' }}>
                     <input autoFocus value={addSearch} onChange={e => setAddSearch(e.target.value)}
                       placeholder="Buscar receta para agregar…"
@@ -835,7 +901,7 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
                               </button>
                             ))}
                             {nombreNuevo && !yaExiste && (
-                              <button onClick={() => crearIdeaYVincular(p.id, nombreNuevo, p.categoria)} disabled={busy}
+                              <button onClick={() => abrirIdeaConIngredientes(p.id, nombreNuevo)} disabled={busy}
                                 style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 6px', border: '1px dashed rgba(249,115,22,.4)', background: 'rgba(249,115,22,.06)', cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit', borderRadius: 8, marginTop: res.length > 0 ? 6 : 0 }}>
                                 <span className="material-symbols-outlined" style={{ fontSize: 15, color: '#f97316' }}>add_circle</span>
                                 <span style={{ fontSize: 13, color: '#f97316', fontWeight: 700 }}>Crear &quot;{nombreNuevo}&quot; como idea</span>
@@ -3166,6 +3232,114 @@ function RecetaCard({ receta: r, isDraft, onPublish, onCompleteIA }: { receta: R
         </div>
       )}
     </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════
+// CARGA RÁPIDA — crear una receta tipeando ingredientes/subrecetas al toque,
+// sin pasar por el wizard completo (foto, IA, pasos). Food cost en vivo.
+// ════════════════════════════════════════════════════════════════════
+function CargaRapidaScreen({ categorias, stockProductos, recetasDisponibles, agregarReceta, onClose, onCreated }: {
+  categorias: string[]
+  stockProductos: { id: string; nombre: string; unidad: string; precio_unitario: number }[]
+  recetasDisponibles: RecetaConCosto[]
+  agregarReceta: (datos: any, ingredientesData?: any) => Promise<string>
+  onClose: () => void
+  onCreated: (id: string, asDraft?: boolean) => void
+}) {
+  const [nombre, setNombre] = useState('')
+  const [categoria, setCategoria] = useState('')
+  const [porciones, setPorciones] = useState('1')
+  const [precioVenta, setPrecioVenta] = useState('')
+  const [filas, setFilas] = useState<FilaIngredienteRapido[]>([nuevaFilaRapida()])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function guardar(publicar: boolean) {
+    if (!nombre.trim()) { setError('Ponele un nombre a la receta'); return }
+    setSaving(true)
+    setError(null)
+    try {
+      const nuevaId = await agregarReceta({
+        nombre: nombre.trim(),
+        categoria: categoria.trim() || 'Otros',
+        porciones: parseInt(porciones) || 1,
+        precio_venta: parseFloat(precioVenta.replace(',', '.')) || 0,
+        status: publicar ? 'published' : 'draft',
+        activa: true,
+      }, filasToIngredientesData(filas))
+      onCreated(nuevaId, !publicar)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Error al guardar')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <PageTransition>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button onClick={onClose} style={btnClear}><span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>arrow_back</span></button>
+            <div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>Carga rápida</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,.45)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Ingredientes/subrecetas al toque</div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '14px 14px 24px' }}>
+          <Section icon="edit_note" title="Datos de la receta">
+            <div style={{ background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)', padding: 12 }}>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                <input autoFocus value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre de la receta *" style={{ ...inp, flex: 2, fontWeight: 600, fontSize: 13 }} />
+                <div style={{ flex: 1 }}>
+                  <select
+                    value={CATEGORIAS_RECETA.includes(categoria) ? categoria : (categoria ? '__otra' : '')}
+                    onChange={e => { if (e.target.value !== '__otra') setCategoria(e.target.value) }}
+                    style={{ ...inp, fontSize: 11 }}
+                  >
+                    <option value="">Categoría…</option>
+                    {(categorias.length ? categorias : CATEGORIAS_RECETA).map(c => <option key={c} value={c}>{c}</option>)}
+                    <option value="__otra">Otra…</option>
+                  </select>
+                  {(!CATEGORIAS_RECETA.includes(categoria) && categoria) && (
+                    <input value={categoria} onChange={e => setCategoria(e.target.value)} placeholder="Nombre de categoría" style={{ ...inp, fontSize: 11, marginTop: 4 }} />
+                  )}
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span style={lbl}>Porciones</span>
+                  <input type="number" inputMode="numeric" min="1" value={porciones} onChange={e => setPorciones(e.target.value)} style={{ ...inp, textAlign: 'center', padding: '7px 4px' }} />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <span style={lbl}>Precio venta $</span>
+                  <input type="text" inputMode="decimal" value={precioVenta} onChange={e => setPrecioVenta(e.target.value.replace(/[^0-9.,]/g, ''))} placeholder="—" style={{ ...inp, textAlign: 'center', padding: '7px 4px' }} />
+                </label>
+              </div>
+            </div>
+          </Section>
+
+          <Section icon="restaurant" title="Ingredientes / subrecetas">
+            <TotalesRapidosBar filas={filas} porciones={parseInt(porciones) || 1} precioVenta={parseFloat(precioVenta.replace(',', '.')) || 0} />
+            <CargaRapidaIngredientes filas={filas} onChange={setFilas} stockProductos={stockProductos} recetasDisponibles={recetasDisponibles} />
+          </Section>
+
+          {error && <div style={{ color: '#dc2626', fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{error}</div>}
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => guardar(false)} disabled={saving}
+              style={{ flex: 1, padding: 12, borderRadius: 10, border: 'none', background: 'var(--navy)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: saving ? 'default' : 'pointer', fontFamily: 'inherit' }}>
+              {saving ? 'Guardando…' : 'Guardar como idea'}
+            </button>
+            <button onClick={() => guardar(true)} disabled={saving}
+              style={{ flex: 1, padding: 12, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-1)', fontSize: 13, fontWeight: 700, cursor: saving ? 'default' : 'pointer', fontFamily: 'inherit' }}>
+              Publicar directo
+            </button>
+          </div>
+        </div>
+      </div>
+    </PageTransition>
   )
 }
 
