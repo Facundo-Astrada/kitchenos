@@ -6,7 +6,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useRecetas, calcFoodCost, type RecetaConCosto } from '@/lib/hooks/useRecetas'
-import { useCarta } from '@/lib/hooks/useCarta'
+import { useCarta, type CartaItemEnriquecido } from '@/lib/hooks/useCarta'
 import { useStock } from '@/lib/hooks/useStock'
 import { useCategoriasProducto } from '@/lib/hooks/useCategoriasProducto'
 import { usePermisos } from '@/lib/hooks/usePermisos'
@@ -213,6 +213,7 @@ export default function RecetarioPage() {
   const RESTAURANTE_ID = useRestauranteId()
   const { recetas, loading, error, agregarReceta, agregarIngrediente, actualizarReceta, eliminarReceta, publicarReceta } = useRecetas()
   const { productos: stockProductos, agregarProducto } = useStock()
+  const { items: cartaItems, loading: cartaLoading, actualizarPlatoRecetaOps } = useCarta()
   const { categorias: catDB } = useCategoriasProducto()
   const { puedeEditar, isAdmin } = usePermisos()
   const canEdit = isAdmin || puedeEditar('recetas')
@@ -280,6 +281,12 @@ export default function RecetarioPage() {
   const categoriasFiltro = useMemo(() =>
     Array.from(new Set(recetasPublicadas.map(r => normalizeCategoria(r.categoria)).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'es')),
     [recetasPublicadas])
+
+  // Platos compuestos de la Carta + sus categorías (para la pestaña Platos)
+  const platosCompuestos = useMemo(() => cartaItems.filter(i => i.plato_recetas.length > 0), [cartaItems])
+  const categoriasPlatos = useMemo(() =>
+    Array.from(new Set(platosCompuestos.map(p => p.categoria).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'es')),
+    [platosCompuestos])
 
   const activeList = tab === 'recetas' ? recetasPublicadas : recetasDraft
 
@@ -466,7 +473,7 @@ export default function RecetarioPage() {
         </button>
       </div>
 
-      {/* Category tabs (solo en pestaña Recetas) */}
+      {/* Category tabs (pestaña Recetas) */}
       {tab === 'recetas' && categoriasFiltro.length > 0 && (
         <div data-coach-target="recetario-categorias" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '8px 14px', display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0, scrollbarWidth: 'none' }}>
           <CatTab label="Todas" active={!catFilter} onClick={() => setCatFilter('')} />
@@ -474,10 +481,18 @@ export default function RecetarioPage() {
         </div>
       )}
 
+      {/* Category tabs (pestaña Platos — categorías de la Carta) */}
+      {tab === 'platos' && categoriasPlatos.length > 0 && (
+        <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '8px 14px', display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0, scrollbarWidth: 'none' }}>
+          <CatTab label="Todos" active={!catFilter} onClick={() => setCatFilter('')} />
+          {categoriasPlatos.map(c => <CatTab key={c} label={c} active={catFilter === c} onClick={() => setCatFilter(catFilter === c ? '' : c)} />)}
+        </div>
+      )}
+
       {/* Body */}
       <div data-coach-target="recetario-lista" style={{ flex: 1, overflowY: 'auto', padding: '12px 14px 24px' }}>
         {tab === 'platos' ? (
-          <PlatosView search={search} isDesktop={isDesktop} isAdmin={isAdmin} onOpenReceta={(rid) => router.push(`/recetario/${rid}`)} />
+          <PlatosView platos={platosCompuestos} loading={cartaLoading} actualizarPlatoRecetaOps={actualizarPlatoRecetaOps} search={search} catFilter={catFilter} isDesktop={isDesktop} isAdmin={isAdmin} onOpenReceta={(rid) => router.push(`/recetario/${rid}`)} />
         ) : (<>
         {/* Salud del recetario */}
         {tab === 'recetas' && isAdmin && !loading && salud.total > 0 && (
@@ -606,17 +621,21 @@ export default function RecetarioPage() {
 const UNIDADES_OPS = ['g', 'kg', 'u', 'ml', 'l', 'pax']
 const fmtMoneyP = (n: number) => n > 0 ? `$${Math.round(n).toLocaleString('es-AR')}` : '—'
 
-function PlatosView({ search, isDesktop, isAdmin, onOpenReceta }: {
+function PlatosView({ platos: allPlatos, loading, actualizarPlatoRecetaOps, search, catFilter, isDesktop, isAdmin, onOpenReceta }: {
+  platos: CartaItemEnriquecido[]
+  loading: boolean
+  actualizarPlatoRecetaOps: (id: string, datos: { cantidad_ops: number | null; unidad_ops: string | null }) => Promise<void>
   search: string
+  catFilter: string
   isDesktop: boolean
   isAdmin: boolean
   onOpenReceta: (recetaId: string) => void
 }) {
-  const { items, loading, actualizarPlatoRecetaOps } = useCarta()
   const [editing, setEditing] = useState<{ id: string; val: string; unit: string } | null>(null)
 
   const platos = useMemo(() => {
-    let list = items.filter(i => i.plato_recetas.length > 0)
+    let list = allPlatos
+    if (catFilter) list = list.filter(p => p.categoria === catFilter)
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(p =>
@@ -625,7 +644,7 @@ function PlatosView({ search, isDesktop, isAdmin, onOpenReceta }: {
       )
     }
     return list
-  }, [items, search])
+  }, [allPlatos, catFilter, search])
 
   async function guardarGramaje(prId: string, valStr: string, unit: string) {
     const n = parseFloat(valStr.replace(',', '.'))
@@ -638,7 +657,7 @@ function PlatosView({ search, isDesktop, isAdmin, onOpenReceta }: {
     return (
       <div style={{ textAlign: 'center', padding: '48px 24px', color: '#94a3b8' }}>
         <div style={{ fontSize: 28, marginBottom: 8 }}>🍽️</div>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>{search.trim() ? 'Sin resultados' : 'Sin platos compuestos'}</div>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>{(search.trim() || catFilter) ? 'Sin resultados' : 'Sin platos compuestos'}</div>
         <p style={{ fontSize: 11, marginTop: 6, color: '#64748b' }}>Los platos con recetas vinculadas desde la Carta aparecen acá como ficha técnica</p>
       </div>
     )
