@@ -492,7 +492,7 @@ export default function RecetarioPage() {
       {/* Body */}
       <div data-coach-target="recetario-lista" style={{ flex: 1, overflowY: 'auto', padding: '12px 14px 24px' }}>
         {tab === 'platos' ? (
-          <PlatosView platos={platosCompuestos} recetas={recetasPublicadas} loading={cartaLoading} actualizarPlatoRecetaOps={actualizarPlatoRecetaOps} actualizarItem={actualizarCartaItem} agregarPlatoReceta={agregarPlatoReceta} eliminarPlatoReceta={eliminarPlatoReceta} search={search} catFilter={catFilter} isDesktop={isDesktop} isAdmin={isAdmin} canEdit={canEdit} onOpenReceta={(rid) => router.push(`/recetario/${rid}`)} />
+          <PlatosView platos={platosCompuestos} recetas={recetasPublicadas} loading={cartaLoading} actualizarPlatoRecetaOps={actualizarPlatoRecetaOps} actualizarItem={actualizarCartaItem} agregarPlatoReceta={agregarPlatoReceta} eliminarPlatoReceta={eliminarPlatoReceta} agregarReceta={agregarReceta} search={search} catFilter={catFilter} isDesktop={isDesktop} isAdmin={isAdmin} canEdit={canEdit} onOpenReceta={(rid) => router.push(`/recetario/${rid}`)} />
         ) : (<>
         {/* Salud del recetario */}
         {tab === 'recetas' && isAdmin && !loading && salud.total > 0 && (
@@ -619,6 +619,10 @@ export default function RecetarioPage() {
 // componentes y el gramaje de cada una. Lee en vivo de useCarta (sin migración).
 // ════════════════════════════════════════════════════════════════════
 const fmtMoneyP = (n: number) => n > 0 ? `$${Math.round(n).toLocaleString('es-AR')}` : '—'
+// Una receta "falta estandarizar" si sigue siendo borrador o si nunca se le cargó
+// el peso neto/escurrido final (el que se toma recién al terminar de cocinarla).
+const faltaEstandarizar = (r: { status?: string; peso_escurrido_g?: number | null; peso_total_g?: number | null } | null | undefined): boolean =>
+  !r || r.status === 'draft' || (r.peso_escurrido_g == null && r.peso_total_g == null)
 // Gramos de un componente SOLO si la unidad es de peso (g/kg). 'pax'/'u' no cuentan
 // para el gramaje del plato ni para el total — se piden como "+ g".
 const gramosDe = (cant: number | null | undefined, unidad: string | null | undefined): number | null => {
@@ -628,7 +632,7 @@ const gramosDe = (cant: number | null | undefined, unidad: string | null | undef
   return null
 }
 
-function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoRecetaOps, actualizarItem, agregarPlatoReceta, eliminarPlatoReceta, search, catFilter, isDesktop, isAdmin, canEdit, onOpenReceta }: {
+function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoRecetaOps, actualizarItem, agregarPlatoReceta, eliminarPlatoReceta, agregarReceta, search, catFilter, isDesktop, isAdmin, canEdit, onOpenReceta }: {
   platos: CartaItemEnriquecido[]
   recetas: RecetaConCosto[]
   loading: boolean
@@ -636,6 +640,7 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
   actualizarItem: (id: string, datos: { procedimiento?: string | null }) => Promise<void>
   agregarPlatoReceta: (platoId: string, recetaId: string, porciones: number) => Promise<void>
   eliminarPlatoReceta: (platoRecetaId: string) => Promise<void>
+  agregarReceta: (datos: any, ingredientesData?: any) => Promise<string>
   search: string
   catFilter: string
   isDesktop: boolean
@@ -649,6 +654,20 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
   const [addingTo, setAddingTo] = useState<string | null>(null)   // plato id con buscador abierto
   const [addSearch, setAddSearch] = useState('')
   const [busy, setBusy] = useState(false)
+
+  // El input de gramaje solo guarda en su onBlur/Enter — si el usuario cambia de tab
+  // o navega afuera mientras está editando, React desmonta el input SIN disparar blur
+  // (los browsers no emiten blur cuando el nodo enfocado se remueve del DOM), y el
+  // valor tipeado se pierde en silencio. Este ref + cleanup flushea el guardado pendiente.
+  const editingRef = useRef(editing)
+  useEffect(() => { editingRef.current = editing }, [editing])
+  useEffect(() => () => {
+    const pending = editingRef.current
+    if (!pending) return
+    const n = parseFloat(pending.val.replace(',', '.'))
+    const ok = !isNaN(n) && n > 0
+    actualizarPlatoRecetaOps(pending.id, { cantidad_ops: ok ? n : null, unidad_ops: ok ? 'g' : null })
+  }, [actualizarPlatoRecetaOps])
 
   const platos = useMemo(() => {
     let list = allPlatos
@@ -686,6 +705,22 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
     setBusy(true)
     try { await agregarPlatoReceta(platoId, recetaId, 1); setAddingTo(null); setAddSearch('') }
     finally { setBusy(false) }
+  }
+  // Nombre tipeado que no matchea ninguna receta existente → se crea como Idea
+  // (borrador, sin ingredientes/procedimiento todavía) y se vincula al plato de una.
+  async function crearIdeaYVincular(platoId: string, nombre: string, categoria: string) {
+    setBusy(true)
+    try {
+      const nuevaId = await agregarReceta({
+        nombre,
+        categoria: categoria || 'Otros',
+        porciones: 1,
+        status: 'draft',
+        activa: true,
+      })
+      await agregarPlatoReceta(platoId, nuevaId, 1)
+      setAddingTo(null); setAddSearch('')
+    } finally { setBusy(false) }
   }
 
   if (loading) return <EmptyMsg icon="hourglass_empty" text="Cargando platos…" />
@@ -731,12 +766,13 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
                 const isEditing = editing?.id === pr.id
                 const g = gramosDe(pr.cantidad_ops, pr.unidad_ops)
                 const tieneG = g != null
+                const sinEstandarizar = faltaEstandarizar(pr.receta)
                 return (
                   <div key={pr.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderTop: idx > 0 ? '1px solid var(--border)' : 'none' }}>
-                    <button onClick={() => onOpenReceta(pr.receta_id)} title="Abrir receta"
+                    <button onClick={() => onOpenReceta(pr.receta_id)} title={sinEstandarizar ? 'Falta terminar de estandarizar (peso neto)' : 'Abrir receta'}
                       style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', padding: 0 }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--accent)', flexShrink: 0 }}>menu_book</span>
-                      <span style={{ fontSize: 13, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.receta?.nombre ?? '—'}</span>
+                      <span className="material-symbols-outlined" style={{ fontSize: 15, color: sinEstandarizar ? '#f97316' : 'var(--accent)', flexShrink: 0 }}>{sinEstandarizar ? 'construction' : 'menu_book'}</span>
+                      <span style={{ fontSize: 13, color: sinEstandarizar ? '#f97316' : 'var(--text-1)', fontWeight: sinEstandarizar ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.receta?.nombre ?? '—'}</span>
                     </button>
                     {isEditing ? (
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
@@ -785,14 +821,28 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
                         const linked = new Set(p.plato_recetas.map(pr => pr.receta_id))
                         const q = addSearch.trim().toLowerCase()
                         const res = recetas.filter(r => !linked.has(r.id) && (!q || r.nombre.toLowerCase().includes(q))).slice(0, 12)
-                        if (res.length === 0) return <div style={{ padding: '8px 4px', fontSize: 12, color: 'var(--text-3)' }}>{q ? 'Sin recetas que coincidan' : 'Escribí para buscar…'}</div>
-                        return res.map(r => (
-                          <button key={r.id} onClick={() => sumarReceta(p.id, r.id)} disabled={busy}
-                            style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 6px', border: 'none', background: 'none', cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit', borderRadius: 8 }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--accent)' }}>menu_book</span>
-                            <span style={{ fontSize: 13, color: 'var(--text-1)' }}>{r.nombre}</span>
-                          </button>
-                        ))
+                        const nombreNuevo = addSearch.trim()
+                        const yaExiste = !!nombreNuevo && recetas.some(r => r.nombre.trim().toLowerCase() === nombreNuevo.toLowerCase())
+                        return (
+                          <>
+                            {res.length === 0 && !nombreNuevo && <div style={{ padding: '8px 4px', fontSize: 12, color: 'var(--text-3)' }}>Escribí para buscar…</div>}
+                            {res.length === 0 && nombreNuevo && <div style={{ padding: '8px 4px', fontSize: 12, color: 'var(--text-3)' }}>Sin recetas que coincidan</div>}
+                            {res.map(r => (
+                              <button key={r.id} onClick={() => sumarReceta(p.id, r.id)} disabled={busy}
+                                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 6px', border: 'none', background: 'none', cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit', borderRadius: 8 }}>
+                                <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--accent)' }}>menu_book</span>
+                                <span style={{ fontSize: 13, color: 'var(--text-1)' }}>{r.nombre}</span>
+                              </button>
+                            ))}
+                            {nombreNuevo && !yaExiste && (
+                              <button onClick={() => crearIdeaYVincular(p.id, nombreNuevo, p.categoria)} disabled={busy}
+                                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 6px', border: '1px dashed rgba(249,115,22,.4)', background: 'rgba(249,115,22,.06)', cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit', borderRadius: 8, marginTop: res.length > 0 ? 6 : 0 }}>
+                                <span className="material-symbols-outlined" style={{ fontSize: 15, color: '#f97316' }}>add_circle</span>
+                                <span style={{ fontSize: 13, color: '#f97316', fontWeight: 700 }}>Crear &quot;{nombreNuevo}&quot; como idea</span>
+                              </button>
+                            )}
+                          </>
+                        )
                       })()}
                     </div>
                     <button onClick={() => { setAddingTo(null); setAddSearch('') }} style={{ marginTop: 4, fontSize: 12, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 0' }}>Cerrar</button>
@@ -3022,6 +3072,7 @@ function EmptyMsg({ icon, text }: { icon: string; text: string }) {
 function RecetaCard({ receta: r, isDraft, onPublish, onCompleteIA }: { receta: RecetaConCosto; isDraft?: boolean; onPublish?: () => void; onCompleteIA?: () => void }) {
   const fc = r.food_cost
   const sinIngredientes = (r.ingredientes?.length ?? 0) === 0
+  const sinPesoNeto = !isDraft && faltaEstandarizar(r)
   return (
     <div style={{ position: 'relative' }}>
       <Link href={`/recetario/${r.id}`} style={{ textDecoration: 'none', display: 'block', background: r.es_plato && !isDraft ? 'rgba(67,97,160,.035)' : 'var(--surface)', border: isDraft ? '1px solid rgba(245,158,11,.3)' : r.es_plato ? '1px solid rgba(67,97,160,.35)' : '1px solid var(--border)', borderRadius: 14, padding: isDraft && onCompleteIA ? '14px 14px 44px' : '14px', cursor: 'pointer' }}>
@@ -3043,6 +3094,16 @@ function RecetaCard({ receta: r, isDraft, onPublish, onCompleteIA }: { receta: R
                 }}>
                   <span className="material-symbols-outlined" style={{ fontSize: 11 }}>restaurant</span>
                   PLATO
+                </span>
+              )}
+              {sinPesoNeto && (
+                <span title="Falta cargar el peso neto/escurrido al terminar la receta" style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 3,
+                  fontSize: 9, fontWeight: 700, color: '#f97316', background: 'rgba(249,115,22,.1)',
+                  border: '1px solid rgba(249,115,22,.28)', borderRadius: 4, padding: '1px 6px',
+                }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 11 }}>construction</span>
+                  SIN PESO NETO
                 </span>
               )}
             </div>
