@@ -44,7 +44,10 @@ export interface CompPayload {
 }
 
 // Fuente de datos con costo para el resumen vivo
-export interface RefConCosto { id: string; nombre: string; costo: number }
+// costoPorGramo: costo por gramo cuando se puede derivar (receta con peso_total_g
+// cargado, o producto con unidad de stock convertible a gramos). null = no se
+// puede calcular por gramo — el costeo cae a `costo` (por porción/unidad) como fallback.
+export interface RefConCosto { id: string; nombre: string; costo: number; costoPorGramo?: number | null }
 
 // Datos para editar una composición existente
 export interface CompInicial {
@@ -164,6 +167,37 @@ export default function ComposicionEditor({
   const [activeSearch, setActiveSearch] = useState<string | null>(null)
   const [sectionQuery, setSectionQuery] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
+  const nuevaSeccionRef = useRef<HTMLInputElement>(null)
+
+  // ── Drag & drop de secciones (reordenar arrastrando el handle) ──
+  const seccionRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const [draggingSec, setDraggingSec] = useState<string | null>(null)
+  function handleSecDragStart(e: React.PointerEvent, sec: string) {
+    e.preventDefault()
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    setDraggingSec(sec)
+  }
+  function handleSecDragMove(e: React.PointerEvent) {
+    if (!draggingSec) return
+    const y = e.clientY
+    for (const [name, el] of Object.entries(seccionRefs.current)) {
+      if (!el || name === draggingSec) continue
+      const rect = el.getBoundingClientRect()
+      if (y >= rect.top && y <= rect.bottom) {
+        setSecciones(prev => {
+          const from = prev.indexOf(draggingSec)
+          const to = prev.indexOf(name)
+          if (from === -1 || to === -1 || from === to) return prev
+          const next = [...prev]
+          next.splice(from, 1)
+          next.splice(to, 0, draggingSec)
+          return next
+        })
+        break
+      }
+    }
+  }
+  function handleSecDragEnd() { setDraggingSec(null) }
 
   // ── Estado exclusivo para modo plato (UI simplificada) ──
   const [platoRecetas, setPlatoRecetas] = useState<PlatoItem[]>(() => {
@@ -215,8 +249,14 @@ export default function ComposicionEditor({
     }
     return items.reduce((s, it) => {
       const fuente = it.tipo === 'receta' ? recetas : it.tipo === 'producto' ? productos : it.tipo === 'plato' ? cartaItems : null
-      const costo = fuente && it.ref_id ? (fuente.find(f => f.id === it.ref_id)?.costo ?? 0) : 0
-      return s + costo * (it.cantidad ?? 1)
+      const ref = fuente && it.ref_id ? fuente.find(f => f.id === it.ref_id) : null
+      if (!ref) return s
+      // Cantidad se carga en gramos: si la receta/producto tiene costo por gramo
+      // derivable, usarlo (coincide con el costeo real del recetario). Si no
+      // (ej: receta sin peso_total_g cargado), fallback a costo por porción/unidad
+      // para no romper el food cost ya calculado.
+      if (ref.costoPorGramo != null && it.cantidad != null) return s + ref.costoPorGramo * it.cantidad
+      return s + ref.costo * (it.cantidad ?? 1)
     }, 0)
   }, [esPlato, platoRecetas, items, recetas, productos, cartaItems])
 
@@ -487,15 +527,40 @@ export default function ComposicionEditor({
               </span>
               <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', fontFamily: 'monospace' }}>· {items.filter(i => i.nombre.trim()).length}</span>
               <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 'auto' }}>{secciones.length} {secciones.length === 1 ? 'sección' : 'secciones'}</span>
+              <button
+                onClick={() => { nuevaSeccionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); nuevaSeccionRef.current?.focus() }}
+                title="Agregar sección"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 7, border: 'none', cursor: 'pointer', background: 'var(--accent)', color: '#fff', flexShrink: 0 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
+              </button>
             </div>
 
             {/* Secciones + ítems */}
             {secciones.map((sec, secIdx) => {
               const rows = items.filter(it => it._seccion === sec)
               const isEditingSec = secEdit?.idx === secIdx
+              const isDraggingThis = draggingSec === sec
               return (
-                <div key={`${sec}-${secIdx}`} style={{ marginBottom: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
+                <div key={`${sec}-${secIdx}`}
+                  ref={el => { seccionRefs.current[sec] = el }}
+                  style={{
+                    marginBottom: 12, background: 'var(--surface)',
+                    border: isDraggingThis ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+                    borderRadius: 14, overflow: 'hidden',
+                    opacity: isDraggingThis ? .6 : 1,
+                    boxShadow: isDraggingThis ? '0 4px 14px rgba(0,0,0,.12)' : 'none',
+                  }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+                    <span
+                      onPointerDown={e => handleSecDragStart(e, sec)}
+                      onPointerMove={handleSecDragMove}
+                      onPointerUp={handleSecDragEnd}
+                      onPointerCancel={handleSecDragEnd}
+                      title="Arrastrar para reordenar"
+                      className="material-symbols-outlined"
+                      style={{ fontSize: 17, color: 'var(--text-3)', cursor: 'grab', touchAction: 'none', flexShrink: 0, marginLeft: -2 }}>
+                      drag_indicator
+                    </span>
                     {isEditingSec ? (
                       <input value={secEdit!.val} onChange={e => setSecEdit({ idx: secIdx, val: e.target.value })} onBlur={commitSecRename} onKeyDown={e => { if (e.key === 'Enter') commitSecRename() }} autoFocus
                         style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 13, fontWeight: 700, color: 'var(--text-1)', outline: 'none', textTransform: 'uppercase', letterSpacing: '.04em' }} />
@@ -576,10 +641,11 @@ export default function ComposicionEditor({
               )
             })}
 
-            <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-              <input value={nuevaSeccion} onChange={e => setNuevaSeccion(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addSeccion() }} placeholder="Nueva sección (ej: Bebidas)" style={{ ...inp, flex: 1 }} />
-              <button onClick={addSeccion} disabled={!nuevaSeccion.trim()} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: nuevaSeccion.trim() ? 'var(--navy)' : 'var(--border)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: nuevaSeccion.trim() ? 'pointer' : 'default', fontFamily: 'inherit', display: 'flex', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 6, marginTop: 4, padding: 8, borderRadius: 12, border: '1.5px dashed var(--accent)', background: 'rgba(67,97,160,.06)' }}>
+              <input ref={nuevaSeccionRef} value={nuevaSeccion} onChange={e => setNuevaSeccion(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addSeccion() }} placeholder="Nueva sección (ej: Bebidas)" style={{ ...inp, flex: 1, border: 'none', background: 'var(--surface)' }} />
+              <button onClick={addSeccion} disabled={!nuevaSeccion.trim()} style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: nuevaSeccion.trim() ? 'var(--navy)' : 'var(--border)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: nuevaSeccion.trim() ? 'pointer' : 'default', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 5 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
+                Agregar sección
               </button>
             </div>
           </>
@@ -907,6 +973,9 @@ function ItemRowInline({
   const [search, setSearch] = useState('')
   const [showResults, setShowResults] = useState(false)
   const [opsOpen, setOpsOpen] = useState(false)
+  // Texto crudo del input de cantidad — desacoplado de item.cantidad (number)
+  // para no perder la coma decimal ni el punto final mientras se escribe.
+  const [cantidadText, setCantidadText] = useState(item.cantidad != null ? String(item.cantidad).replace('.', ',') : '')
 
   // Receta vinculada todavía sin realizar (idea/draft) → se pinta en rojo.
   const isDraft = item.tipo === 'receta' && !!item.ref_id && draftRecetaIds.has(item.ref_id)
@@ -932,6 +1001,10 @@ function ItemRowInline({
   }, [search, recetas, productos, cartaItems])
 
   const tcfg = item.tipo ? TIPO_CFG[item.tipo] : null
+  // Fuente vinculada (para saber si se puede costear por gramo)
+  const fuenteLigada = item.tipo === 'receta' ? recetas : item.tipo === 'producto' ? productos : item.tipo === 'plato' ? cartaItems : null
+  const refLigado = fuenteLigada && item.ref_id ? fuenteLigada.find(f => f.id === item.ref_id) : null
+  const sinCostoPorGramo = !!refLigado && refLigado.costoPorGramo == null
 
   const chip = (active: boolean): React.CSSProperties => ({
     padding: '5px 11px', borderRadius: 99, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
@@ -1045,13 +1118,29 @@ function ItemRowInline({
             </>
           )}
 
-          {/* Cantidad */}
+          {/* Cantidad — siempre en gramos, para coincidir con el costeo del recetario */}
           <div>
             <label style={lbl}>Cantidad</label>
-            <div style={{ display: 'flex', gap: 5 }}>
-              <input value={item.cantidad != null ? String(item.cantidad) : ''} onChange={e => onChange({ cantidad: e.target.value.trim() ? parseFloat(e.target.value.replace(',', '.')) : null })} placeholder="250" inputMode="decimal" style={{ ...fieldInp, flex: 1 }} />
-              <input value={item.unidad ?? ''} onChange={e => onChange({ unidad: e.target.value || null })} placeholder="u" style={{ ...fieldInp, width: 50 }} />
+            <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+              <input value={cantidadText}
+                onChange={e => {
+                  const raw = e.target.value
+                  setCantidadText(raw)
+                  const parsed = raw.trim() ? parseFloat(raw.replace(',', '.')) : null
+                  onChange({ cantidad: parsed != null && !isNaN(parsed) ? parsed : null, unidad: 'g' })
+                }}
+                onBlur={() => setCantidadText(item.cantidad != null ? String(item.cantidad).replace('.', ',') : '')}
+                placeholder="250" inputMode="decimal" style={{ ...fieldInp, flex: 1 }} />
+              <span style={{ ...fieldInp, width: 40, textAlign: 'center', background: 'var(--surface)', color: 'var(--text-3)', fontWeight: 700 }}>g</span>
             </div>
+            {sinCostoPorGramo && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6, padding: '5px 8px', background: 'rgba(217,119,6,.1)', borderRadius: 7 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 13, color: '#d97706' }}>warning</span>
+                <span style={{ fontSize: 10, color: '#d97706', fontWeight: 600 }}>
+                  {item.tipo === 'receta' ? 'Esta receta no tiene peso total cargado — el costo usa la porción como aproximación. Cargá el peso en Recetario para costear exacto por gramo.' : 'No se pudo derivar el costo por gramo de este ítem — el costo total puede ser aproximado.'}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       )}

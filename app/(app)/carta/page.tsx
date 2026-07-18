@@ -6,7 +6,7 @@ import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { useCarta, type CategoriaCartaItem, type CartaCategoria, type CartaItemEnriquecido } from '@/lib/hooks/useCarta'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { usePermisos } from '@/lib/hooks/usePermisos'
-import { useRecetas, type RecetaConCosto } from '@/lib/hooks/useRecetas'
+import { useRecetas, type RecetaConCosto, unitConversionFactor } from '@/lib/hooks/useRecetas'
 import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
 import { useVentas } from '@/lib/hooks/useVentas'
 import { usePackagingGrupos, type PackagingGrupo } from '@/lib/hooks/usePackagingGrupos'
@@ -1246,6 +1246,7 @@ function DetailView({
   const [opsPesoPorcion, setOpsPesoPorcion] = useState('')
   const [opsPesoPorcionUnidad, setOpsPesoPorcionUnidad] = useState('g')
   const [opsSaving, setOpsSaving] = useState(false)
+  const [opsError, setOpsError] = useState('')
   // Draft recipe creation
   const [creatingDraft, setCreatingDraft] = useState(false)
   const [creatingTarea, setCreatingTarea] = useState(false)
@@ -1301,6 +1302,7 @@ function DetailView({
   const handleGuardarOPS = async (pr: { id: string; receta_id: string; receta?: { nombre: string } }) => {
     if (!opsPlaza || !opsSeccion || opsSaving) return
     setOpsSaving(true)
+    setOpsError('')
     try {
       const capVal = parseFloat(opsCantidad) || 0
 
@@ -1318,17 +1320,19 @@ function DetailView({
       const recipienteCapacidad = recipienteNombre ? miCantidad : null
 
       // 1. Guardar plaza + contribución de ESTE plato en plato_recetas
-      await supabaseDV.from('plato_recetas')
+      const { error: errPlatoReceta } = await supabaseDV.from('plato_recetas')
         .update({ plaza: opsPlaza, cantidad_ops: miCantidad, unidad_ops: opsUnidad })
         .eq('id', pr.id)
+      if (errPlatoReceta) throw errPlatoReceta
 
       // 2. Sumar TODAS las contribuciones de esta receta en esta plaza
-      const { data: todasContribuciones } = await supabaseDV
+      const { data: todasContribuciones, error: errSuma } = await supabaseDV
         .from('plato_recetas')
         .select('cantidad_ops')
         .eq('receta_id', pr.receta_id)
         .eq('plaza', opsPlaza)
         .not('cantidad_ops', 'is', null)
+      if (errSuma) throw errSuma
 
       const cantidadTotal = (todasContribuciones ?? []).reduce(
         (sum, r) => sum + (r.cantidad_ops ?? 0), 0
@@ -1338,34 +1342,37 @@ function DetailView({
       const secNombre = SECCIONES_OPS.find(s => s.id === opsSeccion)?.label ?? opsSeccion
       const secIcono = SECCIONES_OPS.find(s => s.id === opsSeccion)?.icono ?? 'inventory_2'
       const secOrden = SECCIONES_OPS.findIndex(s => s.id === opsSeccion)
-      const { data: secExistente } = await supabaseDV
+      const { data: secExistente, error: errSecSelect } = await supabaseDV
         .from('checklist_secciones')
         .select('id')
         .eq('restaurante_id', restauranteId)
         .eq('plaza', opsPlaza)
         .ilike('nombre', secNombre)
         .limit(1)
+      if (errSecSelect) throw errSecSelect
       let seccionId: string | null = secExistente?.[0]?.id ?? null
       if (!seccionId) {
-        const { data: newSec } = await supabaseDV
+        const { data: newSec, error: errSecInsert } = await supabaseDV
           .from('checklist_secciones')
           .insert({ nombre: secNombre, icono: secIcono, plaza: opsPlaza, orden: secOrden, restaurante_id: restauranteId })
           .select('id').single()
+        if (errSecInsert) throw errSecInsert
         seccionId = newSec?.id ?? null
       }
 
       // 4. Upsert checklist_item con la SUMA de contribuciones + recipiente/peso
       const nombre = pr.receta?.nombre ?? search
-      const { data: existente } = await supabaseDV
+      const { data: existente, error: errExistente } = await supabaseDV
         .from('checklist_items')
         .select('id')
         .eq('restaurante_id', restauranteId)
         .eq('receta_id', pr.receta_id)
         .eq('plaza', opsPlaza)
         .limit(1)
+      if (errExistente) throw errExistente
 
       if (existente?.[0]) {
-        await supabaseDV.from('checklist_items').update({
+        const { error: errUpdate } = await supabaseDV.from('checklist_items').update({
           cantidad: cantidadTotal,
           unidad: opsUnidad,
           seccion_id: seccionId,
@@ -1375,8 +1382,9 @@ function DetailView({
           peso_porcion: pesoPorcion,
           peso_porcion_unidad: pesoPorcionUnidad,
         }).eq('id', existente[0].id)
+        if (errUpdate) throw errUpdate
       } else {
-        await supabaseDV.from('checklist_items').insert({
+        const { error: errInsert } = await supabaseDV.from('checklist_items').insert({
           nombre,
           plaza: opsPlaza,
           receta_id: pr.receta_id,
@@ -1392,8 +1400,13 @@ function DetailView({
           peso_porcion: pesoPorcion,
           peso_porcion_unidad: pesoPorcionUnidad,
         })
+        if (errInsert) throw errInsert
       }
       setOpsPanel(null)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message) : 'desconocido'
+      console.error('[Carta] handleGuardarOPS error:', e)
+      setOpsError(msg)
     } finally { setOpsSaving(false) }
   }
 
@@ -1726,6 +1739,7 @@ function DetailView({
                     onClick={async () => {
                       if (opsPanel === pr.id) { setOpsPanel(null); return }
                       setOpsPanel(pr.id)
+                      setOpsError('')
                       setOpsPlaza(pr.plaza ?? '')
                       setOpsSeccion('')
                       setOpsCantidad(pr.cantidad_ops != null ? String(pr.cantidad_ops) : '')
@@ -1733,15 +1747,17 @@ function DetailView({
                       setOpsRecipienteNombre('')
                       setOpsPesoPorcion('')
                       setOpsPesoPorcionUnidad('g')
-                      // Prefill recipiente/peso desde checklist_items si ya existe
+                      // Prefill recipiente/peso/sección desde checklist_items si ya existe
                       if (pr.receta_id && pr.plaza) {
                         const { data } = await supabaseDV.from('checklist_items')
-                          .select('recipiente_nombre, recipiente_capacidad, peso_porcion, peso_porcion_unidad, unidad')
+                          .select('recipiente_nombre, recipiente_capacidad, peso_porcion, peso_porcion_unidad, unidad, seccion')
                           .eq('receta_id', pr.receta_id).eq('plaza', pr.plaza).limit(1)
                         if (data?.[0]) {
                           setOpsRecipienteNombre(data[0].recipiente_nombre ?? '')
                           setOpsPesoPorcion(data[0].peso_porcion != null ? String(data[0].peso_porcion) : '')
                           setOpsPesoPorcionUnidad(data[0].peso_porcion_unidad ?? 'g')
+                          const secMatch = SECCIONES_OPS.find(s => s.label === data[0].seccion)
+                          setOpsSeccion(secMatch?.id ?? '')
                         }
                       }
                     }}
@@ -1881,6 +1897,17 @@ function DetailView({
                     )}
 
                     {/* Guardar / Quitar */}
+                    {opsError && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: 'rgba(239,68,68,.1)', borderRadius: 8, marginBottom: 8 }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#ef4444' }}>error</span>
+                        <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>Error al guardar: {opsError}</span>
+                      </div>
+                    )}
+                    {opsPlaza && !opsSeccion && (
+                      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 8, paddingLeft: 2 }}>
+                        Elegí una sección del mise para poder guardar.
+                      </div>
+                    )}
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button onClick={() => handleGuardarOPS(pr)} disabled={!opsPlaza || !opsSeccion || opsSaving}
                         style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none',
@@ -3373,8 +3400,20 @@ export default function CartaPage() {
       <>
         <ComposicionEditor
           inicial={composing.inicial}
-          recetas={recetas.map(r => ({ id: r.id, nombre: r.nombre, costo: r.food_cost.costo_porcion }))}
-          productos={productos.map(p => ({ id: p.id, nombre: p.nombre, costo: p.precio_unitario }))}
+          recetas={recetas.map(r => ({
+            id: r.id, nombre: r.nombre, costo: r.food_cost.costo_porcion,
+            // costo por gramo del recetario: costo_total del batch ÷ su peso bruto total.
+            // Sin peso_total_g cargado no hay forma de derivarlo — null (fallback a costo_porcion).
+            costoPorGramo: r.peso_total_g && r.peso_total_g > 0 ? r.food_cost.costo_total / r.peso_total_g : null,
+          }))}
+          productos={productos.map(p => {
+            const factor = unitConversionFactor('g', p.unidad)
+            return {
+              id: p.id, nombre: p.nombre, costo: p.precio_unitario,
+              // factor 0 = unidad incompatible con gramos (ej: producto por 'u') — no calcular
+              costoPorGramo: factor > 0 ? p.precio_unitario * factor : null,
+            }
+          })}
           cartaItems={items.map(i => ({ id: i.id, nombre: i.nombre, costo: i.costo_porcion ?? 0 }))}
           categoriasCarta={categorias.length > 0 ? categorias.map(c => c.nombre) : CATEGORIAS}
           draftRecetaIds={new Set(recetas.filter(r => r.status === 'draft').map(r => r.id))}
