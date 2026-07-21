@@ -62,3 +62,6 @@ qa-report.md
 # Outputs temporales de scripts
 scripts/matches-output.json
 scripts/update-ingredientes.sql
+
+# graphify — grafo de código (artefacto local, se reconstruye con `graphify extract . --code-only`)
+graphify-out/

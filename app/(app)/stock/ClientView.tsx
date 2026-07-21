@@ -296,6 +296,7 @@ export default function StockPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [duplicadoWarn, setDuplicadoWarn] = useState<ProductoConEstado | null>(null)
   const [showUnidadCompra, setShowUnidadCompra] = useState(false)
+  const [showMasOpciones, setShowMasOpciones] = useState(false)
 
   // Badge de sobreprecio vs. otros proveedores (Q5) — solo para el producto en edición
   const badgeSobreprecio = useMemo(() => {
@@ -1021,6 +1022,7 @@ export default function StockPage() {
     setFormError(null)
     setDuplicadoWarn(null)
     setShowUnidadCompra(false)
+    setShowMasOpciones(false)
     setModalOpen(true)
   }
 
@@ -1045,6 +1047,7 @@ export default function StockPage() {
       proveedor_id: p.proveedor_id ?? '',
     })
     setShowUnidadCompra(!!(p.unidad_compra || p.cantidad_por_envase))
+    setShowMasOpciones(!!(p.es_produccion || p.fuera_de_uso || p.unidad_compra || p.cantidad_por_envase))
     setFormError(null)
     setModalOpen(true)
   }
@@ -1841,224 +1844,152 @@ export default function StockPage() {
 
       {/* ── Add/Edit modal ── */}
       {modalOpen && (
+        <SheetChrome>
         <div
           style={{ position: 'absolute', inset: 0, zIndex: 50, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}
           onClick={e => { if (e.target === e.currentTarget) setModalOpen(false) }}
         >
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)' }} onClick={() => setModalOpen(false)} />
           <div
-            style={{ position: 'relative', background: 'var(--surface)', borderRadius: '16px 16px 0 0', padding: '20px 16px 100px', maxHeight: '92%', overflowY: 'auto', boxShadow: '0 -8px 40px rgba(0,0,0,.3)' }}
+            style={{ position: 'relative', background: 'var(--surface)', borderRadius: '16px 16px 0 0', maxHeight: '92%', display: 'flex', flexDirection: 'column', boxShadow: '0 -8px 40px rgba(0,0,0,.3)' }}
             onClick={e => e.stopPropagation()}
           >
-            <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 16px' }} />
-
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>
-                {editingProducto ? 'Editar producto' : 'Nuevo producto'}
-              </h2>
-              {editingProducto && puedeEliminar && (
-                <button
-                  onClick={() => setDeleteId(editingProducto.id)}
-                  style={{ background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#ef4444', fontFamily: 'inherit' }}
-                >
-                  Eliminar
-                </button>
-              )}
+            {/* Header fijo — separado del contenido scrolleable por un hairline, no por una caja */}
+            <div style={{ flexShrink: 0, padding: '20px 16px 14px', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 16px' }} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-1)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {editingProducto ? editingProducto.nombre : 'Nuevo producto'}
+                </h2>
+                {editingProducto && puedeEliminar && (
+                  <button
+                    onClick={() => setDeleteId(editingProducto.id)}
+                    style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#ef4444', fontFamily: 'inherit' }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 15 }}>delete</span>
+                    Eliminar
+                  </button>
+                )}
+              </div>
             </div>
 
-            {formError && (
-              <div style={{ background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#ef4444' }}>
-                {formError}
-              </div>
-            )}
-            {duplicadoWarn && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.3)', borderRadius: 8, padding: '8px 12px', marginBottom: 12 }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#d97706', flexShrink: 0 }}>content_copy</span>
-                <span style={{ fontSize: 12, color: 'var(--text-1)', flex: 1 }}>
-                  Ya existe <strong>«{duplicadoWarn.nombre}»</strong> en el stock
-                </span>
-                <button
-                  onClick={() => openEdit(duplicadoWarn)}
-                  style={{ flexShrink: 0, background: 'none', border: '1px solid rgba(245,158,11,.5)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#d97706', fontFamily: 'inherit' }}
-                >
-                  Abrir
-                </button>
-              </div>
-            )}
+            {/* Body scrolleable */}
+            <div style={{ overflowY: 'auto', padding: '16px 16px calc(env(safe-area-inset-bottom) + 16px)', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={lblStyle}>Nombre *</span>
-                <input
-                  value={form.nombre}
-                  onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
-                  placeholder="Ej: Lomo, Tomate perita…"
-                  style={inputStyle}
-                />
-              </label>
-
-              {/* Categoría + botón "+" */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span style={lblStyle}>Categoría</span>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <select
-                      value={form.categoria}
-                      onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
-                      style={{ ...inputStyle, appearance: 'auto', flex: 1 }}
-                    >
-                      <option value="">Elegir…</option>
-                      {categoriasNombres.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <button
-                      onClick={() => setNewCatModal(true)}
-                      title="Nueva categoría"
-                      style={{ width: 34, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                    >
-                      <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-2)' }}>add</span>
-                    </button>
-                  </div>
-                </label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span style={lblStyle}>Unidad</span>
-                  <select value={form.unidad} onChange={e => setForm(f => ({ ...f, unidad: e.target.value }))} style={{ ...inputStyle, cursor: 'pointer', appearance: 'auto' }}>
-                    {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
-                  </select>
-                </label>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span style={lblStyle}>Sector físico</span>
-                  <select
-                    value={form.sector_id}
-                    onChange={e => setForm(f => ({ ...f, sector_id: e.target.value }))}
-                    style={{ ...inputStyle, appearance: 'auto', cursor: 'pointer' }}
-                  >
-                    <option value="">Sin sector</option>
-                    {sectores.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                  </select>
-                </label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span style={lblStyle}>Proveedor</span>
-                  <select
-                    value={form.proveedor_id}
-                    onChange={e => setForm(f => ({ ...f, proveedor_id: e.target.value }))}
-                    style={{ ...inputStyle, appearance: 'auto', cursor: 'pointer' }}
-                  >
-                    <option value="">Sin proveedor</option>
-                    {proveedores.map(pr => <option key={pr.id} value={pr.id}>{pr.nombre}</option>)}
-                  </select>
-                </label>
-              </div>
-
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ ...lblStyle, color: 'var(--navy)' }}>
-                  {form.es_produccion ? 'Costo unitario ($) — desde receta' : 'Precio unitario ($)'}
-                </span>
-                <input type="text" inputMode="decimal" value={form.precio_unitario} onChange={e => setForm(f => ({ ...f, precio_unitario: e.target.value }))}
-                  placeholder="0"
-                  style={{ ...inputStyle, borderColor: 'rgba(28,45,74,.3)' }} />
-              </label>
-
-              {/* Badge sobreprecio vs. otros proveedores (Q5) */}
-              {badgeSobreprecio && (
-                <div style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', borderRadius: 10,
-                  background: 'rgba(220,38,38,.06)', border: '1px solid rgba(220,38,38,.25)',
-                }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#dc2626', flexShrink: 0 }}>trending_up</span>
-                  <span style={{ fontSize: 12, color: 'var(--text-1)', lineHeight: 1.4 }}>
-                    Pagaste <strong style={{ color: '#dc2626' }}>{badgeSobreprecio.deltaPct.toFixed(0)}% más</strong> que el mejor precio reciente
-                    ({badgeSobreprecio.mejorProveedor}, {fmtPrecio(badgeSobreprecio.mejorPrecio)} el {new Date(badgeSobreprecio.mejorFecha + 'T12:00:00').toLocaleDateString('es-AR')})
+              {formError && (
+                <div style={{ background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#ef4444' }}>
+                  {formError}
+                </div>
+              )}
+              {duplicadoWarn && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.3)', borderRadius: 8, padding: '8px 12px' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#d97706', flexShrink: 0 }}>content_copy</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-1)', flex: 1 }}>
+                    Ya existe <strong>«{duplicadoWarn.nombre}»</strong> en el stock
                   </span>
+                  <button
+                    onClick={() => openEdit(duplicadoWarn)}
+                    style={{ flexShrink: 0, background: 'none', border: '1px solid rgba(245,158,11,.5)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#d97706', fontFamily: 'inherit' }}
+                  >
+                    Abrir
+                  </button>
                 </div>
               )}
 
-              {/* ── Producción interna ── */}
-              <div style={{ background: form.es_produccion ? 'rgba(16,185,129,.06)' : 'var(--bg)', border: `1px solid ${form.es_produccion ? 'rgba(16,185,129,.3)' : 'var(--border)'}`, borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              {/* ── Identificación ── */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={lblStyle}>Nombre *</span>
                   <input
-                    type="checkbox"
-                    checked={form.es_produccion}
-                    onChange={e => setForm(f => ({ ...f, es_produccion: e.target.checked, receta_id: e.target.checked ? f.receta_id : '' }))}
-                    style={{ width: 18, height: 18, accentColor: '#10b981', flexShrink: 0 }}
+                    value={form.nombre}
+                    onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
+                    placeholder="Ej: Lomo, Tomate perita…"
+                    style={inputStyle}
                   />
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Producción interna</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Caldo, masa, fondo, salsa base — se produce, no se compra</div>
-                  </div>
                 </label>
 
-                {form.es_produccion && (() => {
-                  const recetaSel = recetas.find(r => r.id === form.receta_id)
-                  const costoPorc = recetaSel ? recetaSel.food_cost.costo_porcion : 0
-                  return (
-                    <>
-                      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span style={lblStyle}>Receta de origen</span>
-                        <select
-                          value={form.receta_id}
-                          onChange={e => {
-                            const r = recetas.find(x => x.id === e.target.value)
-                            const c = r ? r.food_cost.costo_porcion : 0
-                            setForm(f => ({
-                              ...f,
-                              receta_id: e.target.value,
-                              // El costo se toma de la receta (costo por porción)
-                              precio_unitario: c > 0 ? String(Math.round(c * 100) / 100) : f.precio_unitario,
-                            }))
-                          }}
-                          style={{ ...inputStyle, appearance: 'auto', cursor: 'pointer' }}
-                        >
-                          <option value="">Elegir receta…</option>
-                          {recetas.map(r => (
-                            <option key={r.id} value={r.id}>{r.nombre}</option>
-                          ))}
-                        </select>
-                      </label>
-                      {recetaSel && (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--surface)', borderRadius: 8, padding: '8px 10px' }}>
-                          <span style={{ fontSize: 11, color: 'var(--text-2)' }}>
-                            Costo desde receta ({recetaSel.porciones ?? 1} porc.)
-                          </span>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: '#10b981' }}>
-                            {fmtPrecio(costoPorc)}/porción
-                          </span>
-                        </div>
-                      )}
-                      {form.receta_id && (
-                        <button
-                          onClick={() => {
-                            const r = recetas.find(x => x.id === form.receta_id)
-                            const c = r ? r.food_cost.costo_porcion : 0
-                            if (c > 0) setForm(f => ({ ...f, precio_unitario: String(Math.round(c * 100) / 100) }))
-                          }}
-                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'none', border: '1px solid rgba(16,185,129,.4)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#10b981', fontFamily: 'inherit' }}
-                        >
-                          <span className="material-symbols-outlined" style={{ fontSize: 15 }}>refresh</span>
-                          Recalcular costo desde la receta
-                        </button>
-                      )}
-                    </>
-                  )
-                })()}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={lblStyle}>Categoría</span>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <select
+                        value={form.categoria}
+                        onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
+                        style={{ ...inputStyle, appearance: 'auto', flex: 1 }}
+                      >
+                        <option value="">Elegir…</option>
+                        {categoriasNombres.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                      <button
+                        onClick={() => setNewCatModal(true)}
+                        title="Nueva categoría"
+                        style={{ width: 34, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-2)' }}>add</span>
+                      </button>
+                    </div>
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={lblStyle}>Unidad</span>
+                    <select value={form.unidad} onChange={e => setForm(f => ({ ...f, unidad: e.target.value }))} style={{ ...inputStyle, cursor: 'pointer', appearance: 'auto' }}>
+                      {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
+                    </select>
+                  </label>
+                </div>
               </div>
 
-              {/* ── Fuera de uso ── */}
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', background: form.fuera_de_uso ? 'rgba(148,163,184,.1)' : 'var(--bg)', border: `1px solid ${form.fuera_de_uso ? 'rgba(148,163,184,.35)' : 'var(--border)'}`, borderRadius: 10, padding: 12 }}>
-                <input
-                  type="checkbox"
-                  checked={form.fuera_de_uso}
-                  onChange={e => setForm(f => ({ ...f, fuera_de_uso: e.target.checked }))}
-                  style={{ width: 18, height: 18, accentColor: '#64748b', flexShrink: 0 }}
-                />
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Fuera de uso</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>No genera alertas ni aparece en Stockear — sigue contando en el valor del stock</div>
+              {/* ── Ubicación, proveedor y precio ── */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={lblStyle}>Sector físico</span>
+                    <select
+                      value={form.sector_id}
+                      onChange={e => setForm(f => ({ ...f, sector_id: e.target.value }))}
+                      style={{ ...inputStyle, appearance: 'auto', cursor: 'pointer' }}
+                    >
+                      <option value="">Sin sector</option>
+                      {sectores.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                    </select>
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={lblStyle}>Proveedor</span>
+                    <select
+                      value={form.proveedor_id}
+                      onChange={e => setForm(f => ({ ...f, proveedor_id: e.target.value }))}
+                      style={{ ...inputStyle, appearance: 'auto', cursor: 'pointer' }}
+                    >
+                      <option value="">Sin proveedor</option>
+                      {proveedores.map(pr => <option key={pr.id} value={pr.id}>{pr.nombre}</option>)}
+                    </select>
+                  </label>
                 </div>
-              </label>
 
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={{ ...lblStyle, color: 'var(--navy)' }}>
+                    {form.es_produccion ? 'Costo unitario ($) — desde receta' : 'Precio unitario ($)'}
+                  </span>
+                  <input type="text" inputMode="decimal" value={form.precio_unitario} onChange={e => setForm(f => ({ ...f, precio_unitario: e.target.value }))}
+                    placeholder="0"
+                    style={{ ...inputStyle, borderColor: 'rgba(28,45,74,.3)' }} />
+                </label>
+
+                {/* Badge sobreprecio vs. otros proveedores (Q5) */}
+                {badgeSobreprecio && (
+                  <div style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', borderRadius: 10,
+                    background: 'rgba(220,38,38,.06)', border: '1px solid rgba(220,38,38,.25)',
+                  }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#dc2626', flexShrink: 0 }}>trending_up</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-1)', lineHeight: 1.4 }}>
+                      Pagaste <strong style={{ color: '#dc2626' }}>{badgeSobreprecio.deltaPct.toFixed(0)}% más</strong> que el mejor precio reciente
+                      ({badgeSobreprecio.mejorProveedor}, {fmtPrecio(badgeSobreprecio.mejorPrecio)} el {new Date(badgeSobreprecio.mejorFecha + 'T12:00:00').toLocaleDateString('es-AR')})
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Stock ── */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={lblStyle}>Stock actual</span>
@@ -2074,68 +2005,161 @@ export default function StockPage() {
                 </label>
               </div>
 
-              {/* ── Unidad de compra (colapsable) ── */}
-              <button
-                onClick={() => setShowUnidadCompra(v => !v)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', color: 'var(--text-2)', fontFamily: 'inherit' }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
-                  {showUnidadCompra ? 'expand_less' : 'expand_more'}
-                </span>
-                <span style={{ fontSize: 12, fontWeight: 600 }}>Unidad de compra (opcional)</span>
-              </button>
+              {/* ── Más opciones (colapsable): producción interna, fuera de uso, unidad de compra ── */}
+              <div>
+                <button
+                  onClick={() => setShowMasOpciones(v => !v)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', color: 'var(--text-2)', fontFamily: 'inherit' }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                    {showMasOpciones ? 'expand_less' : 'expand_more'}
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>Más opciones</span>
+                </button>
 
-              {showUnidadCompra && (
-                <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <p style={{ margin: 0, fontSize: 11, color: 'var(--text-3)' }}>
-                    Ej: comprás 1 caja de 100 unidades → el stock se lleva en unidades
-                  </p>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={lblStyle}>Unidad de compra</span>
-                      <input
-                        value={form.unidad_compra}
-                        onChange={e => setForm(f => ({ ...f, unidad_compra: e.target.value }))}
-                        placeholder="caja, pack, bolsa…"
-                        style={inputStyle}
-                      />
-                    </label>
-                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <span style={lblStyle}>Cantidad por envase</span>
-                      <input
-                        type="text" inputMode="numeric"
-                        value={form.cantidad_por_envase}
-                        onChange={e => setForm(f => ({ ...f, cantidad_por_envase: e.target.value }))}
-                        placeholder="100"
-                        style={inputStyle}
-                      />
-                    </label>
-                  </div>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <span style={lblStyle}>Unidad de uso (stock se mide en)</span>
-                    <select
-                      value={form.unidad_uso}
-                      onChange={e => setForm(f => ({ ...f, unidad_uso: e.target.value }))}
-                      style={{ ...inputStyle, appearance: 'auto', cursor: 'pointer' }}
+                {showMasOpciones && (
+                  <div style={{ marginTop: 8, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: '2px 12px', display: 'flex', flexDirection: 'column' }}>
+                    <SwitchRow
+                      icon="soup_kitchen"
+                      color="#10b981"
+                      checked={form.es_produccion}
+                      onChange={v => setForm(f => ({ ...f, es_produccion: v, receta_id: v ? f.receta_id : '' }))}
+                      label="Producción interna"
+                      sub="Caldo, masa, fondo, salsa base — se produce, no se compra"
+                    />
+
+                    {form.es_produccion && (() => {
+                      const recetaSel = recetas.find(r => r.id === form.receta_id)
+                      const costoPorc = recetaSel ? recetaSel.food_cost.costo_porcion : 0
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingBottom: 12 }}>
+                          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <span style={lblStyle}>Receta de origen</span>
+                            <select
+                              value={form.receta_id}
+                              onChange={e => {
+                                const r = recetas.find(x => x.id === e.target.value)
+                                const c = r ? r.food_cost.costo_porcion : 0
+                                setForm(f => ({
+                                  ...f,
+                                  receta_id: e.target.value,
+                                  // El costo se toma de la receta (costo por porción)
+                                  precio_unitario: c > 0 ? String(Math.round(c * 100) / 100) : f.precio_unitario,
+                                }))
+                              }}
+                              style={{ ...inputStyle, appearance: 'auto', cursor: 'pointer' }}
+                            >
+                              <option value="">Elegir receta…</option>
+                              {recetas.map(r => (
+                                <option key={r.id} value={r.id}>{r.nombre}</option>
+                              ))}
+                            </select>
+                          </label>
+                          {recetaSel && (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--surface)', borderRadius: 8, padding: '8px 10px' }}>
+                              <span style={{ fontSize: 11, color: 'var(--text-2)' }}>
+                                Costo desde receta ({recetaSel.porciones ?? 1} porc.)
+                              </span>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: '#10b981' }}>
+                                {fmtPrecio(costoPorc)}/porción
+                              </span>
+                            </div>
+                          )}
+                          {form.receta_id && (
+                            <button
+                              onClick={() => {
+                                const r = recetas.find(x => x.id === form.receta_id)
+                                const c = r ? r.food_cost.costo_porcion : 0
+                                if (c > 0) setForm(f => ({ ...f, precio_unitario: String(Math.round(c * 100) / 100) }))
+                              }}
+                              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'none', border: '1px solid rgba(16,185,129,.4)', borderRadius: 8, padding: '7px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#10b981', fontFamily: 'inherit' }}
+                            >
+                              <span className="material-symbols-outlined" style={{ fontSize: 15 }}>refresh</span>
+                              Recalcular costo desde la receta
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })()}
+
+                    <div style={{ height: 1, background: 'var(--border)' }} />
+
+                    <SwitchRow
+                      icon="block"
+                      color="#64748b"
+                      checked={form.fuera_de_uso}
+                      onChange={v => setForm(f => ({ ...f, fuera_de_uso: v }))}
+                      label="Fuera de uso"
+                      sub="No genera alertas ni aparece en Stockear — sigue contando en el valor del stock"
+                    />
+
+                    <div style={{ height: 1, background: 'var(--border)' }} />
+
+                    <button
+                      onClick={() => setShowUnidadCompra(v => !v)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: '10px 0', color: 'var(--text-2)', fontFamily: 'inherit' }}
                     >
-                      <option value="">Misma que unidad principal</option>
-                      {UNIDADES_USO.map(u => <option key={u} value={u}>{u}</option>)}
-                    </select>
-                  </label>
-                </div>
-              )}
-            </div>
+                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                        {showUnidadCompra ? 'expand_less' : 'expand_more'}
+                      </span>
+                      <span style={{ fontSize: 12, fontWeight: 600 }}>Unidad de compra (opcional)</span>
+                    </button>
 
-            <button
-              data-shortcut="save"
-              onClick={handleSave}
-              disabled={saving}
-              style={{ marginTop: 20, width: '100%', background: 'var(--navy)', border: 'none', borderRadius: 10, padding: '13px 16px', fontSize: 14, fontWeight: 700, color: '#fff', cursor: 'pointer', opacity: saving ? 0.6 : 1, fontFamily: 'inherit' }}
-            >
-              {saving ? 'Guardando…' : editingProducto ? 'Guardar cambios' : 'Agregar producto'}
-            </button>
+                    {showUnidadCompra && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingBottom: 12 }}>
+                        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-3)' }}>
+                          Ej: comprás 1 caja de 100 unidades → el stock se lleva en unidades
+                        </p>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <span style={lblStyle}>Unidad de compra</span>
+                            <input
+                              value={form.unidad_compra}
+                              onChange={e => setForm(f => ({ ...f, unidad_compra: e.target.value }))}
+                              placeholder="caja, pack, bolsa…"
+                              style={inputStyle}
+                            />
+                          </label>
+                          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <span style={lblStyle}>Cantidad por envase</span>
+                            <input
+                              type="text" inputMode="numeric"
+                              value={form.cantidad_por_envase}
+                              onChange={e => setForm(f => ({ ...f, cantidad_por_envase: e.target.value }))}
+                              placeholder="100"
+                              style={inputStyle}
+                            />
+                          </label>
+                        </div>
+                        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span style={lblStyle}>Unidad de uso (stock se mide en)</span>
+                          <select
+                            value={form.unidad_uso}
+                            onChange={e => setForm(f => ({ ...f, unidad_uso: e.target.value }))}
+                            style={{ ...inputStyle, appearance: 'auto', cursor: 'pointer' }}
+                          >
+                            <option value="">Misma que unidad principal</option>
+                            {UNIDADES_USO.map(u => <option key={u} value={u}>{u}</option>)}
+                          </select>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <button
+                data-shortcut="save"
+                onClick={handleSave}
+                disabled={saving}
+                style={{ width: '100%', background: 'var(--navy)', border: 'none', borderRadius: 10, padding: '13px 16px', fontSize: 14, fontWeight: 700, color: '#fff', cursor: 'pointer', opacity: saving ? 0.6 : 1, fontFamily: 'inherit' }}
+              >
+                {saving ? 'Guardando…' : editingProducto ? 'Guardar cambios' : 'Agregar producto'}
+              </button>
+            </div>
           </div>
         </div>
+        </SheetChrome>
       )}
 
       {/* ── Nueva categoría modal ── */}
@@ -3270,6 +3294,34 @@ const inputStyle: React.CSSProperties = {
 const lblStyle: React.CSSProperties = {
   fontSize: 11, fontWeight: 700, color: 'var(--text-2)',
   textTransform: 'uppercase', letterSpacing: '.06em',
+}
+
+// Fila de toggle compacta (icono + label + descripción + switch) — reemplaza los
+// checkboxes en caja grande del modal de producto, mismo peso visual sea cual sea el estado.
+function SwitchRow({ checked, onChange, label, sub, color = '#4361a0', icon }: {
+  checked: boolean
+  onChange: (v: boolean) => void
+  label: string
+  sub: string
+  color?: string
+  icon: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', background: 'none', border: 'none', padding: '9px 0', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}
+    >
+      <span className="material-symbols-outlined" style={{ fontSize: 20, color: checked ? color : 'var(--text-3)', flexShrink: 0, transition: 'color .15s ease-out' }}>{icon}</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{label}</span>
+        <span style={{ display: 'block', fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>{sub}</span>
+      </span>
+      <span aria-hidden style={{ flexShrink: 0, width: 40, height: 24, borderRadius: 12, background: checked ? color : 'var(--border)', position: 'relative', transition: 'background .15s ease-out' }}>
+        <span style={{ position: 'absolute', top: 2, left: checked ? 18 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.3)', transition: 'left .18s cubic-bezier(0.16, 1, 0.3, 1)' }} />
+      </span>
+    </button>
+  )
 }
 
 const thStyle: React.CSSProperties = {
