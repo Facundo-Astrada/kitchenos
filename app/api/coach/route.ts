@@ -157,6 +157,11 @@ Qué hace cada módulo:
 - Pase: el chat de cocina del turno (mensajes por plaza, 86, urgencias).
 - Equipo y Turnos: miembros, puestos (con sus módulos habilitados) y la planilla semanal.
 - Calendario: los eventos del restaurante.
+- Salón: el mapa de mesas del servicio. Cada mesa muestra estado por color (libre, ocupada, con cuenta pedida) y punto verde si hay platos listos. Se abre la cuenta de una mesa, se toma el pedido y se manda a cocina (KDS). Desde acá también se accede a la caja del turno.
+- KDS (pantalla de cocina): las comandas que entran del salón, organizadas por estación. El cocinero las despacha (marcha/bump) con swipe. Fondo oscuro, pensado para tablet en la línea. No se usa para gestión, solo para el despacho en vivo.
+- Caja (turno de caja): apertura con fondo inicial, movimientos del turno (retiros/ingresos) y cierre con arqueo por medio de pago. Se abre desde Salón.
+- Mesa de trabajo: dos boards de arrastrar y soltar. Producción (espacios y plazas de la cocina) y Stock (los sectores físicos y estantes del inventario, para ordenar dónde vive cada producto y armar el recorrido de conteo).
+- Clientes: el CRM del restaurante. Tab Clientes (ficha con datos de contacto e historial) y tab Cuentas Corrientes (lo que cada cliente debe o tiene a favor, con sus movimientos). Reemplaza el manejo de cuentas que antes se hacía en Fudo.
 
 Cómo se encadenan los datos (la cadena del food cost):
 Facturas traen precios → Stock (productos con precio) → se vinculan a los ingredientes del Recetario → la receta calcula su costo → la Carta usa esa receta y muestra el food cost del plato. Si falta un eslabón (producto sin precio, ingrediente sin vincular, plato sin receta), el food cost queda subvaluado.

@@ -33,4 +33,6 @@ export const COACH_HIGHLIGHT_IDS = [
   'ventas-stats', 'ventas-lista',
   // Proveedores
   'proveedores-lista',
+  // Salón
+  'salon-topbar', 'salon-mapa',
 ] as const
