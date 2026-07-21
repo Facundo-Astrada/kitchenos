@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { COACH_HIGHLIGHT_IDS as _COACH_HIGHLIGHT_IDS } from '@/lib/coach/highlights'
+import { COACH_ERROR_MARK } from '@/lib/coach/stream'
 
 export { _COACH_HIGHLIGHT_IDS as COACH_HIGHLIGHT_IDS }
 
@@ -18,8 +19,14 @@ interface CoachContext {
   tareasPendientes?: Array<{ titulo: string; prioridad: string; plaza?: string }>
 }
 
+interface CoachOptions {
+  // Si se define, la conversación activa se persiste en localStorage bajo esta key
+  // (sobrevive recargas). El historial de conversaciones se maneja aparte (lib/coach/history).
+  storageKey?: string | null
+}
 
-export function useKitchenCoach() {
+export function useKitchenCoach(opts?: CoachOptions) {
+  const storageKey = opts?.storageKey ?? null
   const [messages, setMessages] = useState<CoachMessage[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -27,6 +34,8 @@ export function useKitchenCoach() {
   const [highlight, setHighlight] = useState<string | null>(null)
   const [overlayText, setOverlayText] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const messagesRef = useRef<CoachMessage[]>([])
+  messagesRef.current = messages
 
   const open = useCallback(() => setIsOpen(true), [])
   const close = useCallback(() => setIsOpen(false), [])
@@ -34,6 +43,33 @@ export function useKitchenCoach() {
   const clearMessages = useCallback(() => setMessages([]), [])
   const clearHighlight = useCallback(() => setHighlight(null), [])
   const clearOverlayText = useCallback(() => setOverlayText(null), [])
+  const replaceMessages = useCallback((msgs: CoachMessage[]) => setMessages(msgs), [])
+
+  // ── Persistencia de la conversación activa ────────────────────
+  const loadedKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!storageKey) return
+    if (loadedKeyRef.current === storageKey) return
+    loadedKeyRef.current = storageKey
+    try {
+      const raw = localStorage.getItem(storageKey)
+      if (raw) {
+        const parsed = JSON.parse(raw) as Array<{ id: string; role: 'user' | 'assistant'; content: string; timestamp: string; options?: string[] }>
+        setMessages(parsed.map(m => ({ ...m, timestamp: new Date(m.timestamp) })))
+      }
+    } catch { /* ignore */ }
+  }, [storageKey])
+
+  // Guarda al terminar cada respuesta (no en cada token para no thrashear localStorage).
+  useEffect(() => {
+    if (!storageKey || loading) return
+    if (loadedKeyRef.current !== storageKey) return
+    try {
+      const toSave = messages.filter(m => m.content !== '')
+      if (toSave.length) localStorage.setItem(storageKey, JSON.stringify(toSave))
+      else localStorage.removeItem(storageKey)
+    } catch { /* ignore */ }
+  }, [messages, storageKey, loading])
 
   // Auto-clear highlight + overlayText after 8s (user may need time to read)
   useEffect(() => {
@@ -69,7 +105,7 @@ export function useKitchenCoach() {
     setHighlight(null)
     setOverlayText(null)
 
-    const apiMessages = [...messages, userMsg]
+    const apiMessages = [...messagesRef.current, userMsg]
       .filter(m => m.content !== '')
       .map(m => ({ role: m.role, content: m.content }))
 
@@ -97,10 +133,36 @@ export function useKitchenCoach() {
         throw new Error(errData.error || 'Error al procesar la solicitud')
       }
 
-      const data = await res.json()
-      const rawText = data.content?.find((b: { type: string; text?: string }) => b.type === 'text')?.text ?? data.message ?? 'Sin respuesta'
+      // ── Lectura del stream de texto ─────────────────────────────
+      const reader = res.body?.getReader()
+      if (!reader) throw new Error('No se pudo leer la respuesta')
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let streamErr: string | null = null
 
-      // Try to parse structured response { text, highlight, overlay_text, options }
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+
+        const markIdx = buffer.indexOf(COACH_ERROR_MARK)
+        if (markIdx >= 0) {
+          streamErr = buffer.slice(markIdx + COACH_ERROR_MARK.length) || 'Error del asistente'
+          break
+        }
+
+        // Respuestas estructuradas (JSON con highlight/options) no se muestran en vivo:
+        // se dejan los puntos suspensivos hasta parsear al final. El resto se streamea.
+        if (!buffer.trimStart().startsWith('{')) {
+          const partial = buffer
+          setMessages(prev => prev.map(m => m.id === placeholderId ? { ...m, content: partial } : m))
+        }
+      }
+
+      if (streamErr) throw new Error(streamErr)
+
+      // ── Stream completo — parsear respuesta estructurada si la hay ──
+      const rawText = buffer
       let text = rawText
       let hl: string | null = null
       let ovText: string | null = null
@@ -125,7 +187,7 @@ export function useKitchenCoach() {
       setMessages(prev =>
         prev.map(m => m.id === placeholderId ? {
           ...m,
-          content: text,
+          content: text || 'Sin respuesta',
           timestamp: new Date(),
           options: opts && opts.length > 0 ? opts : undefined,
         } : m)
@@ -139,11 +201,11 @@ export function useKitchenCoach() {
       setLoading(false)
       abortRef.current = null
     }
-  }, [messages])
+  }, [])
 
   return {
     messages, loading, error, isOpen, highlight, overlayText,
-    open, close, toggle, sendMessage, clearMessages,
+    open, close, toggle, sendMessage, clearMessages, replaceMessages,
     clearHighlight, clearOverlayText, cancelRequest,
   }
 }

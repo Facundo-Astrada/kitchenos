@@ -56,6 +56,23 @@ export default function MoreMenu({ rol, onClose }: MoreMenuProps) {
 
         <div className="px-4 pb-2">
 
+          {/* Kitchen Coach — asistente IA */}
+          <Link
+            href="/coach"
+            onClick={onClose}
+            className="w-full flex items-center gap-3 mb-3 rounded-[14px] px-4 py-3 border transition-colors active:scale-[.98]"
+            style={{ background: 'rgba(249,115,22,.08)', border: '1px solid rgba(249,115,22,.28)', cursor: 'pointer' }}
+          >
+            <div className="w-10 h-10 rounded-[12px] flex items-center justify-center flex-shrink-0" style={{ background: '#f97316' }}>
+              <span className="material-symbols-outlined text-white text-[22px]">chef_hat</span>
+            </div>
+            <div className="text-left">
+              <div className="text-[13px] font-bold" style={{ color: 'var(--text-1)' }}>Kitchen Coach</div>
+              <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>Preguntale lo que sea sobre tu cocina</div>
+            </div>
+            <span className="material-symbols-outlined ml-auto text-[18px]" style={{ color: 'var(--text-3)' }}>chevron_right</span>
+          </Link>
+
           {/* Importar datos */}
           <button
             onClick={() => setShowImportador(true)}

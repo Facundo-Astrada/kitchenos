@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { usePathname } from 'next/navigation'
 import { useKitchenCoach } from '@/lib/hooks/useKitchenCoach'
 import { useMerma } from '@/lib/hooks/useMerma'
 import MermaBottomSheet from '@/components/merma/MermaBottomSheet'
@@ -479,6 +480,7 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
     toggle, open, close, sendMessage, clearMessages, clearHighlight, clearOverlayText,
   } = useKitchenCoach()
   const sheetCount = useSheetCount()
+  const pathname = usePathname()
 
   const [input, setInput] = useState('')
   const [tourStep, setTourStep] = useState(-1)
@@ -622,6 +624,9 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
   const panelRightDesktop = Math.min(fabPos.right, Math.max(8, (typeof window !== 'undefined' ? window.innerWidth : 400) - 396))
 
   const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && m.content && m.options?.length)
+
+  // En la pantalla dedicada del Coach (/coach) el FAB es redundante — se oculta.
+  if (pathname === '/coach') return null
 
   return (
     <>

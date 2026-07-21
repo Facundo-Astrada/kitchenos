@@ -66,6 +66,7 @@ export type ModuloId =
   | 'salon'
   | 'kds'
   | 'clientes'
+  | 'coach'
 
 export const MODULO_CONFIG: Record<
   ModuloId,
@@ -95,6 +96,7 @@ export const MODULO_CONFIG: Record<
   salon: { label: 'Salón', icon: 'table_restaurant', href: '/salon' },
   kds: { label: 'KDS Cocina', icon: 'kitchen', href: '/kds' },
   clientes: { label: 'Clientes', icon: 'contacts', href: '/clientes' },
+  coach: { label: 'Coach', icon: 'forum', href: '/coach' },
 }
 
 // Módulos accesibles por rol (base hardcodeada — se sobrescribe con puestos/permisos del admin)

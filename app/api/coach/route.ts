@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { COACH_HIGHLIGHT_IDS } from '@/lib/coach/highlights'
 import { calcularSugerenciaProduccion } from '@/lib/produccion/sugerencia'
+import { fetchAllRows } from '@/lib/supabase/paginate'
+import { COACH_ERROR_MARK } from '@/lib/coach/stream'
 import type { SupabaseClient } from '@supabase/supabase-js'
+
+const fmtARS = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 
 // ── Rate limit en memoria (best-effort por instancia serverless) ──────────
 const hits = new Map<string, number[]>()
@@ -289,6 +293,95 @@ const COACH_TOOLS = [
       required: [],
     },
   },
+  {
+    name: 'consultar_stock',
+    description: 'Consulta cuánto hay en stock de un producto (o de todos los que coincidan con un nombre). Devuelve cantidad, unidad y estado (crítico/bajo/ok). Usar cuando el usuario pregunta "¿cuánto tengo de X?", "¿me queda Y?", "¿cómo está el stock de Z?".',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        producto: { type: 'string', description: 'Nombre o parte del nombre del producto. Ej: "carne", "tomate", "aceite de oliva".' },
+      },
+      required: ['producto'],
+    },
+  },
+  {
+    name: 'ultimo_precio',
+    description: 'Devuelve el último precio pagado de un producto según las facturas cargadas, con proveedor, fecha y la variación contra la compra anterior. Usar cuando el usuario pregunta "¿a cuánto compré X?", "¿cuál fue el último precio de la carne?", "¿cuánto me sale el Y?".',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        producto: { type: 'string', description: 'Nombre o parte del nombre del producto a buscar en las facturas. Ej: "carne", "queso", "harina".' },
+      },
+      required: ['producto'],
+    },
+  },
+  {
+    name: 'gasto_periodo',
+    description: 'Calcula cuánto se gastó en mercadería (compras/facturas) en un rango de fechas. Opcionalmente filtra por proveedor. Usar cuando el usuario pregunta "¿cuánto gasté los últimos 2 días?", "¿cuánto compré este mes?", "¿cuánto le pagué a tal proveedor?". Interpretá expresiones como "ayer", "esta semana", "últimos 7 días" y pasá las fechas concretas.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        desde: { type: 'string', description: 'Fecha de inicio (inclusive) en formato YYYY-MM-DD.' },
+        hasta: { type: 'string', description: 'Fecha de fin (inclusive) en formato YYYY-MM-DD. Si no se especifica, se usa hoy.' },
+        proveedor: { type: 'string', description: 'Opcional. Nombre o parte del proveedor para filtrar el gasto.' },
+      },
+      required: ['desde'],
+    },
+  },
+  {
+    name: 'consultar_ventas',
+    description: 'Devuelve las ventas y cubiertos en un rango de fechas (total facturado, cantidad de días, promedio por día y ticket promedio). Usar cuando el usuario pregunta "¿cuánto vendí esta semana?", "¿cómo venimos de ventas este mes?", "¿cuántos cubiertos hicimos ayer?".',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        desde: { type: 'string', description: 'Fecha de inicio (inclusive) en formato YYYY-MM-DD.' },
+        hasta: { type: 'string', description: 'Fecha de fin (inclusive) en formato YYYY-MM-DD. Si no se especifica, se usa hoy.' },
+      },
+      required: ['desde'],
+    },
+  },
+  {
+    name: 'cargar_producto',
+    description: 'Da de alta un producto nuevo en el stock. Usar cuando el usuario quiere cargar/crear un producto que todavía no existe ("cargá un producto nuevo…", "agregá X al stock"). Si el producto ya podría existir, conviene primero consultar_stock. Preguntá los datos que falten (unidad, precio) antes de crear.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        nombre: { type: 'string', description: 'Nombre del producto. Ej: "Aceite de oliva", "Lomo".' },
+        unidad: { type: 'string', description: 'Unidad de medida: kg, g, l, ml, u.' },
+        precio_unitario: { type: 'number', description: 'Precio por unidad (opcional).' },
+        stock_actual: { type: 'number', description: 'Cantidad inicial en stock (opcional, default 0).' },
+        stock_minimo: { type: 'number', description: 'Stock mínimo deseado (opcional).' },
+        categoria: { type: 'string', description: 'Categoría (opcional). Ej: Carnes, Verduras, Lácteos, Secos, Bebidas.' },
+      },
+      required: ['nombre', 'unidad'],
+    },
+  },
+  {
+    name: 'ajustar_stock',
+    description: 'Ajusta la cantidad en stock de un producto existente. Usar cuando el usuario informa un conteo o un ingreso/egreso ("quedan 3 kg de X", "entraron 10 kg de Y", "sacá 2 de Z"). operacion "set" fija el valor exacto; "sumar" agrega; "restar" descuenta.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        producto: { type: 'string', description: 'Nombre (o parte) del producto a ajustar.' },
+        cantidad: { type: 'number', description: 'Cantidad a fijar, sumar o restar según la operación.' },
+        operacion: { type: 'string', enum: ['set', 'sumar', 'restar'], description: 'set = fijar el valor exacto (default); sumar = agregar; restar = descontar.' },
+      },
+      required: ['producto', 'cantidad'],
+    },
+  },
+  {
+    name: 'registrar_venta',
+    description: 'Registra las ventas de un día (total facturado y cubiertos). Usar cuando el usuario dicta el cierre de caja o las ventas del día ("hoy vendimos 450 mil con 60 cubiertos"). Si ya hay una venta cargada para esa fecha, la actualiza.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        total_ventas: { type: 'number', description: 'Total facturado del día.' },
+        cantidad_cubiertos: { type: 'number', description: 'Cantidad de cubiertos/comensales (opcional).' },
+        fecha: { type: 'string', description: 'Fecha de la venta en formato YYYY-MM-DD. Si no se especifica, se usa hoy.' },
+      },
+      required: ['total_ventas'],
+    },
+  },
 ]
 
 function turnoActual(): 'apertura' | 'servicio' | 'cierre' {
@@ -445,6 +538,170 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
       return `Sugerencia de producción para ${resultado.diaSemanaLabel} ${fechaObjetivo}:\n${lineas}\n\n(Misma fuente que el botón "Sugerir producción" en OPS → Planificación — si el usuario quiere crear las tareas, decile que las convierta en tareas desde ahí.)`
     }
 
+    if (name === 'consultar_stock') {
+      const producto = String(input.producto ?? '').trim()
+      if (!producto) return 'Error: falta el nombre del producto a consultar.'
+      const { data } = await supabase.from('productos')
+        .select('nombre, stock_actual, unidad, stock_minimo, stock_critico, categoria')
+        .eq('restaurante_id', restauranteId)
+        .eq('activo', true)
+        .ilike('nombre', `%${producto}%`)
+        .order('stock_actual', { ascending: true })
+        .limit(15)
+      const rows = (data ?? []) as Array<{ nombre: string; stock_actual: number; unidad: string | null; stock_minimo: number | null; stock_critico: number | null; categoria: string | null }>
+      if (rows.length === 0) return `No encontré ningún producto que coincida con "${producto}" en el stock. Puede que no esté cargado o tenga otro nombre.`
+      const estado = (p: typeof rows[number]) =>
+        p.stock_actual <= (p.stock_critico ?? 0) ? 'CRÍTICO'
+        : p.stock_actual <= (p.stock_minimo ?? 0) ? 'bajo' : 'ok'
+      const lineas = rows.map(p =>
+        `- ${p.nombre}: ${p.stock_actual} ${p.unidad ?? ''} (${estado(p)}${p.stock_minimo ? `, mínimo ${p.stock_minimo}` : ''})`
+      ).join('\n')
+      return `Stock de "${producto}":\n${lineas}`
+    }
+
+    if (name === 'ultimo_precio') {
+      const producto = String(input.producto ?? '').trim()
+      if (!producto) return 'Error: falta el nombre del producto.'
+      const { data } = await supabase.from('factura_items')
+        .select('producto_nombre, precio_unitario, unidad, facturas!inner(fecha_factura, created_at, proveedor_nombre, restaurante_id)')
+        .eq('facturas.restaurante_id', restauranteId)
+        .ilike('producto_nombre', `%${producto}%`)
+        .gt('precio_unitario', 0)
+        .limit(400)
+      type FacRef = { fecha_factura: string | null; created_at: string | null; proveedor_nombre: string | null }
+      type Row = { producto_nombre: string; precio_unitario: number | string; unidad: string | null; facturas: FacRef | FacRef[] }
+      const raw = (data ?? []) as Row[]
+      if (raw.length === 0) return `No encontré compras de "${producto}" en las facturas. Puede que todavía no se haya cargado ninguna factura con ese producto.`
+      const items = raw.map(r => {
+        const f = Array.isArray(r.facturas) ? r.facturas[0] : r.facturas
+        const fecha = f?.fecha_factura || String(f?.created_at ?? '').slice(0, 10)
+        return { nombre: r.producto_nombre, precio: Number(r.precio_unitario), unidad: r.unidad, proveedor: f?.proveedor_nombre ?? null, fecha }
+      }).filter(r => r.fecha && r.precio > 0).sort((a, b) => b.fecha.localeCompare(a.fecha))
+      if (items.length === 0) return `No encontré precios válidos de "${producto}" en las facturas.`
+      const ultimo = items[0]
+      let txt = `Último precio de ${ultimo.nombre}: ${fmtARS(ultimo.precio)} por ${ultimo.unidad ?? 'unidad'} (${ultimo.fecha}${ultimo.proveedor ? `, ${ultimo.proveedor}` : ''}).`
+      const anterior = items.find(r => r.fecha < ultimo.fecha && r.precio !== ultimo.precio)
+      if (anterior) {
+        const varPct = ((ultimo.precio - anterior.precio) / anterior.precio) * 100
+        txt += ` Antes lo pagabas ${fmtARS(anterior.precio)} (${anterior.fecha}) → ${varPct >= 0 ? 'subió' : 'bajó'} ${Math.abs(Math.round(varPct))}%.`
+      }
+      return txt
+    }
+
+    if (name === 'gasto_periodo') {
+      const desde = String(input.desde ?? '').trim()
+      if (!desde) return 'Error: falta la fecha de inicio del período.'
+      const hasta = String(input.hasta ?? '').trim() || hoy
+      const proveedor = String(input.proveedor ?? '').trim()
+      const rows = await fetchAllRows<{ total: number | null; fecha_factura: string | null; proveedor_nombre: string | null }>(
+        (from, to) => {
+          let q = supabase.from('facturas')
+            .select('total, fecha_factura, proveedor_nombre')
+            .eq('restaurante_id', restauranteId)
+            .gte('fecha_factura', desde)
+            .lte('fecha_factura', hasta)
+          if (proveedor) q = q.ilike('proveedor_nombre', `%${proveedor}%`)
+          return q.order('fecha_factura', { ascending: false }).range(from, to)
+        }
+      )
+      if (rows.length === 0) {
+        return `No encontré compras entre ${desde} y ${hasta}${proveedor ? ` de "${proveedor}"` : ''}. Puede que no haya facturas cargadas en ese período.`
+      }
+      const total = rows.reduce((s, f) => s + (Number(f.total) || 0), 0)
+      const porProv = new Map<string, number>()
+      for (const f of rows) { const k = f.proveedor_nombre ?? 'Sin proveedor'; porProv.set(k, (porProv.get(k) ?? 0) + (Number(f.total) || 0)) }
+      const top = [...porProv.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
+      let txt = `Gasto en mercadería del ${desde} al ${hasta}${proveedor ? ` (${proveedor})` : ''}: ${fmtARS(total)} en ${rows.length} factura${rows.length !== 1 ? 's' : ''}.`
+      if (!proveedor && top.length > 1) {
+        txt += `\nPor proveedor: ` + top.map(([n, v]) => `${n} ${fmtARS(v)}`).join('; ') + '.'
+      }
+      return txt
+    }
+
+    if (name === 'consultar_ventas') {
+      const desde = String(input.desde ?? '').trim()
+      if (!desde) return 'Error: falta la fecha de inicio del período.'
+      const hasta = String(input.hasta ?? '').trim() || hoy
+      const { data } = await supabase.from('ventas')
+        .select('total_ventas, cantidad_cubiertos, fecha')
+        .eq('restaurante_id', restauranteId)
+        .gte('fecha', desde)
+        .lte('fecha', hasta)
+      const rows = (data ?? []) as Array<{ total_ventas: number | null; cantidad_cubiertos: number | null; fecha: string }>
+      if (rows.length === 0) return `No hay ventas cargadas entre ${desde} y ${hasta}.`
+      const total = rows.reduce((s, r) => s + (Number(r.total_ventas) || 0), 0)
+      const cubiertos = rows.reduce((s, r) => s + (Number(r.cantidad_cubiertos) || 0), 0)
+      const dias = rows.length
+      let txt = `Ventas del ${desde} al ${hasta}: ${fmtARS(total)} en ${dias} día${dias !== 1 ? 's' : ''} (promedio ${fmtARS(total / dias)}/día).`
+      if (cubiertos > 0) txt += ` ${cubiertos} cubiertos, ticket promedio ${fmtARS(total / cubiertos)}.`
+      return txt
+    }
+
+    if (name === 'cargar_producto') {
+      const nombre = String(input.nombre ?? '').trim()
+      const unidad = String(input.unidad ?? '').trim()
+      if (!nombre || !unidad) return 'Error: faltan datos del producto (nombre y unidad).'
+      // Evitar duplicados obvios
+      const { data: existe } = await supabase.from('productos')
+        .select('nombre').eq('restaurante_id', restauranteId).ilike('nombre', nombre).limit(1).maybeSingle()
+      if (existe) return `Ya existe un producto llamado "${existe.nombre}". Si querés cambiar su stock, usá ajustar_stock.`
+      const stockActual = Number(input.stock_actual) || 0
+      const stockMinimo = Number(input.stock_minimo) || 0
+      const precio = input.precio_unitario != null ? Number(input.precio_unitario) : null
+      const { error } = await supabase.from('productos').insert({
+        nombre,
+        unidad,
+        stock_actual: stockActual,
+        stock_minimo: stockMinimo,
+        stock_critico: 0,
+        precio_unitario: precio,
+        categoria: input.categoria ? String(input.categoria) : 'Otros',
+        activo: true,
+        restaurante_id: restauranteId,
+      })
+      if (error) return `Error al cargar el producto: ${error.message}`
+      const detalles = [`${stockActual} ${unidad}`]
+      if (precio) detalles.push(`precio ${fmtARS(precio)}`)
+      return `Producto cargado: ${nombre} (${detalles.join(', ')}). Ya aparece en Stock.`
+    }
+
+    if (name === 'ajustar_stock') {
+      const producto = String(input.producto ?? '').trim()
+      const cantidad = Number(input.cantidad)
+      const operacion = ['set', 'sumar', 'restar'].includes(String(input.operacion)) ? String(input.operacion) : 'set'
+      if (!producto || Number.isNaN(cantidad)) return 'Error: faltan datos (producto o cantidad).'
+      const { data: prod } = await supabase.from('productos')
+        .select('id, nombre, stock_actual, unidad')
+        .eq('restaurante_id', restauranteId).ilike('nombre', `%${producto}%`).limit(1).maybeSingle()
+      if (!prod) return `No encontré ningún producto que coincida con "${producto}" en el stock.`
+      const actual = Number(prod.stock_actual) || 0
+      const nuevo = operacion === 'sumar' ? actual + cantidad
+        : operacion === 'restar' ? Math.max(0, actual - cantidad)
+        : cantidad
+      const { error } = await supabase.from('productos').update({ stock_actual: nuevo }).eq('id', prod.id)
+      if (error) return `Error al ajustar el stock: ${error.message}`
+      return `Stock de ${prod.nombre} actualizado: ${actual} → ${nuevo} ${prod.unidad ?? ''}.`
+    }
+
+    if (name === 'registrar_venta') {
+      const total = Number(input.total_ventas)
+      if (!total || total <= 0) return 'Error: falta el total de ventas del día.'
+      const cubiertos = input.cantidad_cubiertos != null ? Number(input.cantidad_cubiertos) : null
+      const fecha = String(input.fecha ?? '').trim() || hoy
+      const { data: existe } = await supabase.from('ventas')
+        .select('id').eq('restaurante_id', restauranteId).eq('fecha', fecha).limit(1).maybeSingle()
+      const payload = { total_ventas: total, cantidad_cubiertos: cubiertos, fecha, restaurante_id: restauranteId }
+      let error
+      if (existe) {
+        ;({ error } = await supabase.from('ventas').update(payload).eq('id', existe.id))
+      } else {
+        ;({ error } = await supabase.from('ventas').insert({ ...payload, origen: 'manual' }))
+      }
+      if (error) return `Error al registrar la venta: ${error.message}`
+      const cubTxt = cubiertos ? ` con ${cubiertos} cubiertos (ticket ${fmtARS(total / cubiertos)})` : ''
+      return `Venta ${existe ? 'actualizada' : 'registrada'} para ${fecha}: ${fmtARS(total)}${cubTxt}.`
+    }
+
     return `Error: herramienta desconocida "${name}".`
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'desconocido'
@@ -452,7 +709,6 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
   }
 }
 
-interface ContentBlock { type: string; [k: string]: unknown }
 interface AnthropicMsg { role: string; content: unknown }
 
 export async function POST(req: NextRequest) {
@@ -509,76 +765,160 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  dynamicBlock += `\n\n## Acciones ejecutables
-Tenés herramientas para EJECUTAR acciones reales: crear_tarea, marcar_86, registrar_merma, buscar_receta, sugerir_produccion.
-- Usalas SOLO cuando el usuario pide explícitamente hacer la acción ("creá una tarea…", "se acabó el…", "se tiraron 2 kg de…", "¿cómo se hace…?", "¿qué produzco mañana?").
-- Después de ejecutar, confirmá en una frase breve en texto plano (sin JSON, sin markdown) lo que hiciste.
-- Si faltan datos para ejecutar (ej. cantidad de la merma), preguntá antes de llamar la herramienta.
-- sugerir_produccion es de solo lectura (no crea nada) — después de mostrar los números, si el usuario quiere convertirlos en tareas, decile que use el botón "Sugerir producción" en OPS → Planificación (ahí sí puede editar cantidades y confirmar).`
+  const hoyISO = new Date().toISOString().split('T')[0]
+  dynamicBlock += `\n\n## Herramientas (consulta y acciones)
+Hoy es ${hoyISO}. Usá esta fecha para interpretar rangos como "ayer", "esta semana", "los últimos 2 días", "este mes" y convertirlos a fechas concretas YYYY-MM-DD antes de llamar una herramienta.
 
-  // Loop agéntico: hasta 4 vueltas (modelo → tool → resultado → modelo).
+Consultas de solo lectura — usalas para responder con NÚMEROS REALES en vez de inventar:
+- consultar_stock: cuánto hay de un producto ("¿cuánto me queda de X?").
+- ultimo_precio: último precio pagado de un producto y su variación ("¿a cuánto compré la carne?").
+- gasto_periodo: cuánto se gastó en mercadería en un rango ("¿cuánto gasté los últimos 2 días?", "¿cuánto le pagué a tal proveedor este mes?").
+- consultar_ventas: ventas y cubiertos en un rango ("¿cuánto vendí esta semana?").
+- buscar_receta: ficha técnica de una receta. sugerir_produccion: qué producir un día (solo lectura).
+
+Acciones que MODIFICAN datos — usalas SOLO cuando el usuario lo pide explícitamente:
+- crear_tarea ("creá una tarea…"), marcar_86 ("se acabó el…"), registrar_merma ("se tiraron 2 kg de…").
+- cargar_producto ("cargá un producto nuevo…"), ajustar_stock ("quedan 3 kg de…", "entraron 10 de…"), registrar_venta ("hoy vendimos 450 mil con 60 cubiertos").
+
+Reglas:
+- Cuando el usuario pregunta por un dato (stock, precio, gasto, ventas), llamá la herramienta correspondiente en vez de responder de memoria o decir que no sabés.
+- Después de ejecutar, confirmá/respondé en una frase breve en texto plano (sin JSON, sin markdown).
+- Si faltan datos para una acción (ej. la unidad al cargar un producto, la cantidad de la merma), preguntá antes de llamar la herramienta. No inventes precios ni cantidades.
+- sugerir_produccion no crea nada — si el usuario quiere convertir la sugerencia en tareas, decile que use el botón "Sugerir producción" en OPS → Planificación.`
+
+  // ── Streaming con loop agéntico de tools ──────────────────────
+  // Cada ronda: el modelo streamea texto (que reenviamos al cliente token a token) y/o
+  // pide tools. Si pide tools, las ejecutamos server-side y volvemos a llamar; el texto
+  // final sigue streameándose sin cortes. Ver lib/coach/stream.ts para el marcador de error.
   const convo: AnthropicMsg[] = Array.isArray(messages) ? [...messages] : []
-  let finalContent: unknown = [{ type: 'text', text: 'Sin respuesta' }]
 
-  for (let i = 0; i < 4; i++) {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1024,
-        system: [
-          { type: 'text', text: COACH_STATIC_PROMPT, cache_control: { type: 'ephemeral' } },
-          { type: 'text', text: dynamicBlock },
-        ],
-        tools: COACH_TOOLS,
-        messages: convo,
-      }),
-    })
+  const callAnthropic = (msgs: AnthropicMsg[]) => fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1024,
+      stream: true,
+      system: [
+        { type: 'text', text: COACH_STATIC_PROMPT, cache_control: { type: 'ephemeral' } },
+        { type: 'text', text: dynamicBlock },
+      ],
+      tools: COACH_TOOLS,
+      messages: msgs,
+    }),
+  })
 
-    if (!response.ok) {
-      const error = await response.text()
-      return NextResponse.json({ error }, { status: response.status })
-    }
-
-    const data = await response.json()
-    // Log de caching para monitoreo en dev
-    if (data.usage) {
-      console.log('[coach] tokens:', JSON.stringify({
-        input: data.usage.input_tokens,
-        cache_read: data.usage.cache_read_input_tokens ?? 0,
-        cache_write: data.usage.cache_creation_input_tokens ?? 0,
-        output: data.usage.output_tokens,
-      }))
-    }
-
-    finalContent = data.content
-    const blocks = (data.content ?? []) as ContentBlock[]
-
-    if (data.stop_reason === 'tool_use') {
-      convo.push({ role: 'assistant', content: data.content })
-      const toolResults = []
-      for (const block of blocks) {
-        if (block.type === 'tool_use') {
-          const result = await executeTool(
-            String(block.name),
-            (block.input ?? {}) as ToolInput,
-            supabase,
-            restauranteId,
-          )
-          toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result })
-        }
-      }
-      convo.push({ role: 'user', content: toolResults })
-      continue
-    }
-
-    break // end_turn — respuesta final lista
+  // Primera llamada: si falla, respondemos con el status correcto ANTES de abrir el stream
+  // (cubre 401/402/429/overload — el punto de falla más común).
+  let anthropicRes = await callAnthropic(convo)
+  if (!anthropicRes.ok) {
+    const error = await anthropicRes.text()
+    return NextResponse.json({ error }, { status: anthropicRes.status })
   }
 
-  return NextResponse.json({ content: finalContent })
+  const encoder = new TextEncoder()
+  const decoder = new TextDecoder()
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (text: string) => controller.enqueue(encoder.encode(text))
+      try {
+        for (let round = 0; round < 4; round++) {
+          if (!anthropicRes.ok || !anthropicRes.body) {
+            const err = anthropicRes.ok ? 'Sin respuesta del asistente' : await anthropicRes.text().catch(() => 'error')
+            send(`${COACH_ERROR_MARK}${err}`)
+            break
+          }
+
+          const reader = anthropicRes.body.getReader()
+          let buf = ''
+          let stopReason = ''
+          const textBlocks: string[] = []
+          const toolUses: { id: string; name: string; json: string }[] = []
+          let curTool: { id: string; name: string; json: string } | null = null
+
+          for (;;) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buf += decoder.decode(value, { stream: true })
+            let nl: number
+            while ((nl = buf.indexOf('\n')) >= 0) {
+              const line = buf.slice(0, nl).trim()
+              buf = buf.slice(nl + 1)
+              if (!line.startsWith('data:')) continue
+              const payload = line.slice(5).trim()
+              if (!payload || payload === '[DONE]') continue
+              let evt: {
+                type?: string
+                content_block?: { type?: string; id?: string; name?: string }
+                delta?: { type?: string; text?: string; partial_json?: string; stop_reason?: string }
+              }
+              try { evt = JSON.parse(payload) } catch { continue }
+
+              if (evt.type === 'content_block_start') {
+                if (evt.content_block?.type === 'tool_use') {
+                  curTool = { id: String(evt.content_block.id), name: String(evt.content_block.name), json: '' }
+                } else if (evt.content_block?.type === 'text') {
+                  textBlocks.push('')
+                }
+              } else if (evt.type === 'content_block_delta') {
+                if (evt.delta?.type === 'text_delta') {
+                  const t = evt.delta.text ?? ''
+                  if (textBlocks.length === 0) textBlocks.push('')
+                  textBlocks[textBlocks.length - 1] += t
+                  send(t)
+                } else if (evt.delta?.type === 'input_json_delta' && curTool) {
+                  curTool.json += evt.delta.partial_json ?? ''
+                }
+              } else if (evt.type === 'content_block_stop') {
+                if (curTool) { toolUses.push(curTool); curTool = null }
+              } else if (evt.type === 'message_delta') {
+                if (evt.delta?.stop_reason) stopReason = evt.delta.stop_reason
+              }
+            }
+          }
+
+          if (stopReason === 'tool_use' && toolUses.length > 0) {
+            const assistantBlocks: unknown[] = []
+            const joinedText = textBlocks.join('')
+            if (joinedText) assistantBlocks.push({ type: 'text', text: joinedText })
+            const parsedInputs = toolUses.map(tu => {
+              try { return tu.json ? JSON.parse(tu.json) as ToolInput : {} } catch { return {} }
+            })
+            toolUses.forEach((tu, i) => {
+              assistantBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: parsedInputs[i] })
+            })
+            convo.push({ role: 'assistant', content: assistantBlocks })
+
+            const toolResults = []
+            for (let i = 0; i < toolUses.length; i++) {
+              const result = await executeTool(toolUses[i].name, parsedInputs[i], supabase, restauranteId)
+              toolResults.push({ type: 'tool_result', tool_use_id: toolUses[i].id, content: result })
+            }
+            convo.push({ role: 'user', content: toolResults })
+            anthropicRes = await callAnthropic(convo)
+            continue
+          }
+          break // end_turn — respuesta final completa
+        }
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'error'
+        try { send(`${COACH_ERROR_MARK}${msg}`) } catch { /* stream ya cerrado */ }
+      } finally {
+        controller.close()
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'X-Accel-Buffering': 'no',
+    },
+  })
 }
