@@ -506,4 +506,73 @@ export const TOURS: Record<string, TourStep[]> = {
       description: 'Preguntame por el estado de una mesa, cuánto lleva una cuenta abierta o pedime ideas para acomodar un evento grande.',
     },
   ],
+
+  clientes: [
+    {
+      targetId: 'clientes-tabs',
+      title: 'Clientes y Cuentas Corrientes',
+      description: 'Clientes es la base con historial de compras y segmentos automáticos (nuevo, dormido, sin compras). Cuentas Corrientes es el libro de fiado: quién debe y quién pagó. Reemplaza el manejo de cuentas que antes se hacía en Fudo.',
+    },
+    {
+      targetId: 'clientes-nuevo',
+      title: 'Nuevo cliente',
+      description: 'Cargá nombre y teléfono para empezar. Los clientes también se crean automáticamente al vincular una venta en el Salón, así que no hace falta cargar todo a mano.',
+    },
+    {
+      targetId: 'clientes-filtros',
+      title: 'Segmentos y filtros',
+      description: 'Filtrá por cantidad de compras, última compra o grupo. Dormido: no compra hace más de 45 días. Nuevo: su primera compra fue hace 30 días o menos. Útil para detectar a quién contactar.',
+    },
+    {
+      targetId: 'clientes-lista',
+      title: 'La ficha del cliente',
+      description: 'Tocá cualquier cliente para ver sus métricas (compras, total gastado, última visita) y el historial completo. Desde ahí también se edita el contacto y las notas (alergias, preferencias).',
+    },
+    {
+      targetId: 'cc-saldo',
+      requireTab: 'cc',
+      title: 'El saldo de cuenta corriente',
+      description: 'Saldo negativo (rojo) significa que los clientes te deben plata en conjunto. Un cargo aumenta la deuda (fía), un pago la reduce. El saldo por cliente se ve filtrando arriba.',
+    },
+    {
+      targetId: 'cc-nueva',
+      requireTab: 'cc',
+      title: 'Registrar un pago o un fiado',
+      description: 'Nueva transacción: elegís el cliente, si es Pago (cobra deuda) o Cargo (fía), el monto y opcionalmente el medio de pago. Los cobros con Cuenta corriente hechos desde el Salón aparecen acá automáticamente.',
+    },
+    {
+      targetId: 'cc-lista',
+      requireTab: 'cc',
+      title: 'El historial de movimientos',
+      description: 'Cada línea es un cargo o un pago, con su fecha y cliente. Tocá cualquiera para ver el detalle completo o eliminarlo si fue un error de carga.',
+    },
+    {
+      targetId: null,
+      title: '¡Ya conocés Clientes!',
+      description: 'Preguntame qué clientes están dormidos, quién te debe plata o pedime ideas para reactivar a los que no vuelven hace tiempo.',
+    },
+  ],
+
+  espacios: [
+    {
+      targetId: 'espacios-tabs',
+      title: 'Mesa de trabajo',
+      description: 'Producción: organizás los espacios físicos de la cocina (ej. Cocina, Barra) y qué plazas trabajan en cada uno. Stock: ordenás dónde vive físicamente cada producto del inventario, por sector y estante.',
+    },
+    {
+      targetId: 'espacios-nuevo',
+      title: 'Crear un espacio',
+      description: 'Un espacio es un área física (Cocina, Panadería, Barra). Después le asignás las plazas que trabajan ahí y armás sus secciones de mise en place, igual que en Operaciones → Mise.',
+    },
+    {
+      targetId: 'espacios-board',
+      title: 'Arrastrar y soltar',
+      description: 'Cada espacio muestra sus plazas con las secciones y producciones del mise. Arrastrá un ítem entre secciones para reorganizarlo — el cambio se guarda solo, sin abrir ningún formulario.',
+    },
+    {
+      targetId: null,
+      title: '¡Ya conocés Mesa de trabajo!',
+      description: 'Preguntame qué plazas todavía no tienen espacio asignado o cuántos productos del stock te faltan ubicar en un sector.',
+    },
+  ],
 }

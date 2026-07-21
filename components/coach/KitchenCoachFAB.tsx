@@ -119,6 +119,17 @@ const SUGGESTIONS_BY_SCREEN: Record<string, Suggestion[]> = {
     { label: '¿Cuántas mesas están ocupadas ahora?', action: 'send' },
     { label: '¿Cómo organizo un evento con mesas grandes?', action: 'send' },
   ],
+  clientes: [
+    { label: 'Ver recorrido de Clientes', action: 'tour' },
+    { label: '¿Qué clientes están dormidos?', action: 'send' },
+    { label: '¿Quién me debe plata?', action: 'send' },
+    { label: '¿Cómo registro un pago o un fiado?', action: 'send' },
+  ],
+  espacios: [
+    { label: 'Ver recorrido de Mesa de trabajo', action: 'tour' },
+    { label: '¿Qué plazas todavía no tienen espacio asignado?', action: 'send' },
+    { label: '¿Cuántos productos me faltan asignar a un sector?', action: 'send' },
+  ],
 }
 
 const DEFAULT_SUGGESTIONS: Suggestion[] = [

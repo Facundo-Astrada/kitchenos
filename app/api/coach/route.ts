@@ -375,6 +375,17 @@ const COACH_TOOLS = [
     },
   },
   {
+    name: 'consultar_deudores',
+    description: 'Consulta cuánto deben los clientes en cuenta corriente (fiado). Sin argumentos devuelve el saldo total y el top de deudores; con "cliente" devuelve el saldo de ese cliente puntual. Usar cuando el usuario pregunta "¿quién me debe plata?", "¿cuánto me debe X?", "¿cómo está la cuenta corriente?".',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        cliente: { type: 'string', description: 'Opcional. Nombre o parte del nombre de un cliente puntual.' },
+      },
+      required: [],
+    },
+  },
+  {
     name: 'registrar_venta',
     description: 'Registra las ventas de un día (total facturado y cubiertos). Usar cuando el usuario dicta el cierre de caja o las ventas del día ("hoy vendimos 450 mil con 60 cubiertos"). Si ya hay una venta cargada para esa fecha, la actualiza.',
     input_schema: {
@@ -688,6 +699,49 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
       return `Stock de ${prod.nombre} actualizado: ${actual} → ${nuevo} ${prod.unidad ?? ''}.`
     }
 
+    if (name === 'consultar_deudores') {
+      const filtroCliente = String(input.cliente ?? '').trim()
+      let clienteIds: string[] | null = null
+      if (filtroCliente) {
+        const { data: clis } = await supabase.from('clientes')
+          .select('id').eq('restaurante_id', restauranteId).ilike('nombre', `%${filtroCliente}%`).limit(10)
+        if (!clis || clis.length === 0) return `No encontré ningún cliente que coincida con "${filtroCliente}".`
+        clienteIds = clis.map(c => c.id as string)
+      }
+      type Row = { cliente_id: string; tipo: string; monto: number; cliente: { nombre: string } | { nombre: string }[] | null }
+      const rows = await fetchAllRows<Row>((from, to) => {
+        let q = supabase.from('cuenta_corriente_movimientos')
+          .select('cliente_id, tipo, monto, cliente:clientes(nombre)')
+          .eq('restaurante_id', restauranteId)
+        if (clienteIds) q = q.in('cliente_id', clienteIds)
+        return q.range(from, to)
+      })
+      if (rows.length === 0) return filtroCliente ? `"${filtroCliente}" no tiene movimientos de cuenta corriente.` : 'No hay movimientos de cuenta corriente todavía.'
+
+      const saldoPorCliente = new Map<string, { nombre: string; saldo: number }>()
+      for (const r of rows) {
+        const nombre = Array.isArray(r.cliente) ? r.cliente[0]?.nombre : r.cliente?.nombre
+        const signo = r.tipo === 'pago' ? Number(r.monto) : -Number(r.monto)
+        const cur = saldoPorCliente.get(r.cliente_id) ?? { nombre: nombre ?? '—', saldo: 0 }
+        cur.saldo += signo
+        saldoPorCliente.set(r.cliente_id, cur)
+      }
+
+      if (filtroCliente) {
+        const entries = [...saldoPorCliente.values()]
+        const total = entries.reduce((s, e) => s + e.saldo, 0)
+        const nombre = entries[0]?.nombre ?? filtroCliente
+        if (total >= 0) return `${nombre} no tiene deuda${total > 0 ? ` (a favor ${fmtARS(total)})` : ''}.`
+        return `${nombre} debe ${fmtARS(Math.abs(total))}.`
+      }
+
+      const saldoTotal = [...saldoPorCliente.values()].reduce((s, e) => s + e.saldo, 0)
+      const deudores = [...saldoPorCliente.values()].filter(e => e.saldo < 0).sort((a, b) => a.saldo - b.saldo).slice(0, 8)
+      if (deudores.length === 0) return `No hay clientes con deuda. Saldo de cuenta corriente: ${fmtARS(saldoTotal)}.`
+      const lineas = deudores.map(d => `- ${d.nombre}: debe ${fmtARS(Math.abs(d.saldo))}`).join('\n')
+      return `Saldo total de cuenta corriente: ${fmtARS(saldoTotal)} (negativo = te deben).\nPrincipales deudores:\n${lineas}`
+    }
+
     if (name === 'registrar_venta') {
       const total = Number(input.total_ventas)
       if (!total || total <= 0) return 'Error: falta el total de ventas del día.'
@@ -779,6 +833,7 @@ Consultas de solo lectura — usalas para responder con NÚMEROS REALES en vez d
 - ultimo_precio: último precio pagado de un producto y su variación ("¿a cuánto compré la carne?").
 - gasto_periodo: cuánto se gastó en mercadería en un rango ("¿cuánto gasté los últimos 2 días?", "¿cuánto le pagué a tal proveedor este mes?").
 - consultar_ventas: ventas y cubiertos en un rango ("¿cuánto vendí esta semana?").
+- consultar_deudores: saldo de cuenta corriente, general o de un cliente puntual ("¿quién me debe plata?", "¿cuánto me debe Juan?").
 - buscar_receta: ficha técnica de una receta. sugerir_produccion: qué producir un día (solo lectura).
 
 Acciones que MODIFICAN datos — usalas SOLO cuando el usuario lo pide explícitamente:

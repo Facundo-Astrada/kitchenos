@@ -37,6 +37,16 @@ const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 12px', bo
 export default function ClientesPage() {
   const [tab, setTab] = useState<MainTab>('clientes')
 
+  // Permite que el tour del Kitchen Coach cambie de tab (ver requireTab en lib/coach/tours.ts).
+  useEffect(() => {
+    function handleSetTab(e: Event) {
+      const { tab: t } = (e as CustomEvent<{ tab: string }>).detail
+      if (t === 'clientes' || t === 'cc') setTab(t)
+    }
+    window.addEventListener('kc-set-tab', handleSetTab)
+    return () => window.removeEventListener('kc-set-tab', handleSetTab)
+  }, [])
+
   return (
     <PageTransition>
       <div className="flex flex-col h-full" style={{ overflow: 'hidden' }}>
@@ -47,7 +57,9 @@ export default function ClientesPage() {
               <div style={{ fontSize: 10, color: 'rgba(255,255,255,.45)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Base de clientes · Fiado</div>
             </div>
           </div>
-          <SegmentedTabs tabs={MAIN_TABS} active={tab} onChange={setTab} />
+          <div data-coach-target="clientes-tabs">
+            <SegmentedTabs tabs={MAIN_TABS} active={tab} onChange={setTab} />
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto">
           {tab === 'clientes' ? <ClientesTab /> : <CuentasCorrientesTab />}
@@ -76,6 +88,20 @@ function ClientesTab() {
   const [saving, setSaving] = useState(false)
 
   const origenesDisponibles = useMemo(() => Array.from(new Set(clientes.map(c => c.origen))).sort(), [clientes])
+
+  useEffect(() => {
+    const dormidos = clientes.filter(c => c.grupo === 'dormido').map(c => c.nombre).slice(0, 6)
+    const nuevos = clientes.filter(c => c.grupo === 'nuevo').map(c => c.nombre).slice(0, 6)
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'clientes',
+      tab: 'clientes',
+      totalActivos: clientes.filter(c => c.activo).length,
+      dormidos,
+      sinCompras: clientes.filter(c => c.grupo === 'sin_compras').length,
+      nuevos,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [clientes])
 
   const filtered = useMemo(() => {
     let list = clientes
@@ -127,10 +153,12 @@ function ClientesTab() {
           <input type="checkbox" checked={verInactivos} onChange={e => setVerInactivos(e.target.checked)} />
           Inactivos
         </label>
-        <HeaderAction label="Nuevo cliente" icon="add" onClick={() => setCreando(v => !v)} style={{ background: 'var(--navy)' }} />
+        <div data-coach-target="clientes-nuevo">
+          <HeaderAction label="Nuevo cliente" icon="add" onClick={() => setCreando(v => !v)} style={{ background: 'var(--navy)' }} />
+        </div>
       </div>
 
-      <div className="flex gap-2 mb-4" style={{ flexWrap: 'wrap' }}>
+      <div data-coach-target="clientes-filtros" className="flex gap-2 mb-4" style={{ flexWrap: 'wrap' }}>
         <select value={cantFiltro} onChange={e => setCantFiltro(e.target.value)} style={selStyle}>
           <option value="">Cant. de compras: todas</option>
           <option value="0">0</option><option value="1">1</option><option value="2-5">2 a 5</option><option value="6+">6 o más</option>
@@ -164,7 +192,7 @@ function ClientesTab() {
       ) : filtered.length === 0 ? (
         <EmptyState icon="groups" title="Sin clientes" subtitle={clientes.length === 0 ? 'Creá tu primer cliente o vinculalo al cobrar en el Salón' : 'Sin resultados para estos filtros'} />
       ) : (
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+        <div data-coach-target="clientes-lista" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
           {filtered.map((c, i) => (
             <button key={c.id} onClick={() => setSeleccion(c)}
               style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '11px 12px', border: 'none', borderTop: i > 0 ? '1px solid var(--border)' : 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', opacity: c.activo ? 1 : .5 }}>
@@ -320,6 +348,24 @@ function CuentasCorrientesTab() {
     .map(id => ({ id, nombre: movimientos.find(m => m.cliente_id === id)?.cliente_nombre ?? '—' }))
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')), [movimientos])
 
+  useEffect(() => {
+    const deudores = [...saldoPorCliente.entries()]
+      .filter(([, saldo]) => saldo < 0)
+      .sort((a, b) => a[1] - b[1])
+      .slice(0, 6)
+      .map(([id, saldo]) => ({
+        nombre: movimientos.find(m => m.cliente_id === id)?.cliente_nombre ?? '—',
+        debe: Math.abs(saldo),
+      }))
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'clientes',
+      tab: 'cc',
+      saldoTotal,
+      deudores,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [movimientos, saldoPorCliente, saldoTotal])
+
   if (seleccion) {
     return (
       <div style={{ padding: '0 16px 24px' }}>
@@ -360,10 +406,12 @@ function CuentasCorrientesTab() {
           <option value="">Cliente: todos</option>
           {clientesConNombre.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
         </select>
-        <HeaderAction label="Nueva transacción" icon="add" onClick={() => setShowNueva(true)} style={{ background: 'var(--navy)' }} />
+        <div data-coach-target="cc-nueva">
+          <HeaderAction label="Nueva transacción" icon="add" onClick={() => setShowNueva(true)} style={{ background: 'var(--navy)' }} />
+        </div>
       </div>
 
-      <div className="flex gap-3 mb-4" style={{ flexWrap: 'wrap' }}>
+      <div data-coach-target="cc-saldo" className="flex gap-3 mb-4" style={{ flexWrap: 'wrap' }}>
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '9px 12px', flex: 1, minWidth: 130 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>Registros totales</div>
           <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-1)' }}>{filtered.length}</div>
@@ -386,7 +434,7 @@ function CuentasCorrientesTab() {
       ) : filtered.length === 0 ? (
         <EmptyState icon="account_balance_wallet" title="Sin movimientos" subtitle="Los cobros con Cuenta corriente en el Salón, y las transacciones manuales, aparecen acá" />
       ) : (
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+        <div data-coach-target="cc-lista" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
           {filtered.map((m, i) => (
             <button key={m.id} onClick={() => setSeleccion(m)}
               style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '11px 12px', border: 'none', borderTop: i > 0 ? '1px solid var(--border)' : 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>

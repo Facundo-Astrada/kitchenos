@@ -35,4 +35,9 @@ export const COACH_HIGHLIGHT_IDS = [
   'proveedores-lista',
   // Salón
   'salon-topbar', 'salon-mapa',
+  // Clientes
+  'clientes-tabs', 'clientes-nuevo', 'clientes-filtros', 'clientes-lista',
+  'cc-saldo', 'cc-nueva', 'cc-lista',
+  // Mesa de trabajo (espacios)
+  'espacios-tabs', 'espacios-nuevo', 'espacios-board', 'espacios-stock-board',
 ] as const
