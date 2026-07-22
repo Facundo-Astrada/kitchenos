@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useSheetOpenWhen } from '@/lib/ui/chrome'
 import { useRouter } from 'next/navigation'
@@ -214,6 +214,30 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
     [tareas, fecha],
   )
 
+  // ── Reordenar secciones/ítems del menú del día (drag & drop en MenuActivoView) ──
+  // Un solo campo `orden` (ya existente en `tareas`) codifica sección + posición dentro
+  // de ella: al aplanar [sección1-item1, sección1-item2, sección2-item1, ...] el índice
+  // en esa lista ES el nuevo `orden`. No hace falta una columna nueva para "orden de sección".
+  async function reordenarMenuDelDia(cambios: { id: string; orden: number }[]) {
+    if (cambios.length === 0) return
+    try {
+      const supabase = createClient()
+      const { error } = await Promise.all(
+        cambios.map(c => supabase.from('tareas').update({ orden: c.orden }).eq('id', c.id))
+      ).then(results => {
+        const withError = results.find(r => r.error)
+        return { error: withError?.error ?? null }
+      })
+      if (error) throw error
+      refetchTareas()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message
+        : (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message)
+        : 'desconocido'
+      showToast('Error al reordenar: ' + msg)
+    }
+  }
+
   async function vaciarMenuDelDia() {
     const ids = menuTareasDelDia.map(t => t.id)
     if (ids.length === 0) return
@@ -295,6 +319,7 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
           onVaciar={vaciarMenuDelDia}
           onActivarOtro={() => setShowMenuPicker(true)}
           onIrAProduccion={irAProduccion}
+          onReordenar={reordenarMenuDelDia}
         />
       ) : (
         /* Sin menú cargado para este día */
@@ -564,25 +589,133 @@ const PRIO_BADGE: Record<string, { label: string; color: string; bg: string }> =
   baja: { label: 'Check', color: '#64748b', bg: '#f8fafc' },
 }
 
+type SeccionGrupo = [string, Tarea[]]
+
+function agruparPorSeccion(tareas: Tarea[]): SeccionGrupo[] {
+  const sorted = [...tareas].sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
+  const m = new Map<string, Tarea[]>()
+  for (const t of sorted) {
+    const sec = (t.seccion ?? '').trim() || 'General'
+    const list = m.get(sec) ?? []
+    list.push(t)
+    m.set(sec, list)
+  }
+  return [...m.entries()]
+}
+
 function MenuActivoView({
-  tareas, miembros, onVaciar, onActivarOtro, onIrAProduccion,
+  tareas, miembros, onVaciar, onActivarOtro, onIrAProduccion, onReordenar,
 }: {
   tareas: Tarea[]
   miembros: { id: string; nombre: string; apellido: string }[]
   onVaciar: () => void
   onActivarOtro: () => void
   onIrAProduccion: () => void
+  onReordenar: (cambios: { id: string; orden: number }[]) => void
 }) {
-  const grouped = useMemo(() => {
-    const m = new Map<string, Tarea[]>()
-    for (const t of tareas) {
-      const sec = (t.seccion ?? '').trim() || 'General'
-      const list = m.get(sec) ?? []
-      list.push(t)
-      m.set(sec, list)
+  const groupedBase = useMemo(() => agruparPorSeccion(tareas), [tareas])
+
+  // Estado local editable para que el drag se sienta fluido (sin esperar el round-trip
+  // a DB en cada micro-movimiento). Se resincroniza con la base solo cuando cambia el
+  // SET de ids (menú activado/vaciado) — no en cada cambio de campo (ej. tildar "listo"),
+  // para no pisar un drag en curso ni "saltar" el orden recién elegido por el usuario.
+  const idsKey = useMemo(() => tareas.map(t => t.id).sort().join(','), [tareas])
+  const [grouped, setGrouped] = useState<SeccionGrupo[]>(groupedBase)
+  const prevIdsKey = useRef(idsKey)
+  useEffect(() => {
+    if (prevIdsKey.current !== idsKey) {
+      prevIdsKey.current = idsKey
+      setGrouped(groupedBase)
+    } else {
+      setGrouped(prev => prev.map(([sec, items]) =>
+        [sec, items.map(it => tareas.find(t => t.id === it.id) ?? it)] as SeccionGrupo
+      ))
     }
-    return [...m.entries()]
-  }, [tareas])
+    // Solo re-ejecutar cuando cambia el set de ids; groupedBase/tareas se leen del closure más reciente.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idsKey])
+
+  function commitOrder(next: SeccionGrupo[]) {
+    const cambios: { id: string; orden: number }[] = []
+    let i = 0
+    for (const [, items] of next) {
+      for (const t of items) {
+        if ((t.orden ?? -1) !== i) cambios.push({ id: t.id, orden: i })
+        i++
+      }
+    }
+    if (cambios.length > 0) onReordenar(cambios)
+  }
+
+  // ── Drag de secciones (arrastrar el header reordena el bloque completo) ──
+  const secRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const [draggingSec, setDraggingSec] = useState<string | null>(null)
+  function secDragStart(e: React.PointerEvent, sec: string) {
+    e.preventDefault()
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    setDraggingSec(sec)
+  }
+  function secDragMove(e: React.PointerEvent) {
+    if (!draggingSec) return
+    const y = e.clientY
+    setGrouped(prev => {
+      for (const [name, el] of Object.entries(secRefs.current)) {
+        if (!el || name === draggingSec) continue
+        const rect = el.getBoundingClientRect()
+        if (y < rect.top || y > rect.bottom) continue
+        const from = prev.findIndex(([s]) => s === draggingSec)
+        const to = prev.findIndex(([s]) => s === name)
+        if (from === -1 || to === -1 || from === to) return prev
+        const next = [...prev]
+        const [moved] = next.splice(from, 1)
+        next.splice(to, 0, moved)
+        return next
+      }
+      return prev
+    })
+  }
+  function secDragEnd() {
+    if (draggingSec) commitOrder(grouped)
+    setDraggingSec(null)
+  }
+
+  // ── Drag de ítems dentro de su sección ──
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const [draggingItem, setDraggingItem] = useState<{ sec: string; id: string } | null>(null)
+  function itemDragStart(e: React.PointerEvent, sec: string, id: string) {
+    e.preventDefault()
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    setDraggingItem({ sec, id })
+  }
+  function itemDragMove(e: React.PointerEvent) {
+    if (!draggingItem) return
+    const y = e.clientY
+    setGrouped(prev => {
+      const secIdx = prev.findIndex(([s]) => s === draggingItem.sec)
+      if (secIdx === -1) return prev
+      const items = prev[secIdx][1]
+      const fromIdx = items.findIndex(t => t.id === draggingItem.id)
+      if (fromIdx === -1) return prev
+      for (let i = 0; i < items.length; i++) {
+        if (i === fromIdx) continue
+        const el = itemRefs.current[items[i].id]
+        if (!el) continue
+        const rect = el.getBoundingClientRect()
+        if (y < rect.top || y > rect.bottom) continue
+        const nextItems = [...items]
+        const [moved] = nextItems.splice(fromIdx, 1)
+        nextItems.splice(i, 0, moved)
+        const next = [...prev]
+        next[secIdx] = [prev[secIdx][0], nextItems]
+        return next
+      }
+      return prev
+    })
+  }
+  function itemDragEnd() {
+    if (draggingItem) commitOrder(grouped)
+    setDraggingItem(null)
+  }
 
   const listos = tareas.filter(t => t.estado === 'listo').length
   const total = tareas.length
@@ -610,12 +743,31 @@ function MenuActivoView({
         </button>
       </div>
 
-      {/* Secciones del menú — resumen read-only (la ejecución es en Producción) */}
+      {/* Secciones del menú — arrastrar el header o cada fila para reordenar */}
       {grouped.map(([sec, items]) => {
         const listosSec = items.filter(t => t.estado === 'listo').length
+        const isDraggingThisSec = draggingSec === sec
         return (
-          <div key={sec} style={{ margin: '0 2px 10px', borderRadius: 14, overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--surface)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+          <div key={sec}
+            ref={el => { secRefs.current[sec] = el }}
+            style={{
+              margin: '0 2px 10px', borderRadius: 14, overflow: 'hidden',
+              border: isDraggingThisSec ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+              background: 'var(--surface)',
+              opacity: isDraggingThisSec ? .7 : 1,
+              boxShadow: isDraggingThisSec ? '0 4px 14px rgba(0,0,0,.12)' : 'none',
+            }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+              <span
+                onPointerDown={e => secDragStart(e, sec)}
+                onPointerMove={secDragMove}
+                onPointerUp={secDragEnd}
+                onPointerCancel={secDragEnd}
+                title="Arrastrar para reordenar la sección"
+                className="material-symbols-outlined"
+                style={{ fontSize: 16, color: 'var(--text-3)', cursor: 'grab', touchAction: 'none', flexShrink: 0, marginLeft: -4 }}>
+                drag_indicator
+              </span>
               <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{sec}</span>
               <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'monospace', color: listosSec === items.length ? '#22c55e' : 'var(--text-3)' }}>{listosSec}/{items.length}</span>
             </div>
@@ -624,8 +776,25 @@ function MenuActivoView({
                 const listo = t.estado === 'listo'
                 const badge = PRIO_BADGE[t.prioridad ?? 'media'] ?? PRIO_BADGE.media
                 const miembro = miembros.find(m => m.id === t.asignado_a)
+                const isDraggingThisItem = draggingItem?.id === t.id
                 return (
-                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                  <div key={t.id}
+                    ref={el => { itemRefs.current[t.id] = el }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 7, padding: '8px 0', borderBottom: '1px solid var(--border)',
+                      opacity: isDraggingThisItem ? .5 : 1,
+                      background: isDraggingThisItem ? 'rgba(67,97,160,.06)' : 'transparent',
+                    }}>
+                    <span
+                      onPointerDown={e => itemDragStart(e, sec, t.id)}
+                      onPointerMove={itemDragMove}
+                      onPointerUp={itemDragEnd}
+                      onPointerCancel={itemDragEnd}
+                      title="Arrastrar para reordenar"
+                      className="material-symbols-outlined"
+                      style={{ fontSize: 15, color: 'var(--text-3)', cursor: 'grab', touchAction: 'none', flexShrink: 0 }}>
+                      drag_indicator
+                    </span>
                     <span style={{ width: 9, height: 9, borderRadius: '50%', background: listo ? '#22c55e' : 'var(--border)', flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 600, color: listo ? '#15803d' : 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.titulo}</div>
