@@ -647,6 +647,69 @@ function MenuActivoView({
     if (cambios.length > 0) onReordenar(cambios)
   }
 
+  // ── Auto-scroll en los bordes durante el drag (sección o ítem) ──
+  // El contenedor scrolleable de Planificación es un ancestro de este componente
+  // (embedded: el propio wrapper con overflowY:auto; standalone: la ventana). Se
+  // resuelve una vez al iniciar el drag y se recorre con un loop rAF leyendo la
+  // posición del puntero desde un ref — sigue corriendo aunque el puntero deje de
+  // moverse, igual que el patrón del board de Stock en Mesa de Trabajo.
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const pointerYRef = useRef<number | null>(null)
+  const scrollElRef = useRef<HTMLElement | Window | null>(null)
+  const rafRef = useRef<number | null>(null)
+  const autoScrollActiveRef = useRef(false)
+  const EDGE = 70
+  const MAX_SPEED = 16
+
+  function findScrollParent(el: HTMLElement | null): HTMLElement | Window {
+    let node = el?.parentElement ?? null
+    while (node) {
+      const style = getComputedStyle(node)
+      if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && node.scrollHeight > node.clientHeight) {
+        return node
+      }
+      node = node.parentElement
+    }
+    return window
+  }
+  function speedNear(distance: number) {
+    const clamped = Math.max(0, Math.min(EDGE, distance))
+    return MAX_SPEED * (1 - clamped / EDGE)
+  }
+  // El loop se reprograma SIEMPRE mientras el drag esté activo — si se corta apenas
+  // pointerYRef es null (ej. el primer frame, antes del primer pointermove), el auto-scroll
+  // muere para toda la duración del drag y no hay forma de reactivarlo sin soltar y volver a agarrar.
+  function autoScrollTick() {
+    if (!autoScrollActiveRef.current) { rafRef.current = null; return }
+    const y = pointerYRef.current
+    const scrollEl = scrollElRef.current
+    if (y != null && scrollEl) {
+      if (scrollEl === window) {
+        const vh = window.innerHeight
+        if (y < EDGE) window.scrollBy(0, -speedNear(y))
+        else if (y > vh - EDGE) window.scrollBy(0, speedNear(vh - y))
+      } else {
+        const el = scrollEl as HTMLElement
+        const rect = el.getBoundingClientRect()
+        if (y < rect.top + EDGE) el.scrollTop -= speedNear(y - rect.top)
+        else if (y > rect.bottom - EDGE) el.scrollTop += speedNear(rect.bottom - y)
+      }
+    }
+    rafRef.current = requestAnimationFrame(autoScrollTick)
+  }
+  function startAutoScroll(initialY: number) {
+    pointerYRef.current = initialY
+    scrollElRef.current = findScrollParent(rootRef.current)
+    autoScrollActiveRef.current = true
+    if (rafRef.current == null) rafRef.current = requestAnimationFrame(autoScrollTick)
+  }
+  function stopAutoScroll() {
+    autoScrollActiveRef.current = false
+    if (rafRef.current != null) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+    pointerYRef.current = null
+    scrollElRef.current = null
+  }
+
   // ── Drag de secciones (arrastrar el header reordena el bloque completo) ──
   const secRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const [draggingSec, setDraggingSec] = useState<string | null>(null)
@@ -654,10 +717,12 @@ function MenuActivoView({
     e.preventDefault()
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     setDraggingSec(sec)
+    startAutoScroll(e.clientY)
   }
   function secDragMove(e: React.PointerEvent) {
     if (!draggingSec) return
     const y = e.clientY
+    pointerYRef.current = y
     setGrouped(prev => {
       for (const [name, el] of Object.entries(secRefs.current)) {
         if (!el || name === draggingSec) continue
@@ -677,6 +742,7 @@ function MenuActivoView({
   function secDragEnd() {
     if (draggingSec) commitOrder(grouped)
     setDraggingSec(null)
+    stopAutoScroll()
   }
 
   // ── Drag de ítems dentro de su sección ──
@@ -686,10 +752,12 @@ function MenuActivoView({
     e.preventDefault()
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     setDraggingItem({ sec, id })
+    startAutoScroll(e.clientY)
   }
   function itemDragMove(e: React.PointerEvent) {
     if (!draggingItem) return
     const y = e.clientY
+    pointerYRef.current = y
     setGrouped(prev => {
       const secIdx = prev.findIndex(([s]) => s === draggingItem.sec)
       if (secIdx === -1) return prev
@@ -715,14 +783,17 @@ function MenuActivoView({
   function itemDragEnd() {
     if (draggingItem) commitOrder(grouped)
     setDraggingItem(null)
+    stopAutoScroll()
   }
+
+  useEffect(() => () => { if (rafRef.current != null) cancelAnimationFrame(rafRef.current) }, [])
 
   const listos = tareas.filter(t => t.estado === 'listo').length
   const total = tareas.length
   const pct = total > 0 ? Math.round((listos / total) * 100) : 0
 
   return (
-    <div style={{ padding: '10px 12px 120px' }}>
+    <div ref={rootRef} style={{ padding: '10px 12px 120px' }}>
       {/* Resumen + acciones */}
       <div style={{ margin: '0 2px 10px', padding: '12px', borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
