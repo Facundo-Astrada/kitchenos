@@ -103,25 +103,28 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
     try {
       const supabase = createClient()
       const modoDestino = menu.tipo === 'evento' ? 'evento' : 'menu'
+      const hoyReal = fmtDate(new Date())
       let totalTareas = 0, diasActivados = 0, diasYaActivos = 0
       for (const f of fechas) {
         // Dedupe por preparación: si ya existe una tarea para ESTE día, no se recrea.
-        // Si la del día anterior quedó sin completar (carryover), la de hoy se crea igual
-        // y la de ayer se borra (con sus subtareas por ON DELETE CASCADE).
-        const prev = new Date(f + 'T12:00:00'); prev.setDate(prev.getDate() - 1)
-        const prevDay = fmtDate(prev)
-        const { data: previas } = await supabase.from('tareas')
-          .select('id, titulo, turno_fecha, estado')
-          .eq('restaurante_id', RESTAURANTE_ID).eq('menu_id', menu.id)
-          .gte('turno_fecha', prevDay).lte('turno_fecha', f)
-        const existentesHoy = new Set<string>()
-        const idsAyerABorrar: string[] = []
-        for (const t of previas ?? []) {
-          if (t.turno_fecha === f) existentesHoy.add(t.titulo.trim().toLowerCase())
-          else if (t.turno_fecha === prevDay && t.estado !== 'listo') idsAyerABorrar.push(t.id)
-        }
-        if (idsAyerABorrar.length > 0) {
-          await supabase.from('tareas').delete().in('id', idsAyerABorrar)
+        const { data: previasDelDia } = await supabase.from('tareas')
+          .select('id, titulo')
+          .eq('restaurante_id', RESTAURANTE_ID).eq('menu_id', menu.id).eq('turno_fecha', f)
+        const existentesHoy = new Set((previasDelDia ?? []).map(t => t.titulo.trim().toLowerCase()))
+
+        // Carryover: SOLO al activar el menú para el día real de hoy se limpia lo pendiente
+        // de ayer (evita duplicados en el mise). No debe dispararse al precargar varios días
+        // futuros de una — ahí "ayer" sería un día del mismo lote recién insertado.
+        if (f === hoyReal) {
+          const ayer = new Date(f + 'T12:00:00'); ayer.setDate(ayer.getDate() - 1)
+          const prevDay = fmtDate(ayer)
+          const { data: previasAyer } = await supabase.from('tareas')
+            .select('id, estado')
+            .eq('restaurante_id', RESTAURANTE_ID).eq('menu_id', menu.id).eq('turno_fecha', prevDay)
+          const idsAyerABorrar = (previasAyer ?? []).filter(t => t.estado !== 'listo').map(t => t.id)
+          if (idsAyerABorrar.length > 0) {
+            await supabase.from('tareas').delete().in('id', idsAyerABorrar)
+          }
         }
         const preparacionesNuevas = menu.preparaciones
           .map((p, i) => ({ p, orden: i }))
