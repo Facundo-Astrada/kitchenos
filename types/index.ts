@@ -1150,3 +1150,25 @@ export interface ComprobanteItem {
   subtotal: number
   created_at: string
 }
+
+// DB: coach_acciones (id, restaurante_id, tool_name, screen, input_propuesto, input_confirmado,
+//   estado, resultado_texto, resultado_error, creado_por, resuelto_por, creado_en, resuelto_en, expira_en)
+export type CoachToolName =
+  | 'crear_tarea' | 'marcar_86' | 'registrar_merma' | 'cargar_producto' | 'ajustar_stock' | 'registrar_venta'
+export type CoachAccionEstado = 'pendiente' | 'confirmada' | 'cancelada' | 'expirada' | 'error'
+export interface CoachAccion {
+  id: string
+  restaurante_id: string
+  tool_name: CoachToolName
+  screen: string | null
+  input_propuesto: Record<string, unknown>
+  input_confirmado: Record<string, unknown> | null
+  estado: CoachAccionEstado
+  resultado_texto: string | null
+  resultado_error: string | null
+  creado_por: string
+  resuelto_por: string | null
+  creado_en: string
+  resuelto_en: string | null
+  expira_en: string
+}

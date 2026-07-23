@@ -5,6 +5,7 @@ import { useKitchenCoach } from '@/lib/hooks/useKitchenCoach'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
 import { listConvos, archiveConvo, deleteConvo, toMessages, type ArchivedConvo } from '@/lib/coach/history'
+import { CoachActionCard } from '@/components/coach/CoachActionCard'
 
 const NARANJA = '#f97316'
 
@@ -79,6 +80,7 @@ export default function CoachPage() {
   const storageKey = RESTAURANTE_ID ? `kc_active_${RESTAURANTE_ID}` : null
   const {
     messages, loading, error, sendMessage, clearMessages, replaceMessages,
+    pendingAction, confirmingDraftId, confirmAction, cancelAction,
   } = useKitchenCoach({ storageKey })
   const datos = useDatosClave()
 
@@ -314,6 +316,14 @@ export default function CoachPage() {
                 </div>
               )
             })}
+            {pendingAction && (
+              <CoachActionCard
+                action={pendingAction}
+                onConfirm={confirmAction}
+                onCancel={cancelAction}
+                busy={confirmingDraftId === pendingAction.draft_id}
+              />
+            )}
             {error && <div style={{ fontSize: 13, color: '#ef4444', textAlign: 'center', padding: '4px 0' }}>{error}</div>}
             <div ref={endRef} />
           </div>

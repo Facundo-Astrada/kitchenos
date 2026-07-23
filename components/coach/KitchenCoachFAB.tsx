@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useKitchenCoach } from '@/lib/hooks/useKitchenCoach'
 import { useMerma } from '@/lib/hooks/useMerma'
 import MermaBottomSheet from '@/components/merma/MermaBottomSheet'
+import { CoachActionCard } from '@/components/coach/CoachActionCard'
 import { type TourStep, TOURS } from '@/lib/coach/tours'
 import { useSheetCount } from '@/lib/ui/chrome'
 
@@ -488,7 +489,9 @@ function CoachOverlay({
 export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: KitchenCoachFABProps) {
   const {
     messages, loading, error, isOpen, highlight, overlayText,
+    pendingAction, confirmingDraftId,
     toggle, open, close, sendMessage, clearMessages, clearHighlight, clearOverlayText,
+    confirmAction, cancelAction,
   } = useKitchenCoach()
   const sheetCount = useSheetCount()
   const pathname = usePathname()
@@ -753,6 +756,15 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
               </div>
             )
           })}
+
+          {pendingAction && (
+            <CoachActionCard
+              action={pendingAction}
+              onConfirm={confirmAction}
+              onCancel={cancelAction}
+              busy={confirmingDraftId === pendingAction.draft_id}
+            />
+          )}
 
           {error && <div style={{ fontSize: 12, color: '#ef4444', textAlign: 'center', padding: '4px 0' }}>{error}</div>}
           <div ref={messagesEndRef} />

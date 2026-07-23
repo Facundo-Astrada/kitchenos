@@ -3,7 +3,11 @@ import { createClient } from '@/lib/supabase/server'
 import { COACH_HIGHLIGHT_IDS } from '@/lib/coach/highlights'
 import { calcularSugerenciaProduccion } from '@/lib/produccion/sugerencia'
 import { fetchAllRows } from '@/lib/supabase/paginate'
-import { COACH_ERROR_MARK } from '@/lib/coach/stream'
+import { COACH_ERROR_MARK, COACH_PENDING_MARK } from '@/lib/coach/stream'
+import { getRestauranteId } from '@/lib/coach/restaurante'
+import { getPermisosServer, puedeEjecutarTool } from '@/lib/permisos/server'
+import { proposeAction, COACH_MUTATING_TOOLS } from '@/lib/coach/tools/propose'
+import type { PendingAction } from '@/lib/coach/types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 const fmtARS = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
@@ -400,11 +404,6 @@ const COACH_TOOLS = [
   },
 ]
 
-function turnoActual(): 'apertura' | 'servicio' | 'cierre' {
-  const h = new Date().getHours()
-  return h < 12 ? 'apertura' : h < 18 ? 'servicio' : 'cierre'
-}
-
 type ToolInput = Record<string, unknown>
 
 async function executeTool(name: string, input: ToolInput, supabase: SupabaseClient, restauranteId: string | null): Promise<string> {
@@ -412,79 +411,6 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
   const hoy = new Date().toISOString().split('T')[0]
 
   try {
-    if (name === 'crear_tarea') {
-      const titulo = String(input.titulo ?? '').trim()
-      if (!titulo) return 'Error: falta el título de la tarea.'
-      const prioridad = ['critica', 'alta', 'media', 'baja'].includes(String(input.prioridad)) ? String(input.prioridad) : 'media'
-      const { error } = await supabase.from('tareas').insert({
-        titulo,
-        descripcion: input.descripcion ? String(input.descripcion) : null,
-        status: 'pendiente',
-        estado: 'pendiente',
-        prioridad,
-        categoria: 'general',
-        seccion: 'general',
-        plaza: input.plaza ? String(input.plaza) : null,
-        turno_fecha: hoy,
-        checklist: '[]',
-        restaurante_id: restauranteId,
-      })
-      if (error) return `Error al crear la tarea: ${error.message}`
-      return `Tarea creada para hoy: "${titulo}" (prioridad ${prioridad}). Aparece en Producción.`
-    }
-
-    if (name === 'marcar_86') {
-      const plato = String(input.plato ?? '').trim()
-      if (!plato) return 'Error: falta el nombre del plato.'
-      const { data, error } = await supabase.from('carta_items')
-        .update({ disponible: false })
-        .eq('restaurante_id', restauranteId)
-        .ilike('nombre', `%${plato}%`)
-        .select('nombre')
-      if (error) return `Error al marcar 86: ${error.message}`
-      if (!data || data.length === 0) return `No encontré ningún plato que coincida con "${plato}". No marqué nada.`
-      return `Marcado como 86 (no disponible): ${data.map(d => d.nombre).join(', ')}.`
-    }
-
-    if (name === 'registrar_merma') {
-      const producto = String(input.producto ?? '').trim()
-      const cantidad = Number(input.cantidad)
-      const unidad = String(input.unidad ?? '').trim()
-      const motivo = String(input.motivo ?? 'otro')
-      if (!producto || !cantidad || cantidad <= 0 || !unidad) return 'Error: faltan datos de la merma (producto, cantidad o unidad).'
-
-      const { data: prod } = await supabase.from('productos')
-        .select('id, precio_unitario, stock_actual')
-        .eq('restaurante_id', restauranteId)
-        .ilike('nombre', `%${producto}%`)
-        .limit(1)
-        .maybeSingle()
-
-      const costo = prod?.precio_unitario ? Number(prod.precio_unitario) * cantidad : 0
-      const { error } = await supabase.from('merma').insert({
-        producto_nombre: producto,
-        producto_id: prod?.id ?? null,
-        cantidad,
-        unidad,
-        motivo,
-        motivo_detalle: input.detalle ? String(input.detalle) : null,
-        fecha: hoy,
-        turno: turnoActual(),
-        costo_estimado: costo,
-        restaurante_id: restauranteId,
-      })
-      if (error) return `Error al registrar la merma: ${error.message}`
-
-      let extra = ''
-      if (prod?.id) {
-        const nuevo = Math.max(0, (Number(prod.stock_actual) || 0) - cantidad)
-        await supabase.from('productos').update({ stock_actual: nuevo }).eq('id', prod.id)
-        extra = ` Stock actualizado a ${nuevo} ${unidad}.`
-      }
-      const costoTxt = costo > 0 ? ` Costo estimado $${Math.round(costo).toLocaleString('es-AR')}.` : ''
-      return `Merma registrada: ${cantidad} ${unidad} de ${producto} (${motivo}).${costoTxt}${extra}`
-    }
-
     if (name === 'buscar_receta') {
       const query = String(input.query ?? '').trim()
       if (!query) return 'Error: falta el nombre de la receta a buscar.'
@@ -653,52 +579,6 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
       return txt
     }
 
-    if (name === 'cargar_producto') {
-      const nombre = String(input.nombre ?? '').trim()
-      const unidad = String(input.unidad ?? '').trim()
-      if (!nombre || !unidad) return 'Error: faltan datos del producto (nombre y unidad).'
-      // Evitar duplicados obvios
-      const { data: existe } = await supabase.from('productos')
-        .select('nombre').eq('restaurante_id', restauranteId).ilike('nombre', nombre).limit(1).maybeSingle()
-      if (existe) return `Ya existe un producto llamado "${existe.nombre}". Si querés cambiar su stock, usá ajustar_stock.`
-      const stockActual = Number(input.stock_actual) || 0
-      const stockMinimo = Number(input.stock_minimo) || 0
-      const precio = input.precio_unitario != null ? Number(input.precio_unitario) : null
-      const { error } = await supabase.from('productos').insert({
-        nombre,
-        unidad,
-        stock_actual: stockActual,
-        stock_minimo: stockMinimo,
-        stock_critico: 0,
-        precio_unitario: precio,
-        categoria: input.categoria ? String(input.categoria) : 'Otros',
-        activo: true,
-        restaurante_id: restauranteId,
-      })
-      if (error) return `Error al cargar el producto: ${error.message}`
-      const detalles = [`${stockActual} ${unidad}`]
-      if (precio) detalles.push(`precio ${fmtARS(precio)}`)
-      return `Producto cargado: ${nombre} (${detalles.join(', ')}). Ya aparece en Stock.`
-    }
-
-    if (name === 'ajustar_stock') {
-      const producto = String(input.producto ?? '').trim()
-      const cantidad = Number(input.cantidad)
-      const operacion = ['set', 'sumar', 'restar'].includes(String(input.operacion)) ? String(input.operacion) : 'set'
-      if (!producto || Number.isNaN(cantidad)) return 'Error: faltan datos (producto o cantidad).'
-      const { data: prod } = await supabase.from('productos')
-        .select('id, nombre, stock_actual, unidad')
-        .eq('restaurante_id', restauranteId).ilike('nombre', `%${producto}%`).limit(1).maybeSingle()
-      if (!prod) return `No encontré ningún producto que coincida con "${producto}" en el stock.`
-      const actual = Number(prod.stock_actual) || 0
-      const nuevo = operacion === 'sumar' ? actual + cantidad
-        : operacion === 'restar' ? Math.max(0, actual - cantidad)
-        : cantidad
-      const { error } = await supabase.from('productos').update({ stock_actual: nuevo }).eq('id', prod.id)
-      if (error) return `Error al ajustar el stock: ${error.message}`
-      return `Stock de ${prod.nombre} actualizado: ${actual} → ${nuevo} ${prod.unidad ?? ''}.`
-    }
-
     if (name === 'consultar_deudores') {
       const filtroCliente = String(input.cliente ?? '').trim()
       let clienteIds: string[] | null = null
@@ -742,25 +622,6 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
       return `Saldo total de cuenta corriente: ${fmtARS(saldoTotal)} (negativo = te deben).\nPrincipales deudores:\n${lineas}`
     }
 
-    if (name === 'registrar_venta') {
-      const total = Number(input.total_ventas)
-      if (!total || total <= 0) return 'Error: falta el total de ventas del día.'
-      const cubiertos = input.cantidad_cubiertos != null ? Number(input.cantidad_cubiertos) : null
-      const fecha = String(input.fecha ?? '').trim() || hoy
-      const { data: existe } = await supabase.from('ventas')
-        .select('id').eq('restaurante_id', restauranteId).eq('fecha', fecha).limit(1).maybeSingle()
-      const payload = { total_ventas: total, cantidad_cubiertos: cubiertos, fecha, restaurante_id: restauranteId }
-      let error
-      if (existe) {
-        ;({ error } = await supabase.from('ventas').update(payload).eq('id', existe.id))
-      } else {
-        ;({ error } = await supabase.from('ventas').insert({ ...payload, origen: 'manual' }))
-      }
-      if (error) return `Error al registrar la venta: ${error.message}`
-      const cubTxt = cubiertos ? ` con ${cubiertos} cubiertos (ticket ${fmtARS(total / cubiertos)})` : ''
-      return `Venta ${existe ? 'actualizada' : 'registrada'} para ${fecha}: ${fmtARS(total)}${cubTxt}.`
-    }
-
     return `Error: herramienta desconocida "${name}".`
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'desconocido'
@@ -786,9 +647,8 @@ export async function POST(req: NextRequest) {
   hits.set(user.id, [...userHits, now])
 
   // restaurante_id de la sesión (fuente confiable para writes; no del body).
-  const { data: ur } = await supabase.from('user_restaurantes')
-    .select('restaurante_id').eq('user_id', user.id).maybeSingle()
-  const restauranteId = (ur?.restaurante_id as string | undefined) ?? null
+  const restauranteId = await getRestauranteId(supabase, user.id)
+  const permisos = restauranteId ? await getPermisosServer(supabase, user.id, restauranteId) : null
 
   const { messages, screenContext, ctx } = await req.json()
 
@@ -799,9 +659,9 @@ export async function POST(req: NextRequest) {
 
   // Bloque dinámico: snapshot M1 + pantalla activa + contexto de stock/tareas del cliente + M5
   let dynamicBlock = ''
+  const screen = (screenContext && typeof screenContext === 'object' && 'screen' in screenContext)
+    ? String((screenContext as { screen?: unknown }).screen ?? '') : undefined
   try {
-    const screen = (screenContext && typeof screenContext === 'object' && 'screen' in screenContext)
-      ? String((screenContext as { screen?: unknown }).screen ?? '') : undefined
     const snapshot = await buildSnapshot(supabase, screen || undefined)
     if (snapshot) dynamicBlock += snapshot
   } catch { /* sin snapshot — seguimos */ }
@@ -839,10 +699,10 @@ Consultas de solo lectura — usalas para responder con NÚMEROS REALES en vez d
 Acciones que MODIFICAN datos — usalas SOLO cuando el usuario lo pide explícitamente:
 - crear_tarea ("creá una tarea…"), marcar_86 ("se acabó el…"), registrar_merma ("se tiraron 2 kg de…").
 - cargar_producto ("cargá un producto nuevo…"), ajustar_stock ("quedan 3 kg de…", "entraron 10 de…"), registrar_venta ("hoy vendimos 450 mil con 60 cubiertos").
+- IMPORTANTE: estas herramientas NO ejecutan el cambio al llamarlas — dejan la acción PROPUESTA. El usuario va a ver una tarjeta editable en el chat y tiene que confirmarla ahí. No digas "ya lo hice", "listo, cargado" ni nada que dé a entender que el cambio ya ocurrió — decí algo como "te dejo esto para que confirmes" y cerrá corto.
 
 Reglas:
 - Cuando el usuario pregunta por un dato (stock, precio, gasto, ventas), llamá la herramienta correspondiente en vez de responder de memoria o decir que no sabés.
-- Después de ejecutar, confirmá/respondé en una frase breve en texto plano (sin JSON, sin markdown).
 - Si faltan datos para una acción (ej. la unidad al cargar un producto, la cantidad de la merma), preguntá antes de llamar la herramienta. No inventes precios ni cantidades.
 - sugerir_produccion no crea nada — si el usuario quiere convertir la sugerencia en tareas, decile que use el botón "Sugerir producción" en OPS → Planificación.`
 
@@ -851,6 +711,12 @@ Reglas:
   // pide tools. Si pide tools, las ejecutamos server-side y volvemos a llamar; el texto
   // final sigue streameándose sin cortes. Ver lib/coach/stream.ts para el marcador de error.
   const convo: AnthropicMsg[] = Array.isArray(messages) ? [...messages] : []
+
+  // Gate de permisos, punto 1 de 2: el modelo ni ve las tools mutantes que el usuario no
+  // puede ejecutar. El punto 2 (el que realmente importa) es la revalidación en /api/coach/confirm.
+  const allowedTools = COACH_TOOLS.filter(t =>
+    !COACH_MUTATING_TOOLS.includes(t.name) || (permisos !== null && puedeEjecutarTool(permisos, t.name))
+  )
 
   const callAnthropic = (msgs: AnthropicMsg[]) => fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -867,7 +733,7 @@ Reglas:
         { type: 'text', text: COACH_STATIC_PROMPT, cache_control: { type: 'ephemeral' } },
         { type: 'text', text: dynamicBlock },
       ],
-      tools: COACH_TOOLS,
+      tools: allowedTools,
       messages: msgs,
     }),
   })
@@ -886,6 +752,9 @@ Reglas:
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const send = (text: string) => controller.enqueue(encoder.encode(text))
+      // Cap de 1 draft por request completo (puede abarcar varias rondas): si el modelo pide
+      // una segunda tool mutante en el mismo mensaje, se le pide esperar a que se resuelva la primera.
+      let pendingActionForResponse: PendingAction | null = null
       try {
         for (let round = 0; round < 4; round++) {
           if (!anthropicRes.ok || !anthropicRes.body) {
@@ -956,8 +825,28 @@ Reglas:
 
             const toolResults = []
             for (let i = 0; i < toolUses.length; i++) {
-              const result = await executeTool(toolUses[i].name, parsedInputs[i], supabase, restauranteId)
-              toolResults.push({ type: 'tool_result', tool_use_id: toolUses[i].id, content: result })
+              const name = toolUses[i].name
+              if (COACH_MUTATING_TOOLS.includes(name)) {
+                if (pendingActionForResponse) {
+                  toolResults.push({
+                    type: 'tool_result', tool_use_id: toolUses[i].id,
+                    content: 'Ya hay una acción pendiente de confirmación en este mensaje. Pedile al usuario que la confirme o cancele antes de proponer otra.',
+                  })
+                  continue
+                }
+                if (!restauranteId || !permisos) {
+                  toolResults.push({ type: 'tool_result', tool_use_id: toolUses[i].id, content: 'Error: no pude identificar tu restaurante. No se propuso nada.' })
+                  continue
+                }
+                const { toolResultText, pendingAction } = await proposeAction(
+                  supabase, restauranteId, user.id, screen, name, parsedInputs[i], permisos
+                )
+                toolResults.push({ type: 'tool_result', tool_use_id: toolUses[i].id, content: toolResultText })
+                if (pendingAction) pendingActionForResponse = pendingAction
+              } else {
+                const result = await executeTool(name, parsedInputs[i], supabase, restauranteId)
+                toolResults.push({ type: 'tool_result', tool_use_id: toolUses[i].id, content: result })
+              }
             }
             convo.push({ role: 'user', content: toolResults })
             anthropicRes = await callAnthropic(convo)
@@ -969,6 +858,11 @@ Reglas:
         const msg = e instanceof Error ? e.message : 'error'
         try { send(`${COACH_ERROR_MARK}${msg}`) } catch { /* stream ya cerrado */ }
       } finally {
+        // Corre siempre que se haya creado un draft, incluso si el loop se cortó por el
+        // límite de 4 rondas sin que el modelo cerrara con texto — la tarjeta igual llega.
+        if (pendingActionForResponse) {
+          try { send(COACH_PENDING_MARK + JSON.stringify(pendingActionForResponse)) } catch { /* stream ya cerrado */ }
+        }
         controller.close()
       }
     },

@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { COACH_HIGHLIGHT_IDS as _COACH_HIGHLIGHT_IDS } from '@/lib/coach/highlights'
-import { COACH_ERROR_MARK } from '@/lib/coach/stream'
+import { COACH_ERROR_MARK, COACH_PENDING_MARK } from '@/lib/coach/stream'
+import type { PendingAction } from '@/lib/coach/types'
 
 export { _COACH_HIGHLIGHT_IDS as COACH_HIGHLIGHT_IDS }
 
@@ -33,6 +34,8 @@ export function useKitchenCoach(opts?: CoachOptions) {
   const [isOpen, setIsOpen] = useState(false)
   const [highlight, setHighlight] = useState<string | null>(null)
   const [overlayText, setOverlayText] = useState<string | null>(null)
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
+  const [confirmingDraftId, setConfirmingDraftId] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const messagesRef = useRef<CoachMessage[]>([])
   messagesRef.current = messages
@@ -151,18 +154,29 @@ export function useKitchenCoach(opts?: CoachOptions) {
           break
         }
 
+        // El marker de acción pendiente (si lo hay) va SIEMPRE al final del stream —
+        // no mostrar el marker+JSON como texto visible mientras se recibe.
+        const pendIdx = buffer.indexOf(COACH_PENDING_MARK)
+        const visibleBuffer = pendIdx >= 0 ? buffer.slice(0, pendIdx) : buffer
+
         // Respuestas estructuradas (JSON con highlight/options) no se muestran en vivo:
         // se dejan los puntos suspensivos hasta parsear al final. El resto se streamea.
-        if (!buffer.trimStart().startsWith('{')) {
-          const partial = buffer
-          setMessages(prev => prev.map(m => m.id === placeholderId ? { ...m, content: partial } : m))
+        if (!visibleBuffer.trimStart().startsWith('{')) {
+          setMessages(prev => prev.map(m => m.id === placeholderId ? { ...m, content: visibleBuffer } : m))
         }
       }
 
       if (streamErr) throw new Error(streamErr)
 
-      // ── Stream completo — parsear respuesta estructurada si la hay ──
-      const rawText = buffer
+      // ── Stream completo — extraer acción pendiente (si la hay) antes de parsear el texto ──
+      let pendingActionParsed: PendingAction | null = null
+      const pendIdxFinal = buffer.indexOf(COACH_PENDING_MARK)
+      const rawText = pendIdxFinal >= 0 ? buffer.slice(0, pendIdxFinal) : buffer
+      if (pendIdxFinal >= 0) {
+        try { pendingActionParsed = JSON.parse(buffer.slice(pendIdxFinal + COACH_PENDING_MARK.length)) } catch { /* ignore */ }
+      }
+
+      // ── Parsear respuesta estructurada si la hay ──
       let text = rawText
       let hl: string | null = null
       let ovText: string | null = null
@@ -184,6 +198,7 @@ export function useKitchenCoach(opts?: CoachOptions) {
 
       setHighlight(hl)
       setOverlayText(ovText)
+      setPendingAction(pendingActionParsed)
       setMessages(prev =>
         prev.map(m => m.id === placeholderId ? {
           ...m,
@@ -203,9 +218,45 @@ export function useKitchenCoach(opts?: CoachOptions) {
     }
   }, [])
 
+  const confirmAction = useCallback(async (draftId: string, payload: Record<string, unknown>) => {
+    setConfirmingDraftId(draftId)
+    try {
+      const res = await fetch('/api/coach/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ draft_id: draftId, action: 'confirm', payload }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'No se pudo confirmar')
+      setMessages(prev => [...prev, {
+        id: crypto.randomUUID(), role: 'assistant', content: `✓ ${data.message}`, timestamp: new Date(),
+      }])
+      setPendingAction(null)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Error al confirmar')
+    } finally {
+      setConfirmingDraftId(null)
+    }
+  }, [])
+
+  const cancelAction = useCallback(async (draftId: string) => {
+    setConfirmingDraftId(draftId)
+    try {
+      await fetch('/api/coach/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ draft_id: draftId, action: 'cancel' }),
+      })
+      setPendingAction(null)
+    } finally {
+      setConfirmingDraftId(null)
+    }
+  }, [])
+
   return {
     messages, loading, error, isOpen, highlight, overlayText,
+    pendingAction, confirmingDraftId,
     open, close, toggle, sendMessage, clearMessages, replaceMessages,
-    clearHighlight, clearOverlayText, cancelRequest,
+    clearHighlight, clearOverlayText, cancelRequest, confirmAction, cancelAction,
   }
 }
