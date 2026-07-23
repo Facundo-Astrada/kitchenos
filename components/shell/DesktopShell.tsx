@@ -11,7 +11,7 @@ import { useState } from 'react'
 // Rutas que necesitan ancho completo (tabla, mapa, gráficos)
 const FULL_WIDTH_ROUTES = ['/stock', '/espacios', '/reportes']
 
-export default function DesktopShell({ children }: { children: React.ReactNode }) {
+export default function DesktopShell({ children, sidePanel }: { children: React.ReactNode; sidePanel?: React.ReactNode }) {
   const pathname = usePathname()
   const [showImportador, setShowImportador] = useState(false)
 
@@ -34,6 +34,13 @@ export default function DesktopShell({ children }: { children: React.ReactNode }
           </div>
         )}
       </main>
+
+      {/* ── Panel lateral fijo (Kitchen Coach) — empuja el contenido, no lo tapa ── */}
+      {sidePanel && (
+        <div style={{ width: 380, flexShrink: 0, height: '100%', borderLeft: '1px solid var(--border)', overflow: 'hidden' }}>
+          {sidePanel}
+        </div>
+      )}
 
       {showImportador && (
         <ImportadorUniversal onClose={() => setShowImportador(false)} />

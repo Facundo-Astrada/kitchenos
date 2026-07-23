@@ -12,6 +12,9 @@ import { useSheetCount } from '@/lib/ui/chrome'
 interface KitchenCoachFABProps {
   stockCritico?: Array<{ nombre: string; cantidad: number; minimo: number }>
   tareasPendientes?: Array<{ titulo: string; prioridad: string; plaza?: string }>
+  // Modo "dock": panel fijo de alto completo (columna lateral de DesktopShell),
+  // siempre visible — sin FAB flotante, sin drag, sin botón de cerrar.
+  dock?: boolean
 }
 
 function getActiveTour(): TourStep[] {
@@ -486,7 +489,7 @@ function CoachOverlay({
 }
 
 // ── Main component ─────────────────────────────────────────────
-export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: KitchenCoachFABProps) {
+export default function KitchenCoachFAB({ stockCritico, tareasPendientes, dock = false }: KitchenCoachFABProps) {
   const {
     messages, loading, error, isOpen, highlight, overlayText,
     pendingAction, confirmingDraftId,
@@ -639,8 +642,12 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
 
   const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && m.content && m.options?.length)
 
-  // En la pantalla dedicada del Coach (/coach) el FAB es redundante — se oculta.
+  // En la pantalla dedicada del Coach (/coach) el FAB/dock es redundante — se oculta.
   if (pathname === '/coach') return null
+
+  const panelClassName = dock ? 'kc-dock' : `kc-panel${isOpen ? ' kc-panel-open' : ''}`
+  const panelStyle = dock ? undefined
+    : { '--kc-panel-bottom': `${panelBottomDesktop}px`, '--kc-panel-right': `${panelRightDesktop}px` } as React.CSSProperties
 
   return (
     <>
@@ -661,14 +668,11 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
         onDismiss={() => { clearHighlight(); clearOverlayText() }}
       />
 
-      {/* Mobile dim */}
-      {isOpen && <div className="kc-overlay" onClick={close} />}
+      {/* Mobile dim — no aplica en modo dock (panel fijo, no modal) */}
+      {!dock && isOpen && <div className="kc-overlay" onClick={close} />}
 
       {/* Chat panel */}
-      <div
-        className={`kc-panel${isOpen ? ' kc-panel-open' : ''}`}
-        style={{ '--kc-panel-bottom': `${panelBottomDesktop}px`, '--kc-panel-right': `${panelRightDesktop}px` } as React.CSSProperties}
-      >
+      <div className={panelClassName} style={panelStyle}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 14px 12px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
           <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#f97316', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -683,9 +687,11 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
               <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-3)' }}>delete_sweep</span>
             </button>
           )}
-          <button onClick={close} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-3)' }}>close</span>
-          </button>
+          {!dock && (
+            <button onClick={close} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-3)' }}>close</span>
+            </button>
+          )}
         </div>
 
         {/* Messages */}
@@ -814,21 +820,23 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
         onRegistrar={async (data) => { await registrarMerma(data); setMermaOpen(false) }}
       />
 
-      {/* FAB — se oculta cuando hay sheets/modales abiertos (useSheetOpen en D1) */}
-      <button
-        className="kc-fab"
-        title="Kitchen Coach"
-        aria-label="Kitchen Coach"
-        style={{ bottom: fabPos.bottom, right: fabPos.right, touchAction: 'none', opacity: sheetCount > 0 ? 0 : 1, pointerEvents: sheetCount > 0 ? 'none' : 'auto', transition: 'opacity .2s' }}
-        onPointerDown={onFabPointerDown}
-        onPointerMove={onFabPointerMove}
-        onPointerUp={onFabPointerUp}
-      >
-        <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#fff', transition: 'transform .2s', transform: isOpen ? 'rotate(90deg)' : 'none', pointerEvents: 'none' }}>
-          {isOpen ? 'close' : 'chef_hat'}
-        </span>
-        {hasUnread && <div className="kc-badge" />}
-      </button>
+      {/* FAB flotante — no aplica en modo dock (el panel ya está siempre visible) */}
+      {!dock && (
+        <button
+          className="kc-fab"
+          title="Kitchen Coach"
+          aria-label="Kitchen Coach"
+          style={{ bottom: fabPos.bottom, right: fabPos.right, touchAction: 'none', opacity: sheetCount > 0 ? 0 : 1, pointerEvents: sheetCount > 0 ? 'none' : 'auto', transition: 'opacity .2s' }}
+          onPointerDown={onFabPointerDown}
+          onPointerMove={onFabPointerMove}
+          onPointerUp={onFabPointerUp}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#fff', transition: 'transform .2s', transform: isOpen ? 'rotate(90deg)' : 'none', pointerEvents: 'none' }}>
+            {isOpen ? 'close' : 'chef_hat'}
+          </span>
+          {hasUnread && <div className="kc-badge" />}
+        </button>
+      )}
 
       <style>{`
         .kc-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 999; display: none; }
@@ -850,6 +858,10 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
           transition: transform .25s ease, opacity .25s ease;
         }
         .kc-panel-open { transform: translateY(0); opacity: 1; pointer-events: all; }
+        .kc-dock {
+          position: relative; width: 100%; height: 100%;
+          background: var(--surface); display: flex; flex-direction: column; overflow: hidden;
+        }
         .kc-typing { display: flex; gap: 4px; align-items: center; padding: 2px 0; }
         .kc-typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); animation: kc-pulse 1.2s ease-in-out infinite; }
         .kc-typing span:nth-child(2) { animation-delay: .2s; }

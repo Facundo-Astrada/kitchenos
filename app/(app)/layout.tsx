@@ -106,11 +106,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (isDesktop) {
     return (
       <UiChromeProvider>
-        <DesktopShell>{pageContent}</DesktopShell>
-        <KitchenCoachFAB
-          stockCritico={stockCritico}
-          tareasPendientes={tareasPendientes}
-        />
+        <DesktopShell
+          sidePanel={pathname !== '/coach' ? (
+            <KitchenCoachFAB
+              dock
+              stockCritico={stockCritico}
+              tareasPendientes={tareasPendientes}
+            />
+          ) : null}
+        >
+          {pageContent}
+        </DesktopShell>
       </UiChromeProvider>
     )
   }
