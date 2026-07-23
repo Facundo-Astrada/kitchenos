@@ -359,7 +359,7 @@ export interface Proveedor {
 // ── Pedidos ─────────────────────────────────────────────────
 export type EstadoPedido = 'borrador' | 'enviado' | 'recibido' | 'parcial'
 
-// DB: pedido_items (id, pedido_id, producto_nombre, producto_id, cantidad, unidad, precio_estimado, cantidad_recibida, recibido)
+// DB: pedido_items (id, pedido_id, producto_nombre, producto_id, cantidad, unidad, precio_estimado, cantidad_recibida, recibido, nota)
 export interface PedidoItem {
   id: string
   pedido_id: string
@@ -370,6 +370,7 @@ export interface PedidoItem {
   precio_estimado?: number | null
   cantidad_recibida?: number | null
   recibido: boolean
+  nota?: string | null
 }
 
 // DB: pedidos (id, proveedor_id, proveedor_nombre, fecha_pedido, fecha_entrega_esperada, status, notas, total_estimado, usuario_id, restaurante_id, created_at)

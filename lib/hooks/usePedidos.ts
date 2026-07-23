@@ -88,7 +88,7 @@ export function usePedidos() {
     proveedor_nombre: string
     fecha_entrega_esperada?: string | null
     notas?: string | null
-    items: { producto_nombre: string; producto_id?: string | null; cantidad: number; unidad: string; precio_estimado: number }[]
+    items: { producto_nombre: string; producto_id?: string | null; cantidad: number; unidad: string; precio_estimado: number; nota?: string | null }[]
   }) => {
     try {
       const total = datos.items.reduce((s, it) => s + it.cantidad * it.precio_estimado, 0)
@@ -114,6 +114,7 @@ export function usePedidos() {
         cantidad: it.cantidad,
         unidad: it.unidad,
         precio_estimado: it.precio_estimado,
+        nota: it.nota || null,
         recibido: false,
         cantidad_recibida: null,
       }))

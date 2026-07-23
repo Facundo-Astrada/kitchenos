@@ -462,6 +462,7 @@ export default function StockPage() {
         precio_unitario: p.precio_unitario ?? 0,
         proveedor_id: p.proveedor_id ?? null,
         cantidad: sugerida,
+        nota: null,
       }]
     })
     setCartOpen(true)
@@ -471,6 +472,10 @@ export default function StockPage() {
     setCart(prev => cantidad <= 0
       ? prev.filter(it => it.producto_id !== id)
       : prev.map(it => it.producto_id === id ? { ...it, cantidad } : it))
+  }, [])
+
+  const updateCartNota = useCallback((id: string, nota: string) => {
+    setCart(prev => prev.map(it => it.producto_id === id ? { ...it, nota: nota || null } : it))
   }, [])
 
   const removeFromCart = useCallback((id: string) => {
@@ -499,6 +504,7 @@ export default function StockPage() {
             cantidad: it.cantidad,
             unidad: it.unidad,
             precio_estimado: it.precio_unitario,
+            nota: it.nota ?? null,
           })),
         })
       }
@@ -3067,6 +3073,7 @@ export default function StockPage() {
           cart={cart}
           proveedores={proveedores}
           onUpdateQty={updateCartQty}
+          onUpdateNota={updateCartNota}
           onRemove={removeFromCart}
           onClear={() => { setCart([]); setCartOpen(false) }}
           onConfirm={confirmarPedidos}

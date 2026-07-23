@@ -55,7 +55,7 @@ async function exportPedidoPDF(pedido: Pedido, items: PedidoItem[]) {
   if (entregaPDF) {
     doc.text(`Entrega: ${entregaPDF}`, 100, 28)
   }
-  doc.text(`Estado: ${STATUS_COLORS[pedido.status as EstadoPedido].label}`, 100, 34)
+  doc.text(`Estado: ${STATUS_COLORS[pedido.status as EstadoPedido]?.label ?? pedido.status}`, 100, 34)
 
   doc.setTextColor(0, 0, 0)
 
@@ -65,7 +65,7 @@ async function exportPedidoPDF(pedido: Pedido, items: PedidoItem[]) {
     head: [['#', 'Producto', 'Cantidad', 'Unidad', 'Precio Est.', 'Subtotal']],
     body: items.map((it, i) => [
       i + 1,
-      it.producto_nombre ?? '',
+      it.nota ? `${it.producto_nombre ?? ''}\n${it.nota}` : (it.producto_nombre ?? ''),
       it.cantidad,
       it.unidad ?? '',
       fmtMoney(it.precio_estimado ?? 0),
@@ -109,6 +109,7 @@ function buildWhatsAppText(pedido: Pedido, items: PedidoItem[]) {
   items.forEach((it, i) => {
     msg += `${i + 1}. ${it.producto_nombre} — ${it.cantidad} ${it.unidad}`
     if ((it.precio_estimado ?? 0) > 0) msg += ` ($${it.precio_estimado})`
+    if (it.nota) msg += ` _(${it.nota})_`
     msg += `\n`
   })
   msg += `\n*Total estimado: ${fmtMoney(pedido.total_estimado ?? 0)}*`
@@ -118,7 +119,9 @@ function buildWhatsAppText(pedido: Pedido, items: PedidoItem[]) {
 
 // ── Badge Component ─────────────────────────────────────
 function StatusBadge({ status }: { status: EstadoPedido }) {
-  const c = STATUS_COLORS[status]
+  // Fallback defensivo: pedidos con un status legacy que no matchea EstadoPedido
+  // (ej. "confirmado", de un flujo viejo) no deben tirar abajo toda la pantalla.
+  const c = STATUS_COLORS[status] ?? { bg: '#e8e8e8', text: '#666', label: status }
   return (
     <span style={{
       background: c.bg, color: c.text,
@@ -746,6 +749,12 @@ function DetailView({
                     </span>
                   )}
                 </div>
+                {it.nota && (
+                  <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 12 }}>inventory_2</span>
+                    {it.nota}
+                  </div>
+                )}
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--navy)' }}>
@@ -955,6 +964,9 @@ function RecibirView({
                 <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
                   Pedido: {it.cantidad} {it.unidad}
                 </div>
+                {it.nota && (
+                  <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 2 }}>{it.nota}</div>
+                )}
               </div>
             </div>
             {it.recibido && (

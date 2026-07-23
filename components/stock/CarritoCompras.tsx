@@ -9,6 +9,7 @@ export interface CartItem {
   precio_unitario: number
   proveedor_id: string | null
   cantidad: number
+  nota?: string | null
 }
 
 interface ProveedorLite {
@@ -20,6 +21,7 @@ interface Props {
   cart: CartItem[]
   proveedores: ProveedorLite[]
   onUpdateQty: (productoId: string, cantidad: number) => void
+  onUpdateNota: (productoId: string, nota: string) => void
   onRemove: (productoId: string) => void
   onClear: () => void
   onConfirm: (notas: string) => Promise<void>
@@ -32,10 +34,66 @@ function fmtP(n: number) {
   return '$' + n.toLocaleString('es-AR', { maximumFractionDigits: 0 })
 }
 
+// Coma decimal (AR): "15,05" -> 15.05. Acepta también punto para no romper el paste.
+function parseQtyAR(raw: string): number | null {
+  const clean = raw.trim().replace(',', '.')
+  if (!clean) return null
+  const n = parseFloat(clean)
+  return isNaN(n) ? null : n
+}
+function fmtQtyAR(n: number) {
+  // Redondeo a 3 decimales para evitar ruido de punto flotante (15.050 -> "15,05")
+  const rounded = Math.round(n * 1000) / 1000
+  return String(rounded).replace('.', ',')
+}
+
+// Input+stepper de cantidad con coma decimal — buffer de texto local desacoplado
+// del número para no perder la coma mientras se escribe (mismo patrón que el
+// editor de composición de Carta).
+function CartQtyStepper({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  const [text, setText] = useState(() => fmtQtyAR(value))
+
+  function apply(next: number) {
+    const clamped = Math.max(0, next)
+    setText(fmtQtyAR(clamped))
+    onChange(clamped)
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+      <button
+        onClick={() => apply(+(value - 1).toFixed(3))}
+        style={{ width: 26, height: 26, borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>remove</span>
+      </button>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={text}
+        onChange={e => {
+          const raw = e.target.value
+          setText(raw)
+          const parsed = parseQtyAR(raw)
+          if (parsed != null) onChange(Math.max(0, parsed))
+        }}
+        onBlur={() => setText(fmtQtyAR(value))}
+        style={{ width: 52, textAlign: 'center', fontSize: 13, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--bg)', color: 'var(--text-1)', border: '1px solid var(--border)', borderRadius: 7, padding: '4px 2px', outline: 'none' }}
+      />
+      <button
+        onClick={() => apply(+(value + 1).toFixed(3))}
+        style={{ width: 26, height: 26, borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
+      </button>
+    </div>
+  )
+}
+
 const SIN_PROVEEDOR = '__sin__'
 
 export default function CarritoCompras({
-  cart, proveedores, onUpdateQty, onRemove, onClear, onConfirm, open, onToggle,
+  cart, proveedores, onUpdateQty, onUpdateNota, onRemove, onClear, onConfirm, open, onToggle,
 }: Props) {
   const [saving, setSaving] = useState(false)
   const [notas, setNotas] = useState('')
@@ -148,46 +206,39 @@ export default function CarritoCompras({
                   {/* Items del grupo */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {grupo.items.map(it => (
-                      <div key={it.producto_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10 }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.nombre}</p>
-                          <p style={{ fontSize: 10, color: 'var(--text-3)', margin: '1px 0 0' }}>
-                            {fmtP(it.precio_unitario)} / {it.unidad}
-                            {it.precio_unitario === 0 && <span style={{ color: '#f59e0b', marginLeft: 4 }}>· sin precio</span>}
-                          </p>
+                      <div key={it.producto_id} style={{ padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.nombre}</p>
+                            <p style={{ fontSize: 10, color: 'var(--text-3)', margin: '1px 0 0' }}>
+                              {fmtP(it.precio_unitario)} / {it.unidad}
+                              {it.precio_unitario === 0 && <span style={{ color: '#f59e0b', marginLeft: 4 }}>· sin precio</span>}
+                            </p>
+                          </div>
+
+                          <CartQtyStepper value={it.cantidad} onChange={n => onUpdateQty(it.producto_id, n)} />
+
+                          {/* Subtotal item */}
+                          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)', fontFamily: "'DM Mono', monospace", minWidth: 60, textAlign: 'right', flexShrink: 0 }}>
+                            {fmtP(it.cantidad * it.precio_unitario)}
+                          </span>
+
+                          {/* Eliminar */}
+                          <button onClick={() => onRemove(it.producto_id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)', flexShrink: 0, display: 'flex' }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
+                          </button>
                         </div>
 
-                        {/* Stepper de cantidad */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                          <button
-                            onClick={() => onUpdateQty(it.producto_id, Math.max(0, +(it.cantidad - 1).toFixed(2)))}
-                            style={{ width: 26, height: 26, borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                          >
-                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>remove</span>
-                          </button>
+                        {/* Formato de pedido personalizado (opcional) — ej. "1 bidón de 20L" */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--text-3)', flexShrink: 0 }}>inventory_2</span>
                           <input
-                            type="number"
-                            value={it.cantidad}
-                            onChange={e => onUpdateQty(it.producto_id, Math.max(0, parseFloat(e.target.value) || 0))}
-                            style={{ width: 48, textAlign: 'center', fontSize: 13, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--bg)', color: 'var(--text-1)', border: '1px solid var(--border)', borderRadius: 7, padding: '4px 2px', outline: 'none' }}
+                            value={it.nota ?? ''}
+                            onChange={e => onUpdateNota(it.producto_id, e.target.value)}
+                            placeholder="Formato de pedido (opcional): ej. 1 bidón de 20L"
+                            style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', fontSize: 11, color: 'var(--text-2)', fontFamily: 'inherit', outline: 'none', padding: '2px 0' }}
                           />
-                          <button
-                            onClick={() => onUpdateQty(it.producto_id, +(it.cantidad + 1).toFixed(2))}
-                            style={{ width: 26, height: 26, borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                          >
-                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
-                          </button>
                         </div>
-
-                        {/* Subtotal item */}
-                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)', fontFamily: "'DM Mono', monospace", minWidth: 60, textAlign: 'right', flexShrink: 0 }}>
-                          {fmtP(it.cantidad * it.precio_unitario)}
-                        </span>
-
-                        {/* Eliminar */}
-                        <button onClick={() => onRemove(it.producto_id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)', flexShrink: 0, display: 'flex' }}>
-                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
-                        </button>
                       </div>
                     ))}
                   </div>
