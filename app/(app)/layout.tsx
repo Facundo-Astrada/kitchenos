@@ -12,6 +12,7 @@ import MoreMenu from '@/components/shell/MoreMenu'
 import DesktopShell from '@/components/shell/DesktopShell'
 import RouteGuard from '@/components/shell/RouteGuard'
 import KitchenCoachFAB from '@/components/coach/KitchenCoachFAB'
+import { CoachPanelContent } from '@/components/coach/CoachPanelContent'
 import DemoBanner from '@/components/shell/DemoBanner'
 import { UiChromeProvider } from '@/lib/ui/chrome'
 
@@ -107,13 +108,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
       <UiChromeProvider>
         <DesktopShell
-          sidePanel={pathname !== '/coach' ? (
-            <KitchenCoachFAB
-              dock
-              stockCritico={stockCritico}
-              tareasPendientes={tareasPendientes}
-            />
-          ) : null}
+          sidePanel={pathname !== '/coach' ? <CoachPanelContent variant="dock" /> : null}
         >
           {pageContent}
         </DesktopShell>
