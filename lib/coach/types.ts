@@ -4,7 +4,10 @@
 export interface CampoUI {
   key: string
   label: string
-  tipo: 'texto' | 'numero' | 'select' | 'textarea'
+  // 'readonly': dato estructurado no editable (ej. los pasos de un menú) — se muestra
+  // formateado en la tarjeta y viaja igual en el payload de confirmación, pero el usuario
+  // no lo toca ahí; si está mal, cancela y se lo redicta al chat.
+  tipo: 'texto' | 'numero' | 'select' | 'textarea' | 'readonly'
   opciones?: string[]     // solo si tipo === 'select'
   requerido?: boolean
   valor?: unknown         // valor propuesto por el modelo, para prellenar el form

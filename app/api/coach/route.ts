@@ -200,6 +200,7 @@ Cuando tu respuesta menciona dónde está algo en la pantalla, respondé en JSON
 - overlay_text: texto corto que aparece sobre el elemento destacado en pantalla, muy conciso
 - options: chips de respuesta rápida para guiar al usuario al siguiente paso (máx 3 opciones, omitir si no aplica)
 - En conversaciones generales sin referencia a UI, respondé SOLO texto plano (sin JSON)
+- CRÍTICO: tu respuesta completa es UNA sola cosa — o texto plano de punta a punta, o el objeto JSON de punta a punta. NUNCA mezcles: no escribas texto normal y después pegues el bloque JSON (ni al revés). Si dudás si hace falta highlight, respondé solo texto plano — es preferible a romper el formato.
 
 IDs disponibles: ${COACH_HIGHLIGHT_IDS.join(', ')}
 
@@ -400,6 +401,30 @@ const COACH_TOOLS = [
         fecha: { type: 'string', description: 'Fecha de la venta en formato YYYY-MM-DD. Si no se especifica, se usa hoy.' },
       },
       required: ['total_ventas'],
+    },
+  },
+  {
+    name: 'crear_evento',
+    description: 'Crea un evento con su menú de pasos (entrada, principal, prepostre, postre, etc). Usar cuando el usuario dicta un evento completo con su menú ("armá un evento para el sábado con...", "creá el evento de tal fecha, entrada X, principal Y..."). Cada paso del menú es un objeto {paso, nombre} — "paso" es la categoría (Entrada, Principal, Prepostre, Postre, o la que corresponda) y "nombre" es la preparación. Si falta la fecha o algún paso no queda claro, preguntá antes de llamar la herramienta — no inventes platos.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        nombre: { type: 'string', description: 'Nombre del evento. Si el usuario no da uno, usar algo descriptivo como "Evento del 25/07".' },
+        fecha_evento: { type: 'string', description: 'Fecha del evento en formato YYYY-MM-DD.' },
+        pasos: {
+          type: 'array',
+          description: 'Pasos del menú en orden.',
+          items: {
+            type: 'object',
+            properties: {
+              paso: { type: 'string', description: 'Categoría del paso: Entrada, Principal, Prepostre, Postre, etc.' },
+              nombre: { type: 'string', description: 'Preparación de ese paso.' },
+            },
+            required: ['paso', 'nombre'],
+          },
+        },
+      },
+      required: ['nombre', 'fecha_evento', 'pasos'],
     },
   },
 ]
@@ -699,6 +724,7 @@ Consultas de solo lectura — usalas para responder con NÚMEROS REALES en vez d
 Acciones que MODIFICAN datos — usalas SOLO cuando el usuario lo pide explícitamente:
 - crear_tarea ("creá una tarea…"), marcar_86 ("se acabó el…"), registrar_merma ("se tiraron 2 kg de…").
 - cargar_producto ("cargá un producto nuevo…"), ajustar_stock ("quedan 3 kg de…", "entraron 10 de…"), registrar_venta ("hoy vendimos 450 mil con 60 cubiertos").
+- crear_evento ("armá un evento para el sábado con menú de…", "creá el evento de tal fecha con entrada X, principal Y…") — pedile la fecha si no la dio, y confirmá cada paso del menú antes de llamar la herramienta si algo quedó ambiguo.
 - IMPORTANTE: estas herramientas NO ejecutan el cambio al llamarlas — dejan la acción PROPUESTA. El usuario va a ver una tarjeta editable en el chat y tiene que confirmarla ahí. No digas "ya lo hice", "listo, cargado" ni nada que dé a entender que el cambio ya ocurrió — decí algo como "te dejo esto para que confirmes" y cerrá corto.
 
 Reglas:

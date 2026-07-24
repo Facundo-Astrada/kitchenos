@@ -1154,7 +1154,7 @@ export interface ComprobanteItem {
 // DB: coach_acciones (id, restaurante_id, tool_name, screen, input_propuesto, input_confirmado,
 //   estado, resultado_texto, resultado_error, creado_por, resuelto_por, creado_en, resuelto_en, expira_en)
 export type CoachToolName =
-  | 'crear_tarea' | 'marcar_86' | 'registrar_merma' | 'cargar_producto' | 'ajustar_stock' | 'registrar_venta'
+  | 'crear_tarea' | 'marcar_86' | 'registrar_merma' | 'cargar_producto' | 'ajustar_stock' | 'registrar_venta' | 'crear_evento'
 export type CoachAccionEstado = 'pendiente' | 'confirmada' | 'cancelada' | 'expirada' | 'error'
 export interface CoachAccion {
   id: string

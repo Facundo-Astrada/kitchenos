@@ -63,6 +63,17 @@ const registrarVentaSchema = z.object({
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 })
 
+const pasoMenuSchema = z.object({
+  paso: z.string().trim().min(1),    // ej. "Entrada", "Principal", "Prepostre", "Postre"
+  nombre: z.string().trim().min(1),  // ej. "Tamal", "Bondiola ahumada con puré"
+})
+
+const crearEventoSchema = z.object({
+  nombre: z.string().trim().min(1),
+  fecha_evento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  pasos: z.array(pasoMenuSchema).min(1),
+})
+
 export const COACH_TOOL_REGISTRY: Record<string, ToolRegistryEntry<any>> = {
   crear_tarea: {
     moduloId: 'tareas',
@@ -261,6 +272,39 @@ export const COACH_TOOL_REGISTRY: Record<string, ToolRegistryEntry<any>> = {
       if (error) return { ok: false, message: `Error al registrar la venta: ${error.message}` }
       const cubTxt = cubiertos ? ` con ${cubiertos} cubiertos (ticket ${fmtARS(input.total_ventas / cubiertos)})` : ''
       return { ok: true, message: `Venta ${existe ? 'actualizada' : 'registrada'} para ${fecha}: ${fmtARS(input.total_ventas)}${cubTxt}.` }
+    },
+  },
+
+  crear_evento: {
+    moduloId: 'operaciones',
+    schema: crearEventoSchema,
+    tituloHumano: 'Crear evento',
+    resumen: i => `${i.nombre} — ${i.fecha_evento} (${i.pasos.length} paso${i.pasos.length !== 1 ? 's' : ''})`,
+    campos: () => [
+      { key: 'nombre', label: 'Nombre del evento', tipo: 'texto', requerido: true },
+      { key: 'fecha_evento', label: 'Fecha (YYYY-MM-DD)', tipo: 'texto', requerido: true },
+      { key: 'pasos', label: 'Menú', tipo: 'readonly' },
+    ],
+    execute: async (supabase, restauranteId, input: z.infer<typeof crearEventoSchema>) => {
+      const { data: menu, error } = await supabase.from('menus').insert({
+        restaurante_id: restauranteId,
+        nombre: input.nombre,
+        tipo: 'evento',
+        fecha_evento: input.fecha_evento,
+        activo: true,
+      }).select('id').single()
+      if (error || !menu) return { ok: false, message: `Error al crear el evento: ${error?.message ?? 'desconocido'}` }
+
+      const rows = input.pasos.map((p, idx) => ({
+        menu_id: menu.id,
+        paso: p.paso,
+        nombre: p.nombre,
+        orden: idx,
+      }))
+      const { error: errPasos } = await supabase.from('menu_preparaciones').insert(rows)
+      if (errPasos) return { ok: false, message: `El evento se creó pero hubo un error al cargar el menú: ${errPasos.message}` }
+
+      return { ok: true, message: `Evento "${input.nombre}" creado para el ${input.fecha_evento} con ${input.pasos.length} paso${input.pasos.length !== 1 ? 's' : ''}. Lo vas a ver en Operaciones → Planificación → Eventos.` }
     },
   },
 }

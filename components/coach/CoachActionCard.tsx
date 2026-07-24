@@ -25,6 +25,20 @@ function valorInicial(campos: CampoUI[]): Record<string, unknown> {
   return out
 }
 
+// Formatea un valor 'readonly' para mostrar — soporta arrays de {paso,nombre}
+// (menú de un evento) además de texto plano genérico.
+function formatReadonly(v: unknown): string {
+  if (Array.isArray(v)) {
+    return v.map(item => {
+      if (item && typeof item === 'object' && 'paso' in item && 'nombre' in item) {
+        return `${(item as { paso: string }).paso}: ${(item as { nombre: string }).nombre}`
+      }
+      return String(item)
+    }).join('\n')
+  }
+  return String(v ?? '')
+}
+
 export function CoachActionCard({ action, onConfirm, onCancel, busy }: Props) {
   const [valores, setValores] = useState<Record<string, unknown>>(() => valorInicial(action.campos))
 
@@ -76,7 +90,11 @@ export function CoachActionCard({ action, onConfirm, onCancel, busy }: Props) {
             <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)' }}>
               {c.label}{c.requerido ? ' *' : ''}
             </span>
-            {c.tipo === 'select' ? (
+            {c.tipo === 'readonly' ? (
+              <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 8px', fontSize: 12.5, color: 'var(--text-2)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                {formatReadonly(valores[c.key])}
+              </div>
+            ) : c.tipo === 'select' ? (
               <select
                 value={String(valores[c.key] ?? '')}
                 onChange={e => setCampo(c.key, e.target.value)}
