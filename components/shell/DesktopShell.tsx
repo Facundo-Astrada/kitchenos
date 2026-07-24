@@ -61,7 +61,7 @@ export default function DesktopShell({ children, sidePanel }: { children: React.
           onClick={toggleDock}
           title={dockCollapsed ? 'Mostrar Kitchen Coach' : 'Ocultar Kitchen Coach'}
           style={{
-            position: 'fixed', top: 16,
+            position: 'fixed', top: '50%', transform: 'translateY(-50%)',
             right: dockCollapsed ? 16 : DOCK_WIDTH + 16,
             zIndex: 1001, width: dockCollapsed ? 52 : 36, height: dockCollapsed ? 52 : 36,
             borderRadius: '50%', cursor: 'pointer',
