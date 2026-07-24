@@ -10,14 +10,27 @@ import { useState } from 'react'
 
 // Rutas que necesitan ancho completo (tabla, mapa, gráficos)
 const FULL_WIDTH_ROUTES = ['/stock', '/espacios', '/reportes']
+const DOCK_WIDTH = 380
 
 export default function DesktopShell({ children, sidePanel }: { children: React.ReactNode; sidePanel?: React.ReactNode }) {
   const pathname = usePathname()
   const [showImportador, setShowImportador] = useState(false)
+  const [dockCollapsed, setDockCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('kc_dock_collapsed') === '1'
+  })
 
   useDesktopShortcuts()
 
   const isFullWidth = FULL_WIDTH_ROUTES.some(r => pathname.startsWith(r))
+
+  function toggleDock() {
+    setDockCollapsed(prev => {
+      const next = !prev
+      localStorage.setItem('kc_dock_collapsed', next ? '1' : '0')
+      return next
+    })
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', background: 'var(--bg)', overflow: 'hidden' }}>
@@ -36,10 +49,33 @@ export default function DesktopShell({ children, sidePanel }: { children: React.
       </main>
 
       {/* ── Panel lateral fijo (Kitchen Coach) — empuja el contenido, no lo tapa ── */}
-      {sidePanel && (
-        <div style={{ width: 380, flexShrink: 0, height: '100%', borderLeft: '1px solid var(--border)', overflow: 'hidden' }}>
+      {sidePanel && !dockCollapsed && (
+        <div style={{ width: DOCK_WIDTH, flexShrink: 0, height: '100%', borderLeft: '1px solid var(--border)', overflow: 'hidden' }}>
           {sidePanel}
         </div>
+      )}
+
+      {/* Botón para ocultar/mostrar el panel — se acomoda al borde según el estado */}
+      {sidePanel && (
+        <button
+          onClick={toggleDock}
+          title={dockCollapsed ? 'Mostrar Kitchen Coach' : 'Ocultar Kitchen Coach'}
+          style={{
+            position: 'fixed', top: 16,
+            right: dockCollapsed ? 16 : DOCK_WIDTH + 16,
+            zIndex: 1001, width: dockCollapsed ? 52 : 36, height: dockCollapsed ? 52 : 36,
+            borderRadius: '50%', cursor: 'pointer',
+            background: dockCollapsed ? '#f97316' : 'var(--surface)',
+            border: dockCollapsed ? 'none' : '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: dockCollapsed ? '0 4px 16px rgba(249,115,22,.4)' : '0 2px 10px rgba(0,0,0,.15)',
+            transition: 'right .2s ease, width .2s ease, height .2s ease',
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: dockCollapsed ? 22 : 18, color: dockCollapsed ? '#fff' : 'var(--text-2)' }}>
+            {dockCollapsed ? 'chef_hat' : 'chevron_right'}
+          </span>
+        </button>
       )}
 
       {showImportador && (
