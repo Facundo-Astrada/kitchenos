@@ -123,6 +123,15 @@ export const MODULOS_POR_ROL: Record<Rol, ModuloId[]> = {
   ayudante:   ['home', 'operaciones', 'pase', 'merma', 'calendario'],
 }
 
+// ── Modo Emprendimiento — subconjunto de módulos para productores ──
+// (VOGLIO Farina, caso piloto). Restaurantes con
+// `restaurantes.configuracion.perfil === 'emprendimiento'` ven SOLO estos
+// módulos, incluso siendo admin. Ver lib/hooks/usePermisos.ts (moduloEnPerfil).
+export const MODULOS_EMPRENDIMIENTO: ModuloId[] = [
+  'home', 'stock', 'proveedores', 'recetario', 'carta', 'produccion',
+  'pedidos', 'ventas', 'reportes', 'merma', 'facturas', 'configuracion', 'coach',
+]
+
 // ── Nav inferior (4 ítems fijos) ────────────────────────────
 export const NAV_ITEMS: ModuloId[] = ['home', 'operaciones', 'recetario', 'stock']
 

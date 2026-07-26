@@ -25,14 +25,14 @@ interface Props {
 export default function SidebarNav({ onImportarClick, dark = false }: Props) {
   const pathname = usePathname()
   const { perfil } = useAuth()
-  const { puedeVer, isAdmin } = usePermisos()
+  const { puedeVer, isAdmin, moduloEnPerfil } = usePermisos()
 
   const rol = perfil?.rol ?? 'ayudante'
   const modulosDelRol = MODULOS_POR_ROL[rol]
   const rolConfig = perfil ? ROL_CONFIG[perfil.rol] : null
 
   const canSee = (id: ModuloId) =>
-    id === 'home' || isAdmin || puedeVer(id)
+    (id === 'home' || isAdmin || puedeVer(id)) && moduloEnPerfil(id)
 
   return (
     <aside style={{
@@ -87,7 +87,7 @@ export default function SidebarNav({ onImportarClick, dark = false }: Props) {
       <nav style={{ flex: 1, padding: '0 12px', overflowY: 'auto' }}>
         {SECCIONES.map(({ label, items }) => {
           const visibles = items.filter(
-            id => MODULO_CONFIG[id] && (isAdmin || (modulosDelRol.includes(id) && canSee(id)))
+            id => MODULO_CONFIG[id] && (isAdmin || (modulosDelRol.includes(id) && canSee(id))) && moduloEnPerfil(id)
           )
           if (visibles.length === 0) return null
 

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/auth/context'
 import { useRestauranteId } from './useRestauranteId'
+import { MODULOS_EMPRENDIMIENTO } from '@/lib/constants'
 import type { RolPermiso } from '@/types'
 
 interface PermisosState {
@@ -15,6 +16,10 @@ interface PermisosState {
   puedeEditar: (recurso: 'stock' | 'equipo' | 'recetas' | 'carta') => boolean
   puedeEliminar: boolean
   isAdmin: boolean
+  /** 'emprendimiento' | null — perfil del restaurante (restaurantes.configuracion.perfil) */
+  perfilRestaurante: string | null
+  /** true si el módulo está permitido por el perfil del restaurante (null = sin restricción, todo pasa) */
+  moduloEnPerfil: (modulo: string) => boolean
   fetchPermisos: () => Promise<void>
   updatePermisos: (rolPermiso: Partial<RolPermiso> & { id: string }) => Promise<void>
   upsertPermisos: (rol: string, data: Partial<Omit<RolPermiso, 'id' | 'restaurante_id' | 'rol' | 'created_at' | 'updated_at'>>) => Promise<void>
@@ -31,6 +36,9 @@ export function usePermisos(): PermisosState {
 
   // Módulos efectivos del usuario logueado (puesto + overrides individuales)
   const [modulosEfectivos, setModulosEfectivos] = useState<string[] | null>(null)
+
+  // Perfil del restaurante (ej. 'emprendimiento') — capa aparte de puedeVer/isAdmin
+  const [perfilRestaurante, setPerfilRestaurante] = useState<string | null>(null)
 
   const dbRol = perfil?.rol === 'admin' ? 'admin'
     : perfil?.rol === 'chef' ? 'sous_chef'
@@ -59,6 +67,15 @@ export function usePermisos(): PermisosState {
 
       const mine = (all ?? []).find(p => p.rol === dbRol) ?? null
       setPermisos(mine)
+
+      // 1b. Perfil del restaurante (modo emprendimiento vs. gestión completa)
+      const { data: rest } = await supabase
+        .from('restaurantes')
+        .select('configuracion')
+        .eq('id', RESTAURANTE_ID)
+        .maybeSingle()
+      const configuracion = (rest?.configuracion ?? null) as { perfil?: string } | null
+      setPerfilRestaurante(configuracion?.perfil ?? null)
 
       // 2. Si hay un usuario logueado con auth_user_id, buscar su equipo_miembro + puesto
       if (user?.id && dbRol !== 'admin') {
@@ -109,6 +126,14 @@ export function usePermisos(): PermisosState {
     if (!permisos) return false
     return permisos.modulos_visibles.includes(modulo)
   }, [permisos, dbRol, modulosEfectivos])
+
+  // null = sin restricción de perfil (comportamiento actual, no-regresión).
+  const perfilModulos = perfilRestaurante === 'emprendimiento' ? MODULOS_EMPRENDIMIENTO : null
+  const moduloEnPerfil = useCallback((modulo: string): boolean => {
+    if (perfilModulos === null) return true
+    if (modulo === 'home') return true
+    return (perfilModulos as string[]).includes(modulo)
+  }, [perfilModulos])
 
   const puedeEditar = useCallback((recurso: 'stock' | 'equipo' | 'recetas' | 'carta'): boolean => {
     if (dbRol === 'admin') return true
@@ -169,6 +194,8 @@ export function usePermisos(): PermisosState {
     puedeEditar,
     puedeEliminar: dbRol === 'admin' || (permisos?.puede_eliminar ?? false),
     isAdmin: dbRol === 'admin',
+    perfilRestaurante,
+    moduloEnPerfil,
     fetchPermisos,
     updatePermisos,
     upsertPermisos,

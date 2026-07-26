@@ -12,10 +12,10 @@ interface BottomNavProps {
 
 export default function BottomNav({ onMoreClick }: BottomNavProps) {
   const pathname = usePathname()
-  const { puedeVer, isAdmin } = usePermisos()
+  const { puedeVer, isAdmin, moduloEnPerfil } = usePermisos()
 
   const visibleItems = NAV_ITEMS.filter(id =>
-    id === 'home' || isAdmin || puedeVer(id)
+    (id === 'home' || isAdmin || puedeVer(id)) && moduloEnPerfil(id)
   )
 
   return (

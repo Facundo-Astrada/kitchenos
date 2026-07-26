@@ -15,7 +15,7 @@ interface MoreMenuProps {
 }
 
 export default function MoreMenu({ rol, onClose }: MoreMenuProps) {
-  const { puedeVer, loading } = usePermisos()
+  const { puedeVer, loading, moduloEnPerfil } = usePermisos()
   const [showImportador, setShowImportador] = useState(false)
 
   const todosLosModulos = MODULOS_POR_ROL[rol]
@@ -23,7 +23,7 @@ export default function MoreMenu({ rol, onClose }: MoreMenuProps) {
     if (NAV_ITEMS.includes(m as (typeof NAV_ITEMS)[number])) return false
     if (!loading) {
       const dbKey = m === 'home' ? 'inicio' : m
-      return puedeVer(dbKey)
+      return puedeVer(dbKey) && moduloEnPerfil(dbKey)
     }
     return true
   })

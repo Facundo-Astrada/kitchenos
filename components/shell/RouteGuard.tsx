@@ -31,7 +31,7 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
   const pathname = usePathname()
   const router = useRouter()
   const { perfil, loading: authLoading } = useAuth()
-  const { puedeVer, loading: permLoading, isAdmin } = usePermisos()
+  const { puedeVer, loading: permLoading, isAdmin, moduloEnPerfil } = usePermisos()
   const [moduloBloqueado, setModuloBloqueado] = useState<string | null>(null)
 
   const stillLoading = authLoading || permLoading
@@ -39,19 +39,23 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     if (stillLoading) return
     if (!perfil) { setModuloBloqueado(null); return }
-    if (isAdmin) { setModuloBloqueado(null); return }
 
     const basePath = '/' + (pathname.split('/')[1] ?? '')
     const modulo = RUTA_A_MODULO[basePath]
 
     if (!modulo) { setModuloBloqueado(null); return }
 
+    // El perfil del restaurante (ej. modo emprendimiento) bloquea incluso a admin.
+    if (!moduloEnPerfil(modulo)) { setModuloBloqueado(modulo); return }
+
+    if (isAdmin) { setModuloBloqueado(null); return }
+
     if (!puedeVer(modulo)) {
       setModuloBloqueado(modulo)
     } else {
       setModuloBloqueado(null)
     }
-  }, [pathname, stillLoading, perfil, isAdmin, puedeVer])
+  }, [pathname, stillLoading, perfil, isAdmin, puedeVer, moduloEnPerfil])
 
   if (stillLoading) return null
 
