@@ -6,6 +6,16 @@ import { useAuth } from '@/lib/auth/context'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { RUTA_A_MODULO } from '@/lib/constants'
 
+// En perfil emprendimiento, algunas rutas legacy deben resolver a su propio
+// módulo real en vez del proxy hacia 'operaciones' (OPS, que este perfil no ve).
+// Solo aplica cuando perfilRestaurante === 'emprendimiento' — no cambia nada
+// para el resto de los restaurantes (evita regresar el proxy legacy que hoy
+// usan sus permisos por rol/puesto).
+const RUTA_A_MODULO_EMPRENDIMIENTO: Record<string, string> = {
+  '/tareas': 'tareas',
+  '/produccion': 'produccion',
+}
+
 const MODULO_LABEL: Record<string, string> = {
   facturas: 'Facturas',
   configuracion: 'Configuración',
@@ -31,7 +41,7 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
   const pathname = usePathname()
   const router = useRouter()
   const { perfil, loading: authLoading } = useAuth()
-  const { puedeVer, loading: permLoading, isAdmin, moduloEnPerfil } = usePermisos()
+  const { puedeVer, loading: permLoading, isAdmin, moduloEnPerfil, perfilRestaurante } = usePermisos()
   const [moduloBloqueado, setModuloBloqueado] = useState<string | null>(null)
 
   const stillLoading = authLoading || permLoading
@@ -41,7 +51,8 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
     if (!perfil) { setModuloBloqueado(null); return }
 
     const basePath = '/' + (pathname.split('/')[1] ?? '')
-    const modulo = RUTA_A_MODULO[basePath]
+    const modulo = (perfilRestaurante === 'emprendimiento' && RUTA_A_MODULO_EMPRENDIMIENTO[basePath])
+      || RUTA_A_MODULO[basePath]
 
     if (!modulo) { setModuloBloqueado(null); return }
 
@@ -55,7 +66,7 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
     } else {
       setModuloBloqueado(null)
     }
-  }, [pathname, stillLoading, perfil, isAdmin, puedeVer, moduloEnPerfil])
+  }, [pathname, stillLoading, perfil, isAdmin, puedeVer, moduloEnPerfil, perfilRestaurante])
 
   if (stillLoading) return null
 

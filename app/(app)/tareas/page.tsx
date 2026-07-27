@@ -1,7 +1,24 @@
-import { redirect } from 'next/navigation'
+'use client'
 
-// Ruta vieja: la vista de Producción ahora vive dentro de OPS (/operaciones, tab Producción).
-// Redirigimos para tener una sola puerta de entrada al workspace diario.
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { usePermisos } from '@/lib/hooks/usePermisos'
+import TareasSimpleClientView from './TareasSimpleClientView'
+
+// Perfil 'emprendimiento': lista de tareas simple, propia (no toca OPS).
+// Resto de restaurantes: ruta vieja — la vista de Producción vive en OPS
+// (/operaciones, tab Producción). Redirigimos para una sola puerta de entrada.
 export default function TareasPage() {
-  redirect('/operaciones?tab=produccion')
+  const router = useRouter()
+  const { perfilRestaurante, loading } = usePermisos()
+
+  useEffect(() => {
+    if (!loading && perfilRestaurante !== 'emprendimiento') {
+      router.replace('/operaciones?tab=produccion')
+    }
+  }, [loading, perfilRestaurante, router])
+
+  if (loading || perfilRestaurante !== 'emprendimiento') return null
+
+  return <TareasSimpleClientView />
 }
