@@ -80,7 +80,6 @@ export default function TareasSimpleClientView() {
   const { tareas, loading, agregarTarea, actualizarTarea, cambiarEstado, eliminarTarea } = useTareas()
   const [filtro, setFiltro] = useState<FiltroEstado>('pendientes')
   const [sheetTarea, setSheetTarea] = useState<Tarea | 'nueva' | null>(null)
-  const [nuevaAreaPrefill, setNuevaAreaPrefill] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [colapsadas, setColapsadas] = useState<Set<string>>(new Set())
 
@@ -135,14 +134,19 @@ export default function TareasSimpleClientView() {
     await cambiarEstado(t.id, estaCompletada(t) ? 'pendiente' : 'listo')
   }
 
-  function handleAgregarEnArea(nombre: string | null) {
-    setNuevaAreaPrefill(nombre)
-    setSheetTarea('nueva')
-  }
-
-  function handleCerrarSheet() {
-    setSheetTarea(null)
-    setNuevaAreaPrefill(null)
+  async function handleAgregarRapida(nombre: string | null, titulo: string) {
+    const limpio = titulo.trim()
+    if (!limpio) return
+    await agregarTarea({
+      titulo: limpio,
+      descripcion: null,
+      fecha_limite: null,
+      prioridad: 'media',
+      categoria: nombre,
+      status: 'pendiente',
+      estado: 'pendiente',
+      seccion: 'general',
+    })
   }
 
   async function handleGuardar(datos: { titulo: string; descripcion: string; fechaLimite: string; prioridad: TareaPrioridad; area: string }) {
@@ -169,7 +173,7 @@ export default function TareasSimpleClientView() {
           seccion: 'general',
         })
       }
-      handleCerrarSheet()
+      setSheetTarea(null)
     } finally {
       setSaving(false)
     }
@@ -178,7 +182,7 @@ export default function TareasSimpleClientView() {
   async function handleEliminar() {
     if (!sheetTarea || sheetTarea === 'nueva') return
     await eliminarTarea(sheetTarea.id)
-    handleCerrarSheet()
+    setSheetTarea(null)
   }
 
   return (
@@ -192,7 +196,7 @@ export default function TareasSimpleClientView() {
                 Lo que hay que hacer
               </div>
             </div>
-            <HeaderAction label="Nueva" onClick={() => handleAgregarEnArea(null)} />
+            <HeaderAction label="Nueva" onClick={() => setSheetTarea('nueva')} />
           </div>
           <FilterChips chips={FILTROS} active={filtro} onChange={setFiltro} context="onDark" />
         </div>
@@ -209,7 +213,7 @@ export default function TareasSimpleClientView() {
                   ? undefined
                   : 'Cargá lo que tengas que hacer — pedirle algo a un proveedor, preparar un lote, llamar a un cliente. Agrupalas por área (Proveedores, Producción, Ventas…) para ordenar tu día.'
               }
-              cta={filtro !== 'completadas' ? { label: 'Nueva tarea', onClick: () => handleAgregarEnArea(null) } : undefined}
+              cta={filtro !== 'completadas' ? { label: 'Nueva tarea', onClick: () => setSheetTarea('nueva') } : undefined}
             />
           )}
 
@@ -229,7 +233,7 @@ export default function TareasSimpleClientView() {
                 onToggleColapsar={() => toggleColapsada(g.nombre)}
                 onToggleTarea={handleToggle}
                 onEditarTarea={setSheetTarea}
-                onAgregarTarea={handleAgregarEnArea}
+                onAgregarRapida={handleAgregarRapida}
               />
             ))}
           </div>
@@ -240,10 +244,9 @@ export default function TareasSimpleClientView() {
         <SheetChrome>
           <TareaSheet
             tarea={sheetTarea === 'nueva' ? null : sheetTarea}
-            areaInicial={sheetTarea === 'nueva' ? nuevaAreaPrefill : null}
             areasExistentes={areasExistentes}
             saving={saving}
-            onClose={handleCerrarSheet}
+            onClose={() => setSheetTarea(null)}
             onGuardar={handleGuardar}
             onEliminar={sheetTarea !== 'nueva' ? handleEliminar : undefined}
           />
@@ -255,7 +258,7 @@ export default function TareasSimpleClientView() {
 
 // ── Grupo por área — header con ícono+color determinístico + lista colapsable ──
 function AreaGrupo({
-  nombre, tareas, colapsada, onToggleColapsar, onToggleTarea, onEditarTarea, onAgregarTarea,
+  nombre, tareas, colapsada, onToggleColapsar, onToggleTarea, onEditarTarea, onAgregarRapida,
 }: {
   nombre: string | null
   tareas: Tarea[]
@@ -263,11 +266,27 @@ function AreaGrupo({
   onToggleColapsar: () => void
   onToggleTarea: (t: Tarea) => void
   onEditarTarea: (t: Tarea) => void
-  onAgregarTarea: (nombre: string | null) => void
+  onAgregarRapida: (nombre: string | null, titulo: string) => Promise<void>
 }) {
   const color = nombre ? areaColor(nombre) : 'var(--text-3)'
   const icono = nombre ? areaIcono(nombre) : 'more_horiz'
   const label = nombre ?? 'Sin área'
+  const [agregando, setAgregando] = useState(false)
+  const [tituloRapido, setTituloRapido] = useState('')
+  const [enviando, setEnviando] = useState(false)
+
+  async function confirmarRapida(seguirAgregando: boolean) {
+    const limpio = tituloRapido.trim()
+    if (!limpio) { setAgregando(false); return }
+    setEnviando(true)
+    try {
+      await onAgregarRapida(nombre, limpio)
+      setTituloRapido('')
+      setAgregando(seguirAgregando)
+    } finally {
+      setEnviando(false)
+    }
+  }
 
   return (
     <div>
@@ -300,18 +319,64 @@ function AreaGrupo({
           {tareas.map(t => (
             <TareaRow key={t.id} tarea={t} onToggle={() => onToggleTarea(t)} onEdit={() => onEditarTarea(t)} />
           ))}
-          <button
-            onClick={() => onAgregarTarea(nombre)}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              padding: '10px 0', borderRadius: 12, border: '1px dashed var(--border)',
-              background: 'none', color: 'var(--text-3)', fontSize: 13, fontWeight: 600,
-              cursor: 'pointer', fontFamily: 'inherit',
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 17 }}>add</span>
-            Tarea
-          </button>
+
+          {agregando ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <input
+                value={tituloRapido}
+                onChange={e => setTituloRapido(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') confirmarRapida(true)
+                  if (e.key === 'Escape') { setAgregando(false); setTituloRapido('') }
+                }}
+                onBlur={() => { if (!tituloRapido.trim()) setAgregando(false) }}
+                placeholder="Título de la tarea…"
+                autoFocus
+                disabled={enviando}
+                style={{
+                  width: '100%', padding: '9px 12px', borderRadius: 10,
+                  border: '1px solid var(--navy)', background: 'var(--surface)',
+                  fontSize: 13, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  onClick={() => confirmarRapida(true)}
+                  disabled={enviando || !tituloRapido.trim()}
+                  style={{
+                    padding: '6px 12px', borderRadius: 8, border: 'none',
+                    background: 'var(--navy)', color: '#fff', fontSize: 12, fontWeight: 700,
+                    cursor: 'pointer', fontFamily: 'inherit', opacity: (enviando || !tituloRapido.trim()) ? 0.6 : 1,
+                  }}
+                >
+                  Agregar
+                </button>
+                <button
+                  onClick={() => { setAgregando(false); setTituloRapido('') }}
+                  style={{
+                    padding: '6px 12px', borderRadius: 8, border: 'none',
+                    background: 'none', color: 'var(--text-3)', fontSize: 12, fontWeight: 600,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAgregando(true)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                padding: '10px 0', borderRadius: 12, border: '1px dashed var(--border)',
+                background: 'none', color: 'var(--text-3)', fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 17 }}>add</span>
+              Tarea
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -390,10 +455,9 @@ function TareaRow({ tarea, onToggle, onEdit }: { tarea: Tarea; onToggle: () => v
 
 // ── Sheet crear/editar — nivel de módulo (inputs con foco, ver hooks.md) ──
 function TareaSheet({
-  tarea, areaInicial, areasExistentes, saving, onClose, onGuardar, onEliminar,
+  tarea, areasExistentes, saving, onClose, onGuardar, onEliminar,
 }: {
   tarea: Tarea | null
-  areaInicial?: string | null
   areasExistentes: string[]
   saving: boolean
   onClose: () => void
@@ -404,7 +468,7 @@ function TareaSheet({
   const [descripcion, setDescripcion] = useState(tarea?.descripcion ?? '')
   const [fechaLimite, setFechaLimite] = useState(tarea?.fecha_limite ?? '')
   const [prioridad, setPrioridad] = useState<TareaPrioridad>((tarea?.prioridad as TareaPrioridad) ?? 'media')
-  const [area, setArea] = useState(tarea?.categoria ?? areaInicial ?? '')
+  const [area, setArea] = useState(tarea?.categoria ?? '')
   const [creandoArea, setCreandoArea] = useState(false)
   const [nuevaAreaTexto, setNuevaAreaTexto] = useState('')
   const isDesktop = useIsDesktop()
