@@ -208,7 +208,7 @@ export default function TareasSimpleClientView() {
             </p>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 18, alignItems: 'start' }}>
             {grupos.map(g => (
               <AreaGrupo
                 key={g.nombre}
