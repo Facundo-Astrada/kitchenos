@@ -7,6 +7,7 @@ import { EmptyState, FilterChips, HeaderAction } from '@/components/ui'
 import { AVATAR_PALETTE } from '@/components/ui/Avatar'
 import type { FilterChip } from '@/components/ui'
 import { useTareas } from '@/lib/hooks/useTareas'
+import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import type { Tarea, TareaPrioridad } from '@/types'
 
 // Lista de tareas simple para perfil 'emprendimiento' — ve/carga/edita lo que
@@ -379,6 +380,7 @@ function TareaSheet({
   const [area, setArea] = useState(tarea?.categoria ?? '')
   const [creandoArea, setCreandoArea] = useState(false)
   const [nuevaAreaTexto, setNuevaAreaTexto] = useState('')
+  const isDesktop = useIsDesktop()
 
   function confirmarNuevaArea() {
     const nombre = nuevaAreaTexto.trim()
@@ -389,10 +391,22 @@ function TareaSheet({
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-end' }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.5)',
+        display: 'flex', alignItems: isDesktop ? 'center' : 'flex-end', justifyContent: 'center',
+        padding: isDesktop ? 24 : 0,
+      }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', width: '100%', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+      <div style={{
+        background: 'var(--surface)',
+        borderRadius: isDesktop ? 20 : '20px 20px 0 0',
+        width: '100%',
+        maxWidth: isDesktop ? 440 : undefined,
+        maxHeight: isDesktop ? 'min(85vh, 640px)' : '85vh',
+        display: 'flex', flexDirection: 'column',
+        boxShadow: isDesktop ? '0 20px 60px rgba(0,0,0,.35)' : undefined,
+      }}>
         <div style={{ padding: '20px 16px 12px', flexShrink: 0 }}>
           <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>
             {tarea ? 'Editar tarea' : 'Nueva tarea'}
