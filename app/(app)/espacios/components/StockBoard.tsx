@@ -6,6 +6,7 @@ import { useStockSectores } from '@/lib/hooks/useStockSectores'
 import { useStockEstantes } from '@/lib/hooks/useStockEstantes'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import StockBoardColumn, { StockBoardCollapsedChip, SECTOR_ICONOS } from './StockBoardColumn'
+import { EmptyState } from '@/components/ui'
 
 const SIN_SECTOR_KEY = '__sin_sector__'
 const AUTOSCROLL_EDGE = 70
@@ -281,6 +282,18 @@ export default function StockBoard() {
           </p>
         )}
       </div>
+
+      {/* Explicación — solo mientras no hay ningún sector creado todavía */}
+      {sectores.length === 0 && (
+        <div style={{ padding: '0 4px 14px', flexShrink: 0 }}>
+          <EmptyState
+            icon="shelves"
+            title="Organizá el stock por sectores"
+            subtitle="Un sector es un lugar físico donde guardás mercadería — ej: Materia prima seca, Cámara de frío, Freezer (producto terminado), Depósito de packaging. Arrastrá productos entre sectores para ubicarlos."
+            cta={{ label: 'Crear mi primer sector', onClick: () => setAddingSector(true) }}
+          />
+        </div>
+      )}
 
       {/* Barra de selección múltiple */}
       {selectedIds.size > 0 && (

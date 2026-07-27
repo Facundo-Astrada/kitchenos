@@ -5,6 +5,7 @@ import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { useEspacios } from '@/lib/hooks/useEspacios'
 import { useChecklist } from '@/lib/hooks/useChecklist'
 import { useStock } from '@/lib/hooks/useStock'
+import { usePermisos } from '@/lib/hooks/usePermisos'
 import { PLAZAS_FIJAS, PLAZA_LABELS } from '@/lib/constants'
 import type { MisePlaceItem, ChecklistSeccionConfig, Plaza, RutinaFrecuencia, MisePrioridad } from '@/types'
 import EspacioCard from './components/EspacioCard'
@@ -34,9 +35,16 @@ export default function EspaciosClientView() {
   const { espacios, espacioPlazas, plazasUsadas, loading: loadingEsp, agregarEspacio, actualizarEspacio, eliminarEspacio, asignarPlaza, quitarPlaza } = useEspacios()
   const { secciones, items, rutinas, loading: loadingCk, agregarSeccion, actualizarSeccion, eliminarSeccion, reordenarSecciones, agregarItem, eliminarItem, actualizarItem, agregarRutina, eliminarRutina } = useChecklist()
   const { productos } = useStock()
+  const { perfilRestaurante } = usePermisos()
+
+  // Perfil 'emprendimiento': la pestaña Producción coordina "plazas" de cocina
+  // de restaurante (Parrilla/Fríos/...) que no aplican a un productor — se
+  // muestra solo Stock (sectores de almacenamiento, sí aplica a cualquiera).
+  const esEmprendimiento = perfilRestaurante === 'emprendimiento'
 
   // ── Tab principal: Producción (espacios/plazas) | Stock (board de sectores) ──
   const [activeMainTab, setActiveMainTab] = useState<'produccion' | 'stock'>('produccion')
+  const effectiveTab = esEmprendimiento ? 'stock' : activeMainTab
 
   // Screen context del Coach — insights por tab (qué falta organizar, no solo conteos).
   useEffect(() => {
@@ -44,13 +52,13 @@ export default function EspaciosClientView() {
     const sinSector = productos.filter(p => p.activo && !p.fuera_de_uso && !p.sector_id).length
     localStorage.setItem('kc_screen_context', JSON.stringify({
       screen: 'espacios',
-      tab: activeMainTab,
+      tab: effectiveTab,
       espacios: espacios.length,
       plazasSinEspacio,
       productosSinSector: sinSector,
     }))
     return () => localStorage.removeItem('kc_screen_context')
-  }, [activeMainTab, espacios.length, plazasUsadas, productos])
+  }, [effectiveTab, espacios.length, plazasUsadas, productos])
 
   // ── Editor de secciones (agregar/renombrar/reordenar/borrar) — mismo componente que Mise ──
   const [sectionEditorPlaza, setSectionEditorPlaza] = useState<Plaza | null>(null)
@@ -192,9 +200,11 @@ export default function EspaciosClientView() {
           <span className="material-symbols-outlined" style={{ color: 'white', fontSize: 26 }}>dashboard</span>
           <div>
             <h1 style={{ color: 'white', fontWeight: 800, fontSize: 20, letterSpacing: '-0.02em', margin: 0 }}>Mesa de trabajo</h1>
-            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 2 }}>Organizá espacios, plazas y producciones</p>
+            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 2 }}>
+              {esEmprendimiento ? 'Organizá tu stock por sectores' : 'Organizá espacios, plazas y producciones'}
+            </p>
           </div>
-          {activeMainTab === 'produccion' && (
+          {effectiveTab === 'produccion' && (
             <div data-coach-target="espacios-nuevo" style={{ marginLeft: 'auto' }}>
               <button
                 onClick={() => setShowNuevoEspacio(true)}
@@ -211,20 +221,23 @@ export default function EspaciosClientView() {
             </div>
           )}
         </div>
-        <div data-coach-target="espacios-tabs">
-          <SegmentedTabs tabs={MESA_TABS} active={activeMainTab} onChange={setActiveMainTab} style={{ maxWidth: 340 }} />
-        </div>
+        {/* En emprendimiento solo existe la pestaña Stock — no tiene sentido mostrar el switcher */}
+        {!esEmprendimiento && (
+          <div data-coach-target="espacios-tabs">
+            <SegmentedTabs tabs={MESA_TABS} active={activeMainTab} onChange={setActiveMainTab} style={{ maxWidth: 340 }} />
+          </div>
+        )}
       </div>
 
       {/* Stock board */}
-      {activeMainTab === 'stock' && (
+      {effectiveTab === 'stock' && (
         <div data-coach-target="espacios-stock-board" style={{ padding: '20px 24px', height: 'calc(100dvh - 132px)' }}>
           <StockBoard />
         </div>
       )}
 
       {/* Board de producción */}
-      {activeMainTab === 'produccion' && (
+      {effectiveTab === 'produccion' && (
       <div data-coach-target="espacios-board" style={{ padding: 24 }}>
         {loading && (
           <p style={{ color: 'var(--text-3)', fontSize: 14 }}>Cargando espacios…</p>

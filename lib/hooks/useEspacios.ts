@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Espacio, EspacioPlaza, Plaza } from '@/types'
 import { PLAZAS_COCINA } from '@/lib/constants'
 import { useRestauranteId } from './useRestauranteId'
+import { usePermisos } from './usePermisos'
 
 interface EspaciosData {
   espacios: Espacio[]
@@ -35,6 +36,7 @@ function errMsg(e: unknown, fallback: string): string {
 
 export function useEspacios() {
   const RESTAURANTE_ID = useRestauranteId()
+  const { perfilRestaurante } = usePermisos()
   const supabase = useMemo(() => createClient(), [])
   const seedingRef = useRef(false)
 
@@ -61,8 +63,12 @@ export function useEspacios() {
   }, [RESTAURANTE_ID, supabase, mutate])
 
   // ── Seeding: espacio "Cocina" por defecto en el primer fetch vacío ──
+  // No aplica en perfil 'emprendimiento': las 7 plazas son estaciones de
+  // cocina de restaurante (Parrilla/Frios/...) que no representan el proceso
+  // de un productor. Ver lib/constants.ts (MODULOS_EMPRENDIMIENTO).
   useEffect(() => {
     if (!RESTAURANTE_ID || loading || seedingRef.current) return
+    if (perfilRestaurante === 'emprendimiento') return
     if (data && data.espacios.length === 0) {
       seedingRef.current = true
       seedDefaultEspacio().catch((e) => {
@@ -71,7 +77,7 @@ export function useEspacios() {
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [RESTAURANTE_ID, loading, data])
+  }, [RESTAURANTE_ID, loading, data, perfilRestaurante])
 
   async function seedDefaultEspacio() {
     const { data: esp, error } = await supabase.from('espacios')
