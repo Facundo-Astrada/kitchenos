@@ -128,8 +128,9 @@ export const MODULOS_POR_ROL: Record<Rol, ModuloId[]> = {
 // `restaurantes.configuracion.perfil === 'emprendimiento'` ven SOLO estos
 // módulos, incluso siendo admin. Ver lib/hooks/usePermisos.ts (moduloEnPerfil).
 export const MODULOS_EMPRENDIMIENTO: ModuloId[] = [
-  'home', 'stock', 'proveedores', 'recetario', 'carta', 'produccion',
-  'pedidos', 'ventas', 'reportes', 'merma', 'facturas', 'configuracion', 'coach',
+  'home', 'espacios', 'tareas', 'recetario', 'carta', 'produccion',
+  'stock', 'facturas', 'proveedores', 'pedidos', 'merma', 'reportes', 'ventas', 'clientes',
+  'calendario', 'equipo', 'configuracion', 'coach',
 ]
 
 // ── Nav inferior (4 ítems fijos) ────────────────────────────
