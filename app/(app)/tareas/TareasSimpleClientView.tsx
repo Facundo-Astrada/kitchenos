@@ -80,6 +80,7 @@ export default function TareasSimpleClientView() {
   const { tareas, loading, agregarTarea, actualizarTarea, cambiarEstado, eliminarTarea } = useTareas()
   const [filtro, setFiltro] = useState<FiltroEstado>('pendientes')
   const [sheetTarea, setSheetTarea] = useState<Tarea | 'nueva' | null>(null)
+  const [nuevaAreaPrefill, setNuevaAreaPrefill] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [colapsadas, setColapsadas] = useState<Set<string>>(new Set())
 
@@ -134,6 +135,16 @@ export default function TareasSimpleClientView() {
     await cambiarEstado(t.id, estaCompletada(t) ? 'pendiente' : 'listo')
   }
 
+  function handleAgregarEnArea(nombre: string | null) {
+    setNuevaAreaPrefill(nombre)
+    setSheetTarea('nueva')
+  }
+
+  function handleCerrarSheet() {
+    setSheetTarea(null)
+    setNuevaAreaPrefill(null)
+  }
+
   async function handleGuardar(datos: { titulo: string; descripcion: string; fechaLimite: string; prioridad: TareaPrioridad; area: string }) {
     setSaving(true)
     try {
@@ -158,7 +169,7 @@ export default function TareasSimpleClientView() {
           seccion: 'general',
         })
       }
-      setSheetTarea(null)
+      handleCerrarSheet()
     } finally {
       setSaving(false)
     }
@@ -167,7 +178,7 @@ export default function TareasSimpleClientView() {
   async function handleEliminar() {
     if (!sheetTarea || sheetTarea === 'nueva') return
     await eliminarTarea(sheetTarea.id)
-    setSheetTarea(null)
+    handleCerrarSheet()
   }
 
   return (
@@ -181,7 +192,7 @@ export default function TareasSimpleClientView() {
                 Lo que hay que hacer
               </div>
             </div>
-            <HeaderAction label="Nueva" onClick={() => setSheetTarea('nueva')} />
+            <HeaderAction label="Nueva" onClick={() => handleAgregarEnArea(null)} />
           </div>
           <FilterChips chips={FILTROS} active={filtro} onChange={setFiltro} context="onDark" />
         </div>
@@ -198,7 +209,7 @@ export default function TareasSimpleClientView() {
                   ? undefined
                   : 'Cargá lo que tengas que hacer — pedirle algo a un proveedor, preparar un lote, llamar a un cliente. Agrupalas por área (Proveedores, Producción, Ventas…) para ordenar tu día.'
               }
-              cta={filtro !== 'completadas' ? { label: 'Nueva tarea', onClick: () => setSheetTarea('nueva') } : undefined}
+              cta={filtro !== 'completadas' ? { label: 'Nueva tarea', onClick: () => handleAgregarEnArea(null) } : undefined}
             />
           )}
 
@@ -218,6 +229,7 @@ export default function TareasSimpleClientView() {
                 onToggleColapsar={() => toggleColapsada(g.nombre)}
                 onToggleTarea={handleToggle}
                 onEditarTarea={setSheetTarea}
+                onAgregarTarea={handleAgregarEnArea}
               />
             ))}
           </div>
@@ -228,9 +240,10 @@ export default function TareasSimpleClientView() {
         <SheetChrome>
           <TareaSheet
             tarea={sheetTarea === 'nueva' ? null : sheetTarea}
+            areaInicial={sheetTarea === 'nueva' ? nuevaAreaPrefill : null}
             areasExistentes={areasExistentes}
             saving={saving}
-            onClose={() => setSheetTarea(null)}
+            onClose={handleCerrarSheet}
             onGuardar={handleGuardar}
             onEliminar={sheetTarea !== 'nueva' ? handleEliminar : undefined}
           />
@@ -242,7 +255,7 @@ export default function TareasSimpleClientView() {
 
 // ── Grupo por área — header con ícono+color determinístico + lista colapsable ──
 function AreaGrupo({
-  nombre, tareas, colapsada, onToggleColapsar, onToggleTarea, onEditarTarea,
+  nombre, tareas, colapsada, onToggleColapsar, onToggleTarea, onEditarTarea, onAgregarTarea,
 }: {
   nombre: string | null
   tareas: Tarea[]
@@ -250,6 +263,7 @@ function AreaGrupo({
   onToggleColapsar: () => void
   onToggleTarea: (t: Tarea) => void
   onEditarTarea: (t: Tarea) => void
+  onAgregarTarea: (nombre: string | null) => void
 }) {
   const color = nombre ? areaColor(nombre) : 'var(--text-3)'
   const icono = nombre ? areaIcono(nombre) : 'more_horiz'
@@ -286,6 +300,18 @@ function AreaGrupo({
           {tareas.map(t => (
             <TareaRow key={t.id} tarea={t} onToggle={() => onToggleTarea(t)} onEdit={() => onEditarTarea(t)} />
           ))}
+          <button
+            onClick={() => onAgregarTarea(nombre)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              padding: '10px 0', borderRadius: 12, border: '1px dashed var(--border)',
+              background: 'none', color: 'var(--text-3)', fontSize: 13, fontWeight: 600,
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 17 }}>add</span>
+            Tarea
+          </button>
         </div>
       )}
     </div>
@@ -364,9 +390,10 @@ function TareaRow({ tarea, onToggle, onEdit }: { tarea: Tarea; onToggle: () => v
 
 // ── Sheet crear/editar — nivel de módulo (inputs con foco, ver hooks.md) ──
 function TareaSheet({
-  tarea, areasExistentes, saving, onClose, onGuardar, onEliminar,
+  tarea, areaInicial, areasExistentes, saving, onClose, onGuardar, onEliminar,
 }: {
   tarea: Tarea | null
+  areaInicial?: string | null
   areasExistentes: string[]
   saving: boolean
   onClose: () => void
@@ -377,7 +404,7 @@ function TareaSheet({
   const [descripcion, setDescripcion] = useState(tarea?.descripcion ?? '')
   const [fechaLimite, setFechaLimite] = useState(tarea?.fecha_limite ?? '')
   const [prioridad, setPrioridad] = useState<TareaPrioridad>((tarea?.prioridad as TareaPrioridad) ?? 'media')
-  const [area, setArea] = useState(tarea?.categoria ?? '')
+  const [area, setArea] = useState(tarea?.categoria ?? areaInicial ?? '')
   const [creandoArea, setCreandoArea] = useState(false)
   const [nuevaAreaTexto, setNuevaAreaTexto] = useState('')
   const isDesktop = useIsDesktop()
