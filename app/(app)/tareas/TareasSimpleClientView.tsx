@@ -4,16 +4,23 @@ import { useState, useMemo, type CSSProperties } from 'react'
 import PageTransition from '@/components/PageTransition'
 import { SheetChrome } from '@/lib/ui/chrome'
 import { EmptyState, FilterChips, HeaderAction } from '@/components/ui'
+import { AVATAR_PALETTE } from '@/components/ui/Avatar'
 import type { FilterChip } from '@/components/ui'
 import { useTareas } from '@/lib/hooks/useTareas'
 import type { Tarea, TareaPrioridad } from '@/types'
 
 // Lista de tareas simple para perfil 'emprendimiento' — ve/carga/edita lo que
 // hay que hacer, sin conceptos de OPS (plaza, menú, turno). Reusa la misma
-// tabla `tareas` que OPS (lib/hooks/useTareas.ts) pero con su propia UI,
-// ignorando los campos de mise que esta pantalla no necesita.
+// tabla `tareas` que OPS (lib/hooks/useTareas.ts) pero con su propia UI.
+//
+// Agrupación por "área" (Proveedores, Producción, Ventas...): reusa la
+// columna `categoria` (ya existía, nullable, sin uso en OPS para este
+// perfil) — sin tabla nueva. Color e ícono por área son determinísticos
+// (hash del nombre), mismo mecanismo que <Avatar> — no hay que elegirlos
+// ni persistirlos aparte.
 
 type FiltroEstado = 'pendientes' | 'completadas' | 'todas'
+const SIN_AREA = '__sin_area__'
 
 const FILTROS: FilterChip<FiltroEstado>[] = [
   { value: 'pendientes', label: 'Pendientes' },
@@ -26,6 +33,24 @@ const PRIORIDADES: { value: TareaPrioridad; label: string; color: string }[] = [
   { value: 'media', label: 'Media', color: '#d97706' },
   { value: 'baja', label: 'Baja', color: '#64748b' },
 ]
+
+// Íconos rotativos para áreas — Material Symbols, sin picker manual.
+const AREA_ICONOS = [
+  'local_shipping', 'restaurant', 'storefront', 'receipt_long',
+  'groups', 'campaign', 'build', 'inventory_2', 'payments', 'task_alt',
+]
+
+function hashStr(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return h
+}
+function areaColor(nombre: string): string {
+  return AVATAR_PALETTE[hashStr(nombre) % AVATAR_PALETTE.length]
+}
+function areaIcono(nombre: string): string {
+  return AREA_ICONOS[hashStr(nombre) % AREA_ICONOS.length]
+}
 
 function estaCompletada(t: Tarea): boolean {
   return t.estado === 'listo' || t.status === 'completada'
@@ -55,34 +80,70 @@ export default function TareasSimpleClientView() {
   const [filtro, setFiltro] = useState<FiltroEstado>('pendientes')
   const [sheetTarea, setSheetTarea] = useState<Tarea | 'nueva' | null>(null)
   const [saving, setSaving] = useState(false)
+  const [colapsadas, setColapsadas] = useState<Set<string>>(new Set())
 
-  const visibles = useMemo(() => {
-    const base = tareas.filter(t => {
+  const areasExistentes = useMemo(() => {
+    const nombres = new Set<string>()
+    for (const t of tareas) {
+      const a = t.categoria?.trim()
+      if (a) nombres.add(a)
+    }
+    return [...nombres].sort((a, b) => a.localeCompare(b))
+  }, [tareas])
+
+  const grupos = useMemo(() => {
+    const filtradas = tareas.filter(t => {
       if (filtro === 'todas') return true
       const completada = estaCompletada(t)
       return filtro === 'completadas' ? completada : !completada
     })
-    return [...base].sort((a, b) => {
+
+    const byArea = new Map<string, Tarea[]>()
+    for (const t of filtradas) {
+      const key = t.categoria?.trim() || SIN_AREA
+      if (!byArea.has(key)) byArea.set(key, [])
+      byArea.get(key)!.push(t)
+    }
+
+    const ordenar = (arr: Tarea[]) => [...arr].sort((a, b) => {
       const fa = a.fecha_limite ?? '9999-99-99'
       const fb = b.fecha_limite ?? '9999-99-99'
       if (fa !== fb) return fa < fb ? -1 : 1
       return (b.created_at ?? '').localeCompare(a.created_at ?? '')
     })
+
+    const areas = [...byArea.keys()].filter(k => k !== SIN_AREA).sort((a, b) => a.localeCompare(b))
+    const resultado = areas.map(nombre => ({ nombre, tareas: ordenar(byArea.get(nombre)!) }))
+    if (byArea.has(SIN_AREA)) resultado.push({ nombre: SIN_AREA, tareas: ordenar(byArea.get(SIN_AREA)!) })
+    return resultado
   }, [tareas, filtro])
+
+  const totalVisible = grupos.reduce((s, g) => s + g.tareas.length, 0)
+
+  function toggleColapsada(nombre: string) {
+    setColapsadas(prev => {
+      const next = new Set(prev)
+      if (next.has(nombre)) next.delete(nombre)
+      else next.add(nombre)
+      return next
+    })
+  }
 
   async function handleToggle(t: Tarea) {
     await cambiarEstado(t.id, estaCompletada(t) ? 'pendiente' : 'listo')
   }
 
-  async function handleGuardar(datos: { titulo: string; descripcion: string; fechaLimite: string; prioridad: TareaPrioridad }) {
+  async function handleGuardar(datos: { titulo: string; descripcion: string; fechaLimite: string; prioridad: TareaPrioridad; area: string }) {
     setSaving(true)
     try {
+      const categoria = datos.area.trim() || null
       if (sheetTarea && sheetTarea !== 'nueva') {
         await actualizarTarea(sheetTarea.id, {
           titulo: datos.titulo,
           descripcion: datos.descripcion || null,
           fecha_limite: datos.fechaLimite || null,
           prioridad: datos.prioridad,
+          categoria,
         })
       } else {
         await agregarTarea({
@@ -90,6 +151,7 @@ export default function TareasSimpleClientView() {
           descripcion: datos.descripcion || null,
           fecha_limite: datos.fechaLimite || null,
           prioridad: datos.prioridad,
+          categoria,
           status: 'pendiente',
           estado: 'pendiente',
           seccion: 'general',
@@ -126,22 +188,36 @@ export default function TareasSimpleClientView() {
         <div className="flex-1 overflow-y-auto" style={{ padding: 16 }}>
           {loading && <p style={{ color: 'var(--text-3)', fontSize: 14 }}>Cargando…</p>}
 
-          {!loading && visibles.length === 0 && (
+          {!loading && totalVisible === 0 && (
             <EmptyState
               icon="checklist"
               title={filtro === 'completadas' ? 'Sin tareas completadas' : 'Sin tareas pendientes'}
               subtitle={
                 filtro === 'completadas'
                   ? undefined
-                  : 'Cargá lo que tengas que hacer — pedirle algo a un proveedor, preparar un lote, llamar a un cliente.'
+                  : 'Cargá lo que tengas que hacer — pedirle algo a un proveedor, preparar un lote, llamar a un cliente. Agrupalas por área (Proveedores, Producción, Ventas…) para ordenar tu día.'
               }
               cta={filtro !== 'completadas' ? { label: 'Nueva tarea', onClick: () => setSheetTarea('nueva') } : undefined}
             />
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {visibles.map(t => (
-              <TareaRow key={t.id} tarea={t} onToggle={() => handleToggle(t)} onEdit={() => setSheetTarea(t)} />
+          {!loading && totalVisible > 0 && areasExistentes.length === 0 && (
+            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 2px 14px' }}>
+              Tip: asignale un área a tus tareas (Proveedores, Producción, Ventas…) para agruparlas acá.
+            </p>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {grupos.map(g => (
+              <AreaGrupo
+                key={g.nombre}
+                nombre={g.nombre === SIN_AREA ? null : g.nombre}
+                tareas={g.tareas}
+                colapsada={colapsadas.has(g.nombre)}
+                onToggleColapsar={() => toggleColapsada(g.nombre)}
+                onToggleTarea={handleToggle}
+                onEditarTarea={setSheetTarea}
+              />
             ))}
           </div>
         </div>
@@ -151,6 +227,7 @@ export default function TareasSimpleClientView() {
         <SheetChrome>
           <TareaSheet
             tarea={sheetTarea === 'nueva' ? null : sheetTarea}
+            areasExistentes={areasExistentes}
             saving={saving}
             onClose={() => setSheetTarea(null)}
             onGuardar={handleGuardar}
@@ -159,6 +236,58 @@ export default function TareasSimpleClientView() {
         </SheetChrome>
       )}
     </PageTransition>
+  )
+}
+
+// ── Grupo por área — header con ícono+color determinístico + lista colapsable ──
+function AreaGrupo({
+  nombre, tareas, colapsada, onToggleColapsar, onToggleTarea, onEditarTarea,
+}: {
+  nombre: string | null
+  tareas: Tarea[]
+  colapsada: boolean
+  onToggleColapsar: () => void
+  onToggleTarea: (t: Tarea) => void
+  onEditarTarea: (t: Tarea) => void
+}) {
+  const color = nombre ? areaColor(nombre) : 'var(--text-3)'
+  const icono = nombre ? areaIcono(nombre) : 'more_horiz'
+  const label = nombre ?? 'Sin área'
+
+  return (
+    <div>
+      <button
+        onClick={onToggleColapsar}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+          background: 'none', border: 'none', padding: '2px 2px 10px', cursor: 'pointer', fontFamily: 'inherit',
+        }}
+      >
+        <span
+          style={{
+            width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+            background: nombre ? `${color}18` : 'var(--surface)',
+            border: nombre ? 'none' : '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 15, color }}>{icono}</span>
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{label}</span>
+        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>· {tareas.length}</span>
+        <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)', marginLeft: 'auto' }}>
+          {colapsada ? 'expand_more' : 'expand_less'}
+        </span>
+      </button>
+
+      {!colapsada && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {tareas.map(t => (
+            <TareaRow key={t.id} tarea={t} onToggle={() => onToggleTarea(t)} onEdit={() => onEditarTarea(t)} />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -234,18 +363,29 @@ function TareaRow({ tarea, onToggle, onEdit }: { tarea: Tarea; onToggle: () => v
 
 // ── Sheet crear/editar — nivel de módulo (inputs con foco, ver hooks.md) ──
 function TareaSheet({
-  tarea, saving, onClose, onGuardar, onEliminar,
+  tarea, areasExistentes, saving, onClose, onGuardar, onEliminar,
 }: {
   tarea: Tarea | null
+  areasExistentes: string[]
   saving: boolean
   onClose: () => void
-  onGuardar: (datos: { titulo: string; descripcion: string; fechaLimite: string; prioridad: TareaPrioridad }) => void
+  onGuardar: (datos: { titulo: string; descripcion: string; fechaLimite: string; prioridad: TareaPrioridad; area: string }) => void
   onEliminar?: () => void
 }) {
   const [titulo, setTitulo] = useState(tarea?.titulo ?? '')
   const [descripcion, setDescripcion] = useState(tarea?.descripcion ?? '')
   const [fechaLimite, setFechaLimite] = useState(tarea?.fecha_limite ?? '')
   const [prioridad, setPrioridad] = useState<TareaPrioridad>((tarea?.prioridad as TareaPrioridad) ?? 'media')
+  const [area, setArea] = useState(tarea?.categoria ?? '')
+  const [creandoArea, setCreandoArea] = useState(false)
+  const [nuevaAreaTexto, setNuevaAreaTexto] = useState('')
+
+  function confirmarNuevaArea() {
+    const nombre = nuevaAreaTexto.trim()
+    if (nombre) setArea(nombre)
+    setCreandoArea(false)
+    setNuevaAreaTexto('')
+  }
 
   return (
     <div
@@ -279,6 +419,64 @@ function TareaSheet({
               style={{ ...inputStyle, resize: 'vertical' }}
             />
           </div>
+
+          <div>
+            <label style={labelStyle}>Área (opcional)</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {areasExistentes.map(a => {
+                const activa = area === a
+                const c = areaColor(a)
+                return (
+                  <button
+                    key={a}
+                    onClick={() => setArea(activa ? '' : a)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                      border: activa ? `1px solid ${c}` : '1px solid var(--border)',
+                      background: activa ? `${c}18` : 'var(--bg)',
+                      color: activa ? c : 'var(--text-2)',
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>{areaIcono(a)}</span>
+                    {a}
+                  </button>
+                )
+              })}
+              {!creandoArea && (
+                <button
+                  onClick={() => setCreandoArea(true)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                    border: '1px dashed var(--border)', background: 'none', color: 'var(--text-3)',
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>add</span>
+                  Nueva área
+                </button>
+              )}
+            </div>
+            {creandoArea && (
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <input
+                  value={nuevaAreaTexto}
+                  onChange={e => setNuevaAreaTexto(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') confirmarNuevaArea(); if (e.key === 'Escape') setCreandoArea(false) }}
+                  placeholder="Ej: Producción"
+                  style={{ ...inputStyle, flex: 1 }}
+                  autoFocus
+                />
+                <button
+                  onClick={confirmarNuevaArea}
+                  style={{ padding: '0 14px', borderRadius: 10, border: 'none', background: 'var(--navy)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  OK
+                </button>
+              </div>
+            )}
+          </div>
+
           <div>
             <label style={labelStyle}>Fecha límite (opcional)</label>
             <input type="date" value={fechaLimite} onChange={e => setFechaLimite(e.target.value)} style={inputStyle} />
@@ -306,7 +504,7 @@ function TareaSheet({
 
         <div style={{ padding: 16, paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button
-            onClick={() => onGuardar({ titulo, descripcion, fechaLimite, prioridad })}
+            onClick={() => onGuardar({ titulo, descripcion, fechaLimite, prioridad, area })}
             disabled={saving || !titulo.trim()}
             style={{
               width: '100%', padding: 13, borderRadius: 12, border: 'none',
