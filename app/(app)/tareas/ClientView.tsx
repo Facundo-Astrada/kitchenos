@@ -281,59 +281,63 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
             Cargando...
           </div>
-        ) : (modo === 'menu' || modo === 'evento') ? (
-          // Modo menú: secciones dinámicas — las del menú activo (las conocidas en su orden + las custom)
-          (() => {
-            const conocidas = new Set<string>(SECCIONES_MENU.map(s => s.id))
-            const presentes: string[] = []
-            for (const t of topLevel) { const s = (t.seccion ?? '').trim(); if (s && !presentes.includes(s)) presentes.push(s) }
-            const ordered: { id: string; label: string; color: string }[] = [
-              ...SECCIONES_MENU.filter(s => presentes.includes(s.id)),
-              ...presentes.filter(s => !conocidas.has(s)).map(s => ({ id: s, label: s, color: '#64748b' })),
-            ]
-            return ordered.map((sec) => {
-              const items = topLevel
-                .filter((t) => (t.seccion ?? '') === sec.id)
-                .sort((a, b) => (PRIO_SORT[a.prioridad ?? 'baja'] ?? 3) - (PRIO_SORT[b.prioridad ?? 'baja'] ?? 3))
-              return (
-                <SeccionOps
-                  key={sec.id}
-                  titulo={sec.label}
-                  color={sec.color}
-                  items={items}
-                  subtareasByParent={subtareasByParent}
-                  onAddItem={(titulo, recetaId) => handleAddItem('media', titulo, recetaId)}
-                  onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
-                  onAddSubtarea={handleAddSubtarea}
-                  modo={modo}
-                  showPrioChip
-                  recetas={recetasSimple}
-                />
-              )
-            })
-          })()
         ) : (
-          // Modo carta: agrupar por prioridad
-          PRIORIDADES.map((prio) => {
-            const items = topLevel.filter((t) => (t.prioridad ?? 'baja') === prio.id)
-            return (
-              <div key={prio.id} {...(prio.id === 'critica' ? { 'data-coach-target': 'prod-seccion-sp' } : {})}>
-                <SeccionOps
-                  titulo={prio.label}
-                  sublabel={prio.sublabel}
-                  color={prio.color}
-                  items={items}
-                  subtareasByParent={subtareasByParent}
-                  onAddItem={(titulo, recetaId) => handleAddItem(prio.id, titulo, recetaId)}
-                  onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
-                  onAddSubtarea={handleAddSubtarea}
-                  modo={modo}
-                  showSeccionChip
-                  recetas={recetasSimple}
-                />
-              </div>
-            )
-          })
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, alignItems: 'start' }}>
+            {(modo === 'menu' || modo === 'evento') ? (
+              // Modo menú: secciones dinámicas — las del menú activo (las conocidas en su orden + las custom)
+              (() => {
+                const conocidas = new Set<string>(SECCIONES_MENU.map(s => s.id))
+                const presentes: string[] = []
+                for (const t of topLevel) { const s = (t.seccion ?? '').trim(); if (s && !presentes.includes(s)) presentes.push(s) }
+                const ordered: { id: string; label: string; color: string }[] = [
+                  ...SECCIONES_MENU.filter(s => presentes.includes(s.id)),
+                  ...presentes.filter(s => !conocidas.has(s)).map(s => ({ id: s, label: s, color: '#64748b' })),
+                ]
+                return ordered.map((sec) => {
+                  const items = topLevel
+                    .filter((t) => (t.seccion ?? '') === sec.id)
+                    .sort((a, b) => (PRIO_SORT[a.prioridad ?? 'baja'] ?? 3) - (PRIO_SORT[b.prioridad ?? 'baja'] ?? 3))
+                  return (
+                    <SeccionOps
+                      key={sec.id}
+                      titulo={sec.label}
+                      color={sec.color}
+                      items={items}
+                      subtareasByParent={subtareasByParent}
+                      onAddItem={(titulo, recetaId) => handleAddItem('media', titulo, recetaId)}
+                      onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
+                      onAddSubtarea={handleAddSubtarea}
+                      modo={modo}
+                      showPrioChip
+                      recetas={recetasSimple}
+                    />
+                  )
+                })
+              })()
+            ) : (
+              // Modo carta: agrupar por prioridad
+              PRIORIDADES.map((prio) => {
+                const items = topLevel.filter((t) => (t.prioridad ?? 'baja') === prio.id)
+                return (
+                  <div key={prio.id} {...(prio.id === 'critica' ? { 'data-coach-target': 'prod-seccion-sp' } : {})}>
+                    <SeccionOps
+                      titulo={prio.label}
+                      sublabel={prio.sublabel}
+                      color={prio.color}
+                      items={items}
+                      subtareasByParent={subtareasByParent}
+                      onAddItem={(titulo, recetaId) => handleAddItem(prio.id, titulo, recetaId)}
+                      onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
+                      onAddSubtarea={handleAddSubtarea}
+                      modo={modo}
+                      showSeccionChip
+                      recetas={recetasSimple}
+                    />
+                  </div>
+                )
+              })
+            )}
+          </div>
         )}
       </div>
     </div>
