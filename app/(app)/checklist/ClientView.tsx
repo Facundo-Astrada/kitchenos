@@ -11,6 +11,7 @@ import { ProductoMiseCard, PLAZA_TO_SECCION } from '@/components/mise/ProductoMi
 import type { PlatoPlaza, CrearTareaParams } from '@/components/mise/ProductoMiseCard'
 import { useProduccionRegistros } from '@/lib/hooks/useProduccionRegistros'
 import { useHaccp } from '@/lib/hooks/useHaccp'
+import { useFichaje } from '@/lib/hooks/useFichaje'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import SectionEditor from '@/components/checklist/SectionEditor'
@@ -87,6 +88,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const { tareas, agregarTarea, cambiarEstado: cambiarEstadoTarea } = useTareas()
   const { rendimientoMap } = useProduccionRegistros()
   const { crearVencimiento } = useHaccp()
+  const { fichajeAbierto, marcarSalida } = useFichaje()
 
   // Build receta info map (id → { porciones, pesoPorcion, vidaUtilDias }) for MiseCard display
   const recetaInfoMap = useMemo(() => {
@@ -177,6 +179,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const [pendientesApertura, setPendientesApertura] = useState<MisePlaceItem[]>([])
   const [regCierreAnteriorMap, setRegCierreAnteriorMap] = useState<Record<string, number | null>>({})
   const [modoControl, setModoControl] = useState(false)
+  const [cerrandoTurno, setCerrandoTurno] = useState(false)
 
   useEffect(() => {
     setModoControl(localStorage.getItem('checklist_modo_control') === 'true')
@@ -437,14 +440,35 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // ── Mensaje al completar el 100% de la plaza (apertura/cierre) ───────
   // Una vez por plaza+turno+día — evita repetir el mensaje si el usuario
   // destilda y vuelve a tildar el último ítem, o cambia de tab y vuelve.
+  // En cierre, si el usuario tiene un fichaje abierto, el toast se omite —
+  // la barra persistente de "Cerrar turno" (abajo) ya comunica que terminó.
   const plazaCompletaShownRef = useRef<Set<string>>(new Set())
   useEffect(() => {
     if (tab === 'rutina' || !plaza || total === 0 || done !== total) return
     const key = `${plaza}-${tab}-${fecha}`
     if (plazaCompletaShownRef.current.has(key)) return
     plazaCompletaShownRef.current.add(key)
-    setToast('Ya checkeaste tu plaza — estás listo para producir tranquilo')
-  }, [tab, plaza, fecha, total, done])
+    if (tab === 'cierre') {
+      if (!fichajeAbierto) setToast('Cierre completo — ¡buen trabajo hoy!')
+    } else {
+      setToast('Ya checkeaste tu plaza — estás listo para producir tranquilo')
+    }
+  }, [tab, plaza, fecha, total, done, fichajeAbierto])
+
+  async function handleCerrarTurno() {
+    if (!fichajeAbierto || cerrandoTurno) return
+    if (!confirm('¿Cerrar tu turno? Se registra tu hora de salida.')) return
+    setCerrandoTurno(true)
+    try {
+      await marcarSalida(fichajeAbierto)
+      localStorage.removeItem('kitchenos_turno')
+      setToast('Turno cerrado — ¡buen trabajo hoy!')
+    } catch (e: unknown) {
+      setToast('Error al cerrar turno: ' + (e instanceof Error ? e.message : 'desconocido'))
+    } finally {
+      setCerrandoTurno(false)
+    }
+  }
 
   // ── Drag-to-move between sections + reorder dentro de la sección ─────
   // Posición fija por defecto (sort por `orden`, no por prioridad/estado —
@@ -1269,6 +1293,36 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           padding: '12px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center',
           boxShadow: '0 8px 24px rgba(34,197,94,.3)',
         }}>{toast}</div>
+      )}
+
+      {/* Barra persistente — cierre 100% completo + turno (fichaje) abierto */}
+      {tab === 'cierre' && plaza && total > 0 && done === total && fichajeAbierto && (
+        <div style={{
+          position: 'fixed', bottom: 'var(--toast-bottom)', left: 16, right: 16, zIndex: 299,
+          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14,
+          padding: '10px 10px 10px 14px', boxShadow: '0 8px 24px rgba(0,0,0,.18)',
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#22c55e', flexShrink: 0 }}>task_alt</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-1)' }}>Cierre completo</div>
+            <div style={{ fontSize: 10.5, color: 'var(--text-3)' }}>Ya podés marcar tu salida</div>
+          </div>
+          <button
+            onClick={handleCerrarTurno}
+            disabled={cerrandoTurno}
+            style={{
+              flexShrink: 0, padding: '10px 14px', borderRadius: 10, border: 'none',
+              background: '#ef4444', color: '#fff', fontSize: 12.5, fontWeight: 700,
+              cursor: cerrandoTurno ? 'default' : 'pointer', fontFamily: 'inherit',
+              opacity: cerrandoTurno ? 0.6 : 1,
+              display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>stop_circle</span>
+            {cerrandoTurno ? 'Cerrando…' : 'Cerrar turno'}
+          </button>
+        </div>
       )}
     </div>
   )
