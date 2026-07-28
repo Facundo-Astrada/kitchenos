@@ -3,6 +3,7 @@
 import PageTransition from '@/components/PageTransition'
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useHaccp, type HaccpEquipo, type HaccpTemperatura, type HaccpVencimiento, type HaccpLimpieza } from '@/lib/hooks/useHaccp'
+import { limpiezaTocaFecha } from '@/lib/haccp/recurrencia'
 import { useMerma } from '@/lib/hooks/useMerma'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
@@ -807,24 +808,8 @@ export default function HaccpPage() {
     return map
   }, [limpieza])
 
-  // ¿Toca esta tarea en un día dado?
-  const tareaTocaDia = useCallback((l: HaccpLimpieza, date: Date): boolean => {
-    switch (l.frecuencia) {
-      case 'cada_turno':
-      case 'diaria':
-        return true
-      case 'semanal': {
-        const dia = l.dia_semana ?? new Date(l.created_at).getDay()
-        return date.getDay() === dia
-      }
-      case 'mensual': {
-        const dia = l.dia_mes ?? new Date(l.created_at).getDate()
-        return date.getDate() === dia
-      }
-      default:
-        return false
-    }
-  }, [])
+  // ¿Toca esta tarea en un día dado? (lib/haccp/recurrencia.ts — misma regla en HACCP/Mise/OPS)
+  const tareaTocaDia = useCallback((l: HaccpLimpieza, date: Date): boolean => limpiezaTocaFecha(l, date), [])
 
   // Vencimientos alerts count
   const vencAlerts = useMemo(() => vencimientos.filter(v => {

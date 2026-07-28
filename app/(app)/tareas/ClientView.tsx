@@ -1,16 +1,22 @@
 'use client'
 
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef, type CSSProperties } from 'react'
 import { useAuth } from '@/lib/auth/context'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { useRecetas } from '@/lib/hooks/useRecetas'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
 import { syncMiseDesdeTarea } from '@/lib/ops/syncMise'
-import { OpsToggle } from '@/components/ops/OpsToggle'
-import { SeccionOps } from '@/components/ops/SeccionOps'
+import { OpsToggle, type OpsToggleValue } from '@/components/ops/OpsToggle'
+import { SeccionOps, type DragHandleProps } from '@/components/ops/SeccionOps'
+import { QuickAdd } from '@/components/ops/QuickAdd'
 import { EventoBanner } from '@/components/ops/EventoBanner'
+import { useHaccp, type HaccpLimpieza } from '@/lib/hooks/useHaccp'
+import { limpiezaTocaFecha } from '@/lib/haccp/recurrencia'
 import type { Tarea, OpsModo, OpsEstado, TareaPrioridad } from '@/types'
+
+const PEDIDOS_COL_ID = '__pedidos__'
+const LIMPIEZA_COL_ID = '__limpieza__'
 
 const PRIO_SORT: Record<string, number> = { critica: 0, alta: 1, media: 2, baja: 3 }
 
@@ -53,16 +59,20 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   const { tareas, loading, agregarTarea, cambiarEstado, eliminarTarea } = useTareas()
   const { recetas } = useRecetas()
   const recetasSimple = useMemo(() => recetas.map(r => ({ id: r.id, nombre: r.nombre })), [recetas])
+  const { limpieza, registrarLimpieza } = useHaccp()
 
   const today = getToday()
 
-  // Modo — persiste en localStorage
-  const [modo, setModo] = useState<OpsModo>(() => {
+  // Modo — persiste en localStorage. 'todo' es una vista que combina
+  // Carta+Menú+Evento; nunca se guarda como modo real de una tarea (ver modoStorage).
+  const [modo, setModo] = useState<OpsToggleValue>(() => {
     if (typeof window === 'undefined') return 'carta'
-    return (localStorage.getItem('ops_modo') as OpsModo) ?? 'carta'
+    return (localStorage.getItem('ops_modo') as OpsToggleValue) ?? 'carta'
   })
+  // modo concreto a usar al crear/mover tareas (una tarea no puede pertenecer a "todo")
+  const modoStorage: OpsModo = modo === 'todo' ? 'carta' : modo
 
-  function handleModoChange(m: OpsModo) {
+  function handleModoChange(m: OpsToggleValue) {
     setModo(m)
     localStorage.setItem('ops_modo', m)
   }
@@ -106,7 +116,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
       modo,
       total,
       listos,
-      pendientesTotal: tareas.filter(t => t.estado !== 'listo').length,
+      pendientesTotal: tareas.filter(t => t.estado !== 'listo' && t.categoria !== 'pedido_nota').length,
       topCriticas,
     }))
     return () => localStorage.removeItem('kc_screen_context')
@@ -116,10 +126,11 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     // Ayer = carryover de un solo día: una tarea no completada se arrastra al día
     // siguiente y nada más. Evita que las pendientes se apilen indefinidamente.
     const ayer = (() => { const d = new Date(today + 'T12:00:00'); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0] })()
-    const todasHoyModo = tareas.filter((t) => t.modo === modo && !t.parent_id && t.turno_fecha === today)
+    // 'todo' junta Carta+Menú+Evento — no filtra por modo, solo por fecha/estado.
+    const todasHoyModo = tareas.filter((t) => (modo === 'todo' || t.modo === modo) && !t.parent_id && t.turno_fecha === today)
     const clavesHoyModo = new Set(todasHoyModo.map((t) => t.titulo.trim().toLowerCase()))
     const ayerCandidates = tareas.filter((t) =>
-      t.modo === modo && !t.parent_id && t.turno_fecha === ayer && t.estado !== 'listo'
+      (modo === 'todo' || t.modo === modo) && !t.parent_id && t.turno_fecha === ayer && t.estado !== 'listo'
     )
     // Si hoy ya existe una tarea con el mismo título (mismo modo), la de ayer es un
     // duplicado: se oculta acá y se borra de DB abajo (ver activarMenu, que ahora
@@ -171,7 +182,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   const handleAddItem = useCallback(async (prioridad: string, titulo: string, recetaId?: string) => {
     await agregarTarea({
       titulo,
-      modo,
+      modo: modoStorage,
       seccion: 'general',
       turno_fecha: today,
       estado: 'pendiente',
@@ -187,7 +198,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
       receta_id: recetaId ?? null,
       checklist: [],
     })
-  }, [agregarTarea, modo, today, perfil])
+  }, [agregarTarea, modoStorage, today, perfil])
 
   // ── Agregar sub-tarea ─────────────────────────────────────────
   const handleAddSubtarea = useCallback(async (parentId: string, titulo: string) => {
@@ -195,7 +206,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     if (!parent) return
     await agregarTarea({
       titulo,
-      modo: parent.modo ?? modo,
+      modo: parent.modo ?? modoStorage,
       seccion: parent.seccion ?? 'general',
       parent_id: parentId,
       turno_fecha: today,
@@ -212,7 +223,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
       receta_id: null,
       checklist: [],
     })
-  }, [agregarTarea, tareas, modo, today, perfil])
+  }, [agregarTarea, tareas, modoStorage, today, perfil])
 
   // ── Sync bidireccional con Mise ───────────────────────────────
   // Al cambiar estado de tarea, refleja en checklist_registros el item vinculado por FK.
@@ -231,7 +242,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
       const secLabel = secciones.find(s => s.id === seccionId)?.label ?? seccionId
       await agregarTarea({
         titulo: `${secLabel} — ${eventoTitulo}`,
-        modo,
+        modo: modoStorage,
         seccion: seccionId,
         turno_fecha: today,
         estado: 'pendiente',
@@ -248,7 +259,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
         checklist: [],
       })
     }
-  }, [agregarTarea, modo, today, perfil, secciones])
+  }, [agregarTarea, modoStorage, today, perfil, secciones])
 
   // ── Columnas a renderizar: mismo agrupamiento de siempre (prioridad en modo
   // carta, sección dinámica en modo menú/evento), reordenadas según lo que el
@@ -263,7 +274,16 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
         ...presentes.filter(s => !conocidas.has(s)).map(s => ({ id: s, label: s, color: '#64748b' })),
       ]
     }
-    return PRIORIDADES.map(p => ({ id: p.id, label: p.label, sublabel: p.sublabel, color: p.color }))
+    const prioridades = PRIORIDADES.map(p => ({ id: p.id, label: p.label, sublabel: p.sublabel, color: p.color }))
+    // Pedidos y Limpieza son recuadros fijos, solo en modo Carta (no en Menú/Evento/Todo).
+    if (modo === 'carta') {
+      return [
+        ...prioridades,
+        { id: PEDIDOS_COL_ID, label: 'Pedidos', color: '#0ea5e9' },
+        { id: LIMPIEZA_COL_ID, label: 'Limpieza', color: '#10b981' },
+      ]
+    }
+    return prioridades
   }, [modo, topLevel])
 
   const columnas = useMemo<ColumnaDef[]>(() => {
@@ -284,6 +304,44 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     }
     return topLevel.filter((t) => (t.prioridad ?? 'baja') === col.id)
   }
+
+  // ── Recuadro Pedidos: notas libres, no accionan nada — se anotan y se
+  // borran cuando ya se resolvieron. Reusa `tareas` (categoria='pedido_nota'),
+  // sin turno_fecha/carryover: no son tareas de producción, son anotaciones.
+  const pedidoNotas = useMemo(
+    () => tareas.filter((t) => t.categoria === 'pedido_nota').sort((a, b) => (a.created_at ?? '').localeCompare(b.created_at ?? '')),
+    [tareas]
+  )
+
+  const handleAgregarNotaPedido = useCallback(async (titulo: string) => {
+    await agregarTarea({
+      titulo,
+      modo: modoStorage,
+      seccion: 'general',
+      turno_fecha: null,
+      estado: 'pendiente',
+      status: 'pendiente',
+      prioridad: 'baja',
+      categoria: 'pedido_nota',
+      asignado_a: null,
+      creado_por: perfil?.miembro_id ?? null,
+      descripcion: null,
+      plaza: null,
+      fecha_limite: null,
+      tiempo_estimado_min: null,
+      receta_id: null,
+      checklist: [],
+    })
+  }, [agregarTarea, modoStorage, perfil])
+
+  // ── Recuadro Limpieza: limpiezas de HACCP que tocan hoy, de todas las
+  // áreas/plazas del restaurante (sin filtrar, a diferencia del tab Rutina
+  // del Mise). Tildar acá llama al mismo registrarLimpieza() de la pantalla
+  // real de HACCP — no duplica el registro, solo lo expone acá también.
+  const limpiezasHoy = useMemo(() => {
+    const hoy = new Date()
+    return limpieza.filter((l) => limpiezaTocaFecha(l, hoy))
+  }, [limpieza])
 
   function handleSecPointerDown(id: string, e: React.PointerEvent) {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
@@ -382,7 +440,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
         {restauranteId && (
           <EventoBanner
             restauranteId={restauranteId}
-            modo={modo}
+            modo={modoStorage}
             onGenerarLista={handleGenerarLista}
           />
         )}
@@ -393,9 +451,14 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, alignItems: 'start' }}>
             {columnas.map((col) => {
-              const items = itemsDeColumna(col)
               const isDragging = draggingSecId === col.id
               const isOver = overSecId === col.id && draggingSecId !== null && draggingSecId !== col.id
+              const dragHandleProps: DragHandleProps = {
+                onPointerDown: (e) => handleSecPointerDown(col.id, e),
+                onPointerMove: handleSecPointerMove,
+                onPointerUp: handleSecPointerUp,
+                onPointerCancel: handleSecPointerUp,
+              }
               return (
                 <div
                   key={col.id}
@@ -411,32 +474,168 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
                     borderRadius: isOver ? 14 : undefined,
                   }}
                 >
-                  <SeccionOps
-                    titulo={col.label}
-                    sublabel={col.sublabel}
-                    color={col.color}
-                    items={items}
-                    subtareasByParent={subtareasByParent}
-                    onAddItem={(titulo, recetaId) => handleAddItem(modo === 'carta' ? col.id : 'media', titulo, recetaId)}
-                    onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
-                    onAddSubtarea={handleAddSubtarea}
-                    modo={modo}
-                    showSeccionChip={modo === 'carta'}
-                    showPrioChip={modo !== 'carta'}
-                    recetas={recetasSimple}
-                    dragHandleProps={{
-                      onPointerDown: (e) => handleSecPointerDown(col.id, e),
-                      onPointerMove: handleSecPointerMove,
-                      onPointerUp: handleSecPointerUp,
-                      onPointerCancel: handleSecPointerUp,
-                    }}
-                  />
+                  {col.id === PEDIDOS_COL_ID ? (
+                    <NotaPedidosCard
+                      notas={pedidoNotas}
+                      onAgregar={handleAgregarNotaPedido}
+                      onEliminar={eliminarTarea}
+                      dragHandleProps={dragHandleProps}
+                    />
+                  ) : col.id === LIMPIEZA_COL_ID ? (
+                    <LimpiezaCard
+                      items={limpiezasHoy}
+                      onRegistrar={registrarLimpieza}
+                      dragHandleProps={dragHandleProps}
+                    />
+                  ) : (
+                    <SeccionOps
+                      titulo={col.label}
+                      sublabel={col.sublabel}
+                      color={col.color}
+                      items={itemsDeColumna(col)}
+                      subtareasByParent={subtareasByParent}
+                      onAddItem={(titulo, recetaId) => handleAddItem((modo === 'menu' || modo === 'evento') ? 'media' : col.id, titulo, recetaId)}
+                      onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
+                      onAddSubtarea={handleAddSubtarea}
+                      modo={modoStorage}
+                      showSeccionChip={!(modo === 'menu' || modo === 'evento')}
+                      showPrioChip={modo === 'menu' || modo === 'evento'}
+                      recetas={recetasSimple}
+                      dragHandleProps={dragHandleProps}
+                    />
+                  )}
                 </div>
               )
             })}
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+const cardShellStyle: CSSProperties = {
+  background: 'var(--surface)',
+  border: '1px solid var(--border)',
+  borderRadius: 14,
+  overflow: 'hidden',
+  marginBottom: 8,
+}
+const cardHeaderStyle = (draggable: boolean): CSSProperties => ({
+  width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+  padding: '10px 14px',
+  background: 'none', border: 'none', cursor: draggable ? 'grab' : 'pointer',
+  WebkitTapHighlightColor: 'transparent',
+  touchAction: draggable ? 'none' : undefined,
+})
+
+// ── Recuadro "Pedidos" — notas libres, sin estado/checkbox (no acciona nada) ──
+function NotaPedidosCard({
+  notas, onAgregar, onEliminar, dragHandleProps,
+}: {
+  notas: Tarea[]
+  onAgregar: (titulo: string) => Promise<void>
+  onEliminar: (id: string) => void
+  dragHandleProps?: DragHandleProps
+}) {
+  const [collapsed, setCollapsed] = useState(false)
+  return (
+    <div style={cardShellStyle}>
+      <button onClick={() => setCollapsed(v => !v)} {...dragHandleProps} style={cardHeaderStyle(!!dragHandleProps)}>
+        {dragHandleProps && (
+          <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)', flexShrink: 0 }}>drag_indicator</span>
+        )}
+        <span className="material-symbols-outlined" style={{ fontSize: 15, color: '#0ea5e9', flexShrink: 0 }}>shopping_cart</span>
+        <span style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 700, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+          Pedidos
+        </span>
+        <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', fontWeight: 700 }}>
+          {notas.length}
+        </span>
+        <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)', transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform .15s' }}>
+          expand_more
+        </span>
+      </button>
+      <div style={{ height: 2, background: '#0ea5e9' }} />
+      {!collapsed && (
+        <div style={{ padding: '6px 10px 10px' }}>
+          {notas.map((n) => (
+            <div key={n.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 4px', borderBottom: '1px solid var(--border)' }}>
+              <span style={{ flex: 1, fontSize: 13, color: 'var(--text-1)' }}>{n.titulo}</span>
+              <button onClick={() => onEliminar(n.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', padding: 2, flexShrink: 0 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+              </button>
+            </div>
+          ))}
+          {notas.length === 0 && (
+            <div style={{ padding: '8px 2px', fontSize: 12, color: 'var(--text-3)' }}>Sin pedidos anotados</div>
+          )}
+          <div style={{ marginTop: 4 }}>
+            <QuickAdd placeholder="Anotar pedido..." onSave={onAgregar} />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Recuadro "Limpieza" — limpiezas de HACCP que tocan hoy, todas las plazas.
+// Tildar acá llama al mismo registrarLimpieza() de la pantalla real de HACCP.
+function LimpiezaCard({
+  items, onRegistrar, dragHandleProps,
+}: {
+  items: HaccpLimpieza[]
+  onRegistrar: (id: string) => void
+  dragHandleProps?: DragHandleProps
+}) {
+  const [collapsed, setCollapsed] = useState(false)
+  const hechaHoy = (l: HaccpLimpieza) =>
+    !!l.ultimo_registro && (Date.now() - new Date(l.ultimo_registro).getTime()) < 86_400_000
+  const listas = items.filter(hechaHoy).length
+
+  return (
+    <div style={cardShellStyle}>
+      <button onClick={() => setCollapsed(v => !v)} {...dragHandleProps} style={cardHeaderStyle(!!dragHandleProps)}>
+        {dragHandleProps && (
+          <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)', flexShrink: 0 }}>drag_indicator</span>
+        )}
+        <span className="material-symbols-outlined" style={{ fontSize: 15, color: '#10b981', flexShrink: 0 }}>cleaning_services</span>
+        <span style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 700, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+          Limpieza
+        </span>
+        <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: listas === items.length && items.length > 0 ? '#22c55e' : 'var(--text-3)', fontWeight: 700 }}>
+          {listas}/{items.length}
+        </span>
+        <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)', transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform .15s' }}>
+          expand_more
+        </span>
+      </button>
+      <div style={{ height: 2, background: '#10b981' }} />
+      {!collapsed && (
+        <div style={{ padding: '6px 10px 10px' }}>
+          {items.map((l) => {
+            const hecha = hechaHoy(l)
+            return (
+              <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 4px', borderBottom: '1px solid var(--border)' }}>
+                <button
+                  onClick={() => onRegistrar(l.id)}
+                  style={{
+                    width: 22, height: 22, borderRadius: 6, border: 'none', flexShrink: 0,
+                    background: hecha ? '#10b981' : 'var(--border)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
+                  }}
+                >
+                  {hecha && <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#fff' }}>check</span>}
+                </button>
+                <span style={{ flex: 1, fontSize: 13, color: 'var(--text-1)' }}>{l.area}: {l.tarea_limpieza}</span>
+              </div>
+            )
+          })}
+          {items.length === 0 && (
+            <div style={{ padding: '8px 2px', fontSize: 12, color: 'var(--text-3)' }}>Sin limpiezas para hoy</div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

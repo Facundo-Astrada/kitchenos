@@ -13,7 +13,7 @@ import IngresosBanner from '@/components/pedidos/IngresosBanner'
 import { usePedidos } from '@/lib/hooks/usePedidos'
 import { usePase } from '@/lib/hooks/usePase'
 import { useHaccp } from '@/lib/hooks/useHaccp'
-import type { HaccpLimpieza } from '@/lib/hooks/useHaccp'
+import { limpiezaTocaFecha } from '@/lib/haccp/recurrencia'
 import type { Tarea, TareaPrioridad } from '@/types'
 
 // Lista de tareas simple para perfil 'emprendimiento' — ve/carga/edita lo que
@@ -73,26 +73,6 @@ function estaVencida(t: Tarea): boolean {
   return t.fecha_limite < new Date().toISOString().slice(0, 10)
 }
 
-// Copiado de app/(app)/haccp/page.tsx (tareaTocaDia) — misma regla de recurrencia,
-// sin filtrar por plaza (evita los duplicados por plaza del tab Rutina del Mise).
-function limpiezaTocaHoy(l: HaccpLimpieza, hoy: Date): boolean {
-  switch (l.frecuencia) {
-    case 'cada_turno':
-    case 'diaria':
-      return true
-    case 'semanal': {
-      const dia = l.dia_semana ?? new Date(l.created_at).getDay()
-      return hoy.getDay() === dia
-    }
-    case 'mensual': {
-      const dia = l.dia_mes ?? new Date(l.created_at).getDate()
-      return hoy.getDate() === dia
-    }
-    default:
-      return false
-  }
-}
-
 const inputStyle: CSSProperties = {
   width: '100%', padding: '10px 12px', borderRadius: 10,
   border: '1px solid var(--border)', background: 'var(--surface)',
@@ -127,7 +107,7 @@ export default function TareasSimpleClientView() {
   )
   const limpiezasHoy = useMemo(() => {
     const hoy = new Date()
-    return limpieza.filter(l => limpiezaTocaHoy(l, hoy)).length
+    return limpieza.filter(l => limpiezaTocaFecha(l, hoy)).length
   }, [limpieza])
 
   const areasExistentes = useMemo(() => {

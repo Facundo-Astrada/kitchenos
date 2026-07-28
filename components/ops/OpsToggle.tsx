@@ -1,10 +1,10 @@
 'use client'
 
-import type { OpsModo } from '@/types'
+export type OpsToggleValue = 'menu' | 'carta' | 'evento' | 'todo'
 
 interface OpsToggleProps {
-  value: OpsModo
-  onChange: (m: OpsModo) => void
+  value: OpsToggleValue
+  onChange: (m: OpsToggleValue) => void
 }
 
 export function OpsToggle({ value, onChange }: OpsToggleProps) {
@@ -16,7 +16,7 @@ export function OpsToggle({ value, onChange }: OpsToggleProps) {
       padding: 2,
       gap: 0,
     }}>
-      {(['menu', 'carta', 'evento'] as OpsModo[]).map((m) => {
+      {(['menu', 'carta', 'evento', 'todo'] as OpsToggleValue[]).map((m) => {
         const active = value === m
         return (
           <button
@@ -36,11 +36,11 @@ export function OpsToggle({ value, onChange }: OpsToggleProps) {
             }}
           >
             <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>
-              {m === 'menu' ? 'Menú' : m === 'evento' ? 'Evento' : 'Carta'}
+              {m === 'menu' ? 'Menú' : m === 'evento' ? 'Evento' : m === 'todo' ? 'Todo' : 'Carta'}
             </span>
             {active && (
               <span style={{ fontSize: 8, fontWeight: 600, opacity: 0.5, letterSpacing: '.04em', lineHeight: 1.3 }}>
-                {m === 'carta' ? 'Por prioridad' : 'Por categoría'}
+                {m === 'carta' ? 'Por prioridad' : m === 'todo' ? 'Carta+Menú+Evento' : 'Por categoría'}
               </span>
             )}
           </button>

@@ -5,7 +5,7 @@ import { ItemOps } from './ItemOps'
 import { QuickAdd } from './QuickAdd'
 import type { Tarea, OpsEstado, OpsModo } from '@/types'
 
-interface DragHandleProps {
+export interface DragHandleProps {
   onPointerDown: (e: React.PointerEvent) => void
   onPointerMove: (e: React.PointerEvent) => void
   onPointerUp: (e: React.PointerEvent) => void
