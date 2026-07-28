@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/client'
 import { syncMiseDesdeTarea } from '@/lib/ops/syncMise'
 import { OpsToggle, type OpsToggleValue } from '@/components/ops/OpsToggle'
 import { SeccionOps, type DragHandleProps } from '@/components/ops/SeccionOps'
+import { ItemOps } from '@/components/ops/ItemOps'
 import { QuickAdd } from '@/components/ops/QuickAdd'
 import { EventoBanner } from '@/components/ops/EventoBanner'
 import { useHaccp, type HaccpLimpieza } from '@/lib/hooks/useHaccp'
@@ -17,6 +18,9 @@ import type { Tarea, OpsModo, OpsEstado, TareaPrioridad } from '@/types'
 
 const PEDIDOS_COL_ID = '__pedidos__'
 const LIMPIEZA_COL_ID = '__limpieza__'
+const MODO_CARTA_ID = '__modo_carta__'
+const MODO_MENU_ID = '__modo_menu__'
+const MODO_EVENTO_ID = '__modo_evento__'
 
 const PRIO_SORT: Record<string, number> = { critica: 0, alta: 1, media: 2, baja: 3 }
 
@@ -179,10 +183,12 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   }, [ayerDuplicadosIds, eliminarTarea])
 
   // ── Agregar item a sección de prioridad ───────────────────────
-  const handleAddItem = useCallback(async (prioridad: string, titulo: string, recetaId?: string) => {
+  // modoOverride: al agregar desde un recuadro de "Todo" (Carta/Menú/Evento),
+  // la tarea tiene que guardarse con el modo de ESE recuadro, no con modoStorage.
+  const handleAddItem = useCallback(async (prioridad: string, titulo: string, recetaId?: string, modoOverride?: OpsModo) => {
     await agregarTarea({
       titulo,
-      modo: modoStorage,
+      modo: modoOverride ?? modoStorage,
       seccion: 'general',
       turno_fecha: today,
       estado: 'pendiente',
@@ -261,9 +267,12 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     }
   }, [agregarTarea, modoStorage, today, perfil, secciones])
 
-  // ── Columnas a renderizar: mismo agrupamiento de siempre (prioridad en modo
-  // carta, sección dinámica en modo menú/evento), reordenadas según lo que el
-  // usuario haya arrastrado (persistido en localStorage, por restaurante+modo).
+  // ── Columnas a renderizar, reordenadas según lo que el usuario haya
+  // arrastrado (persistido en localStorage, por restaurante+modo):
+  // - Carta: prioridad (SP/P/REF/Check) + Pedidos + Limpieza.
+  // - Menú/Evento: sección dinámica del menú activo.
+  // - Todo: un recuadro por Carta/Menú/Evento (con prioridad — y en Menú/Evento
+  //   también sección — adentro de cada uno) + Pedidos + Limpieza.
   const columnasBase = useMemo<ColumnaDef[]>(() => {
     if (modo === 'menu' || modo === 'evento') {
       const conocidas = new Set<string>(SECCIONES_MENU.map(s => s.id))
@@ -274,16 +283,21 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
         ...presentes.filter(s => !conocidas.has(s)).map(s => ({ id: s, label: s, color: '#64748b' })),
       ]
     }
-    const prioridades = PRIORIDADES.map(p => ({ id: p.id, label: p.label, sublabel: p.sublabel, color: p.color }))
-    // Pedidos y Limpieza son recuadros fijos, solo en modo Carta (no en Menú/Evento/Todo).
-    if (modo === 'carta') {
+    if (modo === 'todo') {
       return [
-        ...prioridades,
+        { id: MODO_CARTA_ID, label: 'Carta', color: '#3b82f6' },
+        { id: MODO_MENU_ID, label: 'Menú', color: '#8b5cf6' },
+        { id: MODO_EVENTO_ID, label: 'Evento', color: '#f97316' },
         { id: PEDIDOS_COL_ID, label: 'Pedidos', color: '#0ea5e9' },
         { id: LIMPIEZA_COL_ID, label: 'Limpieza', color: '#10b981' },
       ]
     }
-    return prioridades
+    // modo === 'carta'
+    return [
+      ...PRIORIDADES.map(p => ({ id: p.id, label: p.label, sublabel: p.sublabel, color: p.color })),
+      { id: PEDIDOS_COL_ID, label: 'Pedidos', color: '#0ea5e9' },
+      { id: LIMPIEZA_COL_ID, label: 'Limpieza', color: '#10b981' },
+    ]
   }, [modo, topLevel])
 
   const columnas = useMemo<ColumnaDef[]>(() => {
@@ -303,6 +317,12 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
         .sort((a, b) => (PRIO_SORT[a.prioridad ?? 'baja'] ?? 3) - (PRIO_SORT[b.prioridad ?? 'baja'] ?? 3))
     }
     return topLevel.filter((t) => (t.prioridad ?? 'baja') === col.id)
+  }
+
+  // Tareas de un modo específico dentro de la vista "Todo" (topLevel ya trae
+  // Carta+Menú+Evento combinadas cuando modo==='todo').
+  function itemsPorModo(modoBox: OpsModo): Tarea[] {
+    return topLevel.filter((t) => t.modo === modoBox)
   }
 
   // ── Recuadro Pedidos: notas libres, no accionan nada — se anotan y se
@@ -487,6 +507,23 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
                       onRegistrar={registrarLimpieza}
                       dragHandleProps={dragHandleProps}
                     />
+                  ) : (col.id === MODO_CARTA_ID || col.id === MODO_MENU_ID || col.id === MODO_EVENTO_ID) ? (
+                    (() => {
+                      const modoBox: OpsModo = col.id === MODO_CARTA_ID ? 'carta' : col.id === MODO_MENU_ID ? 'menu' : 'evento'
+                      return (
+                        <ModoResumenCard
+                          titulo={col.label}
+                          color={col.color}
+                          tareas={itemsPorModo(modoBox)}
+                          agruparPorSeccion={modoBox !== 'carta'}
+                          subtareasByParent={subtareasByParent}
+                          onAddItem={(titulo, recetaId) => handleAddItem('media', titulo, recetaId, modoBox)}
+                          onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
+                          onAddSubtarea={handleAddSubtarea}
+                          dragHandleProps={dragHandleProps}
+                        />
+                      )
+                    })()
                   ) : (
                     <SeccionOps
                       titulo={col.label}
@@ -634,6 +671,100 @@ function LimpiezaCard({
           {items.length === 0 && (
             <div style={{ padding: '8px 2px', fontSize: 12, color: 'var(--text-3)' }}>Sin limpiezas para hoy</div>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Recuadro por modo dentro de "Todo" (Carta/Menú/Evento) — lista plana
+// ordenada por prioridad (Carta) o sub-agrupada por sección con prioridad
+// adentro (Menú/Evento), reusando ItemOps real (checkbox/subtareas intactos).
+function ModoResumenCard({
+  titulo, color, tareas: tareasDelModo, agruparPorSeccion, subtareasByParent,
+  onAddItem, onEstadoChange, onAddSubtarea, dragHandleProps,
+}: {
+  titulo: string
+  color: string
+  tareas: Tarea[]
+  agruparPorSeccion: boolean
+  subtareasByParent: Record<string, Tarea[]>
+  onAddItem: (titulo: string, recetaId?: string) => Promise<void>
+  onEstadoChange: (id: string, estado: OpsEstado) => void
+  onAddSubtarea: (parentId: string, titulo: string) => Promise<void>
+  dragHandleProps?: DragHandleProps
+}) {
+  const [collapsed, setCollapsed] = useState(false)
+  const listos = tareasDelModo.filter((t) => t.estado === 'listo').length
+  const total = tareasDelModo.length
+  const pct = total > 0 ? listos / total : 0
+
+  const porPrioridad = (arr: Tarea[]) =>
+    [...arr].sort((a, b) => (PRIO_SORT[a.prioridad ?? 'baja'] ?? 3) - (PRIO_SORT[b.prioridad ?? 'baja'] ?? 3))
+
+  const grupos: { label: string | null; items: Tarea[] }[] = agruparPorSeccion
+    ? (() => {
+        const conocidas = new Set<string>(SECCIONES_MENU.map((s) => s.id))
+        const presentes: string[] = []
+        for (const t of tareasDelModo) { const s = (t.seccion ?? '').trim(); if (s && !presentes.includes(s)) presentes.push(s) }
+        const ordenSecc: { id: string; label: string }[] = [
+          ...SECCIONES_MENU.filter((s) => presentes.includes(s.id)),
+          ...presentes.filter((s) => !conocidas.has(s)).map((s) => ({ id: s, label: s })),
+        ]
+        return ordenSecc.map((s) => ({
+          label: s.label,
+          items: porPrioridad(tareasDelModo.filter((t) => (t.seccion ?? '') === s.id)),
+        }))
+      })()
+    : [{ label: null, items: porPrioridad(tareasDelModo) }]
+
+  return (
+    <div style={cardShellStyle}>
+      <button onClick={() => setCollapsed((v) => !v)} {...dragHandleProps} style={cardHeaderStyle(!!dragHandleProps)}>
+        {dragHandleProps && (
+          <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)', flexShrink: 0 }}>drag_indicator</span>
+        )}
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+        <span style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 700, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+          {titulo}
+        </span>
+        <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: pct === 1 && total > 0 ? '#22c55e' : 'var(--text-3)', fontWeight: 700 }}>
+          {listos}/{total}
+        </span>
+        <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)', transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform .15s' }}>
+          expand_more
+        </span>
+      </button>
+      <div style={{ height: 2, background: 'var(--border)' }}>
+        <div style={{ width: `${pct * 100}%`, height: '100%', background: color, transition: 'width .3s' }} />
+      </div>
+      {!collapsed && (
+        <div style={{ padding: '6px 10px 10px' }}>
+          {grupos.map((g, i) => (
+            <div key={g.label ?? i}>
+              {g.label && (
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', padding: '6px 4px 2px' }}>
+                  {g.label}
+                </div>
+              )}
+              {g.items.map((t) => (
+                <ItemOps
+                  key={t.id}
+                  item={t}
+                  subtareas={subtareasByParent[t.id] ?? []}
+                  onEstadoChange={onEstadoChange}
+                  onAddSubtarea={onAddSubtarea}
+                  showPrioChip
+                />
+              ))}
+            </div>
+          ))}
+          {total === 0 && (
+            <div style={{ padding: '8px 2px', fontSize: 12, color: 'var(--text-3)' }}>Sin preparaciones aún</div>
+          )}
+          <div style={{ marginTop: 4 }}>
+            <QuickAdd onSave={onAddItem} />
+          </div>
         </div>
       )}
     </div>
