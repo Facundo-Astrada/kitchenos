@@ -5,6 +5,13 @@ import { ItemOps } from './ItemOps'
 import { QuickAdd } from './QuickAdd'
 import type { Tarea, OpsEstado, OpsModo } from '@/types'
 
+interface DragHandleProps {
+  onPointerDown: (e: React.PointerEvent) => void
+  onPointerMove: (e: React.PointerEvent) => void
+  onPointerUp: (e: React.PointerEvent) => void
+  onPointerCancel: (e: React.PointerEvent) => void
+}
+
 interface SeccionOpsProps {
   titulo: string
   sublabel?: string
@@ -18,11 +25,14 @@ interface SeccionOpsProps {
   showSeccionChip?: boolean
   showPrioChip?: boolean
   recetas?: { id: string; nombre: string }[]
+  /** Handle de arrastre para reordenar columnas — opcional, no cambia nada si no se pasa. */
+  dragHandleProps?: DragHandleProps
 }
 
 export function SeccionOps({
   titulo, sublabel, color, items, subtareasByParent,
   onAddItem, onEstadoChange, onAddSubtarea, modo, showSeccionChip, showPrioChip, recetas,
+  dragHandleProps,
 }: SeccionOpsProps) {
   const [collapsed, setCollapsed] = useState(false)
 
@@ -38,16 +48,23 @@ export function SeccionOps({
       overflow: 'hidden',
       marginBottom: 8,
     }}>
-      {/* Section header */}
+      {/* Section header — también handle de arrastre si se pasa dragHandleProps */}
       <button
         onClick={() => setCollapsed((v) => !v)}
+        {...dragHandleProps}
         style={{
           width: '100%', display: 'flex', alignItems: 'center', gap: 10,
           padding: '10px 14px',
-          background: 'none', border: 'none', cursor: 'pointer',
+          background: 'none', border: 'none', cursor: dragHandleProps ? 'grab' : 'pointer',
           WebkitTapHighlightColor: 'transparent',
+          touchAction: dragHandleProps ? 'none' : undefined,
         }}
       >
+        {dragHandleProps && (
+          <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)', flexShrink: 0 }}>
+            drag_indicator
+          </span>
+        )}
         <span style={{
           width: 8, height: 8, borderRadius: '50%',
           background: color, flexShrink: 0,

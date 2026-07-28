@@ -14,6 +14,8 @@ import type { Tarea, OpsModo, OpsEstado, TareaPrioridad } from '@/types'
 
 const PRIO_SORT: Record<string, number> = { critica: 0, alta: 1, media: 2, baja: 3 }
 
+type ColumnaDef = { id: string; label: string; sublabel?: string; color: string }
+
 function getToday() { return new Date().toISOString().split('T')[0] }
 function fmtFecha(d: string) {
   return new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
@@ -64,6 +66,29 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     setModo(m)
     localStorage.setItem('ops_modo', m)
   }
+
+  // ── Reordenar columnas (drag & drop) — orden persistido por restaurante+modo ──
+  const [ordenSecciones, setOrdenSecciones] = useState<string[]>([])
+  const [draggingSecId, setDraggingSecId] = useState<string | null>(null)
+  const [overSecId, setOverSecId] = useState<string | null>(null)
+  const [dragOffset, setDragOffset] = useState<{ dx: number; dy: number } | null>(null)
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null)
+  const secDropZonesRef = useRef<Map<string, HTMLElement>>(new Map())
+
+  useEffect(() => {
+    if (!restauranteId) return
+    try {
+      const raw = localStorage.getItem(`ops_orden_secciones_${restauranteId}_${modo}`)
+      setOrdenSecciones(raw ? JSON.parse(raw) : [])
+    } catch {
+      setOrdenSecciones([])
+    }
+  }, [restauranteId, modo])
+
+  const registerSecZone = useCallback((id: string, el: HTMLElement | null) => {
+    if (el) secDropZonesRef.current.set(id, el)
+    else secDropZonesRef.current.delete(id)
+  }, [])
 
   // ── Screen context para Kitchen Coach ─────────────────────────
   // Embebido dentro de OPS, el dueño del contexto es operaciones/page.tsx
@@ -225,6 +250,90 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     }
   }, [agregarTarea, modo, today, perfil, secciones])
 
+  // ── Columnas a renderizar: mismo agrupamiento de siempre (prioridad en modo
+  // carta, sección dinámica en modo menú/evento), reordenadas según lo que el
+  // usuario haya arrastrado (persistido en localStorage, por restaurante+modo).
+  const columnasBase = useMemo<ColumnaDef[]>(() => {
+    if (modo === 'menu' || modo === 'evento') {
+      const conocidas = new Set<string>(SECCIONES_MENU.map(s => s.id))
+      const presentes: string[] = []
+      for (const t of topLevel) { const s = (t.seccion ?? '').trim(); if (s && !presentes.includes(s)) presentes.push(s) }
+      return [
+        ...SECCIONES_MENU.filter(s => presentes.includes(s.id)),
+        ...presentes.filter(s => !conocidas.has(s)).map(s => ({ id: s, label: s, color: '#64748b' })),
+      ]
+    }
+    return PRIORIDADES.map(p => ({ id: p.id, label: p.label, sublabel: p.sublabel, color: p.color }))
+  }, [modo, topLevel])
+
+  const columnas = useMemo<ColumnaDef[]>(() => {
+    if (ordenSecciones.length === 0) return columnasBase
+    const pos = new Map(ordenSecciones.map((id, i) => [id, i]))
+    return [...columnasBase].sort((a, b) => {
+      const pa = pos.has(a.id) ? pos.get(a.id)! : Infinity
+      const pb = pos.has(b.id) ? pos.get(b.id)! : Infinity
+      return pa - pb
+    })
+  }, [columnasBase, ordenSecciones])
+
+  function itemsDeColumna(col: ColumnaDef): Tarea[] {
+    if (modo === 'menu' || modo === 'evento') {
+      return topLevel
+        .filter((t) => (t.seccion ?? '') === col.id)
+        .sort((a, b) => (PRIO_SORT[a.prioridad ?? 'baja'] ?? 3) - (PRIO_SORT[b.prioridad ?? 'baja'] ?? 3))
+    }
+    return topLevel.filter((t) => (t.prioridad ?? 'baja') === col.id)
+  }
+
+  function handleSecPointerDown(id: string, e: React.PointerEvent) {
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    dragStartRef.current = { x: e.clientX, y: e.clientY }
+    setDraggingSecId(id)
+    setDragOffset({ dx: 0, dy: 0 })
+  }
+
+  function handleSecPointerMove(e: React.PointerEvent) {
+    if (!dragStartRef.current || !draggingSecId) return
+    const dx = e.clientX - dragStartRef.current.x
+    const dy = e.clientY - dragStartRef.current.y
+    setDragOffset({ dx, dy })
+    let found: string | null = null
+    for (const [id, el] of secDropZonesRef.current.entries()) {
+      if (id === draggingSecId) continue
+      const rect = el.getBoundingClientRect()
+      if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+        found = id
+        break
+      }
+    }
+    setOverSecId(found)
+  }
+
+  function handleSecPointerUp(e: React.PointerEvent) {
+    const el = e.currentTarget as HTMLElement
+    if (el.hasPointerCapture?.(e.pointerId)) el.releasePointerCapture(e.pointerId)
+    if (draggingSecId && overSecId && draggingSecId !== overSecId) {
+      const idsActuales = columnasBase.map(c => c.id)
+      const base = ordenSecciones.length ? ordenSecciones : idsActuales
+      const withAll = [...base, ...idsActuales.filter(id => !base.includes(id))]
+      const from = withAll.indexOf(draggingSecId)
+      const to = withAll.indexOf(overSecId)
+      if (from !== -1 && to !== -1) {
+        const next = [...withAll]
+        next.splice(from, 1)
+        next.splice(to, 0, draggingSecId)
+        setOrdenSecciones(next)
+        if (restauranteId) {
+          try { localStorage.setItem(`ops_orden_secciones_${restauranteId}_${modo}`, JSON.stringify(next)) } catch {}
+        }
+      }
+    }
+    dragStartRef.current = null
+    setDraggingSecId(null)
+    setDragOffset(null)
+    setOverSecId(null)
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
@@ -283,60 +392,48 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, alignItems: 'start' }}>
-            {(modo === 'menu' || modo === 'evento') ? (
-              // Modo menú: secciones dinámicas — las del menú activo (las conocidas en su orden + las custom)
-              (() => {
-                const conocidas = new Set<string>(SECCIONES_MENU.map(s => s.id))
-                const presentes: string[] = []
-                for (const t of topLevel) { const s = (t.seccion ?? '').trim(); if (s && !presentes.includes(s)) presentes.push(s) }
-                const ordered: { id: string; label: string; color: string }[] = [
-                  ...SECCIONES_MENU.filter(s => presentes.includes(s.id)),
-                  ...presentes.filter(s => !conocidas.has(s)).map(s => ({ id: s, label: s, color: '#64748b' })),
-                ]
-                return ordered.map((sec) => {
-                  const items = topLevel
-                    .filter((t) => (t.seccion ?? '') === sec.id)
-                    .sort((a, b) => (PRIO_SORT[a.prioridad ?? 'baja'] ?? 3) - (PRIO_SORT[b.prioridad ?? 'baja'] ?? 3))
-                  return (
-                    <SeccionOps
-                      key={sec.id}
-                      titulo={sec.label}
-                      color={sec.color}
-                      items={items}
-                      subtareasByParent={subtareasByParent}
-                      onAddItem={(titulo, recetaId) => handleAddItem('media', titulo, recetaId)}
-                      onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
-                      onAddSubtarea={handleAddSubtarea}
-                      modo={modo}
-                      showPrioChip
-                      recetas={recetasSimple}
-                    />
-                  )
-                })
-              })()
-            ) : (
-              // Modo carta: agrupar por prioridad
-              PRIORIDADES.map((prio) => {
-                const items = topLevel.filter((t) => (t.prioridad ?? 'baja') === prio.id)
-                return (
-                  <div key={prio.id} {...(prio.id === 'critica' ? { 'data-coach-target': 'prod-seccion-sp' } : {})}>
-                    <SeccionOps
-                      titulo={prio.label}
-                      sublabel={prio.sublabel}
-                      color={prio.color}
-                      items={items}
-                      subtareasByParent={subtareasByParent}
-                      onAddItem={(titulo, recetaId) => handleAddItem(prio.id, titulo, recetaId)}
-                      onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
-                      onAddSubtarea={handleAddSubtarea}
-                      modo={modo}
-                      showSeccionChip
-                      recetas={recetasSimple}
-                    />
-                  </div>
-                )
-              })
-            )}
+            {columnas.map((col) => {
+              const items = itemsDeColumna(col)
+              const isDragging = draggingSecId === col.id
+              const isOver = overSecId === col.id && draggingSecId !== null && draggingSecId !== col.id
+              return (
+                <div
+                  key={col.id}
+                  ref={(el) => registerSecZone(col.id, el)}
+                  {...(col.id === 'critica' ? { 'data-coach-target': 'prod-seccion-sp' } : {})}
+                  style={{
+                    transform: isDragging && dragOffset ? `translate(${dragOffset.dx}px, ${dragOffset.dy}px)` : undefined,
+                    position: isDragging ? 'relative' : undefined,
+                    zIndex: isDragging ? 30 : undefined,
+                    opacity: isDragging ? 0.85 : 1,
+                    outline: isOver ? '2px dashed var(--navy)' : undefined,
+                    outlineOffset: isOver ? 2 : undefined,
+                    borderRadius: isOver ? 14 : undefined,
+                  }}
+                >
+                  <SeccionOps
+                    titulo={col.label}
+                    sublabel={col.sublabel}
+                    color={col.color}
+                    items={items}
+                    subtareasByParent={subtareasByParent}
+                    onAddItem={(titulo, recetaId) => handleAddItem(modo === 'carta' ? col.id : 'media', titulo, recetaId)}
+                    onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
+                    onAddSubtarea={handleAddSubtarea}
+                    modo={modo}
+                    showSeccionChip={modo === 'carta'}
+                    showPrioChip={modo !== 'carta'}
+                    recetas={recetasSimple}
+                    dragHandleProps={{
+                      onPointerDown: (e) => handleSecPointerDown(col.id, e),
+                      onPointerMove: handleSecPointerMove,
+                      onPointerUp: handleSecPointerUp,
+                      onPointerCancel: handleSecPointerUp,
+                    }}
+                  />
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
