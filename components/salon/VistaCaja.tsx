@@ -28,7 +28,7 @@ export default function VistaCaja({ onVolver }: { onVolver: () => void }) {
   const { perfil } = useAuth()
   const RESTAURANTE_ID = useRestauranteId()
   const { medios } = useMediosPago()
-  const { config: impresion } = useImpresionConfig()
+  const { impresion } = useImpresionConfig()
   const {
     cajaAbierta, loading,
     abrirCaja, cerrarCaja, registrarMovimiento, fetchMovimientos, calcularEsperado,

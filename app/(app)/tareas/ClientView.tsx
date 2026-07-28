@@ -10,6 +10,7 @@ import { syncMiseDesdeTarea } from '@/lib/ops/syncMise'
 import { OpsToggle, type OpsToggleValue } from '@/components/ops/OpsToggle'
 import { SeccionOps, type DragHandleProps } from '@/components/ops/SeccionOps'
 import { ItemOps } from '@/components/ops/ItemOps'
+import type { CrearTareaSheetConfirmData } from '@/components/ops/CrearTareaSheet'
 import { QuickAdd } from '@/components/ops/QuickAdd'
 import { EventoBanner } from '@/components/ops/EventoBanner'
 import { useHaccp, type HaccpLimpieza } from '@/lib/hooks/useHaccp'
@@ -251,35 +252,39 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     actualizarTarea(id, { prioridad })
   }, [actualizarTarea])
 
-  // ── Pase de turno: deja una tarea programada para mañana, vinculada al
-  // mismo componente (receta_id/plaza/sección) — el próximo turno la ve
-  // directo en su Producción del día siguiente, sin depender de que alguien
-  // avise de palabra. categoria='pase_turno' la distingue de las tareas
-  // normales (mismo patrón que categoria='pedido_nota'). Sin menu_id a
-  // propósito: no activa por sí sola la vista "menú activo" de Planificación,
-  // que depende de que el menú se reactive explícitamente ese día.
-  const handleCrearPaseTurno = useCallback(async (item: Tarea, data: { cantidad: number | null; prioridad: TareaPrioridad; nota: string | null }) => {
-    const d = new Date(today + 'T12:00:00')
-    d.setDate(d.getDate() + 1)
-    const manana = d.toISOString().split('T')[0]
+  // ── Crear tarea desde un componente de OPS — hoy (duplicado ad hoc) o
+  // mañana ("pase de turno"), vinculada al mismo componente (receta_id/
+  // plaza/sección). Para mañana, el próximo turno la ve directo en su
+  // Producción del día siguiente, sin depender de que alguien avise de
+  // palabra — categoria='pase_turno' la distingue de las tareas normales
+  // (mismo patrón que categoria='pedido_nota'). Sin menu_id a propósito:
+  // no activa por sí sola la vista "menú activo" de Planificación, que
+  // depende de que el menú se reactive explícitamente ese día.
+  const handleCrearTareaDesdeItem = useCallback(async (item: Tarea, data: CrearTareaSheetConfirmData) => {
+    let turnoFecha = today
+    if (data.dia === 'manana') {
+      const d = new Date(today + 'T12:00:00')
+      d.setDate(d.getDate() + 1)
+      turnoFecha = d.toISOString().split('T')[0]
+    }
     await agregarTarea({
       titulo: item.titulo,
       descripcion: data.nota,
       status: 'pendiente',
       prioridad: data.prioridad,
-      categoria: 'pase_turno',
+      categoria: data.dia === 'manana' ? 'pase_turno' : 'produccion',
       plaza: item.plaza ?? null,
       receta_id: item.receta_id ?? null,
       seccion: item.seccion ?? 'general',
       modo: item.modo ?? modoStorage,
-      turno_fecha: manana,
+      turno_fecha: turnoFecha,
       menu_id: null,
       estado: 'pendiente',
       cantidad: data.cantidad,
       asignado_a: null, creado_por: perfil?.miembro_id ?? null,
       fecha_limite: null, tiempo_estimado_min: null, checklist: [],
     })
-    showToast(`Programado para mañana — ${item.titulo}`)
+    showToast(data.dia === 'manana' ? `Programado para mañana — ${item.titulo}` : `Tarea creada — ${item.titulo}`)
   }, [agregarTarea, today, modoStorage, perfil])
 
   // ── Generar lista desde evento ────────────────────────────────
@@ -312,7 +317,9 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   // ── Columnas a renderizar, reordenadas según lo que el usuario haya
   // arrastrado (persistido en localStorage, por restaurante+modo):
   // - Carta: prioridad (SP/P/REF/Check) + Pedidos + Limpieza.
-  // - Menú/Evento: sección dinámica del menú activo.
+  // - Menú/Evento: sección dinámica del menú activo + Pedidos + Limpieza (antes
+  //   faltaban acá — una limpieza de rutina cargada en HACCP quedaba invisible
+  //   en Producción salvo que se cambiara a modo Carta o Todo).
   // - Todo: un recuadro por Carta/Menú/Evento (con prioridad — y en Menú/Evento
   //   también sección — adentro de cada uno) + Pedidos + Limpieza.
   const columnasBase = useMemo<ColumnaDef[]>(() => {
@@ -323,6 +330,8 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
       return [
         ...SECCIONES_MENU.filter(s => presentes.includes(s.id)),
         ...presentes.filter(s => !conocidas.has(s)).map(s => ({ id: s, label: s, color: '#64748b' })),
+        { id: PEDIDOS_COL_ID, label: 'Pedidos', color: '#0ea5e9' },
+        { id: LIMPIEZA_COL_ID, label: 'Limpieza', color: '#10b981' },
       ]
     }
     if (modo === 'todo') {
@@ -579,7 +588,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
                           onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
                           onAddSubtarea={handleAddSubtarea}
                           onPrioridadChange={handlePrioridadChange}
-                          onCrearPaseTurno={handleCrearPaseTurno}
+                          onCrearTareaDesdeItem={handleCrearTareaDesdeItem}
                           dragHandleProps={dragHandleProps}
                         />
                       )
@@ -595,7 +604,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
                       onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
                       onAddSubtarea={handleAddSubtarea}
                       onPrioridadChange={handlePrioridadChange}
-                      onCrearPaseTurno={handleCrearPaseTurno}
+                      onCrearTareaDesdeItem={handleCrearTareaDesdeItem}
                       modo={modoStorage}
                       showSeccionChip={!(modo === 'menu' || modo === 'evento')}
                       showPrioChip={modo === 'menu' || modo === 'evento'}
@@ -756,7 +765,7 @@ function LimpiezaCard({
 // adentro (Menú/Evento), reusando ItemOps real (checkbox/subtareas intactos).
 function ModoResumenCard({
   titulo, color, tareas: tareasDelModo, agruparPorSeccion, subtareasByParent,
-  onAddItem, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearPaseTurno, dragHandleProps,
+  onAddItem, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, dragHandleProps,
 }: {
   titulo: string
   color: string
@@ -767,7 +776,7 @@ function ModoResumenCard({
   onEstadoChange: (id: string, estado: OpsEstado) => void
   onAddSubtarea: (parentId: string, titulo: string) => Promise<void>
   onPrioridadChange?: (id: string, prioridad: TareaPrioridad) => void
-  onCrearPaseTurno?: (item: Tarea, data: { cantidad: number | null; prioridad: TareaPrioridad; nota: string | null }) => Promise<void>
+  onCrearTareaDesdeItem?: (item: Tarea, data: CrearTareaSheetConfirmData) => Promise<void>
   dragHandleProps?: DragHandleProps
 }) {
   const [collapsed, setCollapsed] = useState(false)
@@ -831,7 +840,7 @@ function ModoResumenCard({
                   onEstadoChange={onEstadoChange}
                   onAddSubtarea={onAddSubtarea}
                   onPrioridadChange={onPrioridadChange}
-                  onCrearPaseTurno={onCrearPaseTurno}
+                  onCrearTareaDesdeItem={onCrearTareaDesdeItem}
                   showPrioChip
                 />
               ))}

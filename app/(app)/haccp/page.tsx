@@ -520,7 +520,7 @@ function NuevoVencView({
   restauranteNombre: string
 }) {
   const { perfil } = useAuth()
-  const { config: impresion } = useImpresionConfig()
+  const { impresion } = useImpresionConfig()
   const [nombre, setNombre] = useState('')
   const [fechaVenc, setFechaVenc] = useState('')
   const [fechaAp, setFechaAp] = useState('')

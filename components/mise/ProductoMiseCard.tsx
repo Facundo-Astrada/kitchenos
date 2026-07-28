@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/lib/auth/context'
 import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
 import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, supportsWebUSB, supportsWebBluetooth } from '@/lib/print/escpos'
-import type { MisePlaceItem, MisePrioridad } from '@/types'
+import { CrearTareaSheet, type CrearTareaSheetConfirmData } from '@/components/ops/CrearTareaSheet'
+import type { MisePlaceItem, MisePrioridad, TareaPrioridad } from '@/types'
 
 // ── Exported interfaces ───────────────────────────────────────
 export interface PlatoPlaza {
@@ -20,12 +21,21 @@ export interface PlatoPlaza {
 export interface CrearTareaParams {
   titulo: string
   seccion: string        // mapped ops section id (caliente, fria, pasteleria, salon, general)
-  prioridad: MisePrioridad
+  prioridad: TareaPrioridad
+  dia: 'hoy' | 'manana'
+  nota: string | null
   cantidad: number | null
   receta_id: string | null
   plaza: string          // raw plaza name → tarea.plaza field
   plazas: PlatoPlaza[]   // multi-plaza sub-tasks
   checklist_item_id: string | null  // FK al item del mise que origina la tarea
+}
+
+// Prioridad del ítem del mise (badge propio, sp/p/ref/chk) → dominio real
+// TareaPrioridad. Usado como default al abrir el sheet de crear tarea, y
+// para traducir la prioridad elegida al agregar un ítem nuevo al mise.
+export const MISE_PRIO_TO_TAREA: Record<string, TareaPrioridad> = {
+  sp: 'critica', p: 'alta', ref: 'media', chk: 'baja',
 }
 
 // ── Internal config ───────────────────────────────────────────
@@ -173,10 +183,7 @@ export function ProductoMiseCard({
 }: ProductoMiseCardProps) {
   const esCierre = turno === 'cierre'
   const [cantInput, setCantInput] = useState(reg?.cantidad_actual?.toString() ?? '')
-  const [prodOpen, setProdOpen] = useState(false)
-  const [selectedPrio, setSelectedPrio] = useState<MisePrioridad>((item.prioridad as MisePrioridad) ?? 'p')
-  const [multiplier, setMultiplier] = useState<1 | 2 | 3>(1)
-  const [freeQty, setFreeQty] = useState(item.cantidad > 0 ? String(item.cantidad) : '')
+  const [crearTareaSheetOpen, setCrearTareaSheetOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [showDelete, setShowDelete] = useState(false)
@@ -205,7 +212,7 @@ export function ProductoMiseCard({
 
   // ── Etiqueta de producción (imprimible al marcar como lista) ──
   const { perfil } = useAuth()
-  const { config: impresion } = useImpresionConfig()
+  const { impresion, vencimientosHabilitados } = useImpresionConfig()
   const [diasOverride, setDiasOverride] = useState<number | null>(null)
   const [printingEtiqueta, setPrintingEtiqueta] = useState(false)
   const [etiquetaError, setEtiquetaError] = useState<string | null>(null)
@@ -271,32 +278,35 @@ export function ProductoMiseCard({
     }
   }
 
-  async function handleCrearTarea(cantidadOverride?: number) {
+  async function crearTarea(cantidad: number | null, prioridad: TareaPrioridad, dia: 'hoy' | 'manana', nota: string | null) {
     if (creating) return
     setCreating(true)
     try {
-      const cantidad = cantidadOverride !== undefined
-        ? cantidadOverride
-        : hasReceta && porciones != null
-          ? porciones * multiplier
-          : freeQty !== '' ? parseFloat(freeQty) : null
-
       await onCrearTarea({
         titulo: item.nombre,
         seccion: PLAZA_TO_SECCION[primaryPlaza] ?? 'general',
-        prioridad: selectedPrio,
+        prioridad, dia, nota,
         cantidad,
         receta_id: item.receta_id ?? null,
         plaza: primaryPlaza,
         plazas: platoPlazo,
         checklist_item_id: item.id,
       })
-      setProdOpen(false)
+      setCrearTareaSheetOpen(false)
       setSuccessMsg(capPlaza(primaryPlaza) + (platoPlazo.length > 1 ? ` +${platoPlazo.length - 1}` : ''))
       setTimeout(() => setSuccessMsg(null), 2200)
     } finally {
       setCreating(false)
     }
+  }
+
+  // Atajo de un tap desde el CTA de déficit — sin abrir el sheet, prioridad alta por defecto.
+  function handleCrearTareaRapida(cantidad: number) {
+    return crearTarea(cantidad, 'alta', 'hoy', null)
+  }
+
+  function handleConfirmCrearTarea(data: CrearTareaSheetConfirmData) {
+    return crearTarea(data.cantidad, data.prioridad, data.dia, data.nota)
   }
 
   return (
@@ -389,15 +399,15 @@ export function ProductoMiseCard({
           {prio.label}
         </button>
 
-        {/* Production toggle */}
+        {/* Production toggle — abre el sheet unificado de crear tarea */}
         {!checked && (
           <button
-            onClick={() => setProdOpen(v => !v)}
+            onClick={() => setCrearTareaSheetOpen(true)}
             style={{ ...btnReset, flexShrink: 0, position: 'relative', padding: 2 }}
           >
             <span className="material-symbols-outlined" style={{
               fontSize: 20,
-              color: prodOpen ? '#4361a0' : hasTareaPendiente ? '#22c55e' : 'var(--text-3)',
+              color: crearTareaSheetOpen ? '#4361a0' : hasTareaPendiente ? '#22c55e' : 'var(--text-3)',
               transition: 'color .15s',
             }}>
               {hasTareaPendiente ? 'task_alt' : 'add_task'}
@@ -406,8 +416,8 @@ export function ProductoMiseCard({
         )}
       </div>
 
-      {/* ── Etiqueta de producción — visible al marcar como lista ── */}
-      {checked && (
+      {/* ── Etiqueta de producción — visible al marcar como lista (opcional por restaurante) ── */}
+      {checked && vencimientosHabilitados && (
         <div style={{ padding: '0 12px 10px', paddingLeft: 44, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
             <span style={{ fontSize: 10, color: 'var(--text-3)' }}>Caduca en</span>
@@ -588,7 +598,7 @@ export function ProductoMiseCard({
           {/* CTA rápido cuando hay déficit */}
           {deficit !== null && deficit > 0 && (
             <button
-              onClick={() => handleCrearTarea(deficit)}
+              onClick={() => handleCrearTareaRapida(deficit)}
               disabled={creating}
               style={{
                 marginTop: 8, width: '100%', padding: '9px 0', borderRadius: 10, border: 'none',
@@ -605,146 +615,21 @@ export function ProductoMiseCard({
         </div>
       )}
 
-      {/* ── Production panel ── */}
-      <AnimatePresence>
-        {prodOpen && !checked && (
-          <motion.div
-            key="prod-panel"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
-            style={{ overflow: 'hidden' }}
-          >
-            <div style={{ padding: '10px 12px 12px', borderTop: '1px solid var(--border)' }}>
-
-              {/* Priority pills */}
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>
-                  Prioridad
-                </div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {(['sp', 'p', 'ref'] as MisePrioridad[]).map(pr => {
-                    const cfg = PRIO_CFG[pr]
-                    return (
-                      <button key={pr} onClick={() => setSelectedPrio(pr)} style={{
-                        flex: 1, padding: '7px 0', borderRadius: 9, border: 'none', cursor: 'pointer',
-                        fontFamily: 'inherit', fontSize: 11, fontWeight: 800,
-                        background: selectedPrio === pr ? cfg.bg : 'var(--bg)',
-                        color: selectedPrio === pr ? cfg.color : 'var(--text-3)',
-                        outline: selectedPrio === pr ? `2px solid ${cfg.color}50` : 'none',
-                        transition: 'all .15s',
-                      }}>{cfg.label}</button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Multiplier / free qty */}
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>
-                  {hasReceta ? 'Multiplicador' : 'Cantidad a preparar'}
-                </div>
-                {hasReceta ? (
-                  <div>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      {([1, 2, 3] as const).map(m => (
-                        <button key={m} onClick={() => setMultiplier(m)} style={{
-                          flex: 1, padding: '7px 0', borderRadius: 9, border: 'none', cursor: 'pointer',
-                          fontFamily: 'inherit', fontSize: 13, fontWeight: 800,
-                          background: multiplier === m ? 'rgba(67,97,160,.15)' : 'var(--bg)',
-                          color: multiplier === m ? '#4361a0' : 'var(--text-3)',
-                          outline: multiplier === m ? '2px solid rgba(67,97,160,.4)' : 'none',
-                          transition: 'all .15s',
-                        }}>×{m}</button>
-                      ))}
-                    </div>
-                    {porciones != null && (
-                      <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 5 }}>
-                        {[1, 2, 3].map(m => `×${m}=${porciones * m} pax`).join(' · ')}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <input
-                      type="number"
-                      value={freeQty}
-                      onChange={e => setFreeQty(e.target.value)}
-                      inputMode="decimal"
-                      placeholder="Cant."
-                      style={{
-                        width: 70, padding: '6px 8px', borderRadius: 8,
-                        border: '1px solid var(--border)', background: 'var(--bg)',
-                        fontSize: 13, fontWeight: 700, fontFamily: "'DM Mono', monospace",
-                        color: 'var(--text-1)', outline: 'none',
-                      }}
-                    />
-                    <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{item.unidad}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Rendimiento promedio real */}
-              {rendimientoPromedio != null && rendimientoPromedio !== 1 && (
-                <div style={{ marginBottom: 10 }}>
-                  <span style={{ fontSize: 10, color: 'var(--text-3)' }}>
-                    Rendimiento real promedio:{' '}
-                    <span style={{ fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>
-                      ×{rendimientoPromedio.toFixed(2)}
-                    </span>
-                  </span>
-                </div>
-              )}
-
-              {/* Plazas chips — only if multi-plaza configured */}
-              {platoPlazo.length > 0 && (
-                <div style={{ marginBottom: 10 }}>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>
-                    Plazas
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {platoPlazo.map(pp => (
-                      <span key={pp.id} style={{
-                        padding: '4px 10px', borderRadius: 8,
-                        background: 'rgba(67,97,160,.1)', border: '1px solid rgba(67,97,160,.25)',
-                        fontSize: 11, fontWeight: 700, color: '#4361a0',
-                      }}>
-                        {capPlaza(pp.plaza)}
-                        {pp.instruccion && (
-                          <span style={{ fontWeight: 400, color: 'var(--text-3)', marginLeft: 4 }}>
-                            — {pp.instruccion}
-                          </span>
-                        )}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* CTA */}
-              <button
-                onClick={() => handleCrearTarea()}
-                disabled={creating}
-                style={{
-                  width: '100%', padding: '10px 0', borderRadius: 10, border: 'none',
-                  background: creating ? 'var(--border)' : 'linear-gradient(135deg, var(--navy), #4361a0)',
-                  color: creating ? 'var(--text-3)' : '#fff',
-                  fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
-                  cursor: creating ? 'default' : 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                  transition: 'all .15s',
-                }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
-                  {creating ? 'more_horiz' : 'add_task'}
-                </span>
-                {creating ? 'Creando...' : 'Crear tarea →'}
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* ── Crear tarea (sheet unificado, hoy o mañana) ── */}
+      {crearTareaSheetOpen && !checked && (
+        <CrearTareaSheet
+          nombreComponente={item.nombre}
+          porciones={hasReceta ? porciones : undefined}
+          cantidadSugerida={item.cantidad > 0 ? item.cantidad : null}
+          unidad={item.unidad}
+          plazas={platoPlazo}
+          rendimientoPromedio={rendimientoPromedio}
+          defaultPrioridad={MISE_PRIO_TO_TAREA[item.prioridad] ?? 'alta'}
+          defaultDia="hoy"
+          onConfirm={handleConfirmCrearTarea}
+          onDismiss={() => setCrearTareaSheetOpen(false)}
+        />
+      )}
 
       {/* ── Success banner ── */}
       <AnimatePresence>

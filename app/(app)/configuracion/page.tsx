@@ -866,13 +866,21 @@ function RestauranteTab({
   )
 }
 
-// ── Impresión de etiquetas: USB / Bluetooth / .bin — por establecimiento ──
+// ── Impresión de etiquetas + vencimientos — por establecimiento ──
 function ImpresionCard({ showToast }: { showToast: (msg: string) => void }) {
-  const { config, loading, guardarImpresionConfig } = useImpresionConfig()
+  const { impresion, vencimientosHabilitados, loading, guardarImpresionConfig, guardarVencimientosHabilitados } = useImpresionConfig()
 
   async function toggle(key: 'usb' | 'bluetooth' | 'bin', value: boolean) {
     try {
       await guardarImpresionConfig({ [key]: value })
+    } catch (e: unknown) {
+      showToast('Error: ' + (e instanceof Error ? e.message : 'no se pudo guardar'))
+    }
+  }
+
+  async function toggleVencimientos(value: boolean) {
+    try {
+      await guardarVencimientosHabilitados(value)
     } catch (e: unknown) {
       showToast('Error: ' + (e instanceof Error ? e.message : 'no se pudo guardar'))
     }
@@ -890,22 +898,33 @@ function ImpresionCard({ showToast }: { showToast: (msg: string) => void }) {
         icon="print"
         label="Imprimir por USB"
         sub="Impresora térmica conectada por cable"
-        checked={config.usb}
+        checked={impresion.usb}
         onChange={v => toggle('usb', v)}
       />
       <SwitchRow
         icon="bluetooth"
         label="Imprimir por Bluetooth"
         sub="Impresora térmica inalámbrica"
-        checked={config.bluetooth}
+        checked={impresion.bluetooth}
         onChange={v => toggle('bluetooth', v)}
       />
       <SwitchRow
         icon="download"
         label="Descargar .bin"
         sub="Guardar el archivo ESC/POS para imprimir manualmente"
-        checked={config.bin}
+        checked={impresion.bin}
         onChange={v => toggle('bin', v)}
+      />
+      <div style={{ height: 1, background: 'var(--border)', margin: '10px 0' }} />
+      <p className="text-xs mb-1" style={{ color: 'var(--text-3)' }}>
+        Al marcar un ítem del mise como listo, ofrecer registrar su vencimiento.
+      </p>
+      <SwitchRow
+        icon="event"
+        label="Vencimientos en HACCP"
+        sub="Desactivalo si rotulás el producto a mano"
+        checked={vencimientosHabilitados}
+        onChange={toggleVencimientos}
       />
     </div>
   )

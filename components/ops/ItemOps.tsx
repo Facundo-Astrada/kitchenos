@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { RecetaDrawer } from './RecetaDrawer'
 import { ProduccionSheet } from './ProduccionSheet'
-import { PaseTurnoSheet } from './PaseTurnoSheet'
+import { CrearTareaSheet, type CrearTareaSheetConfirmData } from './CrearTareaSheet'
 import { QuickAdd } from './QuickAdd'
 import { useProduccionRegistros } from '@/lib/hooks/useProduccionRegistros'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
@@ -53,18 +53,18 @@ interface ItemOpsProps {
   onEstadoChange: (id: string, estado: OpsEstado) => void
   onAddSubtarea: (parentId: string, titulo: string) => Promise<void>
   onPrioridadChange?: (id: string, prioridad: TareaPrioridad) => void
-  onCrearPaseTurno?: (item: Tarea, data: { cantidad: number | null; prioridad: TareaPrioridad; nota: string | null }) => Promise<void>
+  onCrearTareaDesdeItem?: (item: Tarea, data: CrearTareaSheetConfirmData) => Promise<void>
   depth?: number
   modo?: OpsModo
   showSeccionChip?: boolean
   showPrioChip?: boolean
 }
 
-export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearPaseTurno, depth = 0, showSeccionChip, showPrioChip }: ItemOpsProps) {
+export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, depth = 0, showSeccionChip, showPrioChip }: ItemOpsProps) {
   const [expanded, setExpanded] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [prodSheetOpen, setProdSheetOpen] = useState(false)
-  const [paseSheetOpen, setPaseSheetOpen] = useState(false)
+  const [crearTareaSheetOpen, setCrearTareaSheetOpen] = useState(false)
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const holdFired = useRef(false)
 
@@ -151,10 +151,10 @@ export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, onPrio
     setProdSheetOpen(false)
   }
 
-  async function handlePaseConfirm(data: { cantidad: number | null; prioridad: TareaPrioridad; nota: string | null }) {
-    if (!onCrearPaseTurno) return
-    await onCrearPaseTurno(item, data)
-    setPaseSheetOpen(false)
+  async function handleCrearTareaConfirm(data: CrearTareaSheetConfirmData) {
+    if (!onCrearTareaDesdeItem) return
+    await onCrearTareaDesdeItem(item, data)
+    setCrearTareaSheetOpen(false)
   }
 
   return (
@@ -283,15 +283,15 @@ export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, onPrio
           </button>
         )}
 
-        {/* Pase de turno — deja este componente programado para mañana */}
-        {depth === 0 && item.receta_id && onCrearPaseTurno && (
+        {/* Crear tarea desde este componente — hoy o para el próximo turno */}
+        {depth === 0 && item.receta_id && onCrearTareaDesdeItem && (
           <button
-            onClick={(e) => { e.stopPropagation(); setPaseSheetOpen(true) }}
-            title="Programar para el próximo turno"
+            onClick={(e) => { e.stopPropagation(); setCrearTareaSheetOpen(true) }}
+            title="Crear tarea (hoy o mañana)"
             style={{ flexShrink: 0, padding: 4, background: 'none', border: 'none', cursor: 'pointer' }}
           >
             <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)' }}>
-              event_upcoming
+              add_task
             </span>
           </button>
         )}
@@ -379,12 +379,14 @@ export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, onPrio
         />
       )}
 
-      {paseSheetOpen && (
-        <PaseTurnoSheet
+      {crearTareaSheetOpen && (
+        <CrearTareaSheet
           nombreComponente={item.titulo}
-          cantidadHoy={item.cantidad ?? null}
-          onConfirm={handlePaseConfirm}
-          onDismiss={() => setPaseSheetOpen(false)}
+          cantidadSugerida={item.cantidad ?? null}
+          defaultPrioridad={(item.prioridad as TareaPrioridad) || 'alta'}
+          defaultDia="manana"
+          onConfirm={handleCrearTareaConfirm}
+          onDismiss={() => setCrearTareaSheetOpen(false)}
         />
       )}
     </div>

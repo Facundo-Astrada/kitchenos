@@ -469,7 +469,7 @@ function TicketCobro({
 
   const [printing, setPrinting] = useState(false)
   const [printError, setPrintError] = useState<string | null>(null)
-  const { config: impresion } = useImpresionConfig()
+  const { impresion } = useImpresionConfig()
   const supportsUSB = impresion.usb && supportsWebUSB()
   const supportsBT  = impresion.bluetooth && supportsWebBluetooth()
 

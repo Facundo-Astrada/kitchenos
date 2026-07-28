@@ -7,7 +7,7 @@ import { useChecklist } from '@/lib/hooks/useChecklist'
 import { useRecetas } from '@/lib/hooks/useRecetas'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { createClient } from '@/lib/supabase/client'
-import { ProductoMiseCard, PLAZA_TO_SECCION } from '@/components/mise/ProductoMiseCard'
+import { ProductoMiseCard, PLAZA_TO_SECCION, MISE_PRIO_TO_TAREA } from '@/components/mise/ProductoMiseCard'
 import type { PlatoPlaza, CrearTareaParams } from '@/components/mise/ProductoMiseCard'
 import { useProduccionRegistros } from '@/lib/hooks/useProduccionRegistros'
 import { useHaccp } from '@/lib/hooks/useHaccp'
@@ -596,17 +596,25 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   }, [upsertRegistro, tareas, cambiarEstadoTarea, today])
 
   const handleCrearTarea = useCallback(async (params: CrearTareaParams) => {
+    let turnoFecha = today
+    if (params.dia === 'manana') {
+      const d = new Date(today + 'T12:00:00')
+      d.setDate(d.getDate() + 1)
+      turnoFecha = d.toISOString().split('T')[0]
+    }
+    const categoria = params.dia === 'manana' ? 'pase_turno' : 'produccion'
+    const descripcion = params.nota ?? (params.cantidad != null ? `Preparar ${params.cantidad}` : null)
     await agregarTarea({
       titulo: params.titulo,
-      descripcion: params.cantidad != null ? `Preparar ${params.cantidad}` : null,
+      descripcion,
       status: 'pendiente',
-      prioridad: params.prioridad === 'sp' ? 'alta' : params.prioridad === 'p' ? 'media' : 'baja',
-      categoria: 'produccion',
+      prioridad: params.prioridad,
+      categoria,
       plaza: params.plaza,
       receta_id: params.receta_id,
       seccion: params.seccion,
       modo: 'carta',
-      turno_fecha: today,
+      turno_fecha: turnoFecha,
       estado: 'pendiente',
       cantidad: params.cantidad,
       checklist_item_id: params.checklist_item_id,
@@ -621,12 +629,12 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           descripcion: pp.instruccion ?? null,
           status: 'pendiente',
           prioridad: 'baja',
-          categoria: 'produccion',
+          categoria,
           plaza: pp.plaza,
           receta_id: params.receta_id,
           seccion: params.seccion,
           modo: 'carta',
-          turno_fecha: today,
+          turno_fecha: turnoFecha,
           estado: 'pendiente',
           cantidad: null,
           checklist_item_id: params.checklist_item_id,
@@ -1243,7 +1251,9 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
               await handleCrearTarea({
                 titulo: d.nombre,
                 seccion: PLAZA_TO_SECCION[primaryPlaza] ?? 'general',
-                prioridad: d.prioridad,
+                prioridad: MISE_PRIO_TO_TAREA[d.prioridad] ?? 'alta',
+                dia: 'hoy',
+                nota: null,
                 cantidad: d.cantidad > 0 ? d.cantidad : null,
                 receta_id: d.receta_id ?? null,
                 plaza: primaryPlaza,

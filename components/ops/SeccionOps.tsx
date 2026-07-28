@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ItemOps } from './ItemOps'
 import { QuickAdd } from './QuickAdd'
+import type { CrearTareaSheetConfirmData } from './CrearTareaSheet'
 import type { Tarea, OpsEstado, OpsModo, TareaPrioridad } from '@/types'
 
 export interface DragHandleProps {
@@ -22,7 +23,7 @@ interface SeccionOpsProps {
   onEstadoChange: (id: string, estado: OpsEstado) => void
   onAddSubtarea: (parentId: string, titulo: string) => Promise<void>
   onPrioridadChange?: (id: string, prioridad: TareaPrioridad) => void
-  onCrearPaseTurno?: (item: Tarea, data: { cantidad: number | null; prioridad: TareaPrioridad; nota: string | null }) => Promise<void>
+  onCrearTareaDesdeItem?: (item: Tarea, data: CrearTareaSheetConfirmData) => Promise<void>
   modo?: OpsModo
   showSeccionChip?: boolean
   showPrioChip?: boolean
@@ -33,7 +34,7 @@ interface SeccionOpsProps {
 
 export function SeccionOps({
   titulo, sublabel, color, items, subtareasByParent,
-  onAddItem, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearPaseTurno, modo, showSeccionChip, showPrioChip, recetas,
+  onAddItem, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, modo, showSeccionChip, showPrioChip, recetas,
   dragHandleProps,
 }: SeccionOpsProps) {
   const [collapsed, setCollapsed] = useState(false)
@@ -123,7 +124,7 @@ export function SeccionOps({
               onEstadoChange={onEstadoChange}
               onAddSubtarea={onAddSubtarea}
               onPrioridadChange={onPrioridadChange}
-              onCrearPaseTurno={onCrearPaseTurno}
+              onCrearTareaDesdeItem={onCrearTareaDesdeItem}
               modo={modo}
               showSeccionChip={showSeccionChip}
               showPrioChip={showPrioChip}
