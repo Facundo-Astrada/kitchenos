@@ -22,6 +22,7 @@ interface SeccionOpsProps {
   onEstadoChange: (id: string, estado: OpsEstado) => void
   onAddSubtarea: (parentId: string, titulo: string) => Promise<void>
   onPrioridadChange?: (id: string, prioridad: TareaPrioridad) => void
+  onCrearPaseTurno?: (item: Tarea, data: { cantidad: number | null; prioridad: TareaPrioridad; nota: string | null }) => Promise<void>
   modo?: OpsModo
   showSeccionChip?: boolean
   showPrioChip?: boolean
@@ -32,7 +33,7 @@ interface SeccionOpsProps {
 
 export function SeccionOps({
   titulo, sublabel, color, items, subtareasByParent,
-  onAddItem, onEstadoChange, onAddSubtarea, onPrioridadChange, modo, showSeccionChip, showPrioChip, recetas,
+  onAddItem, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearPaseTurno, modo, showSeccionChip, showPrioChip, recetas,
   dragHandleProps,
 }: SeccionOpsProps) {
   const [collapsed, setCollapsed] = useState(false)
@@ -122,6 +123,7 @@ export function SeccionOps({
               onEstadoChange={onEstadoChange}
               onAddSubtarea={onAddSubtarea}
               onPrioridadChange={onPrioridadChange}
+              onCrearPaseTurno={onCrearPaseTurno}
               modo={modo}
               showSeccionChip={showSeccionChip}
               showPrioChip={showPrioChip}

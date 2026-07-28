@@ -81,6 +81,12 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     localStorage.setItem('ops_modo', m)
   }
 
+  const [toast, setToast] = useState('')
+  function showToast(msg: string) {
+    setToast(msg)
+    setTimeout(() => setToast(''), 2500)
+  }
+
   // ── Reordenar columnas (drag & drop) — orden persistido por restaurante+modo ──
   const [ordenSecciones, setOrdenSecciones] = useState<string[]>([])
   const [draggingSecId, setDraggingSecId] = useState<string | null>(null)
@@ -244,6 +250,37 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   const handlePrioridadChange = useCallback((id: string, prioridad: TareaPrioridad) => {
     actualizarTarea(id, { prioridad })
   }, [actualizarTarea])
+
+  // ── Pase de turno: deja una tarea programada para mañana, vinculada al
+  // mismo componente (receta_id/plaza/sección) — el próximo turno la ve
+  // directo en su Producción del día siguiente, sin depender de que alguien
+  // avise de palabra. categoria='pase_turno' la distingue de las tareas
+  // normales (mismo patrón que categoria='pedido_nota'). Sin menu_id a
+  // propósito: no activa por sí sola la vista "menú activo" de Planificación,
+  // que depende de que el menú se reactive explícitamente ese día.
+  const handleCrearPaseTurno = useCallback(async (item: Tarea, data: { cantidad: number | null; prioridad: TareaPrioridad; nota: string | null }) => {
+    const d = new Date(today + 'T12:00:00')
+    d.setDate(d.getDate() + 1)
+    const manana = d.toISOString().split('T')[0]
+    await agregarTarea({
+      titulo: item.titulo,
+      descripcion: data.nota,
+      status: 'pendiente',
+      prioridad: data.prioridad,
+      categoria: 'pase_turno',
+      plaza: item.plaza ?? null,
+      receta_id: item.receta_id ?? null,
+      seccion: item.seccion ?? 'general',
+      modo: item.modo ?? modoStorage,
+      turno_fecha: manana,
+      menu_id: null,
+      estado: 'pendiente',
+      cantidad: data.cantidad,
+      asignado_a: null, creado_por: perfil?.miembro_id ?? null,
+      fecha_limite: null, tiempo_estimado_min: null, checklist: [],
+    })
+    showToast(`Programado para mañana — ${item.titulo}`)
+  }, [agregarTarea, today, modoStorage, perfil])
 
   // ── Generar lista desde evento ────────────────────────────────
   const secciones = (modo === 'menu' || modo === 'evento') ? [...SECCIONES_MENU] : [...SECCIONES_CARTA]
@@ -542,6 +579,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
                           onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
                           onAddSubtarea={handleAddSubtarea}
                           onPrioridadChange={handlePrioridadChange}
+                          onCrearPaseTurno={handleCrearPaseTurno}
                           dragHandleProps={dragHandleProps}
                         />
                       )
@@ -557,6 +595,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
                       onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
                       onAddSubtarea={handleAddSubtarea}
                       onPrioridadChange={handlePrioridadChange}
+                      onCrearPaseTurno={handleCrearPaseTurno}
                       modo={modoStorage}
                       showSeccionChip={!(modo === 'menu' || modo === 'evento')}
                       showPrioChip={modo === 'menu' || modo === 'evento'}
@@ -570,6 +609,14 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
           </div>
         )}
       </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[999] px-4 py-2 rounded-lg text-sm font-semibold text-white"
+          style={{ background: '#22c55e' }}>
+          {toast}
+        </div>
+      )}
     </div>
   )
 }
@@ -709,7 +756,7 @@ function LimpiezaCard({
 // adentro (Menú/Evento), reusando ItemOps real (checkbox/subtareas intactos).
 function ModoResumenCard({
   titulo, color, tareas: tareasDelModo, agruparPorSeccion, subtareasByParent,
-  onAddItem, onEstadoChange, onAddSubtarea, onPrioridadChange, dragHandleProps,
+  onAddItem, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearPaseTurno, dragHandleProps,
 }: {
   titulo: string
   color: string
@@ -720,6 +767,7 @@ function ModoResumenCard({
   onEstadoChange: (id: string, estado: OpsEstado) => void
   onAddSubtarea: (parentId: string, titulo: string) => Promise<void>
   onPrioridadChange?: (id: string, prioridad: TareaPrioridad) => void
+  onCrearPaseTurno?: (item: Tarea, data: { cantidad: number | null; prioridad: TareaPrioridad; nota: string | null }) => Promise<void>
   dragHandleProps?: DragHandleProps
 }) {
   const [collapsed, setCollapsed] = useState(false)
@@ -783,6 +831,7 @@ function ModoResumenCard({
                   onEstadoChange={onEstadoChange}
                   onAddSubtarea={onAddSubtarea}
                   onPrioridadChange={onPrioridadChange}
+                  onCrearPaseTurno={onCrearPaseTurno}
                   showPrioChip
                 />
               ))}

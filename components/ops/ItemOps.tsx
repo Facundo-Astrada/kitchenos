@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { RecetaDrawer } from './RecetaDrawer'
 import { ProduccionSheet } from './ProduccionSheet'
+import { PaseTurnoSheet } from './PaseTurnoSheet'
 import { QuickAdd } from './QuickAdd'
 import { useProduccionRegistros } from '@/lib/hooks/useProduccionRegistros'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
@@ -52,16 +53,18 @@ interface ItemOpsProps {
   onEstadoChange: (id: string, estado: OpsEstado) => void
   onAddSubtarea: (parentId: string, titulo: string) => Promise<void>
   onPrioridadChange?: (id: string, prioridad: TareaPrioridad) => void
+  onCrearPaseTurno?: (item: Tarea, data: { cantidad: number | null; prioridad: TareaPrioridad; nota: string | null }) => Promise<void>
   depth?: number
   modo?: OpsModo
   showSeccionChip?: boolean
   showPrioChip?: boolean
 }
 
-export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, onPrioridadChange, depth = 0, showSeccionChip, showPrioChip }: ItemOpsProps) {
+export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearPaseTurno, depth = 0, showSeccionChip, showPrioChip }: ItemOpsProps) {
   const [expanded, setExpanded] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [prodSheetOpen, setProdSheetOpen] = useState(false)
+  const [paseSheetOpen, setPaseSheetOpen] = useState(false)
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const holdFired = useRef(false)
 
@@ -148,6 +151,12 @@ export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, onPrio
     setProdSheetOpen(false)
   }
 
+  async function handlePaseConfirm(data: { cantidad: number | null; prioridad: TareaPrioridad; nota: string | null }) {
+    if (!onCrearPaseTurno) return
+    await onCrearPaseTurno(item, data)
+    setPaseSheetOpen(false)
+  }
+
   return (
     <div style={{
       marginLeft: depth * 16,
@@ -205,6 +214,18 @@ export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, onPrio
               turno ant.
             </span>
           )}
+          {depth === 0 && item.categoria === 'pase_turno' && (
+            <span
+              title={item.descripcion ?? 'Pase de turno'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, padding: '1px 5px',
+                borderRadius: 4, marginTop: 1, background: 'rgba(139,92,246,.14)', color: '#8b5cf6',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 10 }}>event_upcoming</span>
+              pase de turno
+            </span>
+          )}
           {showSeccionChip && depth === 0 && item.seccion && SECCION_LABELS[item.seccion] && (
             <span style={{
               display: 'inline-block', fontSize: 9, fontWeight: 600, padding: '1px 6px',
@@ -258,6 +279,19 @@ export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, onPrio
           >
             <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>
               menu_book
+            </span>
+          </button>
+        )}
+
+        {/* Pase de turno — deja este componente programado para mañana */}
+        {depth === 0 && item.receta_id && onCrearPaseTurno && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setPaseSheetOpen(true) }}
+            title="Programar para el próximo turno"
+            style={{ flexShrink: 0, padding: 4, background: 'none', border: 'none', cursor: 'pointer' }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)' }}>
+              event_upcoming
             </span>
           </button>
         )}
@@ -342,6 +376,15 @@ export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, onPrio
           recetaId={item.receta_id}
           onConfirm={handleProduccionConfirm}
           onDismiss={handleProduccionDismiss}
+        />
+      )}
+
+      {paseSheetOpen && (
+        <PaseTurnoSheet
+          nombreComponente={item.titulo}
+          cantidadHoy={item.cantidad ?? null}
+          onConfirm={handlePaseConfirm}
+          onDismiss={() => setPaseSheetOpen(false)}
         />
       )}
     </div>
