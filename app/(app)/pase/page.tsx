@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { usePase } from '@/lib/hooks/usePase'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { useEquipo } from '@/lib/hooks/useEquipo'
+import { usePermisos } from '@/lib/hooks/usePermisos'
 import { createClient } from '@/lib/supabase/client'
 import type { PaseMensaje, PrioridadPase, Plaza } from '@/types'
 
@@ -294,6 +295,8 @@ export default function PasePage() {
   const { mensajes, loading, fetchMensajes, enviarMensaje, marcarLeidos } = usePase()
   const { agregarTarea } = useTareas()
   const { miembros } = useEquipo()
+  const { perfilRestaurante } = usePermisos()
+  const esEmprendimiento = perfilRestaurante === 'emprendimiento'
   const usuariosMencion = useMemo(() => [
     ...miembros.map(m => ({ id: m.id, nombre: `${m.nombre} ${m.apellido?.[0] ?? ''}.`.trimEnd().replace(/\.$/, '.') })),
   ], [miembros])
@@ -454,9 +457,9 @@ export default function PasePage() {
       <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 0', flexShrink: 0 }}>
         <div className="flex items-center justify-between mb-2">
           <div>
-            <h1 className="text-white text-[18px] font-bold m-0">Pase de Turno</h1>
+            <h1 className="text-white text-[18px] font-bold m-0">{esEmprendimiento ? 'Avisos' : 'Pase de Turno'}</h1>
             <p className="text-white/60 text-[11px] m-0 mt-[2px]">
-              Chat de cocina
+              {esEmprendimiento ? 'Mensajes y novedades del equipo' : 'Chat de cocina'}
             </p>
           </div>
           {/* Date jump */}

@@ -130,7 +130,7 @@ export const MODULOS_POR_ROL: Record<Rol, ModuloId[]> = {
 export const MODULOS_EMPRENDIMIENTO: ModuloId[] = [
   'home', 'espacios', 'tareas', 'recetario', 'carta', 'produccion',
   'stock', 'facturas', 'proveedores', 'pedidos', 'merma', 'reportes', 'ventas', 'clientes',
-  'calendario', 'equipo', 'configuracion', 'coach',
+  'calendario', 'equipo', 'configuracion', 'coach', 'pase', 'haccp',
 ]
 
 // ── Nav inferior (4 ítems fijos) ────────────────────────────

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, type CSSProperties } from 'react'
+import Link from 'next/link'
 import PageTransition from '@/components/PageTransition'
 import { SheetChrome } from '@/lib/ui/chrome'
 import { EmptyState, FilterChips, HeaderAction } from '@/components/ui'
@@ -8,6 +9,11 @@ import { AVATAR_PALETTE } from '@/components/ui/Avatar'
 import type { FilterChip } from '@/components/ui'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
+import IngresosBanner from '@/components/pedidos/IngresosBanner'
+import { usePedidos } from '@/lib/hooks/usePedidos'
+import { usePase } from '@/lib/hooks/usePase'
+import { useHaccp } from '@/lib/hooks/useHaccp'
+import type { HaccpLimpieza } from '@/lib/hooks/useHaccp'
 import type { Tarea, TareaPrioridad } from '@/types'
 
 // Lista de tareas simple para perfil 'emprendimiento' — ve/carga/edita lo que
@@ -67,6 +73,26 @@ function estaVencida(t: Tarea): boolean {
   return t.fecha_limite < new Date().toISOString().slice(0, 10)
 }
 
+// Copiado de app/(app)/haccp/page.tsx (tareaTocaDia) — misma regla de recurrencia,
+// sin filtrar por plaza (evita los duplicados por plaza del tab Rutina del Mise).
+function limpiezaTocaHoy(l: HaccpLimpieza, hoy: Date): boolean {
+  switch (l.frecuencia) {
+    case 'cada_turno':
+    case 'diaria':
+      return true
+    case 'semanal': {
+      const dia = l.dia_semana ?? new Date(l.created_at).getDay()
+      return hoy.getDay() === dia
+    }
+    case 'mensual': {
+      const dia = l.dia_mes ?? new Date(l.created_at).getDate()
+      return hoy.getDate() === dia
+    }
+    default:
+      return false
+  }
+}
+
 const inputStyle: CSSProperties = {
   width: '100%', padding: '10px 12px', borderRadius: 10,
   border: '1px solid var(--border)', background: 'var(--surface)',
@@ -76,12 +102,33 @@ const labelStyle: CSSProperties = {
   fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block',
 }
 
+function resumenChipStyle(color: string): CSSProperties {
+  return {
+    display: 'flex', alignItems: 'center', gap: 5,
+    padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 700,
+    background: `${color}18`, color, textDecoration: 'none',
+  }
+}
+
 export default function TareasSimpleClientView() {
   const { tareas, loading, agregarTarea, actualizarTarea, cambiarEstado, eliminarTarea } = useTareas()
+  const { pedidos } = usePedidos()
+  const { mensajes: avisos, usuarioId } = usePase()
+  const { limpieza } = useHaccp()
   const [filtro, setFiltro] = useState<FiltroEstado>('pendientes')
   const [sheetTarea, setSheetTarea] = useState<Tarea | 'nueva' | null>(null)
   const [saving, setSaving] = useState(false)
   const [colapsadas, setColapsadas] = useState<Set<string>>(new Set())
+
+  const pedidosPorConfirmar = useMemo(() => pedidos.filter(p => p.status === 'borrador').length, [pedidos])
+  const avisosNoLeidos = useMemo(
+    () => usuarioId ? avisos.filter(m => !(Array.isArray(m.leido_por) && m.leido_por.includes(usuarioId))).length : 0,
+    [avisos, usuarioId]
+  )
+  const limpiezasHoy = useMemo(() => {
+    const hoy = new Date()
+    return limpieza.filter(l => limpiezaTocaHoy(l, hoy)).length
+  }, [limpieza])
 
   const areasExistentes = useMemo(() => {
     const nombres = new Set<string>()
@@ -202,6 +249,31 @@ export default function TareasSimpleClientView() {
         </div>
 
         <div className="flex-1 overflow-y-auto" style={{ padding: 16 }}>
+          {/* Resumen del día — cada fuente se omite en silencio si está vacía (mismo patrón que IngresosBanner) */}
+          <IngresosBanner embedded />
+          {(pedidosPorConfirmar > 0 || avisosNoLeidos > 0 || limpiezasHoy > 0) && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '0 0 16px' }}>
+              {pedidosPorConfirmar > 0 && (
+                <Link href="/pedidos" style={resumenChipStyle('#0ea5e9')}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 15 }}>shopping_cart</span>
+                  {pedidosPorConfirmar} pedido{pedidosPorConfirmar !== 1 ? 's' : ''} por confirmar
+                </Link>
+              )}
+              {avisosNoLeidos > 0 && (
+                <Link href="/pase" style={resumenChipStyle('#8b5cf6')}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 15 }}>campaign</span>
+                  {avisosNoLeidos} aviso{avisosNoLeidos !== 1 ? 's' : ''} sin leer
+                </Link>
+              )}
+              {limpiezasHoy > 0 && (
+                <Link href="/haccp" style={resumenChipStyle('#10b981')}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 15 }}>cleaning_services</span>
+                  {limpiezasHoy} limpieza{limpiezasHoy !== 1 ? 's' : ''} hoy
+                </Link>
+              )}
+            </div>
+          )}
+
           {loading && <p style={{ color: 'var(--text-3)', fontSize: 14 }}>Cargando…</p>}
 
           {!loading && totalVisible === 0 && (
