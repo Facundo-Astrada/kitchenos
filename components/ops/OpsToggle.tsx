@@ -18,6 +18,7 @@ export function OpsToggle({ value, onChange }: OpsToggleProps) {
     }}>
       {(['menu', 'carta', 'evento', 'todo'] as OpsToggleValue[]).map((m) => {
         const active = value === m
+        const esTodo = m === 'todo'
         return (
           <button
             key={m}
@@ -28,8 +29,8 @@ export function OpsToggle({ value, onChange }: OpsToggleProps) {
               border: 'none',
               cursor: 'pointer',
               fontFamily: 'inherit',
-              background: active ? '#fff' : 'transparent',
-              color: active ? 'var(--navy)' : 'rgba(255,255,255,.55)',
+              background: active ? (esTodo ? '#f59e0b' : '#fff') : 'transparent',
+              color: active ? (esTodo ? '#fff' : 'var(--navy)') : (esTodo ? '#fbbf24' : 'rgba(255,255,255,.55)'),
               transition: 'all .15s',
               WebkitTapHighlightColor: 'transparent',
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0,
@@ -39,7 +40,7 @@ export function OpsToggle({ value, onChange }: OpsToggleProps) {
               {m === 'menu' ? 'Menú' : m === 'evento' ? 'Evento' : m === 'todo' ? 'Todo' : 'Carta'}
             </span>
             {active && (
-              <span style={{ fontSize: 8, fontWeight: 600, opacity: 0.5, letterSpacing: '.04em', lineHeight: 1.3 }}>
+              <span style={{ fontSize: 8, fontWeight: 600, opacity: esTodo ? 0.85 : 0.5, letterSpacing: '.04em', lineHeight: 1.3 }}>
                 {m === 'carta' ? 'Por prioridad' : m === 'todo' ? 'Carta+Menú+Evento' : 'Por categoría'}
               </span>
             )}

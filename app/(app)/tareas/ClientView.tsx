@@ -63,7 +63,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   const { tareas, loading, agregarTarea, cambiarEstado, eliminarTarea } = useTareas()
   const { recetas } = useRecetas()
   const recetasSimple = useMemo(() => recetas.map(r => ({ id: r.id, nombre: r.nombre })), [recetas])
-  const { limpieza, registrarLimpieza } = useHaccp()
+  const { limpieza, registrarLimpieza, crearTareaLimpieza } = useHaccp()
 
   const today = getToday()
 
@@ -363,6 +363,21 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     return limpieza.filter((l) => limpiezaTocaFecha(l, hoy))
   }, [limpieza])
 
+  // Alta rápida de limpieza desde OPS: sin frecuencia/área, se crea diaria y
+  // general (mismo default que ofrece el formulario real de HACCP), para no
+  // pedir un formulario completo acá — se puede afinar después en HACCP.
+  const handleAgregarLimpieza = useCallback(async (titulo: string) => {
+    await crearTareaLimpieza({
+      area: 'General',
+      tarea_limpieza: titulo,
+      frecuencia: 'diaria',
+      dia_semana: null,
+      dia_mes: null,
+      sync_ops: true,
+      usuario_id: null,
+    })
+  }, [crearTareaLimpieza])
+
   function handleSecPointerDown(id: string, e: React.PointerEvent) {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     dragStartRef.current = { x: e.clientX, y: e.clientY }
@@ -505,6 +520,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
                     <LimpiezaCard
                       items={limpiezasHoy}
                       onRegistrar={registrarLimpieza}
+                      onAgregar={handleAgregarLimpieza}
                       dragHandleProps={dragHandleProps}
                     />
                   ) : (col.id === MODO_CARTA_ID || col.id === MODO_MENU_ID || col.id === MODO_EVENTO_ID) ? (
@@ -619,10 +635,11 @@ function NotaPedidosCard({
 // ── Recuadro "Limpieza" — limpiezas de HACCP que tocan hoy, todas las plazas.
 // Tildar acá llama al mismo registrarLimpieza() de la pantalla real de HACCP.
 function LimpiezaCard({
-  items, onRegistrar, dragHandleProps,
+  items, onRegistrar, onAgregar, dragHandleProps,
 }: {
   items: HaccpLimpieza[]
   onRegistrar: (id: string) => void
+  onAgregar: (titulo: string) => Promise<void>
   dragHandleProps?: DragHandleProps
 }) {
   const [collapsed, setCollapsed] = useState(false)
@@ -671,6 +688,9 @@ function LimpiezaCard({
           {items.length === 0 && (
             <div style={{ padding: '8px 2px', fontSize: 12, color: 'var(--text-3)' }}>Sin limpiezas para hoy</div>
           )}
+          <div style={{ marginTop: 4 }}>
+            <QuickAdd placeholder="Agregar limpieza..." onSave={onAgregar} />
+          </div>
         </div>
       )}
     </div>
