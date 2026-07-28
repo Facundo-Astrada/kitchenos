@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/lib/auth/context'
+import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
 import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, supportsWebUSB, supportsWebBluetooth } from '@/lib/print/escpos'
 import type { MisePlaceItem, MisePrioridad } from '@/types'
 
@@ -204,6 +205,7 @@ export function ProductoMiseCard({
 
   // ── Etiqueta de producción (imprimible al marcar como lista) ──
   const { perfil } = useAuth()
+  const { config: impresion } = useImpresionConfig()
   const [diasOverride, setDiasOverride] = useState<number | null>(null)
   const [printingEtiqueta, setPrintingEtiqueta] = useState(false)
   const [etiquetaError, setEtiquetaError] = useState<string | null>(null)
@@ -423,22 +425,24 @@ export function ProductoMiseCard({
             <span style={{ fontSize: 10, color: 'var(--text-3)' }}>días ({fmtFechaCorta(fechaCaducidad)})</span>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
-            {supportsWebUSB() && (
+            {impresion.usb && supportsWebUSB() && (
               <button onClick={() => handlePrintEtiqueta('usb')} disabled={printingEtiqueta} style={btnEtiqueta}>
                 <span className="material-symbols-outlined" style={{ fontSize: 14 }}>print</span>
                 {printingEtiqueta ? 'Imprimiendo...' : 'Imprimir etiqueta'}
               </button>
             )}
-            {supportsWebBluetooth() && (
+            {impresion.bluetooth && supportsWebBluetooth() && (
               <button onClick={() => handlePrintEtiqueta('bluetooth')} disabled={printingEtiqueta} style={btnEtiquetaSecundario}>
                 <span className="material-symbols-outlined" style={{ fontSize: 14 }}>bluetooth</span>
                 Bluetooth
               </button>
             )}
-            <button onClick={handleDownloadEtiqueta} disabled={printingEtiqueta} style={btnEtiquetaSecundario}>
-              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>download</span>
-              Descargar .bin
-            </button>
+            {impresion.bin && (
+              <button onClick={handleDownloadEtiqueta} disabled={printingEtiqueta} style={btnEtiquetaSecundario}>
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>download</span>
+                Descargar .bin
+              </button>
+            )}
           </div>
           <button
             onClick={handleCrearVencDesdeEtiqueta}

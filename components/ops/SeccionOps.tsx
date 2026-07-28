@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { ItemOps } from './ItemOps'
 import { QuickAdd } from './QuickAdd'
-import type { Tarea, OpsEstado, OpsModo } from '@/types'
+import type { Tarea, OpsEstado, OpsModo, TareaPrioridad } from '@/types'
 
 export interface DragHandleProps {
   onPointerDown: (e: React.PointerEvent) => void
@@ -21,6 +21,7 @@ interface SeccionOpsProps {
   onAddItem: (titulo: string, recetaId?: string) => Promise<void>
   onEstadoChange: (id: string, estado: OpsEstado) => void
   onAddSubtarea: (parentId: string, titulo: string) => Promise<void>
+  onPrioridadChange?: (id: string, prioridad: TareaPrioridad) => void
   modo?: OpsModo
   showSeccionChip?: boolean
   showPrioChip?: boolean
@@ -31,7 +32,7 @@ interface SeccionOpsProps {
 
 export function SeccionOps({
   titulo, sublabel, color, items, subtareasByParent,
-  onAddItem, onEstadoChange, onAddSubtarea, modo, showSeccionChip, showPrioChip, recetas,
+  onAddItem, onEstadoChange, onAddSubtarea, onPrioridadChange, modo, showSeccionChip, showPrioChip, recetas,
   dragHandleProps,
 }: SeccionOpsProps) {
   const [collapsed, setCollapsed] = useState(false)
@@ -120,6 +121,7 @@ export function SeccionOps({
               subtareas={subtareasByParent[item.id] ?? []}
               onEstadoChange={onEstadoChange}
               onAddSubtarea={onAddSubtarea}
+              onPrioridadChange={onPrioridadChange}
               modo={modo}
               showSeccionChip={showSeccionChip}
               showPrioChip={showPrioChip}

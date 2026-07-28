@@ -7,6 +7,8 @@ import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { useAuth } from '@/lib/auth/context'
 import { resetOnboardingDone } from '@/lib/hooks/useOnboardingProgress'
+import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
+import { SwitchRow } from '@/components/ui'
 import type { EquipoMiembro, RolPermiso } from '@/types'
 import { ROLES_DISPONIBLES, PLAZAS_DISPONIBLES, TODOS_LOS_MODULOS } from '@/types'
 
@@ -850,6 +852,9 @@ function RestauranteTab({
         supabase={supabase}
       />
 
+      {/* Impresión de etiquetas (mise, HACCP, caja, salón) */}
+      <ImpresionCard showToast={showToast} />
+
       {/* Logo */}
       <div
         className="rounded-xl p-4 flex items-center justify-center"
@@ -857,6 +862,51 @@ function RestauranteTab({
       >
         <p className="text-sm" style={{ color: 'var(--text-3)' }}>Logo (proxim<wbr/>amente)</p>
       </div>
+    </div>
+  )
+}
+
+// ── Impresión de etiquetas: USB / Bluetooth / .bin — por establecimiento ──
+function ImpresionCard({ showToast }: { showToast: (msg: string) => void }) {
+  const { config, loading, guardarImpresionConfig } = useImpresionConfig()
+
+  async function toggle(key: 'usb' | 'bluetooth' | 'bin', value: boolean) {
+    try {
+      await guardarImpresionConfig({ [key]: value })
+    } catch (e: unknown) {
+      showToast('Error: ' + (e instanceof Error ? e.message : 'no se pudo guardar'))
+    }
+  }
+
+  if (loading) return null
+
+  return (
+    <div className="rounded-xl p-4 flex flex-col" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+      <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>Impresión de etiquetas</p>
+      <p className="text-xs mb-1" style={{ color: 'var(--text-3)' }}>
+        Controla qué métodos de impresión aparecen en Mise, HACCP, Caja y Salón.
+      </p>
+      <SwitchRow
+        icon="print"
+        label="Imprimir por USB"
+        sub="Impresora térmica conectada por cable"
+        checked={config.usb}
+        onChange={v => toggle('usb', v)}
+      />
+      <SwitchRow
+        icon="bluetooth"
+        label="Imprimir por Bluetooth"
+        sub="Impresora térmica inalámbrica"
+        checked={config.bluetooth}
+        onChange={v => toggle('bluetooth', v)}
+      />
+      <SwitchRow
+        icon="download"
+        label="Descargar .bin"
+        sub="Guardar el archivo ESC/POS para imprimir manualmente"
+        checked={config.bin}
+        onChange={v => toggle('bin', v)}
+      />
     </div>
   )
 }

@@ -8,7 +8,7 @@ import { useProduccionRegistros } from '@/lib/hooks/useProduccionRegistros'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { useAuth } from '@/lib/auth/context'
 import { createClient } from '@/lib/supabase/client'
-import type { Tarea, OpsEstado, OpsModo } from '@/types'
+import type { Tarea, OpsEstado, OpsModo, TareaPrioridad } from '@/types'
 
 export function nextEstado(e: OpsEstado): OpsEstado {
   if (e === 'duda') return 'pendiente'
@@ -33,12 +33,17 @@ const SECCION_LABELS: Record<string, string> = {
   pasteleria: 'Pastelería', salon: 'Salón',
 }
 
-// Chip de prioridad para modo menú (agrupado por sección)
+// Chip de prioridad para modo menú (agrupado por sección) — tap para ciclar
 const PRIO_CHIP: Record<string, { label: string; color: string; bg: string }> = {
   critica: { label: 'SP',  color: '#ef4444', bg: 'rgba(239,68,68,.13)' },
   alta:    { label: 'P',   color: '#f97316', bg: 'rgba(249,115,22,.13)' },
   media:   { label: 'REF', color: '#3b82f6', bg: 'rgba(59,130,246,.13)' },
   baja:    { label: 'Baja',color: '#64748b', bg: 'rgba(100,116,139,.1)' },
+}
+const PRIO_CYCLE: TareaPrioridad[] = ['critica', 'alta', 'media', 'baja']
+function nextPrioridad(current: string): TareaPrioridad {
+  const idx = PRIO_CYCLE.indexOf(current as TareaPrioridad)
+  return PRIO_CYCLE[(idx + 1) % PRIO_CYCLE.length]
 }
 
 interface ItemOpsProps {
@@ -46,13 +51,14 @@ interface ItemOpsProps {
   subtareas: Tarea[]
   onEstadoChange: (id: string, estado: OpsEstado) => void
   onAddSubtarea: (parentId: string, titulo: string) => Promise<void>
+  onPrioridadChange?: (id: string, prioridad: TareaPrioridad) => void
   depth?: number
   modo?: OpsModo
   showSeccionChip?: boolean
   showPrioChip?: boolean
 }
 
-export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, depth = 0, showSeccionChip, showPrioChip }: ItemOpsProps) {
+export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, onPrioridadChange, depth = 0, showSeccionChip, showPrioChip }: ItemOpsProps) {
   const [expanded, setExpanded] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [prodSheetOpen, setProdSheetOpen] = useState(false)
@@ -210,15 +216,32 @@ export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, depth 
           )}
           {showPrioChip && depth === 0 && (() => {
             const chip = PRIO_CHIP[item.prioridad ?? 'baja']
-            return chip ? (
-              <span style={{
-                display: 'inline-block', fontSize: 9, fontWeight: 800, padding: '1px 6px',
-                borderRadius: 4, marginTop: 2, marginLeft: 3,
-                background: chip.bg, color: chip.color,
-              }}>
+            if (!chip) return null
+            if (!onPrioridadChange) {
+              return (
+                <span style={{
+                  display: 'inline-block', fontSize: 9, fontWeight: 800, padding: '1px 6px',
+                  borderRadius: 4, marginTop: 2, marginLeft: 3,
+                  background: chip.bg, color: chip.color,
+                }}>
+                  {chip.label}
+                </span>
+              )
+            }
+            return (
+              <button
+                onClick={(e) => { e.stopPropagation(); onPrioridadChange(item.id, nextPrioridad(item.prioridad ?? 'baja')) }}
+                title="Tocar para cambiar la prioridad"
+                style={{
+                  display: 'inline-block', fontSize: 9, fontWeight: 800, padding: '1px 6px',
+                  borderRadius: 4, marginTop: 2, marginLeft: 3,
+                  background: chip.bg, color: chip.color,
+                  border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
                 {chip.label}
-              </span>
-            ) : null
+              </button>
+            )
           })()}
           {item.cantidad != null && (
             <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace" }}>

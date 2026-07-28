@@ -11,6 +11,7 @@ import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { useAuth } from '@/lib/auth/context'
 import { createClient } from '@/lib/supabase/client'
 import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, supportsWebUSB, supportsWebBluetooth } from '@/lib/print/escpos'
+import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
 
 // ── Helpers ─────────────────────────────────────────────
 const fmtDate = (d: string | null) => {
@@ -519,6 +520,7 @@ function NuevoVencView({
   restauranteNombre: string
 }) {
   const { perfil } = useAuth()
+  const { config: impresion } = useImpresionConfig()
   const [nombre, setNombre] = useState('')
   const [fechaVenc, setFechaVenc] = useState('')
   const [fechaAp, setFechaAp] = useState('')
@@ -603,22 +605,24 @@ function NuevoVencView({
         <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>Etiqueta de producción</span>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
-            {supportsWebUSB() && (
+            {impresion.usb && supportsWebUSB() && (
               <button disabled={!puedeImprimir || printingEtiqueta} onClick={() => handlePrintEtiqueta('usb')} style={{ ...btnEtiqueta, opacity: puedeImprimir ? 1 : 0.5 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 16 }}>print</span>
                 {printingEtiqueta ? 'Imprimiendo...' : 'Imprimir'}
               </button>
             )}
-            {supportsWebBluetooth() && (
+            {impresion.bluetooth && supportsWebBluetooth() && (
               <button disabled={!puedeImprimir || printingEtiqueta} onClick={() => handlePrintEtiqueta('bluetooth')} style={{ ...btnEtiquetaSecundario, opacity: puedeImprimir ? 1 : 0.5 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 16 }}>bluetooth</span>
                 Bluetooth
               </button>
             )}
-            <button disabled={!puedeImprimir || printingEtiqueta} onClick={handleDownloadEtiqueta} style={{ ...btnEtiquetaSecundario, opacity: puedeImprimir ? 1 : 0.5 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>download</span>
-              Descargar .bin
-            </button>
+            {impresion.bin && (
+              <button disabled={!puedeImprimir || printingEtiqueta} onClick={handleDownloadEtiqueta} style={{ ...btnEtiquetaSecundario, opacity: puedeImprimir ? 1 : 0.5 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>download</span>
+                Descargar .bin
+              </button>
+            )}
           </div>
           {!puedeImprimir && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Completá producto y fecha de vencimiento para imprimir</span>}
           {etiquetaError && <span style={{ fontSize: 11, color: '#ef4444' }}>{etiquetaError}</span>}

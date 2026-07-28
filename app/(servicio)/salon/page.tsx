@@ -16,6 +16,7 @@ import { useOnlineStatus } from '@/lib/offline/useOnlineStatus'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
 import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, supportsWebUSB, supportsWebBluetooth } from '@/lib/print/escpos'
+import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
 import VistaCaja from '@/components/salon/VistaCaja'
 import { Sillas } from '@/components/salon/Sillas'
 import { PanZoomCanvas } from '@/components/salon/PanZoomCanvas'
@@ -468,8 +469,9 @@ function TicketCobro({
 
   const [printing, setPrinting] = useState(false)
   const [printError, setPrintError] = useState<string | null>(null)
-  const supportsUSB = supportsWebUSB()
-  const supportsBT  = supportsWebBluetooth()
+  const { config: impresion } = useImpresionConfig()
+  const supportsUSB = impresion.usb && supportsWebUSB()
+  const supportsBT  = impresion.bluetooth && supportsWebBluetooth()
 
   function ticketPayload() {
     return {
@@ -642,11 +644,13 @@ function TicketCobro({
                 {printing ? 'Conectando...' : 'Imprimir por Bluetooth'}
               </button>
             )}
-            <button onClick={() => { void handleDownload() }} disabled={printing}
-              style={{ minHeight: 64, borderRadius: 12, background: 'var(--border)', border: 'none', color: 'var(--text-1)', fontSize: 18, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: printing ? 0.6 : 1 }}>
-              <span className="material-symbols-outlined">download</span>
-              Descargar .bin
-            </button>
+            {impresion.bin && (
+              <button onClick={() => { void handleDownload() }} disabled={printing}
+                style={{ minHeight: 64, borderRadius: 12, background: 'var(--border)', border: 'none', color: 'var(--text-1)', fontSize: 18, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: printing ? 0.6 : 1 }}>
+                <span className="material-symbols-outlined">download</span>
+                Descargar .bin
+              </button>
+            )}
           </div>
           {printError && <p style={{ color: '#e57373', fontSize: 13, marginTop: 10 }}>{printError}</p>}
         </div>

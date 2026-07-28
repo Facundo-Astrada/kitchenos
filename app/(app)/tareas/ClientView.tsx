@@ -60,7 +60,7 @@ const SECCIONES_MENU = [
 export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   const { perfil } = useAuth()
   const restauranteId = useRestauranteId()
-  const { tareas, loading, agregarTarea, cambiarEstado, eliminarTarea } = useTareas()
+  const { tareas, loading, agregarTarea, actualizarTarea, cambiarEstado, eliminarTarea } = useTareas()
   const { recetas } = useRecetas()
   const recetasSimple = useMemo(() => recetas.map(r => ({ id: r.id, nombre: r.nombre })), [recetas])
   const { limpieza, registrarLimpieza, crearTareaLimpieza } = useHaccp()
@@ -239,6 +239,11 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     if (!tarea?.checklist_item_id) return
     await syncMiseDesdeTarea(createClient(), tarea.checklist_item_id, today, estado === 'listo')
   }, [cambiarEstado, tareas, today])
+
+  // ── Cambiar prioridad directo desde la card de OPS (Menú/Evento) ──────
+  const handlePrioridadChange = useCallback((id: string, prioridad: TareaPrioridad) => {
+    actualizarTarea(id, { prioridad })
+  }, [actualizarTarea])
 
   // ── Generar lista desde evento ────────────────────────────────
   const secciones = (modo === 'menu' || modo === 'evento') ? [...SECCIONES_MENU] : [...SECCIONES_CARTA]
@@ -536,6 +541,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
                           onAddItem={(titulo, recetaId) => handleAddItem('media', titulo, recetaId, modoBox)}
                           onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
                           onAddSubtarea={handleAddSubtarea}
+                          onPrioridadChange={handlePrioridadChange}
                           dragHandleProps={dragHandleProps}
                         />
                       )
@@ -550,6 +556,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
                       onAddItem={(titulo, recetaId) => handleAddItem((modo === 'menu' || modo === 'evento') ? 'media' : col.id, titulo, recetaId)}
                       onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
                       onAddSubtarea={handleAddSubtarea}
+                      onPrioridadChange={handlePrioridadChange}
                       modo={modoStorage}
                       showSeccionChip={!(modo === 'menu' || modo === 'evento')}
                       showPrioChip={modo === 'menu' || modo === 'evento'}
@@ -702,7 +709,7 @@ function LimpiezaCard({
 // adentro (Menú/Evento), reusando ItemOps real (checkbox/subtareas intactos).
 function ModoResumenCard({
   titulo, color, tareas: tareasDelModo, agruparPorSeccion, subtareasByParent,
-  onAddItem, onEstadoChange, onAddSubtarea, dragHandleProps,
+  onAddItem, onEstadoChange, onAddSubtarea, onPrioridadChange, dragHandleProps,
 }: {
   titulo: string
   color: string
@@ -712,6 +719,7 @@ function ModoResumenCard({
   onAddItem: (titulo: string, recetaId?: string) => Promise<void>
   onEstadoChange: (id: string, estado: OpsEstado) => void
   onAddSubtarea: (parentId: string, titulo: string) => Promise<void>
+  onPrioridadChange?: (id: string, prioridad: TareaPrioridad) => void
   dragHandleProps?: DragHandleProps
 }) {
   const [collapsed, setCollapsed] = useState(false)
@@ -774,6 +782,7 @@ function ModoResumenCard({
                   subtareas={subtareasByParent[t.id] ?? []}
                   onEstadoChange={onEstadoChange}
                   onAddSubtarea={onAddSubtarea}
+                  onPrioridadChange={onPrioridadChange}
                   showPrioChip
                 />
               ))}

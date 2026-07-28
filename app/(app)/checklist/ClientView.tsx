@@ -37,17 +37,9 @@ const PRIO_CFG: Record<string, { label: string; color: string; bg: string }> = {
   ref: { label: 'REF', color: '#3b82f6', bg: 'rgba(59,130,246,.13)' },
   chk: { label: 'OK',  color: '#22c55e', bg: 'rgba(34,197,94,.13)' },
 }
-const PRIO_SORT: Record<string, number> = { sp: 0, p: 1, ref: 2, chk: 3 }
 const FREQ_LABELS: Record<RutinaFrecuencia, string> = {
   diaria: 'Diaria', semanal: 'Semanal', quincenal: 'Quincenal', mensual: 'Mensual',
 }
-const DEFAULT_SECCIONES = [
-  { nombre: 'Heladera',       icono: 'kitchen',     orden: 0 },
-  { nombre: 'Secos / Tuppers', icono: 'inventory_2', orden: 1 },
-  { nombre: 'Congelados',     icono: 'severe_cold',  orden: 2 },
-  { nombre: 'Estación',       icono: 'countertops',  orden: 3 },
-]
-
 type Tab = 'apertura' | 'cierre' | 'rutina'
 function getToday() { return new Date().toISOString().split('T')[0] }
 function fmtFecha(d: string) {
@@ -281,18 +273,6 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     return m
   }, [plazaSecciones])
 
-  const seedingRef = useRef(false)
-  useEffect(() => {
-    if (!plaza || loading || seedingRef.current) return
-    if (!secciones.some(s => s.plaza === plaza)) {
-      seedingRef.current = true
-      ;(async () => {
-        for (const def of DEFAULT_SECCIONES) await agregarSeccion({ ...def, plaza })
-        seedingRef.current = false
-      })()
-    }
-  }, [plaza, loading, secciones, agregarSeccion])
-
   const plazaItems = useMemo(() =>
     items.filter(i => i.plaza === plaza || (plaza !== 'general' && i.plaza === 'general')),
     [items, plaza])
@@ -301,7 +281,9 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     const map: Record<string, MisePlaceItem[]> = {}
     plazaSecciones.forEach(s => { map[s.id] = [] })
     plazaItems.forEach(i => { const sid = i.seccion_id ?? ''; if (map[sid]) map[sid].push(i) })
-    for (const k of Object.keys(map)) map[k].sort((a, b) => (PRIO_SORT[a.prioridad] ?? 3) - (PRIO_SORT[b.prioridad] ?? 3))
+    // Posición fija por `orden` — NO por prioridad/estado, para que un item no
+    // "salte" de lugar al cambiar su badge o tildarlo (ver drag-to-reorder abajo).
+    for (const k of Object.keys(map)) map[k].sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
     return map
   }, [plazaItems, plazaSecciones])
 
@@ -452,15 +434,32 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     if (toast) { const t = setTimeout(() => setToast(null), 2500); return () => clearTimeout(t) }
   }, [toast])
 
-  // ── Drag-to-move between sections ───────────────────────────
-  const [dragging, setDragging] = useState<{ item: MisePlaceItem; y: number; overSecId: string | null } | null>(null)
+  // ── Mensaje al completar el 100% de la plaza (apertura/cierre) ───────
+  // Una vez por plaza+turno+día — evita repetir el mensaje si el usuario
+  // destilda y vuelve a tildar el último ítem, o cambia de tab y vuelve.
+  const plazaCompletaShownRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (tab === 'rutina' || !plaza || total === 0 || done !== total) return
+    const key = `${plaza}-${tab}-${fecha}`
+    if (plazaCompletaShownRef.current.has(key)) return
+    plazaCompletaShownRef.current.add(key)
+    setToast('Ya checkeaste tu plaza — estás listo para producir tranquilo')
+  }, [tab, plaza, fecha, total, done])
+
+  // ── Drag-to-move between sections + reorder dentro de la sección ─────
+  // Posición fija por defecto (sort por `orden`, no por prioridad/estado —
+  // ver `grouped` arriba); este gesto es la única forma de cambiarla.
+  const [dragging, setDragging] = useState<{ item: MisePlaceItem; y: number; overSecId: string | null; overItemId: string | null; insertAfter: boolean } | null>(null)
   const draggingRef = useRef<typeof dragging>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const secElRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const itemElRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const actualizarItemRef = useRef(actualizarItem)
+  const groupedRef = useRef(grouped)
   useEffect(() => { draggingRef.current = dragging }, [dragging])
   useEffect(() => { actualizarItemRef.current = actualizarItem }, [actualizarItem])
+  useEffect(() => { groupedRef.current = grouped }, [grouped])
 
   useEffect(() => {
     if (!dragging) return
@@ -496,13 +495,42 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         const r = el.getBoundingClientRect()
         if (t.clientY >= r.top && t.clientY <= r.bottom) overSecId = secId
       })
-      setDragging(prev => prev ? { ...prev, y: t.clientY, overSecId } : null)
+      // Ítem más cercano dentro de la sección sobrevolada — define dónde se
+      // inserta al soltar (antes/después según qué mitad del ítem se tocó).
+      let overItemId: string | null = null
+      let insertAfter = false
+      if (overSecId) {
+        const draggedId = draggingRef.current?.item.id
+        const secItemIds = new Set((groupedRef.current[overSecId] ?? []).map(i => i.id))
+        let closestDist = Infinity
+        itemElRefs.current.forEach((el, itemId) => {
+          if (itemId === draggedId || !secItemIds.has(itemId)) return
+          const r = el.getBoundingClientRect()
+          const mid = r.top + r.height / 2
+          const dist = Math.abs(t.clientY - mid)
+          if (dist < closestDist) { closestDist = dist; overItemId = itemId; insertAfter = t.clientY > mid }
+        })
+      }
+      setDragging(prev => prev ? { ...prev, y: t.clientY, overSecId, overItemId, insertAfter } : null)
     }
     const onEnd = () => {
       cancelAnimationFrame(rafId)
       const d = draggingRef.current
-      if (d?.overSecId && d.overSecId !== d.item.seccion_id) {
-        actualizarItemRef.current(d.item.id, { seccion_id: d.overSecId })
+      if (d?.overSecId) {
+        const overSecId = d.overSecId
+        const targetItems = (groupedRef.current[overSecId] ?? []).filter(i => i.id !== d.item.id)
+        let insertIdx = targetItems.length
+        if (d.overItemId) {
+          const idx = targetItems.findIndex(i => i.id === d.overItemId)
+          if (idx !== -1) insertIdx = d.insertAfter ? idx + 1 : idx
+        }
+        targetItems.splice(insertIdx, 0, d.item)
+        targetItems.forEach((it, idx) => {
+          const needsSecUpdate = it.id === d.item.id && it.seccion_id !== overSecId
+          if ((it.orden ?? 0) !== idx || needsSecUpdate) {
+            actualizarItemRef.current(it.id, { orden: idx, ...(needsSecUpdate ? { seccion_id: overSecId } : {}) })
+          }
+        })
       }
       setDragging(null)
     }
@@ -518,7 +546,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const startLongPress = useCallback((item: MisePlaceItem, y: number) => {
     longPressTimer.current = setTimeout(() => {
       navigator.vibrate?.(30)
-      setDragging({ item, y, overSecId: item.seccion_id ?? null })
+      setDragging({ item, y, overSecId: item.seccion_id ?? null, overItemId: null, insertAfter: false })
     }, 400)
   }, [])
 
@@ -791,6 +819,36 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
 
         {/* ── APERTURA / CIERRE ── */}
         {!loading && tab !== 'rutina' && (() => {
+          // Sin secciones todavía (plaza nueva, sin nada creado a mano) — bienvenida
+          // explicando qué es el mise y cómo armar la primera sección, en vez de
+          // auto-poblar secciones fijas que nadie pidió.
+          if (plazaSecciones.length === 0) {
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', gap: 10 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'var(--accent)' }}>checklist</span>
+                <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', margin: 0, textAlign: 'center' }}>
+                  Armá el mise en place de {PLAZA_LABELS[plaza]}
+                </p>
+                <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: 0, textAlign: 'center', maxWidth: 300, lineHeight: 1.5 }}>
+                  El mise es la checklist de apertura y cierre de tu plaza: stock que hay que dejar
+                  preparado, cuánto y dónde. Creá una sección (ej. &quot;Heladera&quot;, &quot;Secos&quot;, &quot;Estación&quot;)
+                  y después agregá los ítems que tu equipo va a tildar cada turno.
+                </p>
+                <button
+                  onClick={() => setShowSectionEditor(true)}
+                  style={{
+                    marginTop: 6, padding: '11px 22px', borderRadius: 12, border: 'none',
+                    background: 'linear-gradient(135deg, var(--navy), #4361a0)', color: '#fff',
+                    fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                    display: 'flex', alignItems: 'center', gap: 8,
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
+                  Crear mi primera sección
+                </button>
+              </div>
+            )
+          }
           const allSectionsEmpty = plazaSecciones.every(sec => (grouped[sec.id] ?? []).length === 0)
           if (allSectionsEmpty && plazaSecciones.length > 0) {
             return (
@@ -807,9 +865,13 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           // sección raíz como para los de cada sub-sección. Invocada como
           // función (no <Componente/>) para no perder foco/estado por remount.
           function renderSecItems(itemsList: MisePlaceItem[]) {
-            return itemsList.map(item => (
+            return itemsList.map(item => {
+              const isInsertBefore = dragging?.overItemId === item.id && !dragging.insertAfter && dragging.item.id !== item.id
+              const isInsertAfter = dragging?.overItemId === item.id && dragging.insertAfter && dragging.item.id !== item.id
+              return (
               <div
                 key={item.id}
+                ref={el => { if (el) itemElRefs.current.set(item.id, el); else itemElRefs.current.delete(item.id) }}
                 onTouchStart={modoControl ? undefined : e => startLongPress(item, e.touches[0].clientY)}
                 onTouchMove={modoControl ? undefined : cancelLongPress}
                 onTouchEnd={modoControl ? undefined : cancelLongPress}
@@ -819,6 +881,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                   touchAction: dragging ? 'none' : 'auto',
                   userSelect: 'none',
                   WebkitUserSelect: 'none',
+                  borderTop: isInsertBefore ? '2px solid var(--accent)' : '2px solid transparent',
+                  borderBottom: isInsertAfter ? '2px solid var(--accent)' : '2px solid transparent',
                 }}
               >
                 {modoControl ? (
@@ -877,7 +941,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                   />
                 )}
               </div>
-            ))
+              )
+            })
           }
 
           return rootSecciones.map(sec => {

@@ -7,6 +7,7 @@ import { useMediosPago } from '@/lib/hooks/useMediosPago'
 import { useCajaTurno, inferMedioEfectivo } from '@/lib/hooks/useCajaTurno'
 import { createClient } from '@/lib/supabase/client'
 import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, supportsWebUSB, supportsWebBluetooth } from '@/lib/print/escpos'
+import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
 import type { CajaMovimiento, CajaTurno } from '@/types'
 
 function fmt(n: number) {
@@ -27,6 +28,7 @@ export default function VistaCaja({ onVolver }: { onVolver: () => void }) {
   const { perfil } = useAuth()
   const RESTAURANTE_ID = useRestauranteId()
   const { medios } = useMediosPago()
+  const { config: impresion } = useImpresionConfig()
   const {
     cajaAbierta, loading,
     abrirCaja, cerrarCaja, registrarMovimiento, fetchMovimientos, calcularEsperado,
@@ -301,25 +303,27 @@ export default function VistaCaja({ onVolver }: { onVolver: () => void }) {
           <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 16 }}>
             <p style={{ color: 'var(--text-2)', fontSize: 13, marginBottom: 12 }}>Imprimir cierre</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {supportsWebUSB() && (
+              {impresion.usb && supportsWebUSB() && (
                 <button onClick={() => { void handlePrint('usb') }} disabled={printing}
                   style={{ minHeight: 64, borderRadius: 12, background: '#1c2d4a', border: 'none', color: '#fff', fontSize: 18, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: printing ? 0.6 : 1 }}>
                   <span className="material-symbols-outlined">print</span>
                   {printing ? 'Imprimiendo...' : 'Imprimir por USB'}
                 </button>
               )}
-              {supportsWebBluetooth() && (
+              {impresion.bluetooth && supportsWebBluetooth() && (
                 <button onClick={() => { void handlePrint('bluetooth') }} disabled={printing}
                   style={{ minHeight: 64, borderRadius: 12, background: '#1c2d4a', border: 'none', color: '#fff', fontSize: 18, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: printing ? 0.6 : 1 }}>
                   <span className="material-symbols-outlined">bluetooth</span>
                   {printing ? 'Conectando...' : 'Imprimir por Bluetooth'}
                 </button>
               )}
-              <button onClick={() => { void handleDownload() }} disabled={printing}
-                style={{ minHeight: 64, borderRadius: 12, background: 'var(--border)', border: 'none', color: 'var(--text-1)', fontSize: 18, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: printing ? 0.6 : 1 }}>
-                <span className="material-symbols-outlined">download</span>
-                Descargar .bin
-              </button>
+              {impresion.bin && (
+                <button onClick={() => { void handleDownload() }} disabled={printing}
+                  style={{ minHeight: 64, borderRadius: 12, background: 'var(--border)', border: 'none', color: 'var(--text-1)', fontSize: 18, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: printing ? 0.6 : 1 }}>
+                  <span className="material-symbols-outlined">download</span>
+                  Descargar .bin
+                </button>
+              )}
             </div>
             {printError && <p style={{ color: '#e57373', fontSize: 13, marginTop: 10 }}>{printError}</p>}
           </div>
