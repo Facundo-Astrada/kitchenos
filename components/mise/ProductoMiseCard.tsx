@@ -65,6 +65,14 @@ function nextPrio(current: string): MisePrioridad {
 
 function capPlaza(p: string) { return p.charAt(0).toUpperCase() + p.slice(1) }
 
+// Convierte a kg cuando el total en gramos es grande, para que "Producir" y
+// el peso total de los recipientes se lean como "3.96kg" en vez de "3960g".
+function fmtPeso(valor: number, unidad: string): string {
+  if (unidad === 'g' && valor >= 1000) return `${(valor / 1000).toFixed(2)}kg`
+  if (unidad === 'ml' && valor >= 1000) return `${(valor / 1000).toFixed(2)}l`
+  return `${Math.round(valor * 100) / 100}${unidad}`
+}
+
 function addDays(base: Date, days: number): Date {
   const d = new Date(base)
   d.setDate(d.getDate() + days)
@@ -208,6 +216,14 @@ export function ProductoMiseCard({
   const tieneRecipiente = !!(item.recipiente_nombre && item.recipiente_capacidad != null)
   const deficit = tieneRecipiente && stockDisplay !== null
     ? Math.max(0, (item.recipiente_capacidad ?? 0) + demandaViva - stockDisplay)
+    : null
+
+  // Peso total que debería haber en TODOS los recipientes juntos, a partir de
+  // lo que ya se carga por OPS: capacidad objetivo (en porciones) × peso de
+  // una porción. Si el ítem no tiene peso_porcion cargado (recipiente sin
+  // tamaño por porción definido), no se puede calcular.
+  const pesoTotalRecipientes = tieneRecipiente && item.peso_porcion != null
+    ? item.recipiente_capacidad! * item.peso_porcion
     : null
 
   // ── Etiqueta de producción (imprimible al marcar como lista) ──
@@ -531,6 +547,11 @@ export function ProductoMiseCard({
                 {item.peso_porcion}{item.peso_porcion_unidad ?? 'g'} c/u
               </span>
             )}
+            {pesoTotalRecipientes != null && (
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(16,185,129,.12)', color: '#059669' }}>
+                = {fmtPeso(pesoTotalRecipientes, item.peso_porcion_unidad ?? 'g')} total
+              </span>
+            )}
           </div>
           {/* Hay ahora / falta */}
           <div style={{ display: 'flex', gap: 6 }}>
@@ -609,7 +630,7 @@ export function ProductoMiseCard({
               }}
             >
               <span className="material-symbols-outlined" style={{ fontSize: 14 }}>add_task</span>
-              {creating ? 'Creando...' : `Producir ${deficit} porc${item.peso_porcion ? ` (${Math.round(deficit * item.peso_porcion)}${item.peso_porcion_unidad ?? 'g'})` : ''}`}
+              {creating ? 'Creando...' : `Producir ${deficit} porc${item.peso_porcion ? ` (${fmtPeso(deficit * item.peso_porcion, item.peso_porcion_unidad ?? 'g')})` : ''}`}
             </button>
           )}
         </div>
