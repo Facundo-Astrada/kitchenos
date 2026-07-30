@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import type { PlatoRecetaEnriquecido } from '@/lib/hooks/useCarta'
 import type { MisePlaceItem, PlazaCustom } from '@/types'
 import { plazaLabel, plazaColor } from '@/lib/constants'
@@ -14,10 +15,26 @@ interface Props {
   onToggle: () => void
   onGuardar: (pr: PlatoRecetaEnriquecido, result: OpsResult) => void
   onQuitar: (pr: PlatoRecetaEnriquecido) => void
+  onEditarGramaje: (pr: PlatoRecetaEnriquecido, nuevaCantidad: number) => void
 }
 
-export default function CartaBoardCard({ pr, checklistItem, plazasCustom, isOpen, saving, onToggle, onGuardar, onQuitar }: Props) {
+export default function CartaBoardCard({ pr, checklistItem, plazasCustom, isOpen, saving, onToggle, onGuardar, onQuitar, onEditarGramaje }: Props) {
   const color = pr.plaza ? plazaColor(pr.plaza, plazasCustom) : null
+  const [editandoGramaje, setEditandoGramaje] = useState(false)
+  const [gramajeValor, setGramajeValor] = useState('')
+
+  function startEditGramaje(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (saving) return
+    setGramajeValor(pr.cantidad_ops != null ? String(pr.cantidad_ops) : '')
+    setEditandoGramaje(true)
+  }
+
+  function commitGramaje() {
+    setEditandoGramaje(false)
+    const n = parseFloat(gramajeValor)
+    if (!isNaN(n) && n >= 0 && n !== pr.cantidad_ops) onEditarGramaje(pr, n)
+  }
 
   const initial: OpsInitial = {
     plaza: pr.plaza ?? null,
@@ -37,8 +54,42 @@ export default function CartaBoardCard({ pr, checklistItem, plazasCustom, isOpen
             {pr.receta?.nombre ?? 'Preparación'}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            {pr.cantidad_ops != null && (
-              <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{pr.cantidad_ops} {pr.unidad_ops ?? 'u'}</span>
+            {editandoGramaje ? (
+              <input
+                autoFocus
+                type="number"
+                inputMode="decimal"
+                value={gramajeValor}
+                onChange={e => setGramajeValor(e.target.value)}
+                onBlur={commitGramaje}
+                onKeyDown={e => { if (e.key === 'Enter') commitGramaje(); if (e.key === 'Escape') setEditandoGramaje(false) }}
+                onClick={e => e.stopPropagation()}
+                style={{
+                  width: 56, padding: '2px 5px', borderRadius: 6, border: '1.5px solid var(--accent)',
+                  fontSize: 11, fontWeight: 700, textAlign: 'center', fontFamily: 'inherit',
+                  color: 'var(--text-1)', background: 'var(--surface)', outline: 'none',
+                }}
+              />
+            ) : pr.cantidad_ops != null ? (
+              <button
+                onClick={startEditGramaje}
+                title="Editar gramaje"
+                style={{ background: 'none', border: 'none', padding: 0, cursor: saving ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 2 }}
+              >
+                <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>{pr.cantidad_ops} {pr.unidad_ops ?? 'u'}</span>
+                <span className="material-symbols-outlined" style={{ fontSize: 11, color: 'var(--text-3)' }}>edit</span>
+              </button>
+            ) : (
+              <button
+                onClick={startEditGramaje}
+                style={{
+                  fontSize: 10, fontWeight: 600, color: 'var(--accent)', background: 'none',
+                  border: '1px dashed var(--accent)', borderRadius: 6, padding: '1px 6px',
+                  cursor: saving ? 'default' : 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                + gramaje
+              </button>
             )}
             {pr.plaza ? (
               <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 99, background: `${color}18`, color: color ?? 'var(--text-3)' }}>

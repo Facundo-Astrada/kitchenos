@@ -24,7 +24,7 @@ import CartaBoardCard from './CartaBoardCard'
 export default function CartaBoard() {
   const RESTAURANTE_ID = useRestauranteId()
   const supabase = useMemo(() => createClient(), [])
-  const { items, loading: loadingCarta, categorias, actualizarPlatoRecetaOpsCompleta } = useCarta()
+  const { items, loading: loadingCarta, categorias, actualizarPlatoRecetaOps, actualizarPlatoRecetaOpsCompleta } = useCarta()
   const { items: checklistItems, loading: loadingChecklist, refetchConfig } = useChecklist()
   const { plazasCustom } = usePlazasCustom()
 
@@ -119,6 +119,25 @@ export default function CartaBoard() {
     }
   }
 
+  // Edición rápida del gramaje sin pasar por el panel OPS completo — si el
+  // componente ya está en una plaza, recalcula la suma de esa plaza (sube o
+  // baja según corresponda; shrinkOrPruneMise también borra el checklist_item
+  // si el nuevo total da 0).
+  const handleEditarGramaje = async (pr: PlatoRecetaEnriquecido, nuevaCantidad: number) => {
+    setSavingOpsId(pr.id)
+    try {
+      await actualizarPlatoRecetaOps(pr.id, { cantidad_ops: nuevaCantidad, unidad_ops: pr.unidad_ops ?? 'g' })
+      if (pr.plaza) {
+        await shrinkOrPruneMise({ supabase, restauranteId: RESTAURANTE_ID, recetaId: pr.receta_id, plaza: pr.plaza })
+        await refetchConfig()
+      }
+    } catch (e) {
+      console.error('[CartaBoard] error editando gramaje', e)
+    } finally {
+      setSavingOpsId(null)
+    }
+  }
+
   const loading = loadingCarta || loadingChecklist
 
   if (loading) {
@@ -201,6 +220,7 @@ export default function CartaBoard() {
                       onToggle={() => setOpenOpsId(prev => prev === pr.id ? null : pr.id)}
                       onGuardar={handleGuardarOps}
                       onQuitar={handleQuitarOps}
+                      onEditarGramaje={handleEditarGramaje}
                     />
                   ))}
                 </div>
