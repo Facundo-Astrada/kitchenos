@@ -16,26 +16,37 @@ interface Props {
   onGuardar: (pr: PlatoRecetaEnriquecido, result: OpsResult) => void
   onQuitar: (pr: PlatoRecetaEnriquecido) => void
   onEditarGramaje: (pr: PlatoRecetaEnriquecido, nuevaCantidad: number) => void
+  onEditarPesoPorcion: (pr: PlatoRecetaEnriquecido, nuevoPeso: number) => void
   onEliminar: (pr: PlatoRecetaEnriquecido) => void
 }
 
-export default function CartaBoardCard({ pr, checklistItem, plazasCustom, isOpen, saving, onToggle, onGuardar, onQuitar, onEditarGramaje, onEliminar }: Props) {
+export default function CartaBoardCard({ pr, checklistItem, plazasCustom, isOpen, saving, onToggle, onGuardar, onQuitar, onEditarGramaje, onEditarPesoPorcion, onEliminar }: Props) {
   const color = pr.plaza ? plazaColor(pr.plaza, plazasCustom) : null
   const sinPlaza = !pr.plaza
   const [editandoGramaje, setEditandoGramaje] = useState(false)
   const [gramajeValor, setGramajeValor] = useState('')
 
+  // Con recipiente configurado, cantidad_ops deja de ser "gramos por plato" y
+  // pasa a ser "cuántas porciones entran en el recipiente lleno" (un dato de
+  // mise/stock) — lo que importa ver acá es peso_porcion, el gramaje real del
+  // componente. Sin recipiente, cantidad_ops sigue siendo el gramaje directo.
+  const usaRecipiente = checklistItem?.peso_porcion != null
+  const gramajeMostrado = usaRecipiente ? checklistItem!.peso_porcion : pr.cantidad_ops
+  const unidadMostrada = usaRecipiente ? (checklistItem!.peso_porcion_unidad ?? 'g') : (pr.unidad_ops ?? 'u')
+
   function startEditGramaje(e: React.MouseEvent) {
     e.stopPropagation()
     if (saving) return
-    setGramajeValor(pr.cantidad_ops != null ? String(pr.cantidad_ops) : '')
+    setGramajeValor(gramajeMostrado != null ? String(gramajeMostrado) : '')
     setEditandoGramaje(true)
   }
 
   function commitGramaje() {
     setEditandoGramaje(false)
     const n = parseFloat(gramajeValor)
-    if (!isNaN(n) && n >= 0 && n !== pr.cantidad_ops) onEditarGramaje(pr, n)
+    if (isNaN(n) || n < 0 || n === gramajeMostrado) return
+    if (usaRecipiente) onEditarPesoPorcion(pr, n)
+    else onEditarGramaje(pr, n)
   }
 
   // "Tamaño por porción" es el mismo dato que el gramaje del componente
@@ -80,13 +91,13 @@ export default function CartaBoardCard({ pr, checklistItem, plazasCustom, isOpen
                   color: 'var(--text-1)', background: 'var(--surface)', outline: 'none',
                 }}
               />
-            ) : pr.cantidad_ops != null ? (
+            ) : gramajeMostrado != null ? (
               <button
                 onClick={startEditGramaje}
                 title="Editar gramaje"
                 style={{ background: 'none', border: 'none', padding: 0, cursor: saving ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: 2 }}
               >
-                <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>{pr.cantidad_ops} {pr.unidad_ops ?? 'u'}</span>
+                <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>{gramajeMostrado} {unidadMostrada}</span>
                 <span className="material-symbols-outlined" style={{ fontSize: 11, color: 'var(--text-3)' }}>edit</span>
               </button>
             ) : (

@@ -138,6 +138,25 @@ export default function CartaBoard() {
     }
   }
 
+  // Edición rápida del "tamaño por porción" cuando el componente ya tiene un
+  // recipiente configurado — a diferencia del gramaje directo, este dato vive
+  // en checklist_items (compartido por receta+plaza, no por plato_recetas),
+  // así que no hay suma que recalcular: es un simple update.
+  const handleEditarPesoPorcion = async (pr: PlatoRecetaEnriquecido, nuevoPeso: number) => {
+    if (!pr.plaza) return
+    setSavingOpsId(pr.id)
+    try {
+      const { error } = await supabase.from('checklist_items').update({ peso_porcion: nuevoPeso })
+        .eq('restaurante_id', RESTAURANTE_ID).eq('receta_id', pr.receta_id).eq('plaza', pr.plaza)
+      if (error) throw error
+      await refetchConfig()
+    } catch (e) {
+      console.error('[CartaBoard] error editando tamaño por porción', e)
+    } finally {
+      setSavingOpsId(null)
+    }
+  }
+
   // Elimina el componente del plato (no solo su OPS) — si ya aportaba a una
   // plaza, la recalcula (shrinkOrPruneMise) porque uno de sus aportantes se fue.
   const handleEliminarComponente = async (pr: PlatoRecetaEnriquecido) => {
@@ -246,6 +265,7 @@ export default function CartaBoard() {
                         onGuardar={handleGuardarOps}
                         onQuitar={handleQuitarOps}
                         onEditarGramaje={handleEditarGramaje}
+                        onEditarPesoPorcion={handleEditarPesoPorcion}
                         onEliminar={handleEliminarComponente}
                       />
                     ))}
