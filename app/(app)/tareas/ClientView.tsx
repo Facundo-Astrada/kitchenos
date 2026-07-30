@@ -15,6 +15,8 @@ import { QuickAdd } from '@/components/ops/QuickAdd'
 import { EventoBanner } from '@/components/ops/EventoBanner'
 import { useHaccp, type HaccpLimpieza } from '@/lib/hooks/useHaccp'
 import { limpiezaTocaFecha } from '@/lib/haccp/recurrencia'
+import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
+import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
 import type { Tarea, OpsModo, OpsEstado, TareaPrioridad } from '@/types'
 
 const PEDIDOS_COL_ID = '__pedidos__'
@@ -27,7 +29,6 @@ const PRIO_SORT: Record<string, number> = { critica: 0, alta: 1, media: 2, baja:
 
 type ColumnaDef = { id: string; label: string; sublabel?: string; color: string }
 
-function getToday() { return new Date().toISOString().split('T')[0] }
 function fmtFecha(d: string) {
   return new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
 }
@@ -65,8 +66,9 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   const { recetas } = useRecetas()
   const recetasSimple = useMemo(() => recetas.map(r => ({ id: r.id, nombre: r.nombre })), [recetas])
   const { limpieza, registrarLimpieza, crearTareaLimpieza } = useHaccp()
+  const { turnosActivos } = useTurnosServicio()
 
-  const today = getToday()
+  const today = hoyOperativo()
 
   // Modo — persiste en localStorage. 'todo' es una vista que combina
   // Carta+Menú+Evento; nunca se guarda como modo real de una tarea (ver modoStorage).
@@ -136,7 +138,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   const { topLevel, subtareasByParent, statsHoy, ayerDuplicadosIds } = useMemo(() => {
     // Ayer = carryover de un solo día: una tarea no completada se arrastra al día
     // siguiente y nada más. Evita que las pendientes se apilen indefinidamente.
-    const ayer = (() => { const d = new Date(today + 'T12:00:00'); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0] })()
+    const ayer = sumarDias(today, -1)
     // 'todo' junta Carta+Menú+Evento — no filtra por modo, solo por fecha/estado.
     const todasHoyModo = tareas.filter((t) => (modo === 'todo' || t.modo === modo) && !t.parent_id && t.turno_fecha === today)
     const clavesHoyModo = new Set(todasHoyModo.map((t) => t.titulo.trim().toLowerCase()))
@@ -244,8 +246,8 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     await cambiarEstado(id, estado)
     const tarea = tareas.find(t => t.id === id)
     if (!tarea?.checklist_item_id) return
-    await syncMiseDesdeTarea(createClient(), tarea.checklist_item_id, today, estado === 'listo')
-  }, [cambiarEstado, tareas, today])
+    await syncMiseDesdeTarea(createClient(), tarea.checklist_item_id, today, estado === 'listo', turnosActivos)
+  }, [cambiarEstado, tareas, today, turnosActivos])
 
   // ── Cambiar prioridad directo desde la card de OPS (Menú/Evento) ──────
   const handlePrioridadChange = useCallback((id: string, prioridad: TareaPrioridad) => {
@@ -263,9 +265,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   const handleCrearTareaDesdeItem = useCallback(async (item: Tarea, data: CrearTareaSheetConfirmData) => {
     let turnoFecha = today
     if (data.dia === 'manana') {
-      const d = new Date(today + 'T12:00:00')
-      d.setDate(d.getDate() + 1)
-      turnoFecha = d.toISOString().split('T')[0]
+      turnoFecha = sumarDias(today, 1)
     }
     await agregarTarea({
       titulo: item.titulo,

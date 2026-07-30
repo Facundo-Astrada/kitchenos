@@ -110,7 +110,11 @@ export async function calcularSugerenciaProduccion(opts: {
       .in('checklist_item_id', itemIds)
       .gte('fecha', desdeStock.toISOString().slice(0, 10))
       .not('cantidad_actual', 'is', null)
+      // Con turnos de servicio, 2+ registros pueden compartir fecha — desempate
+      // por turno para que "el más reciente" sea determinístico (ver mismo
+      // comentario en stock/ClientView.tsx).
       .order('fecha', { ascending: false })
+      .order('turno', { ascending: false })
     for (const r of (regs ?? []) as { checklist_item_id: string; cantidad_actual: number }[]) {
       if (!stockByItem.has(r.checklist_item_id)) stockByItem.set(r.checklist_item_id, Number(r.cantidad_actual) || 0)
     }

@@ -18,6 +18,7 @@ import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { getEstadoStock, calcularVencimientoFactura } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useFichaje } from '@/lib/hooks/useFichaje'
+import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
 import type { Perfil, Rol } from '@/types'
 
 // KPI "Cuentas por pagar" — solo admin, oculto si no hay deuda. Query liviana propia.
@@ -150,9 +151,8 @@ export default function DashboardPage() {
 
   // Stats separados para mise en place y tareas
   const { plazaStats, miseStats, tareasStats } = useMemo(() => {
-    const hoy = new Date().toISOString().slice(0, 10)
-    const ayerDate = new Date(); ayerDate.setDate(ayerDate.getDate() - 1)
-    const ayer = ayerDate.toISOString().slice(0, 10)
+    const hoy = hoyOperativo()
+    const ayer = sumarDias(hoy, -1)
     // Solo tareas de hoy + carryover de ayer (mismo criterio que OPS Producción)
     const tareasHoy = tareas.filter(t => {
       if (!t.turno_fecha) return false

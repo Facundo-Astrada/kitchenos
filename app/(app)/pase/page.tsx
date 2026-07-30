@@ -7,10 +7,11 @@ import { useTareas } from '@/lib/hooks/useTareas'
 import { useEquipo } from '@/lib/hooks/useEquipo'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { createClient } from '@/lib/supabase/client'
+import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
 import type { PaseMensaje, PrioridadPase, Plaza } from '@/types'
 
 // ── Helpers ──────────────────────────────────────────────────
-function hoy() { return new Date().toISOString().slice(0, 10) }
+function hoy() { return hoyOperativo() }
 
 function horaCorta(iso: string) {
   return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
@@ -31,9 +32,7 @@ function colorAvatar(nombre: string) {
 function fechaLabel(dateStr: string) {
   const hoyStr = hoy()
   if (dateStr === hoyStr) return 'HOY'
-  const ayer = new Date()
-  ayer.setDate(ayer.getDate() - 1)
-  if (dateStr === ayer.toISOString().slice(0, 10)) return 'AYER'
+  if (dateStr === sumarDias(hoyStr, -1)) return 'AYER'
   return new Date(dateStr + 'T12:00').toLocaleDateString('es-AR', {
     weekday: 'short', day: 'numeric', month: 'short',
   }).toUpperCase()

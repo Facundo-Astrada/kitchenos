@@ -452,6 +452,19 @@ export interface PlazaCustom {
 export type OpsEstado = 'pendiente' | 'en_curso' | 'listo' | 'duda'
 export type OpsModo = 'menu' | 'carta' | 'evento'
 
+// DB: restaurantes.configuracion.turnos_servicio (JSONB, sin migración — ver
+// lib/hooks/useTurnosServicio.ts). Bloques horarios del servicio (almuerzo/cena/etc)
+// — no confundir con `checklist_registros.turno` (fase apertura/cierre del mise),
+// `turnos` (grilla de personal), `turnos_personal` (fichaje) ni `cajas_turnos`.
+export interface TurnoServicio {
+  id: string        // slug estable ('almuerzo', 'cena') — inmutable una vez creado
+  nombre: string
+  desde: string     // 'HH:MM'
+  hasta: string     // 'HH:MM' — si hasta < desde, cruza medianoche (derivado, no se guarda aparte)
+  orden: number
+  activo: boolean   // los turnos NUNCA se borran (romperían registros históricos), se desactivan
+}
+
 export interface ChecklistItemTarea {
   texto: string
   completado: boolean

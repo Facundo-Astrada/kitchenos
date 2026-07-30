@@ -20,6 +20,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import ImportadorArchivo, { UndoBanner } from '@/components/importador/ImportadorArchivo'
 import CarritoCompras, { type CartItem } from '@/components/stock/CarritoCompras'
+import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
 import MultiSelectFiltro from '@/components/stock/MultiSelectFiltro'
 import { usePedidos } from '@/lib/hooks/usePedidos'
 import { useProveedores } from '@/lib/hooks/useProveedores'
@@ -165,8 +166,8 @@ function prodStatus(item: ProdItem): 'ok' | 'bajo' | 'sin_stock' | 'sin_datos' {
 }
 
 function fmtFechaRel(fecha: string): string {
-  const hoy = new Date().toISOString().slice(0, 10)
-  const ayer = new Date(Date.now() - 864e5).toISOString().slice(0, 10)
+  const hoy = hoyOperativo()
+  const ayer = sumarDias(hoy, -1)
   if (fecha === hoy) return 'Hoy'
   if (fecha === ayer) return 'Ayer'
   const d = new Date(fecha + 'T12:00')
@@ -233,7 +234,13 @@ export default function StockPage() {
         .select('*')
         .in('checklist_item_id', items.map((i: { id: string }) => i.id))
         .gte('fecha', since.toISOString().slice(0, 10))
+        // Con turnos de servicio puede haber 2+ registros con la misma fecha
+        // (uno por turno) — sin un segundo criterio, el orden entre ellos es
+        // indefinido en Postgres. Ordenar también por turno da un desempate
+        // determinístico (no perfecto: depende del nombre del turno, no de
+        // su horario real — arreglo completo requeriría timestamp, sin DDL hoy).
         .order('fecha', { ascending: false })
+        .order('turno', { ascending: false })
       const latestByItem = new Map<string, MisePlaceRegistro>()
       for (const r of (registros ?? []) as MisePlaceRegistro[]) {
         if (!latestByItem.has(r.checklist_item_id)) {
@@ -1364,7 +1371,7 @@ export default function StockPage() {
             </div>
           ) : (() => {
             const plazas = Array.from(new Set(prodItems.map(i => i.plaza))).sort()
-            const nHoy = prodItems.filter(i => i.registro?.fecha === new Date().toISOString().slice(0, 10)).length
+            const nHoy = prodItems.filter(i => i.registro?.fecha === hoyOperativo()).length
             const nSinDatos = prodItems.filter(i => prodStatus(i) === 'sin_datos').length
             return (
               <div style={{ paddingBottom: 80 }}>

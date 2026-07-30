@@ -12,17 +12,21 @@ import { createClient } from '@/lib/supabase/client'
 import type { Tarea } from '@/types'
 import { PLAZA_TO_SECCION } from '@/components/mise/ProductoMiseCard'
 import SugerenciaProduccionSheet from '@/components/produccion/SugerenciaProduccionSheet'
+import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
 
 // ── Helpers ─────────────────────────────────────────────────
+// fmtDate formatea un Date arbitrario de navegación de calendario (siempre
+// anclado a T12:00:00 local por los callers) — no es "ahora", así que no
+// necesita hoyOperativo(). Lo que sí usa hoyOperativo() es cada lugar que
+// hoy formatea `new Date()` (la hora real) para saber qué día es hoy.
 function fmtDate(d: Date) {
   return d.toISOString().split('T')[0]
 }
 function fmtDateLabel(d: Date) {
-  const hoy = fmtDate(new Date())
+  const hoy = hoyOperativo()
   const target = fmtDate(d)
   if (target === hoy) return 'Hoy'
-  const manana = new Date(); manana.setDate(manana.getDate() + 1)
-  if (target === fmtDate(manana)) return 'Mañana'
+  if (target === sumarDias(hoy, 1)) return 'Mañana'
   return d.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })
 }
 function fmtMesLabel(mes: string) {
@@ -55,12 +59,12 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
   const [showSugerencia, setShowSugerencia] = useState(false)
   useSheetOpenWhen(showSugerencia)
   const [cargandoMenu, setCargandoMenu] = useState(false)
-  const [fecha, setFecha] = useState(() => fmtDate(new Date()))
+  const [fecha, setFecha] = useState(() => hoyOperativo())
   const [toast, setToast] = useState('')
 
   // ── Calendar state ──────────────────────────────────────────
   const [fechasMes, setFechasMes] = useState<Record<string, string[]>>({})
-  const [mesActual, setMesActual] = useState(() => fmtDate(new Date()).slice(0, 7))
+  const [mesActual, setMesActual] = useState(() => hoyOperativo().slice(0, 7))
   const [multiSelectMode, setMultiSelectMode] = useState(false)
   const [diasSeleccionados, setDiasSeleccionados] = useState<Set<string>>(new Set())
 
@@ -103,7 +107,7 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
     try {
       const supabase = createClient()
       const modoDestino = menu.tipo === 'evento' ? 'evento' : 'menu'
-      const hoyReal = fmtDate(new Date())
+      const hoyReal = hoyOperativo()
       let totalTareas = 0, diasActivados = 0, diasYaActivos = 0
       for (const f of fechas) {
         // Dedupe por preparación: si ya existe una tarea para ESTE día, no se recrea.
@@ -116,8 +120,7 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
         // de ayer (evita duplicados en el mise). No debe dispararse al precargar varios días
         // futuros de una — ahí "ayer" sería un día del mismo lote recién insertado.
         if (f === hoyReal) {
-          const ayer = new Date(f + 'T12:00:00'); ayer.setDate(ayer.getDate() - 1)
-          const prevDay = fmtDate(ayer)
+          const prevDay = sumarDias(f, -1)
           const { data: previasAyer } = await supabase.from('tareas')
             .select('id, estado')
             .eq('restaurante_id', RESTAURANTE_ID).eq('menu_id', menu.id).eq('turno_fecha', prevDay)
@@ -520,7 +523,7 @@ function MesCalendar({
   const firstDow = new Date(year, month - 1, 1).getDay()
   const daysInMonth = new Date(year, month, 0).getDate()
   const startOffset = firstDow === 0 ? 6 : firstDow - 1
-  const today = fmtDate(new Date())
+  const today = hoyOperativo()
   const DIAS = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
 
   const cells: (string | null)[] = []

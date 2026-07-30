@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import type { PlazaCustom } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
+import { slugify } from '@/lib/utils'
 
 // Plazas custom del restaurante — guardadas en restaurantes.configuracion.plazas_custom
 // (JSONB ya existente, sin migración) en vez de una tabla nueva: el acceso DDL
@@ -14,13 +15,6 @@ import { useRestauranteId } from './useRestauranteId'
 // (PLAZAS_FIJAS en lib/constants.ts), el usuario puede crear plazas propias
 // (ej. para un evento) que funcionan en Mesa de Trabajo, Mise, OPS Panel,
 // Pase y Reportes — y borrarlas del todo cuando ya no las necesita.
-function slugify(s: string): string {
-  const sinDiacriticos = s.normalize('NFD').split('').filter(ch => {
-    const code = ch.codePointAt(0)!
-    return code < 0x300 || code > 0x36f
-  }).join('')
-  return sinDiacriticos.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'plaza'
-}
 
 function errMsg(e: unknown, fallback: string): string {
   if (e instanceof Error) return e.message
@@ -61,7 +55,7 @@ export function usePlazasCustom() {
     try {
       const cfg = await leerConfiguracion()
       const actuales = (cfg.plazas_custom as PlazaCustom[] | undefined) ?? []
-      const base = slugify(datos.nombre)
+      const base = slugify(datos.nombre, 'plaza')
       const keysUsadas = new Set(actuales.map(p => p.key))
       let key = base
       let i = 2

@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
 import { useAuth } from '@/lib/auth/context'
+import { hoyOperativo } from '@/lib/ops/turnos'
 import type { Merma, MotivoMerma, TurnoMerma } from '@/types'
 
 async function fetchMermaData(key: string): Promise<Merma[]> {
@@ -67,6 +68,8 @@ export function useMerma() {
 
     try {
       // Determine turno based on current hour
+      // TurnoMerma (apertura/servicio/cierre) es un enum propio, distinto del
+      // turno de servicio (Fase 2) — deuda anotada en el plan, no se unifica acá.
       const hour = new Date().getHours()
       const turno: TurnoMerma = hour < 12 ? 'apertura' : hour < 18 ? 'servicio' : 'cierre'
 
@@ -80,7 +83,7 @@ export function useMerma() {
         plaza: perfil?.rol && !['admin', 'chef'].includes(perfil.rol) ? perfil.rol : null,
         usuario_id: perfil?.miembro_id ?? null,
         usuario_nombre: perfil ? `${perfil.nombre} ${perfil.apellido}`.trim() : null,
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: hoyOperativo(),
         turno,
         costo_estimado: data.costo_estimado ?? 0,
         restaurante_id: RESTAURANTE_ID,

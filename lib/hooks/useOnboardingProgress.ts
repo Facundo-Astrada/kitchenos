@@ -27,12 +27,13 @@ export interface OnboardingStats {
   pctProductosConPrecio: number     // 0..100
   rutinas: number
   miseConfigurados: number          // checklist_items con cantidad asignada
+  turnosConfigurados: boolean       // existe restaurantes.configuracion.turnos_servicio
 }
 
 const STATS_VACIAS: OnboardingStats = {
   carta: 0, recetas: 0, foodCostPromedio: null, plazas: 0, miembros: 0,
   productos: 0, productosConPrecio: 0, pctProductosConPrecio: 0,
-  rutinas: 0, miseConfigurados: 0,
+  rutinas: 0, miseConfigurados: 0, turnosConfigurados: false,
 }
 
 /**
@@ -90,6 +91,7 @@ export function useOnboardingProgress() {
         seccionesRes,
         recetasCostoRes,
         miseRes,
+        restauranteRes,
       ] = await Promise.all([
         eq(supabase.from('carta_items')),
         supabase.from('recetas').select('*', { count: 'exact', head: true }).eq('restaurante_id', RESTAURANTE_ID).eq('activa', true),
@@ -103,6 +105,8 @@ export function useOnboardingProgress() {
         supabase.from('recetas').select('precio_venta').eq('restaurante_id', RESTAURANTE_ID).eq('activa', true).gt('precio_venta', 0),
         // Mise configurado: items con cantidad cargada
         supabase.from('checklist_items').select('*', { count: 'exact', head: true }).eq('restaurante_id', RESTAURANTE_ID).gt('cantidad', 0),
+        // Turnos de servicio: confirmados cuando la clave existe en configuracion (ver useTurnosServicio)
+        supabase.from('restaurantes').select('configuracion').eq('id', RESTAURANTE_ID).single(),
       ])
 
       const plazasSet = new Set<string>()
@@ -120,6 +124,7 @@ export function useOnboardingProgress() {
 
       const productos = productosRes.count ?? 0
       const productosConPrecio = productosPrecioRes.count ?? 0
+      const cfg = (restauranteRes.data?.configuracion ?? {}) as { turnos_servicio?: unknown }
 
       setStats({
         carta: cartaRes.count ?? 0,
@@ -132,6 +137,7 @@ export function useOnboardingProgress() {
         pctProductosConPrecio: productos > 0 ? Math.round((productosConPrecio / productos) * 100) : 0,
         rutinas: rutinasRes.count ?? 0,
         miseConfigurados: miseRes.count ?? 0,
+        turnosConfigurados: Array.isArray(cfg.turnos_servicio),
       })
     } catch {
       setStats(STATS_VACIAS)

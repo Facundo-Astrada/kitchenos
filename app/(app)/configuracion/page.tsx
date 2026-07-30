@@ -8,6 +8,7 @@ import { usePermisos } from '@/lib/hooks/usePermisos'
 import { useAuth } from '@/lib/auth/context'
 import { resetOnboardingDone } from '@/lib/hooks/useOnboardingProgress'
 import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
+import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
 import { SwitchRow } from '@/components/ui'
 import type { EquipoMiembro, RolPermiso } from '@/types'
 import { ROLES_DISPONIBLES, PLAZAS_DISPONIBLES, TODOS_LOS_MODULOS } from '@/types'
@@ -808,21 +809,8 @@ function RestauranteTab({
         </div>
       </div>
 
-      {/* Turnos */}
-      <div className="rounded-xl p-4 flex flex-col gap-2" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-        <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Turnos de servicio</p>
-        <div className="flex gap-2 mt-1">
-          {['Mañana', 'Tarde', 'Noche'].map(t => (
-            <span
-              key={t}
-              className="px-3 py-1 rounded-full text-xs font-semibold"
-              style={{ background: 'rgba(28,45,74,0.08)', color: 'var(--navy)', border: '1px solid var(--border)' }}
-            >
-              {t}
-            </span>
-          ))}
-        </div>
-      </div>
+      {/* Turnos de servicio */}
+      <TurnosServicioCard showToast={showToast} />
 
       {/* Plazas */}
       <div className="rounded-xl p-4 flex flex-col gap-2" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
@@ -862,6 +850,118 @@ function RestauranteTab({
       >
         <p className="text-sm" style={{ color: 'var(--text-3)' }}>Logo (proxim<wbr/>amente)</p>
       </div>
+    </div>
+  )
+}
+
+// ── Turnos de servicio — bloques horarios (almuerzo/cena/...) que definen a
+// qué turno pertenece cada registro del mise. Un turno nunca se borra (dejaría
+// registros históricos huérfanos) — se desactiva. Ver lib/hooks/useTurnosServicio.ts.
+function TurnosServicioCard({ showToast }: { showToast: (msg: string) => void }) {
+  const { turnos, loading, agregarTurno, actualizarTurno, desactivarTurno, reactivarTurno } = useTurnosServicio()
+  const [showForm, setShowForm] = useState(false)
+  const [nombre, setNombre] = useState('')
+  const [desde, setDesde] = useState('09:00')
+  const [hasta, setHasta] = useState('17:00')
+  const [saving, setSaving] = useState(false)
+
+  const inputStyle = {
+    background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-1)',
+    borderRadius: 8, padding: '8px 10px', fontSize: 13,
+  }
+
+  async function handleAgregar() {
+    if (!nombre.trim()) return
+    setSaving(true)
+    try {
+      await agregarTurno({ nombre: nombre.trim(), desde, hasta })
+      setNombre(''); setDesde('09:00'); setHasta('17:00'); setShowForm(false)
+      showToast('Turno creado')
+    } catch (e: unknown) {
+      showToast('Error: ' + (e instanceof Error ? e.message : 'no se pudo crear el turno'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleHorario(id: string, campo: 'desde' | 'hasta', valor: string) {
+    try {
+      await actualizarTurno(id, { [campo]: valor })
+    } catch (e: unknown) {
+      showToast('Error: ' + (e instanceof Error ? e.message : 'no se pudo actualizar el turno'))
+    }
+  }
+
+  async function handleToggleActivo(id: string, activo: boolean) {
+    try {
+      if (activo) await reactivarTurno(id)
+      else await desactivarTurno(id)
+    } catch (e: unknown) {
+      showToast('Error: ' + (e instanceof Error ? e.message : 'no se pudo actualizar el turno'))
+    }
+  }
+
+  if (loading) return null
+
+  return (
+    <div className="rounded-xl p-4 flex flex-col gap-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-3)' }}>Turnos de servicio</p>
+        <button
+          onClick={() => setShowForm(v => !v)}
+          className="flex items-center gap-1 text-xs font-semibold"
+          style={{ color: 'var(--accent)' }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
+          Agregar
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        {turnos.map(t => (
+          <div key={t.id} className="flex items-center gap-2 py-1" style={{ borderBottom: '1px solid var(--border)' }}>
+            <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: t.activo ? 'var(--text-1)' : 'var(--text-3)' }}>{t.nombre}</span>
+            <input type="time" value={t.desde} disabled={!t.activo}
+              onChange={e => handleHorario(t.id, 'desde', e.target.value)}
+              style={{ ...inputStyle, width: 90, opacity: t.activo ? 1 : 0.5 }} />
+            <span style={{ color: 'var(--text-3)', fontSize: 12 }}>a</span>
+            <input type="time" value={t.hasta} disabled={!t.activo}
+              onChange={e => handleHorario(t.id, 'hasta', e.target.value)}
+              style={{ ...inputStyle, width: 90, opacity: t.activo ? 1 : 0.5 }} />
+            <button
+              onClick={() => handleToggleActivo(t.id, !t.activo)}
+              title={t.activo ? 'Desactivar turno' : 'Reactivar turno'}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0 }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18, color: t.activo ? '#10b981' : 'var(--text-3)' }}>
+                {t.activo ? 'toggle_on' : 'toggle_off'}
+              </span>
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {showForm && (
+        <div className="flex flex-col gap-2 mt-1 p-3 rounded-lg" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+          <input
+            type="text" placeholder="Nombre (ej. Brunch)" value={nombre}
+            onChange={e => setNombre(e.target.value)} style={inputStyle}
+          />
+          <div className="flex items-center gap-2">
+            <input type="time" value={desde} onChange={e => setDesde(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+            <span style={{ color: 'var(--text-3)', fontSize: 12 }}>a</span>
+            <input type="time" value={hasta} onChange={e => setHasta(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+          </div>
+          <button
+            onClick={handleAgregar}
+            disabled={saving || !nombre.trim()}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
+            style={{ background: 'var(--navy)', opacity: (saving || !nombre.trim()) ? 0.6 : 1 }}
+          >
+            {saving ? 'Creando...' : 'Crear turno'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

@@ -15,6 +15,7 @@ import KitchenCoachFAB from '@/components/coach/KitchenCoachFAB'
 import { CoachPanelContent } from '@/components/coach/CoachPanelContent'
 import DemoBanner from '@/components/shell/DemoBanner'
 import { UiChromeProvider } from '@/lib/ui/chrome'
+import { hoyOperativo } from '@/lib/ops/turnos'
 
 type StockCriticoItem = { nombre: string; cantidad: number; minimo: number }
 type TareaPendienteItem = { titulo: string; prioridad: string; plaza?: string }
@@ -35,7 +36,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const supabase = createClient()
 
     async function fetchCoachContext() {
-      const hoy = new Date().toISOString().split('T')[0]
+      const hoy = hoyOperativo()
 
       const [stockRes, tareasRes] = await Promise.all([
         supabase

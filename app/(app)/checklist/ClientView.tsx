@@ -14,9 +14,12 @@ import { useHaccp } from '@/lib/hooks/useHaccp'
 import { useFichaje } from '@/lib/hooks/useFichaje'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
+import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
 import { todasLasPlazas, plazaLabel, plazaIcon } from '@/lib/constants'
+import { hoyOperativo, sumarDias, turnoActivo, turnoAnterior, encodeTurnoFase, cierreIncompleto } from '@/lib/ops/turnos'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import SectionEditor from '@/components/checklist/SectionEditor'
+import { FilterChips } from '@/components/ui'
 import type { Plaza, MisePlaceItem, MisePrioridad, ChecklistSeccionConfig, RutinaFrecuencia, ChecklistRutina, ChecklistRutinaRegistro, RutinaCondicion } from '@/types'
 
 // ── Constants ──
@@ -39,7 +42,6 @@ const FREQ_LABELS: Record<RutinaFrecuencia, string> = {
   diaria: 'Diaria', semanal: 'Semanal', quincenal: 'Quincenal', mensual: 'Mensual',
 }
 type Tab = 'apertura' | 'cierre' | 'rutina'
-function getToday() { return new Date().toISOString().split('T')[0] }
 function fmtFecha(d: string) {
   return new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
 }
@@ -86,6 +88,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const { rendimientoMap } = useProduccionRegistros()
   const { crearVencimiento } = useHaccp()
   const { fichajeAbierto, marcarSalida } = useFichaje()
+  const { turnosActivos } = useTurnosServicio()
 
   // Build receta info map (id → { porciones, pesoPorcion, vidaUtilDias }) for MiseCard display
   const recetaInfoMap = useMemo(() => {
@@ -178,6 +181,11 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const [toast, setToast] = useState<string | null>(null)
   const [pendientesApertura, setPendientesApertura] = useState<MisePlaceItem[]>([])
   const [regCierreAnteriorMap, setRegCierreAnteriorMap] = useState<Record<string, number | null>>({})
+  // Arrastre del turno anterior (Fase 3) — items que el turno previo dejó sin
+  // cerrar (lista granular, normal que pase) y si el cierre anterior no se
+  // hizo EN ABSOLUTO (señal gruesa para el banner "recibís sin cierre").
+  const [pendientesTurnoAnterior, setPendientesTurnoAnterior] = useState<MisePlaceItem[]>([])
+  const [cierreAnteriorIncompleto, setCierreAnteriorIncompleto] = useState(false)
   const [modoControl, setModoControl] = useState(false)
   const [cerrandoTurno, setCerrandoTurno] = useState(false)
 
@@ -193,35 +201,65 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     })
   }
 
-  const fecha = getToday()
-  const turno = tab === 'rutina' ? 'apertura' : tab
+  const fecha = hoyOperativo()
+
+  // Turno de servicio activo (almuerzo/cena/...) — default automático por
+  // hora, editable a mano (selector de chips en el header). Solo se
+  // auto-selecciona una vez; después de eso el usuario tiene el control.
+  const [turnoServicioId, setTurnoServicioId] = useState<string | null>(null)
+  useEffect(() => {
+    if (turnoServicioId !== null) return
+    const activo = turnoActivo(new Date(), turnosActivos)
+    if (activo) setTurnoServicioId(activo.id)
+  }, [turnosActivos, turnoServicioId])
+
+  const fase: 'apertura' | 'cierre' = tab === 'rutina' ? 'apertura' : tab
+  // checklist_registros.turno codifica turno+fase ('cena:apertura'); si el
+  // turno de servicio todavía no resolvió, degrada a la fase pelada (compat).
+  const turno = turnoServicioId ? encodeTurnoFase(turnoServicioId, fase) : fase
 
   // Cuando plaza está seleccionada carga su turno; cuando muestra el grid carga apertura para mostrar progreso
   useEffect(() => { fetchAll(fecha, plaza ? turno : 'apertura') }, [plaza, tab, fecha, fetchAll, turno])
 
-  // Fetch stock del cierre anterior para mostrar en apertura (read-only)
+  // Fetch del cierre del turno anterior — se usa para tres cosas a la vez:
+  // (1) stock de referencia por ítem (regCierreAnteriorMap, read-only en apertura),
+  // (2) qué ítems de plaza el turno anterior dejó sin cerrar (pendientesTurnoAnterior),
+  // (3) si el cierre anterior NO se hizo en absoluto (cierreAnteriorIncompleto) —
+  // el pase de turno no se cumplió, se deduce de la ausencia de registros, no
+  // se persiste ningún flag. "Anterior" ya no es simplemente "ayer": es el
+  // turno de servicio previo en la secuencia (puede ser el mismo día, ej.
+  // cena→almuerzo, o el día anterior si este es el primer turno del día). Se
+  // busca también el 'cierre' pelado (compat con filas de antes de turnos de servicio).
   useEffect(() => {
     if (!plaza || items.length === 0) return
     const supabase = createClient()
     const plazaItemIds = items.filter(i => i.plaza === plaza || (plaza !== 'general' && i.plaza === 'general')).map(i => i.id)
     if (plazaItemIds.length === 0) return
-    const d = new Date(fecha + 'T12:00:00')
-    d.setDate(d.getDate() - 1)
-    const ayer = d.toISOString().split('T')[0]
+    const anterior = turnoServicioId ? turnoAnterior(fecha, turnoServicioId, turnosActivos) : null
+    const jornadaBuscada = anterior?.jornada ?? sumarDias(fecha, -1)
+    const turnosBuscados = anterior?.turnoId ? [encodeTurnoFase(anterior.turnoId, 'cierre'), 'cierre'] : ['cierre']
     supabase
       .from('checklist_registros')
-      .select('checklist_item_id, cantidad_actual')
-      .eq('fecha', ayer)
-      .eq('turno', 'cierre')
+      .select('checklist_item_id, cantidad_actual, completado')
+      .eq('fecha', jornadaBuscada)
+      .in('turno', turnosBuscados)
       .in('checklist_item_id', plazaItemIds)
       .then(({ data }) => {
+        const regs = (data ?? []) as { checklist_item_id: string; cantidad_actual: number | null; completado: boolean }[]
         const map: Record<string, number | null> = {}
-        for (const r of (data ?? []) as { checklist_item_id: string; cantidad_actual: number | null }[]) {
+        const completadosSet = new Set<string>()
+        for (const r of regs) {
           map[r.checklist_item_id] = r.cantidad_actual ?? null
+          if (r.completado) completadosSet.add(r.checklist_item_id)
         }
         setRegCierreAnteriorMap(map)
+        const registradosIds = new Set(regs.map(r => r.checklist_item_id))
+        setPendientesTurnoAnterior(items.filter(i =>
+          i.plaza === plaza && (!registradosIds.has(i.id) || !completadosSet.has(i.id))
+        ))
+        setCierreAnteriorIncompleto(cierreIncompleto(regs))
       })
-  }, [plaza, items, fecha]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [plaza, items, fecha, turnoServicioId, turnosActivos]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cargar pendientes de apertura al entrar al tab cierre
   useEffect(() => {
@@ -231,12 +269,13 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       // Traer los item_ids de la plaza
       const plazaItemIds = items.filter(i => i.plaza === plaza || (plaza !== 'general' && i.plaza === 'general')).map(i => i.id)
       if (plazaItemIds.length === 0) { setPendientesApertura([]); return }
-      // Traer registros de apertura del día para esos items
+      // Traer registros de apertura del día para esos items (mismo turno de servicio)
+      const turnoApertura = turnoServicioId ? encodeTurnoFase(turnoServicioId, 'apertura') : 'apertura'
       const { data: regs } = await supabase
         .from('checklist_registros')
         .select('checklist_item_id, completado')
         .eq('fecha', fecha)
-        .eq('turno', 'apertura')
+        .eq('turno', turnoApertura)
         .in('checklist_item_id', plazaItemIds)
       const completadosSet = new Set<string>()
       for (const r of (regs ?? []) as { checklist_item_id: string; completado: boolean }[]) {
@@ -250,7 +289,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       setPendientesApertura(pendientes)
     }
     loadPendientes()
-  }, [tab, plaza, fecha, items]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tab, plaza, fecha, items, turnoServicioId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const plazaSecciones = useMemo(() =>
     secciones
@@ -423,7 +462,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
 
   // Set of checklist_item_ids that already have a pending/in-progress tarea today
   const tareasHoySet = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0]
+    const today = hoyOperativo()
     const s = new Set<string>()
     for (const t of tareas) {
       if (t.turno_fecha === today && t.estado !== 'listo' && t.checklist_item_id) {
@@ -578,14 +617,16 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
   }, [])
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = hoyOperativo()
 
   // Wrapper de upsertRegistro: al cambiar completado, sincroniza la tarea de producción matching
   const handleMiseUpsert = useCallback(async (
     itemId: string, fecha: string, turno: string,
     d: { completado?: boolean; cantidad_actual?: number | null }
   ) => {
-    await upsertRegistro(itemId, fecha, turno, d)
+    // usuario_id: quién hizo la última acción sobre este registro — alimenta
+    // el reporte de auditoría "pase de turno incumplido" (Reportes → Auditoría).
+    await upsertRegistro(itemId, fecha, turno, { ...d, usuario_id: authPerfil?.miembro_id ?? null })
     if (d.completado === undefined) return
     // Vínculo por FK (checklist_item_id), no por título. Refleja el tilde del mise
     // en la(s) tarea(s) de producción originadas por este item.
@@ -593,14 +634,12 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     for (const mt of matchingTareas) {
       await cambiarEstadoTarea(mt.id, d.completado ? 'listo' : 'pendiente')
     }
-  }, [upsertRegistro, tareas, cambiarEstadoTarea, today])
+  }, [upsertRegistro, tareas, cambiarEstadoTarea, today, authPerfil])
 
   const handleCrearTarea = useCallback(async (params: CrearTareaParams) => {
     let turnoFecha = today
     if (params.dia === 'manana') {
-      const d = new Date(today + 'T12:00:00')
-      d.setDate(d.getDate() + 1)
-      turnoFecha = d.toISOString().split('T')[0]
+      turnoFecha = sumarDias(today, 1)
     }
     const categoria = params.dia === 'manana' ? 'pase_turno' : 'produccion'
     const descripcion = params.nota ?? (params.cantidad != null ? `Preparar ${params.cantidad}` : null)
@@ -762,6 +801,19 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           </div>
         </div>
 
+        {/* Selector de turno de servicio — default automático por hora, editable.
+            Solo aplica a apertura/cierre (rutina es del día, no de un turno). */}
+        {tab !== 'rutina' && turnosActivos.length > 1 && (
+          <div style={{ paddingBottom: 8 }}>
+            <FilterChips
+              chips={turnosActivos.map(t => ({ value: t.id, label: t.nombre }))}
+              active={turnoServicioId ?? turnosActivos[0].id}
+              onChange={setTurnoServicioId}
+              context="onDark"
+            />
+          </div>
+        )}
+
         {/* Switcher de plazas — solo si el usuario tiene ≥2 asignadas */}
         {userPlazas.length > 1 && (
           <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, scrollbarWidth: 'none' }}>
@@ -811,6 +863,48 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       <div ref={scrollContainerRef} style={{ flex: 1, overflow: 'auto', padding: '10px 12px', paddingBottom: 120 }}>
         {loading && (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>Cargando...</div>
+        )}
+
+        {/* ── Arrastre del turno anterior (solo en apertura) — nunca bloquea,
+            solo avisa. No le pide al que entra que reconstruya el cierre
+            de quien se fue: solo que cuente lo que va a mirar igual. ── */}
+        {!loading && tab === 'apertura' && pendientesTurnoAnterior.length > 0 && (
+          <div style={{
+            background: cierreAnteriorIncompleto ? 'rgba(239, 68, 68, 0.12)' : 'rgba(250, 204, 21, 0.15)',
+            borderLeft: `3px solid ${cierreAnteriorIncompleto ? '#ef4444' : '#facc15'}`,
+            borderRadius: 12,
+            marginBottom: 10,
+            overflow: 'hidden',
+          }}>
+            <div style={{ padding: '10px 14px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16, color: cierreAnteriorIncompleto ? '#dc2626' : '#ca8a04', flexShrink: 0 }}>
+                {cierreAnteriorIncompleto ? 'report' : 'warning'}
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: cierreAnteriorIncompleto ? '#7f1d1d' : '#78350f', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                {cierreAnteriorIncompleto ? 'Recibís sin cierre del turno anterior' : 'Pendiente del turno anterior'}
+              </span>
+            </div>
+            {cierreAnteriorIncompleto && (
+              <div style={{ padding: '0 14px 6px', fontSize: 12, color: '#7f1d1d', lineHeight: 1.4 }}>
+                Nadie registró el cierre. Contá lo que veas al arrancar — no hace falta reconstruir el turno anterior.
+              </div>
+            )}
+            <div style={{ padding: '0 14px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {pendientesTurnoAnterior.map(item => (
+                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16, color: cierreAnteriorIncompleto ? '#dc2626' : '#ca8a04', flexShrink: 0 }}>radio_button_unchecked</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: cierreAnteriorIncompleto ? '#7f1d1d' : '#78350f' }}>{item.nombre}</span>
+                    {item.cantidad > 0 && (
+                      <span style={{ marginLeft: 6, fontSize: 11, color: cierreAnteriorIncompleto ? '#991b1b' : '#92400e' }}>
+                        {item.cantidad} {item.unidad}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* ── Pendientes del turno (solo en cierre) ── */}

@@ -9,6 +9,20 @@ import type {
   Plaza, MisePrioridad, RutinaFrecuencia,
 } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
+import { parseTurnoFase } from '@/lib/ops/turnos'
+
+// Pase de turno incumplido (Fase 3, jul 2026): un (fecha, turno, plaza) tuvo
+// apertura pero NINGÚN cierre completado — se deduce de checklist_registros,
+// no hay flag ni fila propia. usuarioId = quién hizo la última acción sobre
+// el cierre de ese grupo (null si nadie llegó a tocarlo, ver useChecklist.ts
+// upsertRegistro — usuario_id recién empezó a poblarse en jul 2026, las filas
+// anteriores no lo tienen).
+export interface PaseTurnoIncumplido {
+  fecha: string
+  turnoId: string | null   // null = fila legacy sin turno de servicio codificado
+  plaza: string
+  usuarioId: string | null
+}
 
 interface ChecklistConfig {
   secciones: ChecklistSeccionConfig[]
@@ -236,7 +250,7 @@ export function useChecklist() {
   }
 
   // ── Registros ──
-  async function upsertRegistro(itemId: string, fecha: string, turno: string, datos: { completado?: boolean; cantidad_actual?: number | null }) {
+  async function upsertRegistro(itemId: string, fecha: string, turno: string, datos: { completado?: boolean; cantidad_actual?: number | null; usuario_id?: string | null }) {
     try {
       const { error } = await supabase.from('checklist_registros').upsert({
         checklist_item_id: itemId, fecha, turno, ...datos,
@@ -375,13 +389,65 @@ export function useChecklist() {
     }
   }, [RESTAURANTE_ID, supabase])
 
+  // useCallback: igual que fetchAuditorias, se usa en el loadTab de Reportes —
+  // sin memoizar, generaría un loop de renders (ver hooks.md #10).
+  const fetchAuditoriaPaseTurno = useCallback(async (desde: string, hasta?: string): Promise<PaseTurnoIncumplido[]> => {
+    if (!RESTAURANTE_ID) return []
+    try {
+      const { data: itemsData, error: itemsErr } = await supabase.from('checklist_items').select('id, plaza')
+        .eq('restaurante_id', RESTAURANTE_ID)
+      if (itemsErr) throw itemsErr
+      const itemPlaza = new Map<string, string>()
+      for (const i of (itemsData ?? []) as { id: string; plaza: string }[]) itemPlaza.set(i.id, i.plaza)
+      const itemIds = Array.from(itemPlaza.keys())
+      if (itemIds.length === 0) return []
+
+      let q = supabase.from('checklist_registros')
+        .select('checklist_item_id, fecha, turno, completado, usuario_id')
+        .in('checklist_item_id', itemIds)
+        .gte('fecha', desde)
+      if (hasta) q = q.lte('fecha', hasta)
+      const { data: regs, error: regErr } = await q
+      if (regErr) throw regErr
+
+      interface Grupo { hasApertura: boolean; hasCierreCompletado: boolean; ultimoUsuarioId: string | null }
+      const grupos = new Map<string, Grupo>()
+      for (const r of (regs ?? []) as { checklist_item_id: string; fecha: string; turno: string; completado: boolean; usuario_id: string | null }[]) {
+        const plaza = itemPlaza.get(r.checklist_item_id)
+        if (!plaza) continue
+        const { turnoId, fase } = parseTurnoFase(r.turno)
+        const key = `${r.fecha}|${turnoId ?? 'legacy'}|${plaza}`
+        const g = grupos.get(key) ?? { hasApertura: false, hasCierreCompletado: false, ultimoUsuarioId: null }
+        if (fase === 'apertura') g.hasApertura = true
+        if (fase === 'cierre') {
+          if (r.completado) g.hasCierreCompletado = true
+          if (r.usuario_id) g.ultimoUsuarioId = r.usuario_id
+        }
+        grupos.set(key, g)
+      }
+
+      const incumplidos: PaseTurnoIncumplido[] = []
+      for (const [key, g] of grupos) {
+        // Solo cuenta si hubo apertura (el turno se usó) y ningún cierre completado.
+        if (!g.hasApertura || g.hasCierreCompletado) continue
+        const [fecha, turnoId, plaza] = key.split('|')
+        incumplidos.push({ fecha, turnoId: turnoId === 'legacy' ? null : turnoId, plaza, usuarioId: g.ultimoUsuarioId })
+      }
+      return incumplidos.sort((a, b) => b.fecha.localeCompare(a.fecha))
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al cargar el pase de turno'
+      console.error('[useChecklist] fetchAuditoriaPaseTurno Error:', msg)
+      throw new Error(msg)
+    }
+  }, [RESTAURANTE_ID, supabase])
+
   return {
     secciones, items, registros, rutinas, rutinaRegistros, loading, error,
     fetchAll, fetchRegistros, fetchRutinaRegistros,
     agregarSeccion, actualizarSeccion, eliminarSeccion, reordenarSecciones,
     agregarItem, actualizarItem, eliminarItem, upsertRegistro,
     agregarRutina, actualizarRutina, eliminarRutina, toggleRutina,
-    registrarAuditoriaRutina, guardarAuditoriaPasada, fetchAuditorias,
+    registrarAuditoriaRutina, guardarAuditoriaPasada, fetchAuditorias, fetchAuditoriaPaseTurno,
     // Refresco explícito tras una escritura externa a secciones/items (ej.
     // upsertMiseChecklistItem/shrinkOrPruneMise desde el board de Carta) —
     // la realtime subscription ya lo hace sola en 1-3s, esto evita esa espera.

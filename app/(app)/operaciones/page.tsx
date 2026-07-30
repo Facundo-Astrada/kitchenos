@@ -5,6 +5,7 @@ import ChecklistPage from '@/app/(app)/checklist/ClientView'
 import TareasPage from '@/app/(app)/tareas/ClientView'
 import { ProduccionView } from '@/app/(app)/produccion/page'
 import { useTareas } from '@/lib/hooks/useTareas'
+import { hoyOperativo } from '@/lib/ops/turnos'
 
 type Tab = 'produccion' | 'mise' | 'planificacion'
 
@@ -23,7 +24,7 @@ export default function OperacionesPage() {
   const { tareas } = useTareas()
   // Tareas de hoy sin completar → badge en el tab Producción (ver el efecto sin cambiar de tab)
   const pendientesProduccion = useMemo(() => {
-    const hoy = new Date().toISOString().split('T')[0]
+    const hoy = hoyOperativo()
     return tareas.filter(t => t.turno_fecha === hoy && !t.parent_id && t.estado !== 'listo').length
   }, [tareas])
   // Lazy-mount: cada tab se monta recién en su primera visita y de ahí en más
@@ -47,7 +48,7 @@ export default function OperacionesPage() {
   // Coach responda "¿qué me conviene producir hoy?" con datos reales.
   useEffect(() => {
     try {
-      const hoy = new Date().toISOString().split('T')[0]
+      const hoy = hoyOperativo()
       const delDia = tareas.filter(t => t.turno_fecha === hoy && !t.parent_id)
       const total = delDia.length
       const listos = delDia.filter(t => t.estado === 'listo').length

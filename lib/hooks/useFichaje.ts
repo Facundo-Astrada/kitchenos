@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
 import { useAuth } from '@/lib/auth/context'
+import { hoyOperativo } from '@/lib/ops/turnos'
 
 export interface FichajeDia {
   id: string
@@ -23,8 +24,6 @@ function errMsg(e: unknown, fallback: string): string {
   if (e && typeof e === 'object' && 'message' in e) return String((e as { message: unknown }).message)
   return fallback
 }
-
-function hoyISO(): string { return new Date().toISOString().slice(0, 10) }
 
 async function fetchFichajeAbierto([, restauranteId, userId, fecha]: [string, string, string, string]): Promise<FichajeDia | null> {
   const supabase = createClient()
@@ -46,7 +45,7 @@ export function useFichaje() {
   const { user, perfil } = useAuth()
   const supabase = useMemo(() => createClient(), [])
 
-  const swrKey = RESTAURANTE_ID && user?.id ? ['fichaje-abierto', RESTAURANTE_ID, user.id, hoyISO()] as const : null
+  const swrKey = RESTAURANTE_ID && user?.id ? ['fichaje-abierto', RESTAURANTE_ID, user.id, hoyOperativo()] as const : null
   const { data: fichajeAbierto = null, isLoading: loading, mutate } = useSWR(swrKey, fetchFichajeAbierto, {
     revalidateOnFocus: false,
     dedupingInterval: 30_000,
@@ -58,7 +57,7 @@ export function useFichaje() {
       const { data, error } = await supabase.from('turnos_personal').insert({
         restaurante_id: RESTAURANTE_ID,
         usuario_id: user.id,
-        fecha: hoyISO(),
+        fecha: hoyOperativo(),
         entrada: new Date().toISOString(),
       }).select().single()
       if (error) throw error
@@ -88,7 +87,7 @@ export function useFichaje() {
     const { data: abiertos, error } = await supabase
       .from('turnos_personal').select('*')
       .eq('restaurante_id', RESTAURANTE_ID)
-      .eq('fecha', hoyISO())
+      .eq('fecha', hoyOperativo())
       .is('salida', null)
       .not('entrada', 'is', null)
     if (error) throw new Error(errMsg(error, 'Error al cargar quién está adentro'))

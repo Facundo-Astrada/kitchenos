@@ -8,27 +8,32 @@ import { MOTIVOS_MERMA } from '@/types'
 import type { Merma, MotivoMerma } from '@/types'
 import MermaBottomSheet from '@/components/merma/MermaBottomSheet'
 import { HeaderAction } from '@/components/ui'
+import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
 
 // ── Helpers ─────────────────────────────────────────────────
 type Periodo = 'hoy' | 'semana' | 'mes' | 'todo'
 
+// Formatea un Date anclado a T12:00:00 local (nunca "ahora") — el mediodía
+// evita que el offset UTC lo empuje a otro día calendario.
 function fmtDate(d: Date) {
   return d.toISOString().split('T')[0]
 }
 
 function getRango(periodo: Periodo): { desde?: string; hasta?: string } {
-  const hoy = new Date()
+  const hoy = hoyOperativo()
   switch (periodo) {
     case 'hoy':
-      return { desde: fmtDate(hoy), hasta: fmtDate(hoy) }
+      return { desde: hoy, hasta: hoy }
     case 'semana': {
-      const inicio = new Date(hoy)
-      inicio.setDate(hoy.getDate() - hoy.getDay())
-      return { desde: fmtDate(inicio), hasta: fmtDate(hoy) }
+      const hoyDate = new Date(hoy + 'T12:00:00')
+      const inicio = new Date(hoyDate)
+      inicio.setDate(hoyDate.getDate() - hoyDate.getDay())
+      return { desde: fmtDate(inicio), hasta: hoy }
     }
     case 'mes': {
-      const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
-      return { desde: fmtDate(inicio), hasta: fmtDate(hoy) }
+      const [y, m] = hoy.split('-').map(Number)
+      const inicio = new Date(y, m - 1, 1, 12)
+      return { desde: fmtDate(inicio), hasta: hoy }
     }
     case 'todo':
       return {}
@@ -36,11 +41,9 @@ function getRango(periodo: Periodo): { desde?: string; hasta?: string } {
 }
 
 function fmtFechaGrupo(fecha: string): string {
-  const hoy = fmtDate(new Date())
+  const hoy = hoyOperativo()
   if (fecha === hoy) return 'Hoy'
-  const ayer = new Date()
-  ayer.setDate(ayer.getDate() - 1)
-  if (fecha === fmtDate(ayer)) return 'Ayer'
+  if (fecha === sumarDias(hoy, -1)) return 'Ayer'
   const d = new Date(fecha + 'T12:00:00')
   return d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
 }

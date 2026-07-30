@@ -2,11 +2,15 @@ import { z } from 'zod'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ModuloId } from '@/lib/constants'
 import type { CampoUI } from '@/lib/coach/types'
+import { hoyOperativo, horaEnTz } from '@/lib/ops/turnos'
 
 const fmtARS = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 
+// Corre server-side (API route): el proceso está en UTC, así que
+// new Date().getHours() da la hora equivocada casi todo el día para un
+// restaurante en ART. horaEnTz() resuelve la hora de pared real.
 function turnoActual(): 'apertura' | 'servicio' | 'cierre' {
-  const h = new Date().getHours()
+  const h = horaEnTz(new Date())
   return h < 12 ? 'apertura' : h < 18 ? 'servicio' : 'cierre'
 }
 
@@ -87,7 +91,7 @@ export const COACH_TOOL_REGISTRY: Record<string, ToolRegistryEntry<any>> = {
       { key: 'descripcion', label: 'Descripción', tipo: 'textarea' },
     ],
     execute: async (supabase, restauranteId, input: z.infer<typeof crearTareaSchema>) => {
-      const hoy = new Date().toISOString().split('T')[0]
+      const hoy = hoyOperativo()
       const { error } = await supabase.from('tareas').insert({
         titulo: input.titulo,
         descripcion: input.descripcion ?? null,
@@ -147,7 +151,7 @@ export const COACH_TOOL_REGISTRY: Record<string, ToolRegistryEntry<any>> = {
       { key: 'detalle', label: 'Detalle', tipo: 'textarea' },
     ],
     execute: async (supabase, restauranteId, input: z.infer<typeof registrarMermaSchema>) => {
-      const hoy = new Date().toISOString().split('T')[0]
+      const hoy = hoyOperativo()
       const { data: prod } = await supabase.from('productos')
         .select('id, precio_unitario, stock_actual')
         .eq('restaurante_id', restauranteId)
@@ -257,7 +261,7 @@ export const COACH_TOOL_REGISTRY: Record<string, ToolRegistryEntry<any>> = {
       { key: 'fecha', label: 'Fecha (YYYY-MM-DD)', tipo: 'texto' },
     ],
     execute: async (supabase, restauranteId, input: z.infer<typeof registrarVentaSchema>) => {
-      const hoy = new Date().toISOString().split('T')[0]
+      const hoy = hoyOperativo()
       const fecha = input.fecha || hoy
       const cubiertos = input.cantidad_cubiertos ?? null
       const { data: existe } = await supabase.from('ventas')

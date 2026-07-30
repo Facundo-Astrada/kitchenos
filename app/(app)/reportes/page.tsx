@@ -31,7 +31,7 @@ import {
 } from '@/lib/hooks/usePreciosProveedores'
 import { useCajaTurno } from '@/lib/hooks/useCajaTurno'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
-import { useChecklist } from '@/lib/hooks/useChecklist'
+import { useChecklist, type PaseTurnoIncumplido } from '@/lib/hooks/useChecklist'
 import { useReporteVentas, type ReporteVentas } from '@/lib/hooks/useReporteVentas'
 import { useCarta } from '@/lib/hooks/useCarta'
 import type { CajaTurno, ChecklistAuditoria } from '@/types'
@@ -120,7 +120,7 @@ export default function ReportesPage() {
   const { fetchComparador } = usePreciosProveedores()
   const { fetchHistorial } = useCajaTurno()
   const { medios } = useMediosPago()
-  const { fetchAuditorias } = useChecklist()
+  const { fetchAuditorias, fetchAuditoriaPaseTurno } = useChecklist()
   const { fetchReporte: fetchReporteVentas } = useReporteVentas()
   const { items: cartaItemsRep } = useCarta()
   const isDesktop = useIsDesktop()
@@ -179,6 +179,7 @@ export default function ReportesPage() {
   const [rendData, setRendData] = useState<RendimientoPlaza[]>([])
   const [cajaHistorial, setCajaHistorial] = useState<CajaTurno[]>([])
   const [auditoriaHistorial, setAuditoriaHistorial] = useState<ChecklistAuditoria[]>([])
+  const [paseTurnoIncumplidos, setPaseTurnoIncumplidos] = useState<PaseTurnoIncumplido[]>([])
   const [ventasRep, setVentasRep] = useState<ReporteVentas | null>(null)
 
   const [tabLoading, setTabLoading] = useState(false)
@@ -268,8 +269,12 @@ export default function ReportesPage() {
         }
         case 'auditoria': {
           const { from, to } = rangoAuditoria(p)
-          const a = await fetchAuditorias(from, to)
+          const [a, pt] = await Promise.all([
+            fetchAuditorias(from, to),
+            fetchAuditoriaPaseTurno(from, to),
+          ])
           setAuditoriaHistorial(a)
+          setPaseTurnoIncumplidos(pt)
           break
         }
       }
@@ -278,7 +283,7 @@ export default function ReportesPage() {
     } finally {
       setTabLoading(false)
     }
-  }, [fetchResumen, fetchReporteVentas, fetchFoodCost, fetchCompras, fetchPrecios, fetchComparador, fetchProduccion, fetchCMV, fetchPresupuestos, fetchRendimiento, fetchHistorial, fetchAuditorias])
+  }, [fetchResumen, fetchReporteVentas, fetchFoodCost, fetchCompras, fetchPrecios, fetchComparador, fetchProduccion, fetchCMV, fetchPresupuestos, fetchRendimiento, fetchHistorial, fetchAuditorias, fetchAuditoriaPaseTurno])
 
   useEffect(() => {
     loadTab(tab, periodo)
@@ -1148,13 +1153,68 @@ export default function ReportesPage() {
     return '#dc2626'
   }
 
+  // Pase de turno incumplido (Fase 3): turnos con apertura pero sin ningún
+  // cierre completado — se deduce de checklist_registros, sin storage propio.
+  // "Sin asignar" cuando nadie llegó a tocar el cierre (usuario_id null).
+  function renderPaseTurnoIncumplido() {
+    if (!paseTurnoIncumplidos.length) return null
+    const porPlaza = new Map<string, number>()
+    const porPersona = new Map<string, number>()
+    for (const pt of paseTurnoIncumplidos) {
+      porPlaza.set(pt.plaza, (porPlaza.get(pt.plaza) ?? 0) + 1)
+      const nombre = pt.usuarioId ? (nombresEquipo[pt.usuarioId] ?? 'Ex-miembro del equipo') : 'Sin asignar'
+      porPersona.set(nombre, (porPersona.get(nombre) ?? 0) + 1)
+    }
+    return (
+      <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 16, border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#dc2626' }}>report</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Pase de turno incumplido</span>
+          <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#dc2626' }}>{paseTurnoIncumplidos.length} turnos</span>
+        </div>
+        <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0 }}>Turnos donde se hizo la apertura pero nadie cerró el mise. No bloquea nada — es información para conversar con el equipo.</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+          <div style={{ flex: 1, minWidth: 140 }}>
+            <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', margin: '0 0 6px' }}>Por plaza</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {[...porPlaza.entries()].sort((a, b) => b[1] - a[1]).map(([plaza, n]) => (
+                <div key={plaza} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                  <span style={{ color: 'var(--text-2)' }}>{PLAZA_LABELS[plaza] ?? plaza}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--text-1)' }}>{n}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{ flex: 1, minWidth: 140 }}>
+            <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', margin: '0 0 6px' }}>Por persona</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {[...porPersona.entries()].sort((a, b) => b[1] - a[1]).map(([nombre, n]) => (
+                <div key={nombre} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                  <span style={{ color: 'var(--text-2)' }}>{nombre}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--text-1)' }}>{n}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   function renderAuditoria() {
+    const paseTurnoCard = renderPaseTurnoIncumplido()
     if (!auditoriaHistorial.length) {
-      return <EmptyState icon="fact_check" text="Todavía no hay pasadas de auditoría cerradas en este período. Se registran desde Checklist → Rutina, configurando puntaje en un ítem." />
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {paseTurnoCard}
+          <EmptyState icon="fact_check" text="Todavía no hay pasadas de auditoría cerradas en este período. Se registran desde Checklist → Rutina, configurando puntaje en un ítem." />
+        </div>
+      )
     }
     const porFecha = [...auditoriaHistorial].sort((a, b) => a.fecha.localeCompare(b.fecha))
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {paseTurnoCard}
         <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 16, border: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Evolución del score</span>

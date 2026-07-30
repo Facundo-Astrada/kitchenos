@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth/context'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { useUserRol, type FlujoOnboarding } from '@/lib/hooks/useUserRol'
 import { useOnboardingProgress, markOnboardingDone, type OnboardingStats, type StepState } from '@/lib/hooks/useOnboardingProgress'
+import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
 import StepCard, { type StepGroup } from '@/components/onboarding/StepCard'
 import RoleBadge from '@/components/onboarding/RoleBadge'
 
@@ -34,6 +35,8 @@ interface StepDef {
   coachPrefill?: string
   /** Marcador para pasos que dejan elegir plaza inline */
   plazaPicker?: boolean
+  /** Marcador para el paso de turnos de servicio (botón "así está bien" con los defaults) */
+  turnosPicker?: boolean
 }
 
 interface StepCtx {
@@ -68,6 +71,13 @@ const PASOS_ADMIN: StepDef[] = [
     stat: s => `${s.plazas} plazas activas`,
     deeplink: '/configuracion', goLabel: 'Configurar plazas',
     isDone: s => s.plazas > 0,
+  },
+  {
+    group: 'green', icon: 'schedule', title: 'Definí tus turnos de servicio',
+    description: () => 'Almuerzo, cena, o los bloques horarios que uses — el mise se lleva por turno, para que el que entra reciba lo que dejó el anterior.',
+    stat: s => s.turnosConfigurados ? 'Turnos configurados' : 'Almuerzo (09-17) y Cena (17-01:30) — podés ajustarlos',
+    turnosPicker: true,
+    isDone: s => s.turnosConfigurados,
   },
   {
     group: 'green', icon: 'checklist', title: 'Configurá el mise en place ⭐',
@@ -162,6 +172,8 @@ export default function OnboardingPage() {
 
   const { flujo, plazaDefault, loading: rolLoading } = useUserRol()
   const { stats, loading: statsLoading, refresh } = useOnboardingProgress()
+  const { turnos: turnosOnboarding, confirmarDefaults: confirmarDefaultsTurnos } = useTurnosServicio()
+  const [confirmandoTurnos, setConfirmandoTurnos] = useState(false)
 
   const [restauranteNombre, setRestauranteNombre] = useState('tu restaurante')
   const [plazaActual, setPlazaActual] = useState<string | null>(plazaDefault)
@@ -232,6 +244,16 @@ export default function OnboardingPage() {
         .eq('restaurante_id', RESTAURANTE_ID)
         .eq('auth_user_id', user.id)
         .then(() => {}, () => {})
+    }
+  }
+
+  async function confirmarTurnos() {
+    setConfirmandoTurnos(true)
+    try {
+      await confirmarDefaultsTurnos()
+      await refresh()
+    } finally {
+      setConfirmandoTurnos(false)
     }
   }
 
@@ -334,6 +356,33 @@ export default function OnboardingPage() {
                   actual={plazaActual}
                   onChange={guardarPlaza}
                 />
+              )}
+
+              {/* Turnos de servicio: los 2 defaults ya vienen cargados — un tap alcanza */}
+              {p.turnosPicker && !stats.turnosConfigurados && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {turnosOnboarding.map(t => (
+                      <span key={t.id} style={{
+                        padding: '4px 10px', borderRadius: 999, fontSize: 11.5, fontWeight: 700,
+                        background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-1)',
+                      }}>
+                        {t.nombre} {t.desde}-{t.hasta}
+                      </span>
+                    ))}
+                  </div>
+                  <button
+                    onClick={confirmarTurnos}
+                    disabled={confirmandoTurnos}
+                    style={{
+                      padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                      background: 'var(--navy)', color: '#fff', fontWeight: 700, fontSize: 12.5,
+                      fontFamily: 'inherit', opacity: confirmandoTurnos ? 0.6 : 1,
+                    }}
+                  >
+                    {confirmandoTurnos ? 'Guardando...' : 'Así está bien'}
+                  </button>
+                </div>
               )}
             </StepCard>
           ))}
