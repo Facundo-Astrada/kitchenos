@@ -48,9 +48,9 @@ const PRIO_CFG: Record<string, { label: string; color: string; bg: string }> = {
   sp:  { label: 'SP',  color: '#ef4444', bg: 'rgba(239,68,68,.13)' },
   p:   { label: 'P',   color: '#f97316', bg: 'rgba(249,115,22,.13)' },
   ref: { label: 'REF', color: '#3b82f6', bg: 'rgba(59,130,246,.13)' },
-  chk: { label: 'REF', color: '#3b82f6', bg: 'rgba(59,130,246,.13)' },
+  chk: { label: 'OK',  color: '#22c55e', bg: 'rgba(34,197,94,.13)' },
 }
-const PRIO_CYCLE: MisePrioridad[] = ['sp', 'p', 'ref']
+const PRIO_CYCLE: MisePrioridad[] = ['sp', 'p', 'ref', 'chk']
 
 const btnReset: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer', padding: 0,
