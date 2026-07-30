@@ -16,9 +16,10 @@ interface Props {
   onGuardar: (pr: PlatoRecetaEnriquecido, result: OpsResult) => void
   onQuitar: (pr: PlatoRecetaEnriquecido) => void
   onEditarGramaje: (pr: PlatoRecetaEnriquecido, nuevaCantidad: number) => void
+  onEliminar: (pr: PlatoRecetaEnriquecido) => void
 }
 
-export default function CartaBoardCard({ pr, checklistItem, plazasCustom, isOpen, saving, onToggle, onGuardar, onQuitar, onEditarGramaje }: Props) {
+export default function CartaBoardCard({ pr, checklistItem, plazasCustom, isOpen, saving, onToggle, onGuardar, onQuitar, onEditarGramaje, onEliminar }: Props) {
   const color = pr.plaza ? plazaColor(pr.plaza, plazasCustom) : null
   const sinPlaza = !pr.plaza
   const [editandoGramaje, setEditandoGramaje] = useState(false)
@@ -111,20 +112,33 @@ export default function CartaBoardCard({ pr, checklistItem, plazasCustom, isOpen
             )}
           </div>
         </div>
-        <button
-          onClick={onToggle}
-          title="Asignar a OPS"
-          style={{
-            display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0,
-            padding: '3px 7px', borderRadius: 7, border: 'none', cursor: 'pointer',
-            fontSize: 10, fontWeight: 700,
-            background: isOpen ? 'rgba(67,97,160,.14)' : 'var(--surface)',
-            color: isOpen ? 'var(--accent)' : 'var(--text-3)',
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 13 }}>store</span>
-          OPS
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          <button
+            onClick={onToggle}
+            title="Asignar a OPS"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 3,
+              padding: '3px 7px', borderRadius: 7, border: 'none', cursor: 'pointer',
+              fontSize: 10, fontWeight: 700,
+              background: isOpen ? 'rgba(67,97,160,.14)' : 'var(--surface)',
+              color: isOpen ? 'var(--accent)' : 'var(--text-3)',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 13 }}>store</span>
+            OPS
+          </button>
+          <button
+            onClick={e => { e.stopPropagation(); onEliminar(pr) }}
+            title="Eliminar componente del plato"
+            disabled={saving}
+            style={{
+              display: 'flex', alignItems: 'center', padding: '3px 5px', borderRadius: 7,
+              border: 'none', cursor: saving ? 'default' : 'pointer', background: 'none', color: 'var(--text-3)',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>delete</span>
+          </button>
+        </div>
       </div>
       {isOpen && (
         <div style={{ padding: '10px 10px 12px', borderTop: '1px solid var(--border)', background: 'var(--surface)', borderBottomLeftRadius: 9, borderBottomRightRadius: 9 }}>

@@ -24,7 +24,7 @@ import CartaBoardCard from './CartaBoardCard'
 export default function CartaBoard() {
   const RESTAURANTE_ID = useRestauranteId()
   const supabase = useMemo(() => createClient(), [])
-  const { items, loading: loadingCarta, categorias, actualizarPlatoRecetaOps, actualizarPlatoRecetaOpsCompleta } = useCarta()
+  const { items, loading: loadingCarta, categorias, actualizarPlatoRecetaOps, actualizarPlatoRecetaOpsCompleta, eliminarPlatoReceta } = useCarta()
   const { items: checklistItems, loading: loadingChecklist, refetchConfig } = useChecklist()
   const { plazasCustom } = usePlazasCustom()
 
@@ -138,6 +138,26 @@ export default function CartaBoard() {
     }
   }
 
+  // Elimina el componente del plato (no solo su OPS) — si ya aportaba a una
+  // plaza, la recalcula (shrinkOrPruneMise) porque uno de sus aportantes se fue.
+  const handleEliminarComponente = async (pr: PlatoRecetaEnriquecido) => {
+    if (!confirm(`¿Eliminar "${pr.receta?.nombre ?? 'este componente'}" del plato?`)) return
+    setSavingOpsId(pr.id)
+    try {
+      const oldPlaza = pr.plaza
+      await eliminarPlatoReceta(pr.id)
+      if (oldPlaza) {
+        await shrinkOrPruneMise({ supabase, restauranteId: RESTAURANTE_ID, recetaId: pr.receta_id, plaza: oldPlaza })
+        await refetchConfig()
+      }
+      if (openOpsId === pr.id) setOpenOpsId(null)
+    } catch (e) {
+      console.error('[CartaBoard] error eliminando componente', e)
+    } finally {
+      setSavingOpsId(null)
+    }
+  }
+
   const loading = loadingCarta || loadingChecklist
 
   if (loading) {
@@ -226,6 +246,7 @@ export default function CartaBoard() {
                         onGuardar={handleGuardarOps}
                         onQuitar={handleQuitarOps}
                         onEditarGramaje={handleEditarGramaje}
+                        onEliminar={handleEliminarComponente}
                       />
                     ))}
                   </div>
