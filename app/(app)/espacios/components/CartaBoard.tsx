@@ -192,40 +192,46 @@ export default function CartaBoard() {
             </select>
           </div>
 
-          {/* Board horizontal de platos */}
-          <div style={{ display: 'flex', gap: 12, overflowX: 'auto', flex: 1, minHeight: 0, padding: '0 4px 12px', alignItems: 'flex-start' }}>
-            {platosVisibles.map(plato => (
-              <div
-                key={plato.id}
-                style={{
-                  minWidth: 230, maxWidth: 250, flexShrink: 0, display: 'flex', flexDirection: 'column',
-                  background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, maxHeight: '100%',
-                }}
-              >
-                <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 18, color: plato.disponible ? 'var(--accent)' : 'var(--text-3)' }}>restaurant_menu</span>
-                  <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {plato.nombre}
-                  </span>
+          {/* Board horizontal de platos — el wrapper exterior fija la altura
+              (flex:1/minHeight:0) para que cada columna pueda scrollear su
+              propio contenido en vez de crecer sin límite y tapar todo lo de
+              abajo cuando se expande un panel OPS (bug reportado: el panel
+              "se acortaba" y no se veían Recipiente/Cantidad/Guardar). */}
+          <div style={{ flex: 1, minHeight: 0, overflowX: 'auto', overflowY: 'hidden', padding: '0 4px 12px' }}>
+            <div style={{ display: 'flex', gap: 12, height: '100%' }}>
+              {platosVisibles.map(plato => (
+                <div
+                  key={plato.id}
+                  style={{
+                    minWidth: 230, maxWidth: 250, flexShrink: 0, display: 'flex', flexDirection: 'column',
+                    background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, height: '100%',
+                  }}
+                >
+                  <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 18, color: plato.disponible ? 'var(--accent)' : 'var(--text-3)' }}>restaurant_menu</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {plato.nombre}
+                    </span>
+                  </div>
+                  <div style={{ flex: 1, minHeight: 0, padding: 8, display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto' }}>
+                    {componentesVisibles(plato).map(pr => (
+                      <CartaBoardCard
+                        key={pr.id}
+                        pr={pr}
+                        checklistItem={pr.plaza ? checklistItems.find(ci => ci.receta_id === pr.receta_id && ci.plaza === pr.plaza) ?? null : null}
+                        plazasCustom={plazasCustom}
+                        isOpen={openOpsId === pr.id}
+                        saving={savingOpsId === pr.id}
+                        onToggle={() => setOpenOpsId(prev => prev === pr.id ? null : pr.id)}
+                        onGuardar={handleGuardarOps}
+                        onQuitar={handleQuitarOps}
+                        onEditarGramaje={handleEditarGramaje}
+                      />
+                    ))}
+                  </div>
                 </div>
-                <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto' }}>
-                  {componentesVisibles(plato).map(pr => (
-                    <CartaBoardCard
-                      key={pr.id}
-                      pr={pr}
-                      checklistItem={pr.plaza ? checklistItems.find(ci => ci.receta_id === pr.receta_id && ci.plaza === pr.plaza) ?? null : null}
-                      plazasCustom={plazasCustom}
-                      isOpen={openOpsId === pr.id}
-                      saving={savingOpsId === pr.id}
-                      onToggle={() => setOpenOpsId(prev => prev === pr.id ? null : pr.id)}
-                      onGuardar={handleGuardarOps}
-                      onQuitar={handleQuitarOps}
-                      onEditarGramaje={handleEditarGramaje}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </>
       )}
