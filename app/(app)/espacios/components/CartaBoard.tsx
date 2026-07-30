@@ -1,9 +1,11 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { useCarta, type PlatoRecetaEnriquecido } from '@/lib/hooks/useCarta'
+import { useCarta, type PlatoRecetaEnriquecido, type CartaItemEnriquecido } from '@/lib/hooks/useCarta'
 import { useChecklist } from '@/lib/hooks/useChecklist'
 import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
+import { useRecetas } from '@/lib/hooks/useRecetas'
+import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
 import { upsertMiseChecklistItem, sumPlatoRecetaCantidad, shrinkOrPruneMise } from '@/lib/ops/mise'
@@ -24,15 +26,20 @@ import CartaBoardCard from './CartaBoardCard'
 export default function CartaBoard() {
   const RESTAURANTE_ID = useRestauranteId()
   const supabase = useMemo(() => createClient(), [])
-  const { items, loading: loadingCarta, categorias, actualizarPlatoRecetaOps, actualizarPlatoRecetaOpsCompleta, eliminarPlatoReceta } = useCarta()
+  const { items, loading: loadingCarta, categorias, actualizarPlatoRecetaOps, actualizarPlatoRecetaOpsCompleta, agregarPlatoReceta, eliminarPlatoReceta } = useCarta()
   const { items: checklistItems, loading: loadingChecklist, refetchConfig } = useChecklist()
   const { plazasCustom } = usePlazasCustom()
+  const { recetas } = useRecetas()
+  const { productos } = useStock()
 
   const [search, setSearch] = useState('')
   const [categoriaActiva, setCategoriaActiva] = useState('todas')
   const [plazaFiltro, setPlazaFiltro] = useState('todas')
   const [openOpsId, setOpenOpsId] = useState<string | null>(null)
   const [savingOpsId, setSavingOpsId] = useState<string | null>(null)
+  const [addingPlatoId, setAddingPlatoId] = useState<string | null>(null)
+  const [addSearch, setAddSearch] = useState('')
+  const [addBusy, setAddBusy] = useState(false)
 
   // Entradas siempre primero, bebidas siempre al final; el resto respeta el
   // orden de categorías que ya tiene el restaurante en Carta.
@@ -177,6 +184,57 @@ export default function CartaBoard() {
     }
   }
 
+  // Agregar componente — misma dinámica que "Vincular receta" en Carta:
+  // buscar receta ya cargada, o un insumo de stock (se envuelve como receta
+  // borrador de 1 ingrediente vía /api/recetas/save, igual que handleVincularProducto
+  // en carta/page.tsx, para poder vincularlo con agregarPlatoReceta).
+  const addQ = addSearch.trim().toLowerCase()
+  function recetasParaAgregar(plato: CartaItemEnriquecido) {
+    if (!addQ) return []
+    const linkedIds = new Set(plato.plato_recetas.map(pr => pr.receta_id))
+    return recetas.filter(r => !linkedIds.has(r.id) && r.nombre.toLowerCase().includes(addQ)).slice(0, 8)
+  }
+  function productosParaAgregar() {
+    if (addQ.length < 2) return []
+    return productos.filter(p => p.nombre.toLowerCase().includes(addQ)).slice(0, 6)
+  }
+
+  const handleAgregarReceta = async (platoId: string, recetaId: string) => {
+    setAddBusy(true)
+    try {
+      await agregarPlatoReceta(platoId, recetaId, 1)
+      setAddingPlatoId(null); setAddSearch('')
+    } catch (e) {
+      console.error('[CartaBoard] error agregando receta al plato', e)
+    } finally {
+      setAddBusy(false)
+    }
+  }
+
+  const handleVincularProducto = async (platoId: string, producto: ProductoConEstado) => {
+    setAddBusy(true)
+    try {
+      const res = await fetch('/api/recetas/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          receta: { nombre: producto.nombre, categoria: producto.categoria || 'Insumo', porciones: 1, status: 'draft', restaurante_id: RESTAURANTE_ID },
+          ingredientes: [{
+            nombre: producto.nombre, cantidad: 1, unidad: producto.unidad,
+            costo_unitario: producto.precio_unitario || 0, unidad_costo: producto.unidad, producto_id: producto.id,
+          }],
+        }),
+      })
+      const json = await res.json()
+      if (json.id) await agregarPlatoReceta(platoId, json.id, 1)
+      setAddingPlatoId(null); setAddSearch('')
+    } catch (e) {
+      console.error('[CartaBoard] error vinculando producto al plato', e)
+    } finally {
+      setAddBusy(false)
+    }
+  }
+
   const loading = loadingCarta || loadingChecklist
 
   if (loading) {
@@ -269,6 +327,67 @@ export default function CartaBoard() {
                         onEliminar={handleEliminarComponente}
                       />
                     ))}
+
+                    {/* Agregar componente — solo con "Todas" las plazas, para
+                        no esconder lo recién agregado (todavía sin plaza)
+                        detrás del filtro secundario. */}
+                    {plazaFiltro === 'todas' && (
+                      addingPlatoId === plato.id ? (
+                        <div style={{ border: '1px solid var(--accent)', borderRadius: 10, background: 'var(--bg)', padding: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                            <input
+                              autoFocus
+                              value={addSearch}
+                              onChange={e => setAddSearch(e.target.value)}
+                              placeholder="Buscar receta o insumo…"
+                              style={{ flex: 1, padding: '6px 8px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 12, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none' }}
+                            />
+                            <button onClick={() => { setAddingPlatoId(null); setAddSearch('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', flexShrink: 0 }}>
+                              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+                            </button>
+                          </div>
+                          {addQ && (
+                            <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                              {recetasParaAgregar(plato).map(r => (
+                                <button
+                                  key={r.id} disabled={addBusy} onClick={() => handleAgregarReceta(plato.id, r.id)}
+                                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 4px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', opacity: addBusy ? .5 : 1 }}
+                                >
+                                  <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent)', flexShrink: 0 }}>menu_book</span>
+                                  <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.nombre}</span>
+                                  <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent)', flexShrink: 0 }}>add_circle</span>
+                                </button>
+                              ))}
+                              {productosParaAgregar().map(p => (
+                                <button
+                                  key={p.id} disabled={addBusy} onClick={() => handleVincularProducto(plato.id, p)}
+                                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 4px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', opacity: addBusy ? .5 : 1 }}
+                                >
+                                  <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#10b981', flexShrink: 0 }}>inventory_2</span>
+                                  <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</span>
+                                  <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#10b981', flexShrink: 0 }}>add_circle</span>
+                                </button>
+                              ))}
+                              {recetasParaAgregar(plato).length === 0 && productosParaAgregar().length === 0 && (
+                                <p style={{ fontSize: 11, color: 'var(--text-3)', padding: '4px 2px' }}>Sin resultados</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => { setAddingPlatoId(plato.id); setAddSearch('') }}
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%',
+                            padding: '8px', borderRadius: 10, border: '1px dashed var(--border)', background: 'none',
+                            color: 'var(--text-3)', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit',
+                          }}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
+                          Agregar componente
+                        </button>
+                      )
+                    )}
                   </div>
                 </div>
               ))}
