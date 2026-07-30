@@ -244,6 +244,8 @@ Solo `Material Symbols Outlined`. Nunca emoji ni SVG custom.
 <span className="material-symbols-outlined">restaurant_menu</span>
 ```
 
+**Picker de ícono → nunca `<select>` nativo (jul 2026).** Un `<option>` dentro de un `<select>` no renderiza la tipografía de Material Symbols (es texto plano de navegador, no acepta el `className` del span) — el `<select>` de `SectionEditor.tsx` mostraba el nombre crudo del ícono cortado por el ancho fijo ("kitche…", "invent…"), reportado por Facundo como "estética fea" antes de identificar la causa real. Patrón correcto: un swatch (botón redondo que sí renderiza el ícono real) que al tocarlo despliega una grilla de botones, cada uno con su propio `<span className="material-symbols-outlined">` — ver `IconSwatch`/`IconPicker` en `components/checklist/SectionEditor.tsx`. Cualquier picker de ícono nuevo debe seguir este patrón, no un `<select>`.
+
 ## Food cost — colores
 
 ```
@@ -254,7 +256,13 @@ Solo `Material Symbols Outlined`. Nunca emoji ni SVG custom.
 
 ## Panel OPS / mise — fuente única `components/ops/OpsPanel.tsx` (jul 2026)
 
-El panel de asignación a OPS/mise (plaza → sección → recipiente → cantidad+unidad → tamaño por porción con porciones auto) vive **una sola vez** en `components/ops/OpsPanel.tsx`. Recibe `initial?: OpsInitial` (prefill) y emite `onSave(result: OpsResult)` normalizado; quién persiste depende del contexto. Lo usan `RecetaOpsSheet` (ficha del recetario, como bottom sheet), `PlatoRecetasEditor` (carta → plato, inline) y `ItemRowInline` (carta → menú/evento, inline). **No duplicar esa UI en ningún lado** — antes estaba triplicada y divergía. Las constantes `PLAZAS_OPS`/`SECCIONES_OPS` siguen viviendo en `lib/ops/mise.ts`.
+El panel de asignación a OPS/mise (plaza → sección → recipiente → cantidad+unidad → tamaño por porción con porciones auto) vive **una sola vez** en `components/ops/OpsPanel.tsx`. Recibe `initial?: OpsInitial` (prefill) y emite `onSave(result: OpsResult)` normalizado; quién persiste depende del contexto. Lo usan `RecetaOpsSheet` (ficha del recetario, como bottom sheet), `CartaBoardCard` (Mesa de Trabajo → tab Carta, inline), `PlatoRecetasEditor` (carta → plato, inline) y `ItemRowInline` (carta → menú/evento, inline). **No duplicar esa UI en ningún lado** — antes estaba triplicada y divergía (siguen existiendo copias viejas sin migrar en `carta/page.tsx` línea ~1254 y `espacios/components/ItemEditPanel.tsx`, deuda conocida, no tocar sin que alguien lo pida). Las constantes `PLAZAS_OPS`/`SECCIONES_OPS` siguen viviendo en `lib/ops/mise.ts`.
+
+**Capacidades sumadas (jul 2026):** plazas custom del restaurante se mezclan automáticamente en el selector de plaza (`usePlazasCustom()` interno al panel, no hace falta pasarlas por prop). Stepper "¿Cuántos recipientes?" (solo visible con recipiente definido) multiplica el total guardado por la cantidad — ver `.claude/docs/columnas.md` (`checklist_items.recipiente_nombre`) y `.claude/docs/hooks.md` #15 para cómo se persiste sin columna nueva. Prop opcional `recipienteSugerencias?: string[]` agrega un `datalist` de autocompletar al campo Recipiente (usar `useId()` para el id del datalist, no un string fijo — puede haber más de un `OpsPanel` en la misma pantalla).
+
+## Toggle switch compacto — existe, todavía no está en `components/ui/` (jul 2026)
+
+Para un ajuste booleano dentro de un form (ej. "Producción interna", "Fuera de uso" en Stock), no usar `<input type="checkbox">` envuelto en una caja grande con borde — es pesado visualmente cuando hay 2+ en el mismo modal. Ya existe un switch compacto (ícono + label + descripción + pill deslizable, un solo `<button>` accesible) como `SwitchRow` en `app/(app)/stock/ClientView.tsx` (a nivel de módulo, junto a `inputStyle`/`lblStyle`). **Antes de escribir otro toggle desde cero, revisar ese componente** — es candidato a extraerse a `components/ui/` la próxima vez que se necesite en una segunda pantalla (regla D0: nada nuevo se reinventa dos veces).
 
 ## Badges / chips de estado — tinte alfa, no hex claro fijo (dark mode)
 
@@ -317,6 +325,8 @@ Patrones nuevos del board de Stock en Mesa de Trabajo (`espacios/components/Stoc
 **Columnas colapsables → fila de chips que envuelve, NO tiras verticales altas.** Una primera versión colapsaba cada columna a una tira vertical angosta pero de altura completa — con muchas columnas cerradas se veían como una hilera de "palitos" confusa (feedback real: "esto es confuso... arrastrar un producto... no se puede mover por fuera de la pantalla visible"). El fix correcto: las columnas colapsadas se sacan del row de scroll horizontal y se renderizan aparte, como una fila de chips (`flexWrap: 'wrap'`) que va ocupando el ancho disponible de arriba hacia abajo — expandir un chip lo saca de esa fila y restaura la columna completa en el board. IDs colapsados persistidos en `localStorage` (`..._collapsed_${RESTAURANTE_ID}`).
 
 **Auto-scroll en los bordes durante drag** — necesario en cualquier board más ancho que la pantalla. Un loop `requestAnimationFrame` leyendo la posición del puntero desde un `ref` (no desde React state, para que siga corriendo aunque el puntero deje de moverse) mueve el `scrollLeft`/`scrollTop` del contenedor cuando el puntero está a menos de ~70px de un borde, con velocidad proporcional a la cercanía al borde.
+
+**Columnas que scrollean solas necesitan `height` explícito en TODA la cadena, no `maxHeight` sobre un padre sin altura fija (jul 2026).** El board de Carta (`CartaBoard.tsx`) copió el layout de columna de `StockBoardColumn` (`maxHeight: '100%'` + `overflowY: 'auto'` en el body) pero puso `alignItems: 'flex-start'` en la fila que las contiene — con eso las columnas dejan de estirarse a la altura del contenedor (default `stretch`), así que `maxHeight: '100%'` no tiene ninguna altura real de la que ser el 100%, y el navegador no la trata como límite. Resultado: al expandir contenido dentro de una columna (ej. el panel OPS de una tarjeta), la columna crecía sin tope en vez de scrollear, tapando todo lo de abajo. Fix: sacar el `alignItems` custom (dejar el `stretch` default) y usar `height: '100%'` (no `maxHeight`) en la columna — exactamente el patrón de `StockBoard.tsx` (wrapper `{flex:1, minHeight:0, overflowX:'auto', overflowY:'hidden'}` → fila `{height:'100%'}` → columna `{height:'100%'}` → body `{flex:1, minHeight:0, overflowY:'auto'}`). Cualquier board nuevo con columnas de contenido variable: copiar esta cadena completa, no solo el body con `overflowY:auto`.
 
 ## Loading y estado vacío — obligatorios en toda página
 
