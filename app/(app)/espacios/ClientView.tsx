@@ -14,12 +14,16 @@ import LimpiezaPanel from './components/LimpiezaPanel'
 import ItemEditPanel from './components/ItemEditPanel'
 import SectionEditor from '@/components/checklist/SectionEditor'
 import StockBoard from './components/StockBoard'
+import CartaBoard from './components/CartaBoard'
 import { SegmentedTabs } from '@/components/ui'
 import type { SegmentedTab } from '@/components/ui'
 
-const MESA_TABS: SegmentedTab<'produccion' | 'stock'>[] = [
+type MesaTab = 'produccion' | 'stock' | 'carta'
+
+const MESA_TABS: SegmentedTab<MesaTab>[] = [
   { id: 'produccion', label: 'Producción', icon: 'restaurant_menu' },
   { id: 'stock', label: 'Stock', icon: 'inventory_2' },
+  { id: 'carta', label: 'Carta', icon: 'receipt_long' },
 ]
 
 const DEFAULT_SECCIONES_BOARD = [
@@ -44,8 +48,8 @@ export default function EspaciosClientView() {
   // muestra solo Stock (sectores de almacenamiento, sí aplica a cualquiera).
   const esEmprendimiento = perfilRestaurante === 'emprendimiento'
 
-  // ── Tab principal: Producción (espacios/plazas) | Stock (board de sectores) ──
-  const [activeMainTab, setActiveMainTab] = useState<'produccion' | 'stock'>('produccion')
+  // ── Tab principal: Producción (espacios/plazas) | Stock (sectores) | Carta (OPS por plato) ──
+  const [activeMainTab, setActiveMainTab] = useState<MesaTab>('produccion')
   const effectiveTab = esEmprendimiento ? 'stock' : activeMainTab
 
   // Screen context del Coach — insights por tab (qué falta organizar, no solo conteos).
@@ -226,7 +230,7 @@ export default function EspaciosClientView() {
         {/* En emprendimiento solo existe la pestaña Stock — no tiene sentido mostrar el switcher */}
         {!esEmprendimiento && (
           <div data-coach-target="espacios-tabs">
-            <SegmentedTabs tabs={MESA_TABS} active={activeMainTab} onChange={setActiveMainTab} style={{ maxWidth: 340 }} />
+            <SegmentedTabs tabs={MESA_TABS} active={activeMainTab} onChange={setActiveMainTab} style={{ maxWidth: 460 }} />
           </div>
         )}
       </div>
@@ -235,6 +239,13 @@ export default function EspaciosClientView() {
       {effectiveTab === 'stock' && (
         <div data-coach-target="espacios-stock-board" style={{ padding: '20px 24px', height: 'calc(100dvh - 132px)' }}>
           <StockBoard />
+        </div>
+      )}
+
+      {/* Carta board — OPS por plato */}
+      {effectiveTab === 'carta' && (
+        <div data-coach-target="espacios-carta-board" style={{ padding: '20px 24px', height: 'calc(100dvh - 132px)' }}>
+          <CartaBoard />
         </div>
       )}
 

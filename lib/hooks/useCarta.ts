@@ -499,6 +499,21 @@ export function useCarta() {
     }
   }, [fetchItems, supabase])
 
+  // Solo mueve plato_recetas.plaza — el recálculo del mise (ambas plazas) lo
+  // hace el caller (ver recomputePlatoRecetaMise en lib/ops/mise.ts), porque
+  // cruza con checklist_items y no es dominio de este hook.
+  const actualizarPlatoRecetaPlaza = useCallback(async (platoRecetaId: string, plaza: string | null) => {
+    try {
+      const { error } = await supabase.from('plato_recetas').update({ plaza }).eq('id', platoRecetaId)
+      if (error) throw error
+      await fetchItems()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al mover de plaza'
+      console.error('[useCarta] actualizarPlatoRecetaPlaza Error:', msg)
+      throw new Error(msg)
+    }
+  }, [fetchItems, supabase])
+
   const eliminarPlatoReceta = useCallback(async (platoRecetaId: string) => {
     try {
       const { error } = await supabase.from('plato_recetas').delete().eq('id', platoRecetaId)
@@ -576,7 +591,7 @@ export function useCarta() {
     fetchItems, crearItem, actualizarItem, actualizarTags,
     toggleDisponible, eliminarItem, marcar86PorNombre,
     duplicarItem,
-    agregarPlatoReceta, actualizarPlatoReceta, actualizarPlatoRecetaOps, eliminarPlatoReceta,
+    agregarPlatoReceta, actualizarPlatoReceta, actualizarPlatoRecetaOps, actualizarPlatoRecetaPlaza, eliminarPlatoReceta,
     agregarPlatoPackaging, eliminarPlatoPackaging,
   }
 }
