@@ -8,7 +8,7 @@ import { useRecetas } from '@/lib/hooks/useRecetas'
 import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
-import { upsertMiseChecklistItem, sumPlatoRecetaCantidad, shrinkOrPruneMise } from '@/lib/ops/mise'
+import { upsertMiseChecklistItem, sumPlatoRecetaCantidad, shrinkOrPruneMise, parseRecipienteNombre } from '@/lib/ops/mise'
 import { todasLasPlazas, plazaLabel } from '@/lib/constants'
 import { EmptyState, FilterChips } from '@/components/ui'
 import type { FilterChip } from '@/components/ui'
@@ -60,6 +60,16 @@ export default function CartaBoard() {
   ], [categoriasOrdenadas])
 
   const plazas = useMemo(() => todasLasPlazas(plazasCustom), [plazasCustom])
+
+  // Nombres de recipiente ya usados en cualquier plaza, para autocompletar
+  // el campo del OpsPanel (no repetir "tupper GN1/9" a mano cada vez).
+  // parseRecipienteNombre saca el " ×N" codificado antes de sugerir.
+  const recipientesUsados = useMemo(() => {
+    const nombres = checklistItems
+      .map(ci => parseRecipienteNombre(ci.recipiente_nombre).nombre)
+      .filter((n): n is string => !!n)
+    return [...new Set(nombres)].sort((a, b) => a.localeCompare(b, 'es'))
+  }, [checklistItems])
 
   const platos = useMemo(() => items.filter(i => i.plato_recetas.length > 0), [items])
 
@@ -318,6 +328,7 @@ export default function CartaBoard() {
                         pr={pr}
                         checklistItem={pr.plaza ? checklistItems.find(ci => ci.receta_id === pr.receta_id && ci.plaza === pr.plaza) ?? null : null}
                         plazasCustom={plazasCustom}
+                        recipientesUsados={recipientesUsados}
                         isOpen={openOpsId === pr.id}
                         saving={savingOpsId === pr.id}
                         onToggle={() => setOpenOpsId(prev => prev === pr.id ? null : pr.id)}

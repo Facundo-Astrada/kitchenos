@@ -11,6 +11,7 @@ interface Props {
   pr: PlatoRecetaEnriquecido
   checklistItem: MisePlaceItem | null
   plazasCustom: PlazaCustom[]
+  recipientesUsados: string[]
   isOpen: boolean
   saving: boolean
   onToggle: () => void
@@ -21,7 +22,7 @@ interface Props {
   onEliminar: (pr: PlatoRecetaEnriquecido) => void
 }
 
-export default function CartaBoardCard({ pr, checklistItem, plazasCustom, isOpen, saving, onToggle, onGuardar, onQuitar, onEditarGramaje, onEditarPesoPorcion, onEliminar }: Props) {
+export default function CartaBoardCard({ pr, checklistItem, plazasCustom, recipientesUsados, isOpen, saving, onToggle, onGuardar, onQuitar, onEditarGramaje, onEditarPesoPorcion, onEliminar }: Props) {
   const color = pr.plaza ? plazaColor(pr.plaza, plazasCustom) : null
   const sinPlaza = !pr.plaza
   const [editandoGramaje, setEditandoGramaje] = useState(false)
@@ -162,6 +163,7 @@ export default function CartaBoardCard({ pr, checklistItem, plazasCustom, isOpen
             initial={initial}
             hasExisting={!!pr.plaza}
             saving={saving}
+            recipienteSugerencias={recipientesUsados}
             onSave={result => onGuardar(pr, result)}
             onRemove={pr.plaza ? () => onQuitar(pr) : undefined}
             onCancel={onToggle}

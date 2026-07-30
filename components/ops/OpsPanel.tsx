@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import { PLAZAS_OPS, SECCIONES_OPS } from '@/lib/ops/mise'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
@@ -48,16 +48,18 @@ export interface OpsResult {
 const secTitle: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }
 
 export default function OpsPanel({
-  initial, hasExisting, saving, defaultUnidad = 'porc', onSave, onRemove, onCancel,
+  initial, hasExisting, saving, defaultUnidad = 'porc', recipienteSugerencias = [], onSave, onRemove, onCancel,
 }: {
   initial?: OpsInitial
   hasExisting?: boolean
   saving?: boolean
   defaultUnidad?: string
+  recipienteSugerencias?: string[]
   onSave: (result: OpsResult) => void
   onRemove?: () => void
   onCancel?: () => void
 }) {
+  const recipienteListId = useId()
   const [plaza, setPlaza] = useState(initial?.plaza ?? '')
   const [seccion, setSeccion] = useState(initial?.seccion ?? '')
   const [recipiente, setRecipiente] = useState(initial?.recipienteNombre ?? '')
@@ -309,8 +311,14 @@ export default function OpsPanel({
           {/* Recipiente */}
           <div style={secTitle}>Recipiente (opcional)</div>
           <input type="text" value={recipiente} onChange={e => { setRecipiente(e.target.value); if (!e.target.value.trim()) { setPesoPorcion(''); setRecipienteCantidad(1) } }}
+            list={recipienteSugerencias.length > 0 ? recipienteListId : undefined}
             placeholder="ej: tupper, cubeta GN, bandeja"
             style={{ width: '100%', padding: '9px 12px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)', boxSizing: 'border-box', marginBottom: recipiente.trim() ? 8 : 14 }} />
+          {recipienteSugerencias.length > 0 && (
+            <datalist id={recipienteListId}>
+              {recipienteSugerencias.map(s => <option key={s} value={s} />)}
+            </datalist>
+          )}
 
           {/* Cuántos recipientes iguales hay que mantener — ej. 2 tuppers
               idénticos en heladeras distintas. Solo tiene sentido con
