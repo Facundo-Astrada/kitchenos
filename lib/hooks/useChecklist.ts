@@ -383,8 +383,8 @@ export function useChecklist() {
     agregarRutina, actualizarRutina, eliminarRutina, toggleRutina,
     registrarAuditoriaRutina, guardarAuditoriaPasada, fetchAuditorias,
     // Refresco explícito tras una escritura externa a secciones/items (ej.
-    // recomputePlatoRecetaMise desde el board de Carta) — la realtime
-    // subscription ya lo hace sola en 1-3s, esto evita esa espera.
+    // upsertMiseChecklistItem/shrinkOrPruneMise desde el board de Carta) —
+    // la realtime subscription ya lo hace sola en 1-3s, esto evita esa espera.
     refetchConfig: mutateConfig,
   }
 }

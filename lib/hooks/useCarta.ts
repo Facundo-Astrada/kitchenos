@@ -499,17 +499,19 @@ export function useCarta() {
     }
   }, [fetchItems, supabase])
 
-  // Solo mueve plato_recetas.plaza — el recálculo del mise (ambas plazas) lo
-  // hace el caller (ver recomputePlatoRecetaMise en lib/ops/mise.ts), porque
-  // cruza con checklist_items y no es dominio de este hook.
-  const actualizarPlatoRecetaPlaza = useCallback(async (platoRecetaId: string, plaza: string | null) => {
+  // Guarda plaza+cantidad_ops+unidad_ops de UN componente del plato de una — usado
+  // por el botón OPS del board de Carta (Mesa de Trabajo). El recálculo del mise
+  // (sumar contribuciones, achicar la plaza de origen si cambió) lo hace el
+  // caller vía sumPlatoRecetaCantidad/shrinkOrPruneMise/upsertMiseChecklistItem
+  // en lib/ops/mise.ts — cruza con checklist_items, no es dominio de este hook.
+  const actualizarPlatoRecetaOpsCompleta = useCallback(async (platoRecetaId: string, datos: { plaza: string | null; cantidad_ops: number | null; unidad_ops: string | null }) => {
     try {
-      const { error } = await supabase.from('plato_recetas').update({ plaza }).eq('id', platoRecetaId)
+      const { error } = await supabase.from('plato_recetas').update(datos).eq('id', platoRecetaId)
       if (error) throw error
       await fetchItems()
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al mover de plaza'
-      console.error('[useCarta] actualizarPlatoRecetaPlaza Error:', msg)
+      const msg = e instanceof Error ? e.message : 'Error al guardar OPS'
+      console.error('[useCarta] actualizarPlatoRecetaOpsCompleta Error:', msg)
       throw new Error(msg)
     }
   }, [fetchItems, supabase])
@@ -591,7 +593,7 @@ export function useCarta() {
     fetchItems, crearItem, actualizarItem, actualizarTags,
     toggleDisponible, eliminarItem, marcar86PorNombre,
     duplicarItem,
-    agregarPlatoReceta, actualizarPlatoReceta, actualizarPlatoRecetaOps, actualizarPlatoRecetaPlaza, eliminarPlatoReceta,
+    agregarPlatoReceta, actualizarPlatoReceta, actualizarPlatoRecetaOps, actualizarPlatoRecetaOpsCompleta, eliminarPlatoReceta,
     agregarPlatoPackaging, eliminarPlatoPackaging,
   }
 }

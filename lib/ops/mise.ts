@@ -91,62 +91,40 @@ export async function upsertMiseChecklistItem(params: {
   }
 }
 
-// ── Recalcular el mise de una receta en una plaza a partir de plato_recetas ──
-// Usado por el board "Carta" de Mesa de Trabajo: al arrastrar un componente a
-// otra plaza hay que recalcular DOS plazas (de donde salió y a donde entró),
-// porque checklist_items.cantidad es la SUMA de todas las contribuciones de
-// esa receta en esa plaza (misma regla que handleGuardarOPS en carta/page.tsx
-// — no hay una fuente única todavía, ver PENDIENTES). Si la suma da 0 (ya no
-// queda nadie aportando ahí), borra el checklist_item en vez de dejarlo en 0
-// fantasma.
-export async function recomputePlatoRecetaMise(params: {
+// ── Suma de contribuciones de una receta en una plaza (plato_recetas) ──
+// Varios platos pueden compartir la misma receta/preparación — el mise no
+// guarda "por plato", guarda UN checklist_item por (receta, plaza) con la
+// suma de todo lo que aporta esa plaza. Usado por el board "Carta".
+export async function sumPlatoRecetaCantidad(
+  supabase: SupabaseClient, recetaId: string, plaza: string
+): Promise<{ total: number; unidad: string }> {
+  const { data } = await supabase.from('plato_recetas')
+    .select('cantidad_ops, unidad_ops')
+    .eq('receta_id', recetaId).eq('plaza', plaza).not('cantidad_ops', 'is', null)
+  const rows = (data ?? []) as { cantidad_ops: number | null; unidad_ops: string | null }[]
+  const total = rows.reduce((s, r) => s + (r.cantidad_ops ?? 0), 0)
+  return { total, unidad: rows[0]?.unidad_ops ?? 'u' }
+}
+
+// ── Achicar o borrar el checklist_item de una plaza que un componente dejó ──
+// Usado por el board "Carta" al mover un componente a OTRA plaza: la plaza de
+// origen puede seguir teniendo otros aportantes (recalcula cantidad) o quedar
+// en 0 (se borra el ítem en vez de dejarlo "fantasma" con una cantidad vieja).
+// A propósito NO toca seccion/recipiente — esos son del ítem que queda, no
+// tienen por qué cambiar porque uno de sus aportantes se fue.
+export async function shrinkOrPruneMise(params: {
   supabase: SupabaseClient
   restauranteId: string
   recetaId: string
-  recetaNombre: string
   plaza: string
-  seccionNombre: string
-  seccionIcono?: string
 }): Promise<void> {
-  const { supabase, restauranteId, recetaId, recetaNombre, plaza, seccionNombre, seccionIcono = 'inventory_2' } = params
-
-  const { data: contribuciones } = await supabase.from('plato_recetas')
-    .select('cantidad_ops, unidad_ops')
-    .eq('receta_id', recetaId).eq('plaza', plaza).not('cantidad_ops', 'is', null)
-
-  const total = (contribuciones ?? []).reduce((s: number, r: { cantidad_ops: number | null }) => s + (r.cantidad_ops ?? 0), 0)
-
+  const { supabase, restauranteId, recetaId, plaza } = params
+  const { total } = await sumPlatoRecetaCantidad(supabase, recetaId, plaza)
   if (total <= 0) {
     await supabase.from('checklist_items').delete()
       .eq('restaurante_id', restauranteId).eq('receta_id', recetaId).eq('plaza', plaza)
-    return
-  }
-
-  const unidad = (contribuciones?.[0] as { unidad_ops: string | null } | undefined)?.unidad_ops ?? 'u'
-  const nombreSeccion = seccionNombre.trim() || 'General'
-
-  const { data: secExistente } = await supabase.from('checklist_secciones').select('id')
-    .eq('restaurante_id', restauranteId).eq('plaza', plaza).is('parent_id', null).ilike('nombre', nombreSeccion).limit(1)
-  let seccionId: string | null = secExistente?.[0]?.id ?? null
-  if (!seccionId) {
-    const { count } = await supabase.from('checklist_secciones').select('id', { count: 'exact', head: true })
-      .eq('restaurante_id', restauranteId).eq('plaza', plaza).is('parent_id', null)
-    const { data: newSec } = await supabase.from('checklist_secciones')
-      .insert({ nombre: nombreSeccion, icono: seccionIcono, plaza, orden: count ?? 0, restaurante_id: restauranteId })
-      .select('id').single()
-    seccionId = newSec?.id ?? null
-  }
-
-  const { data: existente } = await supabase.from('checklist_items').select('id')
-    .eq('restaurante_id', restauranteId).eq('receta_id', recetaId).eq('plaza', plaza).limit(1)
-
-  const payload = { cantidad: total, unidad, seccion_id: seccionId, seccion: nombreSeccion }
-  if (existente?.[0]) {
-    await supabase.from('checklist_items').update(payload).eq('id', existente[0].id)
   } else {
-    await supabase.from('checklist_items').insert({
-      nombre: recetaNombre, plaza, receta_id: recetaId, prioridad: 'sp', orden: 0,
-      restaurante_id: restauranteId, ...payload,
-    })
+    await supabase.from('checklist_items').update({ cantidad: total })
+      .eq('restaurante_id', restauranteId).eq('receta_id', recetaId).eq('plaza', plaza)
   }
 }
