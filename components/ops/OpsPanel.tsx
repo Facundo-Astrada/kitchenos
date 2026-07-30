@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { PLAZAS_OPS, SECCIONES_OPS } from '@/lib/ops/mise'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
+import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
 import { createClient } from '@/lib/supabase/client'
 
 // ════════════════════════════════════════════════════════════
@@ -68,6 +69,11 @@ export default function OpsPanel({
   // cuando la plaza todavía no tiene ninguna sección propia con ese nombre.
   const RESTAURANTE_ID = useRestauranteId()
   const supabase = useMemo(() => createClient(), [])
+  const { plazasCustom } = usePlazasCustom()
+  const plazasDisponibles = useMemo(
+    () => [...PLAZAS_OPS, ...plazasCustom.map(c => ({ id: c.key, label: c.nombre, color: c.color }))],
+    [plazasCustom]
+  )
   const [seccionesDb, setSeccionesDb] = useState<{ id: string; nombre: string; icono: string; orden: number; parent_id: string | null }[]>([])
   const [nuevaSeccionMode, setNuevaSeccionMode] = useState(false)
   const [nuevaSeccionNombre, setNuevaSeccionNombre] = useState('')
@@ -190,7 +196,7 @@ export default function OpsPanel({
       {/* Plaza */}
       <div style={secTitle}>Plaza de producción</div>
       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 14 }}>
-        {PLAZAS_OPS.map(p => (
+        {plazasDisponibles.map(p => (
           <button key={p.id} onClick={() => { setPlaza(plaza === p.id ? '' : p.id); setSeccion(''); setNuevaSeccionMode(false); setNuevaSeccionNombre(''); setNuevaSubseccionMode(false); setNuevaSubseccionNombre('') }}
             style={{ padding: '6px 12px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
               background: plaza === p.id ? `${p.color}18` : 'var(--bg)',

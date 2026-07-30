@@ -436,7 +436,19 @@ export interface CartaItem {
 export type TareaPrioridad = 'critica' | 'alta' | 'media' | 'baja'
 export type TareaStatus = 'pendiente' | 'en_proceso' | 'completada'
 export type TareaCategoria = 'general' | 'plaza' | 'rutina' | 'evento' | 'produccion'
-export type Plaza = 'parrilla' | 'frios' | 'calientes' | 'pase' | 'pasteleria' | 'panaderia' | 'general'
+// Plaza: las 6 fijas de PLAZAS_FIJAS (lib/constants.ts) + custom por restaurante
+// (ver PlazaCustom / usePlazasCustom) — por eso es string y no un union cerrado.
+export type Plaza = string
+
+// DB: restaurantes.configuracion.plazas_custom (JSONB, sin migración — ver
+// lib/hooks/usePlazasCustom.ts) — plazas que el usuario crea además de las 7 fijas.
+export interface PlazaCustom {
+  key: string
+  nombre: string
+  icono: string
+  color: string
+  orden: number
+}
 export type OpsEstado = 'pendiente' | 'en_curso' | 'listo' | 'duda'
 export type OpsModo = 'menu' | 'carta' | 'evento'
 

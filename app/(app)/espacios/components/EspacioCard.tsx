@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { Espacio, EspacioPlaza, ChecklistSeccionConfig, MisePlaceItem, Plaza, MisePrioridad } from '@/types'
+import type { Espacio, EspacioPlaza, ChecklistSeccionConfig, MisePlaceItem, Plaza, PlazaCustom, MisePrioridad } from '@/types'
 import { PLAZAS_FIJAS, PLAZA_LABELS } from '@/lib/constants'
 import PlazaRow from './PlazaRow'
 
@@ -10,10 +10,16 @@ const ICONOS_ESPACIO = [
   'bakery_dining', 'local_bar', 'inventory_2', 'store', 'home',
 ]
 
+const ICONOS_PLAZA = [
+  'category', 'outdoor_grill', 'ac_unit', 'soup_kitchen', 'room_service',
+  'cake', 'bakery_dining', 'blender', 'local_bar', 'skillet', 'coffee_maker', 'countertops',
+]
+
 interface Props {
   espacio: Espacio
   plazasDelEspacio: EspacioPlaza[]
   plazasUsadas: Set<string>
+  plazasCustom: PlazaCustom[]
   secciones: ChecklistSeccionConfig[]
   items: MisePlaceItem[]
   overSecId: string | null
@@ -26,6 +32,9 @@ interface Props {
   onEliminar: (id: string) => void
   onAsignarPlaza: (espacioId: string, plaza: Plaza) => void
   onQuitarPlaza: (id: string) => void
+  onCrearPlaza: (datos: { nombre: string; icono: string }) => Promise<PlazaCustom>
+  onEliminarPlazaCustom: (key: string) => void
+  onReordenarPlazas: (espacioId: string, orderedIds: string[]) => void
   onAddSeccion: (plaza: Plaza) => void
   onSeedSecciones: (plaza: Plaza) => void
   onAddItem: (seccion: ChecklistSeccionConfig) => void
@@ -37,10 +46,11 @@ interface Props {
 
 export default function EspacioCard(props: Props) {
   const {
-    espacio, plazasDelEspacio, plazasUsadas, secciones, items,
+    espacio, plazasDelEspacio, plazasUsadas, plazasCustom, secciones, items,
     overSecId, registerDropZone, draggingId,
     onDragStart, onDragMove, onDragEnd,
     onActualizar, onEliminar, onAsignarPlaza, onQuitarPlaza,
+    onCrearPlaza, onEliminarPlazaCustom, onReordenarPlazas,
     onAddSeccion, onSeedSecciones, onAddItem, onDeleteSeccion, onDeleteItem, onEditItem, onLimpieza,
   } = props
 
@@ -49,10 +59,42 @@ export default function EspacioCard(props: Props) {
   const [editNombre, setEditNombre] = useState(espacio.nombre)
   const [editIcono, setEditIcono] = useState(espacio.icono)
   const [showPlazaPicker, setShowPlazaPicker] = useState(false)
+  const [showCrearPlaza, setShowCrearPlaza] = useState(false)
+  const [nuevaPlazaNombre, setNuevaPlazaNombre] = useState('')
+  const [nuevaPlazaIcono, setNuevaPlazaIcono] = useState(ICONOS_PLAZA[0])
+  const [creandoPlaza, setCreandoPlaza] = useState(false)
+  const [draggingPlazaId, setDraggingPlazaId] = useState<string | null>(null)
 
   const plazasLibres = PLAZAS_FIJAS.filter(p => !plazasUsadas.has(p))
+  const customLibres = plazasCustom.filter(c => !plazasUsadas.has(c.key))
   const plazasAqui = plazasDelEspacio.map(ep => ep.plaza_key)
   const todasLasPlazas: Plaza[] = plazasDelEspacio.map(ep => ep.plaza_key)
+
+  async function handleCrearPlaza() {
+    if (!nuevaPlazaNombre.trim()) return
+    setCreandoPlaza(true)
+    try {
+      const nueva = await onCrearPlaza({ nombre: nuevaPlazaNombre.trim(), icono: nuevaPlazaIcono })
+      onAsignarPlaza(espacio.id, nueva.key)
+      setNuevaPlazaNombre(''); setNuevaPlazaIcono(ICONOS_PLAZA[0])
+      setShowCrearPlaza(false); setShowPlazaPicker(false)
+    } finally {
+      setCreandoPlaza(false)
+    }
+  }
+
+  function handleDropPlaza(targetId: string) {
+    if (!draggingPlazaId || draggingPlazaId === targetId) { setDraggingPlazaId(null); return }
+    const ids = plazasDelEspacio.map(ep => ep.id)
+    const fromIdx = ids.indexOf(draggingPlazaId)
+    const toIdx = ids.indexOf(targetId)
+    setDraggingPlazaId(null)
+    if (fromIdx === -1 || toIdx === -1) return
+    const reordenadas = [...ids]
+    reordenadas.splice(fromIdx, 1)
+    reordenadas.splice(toIdx, 0, draggingPlazaId)
+    onReordenarPlazas(espacio.id, reordenadas)
+  }
 
   function guardarEdit() {
     if (editNombre.trim()) {
@@ -133,23 +175,76 @@ export default function EspacioCard(props: Props) {
 
       {/* Plaza picker */}
       {showPlazaPicker && (
-        <div style={{ padding: '0 14px 10px', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {plazasLibres.length === 0 && (
-            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Todas las plazas ya están asignadas.</span>
+        <div style={{ padding: '0 14px 10px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: showCrearPlaza ? 10 : 0 }}>
+            {plazasLibres.length === 0 && customLibres.length === 0 && !showCrearPlaza && (
+              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Todas las plazas ya están asignadas.</span>
+            )}
+            {plazasLibres.map(p => (
+              <button
+                key={p}
+                onClick={() => { onAsignarPlaza(espacio.id, p); setShowPlazaPicker(false) }}
+                style={plazaPickerBtn}
+              >
+                {PLAZA_LABELS[p]}
+              </button>
+            ))}
+            {customLibres.map(c => (
+              <button
+                key={c.key}
+                onClick={() => { onAsignarPlaza(espacio.id, c.key); setShowPlazaPicker(false) }}
+                style={plazaPickerBtn}
+              >
+                {c.nombre}
+              </button>
+            ))}
+            {!showCrearPlaza && (
+              <button
+                onClick={() => setShowCrearPlaza(true)}
+                style={{ ...plazaPickerBtn, borderStyle: 'dashed', display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>add</span>
+                Nueva plaza
+              </button>
+            )}
+          </div>
+          {showCrearPlaza && (
+            <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: 10 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+                {ICONOS_PLAZA.map(ic => (
+                  <button
+                    key={ic}
+                    onClick={() => setNuevaPlazaIcono(ic)}
+                    title={ic}
+                    style={{
+                      background: nuevaPlazaIcono === ic ? 'var(--accent)' : 'var(--surface)',
+                      border: '1px solid var(--border)', borderRadius: 6,
+                      cursor: 'pointer', padding: 4, display: 'flex',
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 16, color: nuevaPlazaIcono === ic ? '#fff' : 'var(--text-2)' }}>{ic}</span>
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  autoFocus
+                  placeholder="Nombre de la plaza (ej: Plancha evento)"
+                  value={nuevaPlazaNombre}
+                  onChange={e => setNuevaPlazaNombre(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleCrearPlaza(); if (e.key === 'Escape') setShowCrearPlaza(false) }}
+                  style={{
+                    flex: 1, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border)',
+                    background: 'var(--surface)', color: 'var(--text-1)', fontSize: 13, fontFamily: 'inherit',
+                  }}
+                />
+                <button onClick={handleCrearPlaza} disabled={!nuevaPlazaNombre.trim() || creandoPlaza} style={accentBtn}>
+                  {creandoPlaza ? 'Creando…' : 'Crear'}
+                </button>
+                <button onClick={() => { setShowCrearPlaza(false); setNuevaPlazaNombre('') }} style={ghostBtn}>Cancelar</button>
+              </div>
+            </div>
           )}
-          {plazasLibres.map(p => (
-            <button
-              key={p}
-              onClick={() => { onAsignarPlaza(espacio.id, p); setShowPlazaPicker(false) }}
-              style={{
-                fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 20,
-                border: '1px solid var(--accent)', color: 'var(--accent)', background: 'none',
-                cursor: 'pointer', fontFamily: 'inherit',
-              }}
-            >
-              {PLAZA_LABELS[p]}
-            </button>
-          ))}
         </div>
       )}
 
@@ -166,27 +261,36 @@ export default function EspacioCard(props: Props) {
             const secsPlaza = secciones.filter(s => s.plaza === plaza)
             const itsPlaza = items.filter(it => it.plaza === plaza)
             return (
-              <PlazaRow
+              <div
                 key={ep.id}
-                plaza={plaza}
-                espacioPlazaId={ep.id}
-                secciones={secsPlaza}
-                items={itsPlaza}
-                overSecId={overSecId}
-                registerDropZone={registerDropZone}
-                draggingId={draggingId}
-                onDragStart={onDragStart}
-                onDragMove={onDragMove}
-                onDragEnd={onDragEnd}
-                onQuitarPlaza={onQuitarPlaza}
-                onAddSeccion={onAddSeccion}
-                onSeedSecciones={onSeedSecciones}
-                onAddItem={onAddItem}
-                onDeleteSeccion={onDeleteSeccion}
-                onDeleteItem={onDeleteItem}
-                onEditItem={onEditItem}
-                onLimpieza={(scope) => onLimpieza({ ...scope, plazas: [plaza] })}
-              />
+                onDragOver={e => e.preventDefault()}
+                onDrop={() => handleDropPlaza(ep.id)}
+                style={{ opacity: draggingPlazaId === ep.id ? 0.4 : 1 }}
+              >
+                <PlazaRow
+                  plaza={plaza}
+                  espacioPlazaId={ep.id}
+                  plazasCustom={plazasCustom}
+                  secciones={secsPlaza}
+                  items={itsPlaza}
+                  overSecId={overSecId}
+                  registerDropZone={registerDropZone}
+                  draggingId={draggingId}
+                  onDragStart={onDragStart}
+                  onDragMove={onDragMove}
+                  onDragEnd={onDragEnd}
+                  onPlazaDragStart={() => setDraggingPlazaId(ep.id)}
+                  onQuitarPlaza={onQuitarPlaza}
+                  onEliminarPlazaCustom={onEliminarPlazaCustom}
+                  onAddSeccion={onAddSeccion}
+                  onSeedSecciones={onSeedSecciones}
+                  onAddItem={onAddItem}
+                  onDeleteSeccion={onDeleteSeccion}
+                  onDeleteItem={onDeleteItem}
+                  onEditItem={onEditItem}
+                  onLimpieza={(scope) => onLimpieza({ ...scope, plazas: [plaza] })}
+                />
+              </div>
             )
           })}
         </div>
@@ -207,5 +311,10 @@ const accentBtn: React.CSSProperties = {
 const ghostBtn: React.CSSProperties = {
   background: 'none', color: 'var(--text-2)', border: '1px solid var(--border)',
   borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 600,
+  cursor: 'pointer', fontFamily: 'inherit',
+}
+const plazaPickerBtn: React.CSSProperties = {
+  fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 20,
+  border: '1px solid var(--accent)', color: 'var(--accent)', background: 'none',
   cursor: 'pointer', fontFamily: 'inherit',
 }

@@ -13,6 +13,8 @@ import { useProduccionRegistros } from '@/lib/hooks/useProduccionRegistros'
 import { useHaccp } from '@/lib/hooks/useHaccp'
 import { useFichaje } from '@/lib/hooks/useFichaje'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
+import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
+import { todasLasPlazas, plazaLabel, plazaIcon } from '@/lib/constants'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import SectionEditor from '@/components/checklist/SectionEditor'
 import type { Plaza, MisePlaceItem, MisePrioridad, ChecklistSeccionConfig, RutinaFrecuencia, ChecklistRutina, ChecklistRutinaRegistro, RutinaCondicion } from '@/types'
@@ -23,11 +25,6 @@ const PLAZA_LABELS: Record<Plaza, string> = {
   parrilla: 'Parrilla', frios: 'Fríos', calientes: 'Calientes',
   pase: 'Pase', pasteleria: 'Pastelería', panaderia: 'Panadería',
   general: 'General',
-}
-const PLAZA_ICONS: Record<Plaza, string> = {
-  parrilla: 'local_fire_department', frios: 'ac_unit', calientes: 'soup_kitchen',
-  pase: 'room_service', pasteleria: 'cake', panaderia: 'bakery_dining',
-  general: 'groups',
 }
 const UNIDADES = ['u', 'kg', 'g', 'l', 'ml', 'pax', 'porc', 'bandeja', 'gastro', 'tupper']
 
@@ -136,6 +133,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     })
   }, [])
 
+  const { plazasCustom } = usePlazasCustom()
+
   // Plazas asignadas al usuario (equipo_miembros.plaza_asignada, coma-separadas)
   const userPlazas: Plaza[] = useMemo(() => {
     if (!authPerfil?.plaza_asignada) return []
@@ -146,10 +145,11 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   }, [authPerfil])
 
   // Plazas a mostrar en el selector: si tiene ≥2 asignadas, solo esas + general
+  // (las custom son de producción/mise, no roles de staff — no aplican acá)
   const plazasForSelector: Plaza[] = useMemo(() => {
-    if (userPlazas.length < 2) return PLAZAS
+    if (userPlazas.length < 2) return todasLasPlazas(plazasCustom)
     return userPlazas.includes('general') ? userPlazas : [...userPlazas, 'general']
-  }, [userPlazas])
+  }, [userPlazas, plazasCustom])
 
   const autoPlaza: Plaza | null = (() => {
     if (userPlazas.length === 1) return userPlazas[0]
@@ -415,11 +415,11 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         if (item) completos[item.plaza] = (completos[item.plaza] ?? 0) + 1
       }
     })
-    return PLAZAS.reduce((acc, p) => {
+    return todasLasPlazas(plazasCustom).reduce((acc, p) => {
       acc[p] = { total: totals[p] ?? 0, done: completos[p] ?? 0 }
       return acc
     }, {} as Record<string, { total: number; done: number }>)
-  }, [items, registros])
+  }, [items, registros, plazasCustom])
 
   // Set of checklist_item_ids that already have a pending/in-progress tarea today
   const tareasHoySet = useMemo(() => {
@@ -688,8 +688,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
                   cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s',
                 }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 32, color: isCompleto ? '#22c55e' : '#4361a0' }}>{PLAZA_ICONS[p]}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{PLAZA_LABELS[p]}</span>
+                  <span className="material-symbols-outlined" style={{ fontSize: 32, color: isCompleto ? '#22c55e' : '#4361a0' }}>{plazaIcon(p, plazasCustom)}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{plazaLabel(p, plazasCustom)}</span>
                   {gp.total > 0 ? (
                     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 3 }}>
                       <span style={{ fontSize: 10, color: isCompleto ? '#22c55e' : 'var(--text-3)', fontWeight: 600 }}>
@@ -722,7 +722,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
             <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>arrow_back</span>
           </button>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>{PLAZA_LABELS[plaza]}</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>{plazaLabel(plaza, plazasCustom)}</div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', marginTop: 1 }}>{fmtFecha(fecha)}</div>
           </div>
           <button
@@ -859,7 +859,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', gap: 10 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'var(--accent)' }}>checklist</span>
                 <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', margin: 0, textAlign: 'center' }}>
-                  Armá el mise en place de {PLAZA_LABELS[plaza]}
+                  Armá el mise en place de {plazaLabel(plaza, plazasCustom)}
                 </p>
                 <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: 0, textAlign: 'center', maxWidth: 300, lineHeight: 1.5 }}>
                   El mise es la checklist de apertura y cierre de tu plaza: stock que hay que dejar

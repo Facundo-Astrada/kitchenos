@@ -6,6 +6,7 @@ import { useEspacios } from '@/lib/hooks/useEspacios'
 import { useChecklist } from '@/lib/hooks/useChecklist'
 import { useStock } from '@/lib/hooks/useStock'
 import { usePermisos } from '@/lib/hooks/usePermisos'
+import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
 import { PLAZAS_FIJAS, PLAZA_LABELS } from '@/lib/constants'
 import type { MisePlaceItem, ChecklistSeccionConfig, Plaza, RutinaFrecuencia, MisePrioridad } from '@/types'
 import EspacioCard from './components/EspacioCard'
@@ -32,10 +33,11 @@ type LimpiezaScope = { type: 'espacio' | 'plaza' | 'seccion'; plazas: Plaza[]; n
 
 export default function EspaciosClientView() {
   const isDesktop = useIsDesktop()
-  const { espacios, espacioPlazas, plazasUsadas, loading: loadingEsp, agregarEspacio, actualizarEspacio, eliminarEspacio, asignarPlaza, quitarPlaza } = useEspacios()
+  const { espacios, espacioPlazas, plazasUsadas, loading: loadingEsp, agregarEspacio, actualizarEspacio, eliminarEspacio, asignarPlaza, quitarPlaza, reordenarPlazas } = useEspacios()
   const { secciones, items, rutinas, loading: loadingCk, agregarSeccion, actualizarSeccion, eliminarSeccion, reordenarSecciones, agregarItem, eliminarItem, actualizarItem, agregarRutina, eliminarRutina } = useChecklist()
   const { productos } = useStock()
   const { perfilRestaurante } = usePermisos()
+  const { plazasCustom, agregarPlazaCustom, eliminarPlazaCustom } = usePlazasCustom()
 
   // Perfil 'emprendimiento': la pestaña Producción coordina "plazas" de cocina
   // de restaurante (Parrilla/Fríos/...) que no aplican a un productor — se
@@ -260,6 +262,7 @@ export default function EspaciosClientView() {
                 espacio={espacio}
                 plazasDelEspacio={plazasDelEspacio}
                 plazasUsadas={plazasUsadas}
+                plazasCustom={plazasCustom}
                 secciones={secciones}
                 items={items}
                 overSecId={overSecId}
@@ -272,6 +275,9 @@ export default function EspaciosClientView() {
                 onEliminar={eliminarEspacio}
                 onAsignarPlaza={asignarPlaza}
                 onQuitarPlaza={quitarPlaza}
+                onCrearPlaza={agregarPlazaCustom}
+                onEliminarPlazaCustom={eliminarPlazaCustom}
+                onReordenarPlazas={reordenarPlazas}
                 onAddSeccion={onAddSeccion}
                 onSeedSecciones={onSeedSecciones}
                 onAddItem={(sec) => setAddItemTarget(sec)}
@@ -394,6 +400,7 @@ export default function EspaciosClientView() {
           item={editingItem}
           secciones={secciones}
           sugerenciasRecipiente={recipientesUsados}
+          plazasCustom={plazasCustom}
           onClose={() => setEditingItem(null)}
           onGuardar={handleGuardarItem}
         />

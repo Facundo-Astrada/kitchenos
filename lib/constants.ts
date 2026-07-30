@@ -1,4 +1,4 @@
-import type { Rol, Plaza } from '@/types'
+import type { Rol, Plaza, PlazaCustom } from '@/types'
 
 // ── Plazas fijas (fuente única, compartida por checklist/mise y espacios) ──
 export const PLAZAS_FIJAS: Plaza[] = ['parrilla', 'frios', 'calientes', 'pase', 'pasteleria', 'panaderia', 'general']
@@ -12,8 +12,33 @@ export const PLAZA_ICONS: Record<Plaza, string> = {
   pase: 'room_service', pasteleria: 'cake', panaderia: 'bakery_dining',
   general: 'groups',
 }
+export const PLAZA_COLORS: Record<Plaza, string> = {
+  general: '#6b7280', parrilla: '#ef4444', frios: '#0ea5e9', calientes: '#f97316',
+  pase: '#8b5cf6', pasteleria: '#ec4899', panaderia: '#84cc16',
+}
 // Plazas de cocina usadas para sembrar el espacio "Cocina" por defecto
 export const PLAZAS_COCINA: Plaza[] = ['parrilla', 'frios', 'calientes', 'pase', 'pasteleria', 'panaderia', 'general']
+
+// ── Plazas fijas + custom (por restaurante, ver usePlazasCustom) ───────────
+// Toda pantalla que liste/etiquete plazas (Mesa de Trabajo, Mise, OPS Panel,
+// Pase, Reportes) debe combinar PLAZAS_FIJAS con las custom del restaurante
+// usando estos helpers, para que una plaza creada por el usuario aparezca
+// en todos lados sin duplicar la lista de "fijas + custom" en cada pantalla.
+export function todasLasPlazas(custom: PlazaCustom[]): Plaza[] {
+  return [...PLAZAS_FIJAS, ...custom.map(c => c.key)]
+}
+export function plazaLabel(key: Plaza, custom: PlazaCustom[]): string {
+  return PLAZA_LABELS[key] ?? custom.find(c => c.key === key)?.nombre ?? key
+}
+export function plazaIcon(key: Plaza, custom: PlazaCustom[]): string {
+  return PLAZA_ICONS[key] ?? custom.find(c => c.key === key)?.icono ?? 'category'
+}
+export function plazaColor(key: Plaza, custom: PlazaCustom[]): string {
+  return PLAZA_COLORS[key] ?? custom.find(c => c.key === key)?.color ?? '#6b7280'
+}
+export function esPlazaCustom(key: Plaza, custom: PlazaCustom[]): boolean {
+  return custom.some(c => c.key === key)
+}
 
 // ── Configuración de roles ──────────────────────────────────
 export const ROL_CONFIG: Record<

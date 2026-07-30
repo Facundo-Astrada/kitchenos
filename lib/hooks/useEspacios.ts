@@ -163,12 +163,39 @@ export function useEspacios() {
     }
   }
 
+  // Reordena las plazas de un espacio tras un drag — recibe los espacio_plazas.id
+  // ya en el orden final. Optimista: pisa el cache local antes del round-trip
+  // para que el drop se sienta instantáneo, sin esperar a los N updates.
+  async function reordenarPlazas(espacioId: string, orderedIds: string[]) {
+    const otras = espacioPlazas.filter(ep => ep.espacio_id !== espacioId)
+    const deEsteEspacio = espacioPlazas.filter(ep => ep.espacio_id === espacioId)
+    const reordenadas = orderedIds
+      .map((id, i) => {
+        const ep = deEsteEspacio.find(e => e.id === id)
+        return ep ? { ...ep, orden: i } : null
+      })
+      .filter((ep): ep is EspacioPlaza => ep !== null)
+    mutate({ espacios, espacioPlazas: [...otras, ...reordenadas] }, { revalidate: false })
+    try {
+      for (let i = 0; i < orderedIds.length; i++) {
+        const { error } = await supabase.from('espacio_plazas').update({ orden: i }).eq('id', orderedIds[i])
+        if (error) throw error
+      }
+      await mutate()
+    } catch (e) {
+      const msg = errMsg(e, 'Error al reordenar plazas')
+      console.error('[useEspacios] reordenarPlazas Error:', msg)
+      await mutate()
+      throw new Error(msg)
+    }
+  }
+
   // Plazas ya usadas por cualquier espacio (para ocultarlas en el picker)
   const plazasUsadas = useMemo(() => new Set(espacioPlazas.map(ep => ep.plaza_key)), [espacioPlazas])
 
   return {
     espacios, espacioPlazas, plazasUsadas, loading, mutate,
     agregarEspacio, actualizarEspacio, eliminarEspacio,
-    asignarPlaza, quitarPlaza,
+    asignarPlaza, quitarPlaza, reordenarPlazas,
   }
 }

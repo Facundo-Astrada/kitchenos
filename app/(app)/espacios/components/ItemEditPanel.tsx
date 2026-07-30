@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import type { MisePlaceItem, ChecklistSeccionConfig, Plaza, MisePrioridad } from '@/types'
+import type { MisePlaceItem, ChecklistSeccionConfig, Plaza, PlazaCustom, MisePrioridad } from '@/types'
 
 const PLAZAS_OPS = [
   { id: 'general',    label: 'General',    color: '#6b7280' },
@@ -42,11 +42,16 @@ interface Props {
   item: MisePlaceItem
   secciones: ChecklistSeccionConfig[]
   sugerenciasRecipiente: string[]
+  plazasCustom: PlazaCustom[]
   onClose: () => void
   onGuardar: (id: string, datos: GuardarDatos) => Promise<void>
 }
 
-export default function ItemEditPanel({ item, secciones, sugerenciasRecipiente, onClose, onGuardar }: Props) {
+export default function ItemEditPanel({ item, secciones, sugerenciasRecipiente, plazasCustom, onClose, onGuardar }: Props) {
+  const plazasDisponibles = useMemo(
+    () => [...PLAZAS_OPS, ...plazasCustom.map(c => ({ id: c.key, label: c.nombre, color: c.color }))],
+    [plazasCustom]
+  )
   const [nombre,    setNombre]    = useState(item.nombre)
   const [plaza,     setPlaza]     = useState<Plaza>(item.plaza as Plaza)
   const [seccionId, setSeccionId] = useState(item.seccion_id ?? '')
@@ -180,7 +185,7 @@ export default function ItemEditPanel({ item, secciones, sugerenciasRecipiente, 
           {/* Plaza */}
           <Section label="Plaza de producción">
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {PLAZAS_OPS.map(p => (
+              {plazasDisponibles.map(p => (
                 <button key={p.id} onClick={() => setPlaza(p.id as Plaza)} style={{
                   padding: '6px 14px', borderRadius: 20,
                   border: `1.5px solid ${plaza === p.id ? p.color : 'var(--border)'}`,
