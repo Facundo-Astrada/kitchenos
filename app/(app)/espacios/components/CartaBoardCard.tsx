@@ -20,6 +20,7 @@ interface Props {
 
 export default function CartaBoardCard({ pr, checklistItem, plazasCustom, isOpen, saving, onToggle, onGuardar, onQuitar, onEditarGramaje }: Props) {
   const color = pr.plaza ? plazaColor(pr.plaza, plazasCustom) : null
+  const sinPlaza = !pr.plaza
   const [editandoGramaje, setEditandoGramaje] = useState(false)
   const [gramajeValor, setGramajeValor] = useState('')
 
@@ -47,7 +48,11 @@ export default function CartaBoardCard({ pr, checklistItem, plazasCustom, isOpen
   }
 
   return (
-    <div style={{ borderRadius: 10, background: 'var(--bg)', border: `1px solid ${isOpen ? 'var(--accent)' : 'var(--border)'}`, overflow: 'hidden' }}>
+    <div style={{
+      borderRadius: 10,
+      background: sinPlaza && !isOpen ? 'rgba(239,68,68,.05)' : 'var(--bg)',
+      border: `1px solid ${isOpen ? 'var(--accent)' : sinPlaza ? 'rgba(239,68,68,.4)' : 'var(--border)'}`,
+    }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6, padding: '8px 10px' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-1)', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -96,7 +101,7 @@ export default function CartaBoardCard({ pr, checklistItem, plazasCustom, isOpen
                 {plazaLabel(pr.plaza, plazasCustom)}
               </span>
             ) : (
-              <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 7px', borderRadius: 99, background: 'var(--border)', color: 'var(--text-3)' }}>
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 99, background: 'rgba(239,68,68,.12)', color: '#ef4444' }}>
                 Sin plaza
               </span>
             )}
@@ -118,7 +123,7 @@ export default function CartaBoardCard({ pr, checklistItem, plazasCustom, isOpen
         </button>
       </div>
       {isOpen && (
-        <div style={{ padding: '10px 10px 12px', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
+        <div style={{ padding: '10px 10px 12px', borderTop: '1px solid var(--border)', background: 'var(--surface)', borderBottomLeftRadius: 9, borderBottomRightRadius: 9 }}>
           <OpsPanel
             initial={initial}
             hasExisting={!!pr.plaza}
