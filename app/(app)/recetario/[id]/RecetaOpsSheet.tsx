@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { SECCIONES_OPS, upsertMiseChecklistItem } from '@/lib/ops/mise'
+import { SECCIONES_OPS, upsertMiseChecklistItem, parseRecipienteNombre } from '@/lib/ops/mise'
 import { useSheetOpen } from '@/lib/ui/chrome'
 import OpsPanel, { type OpsInitial, type OpsResult } from '@/components/ops/OpsPanel'
 
@@ -48,10 +48,12 @@ export default function RecetaOpsSheet({
         // Y custom (Sesión 2, B2). Fallback al label legacy solo para filas
         // viejas guardadas antes de que seccion_id existiera.
         const secCfg = SECCIONES_OPS.find(s => s.label === row.seccion)
+        const { nombre: recipienteNombre, cantidad: recipienteCantidad } = parseRecipienteNombre(row.recipiente_nombre)
         setInitial({
           plaza: row.plaza ?? '',
           seccion: row.seccion_id ?? secCfg?.id ?? '',
-          recipienteNombre: row.recipiente_nombre ?? '',
+          recipienteNombre: recipienteNombre ?? '',
+          recipienteCantidad,
           cantidad: row.recipiente_capacidad ?? row.cantidad,
           unidad: row.unidad ?? 'porc',
           pesoPorcion: row.peso_porcion,
@@ -74,6 +76,7 @@ export default function RecetaOpsSheet({
         cantidad: result.cantidad,
         unidad: result.unidad,
         recipienteNombre: result.recipienteNombre,
+        recipienteCantidad: result.recipienteCantidad,
         pesoPorcion: result.pesoPorcion,
         pesoPorcionUnidad: result.pesoPorcionUnidad,
       })

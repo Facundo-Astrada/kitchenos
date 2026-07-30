@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { PlatoRecetaEnriquecido } from '@/lib/hooks/useCarta'
 import type { MisePlaceItem, PlazaCustom } from '@/types'
 import { plazaLabel, plazaColor } from '@/lib/constants'
+import { parseRecipienteNombre } from '@/lib/ops/mise'
 import OpsPanel, { type OpsInitial, type OpsResult } from '@/components/ops/OpsPanel'
 
 interface Props {
@@ -53,12 +54,16 @@ export default function CartaBoardCard({ pr, checklistItem, plazasCustom, isOpen
   // (cuánto de esta preparación va en una porción del plato) — si todavía no
   // hay un tamaño guardado en el mise (primera vez que se define recipiente),
   // lo prefileamos con cantidad_ops/unidad_ops en vez de pedirlo de nuevo.
+  // recipiente_nombre trae el "×N" codificado (ver lib/ops/mise.ts) — se
+  // separa acá para no mostrarlo embebido en el input del nombre.
+  const { nombre: recipienteNombrePrefill, cantidad: recipienteCantidadPrefill } = parseRecipienteNombre(checklistItem?.recipiente_nombre)
   const initial: OpsInitial = {
     plaza: pr.plaza ?? null,
     seccion: checklistItem?.seccion_id ?? null,
     cantidad: pr.cantidad_ops ?? null,
     unidad: pr.unidad_ops ?? null,
-    recipienteNombre: checklistItem?.recipiente_nombre ?? null,
+    recipienteNombre: recipienteNombrePrefill,
+    recipienteCantidad: recipienteCantidadPrefill,
     pesoPorcion: checklistItem?.peso_porcion ?? pr.cantidad_ops ?? null,
     pesoPorcionUnidad: checklistItem?.peso_porcion_unidad ?? pr.unidad_ops ?? null,
   }

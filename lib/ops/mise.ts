@@ -21,6 +21,25 @@ export const SECCIONES_OPS = [
   { id: 'estacion',   label: 'Estación',        icono: 'countertops' },
 ]
 
+// ── "Cuántos recipientes iguales" sin columna nueva (DDL de Supabase caído,
+// ver hooks.md #13) — se codifica como sufijo " ×N" en recipiente_nombre,
+// que además es perfectamente legible como texto humano en cualquier
+// pantalla que ya muestre ese campo sin parsearlo (Mise, RecetaOpsSheet).
+const RECIPIENTE_CANTIDAD_RE = / ×(\d+)$/
+
+export function encodeRecipienteNombre(nombre: string | null, cantidad: number): string | null {
+  if (!nombre) return null
+  const base = nombre.replace(RECIPIENTE_CANTIDAD_RE, '')
+  return cantidad > 1 ? `${base} ×${cantidad}` : base
+}
+
+export function parseRecipienteNombre(raw: string | null | undefined): { nombre: string | null; cantidad: number } {
+  if (!raw) return { nombre: null, cantidad: 1 }
+  const m = raw.match(RECIPIENTE_CANTIDAD_RE)
+  if (!m) return { nombre: raw, cantidad: 1 }
+  return { nombre: raw.replace(RECIPIENTE_CANTIDAD_RE, ''), cantidad: parseInt(m[1], 10) || 1 }
+}
+
 // ── Upsert de un ítem del mise keyed por (restaurante, receta, plaza) ──
 // Extraído de handleComposicionSave (carta/page.tsx). Busca o crea la
 // checklist_seccion de la plaza y hace upsert del checklist_item, incluyendo
@@ -35,13 +54,15 @@ export async function upsertMiseChecklistItem(params: {
   cantidad: number
   unidad: string
   recipienteNombre?: string | null
+  recipienteCantidad?: number
   pesoPorcion?: number | null
   pesoPorcionUnidad?: string | null
 }): Promise<void> {
   const {
     supabase, restauranteId, recetaId, nombre, plaza, seccionMiseId,
-    cantidad, unidad, recipienteNombre = null, pesoPorcion = null, pesoPorcionUnidad = null,
+    cantidad, unidad, recipienteCantidad = 1, pesoPorcion = null, pesoPorcionUnidad = null,
   } = params
+  const recipienteNombre = encodeRecipienteNombre(params.recipienteNombre ?? null, recipienteCantidad)
 
   // seccionMiseId puede ser un id legacy de SECCIONES_OPS (4 fijas) o un UUID
   // real de checklist_secciones (Sesión 2, B2 — secciones editables por plaza).

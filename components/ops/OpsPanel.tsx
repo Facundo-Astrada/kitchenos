@@ -26,6 +26,7 @@ export interface OpsInitial {
   plaza?: string | null
   seccion?: string | null
   recipienteNombre?: string | null
+  recipienteCantidad?: number | null
   cantidad?: number | null
   unidad?: string | null
   pesoPorcion?: number | null
@@ -36,9 +37,10 @@ export interface OpsInitial {
 export interface OpsResult {
   plaza: string
   seccion: string // id de SECCIONES_OPS
-  cantidad: number // porciones finales (directo si porc/u/pax, calculado si peso)
+  cantidad: number // porciones finales — ya multiplicadas por recipienteCantidad si hay recipiente
   unidad: string
   recipienteNombre: string | null
+  recipienteCantidad: number // cuántos recipientes iguales hay que mantener (1 si no hay recipiente)
   pesoPorcion: number | null
   pesoPorcionUnidad: string | null
 }
@@ -59,6 +61,7 @@ export default function OpsPanel({
   const [plaza, setPlaza] = useState(initial?.plaza ?? '')
   const [seccion, setSeccion] = useState(initial?.seccion ?? '')
   const [recipiente, setRecipiente] = useState(initial?.recipienteNombre ?? '')
+  const [recipienteCantidad, setRecipienteCantidad] = useState(initial?.recipienteCantidad ?? 1)
   const [cantidad, setCantidad] = useState(initial?.cantidad != null ? String(initial.cantidad) : '')
   const [unidad, setUnidad] = useState(initial?.unidad ?? defaultUnidad)
   const [pesoPorcion, setPesoPorcion] = useState(initial?.pesoPorcion != null ? String(initial.pesoPorcion) : '')
@@ -183,10 +186,14 @@ export default function OpsPanel({
     const recipNombre = recipiente.trim() || null
     const pesoP = recipNombre && pesoPorcion ? parseFloat(pesoPorcion) || null : null
     const pesoPUnidad = pesoP ? pesoPorcionUnidad : null
+    const recipCantidad = recipNombre ? Math.max(1, recipienteCantidad) : 1
     // Si la unidad es de porciones/unidades usamos el valor directo;
     // si es peso y hay tamaño de porción, guardamos las porciones calculadas.
-    const cantidadFinal = ['porc', 'u', 'pax'].includes(unidad) ? capVal : (porcionesAuto ?? capVal)
-    onSave({ plaza, seccion, cantidad: cantidadFinal, unidad, recipienteNombre: recipNombre, pesoPorcion: pesoP, pesoPorcionUnidad: pesoPUnidad })
+    // "cantidad"/"cantidad" de acá es SIEMPRE por UN recipiente lleno — el
+    // total a mantener multiplica por la cantidad de recipientes iguales.
+    const cantidadPorRecipiente = ['porc', 'u', 'pax'].includes(unidad) ? capVal : (porcionesAuto ?? capVal)
+    const cantidadFinal = cantidadPorRecipiente * recipCantidad
+    onSave({ plaza, seccion, cantidad: cantidadFinal, unidad, recipienteNombre: recipNombre, recipienteCantidad: recipCantidad, pesoPorcion: pesoP, pesoPorcionUnidad: pesoPUnidad })
   }
 
   const valido = !!plaza && !!seccion
@@ -301,13 +308,34 @@ export default function OpsPanel({
 
           {/* Recipiente */}
           <div style={secTitle}>Recipiente (opcional)</div>
-          <input type="text" value={recipiente} onChange={e => { setRecipiente(e.target.value); if (!e.target.value.trim()) setPesoPorcion('') }}
+          <input type="text" value={recipiente} onChange={e => { setRecipiente(e.target.value); if (!e.target.value.trim()) { setPesoPorcion(''); setRecipienteCantidad(1) } }}
             placeholder="ej: tupper, cubeta GN, bandeja"
-            style={{ width: '100%', padding: '9px 12px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)', boxSizing: 'border-box', marginBottom: 14 }} />
+            style={{ width: '100%', padding: '9px 12px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)', boxSizing: 'border-box', marginBottom: recipiente.trim() ? 8 : 14 }} />
 
-          {/* Cantidad + unidad */}
-          <div style={secTitle}>{recipiente.trim() ? 'Porciones/peso recipiente lleno' : 'Cantidad en mise'}</div>
-          <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          {/* Cuántos recipientes iguales hay que mantener — ej. 2 tuppers
+              idénticos en heladeras distintas. Solo tiene sentido con
+              recipiente definido; el total se multiplica por este número. */}
+          {recipiente.trim() && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <span style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 600 }}>¿Cuántos recipientes?</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button type="button" onClick={() => setRecipienteCantidad(n => Math.max(1, n - 1))}
+                  style={{ width: 26, height: 26, borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>remove</span>
+                </button>
+                <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-1)', minWidth: 16, textAlign: 'center' }}>{recipienteCantidad}</span>
+                <button type="button" onClick={() => setRecipienteCantidad(n => n + 1)}
+                  style={{ width: 26, height: 26, borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Cantidad + unidad — SIEMPRE por UN recipiente lleno; el total
+              que se guarda multiplica por "¿Cuántos recipientes?" de arriba. */}
+          <div style={secTitle}>{recipiente.trim() ? 'Porciones/peso de UN recipiente lleno' : 'Cantidad en mise'}</div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: recipienteCantidad > 1 && ['porc', 'u', 'pax'].includes(unidad) ? 4 : 14, flexWrap: 'wrap', alignItems: 'flex-start' }}>
             <input type="number" value={cantidad} onChange={e => setCantidad(e.target.value)} inputMode="decimal" placeholder="0"
               style={{ width: 74, padding: '9px 10px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 14, fontWeight: 700, textAlign: 'center', fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)' }} />
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
@@ -321,6 +349,11 @@ export default function OpsPanel({
               ))}
             </div>
           </div>
+          {recipienteCantidad > 1 && ['porc', 'u', 'pax'].includes(unidad) && capVal > 0 && (
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', marginBottom: 14, paddingLeft: 2 }}>
+              = {capVal * recipienteCantidad} {unidad} en total ({recipienteCantidad} recipientes)
+            </div>
+          )}
 
           {/* Tamaño por porción — solo con recipiente */}
           {recipiente.trim() && (
@@ -343,6 +376,7 @@ export default function OpsPanel({
               {porcionesAuto !== null && cantidad && pesoPorcion ? (
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', marginBottom: 8, paddingLeft: 2 }}>
                   = {porcionesAuto} porciones por recipiente
+                  {recipienteCantidad > 1 && ` · ${porcionesAuto * recipienteCantidad} porciones en total (${recipienteCantidad} recipientes)`}
                 </div>
               ) : <div style={{ marginBottom: 8 }} />}
             </>

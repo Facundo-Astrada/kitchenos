@@ -94,7 +94,8 @@ export default function CartaBoard() {
       await upsertMiseChecklistItem({
         supabase, restauranteId: RESTAURANTE_ID, recetaId: pr.receta_id, nombre: recetaNombre,
         plaza: result.plaza, seccionMiseId: result.seccion, cantidad: total, unidad: result.unidad,
-        recipienteNombre: result.recipienteNombre, pesoPorcion: result.pesoPorcion, pesoPorcionUnidad: result.pesoPorcionUnidad,
+        recipienteNombre: result.recipienteNombre, recipienteCantidad: result.recipienteCantidad,
+        pesoPorcion: result.pesoPorcion, pesoPorcionUnidad: result.pesoPorcionUnidad,
       })
 
       if (oldPlaza && oldPlaza !== result.plaza) {
