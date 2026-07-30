@@ -37,14 +37,18 @@ export default function CartaBoardCard({ pr, checklistItem, plazasCustom, isOpen
     if (!isNaN(n) && n >= 0 && n !== pr.cantidad_ops) onEditarGramaje(pr, n)
   }
 
+  // "Tamaño por porción" es el mismo dato que el gramaje del componente
+  // (cuánto de esta preparación va en una porción del plato) — si todavía no
+  // hay un tamaño guardado en el mise (primera vez que se define recipiente),
+  // lo prefileamos con cantidad_ops/unidad_ops en vez de pedirlo de nuevo.
   const initial: OpsInitial = {
     plaza: pr.plaza ?? null,
     seccion: checklistItem?.seccion_id ?? null,
     cantidad: pr.cantidad_ops ?? null,
     unidad: pr.unidad_ops ?? null,
     recipienteNombre: checklistItem?.recipiente_nombre ?? null,
-    pesoPorcion: checklistItem?.peso_porcion ?? null,
-    pesoPorcionUnidad: checklistItem?.peso_porcion_unidad ?? null,
+    pesoPorcion: checklistItem?.peso_porcion ?? pr.cantidad_ops ?? null,
+    pesoPorcionUnidad: checklistItem?.peso_porcion_unidad ?? pr.unidad_ops ?? null,
   }
 
   return (
