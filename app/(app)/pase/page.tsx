@@ -6,6 +6,7 @@ import { usePase } from '@/lib/hooks/usePase'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { useEquipo } from '@/lib/hooks/useEquipo'
 import { usePermisos } from '@/lib/hooks/usePermisos'
+import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
 import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
 import {
@@ -141,15 +142,17 @@ function MensajeBurbuja({ msg, showHeader = true, onCrearTarea }: { msg: PaseMen
 function Sheet86({ onSelect, onClose }: { onSelect: (nombre: string, id: string) => void; onClose: () => void }) {
   const [platos, setPlatos] = useState<{ id: string; nombre: string; categoria: string }[]>([])
   const [busqueda, setBusqueda] = useState('')
-  const supabase = createClient()
+  const RESTAURANTE_ID = useRestauranteId()
+  const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
+    if (!RESTAURANTE_ID) return
     supabase.from('recetas').select('id, nombre, categoria')
-      .eq('restaurante_id', '00000000-0000-0000-0000-000000000001')
+      .eq('restaurante_id', RESTAURANTE_ID)
       .eq('activa', true)
       .order('nombre')
       .then(({ data }) => setPlatos((data ?? []) as { id: string; nombre: string; categoria: string }[]))
-  }, [])
+  }, [RESTAURANTE_ID, supabase])
 
   const filtrados = platos.filter(p =>
     p.nombre.toLowerCase().includes(busqueda.toLowerCase())
@@ -211,6 +214,7 @@ function Sheet86({ onSelect, onClose }: { onSelect: (nombre: string, id: string)
 // ── Componente principal ─────────────────────────────────────
 export default function PasePage() {
   const { mensajes, loading, fetchMensajes, enviarMensaje, marcarLeidos } = usePase()
+  const restauranteId = useRestauranteId()
   const { agregarTarea } = useTareas()
   const { miembros } = useEquipo()
   const { perfilRestaurante } = usePermisos()
@@ -311,10 +315,16 @@ export default function PasePage() {
       await supabase.from('recetas').update({ activa: false }).eq('id', _id)
       // Mark carta_items with this receta as unavailable
       await supabase.from('carta_items').update({ disponible: false }).eq('receta_id', _id)
-      // Also match by name in carta_items
-      await supabase.from('carta_items').update({ disponible: false })
-        .eq('restaurante_id', '00000000-0000-0000-0000-000000000001')
-        .ilike('nombre', nombre)
+      // Y por nombre, para los platos de carta que no tienen receta vinculada.
+      // El restaurante sale de la sesión — estaba hardcodeado el id de El
+      // Rescoldo, así que en cualquier otra cuenta este UPDATE no matcheaba
+      // nada (RLS bloqueaba la escritura cruzada) y el 86 por nombre no hacía
+      // efecto. Guard: sin restaurante resuelto, no escribir sin scope.
+      if (restauranteId) {
+        await supabase.from('carta_items').update({ disponible: false })
+          .eq('restaurante_id', restauranteId)
+          .ilike('nombre', nombre)
+      }
     } catch (e) {
       console.error(e)
     }
