@@ -8,6 +8,9 @@ import { useEquipo } from '@/lib/hooks/useEquipo'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { createClient } from '@/lib/supabase/client'
 import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
+import {
+  MentionDropdown, RenderTexto, detectarMencion, plazaDesdeTexto, PLAZA_LABELS_HASH as PLAZA_LABELS,
+} from '@/components/pase/menciones'
 import type { PaseMensaje, PrioridadPase, Plaza } from '@/types'
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -48,21 +51,6 @@ const PLAZAS: { id: Plaza | 'todas'; label: string }[] = [
   { id: 'pase', label: '#Pase' },
 ]
 
-const PLAZA_LABELS: Record<string, string> = {
-  parrilla: '#Parrilla', frios: '#Fríos', calientes: '#Calientes',
-  pase: '#Pase', pasteleria: '#Pastelería', panaderia: '#Panadería',
-}
-
-
-const PLAZA_MENTION_LIST: { id: Plaza; label: string }[] = [
-  { id: 'parrilla', label: 'Parrilla' },
-  { id: 'frios', label: 'Fríos' },
-  { id: 'calientes', label: 'Calientes' },
-  { id: 'pase', label: 'Pase' },
-  { id: 'pasteleria', label: 'Pastelería' },
-  { id: 'panaderia', label: 'Panadería' },
-]
-
 const MENSAJES_RAPIDOS = [
   { texto: 'Falta stock', icon: 'inventory_2' },
   { texto: 'Producción pendiente', icon: 'pending_actions' },
@@ -71,29 +59,6 @@ const MENSAJES_RAPIDOS = [
   { texto: 'Limpieza pendiente', icon: 'cleaning_services' },
   { texto: 'Todo OK', icon: 'check_circle' },
 ]
-
-// ── Render texto con @menciones y #plazas ────────────────────
-function RenderTexto({ texto }: { texto: string }) {
-  const parts = texto.split(/(@\w[\w\s]*\.?|#\w+)/g)
-  return (
-    <>
-      {parts.map((part, i) => {
-        if (part.startsWith('@')) {
-          return <span key={i} className="font-bold" style={{ color: 'var(--navy)' }}>{part}</span>
-        }
-        if (part.startsWith('#')) {
-          return (
-            <span key={i} className="inline-flex items-center px-[5px] py-[1px] rounded-[4px] text-[11px] font-bold mx-[2px]"
-              style={{ background: 'rgba(30,58,110,0.1)', color: 'var(--navy)' }}>
-              {part}
-            </span>
-          )
-        }
-        return <span key={i}>{part}</span>
-      })}
-    </>
-  )
-}
 
 // ── Burbuja de mensaje ───────────────────────────────────────
 function MensajeBurbuja({ msg, showHeader = true, onCrearTarea }: { msg: PaseMensaje; showHeader?: boolean; onCrearTarea?: (texto: string) => void }) {
@@ -242,52 +207,6 @@ function Sheet86({ onSelect, onClose }: { onSelect: (nombre: string, id: string)
   )
 }
 
-// ── Mention dropdown ─────────────────────────────────────────
-function MentionDropdown({ type, filter, onSelect, position, usuarios }: {
-  type: '@' | '#'
-  filter: string
-  onSelect: (value: string) => void
-  position: { bottom: number; left: number }
-  usuarios: { id: string; nombre: string }[]
-}) {
-  const items = type === '@'
-    ? usuarios
-        .filter(u => u.nombre.toLowerCase().includes(filter.toLowerCase()))
-        .map(u => ({ key: u.id, label: u.nombre, icon: 'person' }))
-    : PLAZA_MENTION_LIST
-        .filter(p => p.label.toLowerCase().includes(filter.toLowerCase()))
-        .map(p => ({ key: p.id, label: p.label, icon: 'tag' }))
-
-  if (items.length === 0) return null
-
-  return (
-    <div
-      className="absolute rounded-[10px] overflow-hidden z-[210] max-h-[200px] overflow-y-auto"
-      style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        boxShadow: '0 8px 24px rgba(0,0,0,.15)',
-        bottom: position.bottom,
-        left: position.left,
-        right: 16,
-      }}
-    >
-      {items.map(item => (
-        <button
-          key={item.key}
-          className="flex items-center gap-2 w-full text-left px-3 py-[9px] border-none cursor-pointer text-[13px]"
-          style={{ background: 'transparent', color: 'var(--text)', fontFamily: 'inherit' }}
-          onMouseDown={(e) => { e.preventDefault(); onSelect(item.label) }}
-        >
-          <span className="material-symbols-outlined text-[16px]" style={{ color: 'var(--navy)' }}>
-            {item.icon}
-          </span>
-          <span className="font-medium">{type === '@' ? `@${item.label}` : `#${item.label}`}</span>
-        </button>
-      ))}
-    </div>
-  )
-}
 
 // ── Componente principal ─────────────────────────────────────
 export default function PasePage() {
@@ -363,18 +282,10 @@ export default function PasePage() {
     if (!texto.trim() || enviando) return
     setEnviando(true)
     try {
-      // Extract plaza from #mentions
-      const plazaMatch = texto.match(/#(Parrilla|Fríos|Calientes|Pase|Pastelería|Panadería)/i)
-      const plazaMap: Record<string, Plaza> = {
-        parrilla: 'parrilla', fríos: 'frios', calientes: 'calientes',
-        pase: 'pase', pastelería: 'pasteleria', panadería: 'panaderia',
-      }
-      const plaza = plazaMatch ? plazaMap[plazaMatch[1].toLowerCase()] || null : null
-
       await enviarMensaje({
         texto: texto.trim(),
         prioridad,
-        plaza,
+        plaza: plazaDesdeTexto(texto),
       })
       setTexto('')
       setPrioridad('normal')
@@ -424,19 +335,7 @@ export default function PasePage() {
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 120) + 'px'
 
-    // Check for @/# mentions
-    const cursorPos = el.selectionStart
-    const textBefore = val.slice(0, cursorPos)
-    const atMatch = textBefore.match(/@(\w*)$/)
-    const hashMatch = textBefore.match(/#(\w*)$/)
-
-    if (atMatch) {
-      setMention({ type: '@', filter: atMatch[1], startIdx: cursorPos - atMatch[0].length })
-    } else if (hashMatch) {
-      setMention({ type: '#', filter: hashMatch[1], startIdx: cursorPos - hashMatch[0].length })
-    } else {
-      setMention(null)
-    }
+    setMention(detectarMencion(val, el.selectionStart))
   }
 
   function handleMentionSelect(label: string) {

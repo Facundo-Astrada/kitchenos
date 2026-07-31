@@ -14,6 +14,7 @@ import type { CrearTareaSheetConfirmData } from '@/components/ops/CrearTareaShee
 import { QuickAdd } from '@/components/ops/QuickAdd'
 import { EventoBanner } from '@/components/ops/EventoBanner'
 import { ProduccionBoard, type NuevaTareaBoard } from '@/components/ops/ProduccionBoard'
+import { NotaImportanteCard } from '@/components/ops/NotaImportanteCard'
 import { useHaccp, type HaccpLimpieza } from '@/lib/hooks/useHaccp'
 import { limpiezaTocaFecha } from '@/lib/haccp/recurrencia'
 import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
@@ -566,6 +567,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
             restauranteId={restauranteId}
             otros={
               <>
+                <NotaImportanteCard />
                 <NotaPedidosCard
                   notas={pedidoNotas}
                   onAgregar={handleAgregarNotaPedido}
