@@ -13,6 +13,7 @@ import { ItemOps } from '@/components/ops/ItemOps'
 import type { CrearTareaSheetConfirmData } from '@/components/ops/CrearTareaSheet'
 import { QuickAdd } from '@/components/ops/QuickAdd'
 import { EventoBanner } from '@/components/ops/EventoBanner'
+import { ProduccionBoard, type NuevaTareaBoard } from '@/components/ops/ProduccionBoard'
 import { useHaccp, type HaccpLimpieza } from '@/lib/hooks/useHaccp'
 import { limpiezaTocaFecha } from '@/lib/haccp/recurrencia'
 import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
@@ -21,9 +22,6 @@ import type { Tarea, OpsModo, OpsEstado, TareaPrioridad } from '@/types'
 
 const PEDIDOS_COL_ID = '__pedidos__'
 const LIMPIEZA_COL_ID = '__limpieza__'
-const MODO_CARTA_ID = '__modo_carta__'
-const MODO_MENU_ID = '__modo_menu__'
-const MODO_EVENTO_ID = '__modo_evento__'
 
 const PRIO_SORT: Record<string, number> = { critica: 0, alta: 1, media: 2, baja: 3 }
 
@@ -89,6 +87,15 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     setToast(msg)
     setTimeout(() => setToast(''), 2500)
   }
+
+  // `tareas` y `turnosActivos` se leen por ref dentro de los callbacks que bajan
+  // como props hasta ItemOps (memoizado): `tareas` cambia en cada tilde, así que
+  // tenerlas en las deps recrearía los callbacks y re-renderizaría los ~70 ítems
+  // en cada toque — exactamente la demora que se sentía en servicio.
+  const tareasRef = useRef(tareas)
+  useEffect(() => { tareasRef.current = tareas }, [tareas])
+  const turnosActivosRef = useRef(turnosActivos)
+  useEffect(() => { turnosActivosRef.current = turnosActivos }, [turnosActivos])
 
   // ── Reordenar columnas (drag & drop) — orden persistido por restaurante+modo ──
   const [ordenSecciones, setOrdenSecciones] = useState<string[]>([])
@@ -215,9 +222,36 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     })
   }, [agregarTarea, modoStorage, today, perfil])
 
+  // Alta desde una columna del board de "Todo": la columna define el destino
+  // completo (modo + plaza + paso), así que lo que se escribe en la columna
+  // Parrilla nace con plaza='parrilla' — antes toda alta manual iba con
+  // plaza=null y quedaba fuera de cualquier agrupación por plaza.
+  const handleAddItemBoard = useCallback(async (nueva: NuevaTareaBoard) => {
+    await agregarTarea({
+      titulo: nueva.titulo,
+      modo: nueva.modo,
+      seccion: nueva.seccion ?? 'general',
+      plaza: nueva.plaza,
+      turno_fecha: today,
+      estado: 'pendiente',
+      status: 'pendiente',
+      prioridad: nueva.prioridad,
+      categoria: 'produccion',
+      asignado_a: null,
+      creado_por: perfil?.miembro_id ?? null,
+      descripcion: null,
+      fecha_limite: null,
+      tiempo_estimado_min: null,
+      receta_id: nueva.recetaId ?? null,
+      checklist: [],
+    })
+  }, [agregarTarea, today, perfil])
+
   // ── Agregar sub-tarea ─────────────────────────────────────────
+  // Igual que handleEstadoChange: `tareas` por ref para no recrear el callback
+  // en cada tilde (ItemOps está memoizado).
   const handleAddSubtarea = useCallback(async (parentId: string, titulo: string) => {
-    const parent = tareas.find((t) => t.id === parentId)
+    const parent = tareasRef.current.find((t) => t.id === parentId)
     if (!parent) return
     await agregarTarea({
       titulo,
@@ -238,16 +272,16 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
       receta_id: null,
       checklist: [],
     })
-  }, [agregarTarea, tareas, modoStorage, today, perfil])
+  }, [agregarTarea, modoStorage, today, perfil])
 
   // ── Sync bidireccional con Mise ───────────────────────────────
   // Al cambiar estado de tarea, refleja en checklist_registros el item vinculado por FK.
   const handleEstadoChange = useCallback(async (id: string, estado: OpsEstado) => {
     await cambiarEstado(id, estado)
-    const tarea = tareas.find(t => t.id === id)
+    const tarea = tareasRef.current.find(t => t.id === id)
     if (!tarea?.checklist_item_id) return
-    await syncMiseDesdeTarea(createClient(), tarea.checklist_item_id, today, estado === 'listo', turnosActivos)
-  }, [cambiarEstado, tareas, today, turnosActivos])
+    await syncMiseDesdeTarea(createClient(), tarea.checklist_item_id, today, estado === 'listo', turnosActivosRef.current)
+  }, [cambiarEstado, today])
 
   // ── Cambiar prioridad directo desde la card de OPS (Menú/Evento) ──────
   const handlePrioridadChange = useCallback((id: string, prioridad: TareaPrioridad) => {
@@ -320,8 +354,8 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   // - Menú/Evento: sección dinámica del menú activo + Pedidos + Limpieza (antes
   //   faltaban acá — una limpieza de rutina cargada en HACCP quedaba invisible
   //   en Producción salvo que se cambiara a modo Carta o Todo).
-  // - Todo: un recuadro por Carta/Menú/Evento (con prioridad — y en Menú/Evento
-  //   también sección — adentro de cada uno) + Pedidos + Limpieza.
+  // - Todo: no usa estas columnas — lo arma ProduccionBoard (bandas Carta por
+  //   plaza / Menú y Evento por paso / Otros).
   const columnasBase = useMemo<ColumnaDef[]>(() => {
     if (modo === 'menu' || modo === 'evento') {
       const conocidas = new Set<string>(SECCIONES_MENU.map(s => s.id))
@@ -334,16 +368,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
         { id: LIMPIEZA_COL_ID, label: 'Limpieza', color: '#10b981' },
       ]
     }
-    if (modo === 'todo') {
-      return [
-        { id: MODO_CARTA_ID, label: 'Carta', color: '#3b82f6' },
-        { id: MODO_MENU_ID, label: 'Menú', color: '#8b5cf6' },
-        { id: MODO_EVENTO_ID, label: 'Evento', color: '#f97316' },
-        { id: PEDIDOS_COL_ID, label: 'Pedidos', color: '#0ea5e9' },
-        { id: LIMPIEZA_COL_ID, label: 'Limpieza', color: '#10b981' },
-      ]
-    }
-    // modo === 'carta'
+    // modo === 'carta' — 'todo' no pasa por acá: lo renderiza ProduccionBoard.
     return [
       ...PRIORIDADES.map(p => ({ id: p.id, label: p.label, sublabel: p.sublabel, color: p.color })),
       { id: PEDIDOS_COL_ID, label: 'Pedidos', color: '#0ea5e9' },
@@ -368,12 +393,6 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
         .sort((a, b) => (PRIO_SORT[a.prioridad ?? 'baja'] ?? 3) - (PRIO_SORT[b.prioridad ?? 'baja'] ?? 3))
     }
     return topLevel.filter((t) => (t.prioridad ?? 'baja') === col.id)
-  }
-
-  // Tareas de un modo específico dentro de la vista "Todo" (topLevel ya trae
-  // Carta+Menú+Evento combinadas cuando modo==='todo').
-  function itemsPorModo(modoBox: OpsModo): Tarea[] {
-    return topLevel.filter((t) => t.modo === modoBox)
   }
 
   // ── Recuadro Pedidos: notas libres, no accionan nada — se anotan y se
@@ -534,6 +553,32 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
             Cargando...
           </div>
+        ) : modo === 'todo' ? (
+          <ProduccionBoard
+            tareas={topLevel}
+            subtareasByParent={subtareasByParent}
+            onAddItem={handleAddItemBoard}
+            onEstadoChange={handleEstadoChange}
+            onAddSubtarea={handleAddSubtarea}
+            onPrioridadChange={handlePrioridadChange}
+            onCrearTareaDesdeItem={handleCrearTareaDesdeItem}
+            recetas={recetasSimple}
+            restauranteId={restauranteId}
+            otros={
+              <>
+                <NotaPedidosCard
+                  notas={pedidoNotas}
+                  onAgregar={handleAgregarNotaPedido}
+                  onEliminar={eliminarTarea}
+                />
+                <LimpiezaCard
+                  items={limpiezasHoy}
+                  onRegistrar={registrarLimpieza}
+                  onAgregar={handleAgregarLimpieza}
+                />
+              </>
+            }
+          />
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, alignItems: 'start' }}>
             {columnas.map((col) => {
@@ -574,25 +619,6 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
                       onAgregar={handleAgregarLimpieza}
                       dragHandleProps={dragHandleProps}
                     />
-                  ) : (col.id === MODO_CARTA_ID || col.id === MODO_MENU_ID || col.id === MODO_EVENTO_ID) ? (
-                    (() => {
-                      const modoBox: OpsModo = col.id === MODO_CARTA_ID ? 'carta' : col.id === MODO_MENU_ID ? 'menu' : 'evento'
-                      return (
-                        <ModoResumenCard
-                          titulo={col.label}
-                          color={col.color}
-                          tareas={itemsPorModo(modoBox)}
-                          agruparPorSeccion={modoBox !== 'carta'}
-                          subtareasByParent={subtareasByParent}
-                          onAddItem={(titulo, recetaId) => handleAddItem('media', titulo, recetaId, modoBox)}
-                          onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
-                          onAddSubtarea={handleAddSubtarea}
-                          onPrioridadChange={handlePrioridadChange}
-                          onCrearTareaDesdeItem={handleCrearTareaDesdeItem}
-                          dragHandleProps={dragHandleProps}
-                        />
-                      )
-                    })()
                   ) : (
                     <SeccionOps
                       titulo={col.label}
@@ -601,7 +627,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
                       items={itemsDeColumna(col)}
                       subtareasByParent={subtareasByParent}
                       onAddItem={(titulo, recetaId) => handleAddItem((modo === 'menu' || modo === 'evento') ? 'media' : col.id, titulo, recetaId)}
-                      onEstadoChange={(id, estado) => handleEstadoChange(id, estado as OpsEstado)}
+                      onEstadoChange={handleEstadoChange}
                       onAddSubtarea={handleAddSubtarea}
                       onPrioridadChange={handlePrioridadChange}
                       onCrearTareaDesdeItem={handleCrearTareaDesdeItem}
@@ -753,104 +779,6 @@ function LimpiezaCard({
           )}
           <div style={{ marginTop: 4 }}>
             <QuickAdd placeholder="Agregar limpieza..." onSave={onAgregar} />
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Recuadro por modo dentro de "Todo" (Carta/Menú/Evento) — lista plana
-// ordenada por prioridad (Carta) o sub-agrupada por sección con prioridad
-// adentro (Menú/Evento), reusando ItemOps real (checkbox/subtareas intactos).
-function ModoResumenCard({
-  titulo, color, tareas: tareasDelModo, agruparPorSeccion, subtareasByParent,
-  onAddItem, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, dragHandleProps,
-}: {
-  titulo: string
-  color: string
-  tareas: Tarea[]
-  agruparPorSeccion: boolean
-  subtareasByParent: Record<string, Tarea[]>
-  onAddItem: (titulo: string, recetaId?: string) => Promise<void>
-  onEstadoChange: (id: string, estado: OpsEstado) => void
-  onAddSubtarea: (parentId: string, titulo: string) => Promise<void>
-  onPrioridadChange?: (id: string, prioridad: TareaPrioridad) => void
-  onCrearTareaDesdeItem?: (item: Tarea, data: CrearTareaSheetConfirmData) => Promise<void>
-  dragHandleProps?: DragHandleProps
-}) {
-  const [collapsed, setCollapsed] = useState(false)
-  const listos = tareasDelModo.filter((t) => t.estado === 'listo').length
-  const total = tareasDelModo.length
-  const pct = total > 0 ? listos / total : 0
-
-  const porPrioridad = (arr: Tarea[]) =>
-    [...arr].sort((a, b) => (PRIO_SORT[a.prioridad ?? 'baja'] ?? 3) - (PRIO_SORT[b.prioridad ?? 'baja'] ?? 3))
-
-  const grupos: { label: string | null; items: Tarea[] }[] = agruparPorSeccion
-    ? (() => {
-        const conocidas = new Set<string>(SECCIONES_MENU.map((s) => s.id))
-        const presentes: string[] = []
-        for (const t of tareasDelModo) { const s = (t.seccion ?? '').trim(); if (s && !presentes.includes(s)) presentes.push(s) }
-        const ordenSecc: { id: string; label: string }[] = [
-          ...SECCIONES_MENU.filter((s) => presentes.includes(s.id)),
-          ...presentes.filter((s) => !conocidas.has(s)).map((s) => ({ id: s, label: s })),
-        ]
-        return ordenSecc.map((s) => ({
-          label: s.label,
-          items: porPrioridad(tareasDelModo.filter((t) => (t.seccion ?? '') === s.id)),
-        }))
-      })()
-    : [{ label: null, items: porPrioridad(tareasDelModo) }]
-
-  return (
-    <div style={cardShellStyle}>
-      <button onClick={() => setCollapsed((v) => !v)} {...dragHandleProps} style={cardHeaderStyle(!!dragHandleProps)}>
-        {dragHandleProps && (
-          <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)', flexShrink: 0 }}>drag_indicator</span>
-        )}
-        <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-        <span style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 700, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-          {titulo}
-        </span>
-        <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: pct === 1 && total > 0 ? '#22c55e' : 'var(--text-3)', fontWeight: 700 }}>
-          {listos}/{total}
-        </span>
-        <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)', transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform .15s' }}>
-          expand_more
-        </span>
-      </button>
-      <div style={{ height: 2, background: 'var(--border)' }}>
-        <div style={{ width: `${pct * 100}%`, height: '100%', background: color, transition: 'width .3s' }} />
-      </div>
-      {!collapsed && (
-        <div style={{ padding: '6px 10px 10px' }}>
-          {grupos.map((g, i) => (
-            <div key={g.label ?? i}>
-              {g.label && (
-                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', padding: '6px 4px 2px' }}>
-                  {g.label}
-                </div>
-              )}
-              {g.items.map((t) => (
-                <ItemOps
-                  key={t.id}
-                  item={t}
-                  subtareas={subtareasByParent[t.id] ?? []}
-                  onEstadoChange={onEstadoChange}
-                  onAddSubtarea={onAddSubtarea}
-                  onPrioridadChange={onPrioridadChange}
-                  onCrearTareaDesdeItem={onCrearTareaDesdeItem}
-                  showPrioChip
-                />
-              ))}
-            </div>
-          ))}
-          {total === 0 && (
-            <div style={{ padding: '8px 2px', fontSize: 12, color: 'var(--text-3)' }}>Sin preparaciones aún</div>
-          )}
-          <div style={{ marginTop: 4 }}>
-            <QuickAdd onSave={onAddItem} />
           </div>
         </div>
       )}

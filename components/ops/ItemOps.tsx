@@ -1,13 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, memo } from 'react'
 import { RecetaDrawer } from './RecetaDrawer'
-import { ProduccionSheet } from './ProduccionSheet'
+import { ProduccionSheetConectada } from './ProduccionSheetConectada'
 import { CrearTareaSheet, type CrearTareaSheetConfirmData } from './CrearTareaSheet'
 import { QuickAdd } from './QuickAdd'
-import { useProduccionRegistros } from '@/lib/hooks/useProduccionRegistros'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
-import { useAuth } from '@/lib/auth/context'
 import { createClient } from '@/lib/supabase/client'
 import type { Tarea, OpsEstado, OpsModo, TareaPrioridad } from '@/types'
 
@@ -60,7 +58,7 @@ interface ItemOpsProps {
   showPrioChip?: boolean
 }
 
-export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, depth = 0, showSeccionChip, showPrioChip }: ItemOpsProps) {
+function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, depth = 0, showSeccionChip, showPrioChip }: ItemOpsProps) {
   const [expanded, setExpanded] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [prodSheetOpen, setProdSheetOpen] = useState(false)
@@ -72,8 +70,6 @@ export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, onPrio
   const [stockAlerts, setStockAlerts] = useState<StockAlert[]>([])
   const [stockLoaded, setStockLoaded] = useState(false)
 
-  const { registrar } = useProduccionRegistros()
-  const { user, perfil } = useAuth()
   const RESTAURANTE_ID = useRestauranteId()
 
   // Lazy load de alertas de stock on first expand (solo top-level con receta_id)
@@ -132,25 +128,6 @@ export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, onPrio
     }
   }
 
-  async function handleProduccionConfirm(multiplicadorReal: number) {
-    if (!item.receta_id) return
-    await registrar({
-      receta_id: item.receta_id,
-      tarea_id: item.id,
-      fecha: new Date().toISOString().split('T')[0],
-      cantidad_planificada: item.cantidad ?? null,
-      multiplicador_real: multiplicadorReal,
-      usuario_id: user?.id ?? null,
-      usuario_nombre: perfil ? `${perfil.nombre} ${perfil.apellido}`.trim() : null,
-    })
-    setProdSheetOpen(false)
-  }
-
-  function handleProduccionDismiss() {
-    // Omitir → no registrar nada (el registro es informativo, el estado ya cambió)
-    setProdSheetOpen(false)
-  }
-
   async function handleCrearTareaConfirm(data: CrearTareaSheetConfirmData) {
     if (!onCrearTareaDesdeItem) return
     await onCrearTareaDesdeItem(item, data)
@@ -176,6 +153,9 @@ export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, onPrio
             borderRadius: '50%', background: st.bg, border: `2px solid ${st.border}`,
             cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'all .15s', padding: 0,
+            // Sin esto, algunos navegadores móviles esperan ~300ms tras el tap
+            // (por si viene un doble-tap de zoom) antes de disparar el onClick.
+            touchAction: 'manipulation',
           }}
         >
           {st.icon && (
@@ -370,12 +350,12 @@ export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, onPrio
       )}
 
       {prodSheetOpen && item.receta_id && (
-        <ProduccionSheet
+        <ProduccionSheetConectada
+          tareaId={item.id}
+          recetaId={item.receta_id}
           recetaNombre={item.titulo}
           cantidadPlanificada={item.cantidad ?? null}
-          recetaId={item.receta_id}
-          onConfirm={handleProduccionConfirm}
-          onDismiss={handleProduccionDismiss}
+          onClose={() => setProdSheetOpen(false)}
         />
       )}
 
@@ -392,3 +372,11 @@ export function ItemOps({ item, subtareas, onEstadoChange, onAddSubtarea, onPrio
     </div>
   )
 }
+
+// Memoizado a propósito: en OPS se renderizan 40-70 ítems a la vez y cada
+// tilde produce una nueva referencia del array de tareas (optimistic de SWR).
+// Sin memo, tocar UN checkbox re-renderiza los 70 ítems — es la mitad de la
+// demora que se percibía al tildar en servicio. Para que el memo sirva, los
+// callbacks que bajan desde la pantalla tienen que ser estables (useCallback):
+// ver handleEstadoChange / handleAddSubtarea en tareas/ClientView.tsx.
+export const ItemOps = memo(ItemOpsBase)
