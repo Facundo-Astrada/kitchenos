@@ -4,11 +4,11 @@ Origen: auditoría del flujo de trabajo (31 jul 2026, sesión Fable). 16 hallazg
 configuración, memoria del proyecto y ritual de sesiones. Este plan los resuelve en
 2 sesiones. **Ninguna de las dos toca código de la app** (`app/`, `lib/`, `components/`).
 
-Estado: ⬜ Sesión 1 pendiente · ⬜ Sesión 2 pendiente
+Estado: ✅ Sesión 1 completa (31 jul 2026) · ⬜ Sesión 2 pendiente
 
 ---
 
-## Sesión 1 — Configuración e infraestructura (~1h, Sonnet)
+## Sesión 1 ✅ — Configuración e infraestructura (~1h, Sonnet)
 
 Resuelve hallazgos: hook tsc lento, MCPs muertos, tokens expuestos, allowlist inflado,
 skills genéricas, scripts de screenshot reinventados, archivos colgados.
