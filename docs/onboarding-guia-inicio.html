@@ -1,0 +1,355 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<title>KitchenOS — Guía de Inicio</title>
+<style>
+  @font-face{
+    font-family:'Material Symbols Outlined'; font-style:normal; font-weight:400;
+    src:url('fonts/material-symbols-outlined.woff2') format('woff2');
+  }
+  @font-face{
+    font-family:'Playfair Display'; font-style:normal; font-weight:800;
+    src:url('fonts/playfair-display-800.ttf') format('truetype');
+  }
+  @font-face{
+    font-family:'Playfair Display'; font-style:italic; font-weight:600;
+    src:url('fonts/playfair-display-600italic.ttf') format('truetype');
+  }
+  
+  @page { size: 338.66mm 190.5mm; margin: 0; } /* 16:9, equivalente a 13.333in x 7.5in */
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  :root{
+    --navy:#16243f; --navy2:#1c2d4a; --ink:#1f2937; --muted:#5b6677; --faint:#9aa3b2;
+    --paper:#ffffff; --soft:#f4f5f8; --border:#e6e9f0;
+    --serif:'Playfair Display', Georgia, 'Times New Roman', serif;
+    --sans:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  }
+  body{ margin:0; font-family:var(--sans); color:var(--ink); font-size:19px; line-height:1.5; }
+  .mi{ font-family:'Material Symbols Outlined'; font-weight:normal; font-style:normal; vertical-align:middle;
+       font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; line-height:1; }
+  .mi-ok{ color:#16a34a; }
+  .dot{ display:inline-block; width:13px; height:13px; border-radius:50%; background:var(--dc); vertical-align:middle; margin:0 1px; }
+  h1,h2{ font-family:var(--serif); font-weight:800; letter-spacing:-.01em; margin:0; }
+
+  .slide{ position:relative; width:338.66mm; min-height:190.5mm; padding:16mm 28mm;
+          background:var(--paper); display:flex; flex-direction:column; }
+  .slide + .slide{ break-before:page; }
+  /* Salvavidas: si un bloque no entra, pasa a la página siguiente entero en vez de partirse feo */
+  .callout, ul, table.stable, pre.wireframe, .cbody-split{ break-inside:avoid; }
+
+  p{ margin:0 0 12px; color:#374151; }
+  .lead-line{ font-weight:800; color:var(--navy2); margin:16px 0 7px; font-size:20px; }
+  ul{ margin:0 0 14px; padding-left:24px; }
+  li{ margin:6px 0; color:#374151; }
+  strong{ color:#111827; }
+  code{ background:#f1f3f7; color:var(--navy2); padding:2px 7px; border-radius:5px; font-family:'Cascadia Code',Consolas,monospace; font-size:16px; }
+
+  /* Wireframe / mockup de pantalla (bloques de código del .md) */
+  pre.wireframe{ background:#0f1c33; color:#d8e0f0; border-radius:14px; padding:20px 24px; margin:12px 0 16px;
+                 font-family:'Cascadia Code',Consolas,monospace; font-size:14px; line-height:1.6;
+                 box-shadow:0 16px 34px rgba(20,35,63,.22); }
+  pre.wireframe code{ background:none; color:inherit; padding:0; font-size:inherit; white-space:pre; }
+
+  /* Callouts (blockquote) */
+  .callout{ display:flex; gap:14px; align-items:flex-start; background:#f4f6fb; border:1px solid #dde3f0; border-left:5px solid var(--navy2);
+            border-radius:12px; padding:15px 19px; margin:12px 0 16px; font-size:17px; color:#374151; }
+  .callout-ico{ color:var(--navy2); flex-shrink:0; font-size:23px; }
+  .callout-oncover{ background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.18); border-left-color:#e7a049; color:#dbe3f0; }
+  .callout-oncover .mi{ color:#e7a049; }
+  .callout-warn{ background:#fdf6e9; border:1px solid #f1dcb4; border-left:5px solid #e0913c; color:#4a3b22; }
+  .callout-warn strong{ color:#7a4f12; }
+  .callout .mi{ font-size:23px; }
+
+  /* Tabla */
+  table.stable{ width:100%; border-collapse:collapse; margin:10px 0 16px; font-size:17px; }
+  table.stable th{ background:var(--navy2); color:#fff; text-align:left; padding:11px 16px; font-weight:700; font-size:16px; }
+  table.stable th:first-child{ border-radius:10px 0 0 0; } table.stable th:last-child{ border-radius:0 10px 0 0; }
+  table.stable td{ border:1px solid var(--border); padding:11px 16px; vertical-align:top; }
+  table.stable tbody tr:nth-child(even){ background:#f8f9fb; }
+
+  /* Chips del header de contenido */
+  .chead{ display:flex; gap:10px; margin-bottom:16px; flex-shrink:0; }
+  .chip{ display:inline-flex; align-items:center; gap:7px; background:var(--cs); color:var(--ci); border:1px solid color-mix(in srgb,var(--cc) 35%,#fff);
+         font-weight:800; font-size:15px; padding:8px 18px; border-radius:999px; }
+  .chip .mi{ font-size:19px; color:var(--cc); }
+  .chip-done{ background:#e7f4ee; color:#1f7d51; border-color:#bfe3d0; } .chip-done .mi{ color:#16a34a; }
+  .chip-star{ background:#fdf6e9; color:#7a4f12; border-color:#f1dcb4; } .chip-star .mi{ color:#e0913c; }
+
+  /* Diapositiva de contenido — flex column: header fijo arriba, cuerpo crece, footer al final.
+     Sin overflow:hidden: si el contenido no entra, la diapositiva sigue en una página más
+     (nunca se recorta en silencio — bug real que tenía la v1 de este script). */
+  .content{ position:relative; }
+  .content-ghost{ position:absolute; top:14mm; right:20mm; font-size:190px !important; opacity:.06; z-index:0; }
+  .content h2, .chead, .cbody, .cbody-split{ position:relative; z-index:1; }
+  .content h2{ font-size:48px; color:var(--navy2); line-height:1.08; margin-bottom:20px; max-width:34ch; flex-shrink:0; }
+  .cbody{ max-width:220mm; }
+  .cbody-closing .callout{ background:rgba(231,160,73,.12); border:1px solid rgba(231,160,73,.4); border-left:5px solid #e7a049; color:#5b4322; }
+  .cbody-closing .callout .mi{ color:#e7a049; }
+
+  /* Cuerpo a 2 columnas cuando hay un wireframe/resumen (bloque de código) */
+  .cbody-split{ display:grid; grid-template-columns:1.05fr 1fr; gap:30px; align-items:start; }
+  .cbody-visual{ display:flex; align-items:flex-start; justify-content:center; padding-top:4px; }
+  .cbody-visual pre.wireframe{ margin:0; width:100%; }
+  .cbody-text ul:last-child, .cbody-text p:last-child{ margin-bottom:0; }
+
+  .sfoot{ margin-top:auto; padding-top:14px; border-top:1px solid var(--border); display:flex; justify-content:space-between;
+          font-size:14px; color:var(--faint); flex-shrink:0; }
+
+  /* Portada */
+  .cover{ background:linear-gradient(160deg,#1a2a47,#101c33); color:#fff; padding:16mm 28mm; }
+  .cover-logo{ display:flex; align-items:center; gap:11px; flex-shrink:0; }
+  .cover-logo-ico{ width:40px; height:40px; border-radius:11px; background:linear-gradient(150deg,#e7a049,#d2832f); font-size:24px !important; color:#1a2a47 !important;
+                   font-variation-settings:'FILL' 1 !important; display:inline-flex; align-items:center; justify-content:center; }
+  .logo-tx{ font-weight:800; font-size:19px; letter-spacing:-.01em; }
+  .cover-mid{ flex:1 1 auto; display:flex; flex-direction:column; justify-content:center; }
+  .cover-eyebrow{ text-transform:uppercase; letter-spacing:.18em; font-size:13px; font-weight:700; color:#e7a049; margin-bottom:18px; }
+  .cover-title{ font-size:82px; line-height:.98; color:#fff; font-weight:800; }
+  .cover-sub{ font-family:var(--serif); font-style:italic; font-weight:600; font-size:26px; color:#e7a049; margin:20px 0 20px; }
+  .cover-desc{ font-size:16px; color:#aeb9cc; max-width:70ch; line-height:1.6; }
+  .cover-desc p{ color:#aeb9cc; }
+  .cover-foot{ flex-shrink:0; display:flex; justify-content:space-between; align-items:center;
+               border-top:1px solid rgba(255,255,255,.12); padding-top:18px; }
+  .cover-pill{ display:inline-flex; align-items:center; gap:8px; border:1px solid rgba(231,160,73,.5); color:#e7a049; border-radius:999px; padding:8px 17px; font-size:13px; font-weight:700; }
+  .cover-pill .mi{ font-size:18px; }
+  .cover-ed{ font-size:13px; color:#8593aa; }
+
+  /* Divisores de flujo */
+  .divider{ background:linear-gradient(160deg,#1a2a47,#101c33); color:#fff; padding:0; }
+  .div-center{ flex:1 1 auto; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:30mm; margin:0 auto; }
+  .div-ghost{ font-family:var(--serif); font-weight:800; font-size:220px; line-height:.8; color:rgba(255,255,255,.07); margin-bottom:-50px; }
+  .div-kicker{ display:flex; align-items:center; gap:9px; text-transform:uppercase; letter-spacing:.22em; font-size:15px; font-weight:700; color:var(--dc); margin-bottom:16px; }
+  .div-kicker .mi{ color:var(--dc); font-size:23px; }
+  .div-title{ font-size:60px; color:#fff; max-width:20ch; }
+  .div-sub{ font-size:17px; color:#aeb9cc; max-width:62ch; margin-top:18px; line-height:1.6; }
+  .div-sub p{ color:#aeb9cc; margin:0; }
+  </style></head><body><section class="slide cover">
+    <div class="cover-logo"><span class="mi cover-logo-ico">restaurant</span><span class="logo-tx">KitchenOS</span></div>
+    <div class="cover-mid">
+      <div class="cover-eyebrow">Instructivo de Onboarding — KitchenOS</div>
+      <h1 class="cover-title">Guía de<br>Inicio</h1>
+      <div class="cover-sub">Guía para nuevos usuarios · formato presentación</div>
+      <div class="cover-desc"><div class="callout callout-oncover"><span class="mi callout-ico">format_quote</span><div>Este documento explica, pantalla por pantalla, la <strong>Guía de inicio</strong> de KitchenOS. Pensado para usarse como capacitación rápida cuando entra alguien nuevo al equipo. Cada sección equivale a una diapositiva.</div></div>
+</div>
+    </div>
+    <div class="cover-foot">
+      <span class="cover-pill"><span class="mi ">rocket_launch</span> 3 roles · Dueño, Encargado, Cocinero</span>
+      <span class="cover-ed">El Rescoldo · Edición equipo</span>
+    </div>
+  </section><section class="slide content" style="--cc:#e0913c;--ci:#b06a1f;--cs:#fbf1e2">
+    <span class="content-ghost" style="color:#e0913c"><span class="mi ">rocket_launch</span></span>
+    <div class="chead">
+      <span class="chip chip-flow" style="--cc:#e0913c;--cs:#fbf1e2;--ci:#b06a1f">Arranque</span>
+    </div>
+    <h2>¿Qué es la Guía de inicio?</h2>
+    <div class="cbody "><p>Cuando alguien entra <strong>por primera vez</strong> a KitchenOS, la app no lo deja solo: lo recibe con una <strong>Guía de inicio</strong> que le muestra, paso a paso, qué tiene que hacer para empezar a trabajar.</p>
+<p class="lead-line"><strong>Lo importante:</strong></p>
+<ul><li>La guía <strong>se adapta a tu rol</strong>. No es la misma para el dueño que para un cocinero.</li><li>Cada paso te dice <strong>qué hacer, por qué importa, y te lleva directo a la pantalla</strong> donde se hace.</li><li>Cada paso muestra <strong>datos reales de tu cocina</strong> (cuántos platos cargaste, cuántas recetas, etc.).</li><li>Podés <strong>saltarla</strong> cuando quieras, y <strong>volver a abrirla</strong> desde Configuración → "Guía de inicio".</li></ul>
+<p class="lead-line"><strong>Mensaje de arranque que ve el usuario:</strong></p>
+<div class="callout"><span class="mi callout-ico">format_quote</span><div><em>"Restaurantes que completan el setup ahorran 3 hs/semana y mejoran su food cost 4–8%."</em></div></div>
+</div>
+    <div class="sfoot"><span>KitchenOS · Guía de inicio</span><span>1</span></div>
+  </section><section class="slide content" style="--cc:#e0913c;--ci:#b06a1f;--cs:#fbf1e2">
+    <span class="content-ghost" style="color:#e0913c"><span class="mi ">rocket_launch</span></span>
+    <div class="chead">
+      <span class="chip chip-flow" style="--cc:#e0913c;--cs:#fbf1e2;--ci:#b06a1f">Arranque</span>
+    </div>
+    <h2>Cómo se lee la pantalla</h2>
+    <div class="cbody-split"><div class="cbody-visual"><pre class="wireframe"><code>┌────────────────────────────────────────┐
+│  Guía de inicio                          │  ← Encabezado azul (navy)
+│  EL RESCOLDO            [ Administrador ] │  ← Nombre del local + tu rol
+│  5 de 8 listos                      62%  │  ← Barra de progreso
+├────────────────────────────────────────┤
+│  📈 Ahorrá 3 hs/semana y mejorá tu      │  ← Banner de impacto
+│     food cost 4–8%                       │
+│                                          │
+│  ┃ PASO 1 DE 8        ✓ Listo            │  ← Cada paso = una tarjeta
+│  ┃ Creá tu cuenta                        │     (con borde de color)
+│  ┃ Descripción corta...                  │
+│  ┃ 📊 32 platos en la carta              │  ← Dato real de tu cocina
+│  ┃ [ Ir a la carta → ]                   │  ← Botón que te lleva ahí
+│                                          │
+│  ...                                     │
+├────────────────────────────────────────┤
+│  Saltar todo          Continuar →        │  ← Pie de página
+└────────────────────────────────────────┘</code></pre>
+</div><div class="cbody-text"><p>Todos los roles ven la misma estructura visual:</p>
+<p class="lead-line"><strong>Los 3 estados de cada paso:</strong></p>
+<ul><li><span class="dot" style="--dc:#16a34a"></span> <strong>Listo</strong> — ya está hecho (la app lo detecta sola, o vos tocaste "Ya lo tengo <span class="mi mi-ok">check_circle</span>").</li><li><span class="dot" style="--dc:#d97706"></span> <strong>En progreso</strong> — lo empezaste.</li><li><span class="dot" style="--dc:#9aa3b2"></span> <strong>Pendiente</strong> — todavía no.</li></ul>
+<p class="lead-line"><strong>Los colores del borde agrupan los pasos:</strong></p>
+<ul><li><span class="dot" style="--dc:#e0913c"></span> Amber → arranque (cuenta, carta)</li><li><span class="dot" style="--dc:#16a34a"></span> Verde → recetas y plazas</li><li><span class="dot" style="--dc:#3b6fd4"></span> Azul → equipo y stock</li><li><span class="dot" style="--dc:#7c5cd4"></span> Violeta → checklists</li></ul>
+<p class="lead-line"><strong>Dos botones en cada paso:</strong></p>
+<ul><li><strong>"Ir a configurar →"</strong> → te lleva a la pantalla a hacerlo.</li><li><strong>"Ya lo tengo <span class="mi mi-ok">check_circle</span>"</strong> → marca el paso como listo sin moverte (útil si ya lo tenías hecho).</li></ul>
+</div></div>
+    <div class="sfoot"><span>KitchenOS · Guía de inicio</span><span>2</span></div>
+  </section><section class="slide divider" style="--dc:#e0913c">
+    <div class="div-center">
+      <div class="div-ghost">1</div>
+      <div class="div-kicker"><span class="mi ">admin_panel_settings</span> Flujo 1</div>
+      <h2 class="div-title">FLUJO DUEÑO / ADMINISTRADOR — 8 pasos</h2>
+      <div class="div-sub"><div class="callout"><span class="mi callout-ico">format_quote</span><div>Pensado como un <strong>instructivo de configuración</strong>: se hace una vez y deja la app lista para todo el equipo.</div></div>
+</div>
+    </div>
+  </section><section class="slide content" style="--cc:#e0913c;--ci:#b06a1f;--cs:#fbf1e2">
+    <span class="content-ghost" style="color:#e0913c"><span class="mi ">admin_panel_settings</span></span>
+    <div class="chead">
+      <span class="chip" style="--cc:#e0913c;--cs:#fbf1e2;--ci:#b06a1f">Paso 1</span><span class="chip chip-done"><span class="mi ">check_circle</span> Listo</span>
+    </div>
+    <h2>Creá tu cuenta</h2>
+    <div class="cbody "><p><strong>Ya está hecho</strong> apenas te registrás. La app te da la bienvenida con el nombre de tu restaurante. Este paso arranca siempre en verde. Es solo para confirmar: <em>"tu cuenta ya existe, empecemos."</em></p>
+</div>
+    <div class="sfoot"><span>KitchenOS · Guía de inicio</span><span>3</span></div>
+  </section><section class="slide content" style="--cc:#e0913c;--ci:#b06a1f;--cs:#fbf1e2">
+    <span class="content-ghost" style="color:#e0913c"><span class="mi ">admin_panel_settings</span></span>
+    <div class="chead">
+      <span class="chip" style="--cc:#e0913c;--cs:#fbf1e2;--ci:#b06a1f">Paso 2</span>
+    </div>
+    <h2>Cargá tu carta</h2>
+    <div class="cbody "><p><strong>Qué es:</strong> subir tu menú (los platos que vendés) al sistema.</p>
+<p class="lead-line"><strong>Tres formas de hacerlo:</strong></p>
+<ul><li><span class="mi ">photo_camera</span> <strong>Foto</strong> — sacale una foto a tu carta y la IA la lee.</li><li><span class="mi ">description</span> <strong>Excel / CSV</strong> — si ya la tenés en planilla.</li><li><span class="mi ">mic</span> <strong>Dictarle al Coach</strong> — abrís el asistente y le dictás los platos con nombre y precio. El Coach se abre con todo listo para escuchar.</li></ul>
+<p><strong>Te lleva a:</strong> la pantalla <strong>Carta</strong>. <strong>Dato que muestra:</strong> cuántos platos ya tenés cargados.</p>
+</div>
+    <div class="sfoot"><span>KitchenOS · Guía de inicio</span><span>4</span></div>
+  </section><section class="slide content" style="--cc:#e0913c;--ci:#b06a1f;--cs:#fbf1e2">
+    <span class="content-ghost" style="color:#e0913c"><span class="mi ">admin_panel_settings</span></span>
+    <div class="chead">
+      <span class="chip" style="--cc:#e0913c;--cs:#fbf1e2;--ci:#b06a1f">Paso 3</span>
+    </div>
+    <h2>Armá recetas y subrecetas</h2>
+    <div class="cbody "><p><strong>Qué es:</strong> cargar las recetas de tus platos (ingredientes y cantidades). Esto es lo que después calcula tu <strong>food cost</strong> (cuánto te cuesta cada plato).</p>
+<p class="lead-line"><strong>Dos formas:</strong></p>
+<ul><li><span class="mi ">library_books</span> <strong>Subir fichas técnicas</strong> (PDF/Excel/DOCX) → la IA las lee y crea las recetas.</li><li><span class="mi ">edit_note</span> <strong>A mano</strong>, desde el recetario.</li></ul>
+<p><strong>Tip:</strong> las <strong>subrecetas</strong> (ej: una salsa base) se reutilizan en varios platos, así no las cargás dos veces.</p>
+<p><strong>Te lleva a:</strong> el <strong>Recetario</strong>. <strong>Dato que muestra:</strong> cuántas recetas cargaste + el food cost promedio.</p>
+</div>
+    <div class="sfoot"><span>KitchenOS · Guía de inicio</span><span>5</span></div>
+  </section><section class="slide content" style="--cc:#e0913c;--ci:#b06a1f;--cs:#fbf1e2">
+    <span class="content-ghost" style="color:#e0913c"><span class="mi ">admin_panel_settings</span></span>
+    <div class="chead">
+      <span class="chip" style="--cc:#e0913c;--cs:#fbf1e2;--ci:#b06a1f">Paso 4</span>
+    </div>
+    <h2>Definí las plazas</h2>
+    <div class="cbody "><p><strong>Qué es:</strong> las <strong>plazas</strong> son las estaciones de tu cocina (parrilla, fríos, calientes, pase…). Organizan el mise en place y las tareas por estación.</p>
+<p><strong>Cómo:</strong> ves la lista de plazas que ya existen y podés agregar nuevas.</p>
+<p><strong>Te lleva a:</strong> <strong>Configuración</strong>. <strong>Dato que muestra:</strong> cuántas plazas activas tenés.</p>
+</div>
+    <div class="sfoot"><span>KitchenOS · Guía de inicio</span><span>6</span></div>
+  </section><section class="slide content" style="--cc:#e0913c;--ci:#b06a1f;--cs:#fbf1e2">
+    <span class="content-ghost" style="color:#e0913c"><span class="mi ">admin_panel_settings</span></span>
+    <div class="chead">
+      <span class="chip" style="--cc:#e0913c;--cs:#fbf1e2;--ci:#b06a1f">Paso 5</span><span class="chip chip-star"><span class="mi ">star</span> el más importante</span>
+    </div>
+    <h2>Configurá el mise en place</h2>
+    <div class="cbody "><p><strong>Qué es:</strong> el corazón del servicio. Acá definís <strong>qué prepara cada plaza, en qué cantidad y en qué recipiente</strong>, antes de que arranque el servicio.</p>
+<div class="callout callout-warn"><div><span class="mi ">warning</span> <strong>Dato clave para el usuario:</strong> <em>"Para cargar cantidades por 'unidad' (und), el producto tiene que estar previamente costeado en el stock con su medida unitaria — la app toma ese dato de ahí."</em></div></div>
+<p><strong>Te lleva a:</strong> <strong>OPS → pestaña Mise</strong>. <strong>Dato que muestra:</strong> cuántos items ya tienen su cantidad cargada.</p>
+</div>
+    <div class="sfoot"><span>KitchenOS · Guía de inicio</span><span>7</span></div>
+  </section><section class="slide content" style="--cc:#e0913c;--ci:#b06a1f;--cs:#fbf1e2">
+    <span class="content-ghost" style="color:#e0913c"><span class="mi ">admin_panel_settings</span></span>
+    <div class="chead">
+      <span class="chip" style="--cc:#e0913c;--cs:#fbf1e2;--ci:#b06a1f">Paso 6</span>
+    </div>
+    <h2>Invitá al equipo</h2>
+    <div class="cbody "><p><strong>Qué es:</strong> sumar a tu gente para que cada uno entre con su usuario y vea lo suyo.</p>
+<p><strong>Cómo:</strong> generás un <strong>link de invitación o un QR</strong> y se lo pasás al equipo.</p>
+<p><strong>Te lleva a:</strong> <strong>Turnos / Equipo</strong>. <strong>Dato que muestra:</strong> cuántos miembros ya tenés activos.</p>
+</div>
+    <div class="sfoot"><span>KitchenOS · Guía de inicio</span><span>8</span></div>
+  </section><section class="slide content" style="--cc:#e0913c;--ci:#b06a1f;--cs:#fbf1e2">
+    <span class="content-ghost" style="color:#e0913c"><span class="mi ">admin_panel_settings</span></span>
+    <div class="chead">
+      <span class="chip" style="--cc:#e0913c;--cs:#fbf1e2;--ci:#b06a1f">Paso 7</span>
+    </div>
+    <h2>Cargá el stock base</h2>
+    <div class="cbody "><p><strong>Qué es:</strong> tener tus productos cargados con su precio, para que el food cost y los pedidos funcionen.</p>
+<p><strong>Forma rápida:</strong> subir un <strong>Excel o tus facturas</strong> → el importador crea los productos solo.</p>
+<p><strong>Te lleva a:</strong> <strong>Stock</strong>. <strong>Dato que muestra:</strong> cuántos productos tenés y qué porcentaje ya tiene precio asignado.</p>
+</div>
+    <div class="sfoot"><span>KitchenOS · Guía de inicio</span><span>9</span></div>
+  </section><section class="slide content" style="--cc:#e0913c;--ci:#b06a1f;--cs:#fbf1e2">
+    <span class="content-ghost" style="color:#e0913c"><span class="mi ">admin_panel_settings</span></span>
+    <div class="chead">
+      <span class="chip" style="--cc:#e0913c;--cs:#fbf1e2;--ci:#b06a1f">Paso 8</span>
+    </div>
+    <h2>Configurá los checklists</h2>
+    <div class="cbody "><p><strong>Qué es:</strong> activar las <strong>rutinas de apertura, cierre y limpieza (HACCP)</strong> para que nada se pase por alto.</p>
+<p><strong>Cómo:</strong> elegís entre <strong>plantillas prediseñadas</strong> ya listas para usar.</p>
+<p><strong>Te lleva a:</strong> <strong>Checklist / Limpieza</strong>. <strong>Dato que muestra:</strong> cuántas rutinas activas tenés.</p>
+</div>
+    <div class="sfoot"><span>KitchenOS · Guía de inicio</span><span>10</span></div>
+  </section><section class="slide content" style="--cc:#e0913c;--ci:#b06a1f;--cs:#fbf1e2">
+    <span class="content-ghost" style="color:#e0913c"><span class="mi ">admin_panel_settings</span></span>
+    <div class="chead">
+      <span class="chip chip-flow" style="--cc:#e0913c;--cs:#fbf1e2;--ci:#b06a1f">Dueño / Administrador</span>
+    </div>
+    <h2>Cierre del Dueño</h2>
+    <div class="cbody "><p>Cuando completás los 8 pasos, la barra llega al <strong>100%</strong> y el botón del pie cambia a:</p>
+<div class="callout"><span class="mi callout-ico">format_quote</span><div><strong>"Empezar a usar KitchenOS →"</strong></div></div>
+<p>Tu cocina ya está cargada, costeada y organizada. El equipo puede entrar y trabajar.</p>
+</div>
+    <div class="sfoot"><span>KitchenOS · Guía de inicio</span><span>11</span></div>
+  </section><section class="slide divider" style="--dc:#2f9e6b">
+    <div class="div-center">
+      <div class="div-ghost">2</div>
+      <div class="div-kicker"><span class="mi ">supervisor_account</span> Flujo 2</div>
+      <h2 class="div-title">FLUJO ENCARGADO — 4 pasos</h2>
+      <div class="div-sub"><div class="callout"><span class="mi callout-ico">format_quote</span><div>Más corto. Orientado a <strong>operar</strong>, no a configurar.</div></div>
+</div>
+    </div>
+  </section><section class="slide content" style="--cc:#2f9e6b;--ci:#1f7d51;--cs:#e7f4ee">
+    <span class="content-ghost" style="color:#2f9e6b"><span class="mi ">supervisor_account</span></span>
+    <div class="chead">
+      <span class="chip chip-flow" style="--cc:#2f9e6b;--cs:#e7f4ee;--ci:#1f7d51">Encargado</span>
+    </div>
+    <h2>Encargado, de un vistazo</h2>
+    <div class="cbody "><table class="stable"><thead><tr><th>Paso</th><th>Qué hace</th><th>Te lleva a</th></tr></thead><tbody><tr><td><strong>1 · Tu plaza</strong></td><td>Confirmás o elegís tu estación de trabajo</td><td>(selector inline)</td></tr><tr><td><strong>2 · Revisá el mise en place</strong></td><td>Mirás el checklist de tu plaza con lo que hay que preparar</td><td>OPS → Mise</td></tr><tr><td><strong>3 · Chequeá el stock crítico</strong></td><td>Ves qué productos están bajos o en cero</td><td>Stock</td></tr><tr><td><strong>4 · El pase de turno</strong></td><td>Aprendés cómo se pasan mensajes y tareas entre turnos</td><td>Pase</td></tr></tbody></table>
+<p>En 4 pasos estás listo para arrancar el día.</p>
+</div>
+    <div class="sfoot"><span>KitchenOS · Guía de inicio</span><span>12</span></div>
+  </section><section class="slide divider" style="--dc:#3b6fd4">
+    <div class="div-center">
+      <div class="div-ghost">3</div>
+      <div class="div-kicker"><span class="mi ">soup_kitchen</span> Flujo 3</div>
+      <h2 class="div-title">FLUJO COCINERO / BACHERO — 2 pasos</h2>
+      <div class="div-sub"><div class="callout"><span class="mi callout-ico">format_quote</span><div>Activación rápida. Estás listo en minutos.</div></div>
+</div>
+    </div>
+  </section><section class="slide content" style="--cc:#3b6fd4;--ci:#2a52a0;--cs:#e8eefb">
+    <span class="content-ghost" style="color:#3b6fd4"><span class="mi ">soup_kitchen</span></span>
+    <div class="chead">
+      <span class="chip chip-flow" style="--cc:#3b6fd4;--cs:#e8eefb;--ci:#2a52a0">Cocinero / Bachero</span>
+    </div>
+    <h2>Cocinero / Bachero, de un vistazo</h2>
+    <div class="cbody "><table class="stable"><thead><tr><th>Paso</th><th>Qué hace</th><th>Te lleva a</th></tr></thead><tbody><tr><td><strong>1 · Tu plaza</strong></td><td>Confirmás tu estación de trabajo</td><td>(selector inline)</td></tr><tr><td><strong>2 · Tus tareas del día</strong></td><td>Ves las tareas asignadas a tu plaza para hoy</td><td>OPS</td></tr></tbody></table>
+<p>Listo. A trabajar.</p>
+</div>
+    <div class="sfoot"><span>KitchenOS · Guía de inicio</span><span>13</span></div>
+  </section><section class="slide content" style="--cc:#e7a049;--ci:#7a4f12;--cs:#fdf6e9">
+    <span class="content-ghost" style="color:#e7a049"><span class="mi ">undefined</span></span>
+    <div class="chead">
+      
+    </div>
+    <h2>Preguntas frecuentes</h2>
+    <div class="cbody cbody-closing"><p class="lead-line"><strong>¿Tengo que hacer todo de una?</strong></p>
+<p>No. Podés hacerlo de a poco. La guía recuerda lo que ya hiciste.</p>
+<p class="lead-line"><strong>¿Y si ya tenía algo cargado?</strong></p>
+<p>La app lo detecta sola y marca ese paso en verde. Igual podés tocar "Ya lo tengo <span class="mi mi-ok">check_circle</span>".</p>
+<p class="lead-line"><strong>¿Puedo saltarla?</strong></p>
+<p>Sí, con <strong>"Saltar todo"</strong>. Y la podés volver a abrir cuando quieras desde <strong>Configuración → Guía de inicio</strong>.</p>
+<p class="lead-line"><strong>¿La veo en el celular y en la computadora?</strong></p>
+<p>En las dos. Se adapta sola a cada pantalla.</p>
+</div>
+    <div class="sfoot"><span>KitchenOS · Guía de inicio</span><span>14</span></div>
+  </section><section class="slide content" style="--cc:#e7a049;--ci:#7a4f12;--cs:#fdf6e9">
+    <span class="content-ghost" style="color:#e7a049"><span class="mi ">undefined</span></span>
+    <div class="chead">
+      
+    </div>
+    <h2>Resumen final</h2>
+    <div class="cbody-split"><div class="cbody-visual"><pre class="wireframe"><code>DUEÑO       → 8 pasos · dejar la app lista para todos
+ENCARGADO   → 4 pasos · arrancar la operación del día
+COCINERO    → 2 pasos · estar listo en minutos</code></pre>
+</div><div class="cbody-text"><div class="callout"><span class="mi callout-ico">format_quote</span><div><strong>La regla de oro:</strong> completar el setup una vez = ahorrar 3 hs/semana y mejorar el food cost 4–8%.</div></div>
+<p><em>Fin del instructivo.</em></p>
+</div></div>
+    <div class="sfoot"><span>KitchenOS · Guía de inicio</span><span>15</span></div>
+  </section></body></html>

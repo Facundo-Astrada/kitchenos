@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<title>KitchenOS — OPS en 5 minutos</title>
+<style>
+  @page { size: A4; margin: 16mm 16mm; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         color: #1f2937; font-size: 12.5px; line-height: 1.6; margin: 0; }
+  h1 { color: #1c2d4a; font-size: 20px; margin: 24px 0 10px; page-break-after: avoid; }
+  h2 { color: #1c2d4a; font-size: 16px; margin: 22px 0 8px; page-break-after: avoid;
+       border-left: 4px solid #e7a049; padding-left: 10px; }
+  h3 { color: #4361a0; font-size: 13.5px; margin: 14px 0 5px; page-break-after: avoid; }
+  p { margin: 7px 0; }
+  ul, ol { margin: 7px 0 11px; padding-left: 22px; }
+  li { margin: 5px 0; }
+  strong { color: #111827; }
+  code { background: #eef1f7; color: #1c2d4a; padding: 1px 5px; border-radius: 4px;
+         font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; }
+  pre { background: #0f1c33; color: #d8e0f0; border-radius: 10px; padding: 16px 18px;
+        overflow-x: auto; page-break-inside: avoid; font-size: 12px; line-height: 1.6; text-align: center; }
+  pre code { background: none; padding: 0; color: inherit; white-space: pre; }
+  blockquote { margin: 11px 0; padding: 10px 15px; border-radius: 0 8px 8px 0; font-size: 12px; page-break-inside: avoid; }
+  blockquote.note { border-left: 4px solid #4361a0; background: #f4f6fb; color: #374151; }
+  blockquote.tip  { border-left: 4px solid #16a34a; background: #edf7f0; color: #14532d; }
+  blockquote.warn { border-left: 4px solid #e0913c; background: #fdf6e9; color: #7a4f12; }
+  hr { border: none; border-top: 1px solid #e3e6ec; margin: 16px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 14px; font-size: 11.5px; page-break-inside: avoid; }
+  th { background: #1c2d4a; color: #fff; text-align: left; padding: 8px 11px; font-weight: 600; }
+  td { border: 1px solid #e3e6ec; padding: 7px 11px; vertical-align: top; }
+  tbody tr:nth-child(even) { background: #f8f9fb; }
+  .cover { background: linear-gradient(160deg,#1a2a47,#101c33); color: #fff; padding: 38px 32px; border-radius: 14px; margin-bottom: 14px; }
+  .cover .eyebrow { text-transform: uppercase; letter-spacing: .18em; font-size: 11px; font-weight: 700; color: #e7a049; margin-bottom: 12px; }
+  .cover h1 { color: #fff; margin: 0 0 8px; font-size: 28px; }
+  .cover p { color: #c7d0e2; margin: 0; font-size: 12.5px; }
+</style></head><body>
+<div class="cover">
+  <div class="eyebrow">KitchenOS · Operaciones</div>
+  <h1>OPS en 5 minutos</h1>
+  <p>Guía rápida del circuito diario. Para entender cómo funciona OPS sin memorizar botones.</p>
+</div>
+<h1>OPS en 5 minutos</h1>
+<blockquote class="note">Esta guía explica <strong>cómo funciona OPS y cuál es el circuito</strong>, sin entrar en cada botón. Si después necesitás el detalle de un control puntual, está todo en el <em>Manual de OPS</em> completo.</blockquote>
+<hr/>
+<h2>La idea en una frase</h2>
+<p>OPS es donde la cocina opera el día: <strong>entrás, ves lo que hay que dejar listo, lo vas haciendo durante el turno y al final queda registrado qué se hizo, qué no, y qué quedó pendiente para el turno siguiente.</strong></p>
+<p>Son tres pestañas, y se leen como una línea de tiempo:</p>
+<pre><code>PLANIFICACIÓN   →   PRODUCCIÓN   →   MISE
+qué se viene        qué hago hoy      mi plaza lista</code></pre>
+<ul><li><strong>Planificación</strong>: el encargado decide qué se produce (activa el menú del día). Eso <em>crea</em> las tareas.</li><li><strong>Producción</strong>: la lista de tareas del día. Acá el equipo va tildando lo que hace.</li><li><strong>Mise</strong>: tu checklist de plaza (heladera, secos, estación…). El "estoy listo para el servicio".</li></ul>
+<blockquote class="tip">No hay que cargar nada dos veces. Tildar algo en Mise se refleja en Producción, y al revés. La app mantiene todo sincronizado sola.</blockquote>
+<hr/>
+<h2>Un día en OPS</h2>
+<h3>1. Antes de abrir — se planifica</h3>
+<p>El encargado entra a <strong>Planificación</strong> y activa el menú del día (o pide "Sugerir producción"). Con eso, las tareas aparecen solas en <strong>Producción</strong>. Si el restaurante trabaja siempre con la carta fija, este paso puede ni hacer falta.</p>
+<h3>2. Al llegar — revisás tu plaza en el Mise</h3>
+<p>Entrás a <strong>Mise</strong> y elegís tu plaza (Parrilla, Fríos, Calientes, Pastelería…). Ahí tenés tu <strong>checklist de Apertura</strong>, ordenada por secciones tal como está tu cocina física.</p>
+<p>Es literal: <strong>abrís la heladera, mirás, y vas tildando.</strong> Cada ítem te dice:</p>
+<ul><li>cuánto stock <strong>hay ahora</strong> (lo podés corregir tocando el número),</li><li>cuánto habría que <strong>dejar preparado</strong>,</li><li>y <strong>cuánto falta producir</strong>.</li></ul>
+<p>Lo que está urgente (SP / P) genera automáticamente su tarea en Producción, así no se te escapa.</p>
+<h3>3. Durante el turno — vas viendo lo que falta</h3>
+<p>Mientras trabajás, <strong>Producción</strong> es tu tablero. Cada tarea tiene un círculo que cambia de estado con un toque:</p>
+<table><thead><tr><th>Estado</th><th>Qué significa</th></tr></thead><tbody><tr><td><strong>Pendiente</strong> (vacío)</td><td>Todavía no se empezó.</td></tr><tr><td><strong>En curso</strong> (azul)</td><td>Se está haciendo.</td></tr><tr><td><strong>Listo</strong> (verde)</td><td>Terminado.</td></tr><tr><td><strong>Duda</strong> (ámbar)</td><td>Algo no se puede hacer / hay que consultar. Se marca manteniendo apretado el nombre.</td></tr></tbody></table>
+<p>Arriba siempre ves el avance: <strong>"Hoy: 8/14 listos"</strong> con su barra. De un vistazo sabés cuánto falta. La pestaña Producción también muestra un globito rojo con las tareas que quedan.</p>
+<p>Si producís algo con receta, al marcarlo listo la app te pregunta <strong>cuánto produjiste de verdad</strong> (igual, más, menos) — sirve para aprender el rendimiento real con el tiempo.</p>
+<h3>4. Al cerrar — queda registrado qué se hizo y qué quedó</h3>
+<p>Antes de irte, en el Mise pasás a la pestaña <strong>Cierre</strong>. Ahí cargás <strong>cuánto stock quedó</strong> de cada cosa (un número por ítem). Eso deja el registro del día y es el punto de partida de la apertura de mañana.</p>
+<p>Tres cosas quedan asentadas al cerrar:</p>
+<ul><li><strong>Lo que se hizo</strong> — las tareas y el mise que se tildaron.</li><li><strong>Lo que no se hizo</strong> — lo que quedó sin completar se muestra arriba en Cierre, como "Pendiente del turno".</li><li><strong>Lo que queda para mañana</strong> — lo no terminado se arrastra <strong>un día</strong> al turno siguiente (aparece con el cartel "turno ant."). Y si querés dejar algo explícito para el próximo turno, creás un <strong>"pase de turno"</strong> con una nota.</li></ul>
+<p>Cuando tu plaza está 100% cerrada, aparece el botón <strong>Cerrar turno</strong>, que registra tu hora de salida.</p>
+<hr/>
+<h2>Lo mínimo que hay que tener armado</h2>
+<p>Para que el circuito fluya, alguien (el encargado) deja esto listo una sola vez:</p>
+<ol><li><strong>Las secciones del mise de cada plaza</strong> — cómo está dividida tu cocina (Heladera, Secos, Estación…). Se arma con el engranaje arriba a la derecha del Mise.</li><li><strong>Los menús</strong> — se cargan en <em>Carta → Menús</em> y se activan desde Planificación.</li></ol>
+<blockquote class="warn">Si una plaza no tiene secciones, o no hay menús cargados, las pantallas se ven vacías <strong>a propósito</strong> y te ofrecen el atajo para crear lo que falta. No es un error: OPS no inventa datos.</blockquote>
+<hr/>
+<h2>Para acordarte</h2>
+<ul><li><strong>Planificación crea, Producción y Mise ejecutan.</strong></li><li><strong>Mise = mi plaza</strong> (apertura, revisar, cierre). <strong>Producción = las tareas del día</strong> de todos.</li><li><strong>Todo se sincroniza</strong>: tildás una vez, se refleja en las dos pestañas.</li><li><strong>Al cerrar</strong> queda el registro de lo hecho, lo pendiente se arrastra un día, y lo que quieras dejar dicho va como "pase de turno".</li></ul>
+<blockquote class="tip">¿Dudás de un botón puntual? Está todo en el <em>Manual de OPS</em> completo. Esta guía es solo para tener el circuito claro en la cabeza.</blockquote>
+
+</body></html>

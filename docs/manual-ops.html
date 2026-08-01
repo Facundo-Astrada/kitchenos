@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<title>KitchenOS — Manual de OPS</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         color: #1f2937; font-size: 11.5px; line-height: 1.55; margin: 0; }
+  h1 { color: #1c2d4a; font-size: 21px; border-bottom: 3px solid #1c2d4a; padding-bottom: 6px;
+       margin: 26px 0 13px; page-break-after: avoid; }
+  h1.divider { background: linear-gradient(160deg,#1a2a47,#101c33); color: #fff; border: none;
+       border-radius: 12px; padding: 20px 22px; margin: 30px 0 16px; font-size: 20px;
+       letter-spacing: .01em; page-break-before: auto; }
+  h2 { color: #1c2d4a; font-size: 16px; margin: 22px 0 8px; page-break-after: avoid;
+       border-left: 4px solid #4361a0; padding-left: 10px; }
+  h3 { color: #4361a0; font-size: 13.5px; margin: 16px 0 6px; page-break-after: avoid; }
+  h4 { color: #4361a0; font-size: 12px; margin: 12px 0 4px; page-break-after: avoid; }
+  p { margin: 6px 0; }
+  ul, ol { margin: 6px 0 10px; padding-left: 20px; }
+  li { margin: 3px 0; }
+  strong { color: #111827; }
+  a { color: #4361a0; text-decoration: none; }
+  code { background: #eef1f7; color: #1c2d4a; padding: 1px 5px; border-radius: 4px;
+         font-family: "Cascadia Code", Consolas, monospace; font-size: 10px; white-space: nowrap; }
+  pre { background: #0f1c33; color: #d8e0f0; border-radius: 10px; padding: 14px 16px;
+        overflow-x: auto; page-break-inside: avoid; font-size: 10.5px; line-height: 1.5; }
+  pre code { background: none; padding: 0; color: inherit; white-space: pre; font-size: inherit; }
+  blockquote { margin: 10px 0; padding: 9px 14px; border-radius: 0 8px 8px 0; font-size: 11px;
+               page-break-inside: avoid; }
+  blockquote.note { border-left: 4px solid #4361a0; background: #f4f6fb; color: #374151; }
+  blockquote.tip  { border-left: 4px solid #16a34a; background: #edf7f0; color: #14532d; }
+  blockquote.warn { border-left: 4px solid #e0913c; background: #fdf6e9; color: #7a4f12; }
+  blockquote.flow { border-left: 4px solid #7c5cd4; background: #f3f0fb; color: #3f2f7a; }
+  blockquote strong { color: inherit; }
+  hr { border: none; border-top: 1px solid #e3e6ec; margin: 16px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 14px; font-size: 10.3px;
+          page-break-inside: avoid; }
+  th { background: #1c2d4a; color: #fff; text-align: left; padding: 7px 9px; font-weight: 600; }
+  td { border: 1px solid #e3e6ec; padding: 6px 9px; vertical-align: top; }
+  td:first-child { white-space: nowrap; }
+  tbody tr:nth-child(even) { background: #f8f9fb; }
+  .cover { background: linear-gradient(160deg,#1a2a47,#101c33); color: #fff; padding: 40px 32px;
+           border-radius: 14px; margin-bottom: 10px; }
+  .cover .eyebrow { text-transform: uppercase; letter-spacing: .18em; font-size: 11px; font-weight: 700;
+           color: #e7a049; margin-bottom: 12px; }
+  .cover h1 { color: #fff; border: none; margin: 0 0 8px; font-size: 30px; }
+  .cover p { color: #c7d0e2; margin: 0; font-size: 12.5px; }
+  .cover .pill { display: inline-block; margin-top: 18px; border: 1px solid rgba(231,160,73,.5);
+           color: #e7a049; border-radius: 999px; padding: 6px 15px; font-size: 11px; font-weight: 700; }
+</style></head><body>
+<div class="cover">
+  <div class="eyebrow">KitchenOS · Operaciones</div>
+  <h1>Manual de OPS</h1>
+  <p>Capacitación y referencia completa del módulo Operaciones — Producción · Mise · Planificación</p>
+  <span class="pill">Cada botón, función y comportamiento, registrado</span>
+</div>
+<h1>Manual de OPS — Operaciones</h1>
+<blockquote class="note">Guía de capacitación y referencia del módulo <strong>OPS (Operaciones)</strong> de KitchenOS. Pensada para leerse rápido: la primera mitad es la <strong>puesta en marcha</strong> (cómo meter OPS en la rutina del restaurante); la segunda es el <strong>manual de referencia</strong>, donde queda registrado cada botón, ícono y comportamiento de la pantalla.</blockquote>
+<hr/>
+<h2>Qué es OPS en una frase</h2>
+<p>OPS es el centro de operación diaria de la cocina: <strong>qué hay que producir hoy, qué mise dejar armado en cada plaza y qué menú se planifica para los próximos días.</strong> Todo lo demás de la app (recetas, stock, carta, HACCP, salón) desemboca acá cuando arranca el servicio.</p>
+<p>OPS vive en <strong>una sola pantalla con tres pestañas</strong>, que se recorren de derecha a izquierda en el tiempo:</p>
+<pre><code>PLANIFICACIÓN  →  PRODUCCIÓN  →  MISE
+(qué se viene)    (qué hago hoy)   (qué dejo listo en mi plaza)</code></pre>
+<table><thead><tr><th>Pestaña</th><th>Para qué sirve</th><th>Quién la usa</th></tr></thead><tbody><tr><td><strong>Producción</strong></td><td>Lista de tareas del día, agrupadas por prioridad o por categoría. Es donde se tilda lo que se va produciendo.</td><td>Todo el equipo de cocina</td></tr><tr><td><strong>Mise</strong></td><td>Checklist de apertura/cierre por plaza + rutinas y auditoría. El "estoy listo para el servicio".</td><td>Cada cocinero, en su plaza</td></tr><tr><td><strong>Planificación</strong></td><td>Activar menús del catálogo y sugerir producción por ventas históricas. Genera las tareas de Producción.</td><td>Encargado / chef</td></tr></tbody></table>
+<blockquote class="tip">La <strong>ejecución</strong> (tildar tareas) vive en Producción y en Mise. La <strong>planificación</strong> (decidir qué se va a hacer) vive en Planificación. Planificación <em>crea</em> las tareas; Producción las <em>ejecuta</em>.</blockquote>
+<hr/>
+<h2>Cómo se abre y cómo se navega</h2>
+<ul><li>OPS es el ítem <strong>Operaciones</strong> del menú inferior (o lateral en escritorio).</li><li>Al entrar se abre siempre en <strong>Producción</strong>. La pestaña activa se puede fijar por URL (<code>?tab=produccion</code>, <code>?tab=mise</code>, <code>?tab=planificacion</code>) para links directos.</li><li>El <strong>badge rojo</strong> sobre la pestaña Producción muestra cuántas tareas de hoy quedan sin completar — se ve sin cambiar de pestaña.</li><li>Cada pestaña se "monta" recién la primera vez que se entra y de ahí en más conserva su estado (no se pierde lo que estabas mirando al cambiar de tab).</li></ul>
+<hr/>
+<h1 class="divider">PARTE 1 — Puesta en marcha (capacitación)</h1>
+<blockquote class="flow">Esta parte es la que se le muestra al equipo la primera semana. Explica el circuito, no cada botón. La referencia botón por botón está en la Parte 2.</blockquote>
+<h2>El circuito diario, en 5 movimientos</h2>
+<ol><li><strong>La noche anterior / temprano</strong> — el encargado entra a <strong>Planificación</strong>, activa el menú del día (o pide "Sugerir producción"). Eso crea automáticamente las tareas en Producción.</li><li><strong>Al abrir</strong> — cada cocinero entra a <strong>Mise</strong>, elige su plaza y hace la checklist de <strong>Apertura</strong>: revisa stock, marca qué falta producir.</li><li><strong>Durante la preparación</strong> — el equipo trabaja sobre <strong>Producción</strong>: va tildando cada tarea (pendiente → en curso → listo). Si algo no se puede hacer, lo marca con "duda".</li><li><strong>Antes del servicio</strong> — quien produjo algo lo marca listo en Mise; si el restaurante usa etiquetas, imprime la etiqueta de caducidad.</li><li><strong>Al cerrar</strong> — cada plaza hace la checklist de <strong>Cierre</strong> (deja registrado cuánto stock quedó) y marca su salida de turno.</li></ol>
+<blockquote class="tip">Todo esto está sincronizado. Tildar una preparación en Mise tilda su tarea en Producción, y viceversa. No hay que cargar nada dos veces.</blockquote>
+<h2>Roles: quién toca qué</h2>
+<table><thead><tr><th>Rol</th><th>Qué hace en OPS</th></tr></thead><tbody><tr><td><strong>Dueño / Encargado / Chef</strong></td><td>Planifica (activa menús, pide sugerencias), revisa el avance del día, arma las secciones del mise de cada plaza.</td></tr><tr><td><strong>Cocinero de plaza</strong></td><td>Hace su Mise (apertura/cierre), ejecuta sus tareas en Producción, crea "pases de turno" para el turno siguiente.</td></tr><tr><td><strong>Auditor / responsable de calidad</strong></td><td>Usa la pestaña Rutina del Mise (auditoría con puntaje y foto). Activa el "Modo Control".</td></tr></tbody></table>
+<h2>Puesta a punto la primera vez</h2>
+<p>Antes de que el circuito fluya, hay que dejar tres cosas armadas (se hacen una sola vez):</p>
+<ol><li><strong>Secciones del mise por plaza.</strong> En Mise → elegí una plaza → engranaje (arriba a la derecha) → creá las secciones (Heladera, Secos, Estación…). Sin secciones, el mise arranca vacío con una pantalla de bienvenida que invita a crear la primera.</li><li><strong>Menús en el catálogo.</strong> Los menús se arman en <strong>Carta → Menús</strong>. Después se activan desde Planificación. Sin menús, Planificación te manda a crearlos.</li><li><strong>Plazas asignadas al equipo.</strong> Cada persona puede tener plaza(s) asignada(s) (en Turnos → Equipo). Si tiene una sola, el Mise entra directo a esa plaza; si tiene varias, aparece un selector.</li></ol>
+<blockquote class="warn">OPS no inventa datos. Si una plaza no tiene secciones, o no hay menús en el catálogo, las pantallas se ven vacías <strong>a propósito</strong> y te ofrecen el atajo para crear lo que falta. No es un error.</blockquote>
+<hr/>
+<h1 class="divider">PARTE 2 — Referencia completa</h1>
+<blockquote class="note">A partir de acá se documenta <strong>cada control</strong> de las tres pestañas. Los íconos van con su nombre real de Material Symbols entre comillas (<code>check_circle</code>, <code>add_task</code>, etc.) para que se puedan identificar en pantalla.</blockquote>
+<h1 class="divider">TAB 1 · Producción</h1>
+<p>La lista de tareas del día. Es la pantalla de trabajo del equipo durante la preparación.</p>
+<h2>Encabezado (header navy)</h2>
+<table><thead><tr><th>Control</th><th>Qué hace</th></tr></thead><tbody><tr><td>Título <strong>Producción</strong> + fecha</td><td>La fecha del día en curso (formato "lunes, 28 de julio").</td></tr><tr><td><strong>Toggle de modo</strong> (arriba der.)</td><td>4 vistas: <strong>Menú</strong>, <strong>Carta</strong>, <strong>Evento</strong>, <strong>Todo</strong>. Cambia cómo se agrupan las tareas. Se guarda por dispositivo.</td></tr><tr><td><strong>Barra de stats</strong></td><td>Aparece si hay tareas hoy: "Hoy: X/Y listos" + barra de progreso verde.</td></tr></tbody></table>
+<h3>Los 4 modos del toggle</h3>
+<table><thead><tr><th>Modo</th><th>Cómo agrupa</th><th>Columnas que muestra</th></tr></thead><tbody><tr><td><strong>Carta</strong></td><td>Por prioridad</td><td>SP · P · REF · Check + Pedidos + Limpieza</td></tr><tr><td><strong>Menú</strong></td><td>Por categoría del menú</td><td>Apetizer, Entrada, Proteína, Pasta, Veggie, Postre… + Pedidos + Limpieza</td></tr><tr><td><strong>Evento</strong></td><td>Igual que Menú, para tareas de evento</td><td>Secciones del menú + Pedidos + Limpieza</td></tr><tr><td><strong>Todo</strong> (naranja)</td><td>Un recuadro por origen</td><td>Carta + Menú + Evento + Pedidos + Limpieza</td></tr></tbody></table>
+<blockquote class="note">"Todo" es solo una vista combinada; una tarea nunca se guarda como "todo". Lo que crees dentro del recuadro Carta/Menú/Evento de esa vista se guarda con ese modo.</blockquote>
+<h2>Prioridades (los colores de las columnas)</h2>
+<table><thead><tr><th>Sigla</th><th>Significado</th><th>Color</th></tr></thead><tbody><tr><td><strong>SP</strong></td><td>Súper Prioridad (urgente)</td><td>Rojo</td></tr><tr><td><strong>P</strong></td><td>Prioridad</td><td>Naranja</td></tr><tr><td><strong>REF</strong></td><td>Refuerzo (controlar)</td><td>Azul</td></tr><tr><td><strong>Check</strong></td><td>Check (sin acción urgente)</td><td>Gris</td></tr></tbody></table>
+<h2>Banner de evento</h2>
+<p>Si hay un evento cargado para hoy o mañana, aparece un banner naranja arriba de la lista.</p>
+<table><thead><tr><th>Control</th><th>Qué hace</th></tr></thead><tbody><tr><td><strong>Generar lista</strong></td><td>Crea una tarea por cada sección de cocina para ese evento.</td></tr><tr><td><strong>✓ Lista creada</strong></td><td>Estado tras generar (no se puede duplicar).</td></tr><tr><td><strong><code>close</code></strong> (X)</td><td>Descarta el banner por esta sesión.</td></tr></tbody></table>
+<h2>Columnas / secciones</h2>
+<p>Cada columna es una tarjeta plegable. Se puede <strong>reordenar arrastrando</strong> el ícono <code>drag_indicator</code> del encabezado (el orden se guarda por restaurante + modo, en este dispositivo).</p>
+<table><thead><tr><th>Elemento del encabezado de columna</th><th>Qué hace</th></tr></thead><tbody><tr><td><code>drag_indicator</code></td><td>Handle para arrastrar y reordenar la columna.</td></tr><tr><td>Nombre + sublabel</td><td>Ej. "SP · Súper Prioridad".</td></tr><tr><td>Contador <code>X/Y</code></td><td>Listos / total. Verde cuando está completa.</td></tr><tr><td><code>expand_more</code></td><td>Pliega / despliega la columna.</td></tr><tr><td>Barra de color</td><td>Progreso de la columna.</td></tr></tbody></table>
+<h3>Columnas especiales</h3>
+<p><strong>Pedidos</strong> (ícono <code>shopping_cart</code>, celeste) — notas libres, no accionan nada. Se anotan cosas para pedir y se borran cuando se resuelven. No tienen estado ni entran en las estadísticas.</p>
+<ul><li>Escribir en "Anotar pedido…" + <code>add</code> → agrega la nota.</li><li><code>close</code> en cada nota → la elimina.</li></ul>
+<p><strong>Limpieza</strong> (ícono <code>cleaning_services</code>, verde) — muestra las limpiezas de HACCP que tocan hoy (de todas las plazas).</p>
+<ul><li>Tocar el cuadrado → registra la limpieza como hecha (es el mismo registro que la pantalla de HACCP; no se duplica).</li><li>"Agregar limpieza…" + guardar → crea una limpieza diaria general de alta rápida (se afina después en HACCP).</li></ul>
+<h2>La tarjeta de tarea (ItemOps)</h2>
+<p>Cada ítem de una columna es una fila con estos controles:</p>
+<table><thead><tr><th>Control</th><th>Gesto</th><th>Qué hace</th></tr></thead><tbody><tr><td><strong>Círculo de estado</strong> (izq.)</td><td>Tap</td><td>Cicla el estado: <strong>pendiente → en curso (<code>more_horiz</code>, azul) → listo (<code>check</code>, verde) → pendiente</strong>.</td></tr><tr><td><strong>Nombre</strong></td><td>Tap</td><td>Expande la tarjeta (ver sub-preparaciones y alertas).</td></tr><tr><td><strong>Nombre</strong></td><td>Mantener 600 ms</td><td>Marca la tarea como <strong>duda</strong> (<code>help</code>, ámbar, con borde). Un tap la saca de duda.</td></tr><tr><td>Badge <strong>"turno ant."</strong></td><td>—</td><td>La tarea viene arrastrada de ayer (carryover de 1 día).</td></tr><tr><td>Badge <strong>"pase de turno"</strong> (violeta, <code>event_upcoming</code>)</td><td>—</td><td>Tarea programada desde otro turno; el tooltip muestra la nota.</td></tr><tr><td>Badge de sección / prioridad</td><td>Tap (si es editable)</td><td>En modo Menú/Evento, el badge de prioridad se toca para ciclarla (SP→P→REF→Check).</td></tr><tr><td><code>menu_book</code></td><td>Tap</td><td>Abre el <strong>drawer de receta</strong> (ingredientes + última producción). Solo si la tarea tiene receta vinculada.</td></tr><tr><td><code>add_task</code></td><td>Tap</td><td>Abre el <strong>sheet de crear tarea</strong> (hoy o mañana / pase de turno). Solo con receta vinculada.</td></tr><tr><td><code>expand_more</code></td><td>Tap</td><td>Expande/pliega igual que tocar el nombre.</td></tr></tbody></table>
+<h3>Al expandir la tarjeta</h3>
+<ul><li><strong>Alertas de stock</strong> — si la receta usa ingredientes por debajo del mínimo, se listan en rojo con un botón <strong>"+ Producir"</strong> que crea una sub-tarea de reposición.</li><li><strong>Sub-preparaciones</strong> — las sub-tareas se muestran indentadas, cada una con su propio círculo de estado.</li><li><strong>"Agregar sub-preparación…"</strong> — campo para sumar una sub-tarea.</li></ul>
+<h3>Al marcar una tarea con receta como "listo"</h3>
+<p>Se abre el <strong>sheet de producción real</strong> (<code>ProduccionSheet</code>) para registrar cuánto se produjo de verdad:</p>
+<table><thead><tr><th>Control</th><th>Qué hace</th></tr></thead><tbody><tr><td>Pills <strong>×0.8 / ×1 / ×1.2 / ×1.5</strong></td><td>Multiplicador rápido vs. lo planificado.</td></tr><tr><td><strong>otro</strong></td><td>Habilita un campo para un multiplicador libre (ej. ×1.3).</td></tr><tr><td>Cartel de <strong>desviación</strong></td><td>Muestra +/-% y las pax reales resultantes.</td></tr><tr><td><strong>Escalar por ingrediente</strong></td><td>Desplegable: elegís un ingrediente de referencia y cuánto usaste; calcula el multiplicador solo.</td></tr><tr><td><strong>Registrar desviación / Confirmar</strong></td><td>Guarda el registro de producción.</td></tr><tr><td><strong>Omitir</strong></td><td>Cierra sin registrar (el estado ya cambió; el registro es informativo).</td></tr></tbody></table>
+<h2>El sheet "Crear tarea" (CrearTareaSheet)</h2>
+<p>Es el mismo sheet que se usa desde <code>add_task</code> en Producción y desde el Mise. Sirve para duplicar un componente como tarea, hoy o para el próximo turno.</p>
+<table><thead><tr><th>Control</th><th>Qué hace</th></tr></thead><tbody><tr><td><strong>¿Para cuándo?</strong> Hoy / Mañana</td><td>"Mañana" crea un <strong>pase de turno</strong>: aparece en la Producción del turno siguiente con badge violeta.</td></tr><tr><td><strong>Prioridad</strong> SP/P/REF/Check</td><td>Prioridad de la tarea nueva.</td></tr><tr><td><strong>Multiplicador ×1/×2/×3</strong> o <strong>Cantidad libre</strong></td><td>Si la receta tiene porciones, ofrece multiplicador; si no, un campo de cantidad.</td></tr><tr><td>Rendimiento real promedio</td><td>Se muestra si hay historial (ej. ×1.15).</td></tr><tr><td><strong>Plazas</strong></td><td>Chips de plazas si el plato tiene multi-plaza configurada.</td></tr><tr><td><strong>Nota</strong></td><td>Texto libre para el próximo turno (ej. "se vendió mucho, reforzar").</td></tr><tr><td><strong>Crear tarea / Programar para mañana</strong></td><td>Confirma.</td></tr></tbody></table>
+<h2>Agregar tareas (QuickAdd)</h2>
+<p>Al final de cada columna hay un campo para sumar una tarea suelta.</p>
+<ul><li>Escribís el nombre + <code>add</code> (o Enter).</li><li>Si tipeás 3+ letras que coinciden con una receta, aparecen <strong>chips de sugerencia</strong> con <code>menu_book</code>: al tocarlos, la tarea queda vinculada a esa receta (el campo se resalta en azul).</li></ul>
+<h2>Recuadros de la vista "Todo"</h2>
+<p>En modo Todo, Carta/Menú/Evento se muestran como recuadros resumen (<code>ModoResumenCard</code>) con barra de progreso propia, la lista de tareas de ese origen (agrupada por sección en Menú/Evento) y su propio QuickAdd.</p>
+<hr/>
+<h1 class="divider">TAB 2 · Mise</h1>
+<p>La checklist de apertura y cierre de cada plaza, más las rutinas y la auditoría. Es el "estoy listo para el servicio" de cada cocinero.</p>
+<h2>Selector de plaza</h2>
+<p>Si el usuario no tiene una única plaza asignada, primero aparece una <strong>grilla de plazas</strong>:</p>
+<table><thead><tr><th>Plaza</th><th>Ícono</th></tr></thead><tbody><tr><td>Parrilla</td><td><code>local_fire_department</code></td></tr><tr><td>Fríos</td><td><code>ac_unit</code></td></tr><tr><td>Calientes</td><td><code>soup_kitchen</code></td></tr><tr><td>Pase</td><td><code>room_service</code></td></tr><tr><td>Pastelería</td><td><code>cake</code></td></tr><tr><td>Panadería</td><td><code>bakery_dining</code></td></tr><tr><td>General</td><td><code>groups</code></td></tr></tbody></table>
+<ul><li>Cada tarjeta muestra el progreso de apertura de esa plaza (X/Y completados) y se pinta verde al 100%.</li><li>Si el usuario tiene <strong>una sola</strong> plaza asignada, entra directo. Si tiene <strong>varias</strong>, la grilla y un switcher superior muestran solo las suyas + General.</li></ul>
+<h2>Encabezado de la plaza</h2>
+<table><thead><tr><th>Control</th><th>Qué hace</th></tr></thead><tbody><tr><td><code>arrow_back</code></td><td>Vuelve al selector de plazas.</td></tr><tr><td>Nombre de plaza + fecha</td><td>—</td></tr><tr><td><strong><code>fact_check</code> (Modo Control)</strong></td><td>Activa/desactiva el Modo Control (ver abajo). Se guarda por dispositivo.</td></tr><tr><td><strong><code>settings</code></strong></td><td>Abre el <strong>editor de secciones</strong>.</td></tr></tbody></table>
+<h3>Pestañas del Mise</h3>
+<table><thead><tr><th>Pestaña</th><th>Qué muestra</th></tr></thead><tbody><tr><td><strong>Apertura</strong></td><td>Checklist de apertura: stock que hay que dejar preparado.</td></tr><tr><td><strong>Cierre</strong></td><td>Checklist de cierre: cuánto stock quedó (con input numérico).</td></tr><tr><td><strong>Rutina</strong></td><td>Rutinas periódicas + ítems de auditoría con puntaje.</td></tr></tbody></table>
+<ul><li><strong>Barra de progreso</strong> general (apertura/cierre): X/Y completados.</li><li><strong>Modo Control</strong> — cuando está activo, muestra un banner ("solo tildá lo que está listo") y reemplaza las tarjetas ricas por checkboxes simples. Pensado para chequeo rápido / supervisión. Desactiva el arrastre de ítems.</li></ul>
+<h2>La tarjeta de ítem del mise (ProductoMiseCard)</h2>
+<p>Es la pieza central del Mise. Cambia según sea apertura o cierre.</p>
+<h3>Controles comunes</h3>
+<table><thead><tr><th>Control</th><th>Gesto</th><th>Qué hace</th></tr></thead><tbody><tr><td><strong>Checkbox</strong> (<code>radio_button_unchecked</code> / <code>check_circle</code>)</td><td>Tap</td><td>Marca el ítem como completado. Sincroniza la tarea de Producción vinculada.</td></tr><tr><td><strong>Nombre</strong></td><td>Tap</td><td>Despliega una fila con el estándar, peso por porción / porciones, ubicación y botón <strong>Eliminar</strong>.</td></tr><tr><td>Badge <strong>"receta"</strong></td><td>—</td><td>El ítem está vinculado a una receta.</td></tr><tr><td>Badge <strong>"Pedidas hoy: N"</strong></td><td>—</td><td>Demanda viva: porciones ya pedidas desde el salón en el turno.</td></tr><tr><td><strong>Badge de prioridad</strong> (SP/P/REF)</td><td>Tap</td><td>Cicla la prioridad del ítem (sp → p → ref).</td></tr><tr><td><strong><code>add_task</code> / <code>task_alt</code></strong></td><td>Tap</td><td>Abre el sheet de crear tarea. Se pone verde (<code>task_alt</code>) si ya hay una tarea pendiente para este ítem.</td></tr></tbody></table>
+<h3>En Apertura (sin recipiente)</h3>
+<ul><li><strong>Caja "stock"</strong> — editable: tocás y cargás cuánto hay ahora (arranca del cierre anterior). Se pinta verde/ámbar/rojo según el ratio contra el objetivo.</li><li><strong>Caja "a producir"</strong> — el target fijo del ítem (solo lectura).</li></ul>
+<h3>En Apertura (con recipiente configurado)</h3>
+<ul><li>Chip de <strong>recipiente</strong> (nombre × capacidad en porciones, + peso por porción).</li><li><strong>"hay ahora"</strong> — editable (cuánto hay).</li><li><strong>"falta producir"</strong> — déficit calculado = capacidad + demanda viva − stock. Verde si "stock ok", rojo si falta.</li><li><strong>CTA "Producir X porc (Yg)"</strong> — botón rojo/naranja que crea la tarea de producción de un tap (prioridad alta, hoy).</li></ul>
+<h3>En Cierre</h3>
+<ul><li><strong>5 puntitos de stock</strong> (<code>StockDots</code>) — indicador visual del nivel contra el objetivo.</li><li><strong>Input numérico</strong> editable — cuánto quedó. Se pinta verde (ok) o naranja (bajo el estándar).</li><li><strong>"/ X unidad"</strong> — el objetivo de referencia.</li></ul>
+<h3>Etiqueta de producción (al marcar como listo)</h3>
+<p>Si el restaurante tiene vencimientos habilitados, al tildar aparece el bloque de etiqueta:</p>
+<table><thead><tr><th>Control</th><th>Qué hace</th></tr></thead><tbody><tr><td><strong>Caduca en N días</strong></td><td>Editable; arranca de la vida útil de la receta o 3 días por defecto. Muestra la fecha resultante.</td></tr><tr><td><strong>Imprimir etiqueta</strong> (<code>print</code>)</td><td>Imprime por impresora USB (ESC/POS), si está habilitada.</td></tr><tr><td><strong>Bluetooth</strong> (<code>bluetooth</code>)</td><td>Imprime por impresora Bluetooth.</td></tr><tr><td><strong>Descargar .bin</strong> (<code>download</code>)</td><td>Descarga el archivo ESC/POS.</td></tr><tr><td><strong>Crear vencimiento en HACCP</strong> (<code>event</code>)</td><td>Registra el vencimiento en HACCP. Queda en verde "Vencimiento creado".</td></tr></tbody></table>
+<h2>Agregar un ítem al mise (AddItemSheet)</h2>
+<p>Se abre con <strong>"Agregar"</strong> dentro de una sección.</p>
+<table><thead><tr><th>Control</th><th>Qué hace</th></tr></thead><tbody><tr><td><strong>Nombre</strong></td><td>Con autocompletar de recetas (<code>restaurant_menu</code>): al elegir una, hereda porciones.</td></tr><tr><td><strong>Prioridad</strong> SP/P/REF/OK</td><td>El texto de abajo aclara qué hace cada una. <strong>SP y P crean automáticamente una tarea en Producción.</strong></td></tr><tr><td><strong>Cantidad estándar + Unidad</strong></td><td>El objetivo del ítem. Unidades: u, kg, g, l, ml, pax, porc, bandeja, gastro, tupper.</td></tr><tr><td><strong>Agregar</strong></td><td>Guarda.</td></tr></tbody></table>
+<h2>Editor de secciones (SectionEditor)</h2>
+<p>Se abre con <code>settings</code>. Es la fuente única para crear/renombrar/reordenar/borrar/tipar secciones (con sub-secciones de 1 nivel).</p>
+<table><thead><tr><th>Control</th><th>Qué hace</th></tr></thead><tbody><tr><td><strong>Swatch de ícono</strong></td><td>Tocar abre una grilla de íconos reales para elegir.</td></tr><tr><td><strong>Nombre</strong></td><td>Editable en línea.</td></tr><tr><td><code>arrow_upward</code> / <code>arrow_downward</code></td><td>Mueven la sección entre sus hermanas.</td></tr><tr><td><code>delete</code></td><td>Borra la sección (bloqueado si tiene contenido; hay que vaciarla primero).</td></tr><tr><td><strong>Chips de tipo</strong></td><td>Producción · Almacén · Heladera · Freezer · Estación.</td></tr><tr><td><strong>Productos de esta sección</strong></td><td>Solo en tipo "Almacén": elegís qué productos del stock actualiza "Stockear sección" (Mesa de Trabajo).</td></tr><tr><td><strong>Agregar subsección</strong></td><td>Crea una sub-sección anidada (1 nivel).</td></tr><tr><td><strong>Nueva sección</strong></td><td>Ícono + nombre + <code>add</code>.</td></tr><tr><td><strong>Guardar</strong></td><td>Aplica todos los cambios.</td></tr></tbody></table>
+<blockquote class="note">Heladera y Freezer se enlazan a HACCP por <strong>nombre</strong> (no hay que configurar nada extra): una sección "Heladera" se cruza con el equipo HACCP del mismo nombre.</blockquote>
+<h2>Reordenar ítems del mise</h2>
+<ul><li><strong>Mantené presionado 400 ms</strong> un ítem (vibra) → entra en modo arrastre.</li><li>Arrastralo dentro de la sección o <strong>a otra sección</strong> (el fantasma muestra "→ destino").</li><li>Auto-scroll en los bordes al arrastrar. La posición queda fija (no "salta" al cambiar de badge o tildar).</li></ul>
+<h2>Pestaña Rutina</h2>
+<table><thead><tr><th>Elemento</th><th>Qué hace</th></tr></thead><tbody><tr><td><strong>Resumen de auditoría</strong></td><td>Barra + score % del día (verde ≥90, naranja ≥70, rojo debajo).</td></tr><tr><td><strong>Fila de rutina normal</strong></td><td>Checkbox para marcar hecha, badge de frecuencia (Diaria/Semanal/…), "Últ: …", <code>tune</code> (editar), <code>close</code> (borrar).</td></tr><tr><td><strong>Fila de auditoría</strong> (<code>verified</code>)</td><td>Botones <strong>OK</strong> / <strong>Falla</strong>, foto obligatoria si aplica (<code>photo_camera</code>), "Deshacer".</td></tr><tr><td><strong>Agregar rutina</strong></td><td>Abre el sheet de rutina.</td></tr></tbody></table>
+<blockquote class="note">Marcar una auditoría como <strong>Falla</strong> crea automáticamente una tarea de revisión en Producción (prioridad alta).</blockquote>
+<h3>Sheet de rutina (AddRutinaSheet)</h3>
+<table><thead><tr><th>Control</th><th>Qué hace</th></tr></thead><tbody><tr><td><strong>Nombre</strong></td><td>Editable (bloqueado si viene sincronizada de HACCP → Limpieza).</td></tr><tr><td><strong>Frecuencia</strong> Diaria/Semanal/Quincenal/Mensual</td><td>—</td></tr><tr><td><strong>Ítem de auditoría (con puntaje)</strong></td><td>Toggle: convierte la rutina en ítem de auditoría.</td></tr><tr><td><strong>Puntaje</strong></td><td>Puntos que aporta al score.</td></tr><tr><td><strong>Requiere foto obligatoria</strong></td><td>Exige foto para poder responder.</td></tr><tr><td><strong>Mostrar solo si</strong></td><td>Condicional: aparece solo si otra auditoría dio OK/Falla.</td></tr></tbody></table>
+<h2>Cerrar turno</h2>
+<p>En la pestaña <strong>Cierre</strong>, cuando la plaza llega al 100% y hay un fichaje abierto, aparece una barra fija abajo:</p>
+<ul><li><strong>Cerrar turno</strong> (<code>stop_circle</code>, rojo) → registra la hora de salida (pide confirmación).</li></ul>
+<hr/>
+<h1 class="divider">TAB 3 · Planificación</h1>
+<p>Donde se decide qué se produce. Activa menús y sugiere producción; eso <strong>crea las tareas</strong> que después se ejecutan en Producción.</p>
+<h2>Encabezado</h2>
+<table><thead><tr><th>Control</th><th>Qué hace</th></tr></thead><tbody><tr><td><strong>Sugerir producción</strong> (<code>auto_awesome</code>)</td><td>Abre el motor de reglas que sugiere qué producir según ventas históricas de ese día de semana.</td></tr><tr><td><strong>Cargar menú</strong> (<code>menu_book</code>)</td><td>Abre el selector de menús del catálogo.</td></tr><tr><td><strong>Selector de fecha</strong></td><td><code>chevron_left</code> / <code>chevron_right</code> para cambiar de día; tocando el texto se abre un date picker.</td></tr></tbody></table>
+<h2>Vista sin menú cargado</h2>
+<p>Si el día no tiene menú activo:</p>
+<ul><li>Si hay menús en el catálogo → botón <strong>"Activar menú del catálogo"</strong>.</li><li>Si no hay ninguno → cartel "Armá un menú en Carta → Menús".</li><li>Link <strong>"o agregar una tarea suelta en Producción"</strong> → salta a la pestaña Producción.</li></ul>
+<h2>Selector "Cargar menú"</h2>
+<table><thead><tr><th>Control</th><th>Qué hace</th></tr></thead><tbody><tr><td><strong>¿Un día o varios?</strong></td><td>"Hoy" (un día) o <strong>"Varios días"</strong> (abre un calendario mensual para tildar varias fechas).</td></tr><tr><td><strong>Calendario</strong> (multi-día)</td><td><code>chevron_left</code>/<code>right</code> cambia de mes; se tocan los días a activar; los días con menú ya cargado tienen punto verde.</td></tr><tr><td><strong>Lista de menús</strong></td><td>Cada menú muestra su tipo (Fijo/Evento), nombre y cantidad de preparaciones; <code>add_circle</code> lo activa.</td></tr></tbody></table>
+<p>Al activar un menú se crean sus tareas en Producción (dedupe por preparación; en el día real se limpia lo pendiente de ayer para no duplicar el mise).</p>
+<h2>Vista con menú activo (MenuActivoView)</h2>
+<table><thead><tr><th>Control</th><th>Qué hace</th></tr></thead><tbody><tr><td><strong>Resumen</strong> "Menú activo · X/Y listas" + barra</td><td>Progreso del menú del día.</td></tr><tr><td><strong>+ Otro</strong></td><td>Activar otro menú además del actual.</td></tr><tr><td><strong>Vaciar</strong></td><td>Elimina todas las tareas del menú del día (pide confirmación).</td></tr><tr><td><strong>Ir a Producción a ejecutar</strong></td><td>Salta a la pestaña Producción.</td></tr><tr><td>Secciones y filas</td><td>Cada sección y cada fila se <strong>arrastran</strong> (handle <code>drag_indicator</code>) para reordenar; auto-scroll en los bordes. El orden se refleja en Producción.</td></tr><tr><td>Chips de fila</td><td>Plaza, miembro asignado, cantidad y badge de prioridad (SP/P/REF/Check).</td></tr></tbody></table>
+<h2>Calendario del mes</h2>
+<p>Los días del mes con menú activo muestran punto verde. La navegación de fecha del header sincroniza con el calendario del selector multi-día.</p>
+<hr/>
+<h1 class="divider">PARTE 3 — Cómo se conecta todo</h1>
+<p>OPS no es una isla. Estas son las conexiones que hay que entender para no cargar cosas dos veces:</p>
+<table><thead><tr><th>Conexión</th><th>Cómo funciona</th></tr></thead><tbody><tr><td><strong>Mise ↔ Producción</strong></td><td>Tildar un ítem del mise tilda su tarea de producción (vínculo por ID, no por nombre), y viceversa. Un ítem de prioridad SP/P en el mise crea la tarea automáticamente.</td></tr><tr><td><strong>Planificación → Producción</strong></td><td>Activar un menú o confirmar una sugerencia crea las tareas del día en Producción.</td></tr><tr><td><strong>HACCP → Limpieza / Rutina</strong></td><td>Las limpiezas de HACCP con <code>sync_ops</code> aparecen en la columna Limpieza (Producción) y en la pestaña Rutina (Mise). Se registran en un solo lugar.</td></tr><tr><td><strong>Auditoría → Producción</strong></td><td>Una auditoría marcada como "Falla" crea una tarea de revisión.</td></tr><tr><td><strong>Salón → Mise</strong></td><td>Las porciones pedidas desde el salón suben la "demanda viva" del ítem, que se suma al déficit "falta producir".</td></tr><tr><td><strong>Carryover</strong></td><td>Una tarea no completada se arrastra <strong>un solo día</strong> al siguiente (badge "turno ant."), y después se deja de mostrar. Evita que se apilen para siempre.</td></tr><tr><td><strong>Pase de turno</strong></td><td>Una tarea creada con día "Mañana" queda para el turno siguiente con badge violeta, sin depender de que alguien avise de palabra.</td></tr></tbody></table>
+<hr/>
+<h1 class="divider">PARTE 4 — Mejoras detectadas</h1>
+<blockquote class="flow">Observaciones surgidas de recorrer OPS botón por botón. Ordenadas de mayor a menor impacto en la experiencia del usuario. No son bugs que rompan la app; son fricciones y detalles a pulir.</blockquote>
+<h2>Alta prioridad</h2>
+<ol><li><strong>La prioridad "Check" no se puede volver a elegir desde la tarjeta del mise.</strong> El ciclo del badge en la tarjeta del mise es sp → p → ref (excluye "chk"), y un ítem cargado como "OK/Check" se muestra con el badge <strong>"REF" en azul</strong> (mapeo <code>chk → label REF</code>). Resultado: un ítem "Check" parece "Refuerzo" y no hay forma de devolverlo a "Check" tocando el badge. <strong>Sugerencia:</strong> incluir chk en el ciclo y darle su propio label/color (verde "OK"), consistente con el resto de la app.</li></ol>
+<ol><li><strong>No se puede borrar una tarea suelta desde Producción.</strong> El círculo cicla el estado pero no hay acción de eliminar una tarea de producción mal creada (solo se borran las notas de Pedidos y los duplicados de ayer, internamente). Una tarea equivocada queda dando vueltas hasta el carryover. <strong>Sugerencia:</strong> deslizar para eliminar, o una acción de borrar al expandir la tarjeta.</li></ol>
+<ol><li><strong>Dos gestos de "mantener presionado" distintos entre pestañas.</strong> En Producción, mantener el nombre 600 ms marca "duda"; en Mise, mantener un ítem 400 ms lo levanta para arrastrar. Misma familia de gesto, resultado distinto según la pestaña — cuesta construir memoria muscular. <strong>Sugerencia:</strong> unificar el patrón (ej. arrastre con handle explícito en ambos, long-press reservado a un solo significado).</li></ol>
+<h2>Media prioridad</h2>
+<ol><li><strong>El orden de columnas de Producción se guarda solo en el dispositivo.</strong> Al reordenar SP/P/REF/… el orden queda en <code>localStorage</code> por restaurante+modo, no en la base. En otro celular o navegador, el equipo ve el orden por defecto. <strong>Sugerencia:</strong> persistir el orden a nivel restaurante si se busca una vista consistente para todos.</li></ol>
+<ol><li><strong>Baja descubribilidad de "de dónde salen las tareas".</strong> Un usuario nuevo entra a Producción y ve tareas sin saber que se generan en Planificación (activar menú / sugerir). <strong>Sugerencia:</strong> en Producción vacía, un empty-state que enlace a Planificación ("Activá un menú para llenar el día").</li></ol>
+<ol><li><strong>"Cerrar turno" solo aparece al 100% del cierre.</strong> La barra de cerrar turno depende de completar la checklist de cierre + tener fichaje abierto. Si alguien quiere marcar salida sin terminar todo el cierre, no encuentra el botón en esta pantalla. <strong>Sugerencia:</strong> dejar el cierre de turno accesible también desde el fichaje / dashboard, independiente del 100%.</li></ol>
+<h2>Detalles / pulido</h2>
+<ol><li><strong>El badge "turno ant." y "pase de turno" pueden convivir y apilarse</strong> en la misma línea del nombre; en nombres largos el ítem se ve cargado. <strong>Sugerencia:</strong> unificar en un solo indicador de origen con tooltip.</li></ol>
+<ol><li><strong>Las alertas de stock dentro de la tarjeta se cargan recién al expandir</strong> (lazy, una sola vez). Están bien para performance, pero no hay señal en la fila colapsada de que "esta tarea tiene un faltante de insumo". <strong>Sugerencia:</strong> un puntito rojo en la fila cuando hay alerta de stock pendiente.</li></ol>
+<ol><li><strong>El modo de Producción y el de creación divergen sutilmente en "Todo".</strong> La vista "Todo" es cómoda, pero al agregar en el QuickAdd de un recuadro concreto se guarda con ese modo — comportamiento correcto pero poco visible. <strong>Sugerencia:</strong> un microcopy en el QuickAdd de "Todo" aclarando en qué origen se guardará.</li></ol>
+<hr/>
+<blockquote class="tip">Este documento se regenera desde su fuente. Para actualizarlo: editar <code>docs/manual-ops.md</code> y correr <code>node scripts/manual-ops-to-pdf.mjs</code>. No editar el PDF a mano.</blockquote>
+
+</body></html>
