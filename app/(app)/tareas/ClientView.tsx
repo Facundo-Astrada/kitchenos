@@ -507,14 +507,14 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
         padding: `${embedded ? 0 : 46}px 16px 12px`,
         flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div className="ops-header-row" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
           <div>
             <div style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>Producción</div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', marginTop: 1 }}>
               {fmtFecha(today)}
             </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+          <div className="ops-toggle-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
             <OpsToggle value={modo} onChange={handleModoChange} />
           </div>
         </div>

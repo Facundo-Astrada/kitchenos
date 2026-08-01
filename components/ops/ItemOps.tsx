@@ -7,6 +7,7 @@ import { CrearTareaSheet, type CrearTareaSheetConfirmData } from './CrearTareaSh
 import { QuickAdd } from './QuickAdd'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
+import { hoyOperativo } from '@/lib/ops/turnos'
 import type { Tarea, OpsEstado, OpsModo, TareaPrioridad } from '@/types'
 
 export function nextEstado(e: OpsEstado): OpsEstado {
@@ -98,6 +99,10 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
   const st = ESTADO_STYLE[estado]
   const isDuda = estado === 'duda'
   const isListo = estado === 'listo'
+  // hoyOperativo() (no new Date().toISOString()): esta última usa fecha UTC,
+  // que a la noche en Argentina (UTC-3) ya cae en el día siguiente — el badge
+  // marcaba "turno ant." en tareas de HOY apenas pasada la medianoche UTC.
+  const esDeTurnoAnterior = !!item.turno_fecha && item.turno_fecha < hoyOperativo()
 
   function startHold() {
     holdFired.current = false
@@ -186,7 +191,7 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
           }}>
             {item.titulo}
           </span>
-          {depth === 0 && item.turno_fecha && item.turno_fecha < new Date().toISOString().split('T')[0] && (
+          {depth === 0 && esDeTurnoAnterior && (
             <span style={{
               display: 'inline-block', fontSize: 9, fontWeight: 700, padding: '1px 5px',
               borderRadius: 4, marginTop: 1, background: 'rgba(245,158,11,.15)', color: '#d97706',
@@ -209,7 +214,7 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
           {showSeccionChip && depth === 0 && item.seccion && SECCION_LABELS[item.seccion] && (
             <span style={{
               display: 'inline-block', fontSize: 9, fontWeight: 600, padding: '1px 6px',
-              borderRadius: 4, marginTop: 2, marginLeft: item.turno_fecha && item.turno_fecha < new Date().toISOString().split('T')[0] ? 4 : 0,
+              borderRadius: 4, marginTop: 2, marginLeft: esDeTurnoAnterior ? 4 : 0,
               background: 'rgba(67,97,160,.1)', color: 'var(--accent)',
             }}>
               {SECCION_LABELS[item.seccion]}
@@ -221,8 +226,8 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
             if (!onPrioridadChange) {
               return (
                 <span style={{
-                  display: 'inline-block', fontSize: 9, fontWeight: 800, padding: '1px 6px',
-                  borderRadius: 4, marginTop: 2, marginLeft: 3,
+                  display: 'inline-block', fontSize: 10, fontWeight: 800, padding: '3px 8px',
+                  borderRadius: 6, marginTop: 3, marginLeft: 3,
                   background: chip.bg, color: chip.color,
                 }}>
                   {chip.label}
@@ -234,19 +239,33 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
                 onClick={(e) => { e.stopPropagation(); onPrioridadChange(item.id, nextPrioridad(item.prioridad ?? 'baja')) }}
                 title="Tocar para cambiar la prioridad"
                 style={{
-                  display: 'inline-block', fontSize: 9, fontWeight: 800, padding: '1px 6px',
-                  borderRadius: 4, marginTop: 2, marginLeft: 3,
+                  // Chip más grande y con borde propio: en el board por plazas
+                  // esta es LA forma de re-priorizar (ya no hay columna por
+                  // prioridad) — tenía que verse tocable, no solo una etiqueta.
+                  display: 'inline-flex', alignItems: 'center', gap: 2,
+                  fontSize: 10, fontWeight: 800, padding: '3px 8px',
+                  borderRadius: 6, marginTop: 3, marginLeft: 3,
                   background: chip.bg, color: chip.color,
-                  border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                  border: `1px solid ${chip.color}40`, cursor: 'pointer', fontFamily: 'inherit',
+                  touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent',
                 }}
               >
                 {chip.label}
+                <span className="material-symbols-outlined" style={{ fontSize: 11, opacity: .7 }}>sync_alt</span>
               </button>
             )
           })()}
           {item.cantidad != null && (
-            <span style={{ fontSize: 10, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace" }}>
-              {item.cantidad} ×
+            <span
+              title={`Cantidad a producir: ${item.cantidad}`}
+              style={{
+                display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '2px 7px',
+                borderRadius: 6, marginTop: 3, marginLeft: 3,
+                background: 'var(--bg)', border: '1px solid var(--border)',
+                color: 'var(--text-3)', fontFamily: "'DM Mono', monospace",
+              }}
+            >
+              ×{item.cantidad}
             </span>
           )}
         </div>

@@ -101,6 +101,20 @@ input, textarea, [contenteditable] {
   }
 }
 
+/* ── OPS: header de Producción — el toggle Menú/Carta/Evento/Todo se corta
+   en pantallas angostas si queda al lado del título. Debajo de 1024px
+   (mismo corte que #shell) pasa a su propia fila, a todo el ancho. ── */
+@media (max-width: 1023px) {
+  .ops-header-row {
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  .ops-toggle-wrap {
+    width: 100%;
+    align-items: stretch !important;
+  }
+}
+
 /* ── Scroll sin scrollbar ── */
 .scroll-body {
   flex: 1;
