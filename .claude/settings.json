@@ -52,7 +52,7 @@
         "clipcxcbtlibswfzsgzk"
       ],
       "env": {
-        "SUPABASE_MANAGEMENT_TOKEN": "${SUPABASE_MANAGEMENT_TOKEN}"
+        "SUPABASE_ACCESS_TOKEN": "${SUPABASE_MANAGEMENT_TOKEN}"
       }
     }
   }
