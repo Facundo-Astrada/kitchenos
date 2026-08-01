@@ -209,6 +209,28 @@ Cuando un bottom sheet puede tener contenido variable (listas, categorías), sie
 </div>
 ```
 
+## Header con título + control ancho (toggle/tabs) en la misma fila — se corta en mobile (jul 2026)
+
+Un header tipo `<título a la izquierda> ... <toggle de 3-4 opciones a la derecha>` (`justify-content: space-between`) funciona en desktop pero en mobile angosto el toggle no entra y se corta contra el borde — pasó con el toggle Menú/Carta/Evento/Todo de OPS Producción (`OpsToggle`), reportado con captura real ("mal dispuestos en la pantalla del móvil").
+
+**No se puede resolver con inline styles solos** (no soportan media queries). Patrón: clase CSS global + regla en `globals.css`, usando el mismo breakpoint que ya separa mobile de desktop en toda la app (`1023px`, ver `#shell` en `globals.css`) — así no hace falta inventar un breakpoint nuevo ni leer `window.innerWidth` en JS:
+
+```css
+/* globals.css */
+@media (max-width: 1023px) {
+  .header-row-mobile-stack { flex-direction: column; align-items: stretch !important; }
+  .header-control-mobile-full { width: 100%; }
+}
+```
+```tsx
+<div className="header-row-mobile-stack" style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+  <div>{/* título */}</div>
+  <div className="header-control-mobile-full"><OpsToggle .../></div>
+</div>
+```
+
+Los botones del toggle llevan `flex: 1, minWidth: 0` **siempre** (no solo en mobile): en desktop, con el contenedor a ancho intrínseco (`width` no forzado), no hay espacio libre que repartir y `flex: 1` es un no-op — así una sola versión del componente sirve para los dos layouts, sin prop `fullWidth` ni duplicar el componente.
+
 ## FABs (botones flotantes)
 
 `BottomNav` ocupa ~76px desde abajo. Los FABs deben ir en `bottom: 110` mínimo para no quedar tapados.
