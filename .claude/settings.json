@@ -1,4 +1,45 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(node *)",
+      "Bash(git *)",
+      "Bash(gh *)",
+      "Bash(curl *)",
+      "Bash(taskkill *)",
+      "Bash(grep *)",
+      "Bash(ls *)",
+      "PowerShell(git *)",
+      "PowerShell(npm *)",
+      "Bash(node \"C:/Users/Equipo/AppData/Local/Temp/claude/**\")",
+      "mcp__supabase__execute_sql",
+      "mcp__supabase__apply_migration",
+      "mcp__supabase__list_tables",
+      "Skill(deploy)",
+      "Skill(deploy:*)",
+      "Skill(impacto)",
+      "Skill(impacto:*)",
+      "Skill(supabase-check)",
+      "Skill(supabase-check:*)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Skill(shot)",
+      "Skill(shot:*)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"c:/Users/Equipo/Documents/kitchenos\" && npx tsc --noEmit 2>&1 | grep -E \"error TS\" | head -5 || echo \"✓ TypeScript OK\""
+          }
+        ]
+      }
+    ]
+  },
   "mcpServers": {
     "supabase": {
       "command": "npx",
@@ -13,48 +54,6 @@
       "env": {
         "SUPABASE_MANAGEMENT_TOKEN": "${SUPABASE_MANAGEMENT_TOKEN}"
       }
-    },
-    "vercel": {
-      "command": "npx",
-      "args": ["-y", "vercel-mcp@latest"],
-      "env": {
-        "VERCEL_TOKEN": "${VERCEL_TOKEN}"
-      }
-    },
-    "github": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}"
-      }
     }
-  },
-  "permissions": {
-    "allow": [
-      "Bash(npm run *)",
-      "Bash(npx next *)",
-      "Bash(npx vercel *)",
-      "Bash(git status)",
-      "Bash(git diff *)",
-      "Bash(git log *)",
-      "Bash(git add *)",
-      "Bash(git commit *)",
-      "Bash(git branch *)",
-      "Bash(git checkout *)",
-      "Bash(curl *)"
-    ]
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd \"c:/Users/Equipo/Documents/kitchenos\" && npx tsc --noEmit 2>&1 | grep -E \"error TS\" | head -5 || echo \"✓ TypeScript OK\""
-          }
-        ]
-      }
-    ]
   }
 }
