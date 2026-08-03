@@ -46,6 +46,7 @@ export interface OpsResult {
 }
 
 const secTitle: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }
+const secHint: React.CSSProperties = { fontSize: 11, color: 'var(--text-3)', marginTop: -4, marginBottom: 8 }
 
 export default function OpsPanel({
   initial, hasExisting, saving, defaultUnidad = 'porc', recipienteSugerencias = [], onSave, onRemove, onCancel,
@@ -204,6 +205,7 @@ export default function OpsPanel({
     <div>
       {/* Plaza */}
       <div style={secTitle}>Plaza de producción</div>
+      <div style={secHint}>Elegí dónde se cocina esta receta.</div>
       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 14 }}>
         {plazasDisponibles.map(p => (
           <button key={p.id} onClick={() => { setPlaza(plaza === p.id ? '' : p.id); setSeccion(''); setNuevaSeccionMode(false); setNuevaSeccionNombre(''); setNuevaSubseccionMode(false); setNuevaSubseccionNombre('') }}
@@ -220,6 +222,7 @@ export default function OpsPanel({
         <>
           {/* Sección del mise */}
           <div style={secTitle}>Sección del mise</div>
+          <div style={secHint}>¿En qué parte del mise se guarda? (heladera, secos, congelados…)</div>
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: nuevaSeccionMode ? 8 : 14, alignItems: 'center' }}>
             {seccionesDisponibles.map(s => (
               <button key={s.id} onClick={() => { setSeccion(seccion === s.id ? '' : s.id); setNuevaSubseccionMode(false); setNuevaSubseccionNombre('') }}
@@ -310,6 +313,7 @@ export default function OpsPanel({
 
           {/* Recipiente */}
           <div style={secTitle}>Recipiente (opcional)</div>
+          <div style={secHint}>¿En qué se guarda? Si no usa uno fijo, dejalo en blanco.</div>
           <input type="text" value={recipiente} onChange={e => { setRecipiente(e.target.value); if (!e.target.value.trim()) { setPesoPorcion(''); setRecipienteCantidad(1) } }}
             list={recipienteSugerencias.length > 0 ? recipienteListId : undefined}
             placeholder="ej: tupper, cubeta GN, bandeja"

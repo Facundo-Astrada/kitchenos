@@ -13,9 +13,10 @@ import { usePackagingGrupos, type PackagingGrupo } from '@/lib/hooks/usePackagin
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import { createClient } from '@/lib/supabase/client'
 import { useMenus, type MenuConPreparaciones } from '@/lib/hooks/useMenus'
+import { useChecklist } from '@/lib/hooks/useChecklist'
 import MenusView from './MenusView'
 import ComposicionEditor, { type CompPayload, type CompInicial } from './ComposicionEditor'
-import { upsertMiseChecklistItem } from '@/lib/ops/mise'
+import { upsertMiseChecklistItem, parseRecipienteNombre } from '@/lib/ops/mise'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 // ── Helpers ─────────────────────────────────────────────
 const fmtMoney = (n: number) =>
@@ -3086,6 +3087,16 @@ export default function CartaPage() {
   const { ventas } = useVentas()
   const { grupos, crearGrupo, eliminarGrupo, aplicarGrupoAPlatos } = usePackagingGrupos()
   const { crearMenu, actualizarMenu } = useMenus()
+  const { items: checklistItems } = useChecklist()
+
+  // Nombres de recipiente ya usados en OPS, para autocompletar el campo del
+  // OpsPanel dentro del editor de composición (mismo patrón que CartaBoard.tsx).
+  const recipientesUsados = useMemo(() => {
+    const nombres = checklistItems
+      .map(ci => parseRecipienteNombre(ci.recipiente_nombre).nombre)
+      .filter((n): n is string => !!n)
+    return [...new Set(nombres)].sort((a, b) => a.localeCompare(b, 'es'))
+  }, [checklistItems])
 
   const RESTAURANTE_ID = useRestauranteId()
   const { puedeEditar, isAdmin } = usePermisos()
@@ -3207,6 +3218,7 @@ export default function CartaPage() {
                 cantidad: it.cantidad_ops ?? 1,
                 unidad: it.unidad_ops ?? 'u',
                 recipienteNombre: it.recipiente_nombre ?? null,
+                recipienteCantidad: it.recipiente_cantidad ?? 1,
                 pesoPorcion: it.peso_porcion ?? null,
                 pesoPorcionUnidad: it.peso_porcion_unidad ?? null,
               })
@@ -3405,6 +3417,7 @@ export default function CartaPage() {
             // costo por gramo del recetario: costo_total del batch ÷ su peso bruto total.
             // Sin peso_total_g cargado no hay forma de derivarlo — null (fallback a costo_porcion).
             costoPorGramo: r.peso_total_g && r.peso_total_g > 0 ? r.food_cost.costo_total / r.peso_total_g : null,
+            ingredientes: (r.ingredientes ?? []).map(i => ({ nombre: i.nombre, cantidad: i.cantidad, unidad: i.unidad })),
           }))}
           productos={productos.map(p => {
             const factor = unitConversionFactor('g', p.unidad)
@@ -3417,6 +3430,7 @@ export default function CartaPage() {
           cartaItems={items.map(i => ({ id: i.id, nombre: i.nombre, costo: i.costo_porcion ?? 0 }))}
           categoriasCarta={categorias.length > 0 ? categorias.map(c => c.nombre) : CATEGORIAS}
           draftRecetaIds={new Set(recetas.filter(r => r.status === 'draft').map(r => r.id))}
+          recipientesUsados={recipientesUsados}
           onSave={handleComposicionSave}
           onCancel={() => setComposing(null)}
         />
