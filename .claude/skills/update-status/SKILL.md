@@ -1,44 +1,56 @@
 ---
 name: update-status
-description: Cierra la sesión de trabajo actualizando PENDIENTES.md, ESTADO-ACTUAL.md y capturando aprendizajes nuevos en .claude/docs/. Usar al final de cada sesión para mantener la memoria del proyecto actualizada.
+description: Cierra la sesión de trabajo en KitchenOS deduciendo del historial de la sesión y de git lo que se resolvió, podando PENDIENTES.md y ESTADO-ACTUAL.md en vez de acumular, y dejando SESION.md para la continuidad de mañana.
 ---
 
-Al final de la sesión de trabajo en KitchenOS, hacer lo siguiente:
+Al final de la sesión de trabajo en KitchenOS, en este orden:
 
-## 1. Preguntarle a Facundo qué se resolvió
+## 1. Deducir qué se cerró — sin preguntar
 
-"¿Qué bugs o features cerramos en esta sesión? Decime los números del PENDIENTES.md o describí qué hicimos."
+No preguntes "¿qué cerramos?". Miralo vos:
+- Revisá el historial de esta conversación: qué se implementó, qué bugs se arreglaron.
+- Corré `git log --oneline` desde el último commit `docs:` (o los últimos commits de la sesión si no hay uno) para ver qué se commiteó.
+- Cruzá contra `PENDIENTES.md`: qué ítems abiertos quedaron resueltos por el trabajo de hoy.
 
-## 2. Actualizar PENDIENTES.md
+Preguntá a Facundo **solo si hay ambigüedad real** (ej. un commit que no se corresponde claramente con ningún ítem del backlog, o dudas sobre si algo quedó a medias).
 
-- Mover los ítems resueltos a la tabla ✅ Resuelto con la fecha de hoy
-- Renumerar si hace falta para que quede prolijo
-- Si surgió algún bug nuevo durante la sesión, agregarlo en la sección 🔴 Crítico
+## 2. Podar PENDIENTES.md
 
-## 3. Actualizar ESTADO-ACTUAL.md §4 "Implementado en últimas sesiones"
+- Lo resuelto **se borra** de `PENDIENTES.md` y se mueve a `HISTORIAL.md` (sección "Pendientes resueltos"), con la fecha de hoy. Nunca queda acumulado ahí.
+- Si surgió un bug nuevo durante la sesión, agregarlo en 🔴 Crítico o donde corresponda por prioridad.
+- El archivo debe quedar liviano (ítems abiertos, priorizados) — si supera ~10KB, es señal de que algo debería podarse también.
 
-Agregar una entrada con:
+## 3. Podar ESTADO-ACTUAL.md
+
+Es una foto del presente, no un changelog: para el módulo que cambió hoy, actualizar su resumen a 1-3 líneas reflejando el estado nuevo — no agregar una entrada fechada de "Sesión X". El detalle verboso de qué se hizo hoy (si vale la pena preservarlo) va a `HISTORIAL.md`, no a `ESTADO-ACTUAL.md`.
+
+## 4. Actualizar `.claude/docs/`
+
+Si se descubrió algo importante y reutilizable (columna con nombre raro, patrón de hook, regla de UI, comportamiento del importador): **reescribí la regla existente si cambió** — no apiles una entrada numerada nueva ni le pongas fecha/nombre de sesión. Si es una regla nueva de verdad, agregala en 2-3 líneas atemporales, mismo estilo que el resto del archivo (`hooks.md`, `columnas.md`, `ui.md`, `importador.md`, `rls.md`).
+
+## 5. Verificar CLAUDE.md
+
+Confirmá que sigue lean (sin @includes incondicionales de los docs grandes, sin contenido detallado que debería vivir en `.claude/docs/`). Si alguien agregó algo pesado directo ahí, moverlo.
+
+## 6. Escribir `SESION.md` — último paso obligatorio
+
+Sobrescribir `SESION.md` (~10 líneas, no acumular versiones viejas) con:
 ```
-### Sesión [fecha] — [descripción breve]
-- [lista de lo que se hizo]
+# Sesión — [fecha de hoy]
+
+## Qué se cerró
+- ...
+
+## Qué quedó a medias
+- ...
+
+## Probar primero mañana
+- ...
+
+## Próximo paso concreto
+- ...
 ```
 
-## 4. Capturar aprendizajes nuevos
+## 7. Confirmar a Facundo
 
-Si durante la sesión se descubrió algo importante sobre:
-- Una columna con nombre raro → agregar a `.claude/docs/columnas.md`
-- Un patrón de código que funciona o no funciona → agregar a `.claude/docs/hooks.md`
-- Una regla de UI nueva → agregar a `.claude/docs/ui.md`
-- Un endpoint nuevo o comportamiento del importador → agregar a `.claude/docs/importador.md`
-
-## 5. Verificar calidad de CLAUDE.md
-
-Chequear que CLAUDE.md sigue siendo lean (no más de 110 líneas). Si alguien agregó contenido detallado directo al CLAUDE.md en vez de a `.claude/docs/`, moverlo al archivo correcto.
-
-## 6. Confirmar
-
-Reportar a Facundo:
-- Qué se marcó como resuelto
-- Qué se agregó a los docs
-- Si CLAUDE.md está en buen estado
-- Cuál es el próximo ítem prioritario del PENDIENTES.md
+Reportar en pocas líneas: qué se marcó resuelto, qué se agregó/reescribió en docs, y cuál es el próximo ítem prioritario según `SESION.md`.

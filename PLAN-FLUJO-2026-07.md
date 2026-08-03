@@ -4,7 +4,7 @@ Origen: auditoría del flujo de trabajo (31 jul 2026, sesión Fable). 16 hallazg
 configuración, memoria del proyecto y ritual de sesiones. Este plan los resuelve en
 2 sesiones. **Ninguna de las dos toca código de la app** (`app/`, `lib/`, `components/`).
 
-Estado: ✅ Sesión 1 completa (31 jul 2026) · ⬜ Sesión 2 pendiente
+Estado: ✅ Sesión 1 completa (31 jul 2026) · ✅ Sesión 2 completa (2026-08-03)
 
 ---
 
@@ -80,7 +80,7 @@ Commitearlos (son entregables reales) y dejar `git status` limpio.
 
 ---
 
-## Sesión 2 — Memoria del proyecto y método (~1.5-2h, Sonnet, sesión nueva)
+## Sesión 2 ✅ — Memoria del proyecto y método (~1.5-2h, Sonnet, sesión nueva)
 
 Resuelve hallazgos: 100KB de contexto fijo por sesión, docs-changelog, PENDIENTES/ESTADO-ACTUAL
 inflados, update-status que pregunta lo que ya sabe, continuidad rota entre días.

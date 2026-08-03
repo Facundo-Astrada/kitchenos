@@ -31,28 +31,32 @@ Gráficos: CSS divs `width: X%` — **no Chart.js**
 
 ## Reglas críticas (leer siempre)
 
-**Auth:** `useRestauranteId()` devuelve `''` mientras carga. Todos los hooks DEBEN saltear fetches cuando devuelve `''`. Ver patrón completo: @.claude/docs/hooks.md
+**Auth:** `useRestauranteId()` devuelve `''` mientras carga. Todos los hooks DEBEN saltear fetches cuando devuelve `''`.
 
 **Supabase — 3 clientes distintos:**
 - `lib/supabase/client.ts` → browser hooks (`'use client'`)
 - `lib/supabase/server.ts` → Server Components / proxy.ts
 - `lib/supabase/admin.ts` → **Solo API routes** — bypassea RLS, requiere `SUPABASE_SERVICE_ROLE_KEY`
 
-**Claves Supabase (mayo 2026):** `NEXT_PUBLIC_SUPABASE_ANON_KEY` = `sb_publishable_...` | `SUPABASE_SERVICE_ROLE_KEY` = `sb_secret_...` — si están cruzadas, Supabase bloquea con "Forbidden use of secret API key in browser".
+**Claves Supabase:** `NEXT_PUBLIC_SUPABASE_ANON_KEY` = `sb_publishable_...` | `SUPABASE_SERVICE_ROLE_KEY` = `sb_secret_...` — si están cruzadas, Supabase bloquea con "Forbidden use of secret API key in browser".
 
-**RLS:** 44 tablas con `mi_restaurante_id()`. Ver políticas completas: @.claude/docs/rls.md
-
-**Columnas no intuitivas:** siempre verificar antes de escribir queries → @.claude/docs/columnas.md
-
-**UI / CSS:** vars, navy header, FABs → @.claude/docs/ui.md
+**RLS:** 44 tablas con `mi_restaurante_id()`.
 
 ---
 
-## Flujo de importación de datos
+## Docs condicionales — leer solo cuando el trabajo lo toca
 
-Ver detalle completo: @.claude/docs/importador.md
+No se cargan solos: abrirlos cuando la tarea entra en su tema.
 
-Endpoints clave: `/api/importador/facturas-universal` · `/api/stock/rebuild` · `/api/recetas/auto-link-ingredientes`
+| Vas a... | Leé |
+|---|---|
+| Escribir o tocar un hook, una query, patrón SWR/realtime, auth | `.claude/docs/hooks.md` |
+| Tocar UI/CSS: layout, componentes canónicos, tema, boards | `.claude/docs/ui.md` |
+| Escribir una query o migración contra una tabla existente | `.claude/docs/columnas.md` o `/supabase-check` |
+| Aplicar o revisar políticas RLS | `.claude/docs/rls.md` |
+| Tocar el flujo de importación (facturas, carta, stock) | `.claude/docs/importador.md` |
+
+Endpoints clave de importación: `/api/importador/facturas-universal` · `/api/stock/rebuild` · `/api/recetas/auto-link-ingredientes`
 
 ---
 
@@ -101,9 +105,25 @@ Invocar: `Usá el agente bug-fixer para esto: [descripción del bug]`
 
 ---
 
+## Método de trabajo
+
+**Apertura:** sesión nueva siempre. Primer mensaje: "Leé SESION.md. Seguimos con X" — o directo el pedido si es tema nuevo. Sin pedir "análisis de cómo venimos": eso ya está en `SESION.md`.
+
+**Corte de sesión:** una sesión = un tema, máximo un día. Cambio de tema dentro del día = cerrar y abrir. Nunca reabrir la sesión de ayer para "seguir": se cierra con `/update-status` y la nueva arranca de `SESION.md`. Sesión de solo preguntas (sin código): se abre, se pregunta, se abandona sin ritual.
+
+**Modelos:** Opus/Fable solo para diseñar/planificar una feature grande. Antes de ejecutar: `/model sonnet`, siempre. Más de 1h ejecutando UI en Opus/Fable es error.
+
+**Durante:** feedback visual en batch — probar 10 min, anotar captura o lista de 4-5 puntos, un mensaje (no gotear "agregalo"/"arreglalo" de a uno). Deploy: commitear y pushear sin preguntar al verificar cada cambio funcional, avisando el estado — la pregunta "¿hiciste deploy?" no debe existir. Iteración de UI mobile: contra el dev server por LAN desde el celular; deploy a prod es fin de bloque de trabajo, no por iteración.
+
+**Cierre:** `/update-status` como último acto de toda sesión de código, sin excepción. Deduce solo, poda en vez de acumular, deja `SESION.md` — es lo único que compra la continuidad de mañana.
+
+---
+
 ## Contexto completo del proyecto
 
 - `ARQUITECTURA.md` — schema 28 tablas, hooks, API routes
-- `ESTADO-ACTUAL.md` — módulos y estado
-- `PENDIENTES.md` — backlog priorizado
+- `ESTADO-ACTUAL.md` — resumen de estado actual por módulo (1-3 líneas c/u)
+- `PENDIENTES.md` — backlog priorizado, solo ítems abiertos
 - `DECISIONES.md` — razones detrás de cada decisión
+- `HISTORIAL.md` — archivo muerto: planes cerrados, changelog detallado, todo lo "✅ Resuelto". No se carga nunca, solo consulta manual.
+- `SESION.md` — qué se cerró, qué quedó a medias, próximo paso concreto. Se lee al abrir una sesión nueva.
