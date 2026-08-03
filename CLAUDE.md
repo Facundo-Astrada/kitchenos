@@ -58,7 +58,7 @@ Endpoints clave: `/api/importador/facturas-universal` · `/api/stock/rebuild` ·
 
 ## MCP Supabase
 
-Si devuelve `Unauthorized`, usar management API REST. Token en `.env.local` como `SUPABASE_MANAGEMENT_TOKEN`.
+El server (`@supabase/mcp-server-supabase`) lee el token de la env var `SUPABASE_ACCESS_TOKEN` (no `SUPABASE_MANAGEMENT_TOKEN`) — verificar ese nombre en `mcpServers.supabase.env` si da `Unauthorized` con un token válido. Si sigue fallando, usar management API REST. Token en `.env.local` como `SUPABASE_MANAGEMENT_TOKEN`.
 
 ```bash
 curl -X POST https://api.supabase.com/v1/projects/clipcxcbtlibswfzsgzk/database/query \

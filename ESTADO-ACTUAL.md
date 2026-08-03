@@ -106,6 +106,19 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 
 ## 4. Implementado en Últimas Sesiones
 
+### Sesión 2026-08-01 — Sesión 1 de `PLAN-FLUJO-2026-07.md`: infraestructura y configuración
+
+Sesión de solo config (sin tocar `app/`/`lib/`/`components/`), origen: auditoría del flujo de trabajo del 31 jul. Detalle completo en `PLAN-FLUJO-2026-07.md`.
+
+- Hook de TypeScript movido de `PostToolUse` (corría en cada edit) a `Stop` (una vez por turno).
+- Los 3 tokens expuestos en texto plano (Supabase, Vercel, GitHub) rotados; `.mcp.json` y `mcpServers` de `settings.json` reducidos a solo `supabase`, token por variable de entorno.
+- Allowlist de permisos: de ~270 entradas one-off a ~15 globs genéricos + skills puntuales.
+- 52 skills genéricas de negocio/diseño (no usadas en el proyecto) borradas; quedaron las 15 específicas de KitchenOS + `shot` (nueva).
+- `scripts/shot.mjs` + skill `/shot`: driver Playwright reutilizable para capturas (login+navegar+esperar+capturar), reemplaza ~20 scripts one-off de sesiones pasadas.
+- Commiteados entregables colgados del 28-29 jul (manuales PDF/HTML de OPS, guía de inicio, fuentes).
+- **Bug real encontrado y corregido:** la MCP de Supabase daba `Unauthorized` incluso con token válido — `mcpServers.supabase.env` seteaba `SUPABASE_MANAGEMENT_TOKEN`, pero `@supabase/mcp-server-supabase` lee `SUPABASE_ACCESS_TOKEN` (confirmado leyendo `dist/transports/stdio.js` del paquete). Bug preexistente, no introducido por la rotación de esta sesión.
+- **Gotcha de proceso:** cerrar la ventana de VS Code (la X) no mata el proceso de fondo en Windows — una sesión de chat puede quedar anclada a un proceso viejo con env vars stale indefinidamente. Hace falta "Archivo → Salir" real, matar `Code.exe` en el Administrador de tareas, o (como pasó acá) un reinicio de la PC.
+
 ### Sesión 2026-07-31 — OPS Todo: board por plazas/pasos, columna Importante, fix de demora al tildar
 
 Punto de partida: foto de un dibujo a mano de Facundo (pizarrón) proponiendo reorganizar la vista "Todo" de Producción por **quién ejecuta** (plaza en Carta, paso de servicio en Menú/Evento) en vez de por **de dónde viene el trabajo**. 4 commits, cada uno buildeado y deployado por separado. Detalle completo en `PENDIENTES.md` → ✅ Resuelto.
