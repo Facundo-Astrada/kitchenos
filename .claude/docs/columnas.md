@@ -22,6 +22,7 @@
 | `pedido_items` | `producto_nombre`, `producto_id` (FK NULL), `cantidad`, `unidad`, `precio_estimado`, `recibido`, `cantidad_recibida` — al recibir suma a `productos.stock_actual` matcheando por nombre | — |
 | `plato_componentes` | `plaza`, `cantidad_diaria`, `unidad`, `sync_ops BOOLEAN` — solo sincroniza al checklist si `true` | — |
 | `plato_plazas` | `plato_id` = `receta_id`, `ingredientes text[]` | `receta_id` (se llama `plato_id`) |
+| `plato_recetas` | Solo recetas — **no tiene `producto_id`**. Un producto de stock agregado al editor de composición de un plato (`ComposicionEditor › PlatoRecetasEditor`) no tiene dónde persistir; se sacó del buscador de ese modo (ago 2026) | agregar producto de stock directo a un plato sin pasar por una receta |
 | `plato_recetas` | `plaza VARCHAR(50) NULL` — estación asignada | — |
 | `plato_recetas` | `cantidad_ops` + `unidad_ops` — contribución de ESTE plato; `checklist_items.cantidad` = suma de todas con misma `receta_id+plaza` (siempre recalcular, no usar como absoluto). Sin recipiente = gramos por plato; con recipiente = porciones/peso del recipiente × cantidad (dato de mise, no gramaje) — el gramaje real en ese caso es `checklist_items.peso_porcion` | — |
 | `puestos` | `nivel` → mapea a `rol_permisos.rol`. `plaza_default` → plaza OPS default. `permisos_app TEXT[]` → `ModuloId[]` reales | — |
