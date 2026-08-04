@@ -1157,7 +1157,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                       Sin items en esta sección
                     </div>
                   )}
-                  {renderSecItems(secItems)}
+                  <div className="mise-items-grid">{renderSecItems(secItems)}</div>
                   <button
                     data-coach-target="mise-fab-add"
                     onClick={() => setShowAddSheet(sec.id)}
@@ -1212,7 +1212,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                             {childItems.length === 0 && (
                               <div style={{ padding: '6px 2px', fontSize: 11, color: 'var(--text-3)' }}>Sin items</div>
                             )}
-                            {renderSecItems(childItems)}
+                            <div className="mise-items-grid">{renderSecItems(childItems)}</div>
                             <button
                               onClick={() => setShowAddSheet(child.id)}
                               style={{

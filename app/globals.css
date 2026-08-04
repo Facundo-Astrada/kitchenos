@@ -115,6 +115,25 @@ input, textarea, [contenteditable] {
   }
 }
 
+/* ── Mise en place: grilla de tarjetas en desktop ──────────────────────────
+   En una sola columna las tarjetas se estiran a todo el ancho de la pantalla
+   y el campo "hay ahora" (dos dígitos) queda kilométrico.
+
+   `pointer: fine` no es decorativo: el reordenar del mise es un long-press
+   táctil que compara `clientY` contra el centro vertical de cada ítem
+   (ver `dragging` en checklist/ClientView.tsx). Con dos tarjetas lado a lado
+   ese cálculo pierde sentido, así que la grilla se limita a dispositivos con
+   puntero real — donde no hay drag — y una tablet táctil ancha conserva la
+   columna única y su reordenar intacto. ── */
+@media (min-width: 1024px) and (pointer: fine) {
+  .mise-items-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 8px;
+    align-items: start;
+  }
+}
+
 /* ── Scroll sin scrollbar ── */
 .scroll-body {
   flex: 1;

@@ -549,11 +549,12 @@ export function ProductoMiseCard({
               </span>
             )}
           </div>
-          {/* "Hay ahora" — el déficit ("falta producir") no tiene caja propia:
-              vive solo en el botón de abajo, para no repetir el mismo número
-              dos veces en la tarjeta. */}
-          <div>
-            <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 3 }}>
+          {/* "Hay ahora" — label y campo en la misma línea (el campo aloja dos
+              dígitos, no necesita el ancho completo de la tarjeta). El déficit
+              ("falta producir") no tiene caja propia: vive solo en el botón de
+              abajo, para no repetir el mismo número dos veces. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: '.06em', flexShrink: 0 }}>
               hay ahora
             </div>
             {editingStock ? (
@@ -576,7 +577,7 @@ export function ProductoMiseCard({
                 }}
                 onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
                 style={{
-                  width: '100%', padding: '5px 9px', borderRadius: 8, boxSizing: 'border-box',
+                  width: 96, padding: '5px 9px', borderRadius: 8, boxSizing: 'border-box',
                   border: '1.5px solid #3b82f6', background: 'rgba(59,130,246,.08)',
                   fontSize: 14, fontWeight: 800, color: '#3b82f6',
                   fontFamily: "'DM Mono', monospace", outline: 'none',
@@ -586,6 +587,7 @@ export function ProductoMiseCard({
               <div
                 onClick={() => { setStockInput(stockDisplay?.toString() ?? ''); setEditingStock(true) }}
                 style={{
+                  minWidth: 96, boxSizing: 'border-box',
                   padding: '5px 9px', borderRadius: 8, cursor: 'text',
                   background: stockDisplay === null ? 'var(--bg)' : 'rgba(148,163,184,.1)',
                   border: `1.5px dashed ${stockDisplay === null ? 'var(--border)' : 'transparent'}`,

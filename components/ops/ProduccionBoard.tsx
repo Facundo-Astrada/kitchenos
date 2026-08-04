@@ -551,6 +551,13 @@ function ItemsPorPrioridad({
   const secundarias = grupos.filter(g => !PRIO_PRINCIPALES.includes(g.prio) && g.items.length > 0)
   const nSecundarias = secundarias.reduce((s, g) => s + g.items.length, 0)
 
+  // El plegado existe para que REF/Check no le compitan la atención a SP/P.
+  // Sin nada en SP/P no hay a qué no competirle, y como 'baja' es además el
+  // fallback de prioridad (i.prioridad ?? 'baja'), una columna cargada entera
+  // desde Carta/Menú sin prioridad explícita se renderizaba aparentemente
+  // vacía: solo el "+N refuerzos y checks". Si no hay principales, se abren.
+  const expandido = verSecundarias || principales.length === 0
+
   const renderGrupo = (prio: TareaPrioridad, grupoItems: Tarea[]) => {
     const meta = PRIO_META[prio]
     return (
@@ -594,13 +601,17 @@ function ItemsPorPrioridad({
     <>
       {principales.map(g => renderGrupo(g.prio, g.items))}
       {nSecundarias > 0 && (
-        verSecundarias ? (
+        expandido ? (
           <>
             {secundarias.map(g => renderGrupo(g.prio, g.items))}
-            <button onClick={() => setVerSecundarias(false)} style={verMasStyle}>
-              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>expand_less</span>
-              Ocultar refuerzos y checks
-            </button>
+            {/* Sin principales el plegado no aporta nada: ocultar dejaría la
+                columna vacía, así que no se ofrece. */}
+            {principales.length > 0 && (
+              <button onClick={() => setVerSecundarias(false)} style={verMasStyle}>
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>expand_less</span>
+                Ocultar refuerzos y checks
+              </button>
+            )}
           </>
         ) : (
           <button onClick={() => setVerSecundarias(true)} style={verMasStyle}>
