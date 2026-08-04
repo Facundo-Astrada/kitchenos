@@ -33,6 +33,8 @@ export interface EventoCalendario {
   created_at: string
   /* flag for auto-generated pedido events */
   _fromPedido?: boolean
+  /* flag for auto-generated menú-activado events */
+  _fromMenu?: boolean
 }
 
 export interface Proveedor {
@@ -169,9 +171,58 @@ export function useCalendario() {
         })
       }
 
-      setEventos([...eventosDb, ...pedidoEventos, ...prodEventos])
+      // 4. Auto-generate from menús activados (tareas con menu_id, turno_fecha) —
+      // el sistema real de Planificación/Producción. Un evento por (menú, día).
+      const { data: tareasMenu } = await supabase
+        .from('tareas')
+        .select('turno_fecha, menu_id')
+        .eq('restaurante_id', restIdRef.current)
+        .not('menu_id', 'is', null)
+        .gte('turno_fecha', primerDia)
+        .lte('turno_fecha', ultimoDia)
 
-      // 4. Notas del mes (vinculadas a la fecha, no al evento)
+      const menuEventos: EventoCalendario[] = []
+      const menuIdsDelMes = [...new Set((tareasMenu ?? []).map(t => t.menu_id as string))]
+      if (menuIdsDelMes.length > 0) {
+        const { data: menusData } = await supabase
+          .from('menus')
+          .select('id, nombre, tipo')
+          .in('id', menuIdsDelMes)
+        const menusPorId = new Map((menusData ?? []).map(m => [m.id as string, m as { id: string; nombre: string; tipo: string }]))
+
+        const seenMenuDia = new Set<string>()
+        for (const row of (tareasMenu ?? [])) {
+          const fecha = row.turno_fecha as string
+          const menuId = row.menu_id as string
+          const key = `${menuId}_${fecha}`
+          if (seenMenuDia.has(key)) continue
+          seenMenuDia.add(key)
+          const menu = menusPorId.get(menuId)
+          if (!menu) continue
+          menuEventos.push({
+            id: `menu-${menuId}-${fecha}`,
+            titulo: `Menú: ${menu.nombre}`,
+            descripcion: 'Activado desde Planificación / Calendario',
+            tipo: 'otro' as TipoEvento,
+            fecha_inicio: fecha,
+            fecha_fin: null,
+            hora_inicio: '00:00:00',
+            hora_fin: '23:59:00',
+            recurrente: false,
+            frecuencia: null,
+            color: menu.tipo === 'evento' ? '#8b5cf6' : '#0ea5e9',
+            proveedor_id: null,
+            usuario_id: null,
+            restaurante_id: restIdRef.current,
+            created_at: '',
+            _fromMenu: true,
+          })
+        }
+      }
+
+      setEventos([...eventosDb, ...pedidoEventos, ...prodEventos, ...menuEventos])
+
+      // 5. Notas del mes (vinculadas a la fecha, no al evento)
       const { data: notasData, error: notasErr } = await supabase
         .from('calendario_notas')
         .select('*')

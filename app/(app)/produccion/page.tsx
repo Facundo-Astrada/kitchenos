@@ -13,6 +13,7 @@ import type { Tarea } from '@/types'
 import { PLAZA_TO_SECCION } from '@/components/mise/ProductoMiseCard'
 import SugerenciaProduccionSheet from '@/components/produccion/SugerenciaProduccionSheet'
 import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
+import { activarMenuParaFechas } from '@/lib/menus/activarMenu'
 
 // ── Helpers ─────────────────────────────────────────────────
 // fmtDate formatea un Date arbitrario de navegación de calendario (siempre
@@ -106,56 +107,7 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
     setCargandoMenu(true)
     try {
       const supabase = createClient()
-      const modoDestino = menu.tipo === 'evento' ? 'evento' : 'menu'
-      const hoyReal = hoyOperativo()
-      let totalTareas = 0, diasActivados = 0, diasYaActivos = 0
-      for (const f of fechas) {
-        // Dedupe por preparación: si ya existe una tarea para ESTE día, no se recrea.
-        const { data: previasDelDia } = await supabase.from('tareas')
-          .select('id, titulo')
-          .eq('restaurante_id', RESTAURANTE_ID).eq('menu_id', menu.id).eq('turno_fecha', f)
-        const existentesHoy = new Set((previasDelDia ?? []).map(t => t.titulo.trim().toLowerCase()))
-
-        // Carryover: SOLO al activar el menú para el día real de hoy se limpia lo pendiente
-        // de ayer (evita duplicados en el mise). No debe dispararse al precargar varios días
-        // futuros de una — ahí "ayer" sería un día del mismo lote recién insertado.
-        if (f === hoyReal) {
-          const prevDay = sumarDias(f, -1)
-          const { data: previasAyer } = await supabase.from('tareas')
-            .select('id, estado')
-            .eq('restaurante_id', RESTAURANTE_ID).eq('menu_id', menu.id).eq('turno_fecha', prevDay)
-          const idsAyerABorrar = (previasAyer ?? []).filter(t => t.estado !== 'listo').map(t => t.id)
-          if (idsAyerABorrar.length > 0) {
-            await supabase.from('tareas').delete().in('id', idsAyerABorrar)
-          }
-        }
-        const preparacionesNuevas = menu.preparaciones
-          .map((p, i) => ({ p, orden: i }))
-          .filter(({ p }) => !existentesHoy.has(p.nombre.trim().toLowerCase()))
-        if (preparacionesNuevas.length === 0) { diasYaActivos++; continue }
-        const rows = preparacionesNuevas.map(({ p, orden: i }) => ({
-          titulo: p.nombre,
-          descripcion: menu.nombre,
-          status: 'pendiente',
-          estado: 'pendiente',
-          prioridad: p.prioridad,
-          categoria: 'produccion',
-          modo: modoDestino,
-          seccion: p.paso || 'general',
-          plaza: p.plaza,
-          asignado_a: p.usuario_asignado,
-          receta_id: p.tipo === 'receta' ? p.ref_id : null,
-          cantidad: p.cantidad,
-          turno_fecha: f,
-          menu_id: menu.id,
-          orden: i,
-          restaurante_id: RESTAURANTE_ID,
-        }))
-        const { error } = await supabase.from('tareas').insert(rows)
-        if (error) throw error
-        totalTareas += rows.length
-        diasActivados++
-      }
+      const { totalTareas, diasActivados, diasYaActivos } = await activarMenuParaFechas(supabase, RESTAURANTE_ID, menu, fechas)
       refetchTareas()
       setShowMenuPicker(false)
       if (multiSelectMode) { setDiasSeleccionados(new Set()); setMultiSelectMode(false) }

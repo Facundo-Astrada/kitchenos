@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   useCalendario,
   TIPO_CONFIG,
@@ -8,9 +9,13 @@ import {
   type TipoEvento,
 } from '@/lib/hooks/useCalendario'
 import { useTareas } from '@/lib/hooks/useTareas'
+import { useMenus, type MenuConPreparaciones } from '@/lib/hooks/useMenus'
+import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { useDebounce } from '@/lib/hooks/useDebounce'
 import { useSheetOpenWhen } from '@/lib/ui/chrome'
+import { createClient } from '@/lib/supabase/client'
+import { activarMenuParaFechas, rangoFechas } from '@/lib/menus/activarMenu'
 
 /* ─── Helpers ─── */
 
@@ -119,6 +124,7 @@ const cardStyle: React.CSSProperties = {
 /* ─── Page ─── */
 
 export default function CalendarioPage() {
+  const router = useRouter()
   const now = new Date()
   const [currentMonth, setCurrentMonth] = useState(now.getMonth() + 1)
   const [currentYear, setCurrentYear] = useState(now.getFullYear())
@@ -132,8 +138,55 @@ export default function CalendarioPage() {
     fetchEventos, crearEvento, actualizarEvento, eliminarEvento, guardarNota,
   } = useCalendario()
   const { agregarTarea } = useTareas()
+  const { menus: catalogoMenus } = useMenus()
+  const RESTAURANTE_ID = useRestauranteId()
   const isDesktop = useIsDesktop()
   useSheetOpenWhen(showForm)
+
+  /* ── Planificar menú: activa un Menú del catálogo para un rango de días ── */
+  const [showMenuPlan, setShowMenuPlan] = useState(false)
+  useSheetOpenWhen(showMenuPlan)
+  const [menuPlanMenuId, setMenuPlanMenuId] = useState('')
+  const [menuPlanDesde, setMenuPlanDesde] = useState('')
+  const [menuPlanHasta, setMenuPlanHasta] = useState('')
+  const [activandoMenu, setActivandoMenu] = useState(false)
+  const [toast, setToast] = useState('')
+
+  const showToast = (msg: string) => {
+    setToast(msg)
+    setTimeout(() => setToast(''), 3000)
+  }
+
+  const openMenuPlan = () => {
+    setMenuPlanMenuId('')
+    setMenuPlanDesde(selectedDate)
+    setMenuPlanHasta(selectedDate)
+    setShowMenuPlan(true)
+  }
+
+  const handleActivarMenuRango = async () => {
+    if (!RESTAURANTE_ID || !menuPlanMenuId) return
+    const menu = catalogoMenus.find(m => m.id === menuPlanMenuId)
+    if (!menu) return
+    if (menu.preparaciones.length === 0) { showToast('Ese menú no tiene preparaciones cargadas'); return }
+    if (menuPlanHasta < menuPlanDesde) { showToast('La fecha "hasta" no puede ser anterior a "desde"'); return }
+    setActivandoMenu(true)
+    try {
+      const supabase = createClient()
+      const fechas = rangoFechas(menuPlanDesde, menuPlanHasta)
+      const { totalTareas, diasActivados, diasYaActivos } = await activarMenuParaFechas(supabase, RESTAURANTE_ID, menu, fechas)
+      setShowMenuPlan(false)
+      fetchEventos(currentMonth, currentYear)
+      if (diasActivados === 0) showToast('Ese menú ya estaba activo en esas fechas')
+      else if (fechas.length === 1) showToast(`Menú activado · ${totalTareas} ${totalTareas === 1 ? 'tarea' : 'tareas'} en Producción`)
+      else showToast(`Menú activado en ${diasActivados} ${diasActivados === 1 ? 'día' : 'días'}${diasYaActivos > 0 ? ` (${diasYaActivos} ya activos)` : ''}`)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al activar el menú'
+      showToast('Error: ' + msg)
+    } finally {
+      setActivandoMenu(false)
+    }
+  }
 
   /* ── Notas del día seleccionado — autoguardado ── */
   const [notaDraft, setNotaDraft] = useState('')
@@ -300,6 +353,7 @@ export default function CalendarioPage() {
 
   const openEditForm = (ev: EventoCalendario) => {
     if (ev._fromPedido) return
+    if (ev._fromMenu) { router.push('/operaciones?tab=planificacion'); return }
     setEditEvento(ev)
     setFormData({
       titulo: ev.titulo,
@@ -595,6 +649,162 @@ export default function CalendarioPage() {
     )
   }
 
+  /* ─── Render: Planificar menú (rango de días) ─── */
+  if (showMenuPlan) {
+    const menuSeleccionado = catalogoMenus.find(m => m.id === menuPlanMenuId) ?? null
+    const cantidadDias = menuPlanDesde && menuPlanHasta && menuPlanHasta >= menuPlanDesde
+      ? rangoFechas(menuPlanDesde, menuPlanHasta).length
+      : 0
+
+    const menuPlanFields = (
+      <>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>Desde</label>
+            <input
+              type="date"
+              style={fieldStyle}
+              value={menuPlanDesde}
+              onChange={e => setMenuPlanDesde(e.target.value)}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>Hasta</label>
+            <input
+              type="date"
+              style={fieldStyle}
+              value={menuPlanHasta}
+              onChange={e => setMenuPlanHasta(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {cantidadDias > 0 && (
+          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+            {cantidadDias === 1 ? 'Se activa 1 día' : `Se activa en ${cantidadDias} días`}
+          </div>
+        )}
+
+        <div>
+          <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>Menú</label>
+          {catalogoMenus.length === 0 ? (
+            <div style={{ ...cardStyle, padding: 20, textAlign: 'center' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 28, color: 'var(--text-3)' }}>menu_book</span>
+              <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '6px 0 0' }}>No hay menús en el catálogo. Armá uno en Carta → Menús.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {catalogoMenus.map((menu: MenuConPreparaciones) => {
+                const sel = menuPlanMenuId === menu.id
+                return (
+                  <button
+                    key={menu.id}
+                    onClick={() => setMenuPlanMenuId(menu.id)}
+                    style={{
+                      textAlign: 'left', background: sel ? 'rgba(67,97,160,0.08)' : 'var(--surface)',
+                      border: sel ? '2px solid var(--navy)' : '1px solid var(--border)',
+                      borderRadius: 12, padding: '10px 14px', cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{
+                        fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 99, textTransform: 'uppercase', letterSpacing: '.04em',
+                        background: menu.tipo === 'evento' ? 'rgba(139,92,246,.14)' : 'rgba(14,165,233,.14)',
+                        color: menu.tipo === 'evento' ? '#8b5cf6' : '#0ea5e9',
+                      }}>
+                        {menu.tipo === 'evento' ? 'Evento' : 'Fijo'}
+                      </span>
+                      <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{menu.nombre}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>{menu.preparaciones.length} prep.</span>
+                    </div>
+                    {menu.descripcion && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>{menu.descripcion}</div>}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+          <button
+            onClick={() => setShowMenuPlan(false)}
+            style={{
+              flex: 1, padding: '12px 20px', borderRadius: 12, border: '1px solid var(--border)',
+              background: 'var(--surface)', color: 'var(--text-2)', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleActivarMenuRango}
+            disabled={!menuSeleccionado || activandoMenu || cantidadDias === 0}
+            style={{
+              ...btnPrimary,
+              flex: 1,
+              opacity: (!menuSeleccionado || activandoMenu || cantidadDias === 0) ? 0.5 : 1,
+            }}
+          >
+            {activandoMenu ? 'Activando...' : 'Activar menú'}
+          </button>
+        </div>
+      </>
+    )
+
+    if (isDesktop) {
+      return (
+        <div
+          onClick={() => setShowMenuPlan(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.55)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--surface)', borderRadius: 18, width: '100%', maxWidth: 560,
+              maxHeight: 'calc(100dvh - 48px)', overflowY: 'auto', boxShadow: '0 8px 40px rgba(0,0,0,0.4)',
+              display: 'flex', flexDirection: 'column',
+            }}
+          >
+            <div style={{
+              padding: '18px 24px', borderBottom: '1px solid var(--border)', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <div>
+                <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>Planificar menú</h2>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>Activa un menú del catálogo para un rango de días</p>
+              </div>
+              <button onClick={() => setShowMenuPlan(false)} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', display: 'flex', padding: 4 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 22 }}>close</span>
+              </button>
+            </div>
+            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {menuPlanFields}
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
+        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => setShowMenuPlan(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 24 }}>arrow_back</span>
+          </button>
+          <div>
+            <h1 style={{ color: '#fff', fontSize: 18, fontWeight: 700, margin: 0 }}>Planificar menú</h1>
+            <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12, margin: '2px 0 0' }}>Activa un menú para un rango de días</p>
+          </div>
+        </div>
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {menuPlanFields}
+        </div>
+      </div>
+    )
+  }
+
   /* ─── Render: Main calendar ─── */
   return (
     <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
@@ -602,10 +812,16 @@ export default function CalendarioPage() {
       <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <h1 style={{ color: '#fff', fontSize: 20, fontWeight: 700, margin: 0 }}>Calendario</h1>
-          <button onClick={openNewForm} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
-            Nuevo evento
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={openMenuPlan} title="Planificar menú" style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 10, padding: isDesktop ? '8px 14px' : '8px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>restaurant_menu</span>
+              {isDesktop && 'Planificar menú'}
+            </button>
+            <button onClick={openNewForm} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
+              Nuevo evento
+            </button>
+          </div>
         </div>
 
         {/* Month nav */}
@@ -729,7 +945,7 @@ export default function CalendarioPage() {
                       display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                     }}>
                       <span className="material-symbols-outlined" style={{ fontSize: 20, color: ev.color || cfg.color }}>
-                        {ev._fromPedido ? 'local_shipping' : cfg.icon}
+                        {ev._fromPedido ? 'local_shipping' : ev._fromMenu ? 'restaurant_menu' : cfg.icon}
                       </span>
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -765,7 +981,7 @@ export default function CalendarioPage() {
             <div style={isDesktop ? { display: 'flex', gap: 20, alignItems: 'flex-start' } : undefined}>
               <div style={{ flex: isDesktop ? 2 : undefined, minWidth: 0 }}>
                 {/* Day headers */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3, marginBottom: 4 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 3, marginBottom: 4 }}>
                   {DIAS_SEMANA.map((d, i) => (
                     <div key={i} style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-3)', padding: '4px 0' }}>
                       {d}
@@ -774,7 +990,7 @@ export default function CalendarioPage() {
                 </div>
 
                 {/* Calendar grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 3 }}>
                   {grid.map((cell, i) => {
                     const dateStr = toDateStr(cell.year, cell.month, cell.day)
                     const isToday = dateStr === today()
@@ -983,6 +1199,17 @@ export default function CalendarioPage() {
           </div>
         )}
       </div>
+
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: 'max(env(safe-area-inset-bottom), 16px)', left: '50%', transform: 'translateX(-50%)',
+          zIndex: 3000, padding: '10px 18px', borderRadius: 12, fontSize: 13, fontWeight: 600, color: '#fff',
+          background: toast.startsWith('Error') ? '#ef4444' : 'var(--navy)', boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+          maxWidth: '90vw', textAlign: 'center',
+        }}>
+          {toast}
+        </div>
+      )}
     </div>
   )
 }
