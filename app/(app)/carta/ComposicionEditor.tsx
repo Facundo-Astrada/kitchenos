@@ -1,12 +1,14 @@
 'use client'
 
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { PLAZAS_OPS, SECCIONES_OPS } from '@/lib/ops/mise'
 import { useSheetOpen } from '@/lib/ui/chrome'
 import { usePermisos } from '@/lib/hooks/usePermisos'
+import { createClient } from '@/lib/supabase/client'
 import OpsPanel, { type OpsResult } from '@/components/ops/OpsPanel'
 import { SegmentedTabs } from '@/components/ui'
+import { fileToBase64, callRecetaImport, type RecetaIAResult } from '@/lib/recetas/iaImport'
 
 // ── Tipos públicos ──────────────────────────────────────────
 export type CompModo = 'plato' | 'menu' | 'evento'
@@ -53,6 +55,9 @@ export interface RefConCosto {
   // Solo para recetas — ingredientes (producto + cantidad) para la vista rápida
   // "ver receta" (botón del ícono de recetario en cada ítem vinculado).
   ingredientes?: { nombre: string; cantidad: number; unidad: string }[]
+  // Solo para productos de stock — unidad en la que está cargado `costo` (precio_unitario).
+  // La usa el modal de captura IA para vincular ingredientes recién extraídos al stock.
+  unidad?: string
 }
 
 // Datos para editar una composición existente
@@ -136,6 +141,346 @@ function RecetaPreviewModal({ nombre, ingredientes, onClose }: {
   )
 }
 
+// ── Estilos compartidos del modal de captura IA ──
+const iaBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', width: '100%', textAlign: 'left' }
+const iaBtnPrimary: React.CSSProperties = { padding: '12px', borderRadius: 12, border: 'none', background: 'var(--navy)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }
+const iaBtnSecondary: React.CSSProperties = { padding: '12px 14px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-3)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }
+const UNIDADES_ING = ['kg', 'g', 'l', 'ml', 'u']
+
+// Fila editable de ingrediente en la revisión del import IA — separada del
+// resultado crudo de la IA para poder corregir cantidad/unidad y vincular a
+// stock antes de guardar (la IA solo propone un punto de partida).
+interface IaIngRow { nombre: string; cantidad: string; unidad: string; productoId: string | null }
+
+function normalizeNombre(s: string): string {
+  return s.toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ')
+}
+
+// Auto-match simple contra el stock ya cargado (mismo criterio que
+// /api/recetas/auto-link-ingredientes pero client-side, para sugerir sin
+// pegarle a un endpoint que opera sobre TODAS las recetas del restaurante).
+function matchProducto(nombre: string, productos: RefConCosto[]): RefConCosto | null {
+  const norm = normalizeNombre(nombre)
+  if (!norm) return null
+  const exact = productos.find(p => normalizeNombre(p.nombre) === norm)
+  if (exact) return exact
+  const contains = productos.find(p => {
+    const pn = normalizeNombre(p.nombre)
+    return pn.includes(norm) || norm.includes(pn)
+  })
+  return contains ?? null
+}
+
+function buildIaRows(r: RecetaIAResult, productos: RefConCosto[]): IaIngRow[] {
+  return (r.ingredientes || []).filter(i => i.nombre?.trim()).map(i => ({
+    nombre: i.nombre.trim(),
+    cantidad: String(i.cantidad ?? '').replace('.', ','),
+    unidad: i.unidad || 'u',
+    productoId: matchProducto(i.nombre, productos)?.id ?? null,
+  }))
+}
+
+// ── Modal: crear receta al vuelo con foto/texto + IA, sin salir de Carta.
+// Antes "crear idea" solo generaba una receta vacía (solo nombre) — esto la
+// crea con ingredientes y procedimiento ya extraídos, todavía como "a
+// realizar" (status draft) para afinar costeo/vínculo a stock en Recetario. ──
+function RecetaIAModal({ prefillNombre, productos, restauranteId, onClose, onCreated }: {
+  prefillNombre: string
+  productos: RefConCosto[]
+  restauranteId: string
+  onClose: () => void
+  onCreated: (id: string, nombre: string) => void
+}) {
+  const [step, setStep] = useState<'choose' | 'text' | 'loading' | 'review' | 'error'>('choose')
+  const [errorMsg, setErrorMsg] = useState('')
+  const [textInput, setTextInput] = useState('')
+  const [result, setResult] = useState<RecetaIAResult | null>(null)
+  const [rows, setRows] = useState<IaIngRow[]>([])
+  const [pasos, setPasos] = useState<string[]>([])
+  const [nombreEdit, setNombreEdit] = useState(prefillNombre)
+  const [saving, setSaving] = useState(false)
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const galleryRef = useRef<HTMLInputElement>(null)
+
+  // Productos de stock creados al vuelo desde acá — se suman a los ya
+  // existentes para que el ingrediente que los originó (y cualquier otro
+  // repetido en la misma receta) los pueda elegir sin esperar el realtime
+  // de useStock().
+  const [productosNuevos, setProductosNuevos] = useState<RefConCosto[]>([])
+  const [creandoStockIdx, setCreandoStockIdx] = useState<number | null>(null)
+  const allProductos = useMemo(() => [...productos, ...productosNuevos], [productos, productosNuevos])
+
+  async function runImage(file: File) {
+    setStep('loading')
+    try {
+      const { base64, media_type } = await fileToBase64(file)
+      const r = await callRecetaImport('image', { image_base64: base64, media_type })
+      setResult(r)
+      setRows(buildIaRows(r, productos))
+      setPasos(r.procedimiento || [])
+      setNombreEdit(r.nombre_sugerido || prefillNombre)
+      setStep('review')
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Error al analizar la imagen')
+      setStep('error')
+    }
+  }
+
+  async function runText() {
+    if (!textInput.trim()) return
+    setStep('loading')
+    try {
+      const r = await callRecetaImport('text', { text: textInput.trim() })
+      setResult(r)
+      setRows(buildIaRows(r, productos))
+      setPasos(r.procedimiento || [])
+      setNombreEdit(r.nombre_sugerido || prefillNombre)
+      setStep('review')
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Error al analizar el texto')
+      setStep('error')
+    }
+  }
+
+  function updateRow(idx: number, patch: Partial<IaIngRow>) {
+    setRows(prev => prev.map((row, i) => i === idx ? { ...row, ...patch } : row))
+  }
+
+  // Ingrediente sin match en el stock → lo crea como producto nuevo (mínimo:
+  // nombre + unidad, sin precio/stock inicial) y lo deja vinculado al toque.
+  async function crearProductoStock(idx: number) {
+    const row = rows[idx]
+    if (!row.nombre.trim() || creandoStockIdx !== null) return
+    setCreandoStockIdx(idx)
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase.from('productos').insert({
+        nombre: row.nombre.trim(),
+        categoria: 'Otros',
+        unidad: row.unidad || 'u',
+        stock_actual: 0,
+        stock_minimo: 0,
+        stock_critico: 0,
+        precio_unitario: 0,
+        activo: true,
+        restaurante_id: restauranteId,
+      }).select('id, nombre, precio_unitario, unidad').single()
+      if (error) throw error
+      const nuevo: RefConCosto = { id: data.id, nombre: data.nombre, costo: data.precio_unitario, unidad: data.unidad }
+      setProductosNuevos(prev => [...prev, nuevo])
+      updateRow(idx, { productoId: nuevo.id })
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Error al crear el producto en stock')
+      setStep('error')
+    } finally {
+      setCreandoStockIdx(null)
+    }
+  }
+
+  async function confirmar() {
+    if (!result || saving) return
+    setSaving(true)
+    try {
+      const ingredientesData = rows.filter(row => row.nombre.trim()).map(row => {
+        const producto = row.productoId ? allProductos.find(p => p.id === row.productoId) : null
+        return {
+          nombre: row.nombre.trim(),
+          cantidad: parseFloat(row.cantidad.replace(',', '.')) || 0,
+          unidad: row.unidad || 'u',
+          costo_unitario: producto?.costo ?? 0,
+          unidad_costo: producto?.unidad ?? row.unidad ?? 'u',
+          producto_id: producto?.id ?? null,
+          grupo: null,
+        }
+      })
+      const procedimiento = pasos.filter(p => p.trim()).map((p, i) => `${i + 1}. ${p.trim()}`).join('\n')
+      const res = await fetch('/api/recetas/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          receta: {
+            nombre: nombreEdit.trim() || 'Receta importada',
+            categoria: result.categoria_sugerida || 'otros',
+            porciones: result.porciones || 1,
+            tiempo_min: result.tiempo_minutos || 0,
+            procedimiento,
+            activa: true,
+            status: 'draft',
+          },
+          ingredientes: ingredientesData,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Error al guardar la receta')
+      onCreated(json.id as string, nombreEdit.trim() || 'Receta importada')
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Error al guardar')
+      setStep('error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', maxWidth: 480, width: '100%', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 -8px 32px rgba(0,0,0,.3)' }}>
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8, position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 1 }}>
+          <span className="material-symbols-outlined" style={{ color: 'var(--accent)', fontSize: 20 }}>auto_awesome</span>
+          <div style={{ flex: 1, fontSize: 15, fontWeight: 800, color: 'var(--text-1)' }}>Cargar receta con IA</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', padding: 2 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>close</span>
+          </button>
+        </div>
+        <div style={{ padding: 16 }}>
+          {step === 'choose' && (
+            <>
+              <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 14 }}>
+                Sacale una foto a la receta anotada, a una pantalla (Instagram, un libro) o pegá el texto — la IA arma ingredientes y pasos.
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <button onClick={() => cameraRef.current?.click()} style={iaBtn}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 20 }}>photo_camera</span>
+                  Sacar foto
+                </button>
+                <button onClick={() => galleryRef.current?.click()} style={iaBtn}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 20 }}>image</span>
+                  Elegir de la galería
+                </button>
+                <button onClick={() => setStep('text')} style={iaBtn}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 20 }}>content_paste</span>
+                  Pegar texto
+                </button>
+              </div>
+              <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) runImage(f) }} />
+              <input ref={galleryRef} type="file" accept="image/*" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) runImage(f) }} />
+            </>
+          )}
+
+          {step === 'text' && (
+            <>
+              <textarea autoFocus value={textInput} onChange={e => setTextInput(e.target.value)}
+                placeholder="Pegá acá el texto de la receta (de Instagram, un caption, tus notas de un video, etc.)"
+                rows={7} style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none', resize: 'vertical', boxSizing: 'border-box', marginBottom: 10 }} />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setStep('choose')} style={iaBtnSecondary}>Volver</button>
+                <button onClick={runText} disabled={!textInput.trim()} style={{ ...iaBtnPrimary, flex: 1, opacity: textInput.trim() ? 1 : .5 }}>Analizar con IA</button>
+              </div>
+            </>
+          )}
+
+          {step === 'loading' && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '30px 0' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--accent)', animation: 'spin 1s linear infinite' }}>progress_activity</span>
+              <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Analizando con IA…</div>
+            </div>
+          )}
+
+          {step === 'review' && result && (
+            <>
+              <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 5 }}>Nombre</label>
+              <input value={nombreEdit} onChange={e => setNombreEdit(e.target.value)} style={{ width: '100%', padding: '9px 11px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 14, fontWeight: 700, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box', marginBottom: 12 }} />
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <div style={{ flex: 1, textAlign: 'center', padding: '8px 6px', borderRadius: 9, background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-1)' }}>{rows.length}</div>
+                  <div style={{ fontSize: 9, color: 'var(--text-3)', textTransform: 'uppercase' }}>Ingredientes</div>
+                </div>
+                <div style={{ flex: 1, textAlign: 'center', padding: '8px 6px', borderRadius: 9, background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-1)' }}>{pasos.length}</div>
+                  <div style={{ fontSize: 9, color: 'var(--text-3)', textTransform: 'uppercase' }}>Pasos</div>
+                </div>
+                {result.porciones ? (
+                  <div style={{ flex: 1, textAlign: 'center', padding: '8px 6px', borderRadius: 9, background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-1)' }}>{result.porciones}</div>
+                    <div style={{ fontSize: 9, color: 'var(--text-3)', textTransform: 'uppercase' }}>Porciones</div>
+                  </div>
+                ) : null}
+              </div>
+              {rows.length > 0 && (
+                <>
+                  <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 5 }}>
+                    Ingredientes <span style={{ textTransform: 'none', fontWeight: 500 }}>— ajustá cantidad y vinculá al stock si hace falta</span>
+                  </label>
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', marginBottom: 12, maxHeight: 320, overflowY: 'auto' }}>
+                    {rows.map((row, i) => {
+                      const producto = row.productoId ? allProductos.find(p => p.id === row.productoId) : null
+                      const creandoEsta = creandoStockIdx === i
+                      return (
+                        <div key={i} style={{ padding: '8px 10px', borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)', marginBottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.nombre}</div>
+                          <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                            <input value={row.cantidad} onChange={e => updateRow(i, { cantidad: e.target.value })} inputMode="decimal" placeholder="0"
+                              style={{ width: 46, padding: '6px 5px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 12, fontWeight: 700, textAlign: 'center', fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)', flexShrink: 0 }} />
+                            <select value={row.unidad} onChange={e => updateRow(i, { unidad: e.target.value })}
+                              style={{ width: 56, padding: '6px 4px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)', flexShrink: 0 }}>
+                              {UNIDADES_ING.map(u => <option key={u} value={u}>{u}</option>)}
+                            </select>
+                            <select value={row.productoId ?? ''} onChange={e => updateRow(i, { productoId: e.target.value || null })}
+                              style={{ flex: 1, minWidth: 0, padding: '6px 6px', borderRadius: 7, border: `1px solid ${producto ? '#16a34a80' : 'var(--border)'}`, background: producto ? 'rgba(22,163,74,.08)' : 'var(--bg)', fontSize: 11, fontWeight: 600, fontFamily: 'inherit', outline: 'none', color: producto ? '#16a34a' : 'var(--text-3)' }}>
+                              <option value="">Sin vincular</option>
+                              {allProductos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                            </select>
+                          </div>
+                          {/* Sin match en stock — costea $0 hasta vincular; ofrecer crearlo
+                              acá mismo en vez de dejarlo suelto para "arreglar después". */}
+                          {!producto && (
+                            <button onClick={() => crearProductoStock(i)} disabled={creandoStockIdx !== null}
+                              style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5, padding: '4px 8px', borderRadius: 7, border: '1px dashed var(--accent)', background: 'rgba(67,97,160,.06)', color: 'var(--accent)', fontSize: 10, fontWeight: 700, cursor: creandoStockIdx !== null ? 'default' : 'pointer', fontFamily: 'inherit', opacity: creandoStockIdx !== null && !creandoEsta ? .5 : 1 }}>
+                              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>{creandoEsta ? 'progress_activity' : 'add_circle'}</span>
+                              {creandoEsta ? 'Creando en stock…' : 'No está en stock — crearlo'}
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+              {pasos.length > 0 && (
+                <>
+                  <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 5 }}>
+                    Procedimiento
+                  </label>
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 10, marginBottom: 12, maxHeight: 220, overflowY: 'auto' }}>
+                    {pasos.map((paso, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 10px', borderBottom: i < pasos.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-3)', flexShrink: 0, paddingTop: 6 }}>{i + 1}.</span>
+                        <textarea value={paso} onChange={e => setPasos(prev => prev.map((p, pi) => pi === i ? e.target.value : p))}
+                          rows={1}
+                          style={{ flex: 1, padding: '6px 8px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 12, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 12 }}>
+                Queda como receta “a realizar” — se puede terminar de afinar en Recetario.
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setStep('choose')} style={iaBtnSecondary}>Reintentar</button>
+                <button onClick={confirmar} disabled={saving} style={{ ...iaBtnPrimary, flex: 1, opacity: saving ? .6 : 1 }}>
+                  {saving ? 'Guardando…' : 'Usar esta receta'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {step === 'error' && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 10, background: 'rgba(220,38,38,.08)', color: '#dc2626', fontSize: 12, marginBottom: 12 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>error</span>
+                {errorMsg}
+              </div>
+              <button onClick={() => setStep('choose')} style={iaBtnPrimary}>Volver a intentar</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ════════════════════════════════════════════════════════════
 // COMPOSICION EDITOR — un solo editor para Plato / Menú / Evento
 // ════════════════════════════════════════════════════════════
@@ -174,6 +519,32 @@ export default function ComposicionEditor({
   const [creandoIdeaSec, setCreandoIdeaSec] = useState(false)
   const allDraftIds = useMemo(() => new Set<string>([...draftRecetaIds, ...localDraftIds]), [draftRecetaIds, localDraftIds])
 
+  // Modal de captura IA (foto/texto) — un solo estado en el editor, distintos
+  // orígenes (búsqueda de sección en Menú/Evento, buscador de Plato) le pasan
+  // su propio `onCreated` para saber dónde enganchar la receta resultante.
+  const [iaImport, setIaImport] = useState<{ prefillNombre: string; onCreated: (id: string, nombre: string) => void } | null>(null)
+  function openIaImportForPlato(prefillNombre: string) {
+    setIaImport({
+      prefillNombre,
+      onCreated: (id, nombre) => {
+        const nuevoUid = uid()
+        setLocalDraftIds(prev => new Set(prev).add(id))
+        setPlatoRecetas(prev => [...prev, { _uid: nuevoUid, ref_id: id, nombre, porciones: 1, tipo: 'receta' }])
+        setEditingPorcionUid(nuevoUid)
+        setEditingPorcionVal('')
+      },
+    })
+  }
+  function openIaImportForSeccion(sec: string, prefillNombre: string) {
+    setIaImport({
+      prefillNombre,
+      onCreated: (id, nombre) => {
+        setLocalDraftIds(prev => new Set(prev).add(id))
+        addItemFromSearch(sec, 'receta', id, nombre)
+      },
+    })
+  }
+
   const [modo, setModo] = useState<CompModo>(inicial?.modo ?? 'plato')
   const [nombre, setNombre] = useState(inicial?.nombre ?? '')
   const [descripcion, setDescripcion] = useState(inicial?.descripcion ?? '')
@@ -207,6 +578,13 @@ export default function ComposicionEditor({
   const [sectionQuery, setSectionQuery] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
   const nuevaSeccionRef = useRef<HTMLInputElement>(null)
+  // Ítem recién agregado por búsqueda → abre su gramaje solo, para no obligar
+  // a un segundo tap; al confirmar con Enter el foco vuelve al buscador y
+  // sigue la cadena "buscar → elegir → cargar gramaje → Enter → buscar…".
+  const [autoFocusCantidadUid, setAutoFocusCantidadUid] = useState<number | null>(null)
+  // Vistazo rápido de ingredientes de un resultado de búsqueda (todavía sin
+  // elegir) — separado del preview de un ítem ya vinculado.
+  const [previewResult, setPreviewResult] = useState<{ nombre: string; ingredientes: { nombre: string; cantidad: number; unidad: string }[] } | null>(null)
 
   // ── Drag & drop de secciones (reordenar arrastrando el handle) ──
   const seccionRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -359,8 +737,12 @@ export default function ComposicionEditor({
     // el costeo — defaultear a 1 costeaba cada ítem como si pesara 1 gramo.
     const nuevo: ItemRow = { _uid: uid(), _seccion: seccion, tipo, ref_id, nombre, prioridad: 'media', plaza: null, seccion_mise: null, usuario_asignado: null, cantidad: null, unidad: null, variante: null }
     setItems(prev => [...prev, nuevo])
-    setActiveSearch(null)
+    // El buscador queda abierto (no se cierra tras cada ítem, como en Plato)
+    // para poder cargar varios ítems seguidos sin volver a tocar "Agregar".
     setSectionQuery('')
+    // El foco pasa al gramaje del ítem recién creado, no de nuevo al buscador
+    // — ese vuelve solo cuando se confirma la cantidad con Enter.
+    setAutoFocusCantidadUid(nuevo._uid)
   }
 
   function openSectionSearch(sec: string) {
@@ -610,6 +992,7 @@ export default function ComposicionEditor({
             draftRecetaIds={allDraftIds}
             recipientesUsados={recipientesUsados}
             onCrearIdea={async (n) => { const idNueva = await crearIdeaReceta(n); setLocalDraftIds(prev => new Set(prev).add(idNueva)); return idNueva }}
+            onCrearIdeaIA={openIaImportForPlato}
           />
         ) : (
           <>
@@ -625,6 +1008,12 @@ export default function ComposicionEditor({
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 7, border: 'none', cursor: 'pointer', background: 'var(--accent)', color: '#fff', flexShrink: 0 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
               </button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '7px 10px', borderRadius: 9, background: 'rgba(67,97,160,.06)', marginBottom: 10 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent)', flexShrink: 0, marginTop: 1 }}>info</span>
+              <span style={{ fontSize: 10.5, color: 'var(--text-3)', lineHeight: 1.4 }}>
+                Cada componente es <b style={{ color: 'var(--text-2)' }}>una sola</b> receta o ingrediente. Si el plato lleva <b style={{ color: 'var(--text-2)' }}>polenta, queso y hongos</b>, cargalos como 3 ítems separados — no uno solo con los tres juntos.
+              </span>
             </div>
 
             {/* Secciones + ítems */}
@@ -677,6 +1066,8 @@ export default function ComposicionEditor({
                       variantes={variantes}
                       draftRecetaIds={allDraftIds}
                       recipientesUsados={recipientesUsados}
+                      autoFocusCantidad={autoFocusCantidadUid === it._uid}
+                      onCantidadCommitted={() => { setAutoFocusCantidadUid(null); setTimeout(() => searchRef.current?.focus(), 60) }}
                     />
                   ))}
 
@@ -712,14 +1103,32 @@ export default function ComposicionEditor({
                             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{creandoIdeaSec ? 'progress_activity' : 'add_circle'}</span>
                             {creandoIdeaSec ? 'Creando…' : `Crear "${sectionQuery.trim()}" como receta`}
                           </button>
-                        ) : searchResults.map(r => (
-                          <button key={r.id} onClick={() => addItemFromSearch(sec, r.tipo, r.id, r.nombre)}
-                            style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', borderRadius: 8, padding: '7px 6px', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: r.tipo === 'receta' ? 'rgba(67,97,160,.12)' : r.tipo === 'producto' ? 'rgba(16,185,129,.12)' : 'rgba(249,115,22,.12)', color: r.tipo === 'receta' ? 'var(--accent)' : r.tipo === 'producto' ? '#10b981' : '#f97316' }}>
-                              {r.tipo === 'receta' ? 'Receta' : r.tipo === 'producto' ? 'Producto' : 'Plato'}
-                            </span>
-                            <span style={{ fontSize: 13, color: 'var(--text-1)' }}>{r.nombre}</span>
+                        ) : null}
+                        {sectionQuery.trim().length >= 2 && searchResults.length === 0 && (
+                          <button
+                            onClick={() => openIaImportForSeccion(sec, sectionQuery.trim())}
+                            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 10px', borderRadius: 9, border: 'none', marginTop: 6, background: 'rgba(67,97,160,.1)', color: 'var(--accent)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>auto_awesome</span>
+                            Cargar con foto/texto (IA)
                           </button>
+                        )}
+                        {sectionQuery.trim().length >= 2 && searchResults.length > 0 && searchResults.map(r => (
+                          <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <button onClick={() => addItemFromSearch(sec, r.tipo, r.id, r.nombre)}
+                              style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', borderRadius: 8, padding: '7px 6px', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: r.tipo === 'receta' ? 'rgba(67,97,160,.12)' : r.tipo === 'producto' ? 'rgba(16,185,129,.12)' : 'rgba(249,115,22,.12)', color: r.tipo === 'receta' ? 'var(--accent)' : r.tipo === 'producto' ? '#10b981' : '#f97316', flexShrink: 0 }}>
+                                {r.tipo === 'receta' ? 'Receta' : r.tipo === 'producto' ? 'Producto' : 'Plato'}
+                              </span>
+                              <span style={{ fontSize: 13, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.nombre}</span>
+                            </button>
+                            {r.tipo === 'receta' && (
+                              <button onClick={e => { e.stopPropagation(); setPreviewResult({ nombre: r.nombre, ingredientes: r.ingredientes ?? [] }) }}
+                                title="Ver ingredientes" aria-label="Ver ingredientes"
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 5, color: 'var(--text-3)', display: 'flex', flexShrink: 0 }}>
+                                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>visibility</span>
+                              </button>
+                            )}
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -744,6 +1153,18 @@ export default function ComposicionEditor({
           </>
         )}
       </div>
+      {iaImport && (
+        <RecetaIAModal
+          prefillNombre={iaImport.prefillNombre}
+          productos={productos}
+          restauranteId={RESTAURANTE_ID}
+          onClose={() => setIaImport(null)}
+          onCreated={(id, nombreCreado) => { setIaImport(null); iaImport.onCreated(id, nombreCreado) }}
+        />
+      )}
+      {previewResult && (
+        <RecetaPreviewModal nombre={previewResult.nombre} ingredientes={previewResult.ingredientes} onClose={() => setPreviewResult(null)} />
+      )}
     </div>
   )
 }
@@ -772,7 +1193,7 @@ function PlatoRecetasEditor({
   recetas, productos, platoRecetas, setPlatoRecetas, costoTotal,
   platoSearch, setPlatoSearch, platoShowResults, setPlatoShowResults,
   editingPorcionUid, setEditingPorcionUid, editingPorcionVal, setEditingPorcionVal, uid,
-  draftRecetaIds, recipientesUsados, onCrearIdea,
+  draftRecetaIds, recipientesUsados, onCrearIdea, onCrearIdeaIA,
 }: {
   recetas: RefConCosto[]
   productos: RefConCosto[]
@@ -791,12 +1212,16 @@ function PlatoRecetasEditor({
   draftRecetaIds: Set<string>
   recipientesUsados: string[]
   onCrearIdea: (nombre: string) => Promise<string>
+  onCrearIdeaIA: (nombre: string) => void
 }) {
   const [creandoIdea, setCreandoIdea] = useState(false)
   // OPS panel local — abre/cierra por _uid de la fila (el panel es OpsPanel compartido)
   const [opsPanelUid, setOpsPanelUid] = useState<number | null>(null)
   // Vista rápida de receta — abre/cierra por _uid de la fila
   const [previewUid, setPreviewUid] = useState<number | null>(null)
+  // Vistazo rápido de un resultado de búsqueda todavía sin elegir
+  const [previewSearchId, setPreviewSearchId] = useState<string | null>(null)
+  const platoSearchRef = useRef<HTMLInputElement>(null)
 
   function openOps(pr: PlatoItem) {
     setOpsPanelUid(prev => prev === pr._uid ? null : pr._uid)
@@ -835,9 +1260,14 @@ function PlatoRecetasEditor({
   }, [platoSearch, recetas, platoRecetas])
 
   function agregarItem(r: SearchResult) {
-    setPlatoRecetas(prev => [...prev, { _uid: uid(), ref_id: r.id, nombre: r.nombre, porciones: 1, tipo: r.tipo }])
+    const nuevoUid = uid()
+    setPlatoRecetas(prev => [...prev, { _uid: nuevoUid, ref_id: r.id, nombre: r.nombre, porciones: 1, tipo: r.tipo }])
     setPlatoSearch('')
     setPlatoShowResults(false)
+    // El gramaje del ítem recién agregado se abre solo — completa Enter y
+    // el foco vuelve acá para seguir con el próximo (ver saveStock más abajo).
+    setEditingPorcionUid(nuevoUid)
+    setEditingPorcionVal('')
   }
 
   async function agregarIdea() {
@@ -846,9 +1276,12 @@ function PlatoRecetasEditor({
     setCreandoIdea(true)
     try {
       const id = await onCrearIdea(nombre)
-      setPlatoRecetas(prev => [...prev, { _uid: uid(), ref_id: id, nombre, porciones: 1, tipo: 'receta' }])
+      const nuevoUid = uid()
+      setPlatoRecetas(prev => [...prev, { _uid: nuevoUid, ref_id: id, nombre, porciones: 1, tipo: 'receta' }])
       setPlatoSearch('')
       setPlatoShowResults(false)
+      setEditingPorcionUid(nuevoUid)
+      setEditingPorcionVal('')
     } finally {
       setCreandoIdea(false)
     }
@@ -929,7 +1362,10 @@ function PlatoRecetasEditor({
                     <input autoFocus type="number" value={editingPorcionVal}
                       onChange={e => setEditingPorcionVal(e.target.value)}
                       onBlur={() => saveStock(pr._uid)}
-                      onKeyDown={e => { if (e.key === 'Enter') saveStock(pr._uid); if (e.key === 'Escape') setEditingPorcionUid(null) }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') { saveStock(pr._uid); setTimeout(() => platoSearchRef.current?.focus(), 60) }
+                        if (e.key === 'Escape') setEditingPorcionUid(null)
+                      }}
                       placeholder="30"
                       style={{ width: 64, textAlign: 'center', fontSize: 13, fontWeight: 700, border: '1.5px solid var(--accent)', borderRadius: 8, padding: '4px 6px', background: 'var(--surface)', color: 'var(--navy)', outline: 'none' }}
                     />
@@ -1006,6 +1442,7 @@ function PlatoRecetasEditor({
         <div style={{ position: 'relative' }}>
           <span className="material-symbols-outlined" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 18, color: 'var(--text-3)', pointerEvents: 'none' }}>search</span>
           <input
+            ref={platoSearchRef}
             value={platoSearch}
             onChange={e => { setPlatoSearch(e.target.value); setPlatoShowResults(true) }}
             onFocus={() => setPlatoShowResults(true)}
@@ -1024,13 +1461,20 @@ function PlatoRecetasEditor({
             {searchResults.map((r, idx) => {
               const cfg = TIPO_CFG[r.tipo]
               return (
-                <button key={`${r.tipo}-${r.id}`} onMouseDown={e => { e.preventDefault(); agregarItem(r) }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 12px', textAlign: 'left', border: 'none', borderBottom: idx < searchResults.length - 1 ? '1px solid var(--border)' : 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 16, color: cfg.color, flexShrink: 0 }}>{cfg.icon}</span>
-                  <span style={{ flex: 1, fontSize: 13, color: 'var(--text-1)' }}>{r.nombre}</span>
-                  <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: cfg.bg, color: cfg.color, flexShrink: 0 }}>{cfg.label}</span>
-                  {r.costo > 0 && <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 4 }}>{fmtMoney(r.costo)}</span>}
-                </button>
+                <div key={`${r.tipo}-${r.id}`} style={{ display: 'flex', alignItems: 'center', borderBottom: idx < searchResults.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <button onMouseDown={e => { e.preventDefault(); agregarItem(r) }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, padding: '10px 12px', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 16, color: cfg.color, flexShrink: 0 }}>{cfg.icon}</span>
+                    <span style={{ flex: 1, fontSize: 13, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.nombre}</span>
+                    <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: cfg.bg, color: cfg.color, flexShrink: 0 }}>{cfg.label}</span>
+                    {r.costo > 0 && <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 4, flexShrink: 0 }}>{fmtMoney(r.costo)}</span>}
+                  </button>
+                  <button onMouseDown={e => { e.preventDefault(); setPreviewSearchId(r.id) }}
+                    title="Ver ingredientes" aria-label="Ver ingredientes"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '10px 12px', color: 'var(--text-3)', display: 'flex', flexShrink: 0 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>visibility</span>
+                  </button>
+                </div>
               )
             })}
           </div>
@@ -1052,6 +1496,15 @@ function PlatoRecetasEditor({
               </span>
               {creandoIdea ? 'Creando…' : `Crear "${platoSearch}" como idea en recetario`}
             </button>
+            <button
+              onMouseDown={e => { e.preventDefault(); onCrearIdeaIA(platoSearch.trim()) }}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                padding: '9px 14px', borderRadius: 10, border: 'none', marginTop: 6,
+                background: 'rgba(67,97,160,.1)', color: 'var(--accent)', fontSize: 12, fontWeight: 700,
+                cursor: 'pointer', fontFamily: 'inherit' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>auto_awesome</span>
+              Cargar con foto/texto (IA)
+            </button>
           </div>
         )}
       </div>
@@ -1060,6 +1513,11 @@ function PlatoRecetasEditor({
         if (!pr || pr.tipo !== 'receta') return null
         const receta = recetas.find(r => r.id === pr.ref_id)
         return <RecetaPreviewModal nombre={pr.nombre} ingredientes={receta?.ingredientes ?? []} onClose={() => setPreviewUid(null)} />
+      })()}
+      {previewSearchId && (() => {
+        const receta = recetas.find(r => r.id === previewSearchId)
+        if (!receta) return null
+        return <RecetaPreviewModal nombre={receta.nombre} ingredientes={receta.ingredientes ?? []} onClose={() => setPreviewSearchId(null)} />
       })()}
     </div>
   )
@@ -1070,6 +1528,7 @@ function PlatoRecetasEditor({
 // ════════════════════════════════════════════════════════════
 function ItemRowInline({
   item, expanded, onToggle, onChange, onRemove, recetas, productos, cartaItems, variantes, draftRecetaIds, recipientesUsados,
+  autoFocusCantidad, onCantidadCommitted,
 }: {
   item: ItemRow
   expanded: boolean
@@ -1082,13 +1541,30 @@ function ItemRowInline({
   variantes: string[]
   draftRecetaIds: Set<string>
   recipientesUsados: string[]
+  autoFocusCantidad?: boolean
+  onCantidadCommitted?: () => void
 }) {
   const [showResults, setShowResults] = useState(false)
   const [opsOpen, setOpsOpen] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
+  const [previewSearchResult, setPreviewSearchResult] = useState<{ nombre: string; ingredientes: { nombre: string; cantidad: number; unidad: string }[] } | null>(null)
   // Texto crudo del input de cantidad — desacoplado de item.cantidad (number)
   // para no perder la coma decimal ni el punto final mientras se escribe.
   const [cantidadText, setCantidadText] = useState(item.cantidad != null ? String(item.cantidad).replace('.', ',') : '')
+  // Edición rápida de cantidad desde la fila colapsada (sin expandir el ítem
+  // entero) — mismo patrón que el botón "+g por plato" del modo Plato.
+  const [editingCantidadInline, setEditingCantidadInline] = useState(false)
+  // Cuando el ítem se acaba de crear por búsqueda, el gramaje se abre solo
+  // (ver `autoFocusCantidad`) — esta bandera distingue esa apertura automática
+  // de un tap manual, para saber si el Enter debe devolver el foco al buscador.
+  const [editingCantidadAutoSession, setEditingCantidadAutoSession] = useState(false)
+  useEffect(() => {
+    if (autoFocusCantidad) {
+      setEditingCantidadInline(true)
+      setEditingCantidadAutoSession(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoFocusCantidad])
 
   // Receta vinculada todavía sin realizar (idea/draft) → se pinta en rojo.
   const isDraft = item.tipo === 'receta' && !!item.ref_id && draftRecetaIds.has(item.ref_id)
@@ -1151,15 +1627,44 @@ function ItemRowInline({
             </div>
             {isDraft && <span style={{ fontSize: 8, fontWeight: 800, padding: '1px 5px', borderRadius: 99, background: 'rgba(220,38,38,.1)', color: '#dc2626', textTransform: 'uppercase', letterSpacing: '.04em', flexShrink: 0 }}>a realizar</span>}
           </div>
-          {!expanded && (item.plaza || item.seccion_mise || item.cantidad != null || item.variante) && (
+          {!expanded && (item.plaza || item.seccion_mise || item.variante) && (
             <div style={{ display: 'flex', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
               {item.variante && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(139,92,246,.12)', color: '#7c3aed' }}>{item.variante}</span>}
               {item.plaza && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(67,97,160,.1)', color: 'var(--accent)', textTransform: 'capitalize' }}>{plazaCfg?.label ?? item.plaza}</span>}
               {item.seccion_mise && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(14,116,144,.12)', color: '#0e7490' }}>{seccionLabel}</span>}
-              {item.cantidad != null && <span style={{ fontSize: 9, color: 'var(--text-3)', fontFamily: 'monospace' }}>{item.cantidad}{item.unidad ?? ''}</span>}
             </div>
           )}
         </div>
+        {/* Cantidad — editable con un tap directo acá, sin expandir el ítem
+            entero (antes había que abrir todo el editor y bajar hasta el
+            final para tocar este campo). */}
+        {editingCantidadInline ? (
+          <input autoFocus value={cantidadText}
+            onClick={e => e.stopPropagation()}
+            onChange={e => {
+              const raw = e.target.value
+              setCantidadText(raw)
+              const parsed = raw.trim() ? parseFloat(raw.replace(',', '.')) : null
+              onChange({ cantidad: parsed != null && !isNaN(parsed) ? parsed : null, unidad: item.tipo === 'plato' ? 'u' : 'g' })
+            }}
+            onBlur={() => { setCantidadText(item.cantidad != null ? String(item.cantidad).replace('.', ',') : ''); setEditingCantidadInline(false) }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                (e.target as HTMLInputElement).blur()
+                if (editingCantidadAutoSession) { setEditingCantidadAutoSession(false); onCantidadCommitted?.() }
+              }
+              if (e.key === 'Escape') setEditingCantidadInline(false)
+            }}
+            placeholder={item.tipo === 'plato' ? '1' : '250'} inputMode="decimal"
+            style={{ width: 54, textAlign: 'center', fontSize: 12, fontWeight: 800, border: '1.5px solid var(--accent)', borderRadius: 8, padding: '4px 4px', background: 'var(--surface)', color: 'var(--navy)', outline: 'none', flexShrink: 0 }} />
+        ) : (
+          <button onClick={e => { e.stopPropagation(); setEditingCantidadInline(true) }} title="Cantidad"
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, border: `1px solid ${item.cantidad != null ? 'var(--border)' : 'rgba(67,97,160,.4)'}`, borderRadius: 8, background: item.cantidad != null ? 'var(--bg)' : 'rgba(67,97,160,.06)', padding: '3px 8px', cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit' }}>
+            {item.cantidad != null
+              ? <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-1)', fontFamily: 'monospace' }}>{item.cantidad}{item.unidad ?? (item.tipo === 'plato' ? 'u' : 'g')}</span>
+              : <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--accent)' }}>+{item.tipo === 'plato' ? 'u' : 'g'}</span>}
+          </button>
+        )}
         <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)', flexShrink: 0, transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>expand_more</span>
         <button onClick={e => { e.stopPropagation(); onRemove() }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#ef4444', flexShrink: 0, display: 'flex' }}>
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
@@ -1192,12 +1697,21 @@ function ItemRowInline({
                   {results.map(r => {
                     const cfg = TIPO_CFG[r.tipo]
                     return (
-                      <button key={`${r.tipo}-${r.id}`} onMouseDown={e => { e.preventDefault(); onChange({ tipo: r.tipo, ref_id: r.id, nombre: r.nombre }); setShowResults(false) }}
-                        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '9px 11px', textAlign: 'left', border: 'none', borderBottom: '1px solid var(--border)', background: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 16, color: cfg.color }}>{cfg.icon}</span>
-                        <span style={{ flex: 1, fontSize: 13, color: 'var(--text-1)' }}>{r.nombre}</span>
-                        <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 7px', borderRadius: 99, background: cfg.bg, color: cfg.color }}>{cfg.label}</span>
-                      </button>
+                      <div key={`${r.tipo}-${r.id}`} style={{ display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)' }}>
+                        <button onMouseDown={e => { e.preventDefault(); onChange({ tipo: r.tipo, ref_id: r.id, nombre: r.nombre }); setShowResults(false) }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, padding: '9px 11px', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 16, color: cfg.color }}>{cfg.icon}</span>
+                          <span style={{ flex: 1, fontSize: 13, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.nombre}</span>
+                          <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 7px', borderRadius: 99, background: cfg.bg, color: cfg.color, flexShrink: 0 }}>{cfg.label}</span>
+                        </button>
+                        {r.tipo === 'receta' && (
+                          <button onMouseDown={e => { e.preventDefault(); setPreviewSearchResult({ nombre: r.nombre, ingredientes: recetas.find(x => x.id === r.id)?.ingredientes ?? [] }) }}
+                            title="Ver ingredientes" aria-label="Ver ingredientes"
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '9px 10px', color: 'var(--text-3)', display: 'flex', flexShrink: 0 }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>visibility</span>
+                          </button>
+                        )}
+                      </div>
                     )
                   })}
                 </div>
@@ -1307,6 +1821,9 @@ function ItemRowInline({
       )}
       {showPreview && recetaVinculada && (
         <RecetaPreviewModal nombre={recetaVinculada.nombre} ingredientes={recetaVinculada.ingredientes ?? []} onClose={() => setShowPreview(false)} />
+      )}
+      {previewSearchResult && (
+        <RecetaPreviewModal nombre={previewSearchResult.nombre} ingredientes={previewSearchResult.ingredientes} onClose={() => setPreviewSearchResult(null)} />
       )}
     </div>
   )

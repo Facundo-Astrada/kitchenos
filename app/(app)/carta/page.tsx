@@ -3422,7 +3422,7 @@ export default function CartaPage() {
           productos={productos.map(p => {
             const factor = unitConversionFactor('g', p.unidad)
             return {
-              id: p.id, nombre: p.nombre, costo: p.precio_unitario,
+              id: p.id, nombre: p.nombre, costo: p.precio_unitario, unidad: p.unidad,
               // factor 0 = unidad incompatible con gramos (ej: producto por 'u') — no calcular
               costoPorGramo: factor > 0 ? p.precio_unitario * factor : null,
             }
