@@ -10,6 +10,7 @@ import {
 import { useTareas } from '@/lib/hooks/useTareas'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { useDebounce } from '@/lib/hooks/useDebounce'
+import { useSheetOpenWhen } from '@/lib/ui/chrome'
 
 /* ─── Helpers ─── */
 
@@ -132,6 +133,7 @@ export default function CalendarioPage() {
   } = useCalendario()
   const { agregarTarea } = useTareas()
   const isDesktop = useIsDesktop()
+  useSheetOpenWhen(showForm)
 
   /* ── Notas del día seleccionado — autoguardado ── */
   const [notaDraft, setNotaDraft] = useState('')
@@ -355,26 +357,8 @@ export default function CalendarioPage() {
 
   /* ─── Render: Form overlay ─── */
   if (showForm) {
-    return (
-      <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
-        {/* Header */}
-        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 24 }}>arrow_back</span>
-            </button>
-            <h1 style={{ color: '#fff', fontSize: 18, fontWeight: 700, margin: 0 }}>
-              {editEvento ? 'Editar evento' : 'Nuevo evento'}
-            </h1>
-          </div>
-          {editEvento && (
-            <button onClick={handleDelete} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 22 }}>delete</span>
-            </button>
-          )}
-        </div>
-
-        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+    const formFields = (
+      <>
           {/* Título */}
           <div>
             <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>Título</label>
@@ -539,6 +523,73 @@ export default function CalendarioPage() {
               Guardar
             </button>
           </div>
+      </>
+    )
+
+    if (isDesktop) {
+      return (
+        <div
+          onClick={() => setShowForm(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.55)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--surface)', borderRadius: 18, width: '100%', maxWidth: 560,
+              maxHeight: 'calc(100dvh - 48px)', overflowY: 'auto', boxShadow: '0 8px 40px rgba(0,0,0,0.4)',
+              display: 'flex', flexDirection: 'column',
+            }}
+          >
+            <div style={{
+              padding: '18px 24px', borderBottom: '1px solid var(--border)', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>
+                {editEvento ? 'Editar evento' : 'Nuevo evento'}
+              </h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                {editEvento && (
+                  <button onClick={handleDelete} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', padding: 4 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 22 }}>delete</span>
+                  </button>
+                )}
+                <button onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', display: 'flex', padding: 4 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 22 }}>close</span>
+                </button>
+              </div>
+            </div>
+            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {formFields}
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
+        {/* Header */}
+        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 24 }}>arrow_back</span>
+            </button>
+            <h1 style={{ color: '#fff', fontSize: 18, fontWeight: 700, margin: 0 }}>
+              {editEvento ? 'Editar evento' : 'Nuevo evento'}
+            </h1>
+          </div>
+          {editEvento && (
+            <button onClick={handleDelete} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 22 }}>delete</span>
+            </button>
+          )}
+        </div>
+
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {formFields}
         </div>
       </div>
     )
