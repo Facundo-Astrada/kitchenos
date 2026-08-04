@@ -21,6 +21,7 @@ Al cargar una factura, `useFacturas.crearFactura` matchea cada ítem contra `pro
 ## Componentes UI
 
 - `ImportCartaModal` (inline en `app/(app)/carta/page.tsx`) — 2 pasos: upload file → preview editable con componentes vinculables. Cada componente tiene: nombre editable, badge de tipo (receta/producto/producción), dropdown de búsqueda unificado, toggle de tags dietarios. Al confirmar: POST `/api/carta/import` modo `apply`.
+- `RecetaIAModal` (inline en `app/(app)/carta/ComposicionEditor.tsx`, helpers en `lib/recetas/iaImport.ts`) — captura rápida de UNA receta (foto/texto) sin salir del editor de composición, reusando `/api/recetas/import` (mismo endpoint que Recetario, acción `import` simple, no `import_multi`). Ingredientes quedan editables (cantidad/unidad) y se auto-matchean contra `productos` client-side (mismo criterio que `auto-link-ingredientes` pero acotado a la receta nueva, sin tocar otras); si no hay match, un botón crea el producto de stock ahí mismo. Guarda con `status: 'draft'`.
 - `components/facturas/ExcelPOSImportModal.tsx` — XLSX/CSV de cualquier POS (Fudo, Maxirest, Bistrosoft, etc). Muestra hojas analizadas + mapeo IA.
 - `components/facturas/BulkUploadDrawer.tsx` — Drag&drop multi-archivo (PDF/imagen) con OCR en serie.
 - `app/(app)/onboarding/page.tsx` — Wizard 5 pasos. Se dispara desde `app/(app)/page.tsx` cuando productos+facturas+recetas todos en 0.
