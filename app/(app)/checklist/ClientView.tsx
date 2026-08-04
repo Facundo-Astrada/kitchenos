@@ -16,10 +16,9 @@ import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
 import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
 import { todasLasPlazas, plazaLabel, plazaIcon } from '@/lib/constants'
-import { hoyOperativo, sumarDias, turnoActivo, turnoAnterior, encodeTurnoFase, cierreIncompleto } from '@/lib/ops/turnos'
+import { hoyOperativo, sumarDias, turnoActivo, turnoAnterior, encodeTurnoFase, cierreIncompleto, fechaEnTz } from '@/lib/ops/turnos'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import SectionEditor from '@/components/checklist/SectionEditor'
-import { FilterChips } from '@/components/ui'
 import type { Plaza, MisePlaceItem, MisePrioridad, ChecklistSeccionConfig, RutinaFrecuencia, ChecklistRutina, ChecklistRutinaRegistro, RutinaCondicion } from '@/types'
 
 // ── Constants ──
@@ -756,13 +755,43 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
 
       {/* Header */}
       <div style={{ background: 'var(--navy)', padding: `${embedded ? 0 : 46}px 16px 0`, flexShrink: 0 }}>
+        {/* Fila 1: volver + plaza + turno (inline, solo si hay >1) + acciones.
+            La fecha NO se muestra salvo que la jornada operativa (corte 05:00,
+            ver hoyOperativo) no coincida con el día calendario real — ej. cerrando
+            a la 1am la jornada sigue siendo "ayer" y ahí sí vale la pena avisar. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 10 }}>
           <button onClick={() => setPlaza(null)} style={btnReset}>
             <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>arrow_back</span>
           </button>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>{plazaLabel(plaza, plazasCustom)}</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', marginTop: 1 }}>{fmtFecha(fecha)}</div>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>{plazaLabel(plaza, plazasCustom)}</span>
+            {fecha !== fechaEnTz(new Date()) && (
+              <span style={{
+                fontSize: 10, fontWeight: 700, color: '#facc15',
+                background: 'rgba(250,204,21,.15)', borderRadius: 999, padding: '2px 8px',
+              }}>
+                {fmtFecha(fecha)}
+              </span>
+            )}
+            {tab !== 'rutina' && turnosActivos.length > 1 && (
+              <div style={{ display: 'flex', gap: 4 }}>
+                {turnosActivos.map(t => {
+                  const activo = (turnoServicioId ?? turnosActivos[0].id) === t.id
+                  return (
+                    <button key={t.id} onClick={() => setTurnoServicioId(t.id)} style={{
+                      ...btnReset,
+                      padding: '3px 10px', borderRadius: 999,
+                      fontSize: 11, fontWeight: 700,
+                      background: activo ? '#fff' : 'rgba(255,255,255,.12)',
+                      color: activo ? 'var(--navy)' : 'rgba(255,255,255,.6)',
+                      transition: 'all .15s',
+                    }}>
+                      {t.nombre}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </div>
           <button
             onClick={toggleModoControl}
@@ -782,9 +811,9 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           </button>
         </div>
 
-        {/* Tabs — pills */}
-        <div style={{ paddingBottom: 10 }}>
-          <div style={{ display: 'inline-flex', background: 'rgba(255,255,255,.12)', borderRadius: 999, padding: 2, gap: 0 }}>
+        {/* Fila 2: tabs + progreso, misma fila — libera la fila propia que tenía la barra */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 10 }}>
+          <div style={{ display: 'inline-flex', flexShrink: 0, background: 'rgba(255,255,255,.12)', borderRadius: 999, padding: 2, gap: 0 }}>
             {(['apertura', 'cierre', 'rutina'] as Tab[]).map(t => (
               <button key={t} onClick={() => setTab(t)} {...(t === 'rutina' ? { 'data-coach-target': 'mise-tab-rutina' } : {})} style={{
                 padding: '5px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
@@ -799,20 +828,15 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
               </button>
             ))}
           </div>
+          {tab !== 'rutina' && (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <div style={{ flex: 1, height: 3, background: 'rgba(255,255,255,.15)', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{ width: `${pct}%`, height: '100%', background: '#22c55e', borderRadius: 99, transition: 'width .3s' }} />
+              </div>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>{done}/{total}</span>
+            </div>
+          )}
         </div>
-
-        {/* Selector de turno de servicio — default automático por hora, editable.
-            Solo aplica a apertura/cierre (rutina es del día, no de un turno). */}
-        {tab !== 'rutina' && turnosActivos.length > 1 && (
-          <div style={{ paddingBottom: 8 }}>
-            <FilterChips
-              chips={turnosActivos.map(t => ({ value: t.id, label: t.nombre }))}
-              active={turnoServicioId ?? turnosActivos[0].id}
-              onChange={setTurnoServicioId}
-              context="onDark"
-            />
-          </div>
-        )}
 
         {/* Switcher de plazas — solo si el usuario tiene ≥2 asignadas */}
         {userPlazas.length > 1 && (
@@ -848,15 +872,6 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           </div>
         )}
 
-        {/* Overall progress bar */}
-        {tab !== 'rutina' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <div style={{ flex: 1, height: 3, background: 'rgba(255,255,255,.15)', borderRadius: 99, overflow: 'hidden' }}>
-              <div style={{ width: `${pct}%`, height: '100%', background: '#22c55e', borderRadius: 99, transition: 'width .3s' }} />
-            </div>
-            <span style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', fontFamily: "'DM Mono', monospace" }}>{done}/{total}</span>
-          </div>
-        )}
       </div>
 
       {/* Body */}

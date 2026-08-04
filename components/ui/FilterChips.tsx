@@ -45,6 +45,9 @@ export function FilterChips<T extends string>({
 
   function chipStyle(isActive: boolean): CSSProperties {
     if (isActive) {
+      // Sobre header navy el activo va en pill blanco (misma convención que
+      // SegmentedTabs onDark). Navy sólido sobre navy es invisible y deja al
+      // chip inactivo — que sí tiene fondo — pareciendo el seleccionado.
       return {
         flexShrink: 0,
         padding: '6px 14px',
@@ -53,9 +56,9 @@ export function FilterChips<T extends string>({
         fontWeight: 600,
         fontFamily: 'inherit',
         cursor: 'pointer',
-        border: '1px solid var(--navy)',
-        background: 'var(--navy)',
-        color: '#fff',
+        border: `1px solid ${isDark ? '#fff' : 'var(--navy)'}`,
+        background: isDark ? '#fff' : 'var(--navy)',
+        color: isDark ? 'var(--navy)' : '#fff',
         transition: 'all .15s',
       }
     }

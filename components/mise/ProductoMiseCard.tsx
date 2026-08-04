@@ -214,8 +214,15 @@ export function ProductoMiseCard({
   // Se suma al target del recipiente para que "falta producir" contemple lo ya vendido.
   const demandaViva = item.demanda_viva ?? 0
   const tieneRecipiente = !!(item.recipiente_nombre && item.recipiente_capacidad != null)
-  const deficit = tieneRecipiente && stockDisplay !== null
-    ? Math.max(0, (item.recipiente_capacidad ?? 0) + demandaViva - stockDisplay)
+
+  // Valor "en vivo" mientras se escribe (antes del blur que persiste), para que
+  // el CTA de producir reaccione al tipear en vez de esperar a salir del campo —
+  // menos vueltas para llegar del número al botón de crear tarea.
+  const stockLive = editingStock
+    ? (stockInput === '' || isNaN(parseFloat(stockInput)) ? null : parseFloat(stockInput))
+    : stockDisplay
+  const deficit = tieneRecipiente && stockLive !== null
+    ? Math.max(0, (item.recipiente_capacidad ?? 0) + demandaViva - stockLive)
     : null
 
   // Peso total que debería haber en TODOS los recipientes juntos, a partir de
@@ -352,14 +359,21 @@ export function ProductoMiseCard({
           style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
           onClick={() => setShowDelete(v => !v)}
         >
-          <span style={{
-            fontSize: 13, fontWeight: 600,
-            color: checked ? 'var(--text-3)' : 'var(--text-1)',
-            textDecoration: checked ? 'line-through' : 'none',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block',
-          }}>
-            {item.nombre}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span style={{
+              fontSize: 13, fontWeight: 600, flex: 1, minWidth: 0,
+              color: checked ? 'var(--text-3)' : 'var(--text-1)',
+              textDecoration: checked ? 'line-through' : 'none',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block',
+            }}>
+              {item.nombre}
+            </span>
+            {tieneRecipiente && item.peso_porcion != null && !checked && (
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', flexShrink: 0 }}>
+                {item.peso_porcion}{item.peso_porcion_unidad ?? 'g'}/porc
+              </span>
+            )}
+          </div>
           {item.receta_id && !checked && (
             <span style={{ fontSize: 9, color: '#4361a0', fontWeight: 600 }}>receta</span>
           )}
@@ -401,19 +415,6 @@ export function ProductoMiseCard({
             </span>
           </>
         )}
-
-        {/* Prio badge */}
-        <button
-          onClick={() => onPrioChange(item, nextPrio(item.prioridad))}
-          style={{
-            ...btnReset, flexShrink: 0,
-            padding: '3px 7px', borderRadius: 7,
-            background: prio.bg, border: `1px solid ${prio.color}40`,
-            fontSize: 10, fontWeight: 800, color: prio.color, transition: 'all .15s',
-          }}
-        >
-          {prio.label}
-        </button>
 
         {/* Production toggle — abre el sheet unificado de crear tarea */}
         {!checked && (
@@ -541,80 +542,63 @@ export function ProductoMiseCard({
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)', textTransform: 'capitalize' as const }}>
               {item.recipiente_nombre}
             </span>
-            <span style={{ fontSize: 10, color: 'var(--text-3)' }}>× {item.recipiente_capacidad} porc</span>
-            {item.peso_porcion != null && (
-              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(67,97,160,.1)', color: 'var(--accent)' }}>
-                {item.peso_porcion}{item.peso_porcion_unidad ?? 'g'} c/u
-              </span>
-            )}
+            <span style={{ fontSize: 10, color: 'var(--text-3)' }}>→ {item.recipiente_capacidad} porc</span>
             {pesoTotalRecipientes != null && (
               <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(16,185,129,.12)', color: '#059669' }}>
-                = {fmtPeso(pesoTotalRecipientes, item.peso_porcion_unidad ?? 'g')} total
+                {fmtPeso(pesoTotalRecipientes, item.peso_porcion_unidad ?? 'g')} total
               </span>
             )}
           </div>
-          {/* Hay ahora / falta */}
-          <div style={{ display: 'flex', gap: 6 }}>
-            {/* Editable "hay ahora" */}
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 3 }}>
-                hay ahora
-              </div>
-              {editingStock ? (
-                <input
-                  autoFocus type="number" inputMode="decimal" value={stockInput}
-                  onChange={e => setStockInput(e.target.value)}
-                  onBlur={() => {
-                    setEditingStock(false)
-                    const v = stockInput === '' ? null : parseFloat(stockInput)
-                    onUpsert(item.id, fecha, turno, { cantidad_actual: (!v && v !== 0) ? null : v })
-                  }}
-                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-                  style={{
-                    width: '100%', padding: '5px 9px', borderRadius: 8, boxSizing: 'border-box',
-                    border: '1.5px solid #3b82f6', background: 'rgba(59,130,246,.08)',
-                    fontSize: 14, fontWeight: 800, color: '#3b82f6',
-                    fontFamily: "'DM Mono', monospace", outline: 'none',
-                  }}
-                />
-              ) : (
-                <div
-                  onClick={() => { setStockInput(stockDisplay?.toString() ?? ''); setEditingStock(true) }}
-                  style={{
-                    padding: '5px 9px', borderRadius: 8, cursor: 'text',
-                    background: stockDisplay === null ? 'var(--bg)' : 'rgba(148,163,184,.1)',
-                    border: `1.5px dashed ${stockDisplay === null ? 'var(--border)' : 'transparent'}`,
-                    fontSize: stockDisplay !== null ? 14 : 11, fontWeight: 800,
-                    color: stockDisplay === null ? 'var(--text-3)' : 'var(--text-1)',
-                    fontFamily: "'DM Mono', monospace", display: 'flex', alignItems: 'baseline', gap: 3,
-                  }}
-                >
-                  {stockDisplay !== null
-                    ? <>{stockDisplay}<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)' }}> / {item.recipiente_capacidad}</span><span style={{ fontSize: 10, fontWeight: 600, marginLeft: 2 }}>{item.unidad}</span></>
-                    : <span style={{ fontSize: 12, color: 'var(--text-3)' }}>— / {item.recipiente_capacidad}</span>}
-                </div>
-              )}
+          {/* "Hay ahora" — el déficit ("falta producir") no tiene caja propia:
+              vive solo en el botón de abajo, para no repetir el mismo número
+              dos veces en la tarjeta. */}
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 3 }}>
+              hay ahora
             </div>
-            {/* Déficit */}
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: '.06em', marginBottom: 3 }}>
-                falta producir
+            {editingStock ? (
+              <input
+                autoFocus type="number" inputMode="decimal" value={stockInput}
+                onChange={e => setStockInput(e.target.value)}
+                onBlur={() => {
+                  setEditingStock(false)
+                  const v = stockInput === '' ? null : parseFloat(stockInput)
+                  const vFinal = (!v && v !== 0) ? null : v
+                  // Si con este stock ya no falta producir nada, se tilda solo —
+                  // evita el tap extra de ir a buscar el checkbox después de contar.
+                  const deficitFinal = vFinal !== null
+                    ? Math.max(0, (item.recipiente_capacidad ?? 0) + demandaViva - vFinal)
+                    : null
+                  onUpsert(item.id, fecha, turno, {
+                    cantidad_actual: vFinal,
+                    ...(deficitFinal === 0 && !checked ? { completado: true } : {}),
+                  })
+                }}
+                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                style={{
+                  width: '100%', padding: '5px 9px', borderRadius: 8, boxSizing: 'border-box',
+                  border: '1.5px solid #3b82f6', background: 'rgba(59,130,246,.08)',
+                  fontSize: 14, fontWeight: 800, color: '#3b82f6',
+                  fontFamily: "'DM Mono', monospace", outline: 'none',
+                }}
+              />
+            ) : (
+              <div
+                onClick={() => { setStockInput(stockDisplay?.toString() ?? ''); setEditingStock(true) }}
+                style={{
+                  padding: '5px 9px', borderRadius: 8, cursor: 'text',
+                  background: stockDisplay === null ? 'var(--bg)' : 'rgba(148,163,184,.1)',
+                  border: `1.5px dashed ${stockDisplay === null ? 'var(--border)' : 'transparent'}`,
+                  fontSize: stockDisplay !== null ? 14 : 11, fontWeight: 800,
+                  color: stockDisplay === null ? 'var(--text-3)' : 'var(--text-1)',
+                  fontFamily: "'DM Mono', monospace", display: 'flex', alignItems: 'baseline', gap: 3,
+                }}
+              >
+                {stockDisplay !== null
+                  ? <>{stockDisplay}<span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)' }}> / {item.recipiente_capacidad}</span><span style={{ fontSize: 10, fontWeight: 600, marginLeft: 2 }}>{item.unidad}</span></>
+                  : <span style={{ fontSize: 12, color: 'var(--text-3)' }}>— / {item.recipiente_capacidad}</span>}
               </div>
-              <div style={{
-                padding: '5px 9px', borderRadius: 8,
-                background: deficit === null ? 'var(--surface)' : deficit === 0 ? 'rgba(34,197,94,.12)' : 'rgba(239,68,68,.10)',
-                border: `1px solid ${deficit === null ? 'var(--border)' : deficit === 0 ? 'rgba(34,197,94,.25)' : 'rgba(239,68,68,.28)'}`,
-                fontSize: 14, fontWeight: 800,
-                color: deficit === null ? 'var(--text-3)' : deficit === 0 ? '#22c55e' : '#ef4444',
-                fontFamily: "'DM Mono', monospace", display: 'flex', alignItems: 'baseline', gap: 3,
-              }}>
-                {deficit === null
-                  ? <span style={{ fontSize: 11, fontWeight: 600 }}>—</span>
-                  : deficit === 0
-                    ? <span style={{ fontSize: 11, fontWeight: 700 }}>stock ok</span>
-                    : <>{deficit}<span style={{ fontSize: 10, fontWeight: 600, marginLeft: 2 }}>{item.unidad}</span></>}
-              </div>
-            </div>
+            )}
           </div>
           {/* CTA rápido cuando hay déficit */}
           {deficit !== null && deficit > 0 && (
@@ -709,6 +693,20 @@ export function ProductoMiseCard({
                 <span style={{ fontSize: 11, color: 'var(--text-3)' }}>· {item.ubicacion}</span>
               )}
               <div style={{ flex: 1 }} />
+              {/* Prioridad del ítem — default para la próxima tarea que se cree
+                  desde acá. Vive en el panel expandido (no en la fila principal)
+                  porque se toca poco: casi siempre se elige al crear la tarea. */}
+              <button
+                onClick={() => onPrioChange(item, nextPrio(item.prioridad))}
+                style={{
+                  ...btnReset,
+                  padding: '3px 7px', borderRadius: 7,
+                  background: prio.bg, border: `1px solid ${prio.color}40`,
+                  fontSize: 10, fontWeight: 800, color: prio.color, transition: 'all .15s',
+                }}
+              >
+                {prio.label}
+              </button>
               <button
                 onClick={() => onDelete(item.id)}
                 style={{
