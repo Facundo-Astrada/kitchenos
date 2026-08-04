@@ -10,7 +10,7 @@ import type { SegmentedTab, FilterChip } from '@/components/ui'
 ```
 
 - **`SegmentedTabs`** — tabs pill. `variant="onDark"` (default, pill blanco sobre navy, usar dentro de `background: var(--navy)`) o `"onLight"` (pill card, sub-tabs). Props: `tabs: {id,label,icon?}[]`, `active`, `onChange`.
-- **`FilterChips`** — chips con scroll horizontal + fade. `context="onLight"` (default, activo navy sólido) o `"onDark"` (fondo rgba blanco). Props: `chips: {value,label}[]`, `active`, `onChange`.
+- **`FilterChips`** — chips con scroll horizontal + fade. `context="onLight"` (default, activo navy sólido) o `"onDark"` (activo pill **blanco** con texto navy, igual que `SegmentedTabs` onDark — navy sobre navy es invisible y deja al inactivo pareciendo el seleccionado). Props: `chips: {value,label}[]`, `active`, `onChange`.
 - **`EmptyState`** — único estado vacío de la app. Props: `icon` (Material Symbol), `title`, `subtitle?`, `cta?: {label, onClick}`.
 - **`HeaderAction`** — botón de acción primaria, siempre dentro del header navy. Props: `label` (default `'Nuevo'`), `icon` (default `'add'`), `onClick`, `disabled?`.
 - **`Avatar`** — iniciales con color determinístico por hash del nombre. Paleta fija: navy `#4361a0`, verde `#10b981`, naranja `#f97316`, violeta `#8b5cf6`, rosa `#ec4899`, azul `#0ea5e9`. Props: `name`, `size?` (default 40).
@@ -75,6 +75,22 @@ Contenido variable (listas largas) siempre necesita `maxHeight` + scroll interno
 }
 ```
 Los botones del toggle llevan `flex:1, minWidth:0` siempre (en desktop es no-op sin espacio libre, pero evita duplicar el componente por breakpoint).
+
+## Toggle de pills: `flex:1` fija `flex-basis:0` y desborda el activo
+
+`flex: 1` en los botones de un toggle iguala anchos **ignorando el contenido**, así que el activo (el único que suele mostrar subtítulo) se derrama fuera del pill. Usar `flex: '1 1 auto'`: el ancho parte del contenido y recién después reparte el sobrante, que es lo que hace falta cuando el wrapper fuerza `width:100%` en mobile. Sumar `overflow:hidden` como red para pantallas muy angostas.
+
+## Header de pantalla operativa — no apilar una fila por control
+
+Cada fila del header navy le come ~12% de alto a un celular. Reglas: la **fecha solo si no es hoy** (si el módulo usa jornada operativa, comparar contra `fechaEnTz(new Date())`, no contra la jornada); los selectores que se cambian rara vez (turno) van como chips chicos junto al título, no en fila propia; la barra de progreso comparte fila con los tabs. Nunca repetir el mismo dato como título y como selector.
+
+## Densidad de tarjeta operativa — un dato, un lugar
+
+En pantallas que se usan de pie y con apuro, todo número que se pueda derivar de otros dos es ruido. No mostrar `N × peso` **y** el total; no mostrar un déficit calculado en una caja propia **y** dentro del CTA que lo resuelve. Los controles que se tocan poco (prioridad, borrar) van en un panel que se expande, no en la fila principal. Recalcular en `onChange`, no en `onBlur`, para que el CTA reaccione mientras se tipea; y si el dato cargado ya completa el ítem, tildarlo solo en vez de exigir el tap extra.
+
+## Grillas multi-columna sobre listas con drag vertical
+
+Un reordenar por long-press que compara `clientY` contra el centro de cada ítem (patrón del mise, `checklist/ClientView.tsx`) **se rompe** con dos tarjetas lado a lado: mismo centro vertical, el "más cercano" sale al azar. Si se agrega una grilla en desktop, condicionarla a `@media (min-width: 1024px) and (pointer: fine)` — no solo al ancho — para que una tablet táctil ancha (iPad landscape = 1024px) conserve columna única y drag funcionando.
 
 ## FABs
 

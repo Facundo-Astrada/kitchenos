@@ -1,24 +1,19 @@
-# Sesión — 2026-08-04
+# Sesión — 2026-08-04 (cont.)
 
 ## Qué se cerró
-- Editor de composición de Carta (Plato/Menú/Evento), a partir de feedback + capturas reales de Facundo:
-  - Buscador de sección ya no se cierra tras cada ítem agregado en Menú/Evento (llevado del patrón que ya tenía Plato).
-  - Gramaje editable con un tap en la fila colapsada (sin expandir el ítem entero) + cadena completa "buscar → elegir → gramaje se abre solo → Enter → foco vuelve al buscador" en Menú/Evento y en Plato.
-  - Crear receta con foto/texto por IA sin salir de Carta (`RecetaIAModal` en `ComposicionEditor.tsx`, helpers en `lib/recetas/iaImport.ts`, reusa `/api/recetas/import`): ingredientes editables (cantidad/unidad), auto-match contra stock existente o crear el producto ahí mismo, procedimiento editable — antes "crear idea" dejaba una receta vacía con solo el nombre.
-  - Vistazo rápido de ingredientes (ícono de ojo) en los 3 buscadores de receta (sección Menú/Evento, campo Nombre del ítem, buscador de Plato).
-  - Aviso fijo en Composición: "cada componente es una sola receta o ingrediente" (evita cargar "polenta, queso y hongos" como un solo ítem).
-- Build + typecheck verdes en cada ronda. Debugueado dos veces un dev server con proceso node huérfano tapando el puerto 3000 (`taskkill` + reinicio limpio) — si vuelve a pasar, `netstat -ano | grep :3000` y matar el PID antes de levantar de nuevo.
-- Decisión sin código: NO sincronizar `recipiente_nombre`/`peso_porcion` del `OpsPanel` a `tareas`/Producción todavía — dato opcional, esperar feedback real de El Rescoldo (ver `PENDIENTES.md`).
-- Investigado sin código: cómo conectar Kitchen Coach para asistir activamente en el editor de Carta (no solo responder preguntas). Ya existe `crear_evento` en `app/api/coach/route.ts` como precedente funcional — falta decidir arquitectura (ver `PENDIENTES.md › Kitchen Coach — asistir en el editor de Carta`). Diferido a sesión aparte.
-- `ESTADO-ACTUAL.md`, `PENDIENTES.md` y `.claude/docs/importador.md` actualizados.
+- Legibilidad de OPS a partir de capturas reales de Facundo ("demasiados números sin sentido", "el header ocupa 1/3 de la pantalla"). Tres commits deployados: `8b810a2`, `912ac82`, `9359d8d`.
+- **Header del mise de 5 filas a 2:** fecha solo si la jornada operativa no coincide con el día calendario (corte 05:00), turno como chips junto a la plaza, progreso en la fila de los tabs.
+- **Tarjeta del mise:** peso de porción junto al nombre; se fue la redundancia `N × peso = total`; la caja "falta producir" se eliminó (era el mismo número del botón `Producir N`); el déficit recalcula al tipear y el ítem se auto-tilda si el stock cubre el objetivo; badge SP/P/REF al panel expandido. Grilla multi-columna en desktop + "hay ahora" en línea.
+- **Cuatro bugs reales encontrados de paso** (detalle y causa en `HISTORIAL.md`): `FilterChips` onDark con la selección visualmente invertida (afectaba también Menús y Tareas); el banner de "sin cierre del turno anterior" duplicando el mise entero; `ProduccionBoard` escondiendo columnas llenas porque `'baja'` es a la vez el fallback de prioridad y el bucket plegado; `OpsToggle` con `flex:1` desbordando el subtítulo fuera del pill.
+- `ESTADO-ACTUAL.md`, `PENDIENTES.md`, `HISTORIAL.md` y `.claude/docs/ui.md` actualizados (4 reglas nuevas en ui.md: pills con `flex:1`, densidad de header operativo, "un dato un lugar" en tarjetas, y grillas sobre listas con drag vertical).
 
 ## Qué quedó a medias
-- Todo lo de hoy compila y pasa build, pero **no se probó click-through en navegador real** dentro de esta sesión (sí se validó que el dev server sirve `/carta` sin error).
-- Arrastrado de sesiones previas, sin tocar: `mcp-index.js`, `mcp-sdk-client.js`, `mcp-stdio.js` y dos `.tgz` de paquetes MCP, sueltos sin commitear en la raíz — sigue esperando que Facundo diga si se borran o se revisan.
+- Nada a medias en código: los tres commits compilan, pasan typecheck y están en producción.
+- Arrastrado de sesiones previas, sin tocar: `mcp-index.js`, `mcp-sdk-client.js`, `mcp-stdio.js` y dos `.tgz` de paquetes MCP sueltos en la raíz sin commitear — sigue esperando que Facundo diga si se borran. También `.claude/settings.json` quedó modificado sin commitear (no es de esta sesión).
 
-## Probar primero mañana (o al retomar Carta)
-- Click-through real: crear una receta con foto, otra con texto pegado; vincular un ingrediente a un producto de stock existente y crear uno nuevo desde el modal; editar el procedimiento extraído; probar la cadena Enter-en-gramaje en Menú/Evento y en Plato; tocar el ícono de ojo en los 3 buscadores.
+## Probar primero mañana
+- Facundo probó el **primer** commit (header + tarjeta). Los otros dos NO se probaron en navegador: (a) que el board de Producción muestre los ítems de COMPONENTES/ENTRADAS/POSTRES/PRINCIPALES que antes se veían vacíos; (b) que el banner de apertura sin cierre previo sea una línea y no la lista completa; (c) en desktop, que la grilla del mise no deje huecos raros en secciones de pocos ítems; (d) en celular, que nada se haya movido (ahí el wrapper de la grilla es un `div` block, sin efecto).
 
 ## Próximo paso concreto
-- Ahora: sesión nueva de OPS (tema distinto, arranca aparte).
-- Cuando se retome Carta: decidir arquitectura A (Coach en vivo sobre el form sin guardar) vs B (extender el patrón de `crear_evento` con una tool que escribe a DB + refresh del editor) — recomendado B por reusar lo que ya funciona.
+- Si el click-through de arriba sale limpio, el tema OPS queda cerrado. El backlog abierto más caro sigue siendo el 🟠 Alto de `PENDIENTES.md`: invitación de usuarios (solo config de Supabase, sin código) y fiscal ARCA (necesita certificado real).
+- Pendiente de sesión aparte, ya especificado: Kitchen Coach asistiendo en el editor de Carta — arquitectura B recomendada (extender el patrón de `crear_evento`).

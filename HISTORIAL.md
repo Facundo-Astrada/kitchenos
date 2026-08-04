@@ -107,6 +107,18 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Estado actual — detalle histórico
 
+### Sesión 2026-08-04 (cont.) — Legibilidad de OPS: header del mise, tarjeta de producto, board y toggle
+
+Origen: capturas de Facundo del mise real ("hay demasiados números sin sentido para el que no entiende", "el header ocupa casi 1/3 de la pantalla del celular"). Sesión de auditoría visual + fixes, sin features nuevas. Tres commits: `8b810a2`, `912ac82`, `9359d8d`.
+
+- **Header del mise: 5 filas → 2.** Fecha oculta salvo que la jornada operativa no coincida con el día calendario (corte 05:00 — cerrando a la 1am la jornada sigue siendo "ayer", ahí sí se avisa, en ámbar). Turno como chips chicos junto al nombre de la plaza; barra de progreso a la fila de los tabs.
+- **Bug real en `FilterChips`:** en `context="onDark"` el chip **activo** era `background: var(--navy)` sobre un header navy — invisible — mientras el inactivo (`rgba(255,255,255,.08)`) sí se veía: la selección estaba visualmente **invertida**. Afectaba también Menús y Tareas. El activo pasa a pill blanco con texto navy.
+- **Tarjeta del mise sin números redundantes:** `N porciones × peso c/u = total` eran tres formas del mismo hecho; queda el total. Peso de porción junto al nombre. La caja "falta producir" se eliminó: era el mismo número que ya estaba en el botón `Producir N`. El déficit se recalcula en `onChange` (antes esperaba el `onBlur`) y el ítem se auto-tilda si el stock cargado ya cubre el objetivo. Badge SP/P/REF movido al panel que se expande al tocar el nombre.
+- **Bug real en el aviso de pase de turno:** `pendientesTurnoAnterior` sale de `items.filter(i => !registradosIds.has(i.id) || ...)`; sin cierre registrado **ningún** ítem tiene registro, así que "pendientes" era la plaza entera y el banner rojo listaba los 21 ítems que ya estaban en la lista de abajo, comiéndose la primera pantalla. Ese caso pasa a un aviso de una línea; el detalle queda solo para cuando sí hubo cierre y quedaron algunos colgados.
+- **Bug real en `ProduccionBoard`:** `'baja'` es a la vez el fallback de prioridad (`i.prioridad ?? 'baja'`) y el bucket plegado por defecto, así que una columna cargada entera desde Carta/Menú sin prioridad explícita se renderizaba aparentemente vacía (solo el "+N refuerzos y checks"). Ahora el plegado actúa solo si hay algo en SP/P a lo que no competirle.
+- **Bug real en `OpsToggle`:** `flex: 1` implica `flex-basis: 0`, así que los 4 botones quedaban del mismo ancho ignorando su contenido y el activo derramaba el subtítulo ("Carta+Menú+Evento") fuera del pill, sobre el navy. Pasa a `flex: '1 1 auto'`.
+- **Mise en desktop:** grilla `auto-fill` desde 320px + "hay ahora" en línea con campo acotado (antes una barra de ~1150px para dos dígitos). La grilla se condiciona a `(min-width: 1024px) and (pointer: fine)`, no solo al ancho: el reordenar del mise es un long-press táctil que compara `clientY` contra el centro vertical de cada ítem, y con dos tarjetas lado a lado ese cálculo elige al azar. Así una tablet táctil ancha (iPad landscape = 1024px exactos) conserva columna única y drag intacto — a costa de no ganar la grilla ahí.
+
 ### Sesión 2026-08-01 — Sesión 1 de `PLAN-FLUJO-2026-07.md`: infraestructura y configuración
 
 Sesión de solo config (sin tocar `app/`/`lib/`/`components/`), origen: auditoría del flujo de trabajo del 31 jul. Detalle completo en `PLAN-FLUJO-2026-07.md`.
