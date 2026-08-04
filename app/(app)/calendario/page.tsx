@@ -1,12 +1,15 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   useCalendario,
   TIPO_CONFIG,
   type EventoCalendario,
   type TipoEvento,
 } from '@/lib/hooks/useCalendario'
+import { useTareas } from '@/lib/hooks/useTareas'
+import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
+import { useDebounce } from '@/lib/hooks/useDebounce'
 
 /* ─── Helpers ─── */
 
@@ -124,9 +127,67 @@ export default function CalendarioPage() {
   const [editEvento, setEditEvento] = useState<EventoCalendario | null>(null)
 
   const {
-    eventos, proveedores, loading,
-    fetchEventos, crearEvento, actualizarEvento, eliminarEvento,
+    eventos, proveedores, notas, loading,
+    fetchEventos, crearEvento, actualizarEvento, eliminarEvento, guardarNota,
   } = useCalendario()
+  const { agregarTarea } = useTareas()
+  const isDesktop = useIsDesktop()
+
+  /* ── Notas del día seleccionado — autoguardado ── */
+  const [notaDraft, setNotaDraft] = useState('')
+  const [notaToast, setNotaToast] = useState<string | null>(null)
+  const notaTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const lastSelectedDateRef = useRef<string>('')
+  const notaDebounced = useDebounce(notaDraft, 800)
+
+  useEffect(() => {
+    if (lastSelectedDateRef.current === selectedDate) return
+    lastSelectedDateRef.current = selectedDate
+    setNotaDraft(notas[selectedDate]?.contenido ?? '')
+  }, [selectedDate, notas])
+
+  useEffect(() => {
+    const actual = notas[selectedDate]?.contenido ?? ''
+    if (notaDebounced === actual) return
+    if (lastSelectedDateRef.current !== selectedDate) return
+    guardarNota(selectedDate, notaDebounced)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notaDebounced])
+
+  useEffect(() => {
+    if (!notaToast) return
+    const t = setTimeout(() => setNotaToast(null), 2200)
+    return () => clearTimeout(t)
+  }, [notaToast])
+
+  const convertirLineaEnTarea = async () => {
+    const ta = notaTextareaRef.current
+    if (!ta) return
+    const cursor = ta.selectionStart ?? notaDraft.length
+    const antes = notaDraft.slice(0, cursor)
+    const inicioLinea = antes.lastIndexOf('\n') + 1
+    const finLinea = notaDraft.indexOf('\n', cursor)
+    const linea = notaDraft.slice(inicioLinea, finLinea === -1 ? undefined : finLinea).trim()
+    if (!linea) {
+      setNotaToast('Ubicá el cursor en una línea con texto')
+      return
+    }
+    try {
+      await agregarTarea({
+        titulo: linea.slice(0, 120),
+        descripcion: `Desde nota del calendario (${selectedDate})`,
+        status: 'pendiente',
+        estado: 'pendiente',
+        prioridad: 'media',
+        categoria: 'general',
+        seccion: 'general',
+        fecha_limite: selectedDate,
+      })
+      setNotaToast('Tarea creada')
+    } catch {
+      setNotaToast('No se pudo crear la tarea')
+    }
+  }
 
   /* Fetch on month change */
   useEffect(() => {
@@ -142,6 +203,15 @@ export default function CalendarioPage() {
     setCurrentMonth(m)
     setCurrentYear(y)
   }
+
+  const goHoy = () => {
+    const n = new Date()
+    setCurrentMonth(n.getMonth() + 1)
+    setCurrentYear(n.getFullYear())
+    setSelectedDate(today())
+  }
+
+  const esMesActual = currentMonth === now.getMonth() + 1 && currentYear === now.getFullYear()
 
   /* Events by date map */
   const eventosByDate = useMemo(() => {
@@ -164,14 +234,18 @@ export default function CalendarioPage() {
       .flatMap(([, evs]) => evs)
       .slice(0, 3)
       .map(ev => ({ titulo: ev.titulo, fecha: ev.fecha_inicio }))
+    const diasConNota = Object.values(notas).filter(n => n.contenido.trim() !== '').length
     localStorage.setItem('kc_screen_context', JSON.stringify({
       screen: 'calendario',
       totalEventos: eventos.length,
       eventosHoy,
       eventosProximos,
+      diaSeleccionado: selectedDate,
+      notaDiaSeleccionado: notas[selectedDate]?.contenido?.slice(0, 300) || null,
+      diasConNotaEsteMes: diasConNota,
     }))
     return () => localStorage.removeItem('kc_screen_context')
-  }, [eventos, eventosByDate])
+  }, [eventos, eventosByDate, notas, selectedDate])
   const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate])
   const selectedEvents = eventosByDate[selectedDate] ?? []
 
@@ -194,6 +268,24 @@ export default function CalendarioPage() {
       titulo: '',
       tipo: 'otro',
       fecha_inicio: selectedDate,
+      hora_inicio: '08:00',
+      hora_fin: '09:00',
+      descripcion: '',
+      proveedor_id: '',
+      recurrente: false,
+      frecuencia: 'semanal',
+    })
+    setShowForm(true)
+  }
+
+  /* Click en un día vacío de la grilla — crear directo, sin pasar por el FAB */
+  const openNewFormFor = (dateStr: string) => {
+    setSelectedDate(dateStr)
+    setEditEvento(null)
+    setFormData({
+      titulo: '',
+      tipo: 'otro',
+      fecha_inicio: dateStr,
       hora_inicio: '08:00',
       hora_fin: '09:00',
       descripcion: '',
@@ -467,15 +559,28 @@ export default function CalendarioPage() {
 
         {/* Month nav */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <button onClick={() => goMonth(-1)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 24 }}>chevron_left</span>
-          </button>
-          <span style={{ color: '#fff', fontSize: 16, fontWeight: 600 }}>
-            {MESES[currentMonth - 1]} {currentYear}
-          </span>
-          <button onClick={() => goMonth(1)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 24 }}>chevron_right</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <button onClick={() => goMonth(-1)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 24 }}>chevron_left</span>
+            </button>
+            <span style={{ color: '#fff', fontSize: 16, fontWeight: 600 }}>
+              {MESES[currentMonth - 1]} {currentYear}
+            </span>
+            <button onClick={() => goMonth(1)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 24 }}>chevron_right</span>
+            </button>
+          </div>
+          {!esMesActual && (
+            <button
+              onClick={goHoy}
+              style={{
+                background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff',
+                borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              Hoy
+            </button>
+          )}
         </div>
 
         {/* View toggle pills */}
@@ -504,131 +609,224 @@ export default function CalendarioPage() {
           </div>
         )}
 
-        {!loading && view === 'mes' && (
-          <>
-            {/* Day headers */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2, marginBottom: 4 }}>
-              {DIAS_SEMANA.map((d, i) => (
-                <div key={i} style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-3)', padding: '4px 0' }}>
-                  {d}
+        {!loading && view === 'mes' && (() => {
+          const maxPills = isDesktop ? 3 : 2
+
+          const notasPanel = (
+            <div style={{ ...cardStyle, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>edit_note</span>
+                  Notas del día
                 </div>
-              ))}
-            </div>
-
-            {/* Calendar grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2 }}>
-              {grid.map((cell, i) => {
-                const dateStr = toDateStr(cell.year, cell.month, cell.day)
-                const isToday = dateStr === today()
-                const isSelected = dateStr === selectedDate
-                const dayEvents = eventosByDate[dateStr] ?? []
-
-                return (
-                  <button
-                    key={i}
-                    onClick={() => setSelectedDate(dateStr)}
-                    style={{
-                      background: isSelected ? 'var(--navy)' : 'transparent',
-                      border: 'none',
-                      borderRadius: 10,
-                      padding: '6px 2px',
-                      cursor: 'pointer',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-                      minHeight: 44,
-                    }}
-                  >
-                    <span style={{
-                      fontSize: 14,
-                      fontWeight: isToday ? 700 : 400,
-                      color: isSelected ? '#fff' : !cell.inMonth ? 'var(--text-3)' : 'var(--text-1)',
-                      width: 28, height: 28, lineHeight: '28px', textAlign: 'center',
-                      borderRadius: 14,
-                      background: isToday && !isSelected ? 'var(--navy)' : 'transparent',
-                      ...(isToday && !isSelected ? { color: '#fff' } : {}),
-                    }}>
-                      {cell.day}
-                    </span>
-                    {/* Event dots */}
-                    {dayEvents.length > 0 && (
-                      <div style={{ display: 'flex', gap: 3 }}>
-                        {dayEvents.slice(0, 3).map((ev, j) => (
-                          <div
-                            key={j}
-                            style={{
-                              width: 6, height: 6, borderRadius: 3,
-                              background: ev.color || TIPO_CONFIG[ev.tipo]?.color || '#6b7280',
-                            }}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Selected day event list */}
-            <div style={{ marginTop: 20 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)', marginBottom: 10 }}>
-                {new Date(selectedDate + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                {notaToast && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{notaToast}</span>}
               </div>
+              <textarea
+                ref={notaTextareaRef}
+                value={notaDraft}
+                onChange={e => setNotaDraft(e.target.value)}
+                placeholder="Anotá pendientes de la semana, lo que se habló en una reunión..."
+                style={{
+                  width: '100%', minHeight: isDesktop ? 200 : 90, resize: 'vertical',
+                  border: '1px solid var(--border)', borderRadius: 10, padding: 10,
+                  fontSize: 13, color: 'var(--text-1)', background: 'var(--bg)', outline: 'none',
+                  fontFamily: 'inherit', lineHeight: 1.5,
+                }}
+              />
+              <button
+                onClick={convertirLineaEnTarea}
+                disabled={!notaDraft.trim()}
+                style={{
+                  alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6,
+                  background: 'none', border: '1px solid var(--border)', borderRadius: 8,
+                  padding: '6px 12px', fontSize: 12, fontWeight: 600, color: 'var(--text-2)',
+                  cursor: notaDraft.trim() ? 'pointer' : 'default', opacity: notaDraft.trim() ? 1 : 0.5,
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>task_alt</span>
+                Convertir línea en tarea
+              </button>
+            </div>
+          )
 
+          const eventsList = (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {selectedEvents.length === 0 && (
                 <div style={{ ...cardStyle, padding: 24, textAlign: 'center' }}>
                   <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--text-3)' }}>event_available</span>
                   <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '8px 0 0' }}>Sin eventos este día</p>
                 </div>
               )}
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {selectedEvents.map(ev => {
-                  const cfg = TIPO_CONFIG[ev.tipo] ?? TIPO_CONFIG.otro
-                  return (
-                    <button
-                      key={ev.id}
-                      onClick={() => openEditForm(ev)}
-                      style={{
-                        ...cardStyle,
-                        padding: '12px 14px',
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        borderLeft: `4px solid ${ev.color || cfg.color}`,
-                        cursor: ev._fromPedido ? 'default' : 'pointer',
-                        textAlign: 'left', width: '100%',
-                      }}
-                    >
-                      <div style={{
-                        width: 38, height: 38, borderRadius: 10,
-                        background: (ev.color || cfg.color) + '18',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                      }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 20, color: ev.color || cfg.color }}>
-                          {ev._fromPedido ? 'local_shipping' : cfg.icon}
+              {selectedEvents.map(ev => {
+                const cfg = TIPO_CONFIG[ev.tipo] ?? TIPO_CONFIG.otro
+                return (
+                  <button
+                    key={ev.id}
+                    onClick={() => openEditForm(ev)}
+                    style={{
+                      ...cardStyle,
+                      padding: '12px 14px',
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      borderLeft: `4px solid ${ev.color || cfg.color}`,
+                      cursor: ev._fromPedido ? 'default' : 'pointer',
+                      textAlign: 'left', width: '100%',
+                    }}
+                  >
+                    <div style={{
+                      width: 38, height: 38, borderRadius: 10,
+                      background: (ev.color || cfg.color) + '18',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 20, color: ev.color || cfg.color }}>
+                        {ev._fromPedido ? 'local_shipping' : cfg.icon}
+                      </span>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {ev.titulo}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                          {ev.hora_inicio?.slice(0, 5)} - {ev.hora_fin?.slice(0, 5)}
+                        </span>
+                        <span style={{
+                          fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 8,
+                          background: (ev.color || cfg.color) + '18',
+                          color: ev.color || cfg.color,
+                        }}>
+                          {cfg.label}
                         </span>
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {ev.titulo}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                            {ev.hora_inicio?.slice(0, 5)} - {ev.hora_fin?.slice(0, 5)}
-                          </span>
-                          <span style={{
-                            fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 8,
-                            background: (ev.color || cfg.color) + '18',
-                            color: ev.color || cfg.color,
-                          }}>
-                            {cfg.label}
-                          </span>
-                        </div>
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
-          </>
-        )}
+          )
+
+          const diaHeading = (
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)', textTransform: 'capitalize' }}>
+              {new Date(selectedDate + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </div>
+          )
+
+          return (
+            <div style={isDesktop ? { display: 'flex', gap: 20, alignItems: 'flex-start' } : undefined}>
+              <div style={{ flex: isDesktop ? 2 : undefined, minWidth: 0 }}>
+                {/* Day headers */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3, marginBottom: 4 }}>
+                  {DIAS_SEMANA.map((d, i) => (
+                    <div key={i} style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-3)', padding: '4px 0' }}>
+                      {d}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Calendar grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3 }}>
+                  {grid.map((cell, i) => {
+                    const dateStr = toDateStr(cell.year, cell.month, cell.day)
+                    const isToday = dateStr === today()
+                    const isSelected = dateStr === selectedDate
+                    const dayEvents = eventosByDate[dateStr] ?? []
+                    const tieneNota = !!notas[dateStr]?.contenido?.trim()
+
+                    return (
+                      <div key={i} style={{ position: 'relative' }}>
+                        <button
+                          onClick={() => setSelectedDate(dateStr)}
+                          style={{
+                            width: '100%',
+                            background: isSelected ? 'rgba(67,97,160,0.12)' : 'transparent',
+                            border: isSelected ? '2px solid var(--navy)' : '1px solid var(--border)',
+                            borderRadius: 10,
+                            padding: isSelected ? '3px 5px 5px' : '4px 6px 6px',
+                            cursor: 'pointer',
+                            display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 3,
+                            minHeight: isDesktop ? 118 : 64,
+                            textAlign: 'left',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span style={{
+                              fontSize: 13,
+                              fontWeight: isToday ? 700 : 500,
+                              color: !cell.inMonth ? 'var(--text-3)' : 'var(--text-1)',
+                              width: 22, height: 22, lineHeight: '22px', textAlign: 'center',
+                              borderRadius: 11,
+                              background: isToday ? 'var(--navy)' : 'transparent',
+                              ...(isToday ? { color: '#fff' } : {}),
+                            }}>
+                              {cell.day}
+                            </span>
+                            {tieneNota && (
+                              <span className="material-symbols-outlined" style={{ fontSize: 13, color: 'var(--text-3)' }}>edit_note</span>
+                            )}
+                          </div>
+
+                          {dayEvents.length > 0 && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                              {dayEvents.slice(0, maxPills).map((ev, j) => {
+                                const color = ev.color || TIPO_CONFIG[ev.tipo]?.color || '#6b7280'
+                                return (
+                                  <div
+                                    key={j}
+                                    style={{
+                                      fontSize: 10, fontWeight: 600, padding: '1px 5px', borderRadius: 4,
+                                      background: color + '20', color, borderLeft: `2px solid ${color}`,
+                                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    {ev.titulo}
+                                  </div>
+                                )
+                              })}
+                              {dayEvents.length > maxPills && (
+                                <span style={{ fontSize: 10, color: 'var(--text-3)', paddingLeft: 5 }}>
+                                  +{dayEvents.length - maxPills} más
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </button>
+
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openNewFormFor(dateStr) }}
+                          title="Nuevo evento este día"
+                          style={{
+                            position: 'absolute', bottom: 3, right: 3,
+                            width: 18, height: 18, borderRadius: 9, border: 'none',
+                            background: 'var(--surface)', color: 'var(--text-3)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+                          }}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: 13 }}>add</span>
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {!isDesktop && (
+                  <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {diaHeading}
+                    {notasPanel}
+                    {eventsList}
+                  </div>
+                )}
+              </div>
+
+              {isDesktop && (
+                <div style={{ flex: 1, minWidth: 300, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {diaHeading}
+                  {notasPanel}
+                  {eventsList}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* ── Weekly view ── */}
         {!loading && view === 'semana' && (

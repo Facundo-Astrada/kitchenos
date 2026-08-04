@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
 
@@ -41,6 +41,16 @@ export interface Proveedor {
   restaurante_id: string
 }
 
+export interface NotaCalendario {
+  id: string
+  restaurante_id: string
+  fecha: string          // 'YYYY-MM-DD'
+  contenido: string
+  autor_id: string | null
+  created_at: string
+  updated_at: string
+}
+
 interface PedidoRow {
   id: string
   proveedor_nombre: string
@@ -67,9 +77,10 @@ export function useCalendario() {
   restIdRef.current = RESTAURANTE_ID
   const [eventos, setEventos] = useState<EventoCalendario[]>([])
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
+  const [notas, setNotas] = useState<Record<string, NotaCalendario>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   /* Fetch eventos for a given month + auto-gen from pedidos */
   const fetchEventos = useCallback(async (mes: number, anio: number) => {
@@ -159,12 +170,65 @@ export function useCalendario() {
       }
 
       setEventos([...eventosDb, ...pedidoEventos, ...prodEventos])
+
+      // 4. Notas del mes (vinculadas a la fecha, no al evento)
+      const { data: notasData, error: notasErr } = await supabase
+        .from('calendario_notas')
+        .select('*')
+        .eq('restaurante_id', restIdRef.current)
+        .gte('fecha', primerDia)
+        .lte('fecha', ultimoDia)
+
+      if (notasErr) throw notasErr
+      setNotas(prev => {
+        const next = { ...prev }
+        for (const n of (notasData ?? []) as NotaCalendario[]) next[n.fecha] = n
+        return next
+      })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al cargar eventos del calendario'
       console.error('[useCalendario] fetchEventos Error:', msg)
       setError(msg)
     } finally {
       setLoading(false)
+    }
+  }, [supabase])
+
+  /* Guarda (o borra si queda vacía) la nota de un día — upsert por (restaurante_id, fecha) */
+  const guardarNota = useCallback(async (fecha: string, contenido: string) => {
+    if (!restIdRef.current) return
+    const trimmed = contenido
+    if (trimmed.trim() === '') {
+      setNotas(prev => {
+        const existente = prev[fecha]
+        if (!existente) return prev
+        const next = { ...prev }
+        delete next[fecha]
+        return next
+      })
+      const { error } = await supabase
+        .from('calendario_notas')
+        .delete()
+        .eq('restaurante_id', restIdRef.current)
+        .eq('fecha', fecha)
+      if (error) console.error('[useCalendario] guardarNota (delete) Error:', error.message)
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('calendario_notas')
+        .upsert(
+          { restaurante_id: restIdRef.current, fecha, contenido: trimmed, updated_at: new Date().toISOString() },
+          { onConflict: 'restaurante_id,fecha' },
+        )
+        .select('*')
+        .single()
+      if (error) throw error
+      setNotas(prev => ({ ...prev, [fecha]: data as NotaCalendario }))
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al guardar la nota'
+      console.error('[useCalendario] guardarNota Error:', msg)
     }
   }, [supabase])
 
@@ -224,17 +288,26 @@ export function useCalendario() {
     }
   }, [supabase])
 
+  /* Mes actualmente pedido por la pantalla — el realtime debe refetchear ESE
+     mes, no "hoy": si estás navegando septiembre y alguien crea un evento,
+     un refetch de agosto te lo esconde. */
+  const mesActualRef = useRef<{ mes: number; anio: number } | null>(null)
+  const fetchEventosTracked = useCallback(async (mes: number, anio: number) => {
+    mesActualRef.current = { mes, anio }
+    await fetchEventos(mes, anio)
+  }, [fetchEventos])
+
   /* Initial fetch + Realtime */
   useEffect(() => {
     const now = new Date()
-    fetchEventos(now.getMonth() + 1, now.getFullYear())
+    fetchEventosTracked(now.getMonth() + 1, now.getFullYear())
     fetchProveedores()
 
     const ch = supabase
       .channel('eventos-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'eventos' }, () => {
-        const n = new Date()
-        fetchEventos(n.getMonth() + 1, n.getFullYear())
+        const actual = mesActualRef.current ?? { mes: now.getMonth() + 1, anio: now.getFullYear() }
+        fetchEventos(actual.mes, actual.anio)
       })
       .subscribe()
 
@@ -244,11 +317,13 @@ export function useCalendario() {
   return {
     eventos,
     proveedores,
+    notas,
     loading,
     error,
-    fetchEventos,
+    fetchEventos: fetchEventosTracked,
     crearEvento,
     actualizarEvento,
     eliminarEvento,
+    guardarNota,
   }
 }
