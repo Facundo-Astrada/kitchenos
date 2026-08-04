@@ -882,7 +882,13 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
 
         {/* ── Arrastre del turno anterior (solo en apertura) — nunca bloquea,
             solo avisa. No le pide al que entra que reconstruya el cierre
-            de quien se fue: solo que cuente lo que va a mirar igual. ── */}
+            de quien se fue: solo que cuente lo que va a mirar igual.
+
+            Sin cierre registrado, NINGÚN ítem tiene registro previo, así que
+            "pendientes" es la plaza entera — listarlos sería duplicar la lista
+            que está justo abajo. En ese caso va solo el aviso de una línea.
+            El detalle se muestra únicamente cuando sí hubo cierre y quedaron
+            algunos colgados: ahí los nombres son información nueva. ── */}
         {!loading && tab === 'apertura' && pendientesTurnoAnterior.length > 0 && (
           <div style={{
             background: cierreAnteriorIncompleto ? 'rgba(239, 68, 68, 0.12)' : 'rgba(250, 204, 21, 0.15)',
@@ -891,34 +897,43 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
             marginBottom: 10,
             overflow: 'hidden',
           }}>
-            <div style={{ padding: '10px 14px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
               <span className="material-symbols-outlined" style={{ fontSize: 16, color: cierreAnteriorIncompleto ? '#dc2626' : '#ca8a04', flexShrink: 0 }}>
                 {cierreAnteriorIncompleto ? 'report' : 'warning'}
               </span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: cierreAnteriorIncompleto ? '#7f1d1d' : '#78350f', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-                {cierreAnteriorIncompleto ? 'Recibís sin cierre del turno anterior' : 'Pendiente del turno anterior'}
-              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: cierreAnteriorIncompleto ? '#7f1d1d' : '#78350f', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                  {cierreAnteriorIncompleto ? 'Recibís sin cierre del turno anterior' : 'Pendiente del turno anterior'}
+                </div>
+                {cierreAnteriorIncompleto && (
+                  <div style={{ fontSize: 12, color: '#7f1d1d', lineHeight: 1.4, marginTop: 3 }}>
+                    Nadie registró el cierre. Contá lo que veas al arrancar.
+                  </div>
+                )}
+              </div>
+              {!cierreAnteriorIncompleto && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#92400e', flexShrink: 0 }}>
+                  {pendientesTurnoAnterior.length} sin cerrar
+                </span>
+              )}
             </div>
-            {cierreAnteriorIncompleto && (
-              <div style={{ padding: '0 14px 6px', fontSize: 12, color: '#7f1d1d', lineHeight: 1.4 }}>
-                Nadie registró el cierre. Contá lo que veas al arrancar — no hace falta reconstruir el turno anterior.
+            {!cierreAnteriorIncompleto && (
+              <div style={{ padding: '0 14px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {pendientesTurnoAnterior.map(item => (
+                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#ca8a04', flexShrink: 0 }}>radio_button_unchecked</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#78350f' }}>{item.nombre}</span>
+                      {item.cantidad > 0 && (
+                        <span style={{ marginLeft: 6, fontSize: 11, color: '#92400e' }}>
+                          {item.cantidad} {item.unidad}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
-            <div style={{ padding: '0 14px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {pendientesTurnoAnterior.map(item => (
-                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 16, color: cierreAnteriorIncompleto ? '#dc2626' : '#ca8a04', flexShrink: 0 }}>radio_button_unchecked</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: cierreAnteriorIncompleto ? '#7f1d1d' : '#78350f' }}>{item.nombre}</span>
-                    {item.cantidad > 0 && (
-                      <span style={{ marginLeft: 6, fontSize: 11, color: cierreAnteriorIncompleto ? '#991b1b' : '#92400e' }}>
-                        {item.cantidad} {item.unidad}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         )}
 

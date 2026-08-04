@@ -24,11 +24,14 @@ export function OpsToggle({ value, onChange }: OpsToggleProps) {
             key={m}
             onClick={() => onChange(m)}
             style={{
-              // flex:1 solo tiene efecto cuando el wrapper fuerza width:100%
-              // (mobile, ver .ops-toggle-wrap en globals.css) — en desktop el
-              // contenedor no tiene espacio libre para repartir y esto es un
-              // no-op, así que es seguro dejarlo siempre activo.
-              flex: 1, minWidth: 0,
+              // `flex:1` implica `flex-basis:0`: los cuatro botones quedaban del
+              // mismo ancho ignorando su contenido, y el activo — el único que
+              // muestra subtítulo — se derramaba fuera del pill ("Carta+Menú+
+              // Evento" pisando el navy). Con basis `auto` el ancho parte del
+              // contenido y recién ahí reparte el sobrante, que es lo que hace
+              // falta cuando el wrapper fuerza width:100% en mobile
+              // (ver .ops-toggle-wrap en globals.css).
+              flex: '1 1 auto', minWidth: 0,
               padding: '5px 8px',
               borderRadius: 999,
               border: 'none',
@@ -40,13 +43,21 @@ export function OpsToggle({ value, onChange }: OpsToggleProps) {
               WebkitTapHighlightColor: 'transparent',
               touchAction: 'manipulation',
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0,
+              // Red de contención para pantallas muy angostas, donde minWidth:0
+              // todavía permite encoger por debajo del contenido: recorta dentro
+              // del pill en vez de derramar sobre el navy.
+              overflow: 'hidden',
             }}
           >
             <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em', whiteSpace: 'nowrap' }}>
               {m === 'menu' ? 'Menú' : m === 'evento' ? 'Evento' : m === 'todo' ? 'Todo' : 'Carta'}
             </span>
             {active && (
-              <span style={{ fontSize: 8, fontWeight: 600, opacity: esTodo ? 0.85 : 0.5, letterSpacing: '.03em', lineHeight: 1.25, textAlign: 'center' }}>
+              <span style={{
+                fontSize: 8, fontWeight: 600, opacity: esTodo ? 0.85 : 0.5,
+                letterSpacing: '.03em', lineHeight: 1.25, textAlign: 'center',
+                maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
                 {m === 'carta' ? 'Por prioridad' : m === 'todo' ? 'Carta+Menú+Evento' : 'Por categoría'}
               </span>
             )}
