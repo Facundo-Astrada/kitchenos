@@ -79,7 +79,12 @@ function Repercute({ children }: { children: React.ReactNode }) {
 }
 
 // ══════════════════════════════════════════════════════════════
-export function MiseGuiaSheet({ foco, onClose }: { foco?: MiseGuiaFoco; onClose: () => void }) {
+export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
+  foco?: MiseGuiaFoco
+  onClose: () => void
+  /** Presente solo si hay una plaza abierta: cierra la guía y arranca el recorrido guiado. */
+  onVerEnPantalla?: () => void
+}) {
   const isDesktop = useIsDesktop()
   useSheetOpenWhen(true)
   const scrollRef = useRef<HTMLDivElement | null>(null)
@@ -356,6 +361,21 @@ export function MiseGuiaSheet({ foco, onClose }: { foco?: MiseGuiaFoco; onClose:
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>Cómo funciona el Mise</div>
         <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Qué hace cada botón y cómo llega al turno siguiente</div>
       </div>
+      {/* Mismo contenido, otra forma: señalado sobre la pantalla real */}
+      {onVerEnPantalla && (
+        <button
+          onClick={onVerEnPantalla}
+          title="Ver cada botón señalado sobre la pantalla"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
+            padding: '6px 11px', borderRadius: 999, border: 'none', cursor: 'pointer',
+            background: '#f97316', color: '#fff', fontSize: 11.5, fontWeight: 700, fontFamily: 'inherit',
+          }}
+        >
+          <span className={ICON} style={{ fontSize: 15 }}>ads_click</span>
+          Verlo en pantalla
+        </button>
+      )}
       <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }}>
         <span className={ICON} style={{ fontSize: 22, color: 'var(--text-3)' }}>close</span>
       </button>

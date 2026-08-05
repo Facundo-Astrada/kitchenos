@@ -346,6 +346,7 @@ export function ProductoMiseCard({
 
         {/* Checkbox */}
         <button
+          data-coach-target="mise-item-check"
           onClick={() => onUpsert(item.id, fecha, turno, { completado: !checked })}
           style={{ ...btnReset, flexShrink: 0 }}
         >
@@ -369,7 +370,7 @@ export function ProductoMiseCard({
               {item.nombre}
             </span>
             {tieneRecipiente && item.peso_porcion != null && !checked && (
-              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', flexShrink: 0 }}>
+              <span data-coach-target="mise-item-peso" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', flexShrink: 0 }}>
                 {item.peso_porcion}{item.peso_porcion_unidad ?? 'g'}/porc
               </span>
             )}
@@ -390,7 +391,7 @@ export function ProductoMiseCard({
 
         {/* En cierre: stock dots + input editable */}
         {esCierre && (
-          <>
+          <div data-coach-target="mise-item-cierre" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <StockDots cantActual={cantActual} target={item.cantidad} />
             <input
               type="number"
@@ -413,12 +414,13 @@ export function ProductoMiseCard({
             <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 700, flexShrink: 0 }}>
               / {item.cantidad} {item.unidad}
             </span>
-          </>
+          </div>
         )}
 
         {/* Production toggle — abre el sheet unificado de crear tarea */}
         {!checked && (
           <button
+            data-coach-target="mise-item-tarea"
             onClick={() => setCrearTareaSheetOpen(true)}
             style={{ ...btnReset, flexShrink: 0, position: 'relative', padding: 2 }}
           >
@@ -537,7 +539,7 @@ export function ProductoMiseCard({
       {!esCierre && !checked && tieneRecipiente && (
         <div style={{ padding: '0 12px 10px', paddingLeft: 44 }}>
           {/* Recipiente chip */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8, flexWrap: 'wrap' as const }}>
+          <div data-coach-target="mise-item-recipiente" style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8, flexWrap: 'wrap' as const }}>
             <span className="material-symbols-outlined" style={{ fontSize: 13, color: 'var(--text-3)' }}>inventory_2</span>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)', textTransform: 'capitalize' as const }}>
               {item.recipiente_nombre}
@@ -553,7 +555,7 @@ export function ProductoMiseCard({
               dígitos, no necesita el ancho completo de la tarjeta). El déficit
               ("falta producir") no tiene caja propia: vive solo en el botón de
               abajo, para no repetir el mismo número dos veces. */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div data-coach-target="mise-item-hayahora" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' as const, letterSpacing: '.06em', flexShrink: 0 }}>
               hay ahora
             </div>
@@ -605,6 +607,7 @@ export function ProductoMiseCard({
           {/* CTA rápido cuando hay déficit */}
           {deficit !== null && deficit > 0 && (
             <button
+              data-coach-target="mise-item-producir"
               onClick={() => handleCrearTareaRapida(deficit)}
               disabled={creating}
               style={{

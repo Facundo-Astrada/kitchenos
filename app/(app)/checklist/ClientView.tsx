@@ -11,6 +11,7 @@ import { ProductoMiseCard, PLAZA_TO_SECCION, MISE_PRIO_TO_TAREA } from '@/compon
 import type { PlatoPlaza, CrearTareaParams } from '@/components/mise/ProductoMiseCard'
 import { MiseGuiaSheet } from '@/components/mise/MiseGuiaSheet'
 import type { MiseGuiaFoco } from '@/components/mise/MiseGuiaSheet'
+import { MiseTourOverlay } from '@/components/mise/MiseTourOverlay'
 import { useProduccionRegistros } from '@/lib/hooks/useProduccionRegistros'
 import { useHaccp } from '@/lib/hooks/useHaccp'
 import { useFichaje } from '@/lib/hooks/useFichaje'
@@ -180,6 +181,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const [editRutina, setEditRutina] = useState<ChecklistRutina | null>(null)
   // Guía de uso del mise ("?" del header). `foco` abre directo en una sección.
   const [guia, setGuia] = useState<{ foco: MiseGuiaFoco } | null>(null)
+  // Recorrido guiado — la misma guía señalada sobre la pantalla real.
+  const [tourOn, setTourOn] = useState(false)
   const [fotoAuditoriaPend, setFotoAuditoriaPend] = useState<Record<string, string>>({})
   const [toast, setToast] = useState<string | null>(null)
   const [pendientesApertura, setPendientesApertura] = useState<MisePlaceItem[]>([])
@@ -786,7 +789,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
               </span>
             )}
             {tab !== 'rutina' && turnosActivos.length > 1 && (
-              <div style={{ display: 'flex', gap: 4 }}>
+              <div data-coach-target="mise-turno" style={{ display: 'flex', gap: 4 }}>
                 {turnosActivos.map(t => {
                   const activo = (turnoServicioId ?? turnosActivos[0].id) === t.id
                   return (
@@ -814,6 +817,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
             <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'rgba(255,255,255,.7)' }}>help</span>
           </button>
           <button
+            data-coach-target="mise-modo-control"
             onClick={toggleModoControl}
             title={modoControl ? 'Modo Control activo — tap para volver a OPS' : 'Activar Modo Control'}
             style={{
@@ -826,14 +830,14 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
               fact_check
             </span>
           </button>
-          <button onClick={() => setShowSectionEditor(true)} style={{ ...btnReset, background: 'rgba(255,255,255,.1)', borderRadius: 8, padding: 6 }}>
+          <button data-coach-target="mise-secciones-cfg" onClick={() => setShowSectionEditor(true)} style={{ ...btnReset, background: 'rgba(255,255,255,.1)', borderRadius: 8, padding: 6 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'rgba(255,255,255,.7)' }}>settings</span>
           </button>
         </div>
 
         {/* Fila 2: tabs + progreso, misma fila — libera la fila propia que tenía la barra */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 10 }}>
-          <div style={{ display: 'inline-flex', flexShrink: 0, background: 'rgba(255,255,255,.12)', borderRadius: 999, padding: 2, gap: 0 }}>
+          <div data-coach-target="mise-fases" style={{ display: 'inline-flex', flexShrink: 0, background: 'rgba(255,255,255,.12)', borderRadius: 999, padding: 2, gap: 0 }}>
             {(['apertura', 'cierre', 'rutina'] as Tab[]).map(t => (
               <button key={t} onClick={() => setTab(t)} {...(t === 'rutina' ? { 'data-coach-target': 'mise-tab-rutina' } : {})} style={{
                 padding: '5px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
@@ -849,7 +853,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
             ))}
           </div>
           {tab !== 'rutina' && (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <div data-coach-target="mise-progreso" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
               <div style={{ flex: 1, height: 3, background: 'rgba(255,255,255,.15)', borderRadius: 99, overflow: 'hidden' }}>
                 <div style={{ width: `${pct}%`, height: '100%', background: '#22c55e', borderRadius: 99, transition: 'width .3s' }} />
               </div>
@@ -1390,7 +1394,29 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       )}
 
       {/* Sheets */}
-      {guia && <MiseGuiaSheet foco={guia.foco} onClose={() => setGuia(null)} />}
+      {guia && (
+        <MiseGuiaSheet
+          foco={guia.foco}
+          onClose={() => setGuia(null)}
+          onVerEnPantalla={() => {
+            // El recorrido apunta a controles que viven dentro de la lista:
+            // se abren todas las secciones para que existan en el DOM, y el
+            // Modo Control se apaga porque esconde la mitad de los controles.
+            setCollapsed({})
+            setModoControl(false)
+            try { localStorage.setItem('checklist_modo_control', 'false') } catch { /* ignore */ }
+            setGuia(null)
+            setTimeout(() => setTourOn(true), 240)
+          }}
+        />
+      )}
+      {tourOn && (
+        <MiseTourOverlay
+          faseActual={tab}
+          onSetFase={f => setTab(f)}
+          onFinish={() => setTourOn(false)}
+        />
+      )}
       {showAddSheet && (
         <AddItemSheet
           seccionId={showAddSheet}
