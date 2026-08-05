@@ -209,3 +209,19 @@ Route group propio (`app/(servicio)/`), sin BottomNav, UX radicalmente distinta 
 - **Elementos decorativos** (`salon_elementos`) comparten canvas/drag/resize, config en `lib/salon/elementos.ts`; no clickeables en servicio (`pointerEvents:'none'`).
 - **Sillas** (`components/salon/Sillas.tsx`): glifos derivados de `forma+capacidad+ancho/alto`, sin estado propio.
 - Mesa sin color propio = madera `#a9744f`.
+
+## Listas largas: memo en la card + props estables
+
+Una lista de 40+ cards (el mise de una plaza, el board de OPS) se re-renderiza entera con cada cambio de estado del padre. La card va en `memo(...)` con comparador propio, y las props que le bajan tienen que ser estables o el memo no sirve de nada:
+
+- `[]` literal en el JSX → constante a nivel de módulo (`const SIN_PLAZAS: T[] = []`).
+- Handler inline (`onX={async () => ...}`) → `useCallback`.
+- Función que viene de un hook sin memoizar → `useCallback` local que la llama por `ref`, para no depender de su identidad.
+
+Los objetos que sí cambian (el registro de la fila) se comparan por campo dentro del comparador, no por referencia.
+
+## Guía de pantalla: texto y recorrido guiado
+
+Una pantalla densa lleva su explicación al lado, en dos formas sobre el mismo contenido: una hoja de lectura (`MiseGuiaSheet` — réplica visual de cada control + qué hace + cómo repercute después) y un recorrido que la señala sobre la pantalla real (`MiseTourOverlay` — fondo oscurecido, control recortado con borde naranja, viñeta con puntita). Ambos van por `createPortal(document.body)`: montados en el árbol de la pantalla, el panel lateral del Coach queda por encima del backdrop en desktop y la pantalla se oscurece a medias.
+
+El recorrido busca sus controles por `data-coach-target`, scrollea al centro antes de medir, cambia de tab si el paso lo necesita (y restaura el que tenía el usuario), y si un control no existe en esa cuenta saltea el paso solo.

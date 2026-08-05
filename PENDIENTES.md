@@ -53,6 +53,11 @@ La vista de servicio (Salón/KDS) ya tiene offline completo (SW cachea GETs, bum
 ### Tests — Testing Library para hooks
 Vitest + CI (typecheck+vitest+build por push/PR) + Playwright e2e (`e2e/salon-kds.spec.ts`) ya están. Falta Testing Library con mock del cliente Supabase para tests de hooks.
 
+### OPS — seguir bajando el peso en celular (ago 2026)
+Tras la auditoría, entrar a Mise en mobile bajó de 2582 kB / 64 requests a 899 kB / 46. Lo que queda, en orden de tamaño:
+- **`tareas` 594 kB** — es lo más pesado que queda. La ventana de 60 días de `useTareas` hoy recorta 11 filas (es preventiva, no ahorro inmediato). Apretarla a ~3 semanas daría el salto, pero rompe Planificación al navegar el calendario a un día viejo: primero hay que hacer que Planificación consulte por su cuenta las fechas fuera de la ventana.
+- **`productos` 66 kB en OPS** — sale del panel del Kitchen Coach, que baja 1000 filas solo para contar cuántas están en crítico (`CoachPanelContent.tsx`). Resolver con un count server-side (vista o RPC: `stock_actual <= stock_critico` es comparación entre columnas, PostgREST no la soporta directo).
+
 ### Backlog chico — sin síntoma de usuario reportado, priorizar solo si molesta en uso real
 - Warning "Maximum update depth exceeded" en `/checklist` (preexistente, no rompe funcionalidad visible — candidatos: `useChecklist`, `useProduccionRegistros`, o `ClientView.tsx`, no investigado a fondo).
 - HACCP: 3 modales largos (limpieza/vencimientos/temperaturas) sin agrupar — mismo problema que tenía el modal de Stock (muchos campos heterogéneos sin secciones), candidato a la misma cura de fondo pero con otro tratamiento (no son checkboxes, no aplica `SwitchRow`).

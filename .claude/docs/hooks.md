@@ -192,3 +192,21 @@ const total = data.reduce((s, r) => s + (r.cantidad_ops ?? 0), 0)
 ## OPS mise — helper compartido `lib/ops/mise.ts`
 
 Única fuente de verdad para escribir un ítem del mise: `upsertMiseChecklistItem({supabase, restauranteId, recetaId, nombre, plaza, seccionMiseId, cantidad, unidad, recipienteNombre?, pesoPorcion?, pesoPorcionUnidad?})` — busca/crea la `checklist_secciones` de la plaza y hace el upsert. Usado por Carta (`handleComposicionSave`) y Recetario (`RecetaOpsSheet`) — no duplicar. `PLAZAS_OPS`/`SECCIONES_OPS` viven ahí y se re-exportan desde `carta/ComposicionEditor`; importar desde `@/lib/ops/mise` en código nuevo.
+
+## Peso de la pantalla — el hook completo no siempre es el que va
+
+Antes de montar un hook en una pantalla, mirar qué baja realmente. Reglas:
+
+1. **Variante lite cuando solo se necesitan nombres.** `useRecetas` trae cada receta con todos sus ingredientes y le calcula el food cost (medio mega en una cuenta real). Para autocompletar o mostrar porciones va `useRecetasLite` (key SWR propia, compartida entre pantallas). Mismo criterio para cualquier hook "pesado" que se use solo por un campo.
+2. **`{ soloEscritura: true }`** en hooks que la pantalla usa únicamente para escribir (`useTareas`, `useHaccp`): pone la `swrKey` en `null` y no descarga nada; al escribir invalida la key real con `useSWRConfig().mutate(key)` para que las pantallas que sí muestran la lista se enteren.
+3. **Ventana de historia en tablas que crecen todos los días.** `tareas` suma ~40 filas diarias: el fetcher acota a 60 días (`turno_fecha.is.null,turno_fecha.gte.X` vía `.or`). El histórico largo lo consulta Reportes por su cuenta.
+4. **Realtime SIEMPRE con `filter: restaurante_id=eq.X`.** Sin el filter llegan las escrituras de todas las cuentas y disparan refetch en todos los dispositivos.
+5. **`restaurantes.configuracion` se lee por `useRestauranteConfig()`** (una sola key SWR compartida). Nunca una query propia: hay hooks que viven dentro de cada fila de una lista y terminan pidiendo la misma fila una vez por ítem.
+
+Medirlo, no estimarlo: `node scripts/shot.mjs --ruta /x --net` imprime kB y requests por tabla de una pantalla.
+
+## Escrituras del camino crítico — optimista primero, sin refetch
+
+Todo lo que el usuario tapea esperando feedback inmediato (tildar un ítem, cambiar un estado) actualiza el estado local en el mismo frame y **después** manda la escritura; si falla, se refetchea contra el servidor como rollback. Nunca `await escritura → await refetch` antes de pintar: son round-trips en serie y en la cocina, con 4G, se sienten como un segundo de nada por tap. Si el tap dispara varias escrituras (registro del mise + tareas vinculadas), van en `Promise.all`, no encadenadas.
+
+Corolario: `loading` es de la **primera** carga. Un flag que se prende en cada refetch deja la lista en blanco al cambiar de tab o de fecha, que es lo que se percibe como "navegar lento".
