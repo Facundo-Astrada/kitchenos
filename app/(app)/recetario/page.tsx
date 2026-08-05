@@ -11,6 +11,7 @@ import { useStock } from '@/lib/hooks/useStock'
 import { useCategoriasProducto } from '@/lib/hooks/useCategoriasProducto'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
+import { createClient } from '@/lib/supabase/client'
 import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
 import ImageCropModal from '@/components/ui/ImageCropModal'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
@@ -661,6 +662,21 @@ const gramosDe = (cant: number | null | undefined, unidad: string | null | undef
   return null
 }
 
+// Tamaño por porción cargado en el mise (checklist_items.peso_porcion), indexado
+// por receta+plaza — mismo criterio que Mesa de Trabajo/Carta.
+type PorcionMise = { peso: number; unidad: string }
+const misePorcionKey = (recetaId: string, plaza: string | null | undefined) => `${recetaId}|${plaza ?? ''}`
+
+// Edición inline del gramaje. Según de dónde salga el número que se está viendo,
+// el guardado va a plato_recetas.cantidad_ops o a checklist_items.peso_porcion.
+interface EdicionGramaje {
+  id: string            // plato_receta id
+  val: string
+  recetaId: string
+  plaza: string | null
+  enMise: boolean
+}
+
 function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoRecetaOps, actualizarItem, agregarPlatoReceta, eliminarPlatoReceta, agregarReceta, stockProductos, search, catFilter, isDesktop, isAdmin, canEdit, onOpenReceta }: {
   platos: CartaItemEnriquecido[]
   recetas: RecetaConCosto[]
@@ -678,7 +694,7 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
   canEdit: boolean
   onOpenReceta: (recetaId: string) => void
 }) {
-  const [editing, setEditing] = useState<{ id: string; val: string } | null>(null)
+  const [editing, setEditing] = useState<EdicionGramaje | null>(null)
   const [procEdit, setProcEdit] = useState<{ id: string; val: string } | null>(null)
   const [procSaving, setProcSaving] = useState(false)
   const [addingTo, setAddingTo] = useState<string | null>(null)   // plato id con buscador abierto
@@ -687,19 +703,48 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
   // Carga rápida de ingredientes para una idea nueva, abierta inline dentro de un plato
   const [ideaEnEdicion, setIdeaEnEdicion] = useState<{ platoId: string; nombre: string; filas: FilaIngredienteRapido[]; porciones: string } | null>(null)
 
+  // Tamaño por porción del mise. Cuando un componente tiene recipiente configurado,
+  // cantidad_ops deja de ser "gramos por plato" y pasa a ser "porciones que entran
+  // en el recipiente" — el gramaje real queda en checklist_items.peso_porcion. La
+  // ficha técnica tiene que mostrar ese número, igual que Mesa de Trabajo/Carta.
+  const supabase = useMemo(() => createClient(), [])
+  const restauranteId = useRestauranteId()
+  const [misePorciones, setMisePorciones] = useState<Record<string, PorcionMise>>({})
+
+  const cargarMisePorciones = useCallback(async () => {
+    if (!restauranteId) return
+    const { data, error } = await supabase.from('checklist_items')
+      .select('receta_id, plaza, peso_porcion, peso_porcion_unidad')
+      .eq('restaurante_id', restauranteId)
+      .not('peso_porcion', 'is', null)
+    if (error) { console.error('[Recetario/Platos] error cargando tamaños por porción:', error.message); return }
+    const map: Record<string, PorcionMise> = {}
+    for (const row of data ?? []) {
+      if (!row.receta_id || row.peso_porcion == null) continue
+      map[misePorcionKey(row.receta_id, row.plaza)] = { peso: row.peso_porcion, unidad: row.peso_porcion_unidad ?? 'g' }
+    }
+    setMisePorciones(map)
+  }, [supabase, restauranteId])
+
+  useEffect(() => { cargarMisePorciones() }, [cargarMisePorciones])
+
+  const porcionDe = useCallback(
+    (pr: { receta_id: string; plaza?: string | null }): PorcionMise | null =>
+      pr.plaza ? misePorciones[misePorcionKey(pr.receta_id, pr.plaza)] ?? null : null,
+    [misePorciones])
+
   // El input de gramaje solo guarda en su onBlur/Enter — si el usuario cambia de tab
   // o navega afuera mientras está editando, React desmonta el input SIN disparar blur
   // (los browsers no emiten blur cuando el nodo enfocado se remueve del DOM), y el
-  // valor tipeado se pierde en silencio. Este ref + cleanup flushea el guardado pendiente.
+  // valor tipeado se pierde en silencio. Este ref + cleanup flushea el guardado
+  // pendiente (commitRef para que el cleanup de unmount use la última versión).
   const editingRef = useRef(editing)
   useEffect(() => { editingRef.current = editing }, [editing])
+  const commitRef = useRef<(ed: EdicionGramaje) => void>(() => {})
   useEffect(() => () => {
     const pending = editingRef.current
-    if (!pending) return
-    const n = parseFloat(pending.val.replace(',', '.'))
-    const ok = !isNaN(n) && n > 0
-    actualizarPlatoRecetaOps(pending.id, { cantidad_ops: ok ? n : null, unidad_ops: ok ? 'g' : null })
-  }, [actualizarPlatoRecetaOps])
+    if (pending) commitRef.current(pending)
+  }, [])
 
   const platos = useMemo(() => {
     let list = allPlatos
@@ -714,13 +759,24 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
     return list
   }, [allPlatos, catFilter, search])
 
-  // El gramaje por plato se guarda siempre en gramos (unidad fija 'g').
-  async function guardarGramaje(prId: string, valStr: string) {
-    const n = parseFloat(valStr.replace(',', '.'))
-    const ok = !isNaN(n) && n > 0
-    await actualizarPlatoRecetaOps(prId, { cantidad_ops: ok ? n : null, unidad_ops: ok ? 'g' : null })
+  // El gramaje directo se guarda siempre en gramos (unidad fija 'g'). Si el número
+  // que se está editando es el tamaño por porción del mise, va a checklist_items
+  // (compartido por receta+plaza) conservando su unidad — igual que en CartaBoard.
+  async function guardarGramaje(ed: EdicionGramaje) {
     setEditing(null)
+    const n = parseFloat(ed.val.replace(',', '.'))
+    const ok = !isNaN(n) && n > 0
+    if (ed.enMise) {
+      if (!ok || !ed.plaza || !restauranteId) return
+      const { error } = await supabase.from('checklist_items').update({ peso_porcion: n })
+        .eq('restaurante_id', restauranteId).eq('receta_id', ed.recetaId).eq('plaza', ed.plaza)
+      if (error) { console.error('[Recetario/Platos] error guardando tamaño por porción:', error.message); return }
+      await cargarMisePorciones()
+      return
+    }
+    await actualizarPlatoRecetaOps(ed.id, { cantidad_ops: ok ? n : null, unidad_ops: ok ? 'g' : null })
   }
+  useEffect(() => { commitRef.current = guardarGramaje })
 
   async function guardarProc(id: string) {
     if (!procEdit) return
@@ -776,7 +832,10 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
   return (
     <div style={isDesktop ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, alignItems: 'start' } : { display: 'flex', flexDirection: 'column', gap: 10 }}>
       {platos.map(p => {
-        const totalG = p.plato_recetas.reduce((s, pr) => s + (gramosDe(pr.cantidad_ops, pr.unidad_ops) ?? 0), 0)
+        const totalG = p.plato_recetas.reduce((s, pr) => {
+          const mise = porcionDe(pr)
+          return s + (mise ? gramosDe(mise.peso, mise.unidad) ?? 0 : gramosDe(pr.cantidad_ops, pr.unidad_ops) ?? 0)
+        }, 0)
         const fc = p.food_cost_pct
         const fcColor = fc == null ? 'var(--text-3)' : fc < FC_ALERT_OK ? '#16a34a' : fc <= FC_ALERT_HIGH ? '#d97706' : '#dc2626'
         return (
@@ -803,7 +862,11 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
             <div>
               {p.plato_recetas.map((pr, idx) => {
                 const isEditing = editing?.id === pr.id
-                const g = gramosDe(pr.cantidad_ops, pr.unidad_ops)
+                // Con recipiente en el mise, el gramaje real del componente es el
+                // tamaño por porción; sin recipiente, cantidad_ops en gramos.
+                const mise = porcionDe(pr)
+                const g = mise ? mise.peso : gramosDe(pr.cantidad_ops, pr.unidad_ops)
+                const unidadG = mise ? mise.unidad : 'g'
                 const tieneG = g != null
                 const sinEstandarizar = faltaEstandarizar(pr.receta)
                 return (
@@ -817,20 +880,22 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
                         <input autoFocus type="number" value={editing.val}
                           onChange={e => setEditing({ ...editing, val: e.target.value })}
-                          onBlur={() => guardarGramaje(pr.id, editing.val)}
-                          onKeyDown={e => { if (e.key === 'Enter') guardarGramaje(pr.id, editing.val); if (e.key === 'Escape') setEditing(null) }}
+                          onBlur={() => guardarGramaje(editing)}
+                          onKeyDown={e => { if (e.key === 'Enter') guardarGramaje(editing); if (e.key === 'Escape') setEditing(null) }}
                           placeholder="30"
                           style={{ width: 60, textAlign: 'center', fontSize: 13, fontWeight: 700, border: '1.5px solid var(--accent)', borderRadius: 8, padding: '4px 6px', background: 'var(--bg)', color: 'var(--text-1)', outline: 'none', fontFamily: "'DM Mono', monospace" }} />
-                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)' }}>g</span>
-                        <button onMouseDown={e => { e.preventDefault(); guardarGramaje(pr.id, editing.val) }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#16a34a', display: 'flex' }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)' }}>{unidadG}</span>
+                        <button onMouseDown={e => { e.preventDefault(); guardarGramaje(editing) }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#16a34a', display: 'flex' }}>
                           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>check</span>
                         </button>
                       </div>
                     ) : (
-                      <button onClick={() => setEditing({ id: pr.id, val: tieneG ? String(g) : '' })}
+                      <button
+                        onClick={() => setEditing({ id: pr.id, val: tieneG ? String(g) : '', recetaId: pr.receta_id, plaza: pr.plaza ?? null, enMise: mise != null })}
+                        title={mise ? 'Tamaño por porción (cargado en el mise)' : 'Gramaje del componente en el plato'}
                         style={{ flexShrink: 0, border: `1px solid ${tieneG ? 'var(--border)' : 'rgba(249,115,22,.4)'}`, borderRadius: 8, background: tieneG ? 'var(--bg)' : 'rgba(249,115,22,.06)', padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit', minWidth: 52 }}>
                         {tieneG ? (
-                          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', fontFamily: "'DM Mono', monospace" }}>{g}<span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-3)', marginLeft: 2 }}>g</span></span>
+                          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', fontFamily: "'DM Mono', monospace" }}>{g}<span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-3)', marginLeft: 2 }}>{unidadG}</span></span>
                         ) : (
                           <span style={{ fontSize: 11, fontWeight: 700, color: '#f97316' }}>+ g</span>
                         )}
