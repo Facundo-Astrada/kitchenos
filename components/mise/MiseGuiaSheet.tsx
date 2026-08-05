@@ -1,0 +1,407 @@
+'use client'
+
+import { useEffect, useRef } from 'react'
+import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
+import { useSheetOpenWhen } from '@/lib/ui/chrome'
+
+// ══════════════════════════════════════════════════════════════
+// GUÍA DE USO DEL MISE — siempre a mano desde el "?" del header.
+// Explica cada control de la pantalla con una réplica visual del
+// control al lado del texto: qué hace, por qué está ahí y cómo
+// repercute en el turno siguiente. No consume IA — es contenido
+// estático, para que esté disponible aunque no haya red del lado
+// del Coach y sin costo por apertura.
+// ══════════════════════════════════════════════════════════════
+
+export type MiseGuiaFoco = 'primera-vez' | null
+
+const ICON = 'material-symbols-outlined'
+
+// ── Átomos visuales (réplicas de los controles reales) ────────
+function PillNavy({ children, activo }: { children: React.ReactNode; activo?: boolean }) {
+  return (
+    <span style={{
+      padding: '4px 11px', borderRadius: 999, fontSize: 10, fontWeight: 700,
+      textTransform: 'uppercase', letterSpacing: '.07em', whiteSpace: 'nowrap',
+      background: activo ? '#fff' : 'rgba(255,255,255,.12)',
+      color: activo ? 'var(--navy)' : 'rgba(255,255,255,.55)',
+    }}>{children}</span>
+  )
+}
+
+function DemoNavy({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      background: 'var(--navy)', borderRadius: 10, padding: '8px 10px',
+      display: 'inline-flex', alignItems: 'center', gap: 4, flexWrap: 'wrap',
+    }}>{children}</div>
+  )
+}
+
+/** Bloque de la guía: réplica del control arriba, explicación abajo. */
+function Bloque({ demo, titulo, children, id }: {
+  demo: React.ReactNode; titulo: string; children: React.ReactNode; id?: string
+}) {
+  return (
+    <div id={id} style={{
+      background: 'var(--surface)', border: '1px solid var(--border)',
+      borderRadius: 14, padding: '12px 14px', marginBottom: 8,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+        {demo}
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{titulo}</span>
+      </div>
+      <div style={{ fontSize: 12.5, lineHeight: 1.55, color: 'var(--text-2)' }}>{children}</div>
+    </div>
+  )
+}
+
+function Titulo({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      fontSize: 10, fontWeight: 800, color: 'var(--text-3)', textTransform: 'uppercase',
+      letterSpacing: '.08em', margin: '18px 2px 8px',
+    }}>{children}</div>
+  )
+}
+
+/** Frase de consecuencia — lo que pasa en el turno siguiente. */
+function Repercute({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      marginTop: 8, padding: '7px 10px', borderRadius: 9,
+      background: 'rgba(67,97,160,.07)', borderLeft: '3px solid var(--accent)',
+      fontSize: 11.5, lineHeight: 1.5, color: 'var(--text-2)',
+    }}>
+      <b style={{ color: 'var(--accent)' }}>Repercute en: </b>{children}
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════
+export function MiseGuiaSheet({ foco, onClose }: { foco?: MiseGuiaFoco; onClose: () => void }) {
+  const isDesktop = useIsDesktop()
+  useSheetOpenWhen(true)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+
+  // Foco opcional: abrir directamente en una sección (ej. desde el banner
+  // "recibís sin cierre del turno anterior" → cómo cargar la primera vez).
+  useEffect(() => {
+    if (!foco) return
+    const el = document.getElementById(`mise-guia-${foco}`)
+    if (el) setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+  }, [foco])
+
+  // Escape cierra (desktop)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const contenido = (
+    <>
+      {/* ── Qué es ── */}
+      <div style={{
+        background: 'linear-gradient(135deg, var(--navy), #4361a0)', borderRadius: 14,
+        padding: '14px 16px', color: '#fff', marginBottom: 4,
+      }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 5 }}>El mise es la foto de tu plaza</div>
+        <div style={{ fontSize: 12.5, lineHeight: 1.55, color: 'rgba(255,255,255,.85)' }}>
+          Cada ítem de esta lista es algo que tiene que estar preparado y en cantidad antes del servicio.
+          Al <b>abrir</b> contás lo que hay y producís lo que falta. Al <b>cerrar</b> anotás lo que quedó.
+          Ese número es exactamente el que va a ver quien abra el próximo turno.
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+          <PillNavy activo>Apertura</PillNavy>
+          <span className={ICON} style={{ fontSize: 15, color: 'rgba(255,255,255,.5)' }}>arrow_forward</span>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,.7)', fontWeight: 600 }}>servicio</span>
+          <span className={ICON} style={{ fontSize: 15, color: 'rgba(255,255,255,.5)' }}>arrow_forward</span>
+          <PillNavy activo>Cierre</PillNavy>
+          <span className={ICON} style={{ fontSize: 15, color: 'rgba(255,255,255,.5)' }}>arrow_forward</span>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,.7)', fontWeight: 600 }}>apertura de mañana</span>
+        </div>
+      </div>
+
+      {/* ── HEADER ── */}
+      <Titulo>Arriba de todo</Titulo>
+
+      <Bloque
+        titulo="Almuerzo / Cena — turno de servicio"
+        demo={<DemoNavy><PillNavy activo>Almuerzo</PillNavy><PillNavy>Cena</PillNavy></DemoNavy>}
+      >
+        Cada turno de servicio tiene su propia lista y sus propios números. Lo que tildás o contás en
+        Almuerzo no se mezcla con Cena. Se selecciona solo por hora, pero podés cambiarlo a mano.
+        Si tu restaurante tiene un solo turno configurado, este selector no aparece.
+        <Repercute>el cierre de <b>Almuerzo</b> es la referencia de la apertura de <b>Cena</b>, no la del día siguiente.</Repercute>
+      </Bloque>
+
+      <Bloque
+        titulo="Apertura / Cierre / Rutina"
+        demo={<DemoNavy><PillNavy activo>Apertura</PillNavy><PillNavy>Cierre</PillNavy><PillNavy>Rutina</PillNavy></DemoNavy>}
+      >
+        <b>Apertura:</b> arrancás el turno. Contás lo que hay de cada ítem y mandás a producir lo que falta.<br />
+        <b>Cierre:</b> terminás el turno. Anotás cuánto quedó de cada ítem — no cuánto usaste, cuánto <i>queda</i>.<br />
+        <b>Rutina:</b> tareas recurrentes de la plaza (limpieza, descongelado, control de fechas). Cada una
+        aparece solo el día que le toca. Ahí también caen las tareas de HACCP → Limpieza con &quot;Mostrar en OPS&quot;.
+        <Repercute>si nadie completa el <b>Cierre</b>, el que abre mañana arranca a ciegas y tiene que contar todo de cero.</Repercute>
+      </Bloque>
+
+      <Bloque
+        titulo="La barra de progreso — 0/20"
+        demo={
+          <DemoNavy>
+            <div style={{ width: 70, height: 3, background: 'rgba(255,255,255,.15)', borderRadius: 99, overflow: 'hidden' }}>
+              <div style={{ width: '35%', height: '100%', background: '#22c55e', borderRadius: 99 }} />
+            </div>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', fontFamily: "'DM Mono', monospace" }}>7/20</span>
+          </DemoNavy>
+        }
+      >
+        Cuántos ítems de <b>toda la plaza</b> están tildados en este turno y esta fase. Cada sección
+        (Heladera, Secos, Estación…) además lleva su propio contador en su encabezado.
+      </Bloque>
+
+      <Bloque
+        titulo="Modo Control y Editar secciones"
+        demo={
+          <DemoNavy>
+            <span className={ICON} style={{ fontSize: 18, color: 'rgba(255,255,255,.7)' }}>fact_check</span>
+            <span className={ICON} style={{ fontSize: 18, color: 'rgba(255,255,255,.7)' }}>settings</span>
+          </DemoNavy>
+        }
+      >
+        <b>fact_check (Modo Control):</b> deja la lista en una sola línea por ítem, sin cantidades ni
+        botones. Para pasar rápido tildando lo que ya está listo — típico del jefe de cocina revisando la plaza.<br />
+        <b>settings:</b> crear, renombrar, reordenar o borrar las secciones de esta plaza.
+      </Bloque>
+
+      {/* ── LA TARJETA ── */}
+      <Titulo>La tarjeta de cada ítem (apertura)</Titulo>
+
+      <Bloque
+        titulo="El círculo — marcar como resuelto"
+        demo={
+          <span className={ICON} style={{ fontSize: 26, color: '#22c55e' }}>check_circle</span>
+        }
+      >
+        Tildás cuando ese ítem <b>ya está como tiene que estar</b>: hay la cantidad pedida, o ya lo produjiste.
+        No significa &quot;lo miré&quot;, significa &quot;está&quot;. La tarjeta se apaga y suma al progreso de arriba.
+        <Repercute>si ese ítem tenía una tarea en <b>Producción</b>, tildarlo acá la marca como lista allá — y al revés.</Repercute>
+      </Bloque>
+
+      <Bloque
+        titulo="88 g/porc — peso de una porción"
+        demo={
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', border: '1px dashed var(--border)', borderRadius: 8, padding: '4px 8px' }}>
+            88g/porc
+          </span>
+        }
+      >
+        Lo que pesa <b>una</b> porción según la ficha de la receta. Es la traducción entre porciones y balanza:
+        15 porciones × 88 g = 1.32 kg. Si no aparece, esa receta todavía no tiene peso por porción cargado.
+      </Bloque>
+
+      <Bloque
+        titulo="El recipiente — 1.5 ×3 → 15 porc"
+        demo={
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+            <span className={ICON} style={{ fontSize: 14, color: 'var(--text-3)' }}>inventory_2</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>1.5 ×3</span>
+            <span style={{ fontSize: 10, color: 'var(--text-3)' }}>→ 15 porc</span>
+            <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(16,185,129,.12)', color: '#059669' }}>1.32kg total</span>
+          </div>
+        }
+      >
+        En qué se guarda y cuánto tiene que haber. <b>1.5 ×3</b> = tres recipientes GN 1.5 (el <b>×3</b> es la
+        cantidad de recipientes iguales). <b>→ 15 porc</b> es el objetivo del turno: lo que debería quedar
+        cargado entre los tres. El badge verde es ese objetivo pasado a peso, para controlarlo en balanza.
+      </Bloque>
+
+      <Bloque
+        titulo="HAY AHORA — el único número que cargás"
+        demo={
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em' }}>hay ahora</span>
+            <span style={{
+              padding: '5px 9px', borderRadius: 8, background: 'rgba(148,163,184,.1)',
+              fontSize: 13, fontWeight: 800, fontFamily: "'DM Mono', monospace", color: 'var(--text-1)',
+            }}>
+              9<span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)' }}> / 15</span>
+            </span>
+          </div>
+        }
+      >
+        Contás lo que hay físicamente y lo escribís. El número de la derecha es el objetivo, no se toca.
+        Viene precargado con lo que dejó registrado el cierre anterior: si es correcto lo dejás, si no lo corregís.
+        <br /><br />
+        Si al cargarlo <b>llega al objetivo, el ítem se tilda solo</b>. Si falta, aparece el botón rojo de producir.
+        <Repercute>este conteo es el que aparece como stock de arranque, y lo que cargues al <b>cerrar</b> es lo que va a ver el turno siguiente.</Repercute>
+      </Bloque>
+
+      <Bloque
+        titulo="Producir N porc — el botón rojo"
+        demo={
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 12px', borderRadius: 10,
+            background: 'linear-gradient(135deg, #ef4444, #f97316)', color: '#fff', fontSize: 11.5, fontWeight: 700,
+          }}>
+            <span className={ICON} style={{ fontSize: 14 }}>add_task</span>
+            Producir 6 porc (528g)
+          </span>
+        }
+      >
+        Aparece solo cuando hay déficit y ya trae la cuenta hecha: objetivo − lo que hay (+ lo que el salón ya
+        pidió hoy). Un tap crea la tarea en <b>Producción</b> con la cantidad exacta, prioridad alta y para hoy.
+        No hace falta abrir nada más.
+      </Bloque>
+
+      <Bloque
+        titulo="El botón de la derecha — mandar a Producción"
+        demo={
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+            <span className={ICON} style={{ fontSize: 22, color: 'var(--text-3)' }}>add_task</span>
+            <span className={ICON} style={{ fontSize: 22, color: '#22c55e' }}>task_alt</span>
+          </div>
+        }
+      >
+        Lo mismo que el botón rojo pero decidiendo vos: abre el panel para elegir cantidad, prioridad
+        (SP / P / REF / Check) y si es para <b>hoy o para mañana</b>. Usalo cuando querés dejar producción
+        encargada aunque hoy no falte.<br />
+        <b>Gris</b> = todavía no hay tarea creada para ese ítem hoy. <b>Verde</b> = ya hay una tarea abierta en Producción.
+        <Repercute>si elegís &quot;mañana&quot;, la tarea queda como pase de turno y aparece en la producción del día siguiente.</Repercute>
+      </Bloque>
+
+      {/* ── CIERRE ── */}
+      <Titulo>La tarjeta en Cierre</Titulo>
+
+      <Bloque
+        titulo="Cuánto quedó"
+        demo={
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 3 }}>
+              {[0, 1, 2, 3, 4].map(i => (
+                <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i < 2 ? '#f59e0b' : 'var(--border)' }} />
+              ))}
+            </div>
+            <span style={{
+              width: 34, textAlign: 'center', padding: '3px 4px', borderRadius: 7,
+              border: '1.5px solid #f97316', background: 'rgba(249,115,22,.07)',
+              fontSize: 12, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: 'var(--text-1)',
+            }}>6</span>
+            <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 700 }}>/ 15 u</span>
+          </div>
+        }
+      >
+        En cierre la tarjeta cambia: en vez de producir, se registra. Escribís cuánto quedó de cada ítem.
+        Los cinco puntitos son el semáforo — verde si quedó cerca del objetivo, amarillo o rojo si quedó poco.
+        Tildar el ítem en cierre significa &quot;lo conté y lo dejé registrado&quot;.
+        <Repercute>ese número entra tal cual en <b>HAY AHORA</b> de la próxima apertura. Un cierre bien contado le ahorra media hora al turno que entra.</Repercute>
+      </Bloque>
+
+      {/* ── PRIMERA VEZ ── */}
+      <Titulo>La primera vez</Titulo>
+
+      <Bloque
+        id="mise-guia-primera-vez"
+        titulo="Cargar por primera vez lo que hay"
+        demo={<span className={ICON} style={{ fontSize: 24, color: '#f97316' }}>counter_1</span>}
+      >
+        La primera vez (o cuando aparece el aviso rojo <b>&quot;Recibís sin cierre del turno anterior&quot;</b>) no hay
+        ningún número de referencia: nadie registró un cierre todavía. Es normal y no bloquea nada.
+        <div style={{ margin: '8px 0 0', paddingLeft: 2 }}>
+          <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+            <b>1.</b> Recorré la plaza con el celular y contá lo que ves, ítem por ítem.<br />
+            <b>2.</b> Escribí ese número en <b>HAY AHORA</b> (o en el campo de cantidad si el ítem no tiene recipiente).
+            Nada se rompe si te equivocás: se corrige escribiendo encima.<br />
+            <b>3.</b> Lo que falte para el objetivo, mandalo a producir con el botón rojo.<br />
+            <b>4.</b> Al terminar el turno, completá el <b>Cierre</b>. Ese es el paso que cierra el círculo.
+          </div>
+        </div>
+        <Repercute>a partir del primer cierre bien cargado, la apertura del turno siguiente ya viene con los números puestos y solo hay que confirmarlos. La primera semana es la única en que se cuenta todo de cero.</Repercute>
+      </Bloque>
+
+      <Bloque
+        titulo="¿De dónde salen los ítems de la lista?"
+        demo={
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span className={ICON} style={{ fontSize: 16, color: 'var(--accent)' }}>add</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)' }}>Agregar</span>
+          </span>
+        }
+      >
+        Cuatro caminos, todos terminan en la misma lista:<br />
+        <b>· Agregar</b> — el botón al pie de cada sección. Nombre, cantidad estándar y prioridad. Si lo vinculás
+        a una receta, arrastra porciones y plaza solo.<br />
+        <b>· Carta → OPS</b> — al definir en qué plaza se prepara un componente de un plato, se crea su ítem del mise.<br />
+        <b>· Recetario → OPS</b> — lo mismo desde la ficha de la receta, con recipiente y peso por porción.<br />
+        <b>· Planificación</b> — activar un menú del catálogo crea las tareas de producción del día.
+        <br /><br />
+        La <b>cantidad estándar</b> y el <b>recipiente</b> se cargan una sola vez y son los que definen el objetivo
+        de todos los turnos. Tocá el nombre del ítem para ver ese estándar, cambiarle la prioridad o eliminarlo.
+      </Bloque>
+
+      <div style={{ height: 8 }} />
+    </>
+  )
+
+  const head = (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px',
+      borderBottom: '1px solid var(--border)', flexShrink: 0,
+    }}>
+      <span className={ICON} style={{ fontSize: 22, color: 'var(--accent)' }}>help</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>Cómo funciona el Mise</div>
+        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Qué hace cada botón y cómo llega al turno siguiente</div>
+      </div>
+      <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }}>
+        <span className={ICON} style={{ fontSize: 22, color: 'var(--text-3)' }}>close</span>
+      </button>
+    </div>
+  )
+
+  if (isDesktop) {
+    return (
+      <div
+        onClick={e => { if (e.target === e.currentTarget) onClose() }}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,.55)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+        }}
+      >
+        <div style={{
+          background: 'var(--bg)', borderRadius: 18, width: '100%', maxWidth: 620,
+          maxHeight: '86vh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          boxShadow: '0 20px 60px rgba(0,0,0,.35)',
+        }}>
+          {head}
+          <div ref={scrollRef} style={{ overflowY: 'auto', flex: 1, padding: '12px 16px 16px' }}>
+            {contenido}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 2000, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)' }} />
+      <div style={{
+        position: 'relative', background: 'var(--bg)', borderRadius: '20px 20px 0 0',
+        maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 0', flexShrink: 0 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 99, background: 'var(--border)' }} />
+        </div>
+        {head}
+        <div ref={scrollRef} style={{
+          overflowY: 'auto', flex: 1, padding: '12px 14px',
+          paddingBottom: 'max(env(safe-area-inset-bottom), 20px)',
+        }}>
+          {contenido}
+        </div>
+      </div>
+    </div>
+  )
+}

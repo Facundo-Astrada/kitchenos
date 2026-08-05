@@ -9,6 +9,8 @@ import { useTareas } from '@/lib/hooks/useTareas'
 import { createClient } from '@/lib/supabase/client'
 import { ProductoMiseCard, PLAZA_TO_SECCION, MISE_PRIO_TO_TAREA } from '@/components/mise/ProductoMiseCard'
 import type { PlatoPlaza, CrearTareaParams } from '@/components/mise/ProductoMiseCard'
+import { MiseGuiaSheet } from '@/components/mise/MiseGuiaSheet'
+import type { MiseGuiaFoco } from '@/components/mise/MiseGuiaSheet'
 import { useProduccionRegistros } from '@/lib/hooks/useProduccionRegistros'
 import { useHaccp } from '@/lib/hooks/useHaccp'
 import { useFichaje } from '@/lib/hooks/useFichaje'
@@ -176,6 +178,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const [showSectionEditor, setShowSectionEditor] = useState(false)
   const [showAddRutina, setShowAddRutina] = useState(false)
   const [editRutina, setEditRutina] = useState<ChecklistRutina | null>(null)
+  // Guía de uso del mise ("?" del header). `foco` abre directo en una sección.
+  const [guia, setGuia] = useState<{ foco: MiseGuiaFoco } | null>(null)
   const [fotoAuditoriaPend, setFotoAuditoriaPend] = useState<Record<string, string>>({})
   const [toast, setToast] = useState<string | null>(null)
   const [pendientesApertura, setPendientesApertura] = useState<MisePlaceItem[]>([])
@@ -707,12 +711,20 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                 <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>arrow_back</span>
               </button>
             )}
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>Checklist de Plaza</div>
               <div style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', marginTop: 2 }}>Seleccioná tu plaza</div>
             </div>
+            <button
+              onClick={() => setGuia({ foco: null })}
+              title="Cómo funciona el Mise"
+              style={{ ...btnReset, background: 'rgba(255,255,255,.1)', borderRadius: 8, padding: 6 }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'rgba(255,255,255,.7)' }}>help</span>
+            </button>
           </div>
         </div>
+        {guia && <MiseGuiaSheet foco={guia.foco} onClose={() => setGuia(null)} />}
         <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             {plazasForSelector.map(p => {
@@ -793,6 +805,14 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
               </div>
             )}
           </div>
+          {/* Guía de uso — siempre a mano, sin pasar por el Coach */}
+          <button
+            onClick={() => setGuia({ foco: null })}
+            title="Cómo funciona el Mise"
+            style={{ ...btnReset, background: 'rgba(255,255,255,.1)', borderRadius: 8, padding: 6, marginRight: 4 }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'rgba(255,255,255,.7)' }}>help</span>
+          </button>
           <button
             onClick={toggleModoControl}
             title={modoControl ? 'Modo Control activo — tap para volver a OPS' : 'Activar Modo Control'}
@@ -907,7 +927,16 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                 </div>
                 {cierreAnteriorIncompleto && (
                   <div style={{ fontSize: 12, color: '#7f1d1d', lineHeight: 1.4, marginTop: 3 }}>
-                    Nadie registró el cierre. Contá lo que veas al arrancar.
+                    Nadie registró el cierre. Contá lo que veas al arrancar.{' '}
+                    <button
+                      onClick={() => setGuia({ foco: 'primera-vez' })}
+                      style={{
+                        ...btnReset, display: 'inline', padding: 0, fontSize: 12, fontWeight: 700,
+                        color: '#7f1d1d', textDecoration: 'underline',
+                      }}
+                    >
+                      ¿Cómo lo cargo?
+                    </button>
                   </div>
                 )}
               </div>
@@ -1361,6 +1390,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       )}
 
       {/* Sheets */}
+      {guia && <MiseGuiaSheet foco={guia.foco} onClose={() => setGuia(null)} />}
       {showAddSheet && (
         <AddItemSheet
           seccionId={showAddSheet}

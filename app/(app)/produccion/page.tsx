@@ -35,6 +35,26 @@ function fmtMesLabel(mes: string) {
   return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
 }
 
+// ── Tipos locales de Planificación ──────────────────────────
+type TipoMenu = 'menu' | 'evento'
+type FiltroTipo = 'todo' | TipoMenu
+
+/** Un menú activo del día con sus tareas — un bloque visual propio. */
+interface GrupoMenu {
+  key: string          // menu_id
+  nombre: string
+  tipo: TipoMenu
+  tareas: Tarea[]
+}
+
+// Paleta por tipo — la misma que usan el selector de menús del catálogo y
+// el toggle de Producción, para que "evento violeta / menú celeste" sea
+// una sola convención en toda la app.
+const TIPO_CFG: Record<TipoMenu, { label: string; color: string; bg: string; border: string }> = {
+  menu:   { label: 'Menú',   color: '#0284c7', bg: 'rgba(14,165,233,.10)',  border: 'rgba(14,165,233,.35)' },
+  evento: { label: 'Evento', color: '#7c3aed', bg: 'rgba(139,92,246,.10)', border: 'rgba(139,92,246,.35)' },
+}
+
 // Ruta vieja /produccion → redirige a OPS. La implementación vive como <ProduccionView/>,
 // que OPS renderiza embebida en su tab "Planificación".
 export default function ProduccionRoute() {
@@ -62,6 +82,8 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
   const [cargandoMenu, setCargandoMenu] = useState(false)
   const [fecha, setFecha] = useState(() => hoyOperativo())
   const [toast, setToast] = useState('')
+  // Filtro por origen de la producción — mismo criterio que el toggle de Producción.
+  const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>('todo')
 
   // ── Calendar state ──────────────────────────────────────────
   const [fechasMes, setFechasMes] = useState<Record<string, string[]>>({})
@@ -82,14 +104,21 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
     const from = `${mesActual}-01`
     const to = `${mesActual}-${String(new Date(Number(y), Number(mo), 0).getDate()).padStart(2, '0')}`
     const supabase = createClient()
-    supabase.from('tareas').select('turno_fecha')
+    // Se trae también `modo` para distinguir en el calendario los días con menú
+    // fijo de los días con evento — son dos cosas distintas de planificar y se
+    // leen mal si comparten el mismo punto.
+    supabase.from('tareas').select('turno_fecha, modo')
       .eq('restaurante_id', RESTAURANTE_ID)
       .not('menu_id', 'is', null)
       .gte('turno_fecha', from).lte('turno_fecha', to)
       .then(({ data }) => {
         const map: Record<string, string[]> = {}
-        for (const r of (data ?? []) as { turno_fecha: string | null }[]) {
-          if (r.turno_fecha) map[r.turno_fecha] = ['']
+        for (const r of (data ?? []) as { turno_fecha: string | null; modo: string | null }[]) {
+          if (!r.turno_fecha) continue
+          const tag = r.modo === 'evento' ? 'evento' : 'menu'
+          const tags = map[r.turno_fecha] ?? []
+          if (!tags.includes(tag)) tags.push(tag)
+          map[r.turno_fecha] = tags
         }
         setFechasMes(map)
       })
@@ -169,6 +198,44 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
     [tareas, fecha],
   )
 
+  // ── Un bloque por menú activo ──────────────────────────────
+  // Un día puede tener varios menús y varios eventos activos a la vez. Antes se
+  // aplanaban todos en una sola lista por sección y las producciones del menú
+  // fijo quedaban mezcladas con las del evento, sin forma de saber cuál era cuál.
+  // Cada menú activo pasa a ser su propio bloque, y el filtro de arriba (Todo /
+  // Menú / Evento) refleja el mismo criterio que el toggle de Producción.
+  const gruposDelDia = useMemo<GrupoMenu[]>(() => {
+    const m = new Map<string, GrupoMenu>()
+    for (const t of [...menuTareasDelDia].sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))) {
+      const key = t.menu_id!
+      let g = m.get(key)
+      if (!g) {
+        const cat = catalogoMenus.find(x => x.id === key)
+        g = {
+          key,
+          nombre: cat?.nombre ?? t.descripcion ?? 'Menú del día',
+          tipo: (t.modo === 'evento' || cat?.tipo === 'evento') ? 'evento' : 'menu',
+          tareas: [],
+        }
+        m.set(key, g)
+      }
+      g.tareas.push(t)
+    }
+    // Menús primero, eventos después — el evento es lo excepcional del día.
+    return [...m.values()].sort((a, b) => (a.tipo === b.tipo ? 0 : a.tipo === 'menu' ? -1 : 1))
+  }, [menuTareasDelDia, catalogoMenus])
+
+  const gruposVisibles = useMemo(
+    () => filtroTipo === 'todo' ? gruposDelDia : gruposDelDia.filter(g => g.tipo === filtroTipo),
+    [gruposDelDia, filtroTipo],
+  )
+  const conteoTipo = useMemo(() => ({
+    todo: gruposDelDia.reduce((s, g) => s + g.tareas.length, 0),
+    menu: gruposDelDia.filter(g => g.tipo === 'menu').reduce((s, g) => s + g.tareas.length, 0),
+    evento: gruposDelDia.filter(g => g.tipo === 'evento').reduce((s, g) => s + g.tareas.length, 0),
+  }), [gruposDelDia])
+  const tareasVisibles = useMemo(() => gruposVisibles.flatMap(g => g.tareas), [gruposVisibles])
+
   // ── Reordenar secciones/ítems del menú del día (drag & drop en MenuActivoView) ──
   // Un solo campo `orden` (ya existente en `tareas`) codifica sección + posición dentro
   // de ella: al aplanar [sección1-item1, sección1-item2, sección2-item1, ...] el índice
@@ -193,11 +260,14 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
     }
   }
 
-  async function vaciarMenuDelDia() {
-    const ids = menuTareasDelDia.map(t => t.id)
+  // Vacía un menú/evento puntual del día — no todo lo cargado. Con varios menús
+  // activos, "vaciar todo" borraba también el que no se quería tocar.
+  async function vaciarGrupo(grupo: GrupoMenu) {
+    const ids = grupo.tareas.map(t => t.id)
     if (ids.length === 0) return
-    if (!confirm(`¿Vaciar el menú del día? Se eliminan ${ids.length} tareas.`)) return
-    try { for (const id of ids) await eliminarTarea(id); showToast('Menú del día vaciado') }
+    const que = grupo.tipo === 'evento' ? 'el evento' : 'el menú'
+    if (!confirm(`¿Vaciar ${que} "${grupo.nombre}" de este día? Se eliminan ${ids.length} tareas.`)) return
+    try { for (const id of ids) await eliminarTarea(id); showToast(`"${grupo.nombre}" vaciado`) }
     catch (e: unknown) { showToast('Error: ' + (e instanceof Error ? e.message : 'desconocido')) }
   }
 
@@ -264,18 +334,78 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
             <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 20 }}>chevron_right</span>
           </button>
         </div>
+
+        {/* Filtro por origen — solo tiene sentido si hay algo cargado ese día */}
+        {gruposDelDia.length > 0 && (
+          <div data-coach-target="plan-filtro-tipo" style={{ display: 'flex', marginTop: 10, background: 'rgba(255,255,255,.12)', borderRadius: 999, padding: 2 }}>
+            {(['todo', 'menu', 'evento'] as FiltroTipo[]).map(f => {
+              const activo = filtroTipo === f
+              const esTodo = f === 'todo'
+              const color = esTodo ? '#f59e0b' : TIPO_CFG[f].color
+              return (
+                <button
+                  key={f}
+                  onClick={() => setFiltroTipo(f)}
+                  style={{
+                    flex: '1 1 auto', minWidth: 0, padding: '6px 8px', borderRadius: 999,
+                    border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                    background: activo ? (esTodo ? color : '#fff') : 'transparent',
+                    color: activo ? (esTodo ? '#fff' : color) : (esTodo ? '#fbbf24' : 'rgba(255,255,255,.55)'),
+                    transition: 'all .15s', WebkitTapHighlightColor: 'transparent',
+                  }}
+                >
+                  <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>
+                    {esTodo ? 'Todo' : TIPO_CFG[f].label}
+                  </span>
+                  <span style={{
+                    fontSize: 9, fontWeight: 800, padding: '1px 5px', borderRadius: 99,
+                    background: activo ? (esTodo ? 'rgba(255,255,255,.25)' : `${color}1a`) : 'rgba(255,255,255,.12)',
+                    color: activo ? (esTodo ? '#fff' : color) : 'rgba(255,255,255,.5)',
+                  }}>
+                    {conteoTipo[f]}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Content */}
-      {menuTareasDelDia.length > 0 ? (
-        <MenuActivoView
-          tareas={menuTareasDelDia}
-          miembros={miembros}
-          onVaciar={vaciarMenuDelDia}
-          onActivarOtro={() => setShowMenuPicker(true)}
-          onIrAProduccion={irAProduccion}
-          onReordenar={reordenarMenuDelDia}
-        />
+      {gruposDelDia.length > 0 ? (
+        <div style={{ padding: '10px 12px 120px' }}>
+          <ResumenDelDia
+            tareas={tareasVisibles}
+            grupos={gruposVisibles}
+            onActivarOtro={() => setShowMenuPicker(true)}
+            onIrAProduccion={irAProduccion}
+          />
+          {gruposVisibles.length === 0 ? (
+            <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-3)' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 40, opacity: .5 }}>
+                {filtroTipo === 'evento' ? 'celebration' : 'restaurant_menu'}
+              </span>
+              <div style={{ fontSize: 13, fontWeight: 600, marginTop: 8 }}>
+                {filtroTipo === 'evento' ? 'Sin eventos este día' : 'Sin menú fijo este día'}
+              </div>
+              <button
+                onClick={() => setFiltroTipo('todo')}
+                style={{ marginTop: 6, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: 'var(--accent)', textDecoration: 'underline', padding: 0 }}
+              >
+                Ver todo lo cargado
+              </button>
+            </div>
+          ) : gruposVisibles.map(grupo => (
+            <MenuActivoView
+              key={grupo.key}
+              grupo={grupo}
+              miembros={miembros}
+              onVaciar={() => vaciarGrupo(grupo)}
+              onReordenar={reordenarMenuDelDia}
+            />
+          ))}
+        </div>
       ) : (
         /* Sin menú cargado para este día */
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', gap: 10 }}>
@@ -497,8 +627,8 @@ function MesCalendar({
           const isSelected = !multiSelectMode && dayStr === fechaSeleccionada
           const isChecked = multiSelectMode && diasSeleccionados.has(dayStr)
           const tags = fechasMes[dayStr] ?? []
-          const hasBase = tags.length > 0
-          const hasEvent = tags.some(t => t !== '')
+          const hasBase = tags.includes('menu')
+          const hasEvent = tags.includes('evento')
           return (
             <button
               key={dayStr}
@@ -526,7 +656,11 @@ function MesCalendar({
       <div style={{ display: 'flex', gap: 10, marginTop: 6, justifyContent: 'flex-end' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e' }} />
-          <span style={{ fontSize: 9, color: 'rgba(255,255,255,.4)' }}>Con menú</span>
+          <span style={{ fontSize: 9, color: 'rgba(255,255,255,.4)' }}>Menú</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#f97316' }} />
+          <span style={{ fontSize: 9, color: 'rgba(255,255,255,.4)' }}>Evento</span>
         </div>
       </div>
     </div>
@@ -558,16 +692,55 @@ function agruparPorSeccion(tareas: Tarea[]): SeccionGrupo[] {
   return [...m.entries()]
 }
 
-function MenuActivoView({
-  tareas, miembros, onVaciar, onActivarOtro, onIrAProduccion, onReordenar,
-}: {
+/** Resumen del día — avance agregado de lo que está visible + acciones. */
+function ResumenDelDia({ tareas, grupos, onActivarOtro, onIrAProduccion }: {
   tareas: Tarea[]
-  miembros: { id: string; nombre: string; apellido: string }[]
-  onVaciar: () => void
+  grupos: GrupoMenu[]
   onActivarOtro: () => void
   onIrAProduccion: () => void
+}) {
+  const listos = tareas.filter(t => t.estado === 'listo').length
+  const total = tareas.length
+  const pct = total > 0 ? Math.round((listos / total) * 100) : 0
+  const nMenus = grupos.filter(g => g.tipo === 'menu').length
+  const nEventos = grupos.filter(g => g.tipo === 'evento').length
+  const detalle = [
+    nMenus > 0 ? `${nMenus} ${nMenus === 1 ? 'menú' : 'menús'}` : null,
+    nEventos > 0 ? `${nEventos} ${nEventos === 1 ? 'evento' : 'eventos'}` : null,
+  ].filter(Boolean).join(' · ')
+
+  return (
+    <div style={{ margin: '0 2px 12px', padding: '12px', borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{listos}/{total} listas</div>
+          {detalle && <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 1 }}>{detalle} activo{nMenus + nEventos === 1 ? '' : 's'} este día</div>}
+        </div>
+        <button onClick={onActivarOtro} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '5px 11px', fontSize: 11, fontWeight: 700, color: 'var(--accent)', cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>+ Cargar otro</button>
+      </div>
+      <div style={{ height: 6, background: 'var(--border)', borderRadius: 99, overflow: 'hidden', marginBottom: 10 }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? '#22c55e' : '#3b82f6', transition: 'width .3s' }} />
+      </div>
+      {/* La ejecución (tildar) se hace en Producción */}
+      <button onClick={onIrAProduccion} style={{ width: '100%', padding: '11px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, var(--navy), #4361a0)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>task_alt</span>
+        Ir a Producción a ejecutar
+        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_forward</span>
+      </button>
+    </div>
+  )
+}
+
+function MenuActivoView({
+  grupo, miembros, onVaciar, onReordenar,
+}: {
+  grupo: GrupoMenu
+  miembros: { id: string; nombre: string; apellido: string }[]
+  onVaciar: () => void
   onReordenar: (cambios: { id: string; orden: number }[]) => void
 }) {
+  const tareas = grupo.tareas
+  const cfg = TIPO_CFG[grupo.tipo]
   const groupedBase = useMemo(() => agruparPorSeccion(tareas), [tareas])
 
   // Estado local editable para que el drag se sienta fluido (sin esperar el round-trip
@@ -745,27 +918,37 @@ function MenuActivoView({
 
   const listos = tareas.filter(t => t.estado === 'listo').length
   const total = tareas.length
-  const pct = total > 0 ? Math.round((listos / total) * 100) : 0
 
   return (
-    <div ref={rootRef} style={{ padding: '10px 12px 120px' }}>
-      {/* Resumen + acciones */}
-      <div style={{ margin: '0 2px 10px', padding: '12px', borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Menú activo · {listos}/{total} listas</span>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button onClick={onActivarOtro} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 700, color: 'var(--accent)', cursor: 'pointer', fontFamily: 'inherit' }}>+ Otro</button>
-            <button onClick={onVaciar} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '4px 10px', fontSize: 11, fontWeight: 700, color: '#ef4444', cursor: 'pointer', fontFamily: 'inherit' }}>Vaciar</button>
-          </div>
-        </div>
-        <div style={{ height: 6, background: 'var(--border)', borderRadius: 99, overflow: 'hidden', marginBottom: 10 }}>
-          <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? '#22c55e' : '#3b82f6', transition: 'width .3s' }} />
-        </div>
-        {/* La ejecución (tildar) se hace en Producción */}
-        <button onClick={onIrAProduccion} style={{ width: '100%', padding: '11px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, var(--navy), #4361a0)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>task_alt</span>
-          Ir a Producción a ejecutar
-          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_forward</span>
+    <div ref={rootRef} style={{
+      marginBottom: 14, paddingLeft: 8,
+      borderLeft: `3px solid ${cfg.border}`,
+    }}>
+      {/* Encabezado del menú/evento — de quién son las producciones de abajo */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, margin: '0 2px 8px',
+        padding: '9px 12px', borderRadius: 12,
+        background: cfg.bg, border: `1px solid ${cfg.border}`,
+      }}>
+        <span style={{
+          fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 99,
+          textTransform: 'uppercase', letterSpacing: '.05em', flexShrink: 0,
+          background: '#fff', color: cfg.color,
+        }}>{cfg.label}</span>
+        <span style={{
+          flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: 'var(--text-1)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{grupo.nombre}</span>
+        <span style={{
+          fontSize: 11, fontWeight: 700, fontFamily: 'monospace', flexShrink: 0,
+          color: listos === total && total > 0 ? '#22c55e' : cfg.color,
+        }}>{listos}/{total}</span>
+        <button
+          onClick={onVaciar}
+          title={`Vaciar ${grupo.nombre}`}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', flexShrink: 0 }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 17, color: '#ef4444' }}>delete_outline</span>
         </button>
       </div>
 
