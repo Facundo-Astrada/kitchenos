@@ -153,9 +153,11 @@ export function useChecklist() {
     if (!yaCargoRef.current) setDynamicLoading(true)
     setError(null)
     try {
-      // El config (secciones/items/rutinas) casi nunca cambia y ya está cacheado
-      // 5 min: se revalida en paralelo, sin bloquear la pintada de los registros.
-      mutateConfig()
+      // El config (secciones/items/rutinas) NO se revalida acá: casi nunca cambia,
+      // ya está en cache, y fetchAll corre varias veces por carga (al elegir plaza,
+      // al resolver el turno de servicio, al cambiar de fase) — eran 5 descargas
+      // de la lista de items por abrir una plaza. Lo mantienen al día la
+      // suscripción realtime y refetchConfig() tras una escritura externa.
       await Promise.all([
         fetchRegistros(fecha, turno),
         fetchRutinaRegistros(fecha),
@@ -168,7 +170,7 @@ export function useChecklist() {
     } finally {
       setDynamicLoading(false)
     }
-  }, [mutateConfig, fetchRegistros, fetchRutinaRegistros])
+  }, [fetchRegistros, fetchRutinaRegistros])
 
   // ── Secciones CRUD ──
   async function agregarSeccion(datos: { nombre: string; icono: string; orden: number; plaza: Plaza; tipo?: ChecklistSeccionTipo; producto_ids?: string[]; parent_id?: string | null }) {
