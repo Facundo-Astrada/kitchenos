@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { useSheetOpenWhen } from '@/lib/ui/chrome'
 
@@ -382,8 +383,13 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
     </div>
   )
 
+  // Portal a body — si no, en desktop el panel lateral del Coach queda por
+  // encima del backdrop y la pantalla se oscurece a medias.
+  const portal = (n: React.ReactNode) =>
+    typeof document !== 'undefined' ? createPortal(n, document.body) : null
+
   if (isDesktop) {
-    return (
+    return portal(
       <div
         onClick={e => { if (e.target === e.currentTarget) onClose() }}
         style={{
@@ -405,7 +411,7 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
     )
   }
 
-  return (
+  return portal(
     <div style={{ position: 'fixed', inset: 0, zIndex: 2000, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)' }} />
       <div style={{

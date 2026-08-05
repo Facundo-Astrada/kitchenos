@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useSheetOpenWhen } from '@/lib/ui/chrome'
 
 // ══════════════════════════════════════════════════════════════
@@ -221,6 +222,13 @@ export function MiseTourOverlay({ faseActual, onSetFase, onFinish }: {
 
   if (!paso) return null
 
+  // Portal a body: dentro del árbol de la app el overlay quedaba por debajo del
+  // panel lateral del Coach en desktop (el dock seguía a pleno brillo mientras
+  // todo lo demás se oscurecía). Colgado del body no depende de ningún
+  // stacking context de la pantalla.
+  const portal = (n: React.ReactNode) =>
+    typeof document !== 'undefined' ? createPortal(n, document.body) : null
+
   const esUltimo = i === MISE_PASOS.length - 1
   const pasosConTarget = MISE_PASOS.filter(p => p.target !== null).length
   const pasoActual = MISE_PASOS.slice(0, i).filter(p => p.target !== null).length + 1
@@ -228,7 +236,7 @@ export function MiseTourOverlay({ faseActual, onSetFase, onFinish }: {
   // ── Tarjeta centrada (intro / cierre del recorrido) ──────────
   if (!paso.target) {
     const avanzar = esUltimo ? terminar : siguiente
-    return (
+    return portal(
       <div
         onClick={avanzar}
         style={{
@@ -287,7 +295,7 @@ export function MiseTourOverlay({ faseActual, onSetFase, onFinish }: {
   // Mientras busca/scrollea el control, el fondo ya se oscurece para que
   // no parpadee la pantalla entre paso y paso.
   if (!rect) {
-    return <div style={{ position: 'fixed', inset: 0, zIndex: 2100, background: 'rgba(0,0,0,.72)' }} />
+    return portal(<div style={{ position: 'fixed', inset: 0, zIndex: 2100, background: 'rgba(0,0,0,.72)' }} />)
   }
 
   const PAD = 10
@@ -308,7 +316,7 @@ export function MiseTourOverlay({ faseActual, onSetFase, onFinish }: {
   const cardLeft = Math.max(16, Math.min(x, vw - cardWidth - 16))
   const flechaOffset = Math.min(cardWidth - 28, Math.max(12, x + w / 2 - cardLeft - 8))
 
-  return (
+  return portal(
     <div onClick={siguiente} style={{ position: 'fixed', inset: 0, zIndex: 2100, cursor: 'pointer' }}>
       {/* Fondo oscurecido con el control recortado */}
       <svg width="100%" height="100%" style={{ position: 'absolute', inset: 0, display: 'block' }}>
