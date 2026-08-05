@@ -40,6 +40,8 @@ const out = args.out || `docs/shots/${(ruta || '').replace(/^\//, '').replace(/\
 // por "||" (ej. abrir una plaza y después el "?" de la guía). --full: página entera.
 const clicks = typeof args.click === 'string' ? args.click.split('||').map(s => s.trim()).filter(Boolean) : []
 const fullPage = args.full === true
+const waitMs = args.wait ? parseInt(String(args.wait), 10) || 0 : 0
+const probe = typeof args.probe === "string" ? args.probe : null
 
 if (!ruta) {
   console.error('Uso: node scripts/shot.mjs --ruta /stock [--viewport mobile|desktop] [--cuenta bros|demo] [--out docs/shots/x.png] [--click "sel1||sel2"] [--full]')
@@ -117,6 +119,23 @@ try {
     console.log(`Click: ${sel}`)
     await page.click(sel, { timeout: 15000 })
     await sleep(1200)
+  }
+  // Espera extra antes de disparar la foto (animaciones, overlays que buscan
+  // su target, listas que recargan al cambiar de tab).
+  if (waitMs > 0) { console.log(`Esperando ${waitMs}ms...`); await sleep(waitMs) }
+
+  // --probe: además de la foto, lista qué matchea un selector en ese momento.
+  // Sirve para entender por qué un overlay/tour no encuentra su target sin
+  // escribir un script aparte que repita todo el login.
+  if (probe) {
+    const found = await page.evaluate((sel) => {
+      return [...document.querySelectorAll(sel)].slice(0, 40).map((el) => {
+        const r = el.getBoundingClientRect()
+        return `${el.tagName.toLowerCase()}${el.getAttribute('data-coach-target') ? `[${el.getAttribute('data-coach-target')}]` : ''} ${Math.round(r.width)}x${Math.round(r.height)}`
+      })
+    }, probe)
+    console.log(`Probe "${probe}": ${found.length} match(es)`)
+    for (const f of found) console.log('  -', f)
   }
 
   const file = resolve(out)

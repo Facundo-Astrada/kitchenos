@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth/context'
 import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
 import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, supportsWebUSB, supportsWebBluetooth } from '@/lib/print/escpos'
 import { CrearTareaSheet, type CrearTareaSheetConfirmData } from '@/components/ops/CrearTareaSheet'
+import { parseTurnoFase } from '@/lib/ops/turnos'
 import type { MisePlaceItem, MisePrioridad, TareaPrioridad } from '@/types'
 
 // ── Exported interfaces ───────────────────────────────────────
@@ -189,7 +190,12 @@ export function ProductoMiseCard({
   rendimientoPromedio, regCierreAnterior, restauranteNombre,
   onUpsert, onCrearTarea, onPrioChange, onDelete, onCrearVencimiento,
 }: ProductoMiseCardProps) {
-  const esCierre = turno === 'cierre'
+  // `turno` viene codificado como '<turnoId>:<fase>' cuando el restaurante tiene
+  // turnos de servicio (ej. 'almuerzo:cierre') y pelado ('cierre') si no los usa.
+  // Comparando el string crudo, cualquier restaurante con Almuerzo/Cena veía la
+  // tarjeta de APERTURA dentro del tab Cierre: sin los puntitos ni el campo de
+  // "cuánto quedó", y con el botón de producir que en cierre no va.
+  const esCierre = parseTurnoFase(turno).fase === 'cierre'
   const [cantInput, setCantInput] = useState(reg?.cantidad_actual?.toString() ?? '')
   const [crearTareaSheetOpen, setCrearTareaSheetOpen] = useState(false)
   const [creating, setCreating] = useState(false)
