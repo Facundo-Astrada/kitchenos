@@ -155,12 +155,16 @@ export function MiseTourOverlay({ faseActual, onSetFase, onFinish }: {
   // o un solo turno de servicio configurado), saltea el paso solo.
   useEffect(() => {
     if (!paso || !paso.target) { setRect(null); return }
-    if (paso.fase && paso.fase !== faseActual) onSetFaseRef.current(paso.fase)
+    const cambiaFase = !!paso.fase && paso.fase !== faseActual
+    if (cambiaFase) onSetFaseRef.current(paso.fase!)
 
     setRect(null)
     let cancelado = false
     let intentos = 0
-    const MAX = 10
+    // Cambiar de fase dispara un fetch del mise: la lista queda en "Cargando…"
+    // y los controles no existen todavía. Con una ventana corta el paso de
+    // cierre se salteaba solo aunque el ítem estuviera bien. ~3s de margen.
+    const MAX = cambiaFase ? 24 : 10
 
     function buscar() {
       if (cancelado) return
@@ -184,7 +188,7 @@ export function MiseTourOverlay({ faseActual, onSetFase, onFinish }: {
       else siguienteRef.current()
     }
 
-    const delay = paso.fase && paso.fase !== faseActual ? 320 : 90
+    const delay = cambiaFase ? 420 : 90
     const timer = setTimeout(buscar, delay)
     return () => { cancelado = true; clearTimeout(timer) }
     // faseActual a propósito fuera de deps: el cambio de fase lo dispara este
@@ -294,8 +298,23 @@ export function MiseTourOverlay({ faseActual, onSetFase, onFinish }: {
 
   // Mientras busca/scrollea el control, el fondo ya se oscurece para que
   // no parpadee la pantalla entre paso y paso.
+  // Mientras busca el control (puede haber un cambio de fase con recarga de por
+  // medio) el fondo ya se oscurece, con un aviso para que no parezca colgado.
   if (!rect) {
-    return portal(<div style={{ position: 'fixed', inset: 0, zIndex: 2100, background: 'rgba(0,0,0,.72)' }} />)
+    return portal(
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 2100, background: 'rgba(0,0,0,.72)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 999,
+          background: 'rgba(255,255,255,.12)', color: '#fff', fontSize: 12.5, fontWeight: 600,
+        }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 17, color: NARANJA }}>ads_click</span>
+          Buscando “{paso.titulo}”…
+        </div>
+      </div>
+    )
   }
 
   const PAD = 10
