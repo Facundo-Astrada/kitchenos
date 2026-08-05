@@ -1,10 +1,11 @@
 'use client'
 
 import { useCallback, useMemo } from 'react'
-import useSWR from 'swr'
+
 import { createClient } from '@/lib/supabase/client'
 import type { TurnoServicio } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
+import { useRestauranteConfig } from './useRestauranteConfig'
 import { slugify } from '@/lib/utils'
 
 // Turnos de servicio del restaurante — guardados en restaurantes.configuracion.turnos_servicio
@@ -23,29 +24,27 @@ function errMsg(e: unknown, fallback: string): string {
   return fallback
 }
 
-async function fetchTurnosServicio(key: string): Promise<TurnoServicio[]> {
-  const rid = key.slice('turnos-servicio-'.length)
-  const supabase = createClient()
-  const { data, error } = await supabase.from('restaurantes').select('configuracion').eq('id', rid).single()
-  if (error) throw error
-  const cfg = (data?.configuracion ?? {}) as { turnos_servicio?: TurnoServicio[] }
-  // Sin clave todavía = restaurante nuevo: devolver los defaults SIN escribirlos
-  // (se persisten recién cuando el usuario confirma el paso de onboarding).
-  if (!cfg.turnos_servicio) return TURNOS_DEFAULT
-  return cfg.turnos_servicio.slice().sort((a, b) => a.orden - b.orden)
-}
-
 export function useTurnosServicio() {
   const RESTAURANTE_ID = useRestauranteId()
   const supabase = useMemo(() => createClient(), [])
-  const swrKey = RESTAURANTE_ID ? `turnos-servicio-${RESTAURANTE_ID}` : null
+  // Cache compartida de restaurantes.configuracion (una sola query para todos
+  // los hooks que leen esa columna, ver useRestauranteConfig).
+  const { configuracion, loading, mutate: mutateConfig } = useRestauranteConfig()
 
-  const { data: turnos = TURNOS_DEFAULT, isLoading: loading, mutate } = useSWR(swrKey, fetchTurnosServicio, {
-    revalidateOnFocus: false,
-    revalidateOnReconnect: true,
-    dedupingInterval: 300_000,
-    keepPreviousData: true,
-  })
+  const turnos = useMemo(() => {
+    const guardados = configuracion.turnos_servicio as TurnoServicio[] | undefined
+    // Sin clave todavía = restaurante nuevo: usar los defaults SIN escribirlos
+    // (se persisten recién cuando el usuario confirma el paso de onboarding).
+    if (!guardados) return TURNOS_DEFAULT
+    return guardados.slice().sort((a, b) => a.orden - b.orden)
+  }, [configuracion])
+
+  // Compat con los callers que revalidaban la lista de turnos: ahora revalida
+  // la configuracion entera, que es de donde salen.
+  const mutate = useCallback(async (nuevos?: TurnoServicio[]) => {
+    if (nuevos) await mutateConfig(prev => ({ ...(prev ?? {}), turnos_servicio: nuevos }), { revalidate: false })
+    else await mutateConfig()
+  }, [mutateConfig])
 
   const turnosActivos = useMemo(() => turnos.filter(t => t.activo), [turnos])
 
@@ -62,7 +61,7 @@ export function useTurnosServicio() {
     const { error } = await supabase.from('restaurantes')
       .update({ configuracion: { ...cfg, turnos_servicio: nuevos } }).eq('id', RESTAURANTE_ID)
     if (error) throw error
-    await mutate(nuevos, { revalidate: false })
+    await mutate(nuevos)
   }, [RESTAURANTE_ID, supabase, leerConfiguracion, mutate])
 
   // Confirma los defaults tal cual (botón "así está bien" del onboarding) —

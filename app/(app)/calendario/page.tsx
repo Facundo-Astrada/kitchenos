@@ -141,7 +141,7 @@ export default function CalendarioPage() {
     fetchEventos, crearEvento, actualizarEvento, eliminarEvento,
     agregarNotaItem, eliminarNotaItem, asignarPlazaNotaItem,
   } = useCalendario()
-  const { agregarTarea } = useTareas()
+  const { agregarTarea } = useTareas({ soloEscritura: true })
   const { menus: catalogoMenus } = useMenus()
   const RESTAURANTE_ID = useRestauranteId()
   const isDesktop = useIsDesktop()

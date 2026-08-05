@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import type {
@@ -78,24 +78,38 @@ export function useChecklist() {
 
   const loading = configLoading || dynamicLoading
 
-  // Realtime para datos estáticos
+  // Realtime para datos estáticos. Filtrado por restaurante: sin el filter, la
+  // escritura de cualquier otra cuenta llegaba igual y hacía refetchear el
+  // config entero acá (secciones + items + rutinas), en todos los dispositivos.
   useEffect(() => {
     if (!RESTAURANTE_ID) return
+    const filter = `restaurante_id=eq.${RESTAURANTE_ID}`
     const ch = supabase.channel(`checklist-rt-${RESTAURANTE_ID}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'checklist_secciones' }, () => mutateConfig())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'checklist_items' }, () => mutateConfig())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'checklist_rutina' }, () => mutateConfig())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'checklist_secciones', filter }, () => mutateConfig())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'checklist_items', filter }, () => mutateConfig())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'checklist_rutina', filter }, () => mutateConfig())
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [RESTAURANTE_ID, supabase, mutateConfig])
 
+  // Los ids de los items ya están en memoria (config SWR) — ir a buscarlos a la
+  // DB en cada fetch era un round-trip extra en el camino crítico del mise.
+  // Ref (no dep del useCallback) para que fetchAll no cambie de identidad cada
+  // vez que revalida el config y dispare el efecto que lo llama (ver hooks.md #10).
+  const itemIdsRef = useRef<string[]>([])
+  useEffect(() => { itemIdsRef.current = items.map(i => i.id) }, [items])
+
   const fetchRegistros = useCallback(async (fecha: string, turno: string) => {
     if (!RESTAURANTE_ID) { setRegistros([]); return }
     try {
-      const { data: itemsData, error: itemsErr } = await supabase.from('checklist_items').select('id')
-        .eq('restaurante_id', RESTAURANTE_ID)
-      if (itemsErr) throw itemsErr
-      const itemIds = (itemsData ?? []).map((i: { id: string }) => i.id)
+      let itemIds = itemIdsRef.current
+      if (itemIds.length === 0) {
+        // Primera carga: el config todavía no resolvió.
+        const { data: itemsData, error: itemsErr } = await supabase.from('checklist_items').select('id')
+          .eq('restaurante_id', RESTAURANTE_ID)
+        if (itemsErr) throw itemsErr
+        itemIds = (itemsData ?? []).map((i: { id: string }) => i.id)
+      }
       if (itemIds.length === 0) { setRegistros([]); return }
       const { data, error: regErr } = await supabase.from('checklist_registros').select('*')
         .eq('fecha', fecha).eq('turno', turno)
@@ -129,15 +143,24 @@ export function useChecklist() {
     }
   }, [RESTAURANTE_ID, supabase])
 
+  // `loading` solo en la primera carga: al cambiar de fase (apertura↔cierre) o de
+  // fecha, la lista se quedaba en blanco con "Cargando…" y volvía a aparecer de
+  // golpe. Se mantiene lo anterior en pantalla mientras llegan los registros
+  // nuevos — en mobile es la diferencia entre "navegar" y "esperar".
+  const yaCargoRef = useRef(false)
+
   const fetchAll = useCallback(async (fecha: string, turno: string) => {
-    setDynamicLoading(true)
+    if (!yaCargoRef.current) setDynamicLoading(true)
     setError(null)
     try {
+      // El config (secciones/items/rutinas) casi nunca cambia y ya está cacheado
+      // 5 min: se revalida en paralelo, sin bloquear la pintada de los registros.
+      mutateConfig()
       await Promise.all([
-        mutateConfig(),       // SWR: usa caché si está vigente, revalida si no
         fetchRegistros(fecha, turno),
         fetchRutinaRegistros(fecha),
       ])
+      yaCargoRef.current = true
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al cargar datos del checklist'
       console.error('[useChecklist] fetchAll Error:', msg)
@@ -250,19 +273,41 @@ export function useChecklist() {
   }
 
   // ── Registros ──
-  async function upsertRegistro(itemId: string, fecha: string, turno: string, datos: { completado?: boolean; cantidad_actual?: number | null; usuario_id?: string | null }) {
+  // Optimista: el tilde se pinta en el mismo frame del tap y la escritura viaja
+  // después. Antes eran tres round-trips en serie antes de que el círculo se
+  // pusiera verde (upsert → select ids → select registros); en la cocina, con
+  // 4G, eso se sentía como un segundo largo de nada por cada ítem. Si la
+  // escritura falla se refetchea y el estado vuelve a la verdad del servidor.
+  const upsertRegistro = useCallback(async (
+    itemId: string, fecha: string, turno: string,
+    datos: { completado?: boolean; cantidad_actual?: number | null; usuario_id?: string | null },
+  ) => {
+    setRegistros(prev => {
+      const idx = prev.findIndex(r => r.checklist_item_id === itemId && r.fecha === fecha && r.turno === turno)
+      if (idx === -1) {
+        return [...prev, {
+          id: `optimistic-${itemId}-${fecha}-${turno}`,
+          checklist_item_id: itemId, fecha, turno,
+          completado: false, cantidad_actual: null,
+          ...datos,
+        } as MisePlaceRegistro]
+      }
+      const next = [...prev]
+      next[idx] = { ...next[idx], ...datos }
+      return next
+    })
     try {
       const { error } = await supabase.from('checklist_registros').upsert({
         checklist_item_id: itemId, fecha, turno, ...datos,
       }, { onConflict: 'checklist_item_id,fecha,turno' })
       if (error) throw error
-      await fetchRegistros(fecha, turno)
     } catch (e: unknown) {
+      await fetchRegistros(fecha, turno)   // rollback contra el servidor
       const msg = e instanceof Error ? e.message : 'Error al guardar registro'
       console.error('[useChecklist] upsertRegistro Error:', msg)
       throw new Error(msg)
     }
-  }
+  }, [supabase, fetchRegistros])
 
   // ── Rutinas CRUD ──
   async function agregarRutina(datos: {

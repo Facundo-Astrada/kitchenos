@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { useRestauranteId } from './useRestauranteId'
+import { useCallback, useMemo } from 'react'
+import { useRestauranteConfig, useGuardarRestauranteConfig } from './useRestauranteConfig'
 
 export interface ImpresionConfig {
   usb: boolean
@@ -20,50 +19,29 @@ const DEFAULT_VENCIMIENTOS = true
 //   vencimiento en HACCP" al marcar un ítem del mise como listo. Muchos
 //   restaurantes rotulan el producto físicamente y no llevan el registro
 //   digital — con esto en false, ese bloque no aparece.
+//
+// Lee de la cache compartida de `configuracion` (useRestauranteConfig): este
+// hook vive dentro de CADA tarjeta del mise y antes hacía su propio fetch, así
+// que abrir una plaza disparaba una request a `restaurantes` por ítem.
 export function useImpresionConfig() {
-  const RESTAURANTE_ID = useRestauranteId()
-  const [impresion, setImpresion] = useState<ImpresionConfig>(DEFAULT_IMPRESION)
-  const [vencimientosHabilitados, setVencimientosHabilitados] = useState(DEFAULT_VENCIMIENTOS)
-  const [loading, setLoading] = useState(true)
+  const { configuracion, loading } = useRestauranteConfig()
+  const guardarConfig = useGuardarRestauranteConfig()
 
-  const fetchConfig = useCallback(async () => {
-    if (!RESTAURANTE_ID) { setLoading(false); return }
-    setLoading(true)
-    const supabase = createClient()
-    const { data } = await supabase
-      .from('restaurantes').select('configuracion').eq('id', RESTAURANTE_ID).maybeSingle()
-    const cfg = (data?.configuracion ?? null) as { impresion?: Partial<ImpresionConfig>; vencimientos_habilitados?: boolean } | null
-    setImpresion({ ...DEFAULT_IMPRESION, ...(cfg?.impresion ?? {}) })
-    setVencimientosHabilitados(cfg?.vencimientos_habilitados ?? DEFAULT_VENCIMIENTOS)
-    setLoading(false)
-  }, [RESTAURANTE_ID])
+  const impresion = useMemo<ImpresionConfig>(() => ({
+    ...DEFAULT_IMPRESION,
+    ...((configuracion.impresion as Partial<ImpresionConfig> | undefined) ?? {}),
+  }), [configuracion])
 
-  useEffect(() => { fetchConfig() }, [fetchConfig])
+  const vencimientosHabilitados =
+    (configuracion.vencimientos_habilitados as boolean | undefined) ?? DEFAULT_VENCIMIENTOS
 
   const guardarImpresionConfig = useCallback(async (updates: Partial<ImpresionConfig>) => {
-    if (!RESTAURANTE_ID) return
-    const supabase = createClient()
-    const { data } = await supabase
-      .from('restaurantes').select('configuracion').eq('id', RESTAURANTE_ID).maybeSingle()
-    const cfg = (data?.configuracion ?? {}) as Record<string, unknown>
-    const nextImpresion = { ...DEFAULT_IMPRESION, ...(cfg.impresion as Partial<ImpresionConfig> ?? {}), ...updates }
-    const { error } = await supabase
-      .from('restaurantes').update({ configuracion: { ...cfg, impresion: nextImpresion } }).eq('id', RESTAURANTE_ID)
-    if (error) throw error
-    setImpresion(nextImpresion)
-  }, [RESTAURANTE_ID])
+    await guardarConfig({ impresion: { ...impresion, ...updates } })
+  }, [guardarConfig, impresion])
 
   const guardarVencimientosHabilitados = useCallback(async (value: boolean) => {
-    if (!RESTAURANTE_ID) return
-    const supabase = createClient()
-    const { data } = await supabase
-      .from('restaurantes').select('configuracion').eq('id', RESTAURANTE_ID).maybeSingle()
-    const cfg = (data?.configuracion ?? {}) as Record<string, unknown>
-    const { error } = await supabase
-      .from('restaurantes').update({ configuracion: { ...cfg, vencimientos_habilitados: value } }).eq('id', RESTAURANTE_ID)
-    if (error) throw error
-    setVencimientosHabilitados(value)
-  }, [RESTAURANTE_ID])
+    await guardarConfig({ vencimientos_habilitados: value })
+  }, [guardarConfig])
 
   return { impresion, vencimientosHabilitados, loading, guardarImpresionConfig, guardarVencimientosHabilitados }
 }

@@ -215,7 +215,7 @@ function Sheet86({ onSelect, onClose }: { onSelect: (nombre: string, id: string)
 export default function PasePage() {
   const { mensajes, loading, fetchMensajes, enviarMensaje, marcarLeidos } = usePase()
   const restauranteId = useRestauranteId()
-  const { agregarTarea } = useTareas()
+  const { agregarTarea } = useTareas({ soloEscritura: true })
   const { miembros } = useEquipo()
   const { perfilRestaurante } = usePermisos()
   const esEmprendimiento = perfilRestaurante === 'emprendimiento'

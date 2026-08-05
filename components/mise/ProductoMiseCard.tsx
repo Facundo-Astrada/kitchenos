@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/lib/auth/context'
 import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
@@ -185,7 +185,7 @@ interface ProductoMiseCardProps {
   onCrearVencimiento: (params: { producto_nombre: string; fecha_vencimiento: string; fecha_apertura: string }) => Promise<void>
 }
 
-export function ProductoMiseCard({
+function ProductoMiseCardBase({
   item, reg, fecha, turno, recetaInfo, platoPlazo, hasTareaPendiente,
   rendimientoPromedio, regCierreAnterior, restauranteNombre,
   onUpsert, onCrearTarea, onPrioChange, onDelete, onCrearVencimiento,
@@ -735,3 +735,27 @@ export function ProductoMiseCard({
     </div>
   )
 }
+
+// Memo: el mise de una plaza son 40+ tarjetas y cada tilde reemplaza el array de
+// registros, así que sin esto React re-renderizaba todas (con sus AnimatePresence
+// adentro) por cada tap. Solo se re-renderiza la tarjeta cuyo dato cambió.
+// Las funciones que llegan por props ya vienen memoizadas del ClientView; `reg`
+// se compara por campo porque es un objeto nuevo en cada actualización.
+export const ProductoMiseCard = memo(ProductoMiseCardBase, (prev, next) => (
+  prev.item === next.item &&
+  prev.fecha === next.fecha &&
+  prev.turno === next.turno &&
+  prev.hasTareaPendiente === next.hasTareaPendiente &&
+  prev.regCierreAnterior === next.regCierreAnterior &&
+  prev.rendimientoPromedio === next.rendimientoPromedio &&
+  prev.recetaInfo === next.recetaInfo &&
+  prev.platoPlazo === next.platoPlazo &&
+  prev.restauranteNombre === next.restauranteNombre &&
+  (prev.reg?.completado ?? null) === (next.reg?.completado ?? null) &&
+  (prev.reg?.cantidad_actual ?? null) === (next.reg?.cantidad_actual ?? null) &&
+  prev.onUpsert === next.onUpsert &&
+  prev.onCrearTarea === next.onCrearTarea &&
+  prev.onPrioChange === next.onPrioChange &&
+  prev.onDelete === next.onDelete &&
+  prev.onCrearVencimiento === next.onCrearVencimiento
+))

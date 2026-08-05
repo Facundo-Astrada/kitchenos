@@ -123,11 +123,17 @@ export function useRecetas() {
 
   useEffect(() => {
     if (!RESTAURANTE_ID) return
+    // recetas y carta_items se filtran por restaurante — sin filter, cualquier
+    // escritura de otra cuenta hacía refetchear medio mega de recetas acá.
+    // `ingredientes` no tiene restaurante_id (cuelga de la receta), así que ese
+    // canal no se puede filtrar; se deja para no perder frescura al editar
+    // ingredientes desde otro dispositivo.
+    const filter = `restaurante_id=eq.${RESTAURANTE_ID}`
     const ch1 = supabase
       .channel(`recetas-rt-${RESTAURANTE_ID}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'recetas' }, () => mutate())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'recetas', filter }, () => mutate())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredientes' }, () => mutate())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'carta_items' }, () => mutate())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'carta_items', filter }, () => mutate())
       .subscribe()
     return () => { supabase.removeChannel(ch1) }
   }, [RESTAURANTE_ID, supabase, mutate])

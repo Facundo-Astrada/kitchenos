@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useCallback, useMemo, useRef } from 'react'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import type { Tarea, ChecklistItemTarea, OpsEstado } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
@@ -19,23 +19,52 @@ function parseTarea(t: Record<string, unknown>): Tarea {
 // escribir se considera el eco de nuestra propia escritura y se ignora.
 const ECO_REALTIME_MS = 5_000
 
+// Ventana de historia que baja el cliente. `tareas` crece ~40 filas por día y se
+// pedía entera en cada carga de OPS (900 filas / ~200 kB en una cuenta con tres
+// meses de uso; en un año serían varios megas por cada apertura de pantalla).
+// Ninguna vista operativa mira más atrás que unas semanas: Producción trabaja con
+// hoy y ayer, Planificación con el día elegido del calendario, el Dashboard con
+// hoy. El histórico largo vive en Reportes, que hace sus propias queries.
+const DIAS_HISTORIA = 60
+
+function desdeISO(dias: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() - dias)
+  return d.toISOString().slice(0, 10)
+}
+
 async function fetchTareasData(key: string): Promise<Tarea[]> {
   const rid = key.slice('tareas-'.length)
   const supabase = createClient()
+  const desde = desdeISO(DIAS_HISTORIA)
   const { data, error } = await supabase
     .from('tareas')
     .select('*')
     .eq('restaurante_id', rid)
+    // turno_fecha es text 'YYYY-MM-DD' (orden lexicográfico = cronológico).
+    // Las filas sin fecha se incluyen: son tareas sueltas que siguen vigentes.
+    .or(`turno_fecha.is.null,turno_fecha.gte.${desde}`)
     .order('created_at', { ascending: false })
   if (error) throw error
   return (data ?? []).map(t => parseTarea(t as Record<string, unknown>))
 }
 
-export function useTareas() {
+/**
+ * @param opts.soloEscritura — no descarga la lista; deja solo las funciones de
+ *   CRUD. El Pase y el Calendario únicamente crean tareas y estaban bajando la
+ *   tabla entera al abrirse. Al escribir se invalida igual la cache del resto.
+ */
+export function useTareas(opts?: { soloEscritura?: boolean }) {
   const RESTAURANTE_ID = useRestauranteId()
   const supabase = useMemo(() => createClient(), [])
 
-  const swrKey = RESTAURANTE_ID ? `tareas-${RESTAURANTE_ID}` : null
+  const swrKey = RESTAURANTE_ID && !opts?.soloEscritura ? `tareas-${RESTAURANTE_ID}` : null
+  // Con soloEscritura el `mutate` local no apunta a ninguna key: para que las
+  // pantallas que sí muestran la lista se enteren, se invalida por la key real.
+  const { mutate: mutateGlobal } = useSWRConfig()
+  const invalidarLista = useCallback(() => {
+    if (RESTAURANTE_ID) mutateGlobal(`tareas-${RESTAURANTE_ID}`)
+  }, [mutateGlobal, RESTAURANTE_ID])
 
   const { data: tareas = [], isLoading: loading, error: swrError, mutate } = useSWR(
     swrKey,
@@ -107,14 +136,15 @@ export function useTareas() {
       }).select('id').single()
       if (error) throw error
       marcarEscrituraPropia(data.id as string)
-      await mutate()
+      if (swrKey) await mutate()
+      else invalidarLista()
       return data.id as string
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al agregar tarea'
       console.error('[useTareas] agregarTarea Error:', msg)
       throw new Error(msg)
     }
-  }, [supabase, RESTAURANTE_ID, mutate, marcarEscrituraPropia])
+  }, [supabase, RESTAURANTE_ID, mutate, marcarEscrituraPropia, swrKey, invalidarLista])
 
   const actualizarTarea = useCallback(async (id: string, datos: Partial<Omit<Tarea, 'id' | 'restaurante_id'>>) => {
     const optimistic = (prev: Tarea[] | undefined) =>

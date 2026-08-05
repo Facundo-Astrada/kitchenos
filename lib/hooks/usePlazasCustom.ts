@@ -1,10 +1,11 @@
 'use client'
 
 import { useCallback, useMemo } from 'react'
-import useSWR from 'swr'
+
 import { createClient } from '@/lib/supabase/client'
 import type { PlazaCustom } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
+import { useRestauranteConfig } from './useRestauranteConfig'
 import { slugify } from '@/lib/utils'
 
 // Plazas custom del restaurante — guardadas en restaurantes.configuracion.plazas_custom
@@ -22,26 +23,17 @@ function errMsg(e: unknown, fallback: string): string {
   return fallback
 }
 
-async function fetchPlazasCustom(key: string): Promise<PlazaCustom[]> {
-  const rid = key.slice('plazas-custom-'.length)
-  const supabase = createClient()
-  const { data, error } = await supabase.from('restaurantes').select('configuracion').eq('id', rid).single()
-  if (error) throw error
-  const cfg = (data?.configuracion ?? {}) as { plazas_custom?: PlazaCustom[] }
-  return (cfg.plazas_custom ?? []).slice().sort((a, b) => a.orden - b.orden)
-}
-
 export function usePlazasCustom() {
   const RESTAURANTE_ID = useRestauranteId()
   const supabase = useMemo(() => createClient(), [])
-  const swrKey = RESTAURANTE_ID ? `plazas-custom-${RESTAURANTE_ID}` : null
+  // Lee de la cache compartida de restaurantes.configuracion — antes cada hook
+  // que necesitaba algo de esa columna hacía su propia query.
+  const { configuracion, loading, mutate } = useRestauranteConfig()
 
-  const { data: plazasCustom = [], isLoading: loading, mutate } = useSWR(swrKey, fetchPlazasCustom, {
-    revalidateOnFocus: false,
-    revalidateOnReconnect: true,
-    dedupingInterval: 300_000,
-    keepPreviousData: true,
-  })
+  const plazasCustom = useMemo(
+    () => ((configuracion.plazas_custom as PlazaCustom[] | undefined) ?? []).slice().sort((a, b) => a.orden - b.orden),
+    [configuracion],
+  )
 
   // Relee configuracion completa antes de escribir — evita pisar otras
   // claves (nombres_excluidos, slug, onboarding_step, etc.)

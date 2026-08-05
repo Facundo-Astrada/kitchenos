@@ -127,11 +127,17 @@ async function fetchHaccpData(key: string): Promise<HaccpData> {
 // Hook
 // ---------------------------------------------------------------------------
 
-export function useHaccp() {
+/**
+ * @param opts.soloEscritura — no descarga ningún dataset; deja disponibles solo
+ *   las funciones de escritura. Para pantallas que apenas crean un registro (el
+ *   mise crea un vencimiento al imprimir la etiqueta): pedían las 5 tablas de
+ *   HACCP —incluidas 200 temperaturas— para no leer ninguna.
+ */
+export function useHaccp(opts?: { soloEscritura?: boolean }) {
   const RESTAURANTE_ID = useRestauranteId()
   const supabase = useMemo(() => createClient(), [])
 
-  const swrKey = RESTAURANTE_ID ? `haccp-${RESTAURANTE_ID}` : null
+  const swrKey = RESTAURANTE_ID && !opts?.soloEscritura ? `haccp-${RESTAURANTE_ID}` : null
 
   const { data = EMPTY, isLoading: loading, error: swrError, mutate } = useSWR(
     swrKey,
@@ -149,17 +155,21 @@ export function useHaccp() {
 
   const refetch = useCallback(async () => { await mutate() }, [mutate])
 
-  // Realtime — un único canal revalida la cache combinada
+  // Realtime — un único canal revalida la cache combinada.
+  // Se filtra por restaurante: sin filtro, la escritura de cualquier otra cuenta
+  // hacía refetchear las 5 tablas acá. Y no se abre nada en modo solo-escritura.
+  const sinLectura = !!opts?.soloEscritura
   useEffect(() => {
-    if (!RESTAURANTE_ID) return
+    if (!RESTAURANTE_ID || sinLectura) return
+    const filter = `restaurante_id=eq.${RESTAURANTE_ID}`
     const channel = supabase
       .channel(`haccp-rt-${RESTAURANTE_ID}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_equipos' }, () => mutate())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_temperaturas' }, () => mutate())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_vencimientos' }, () => mutate())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_equipos', filter }, () => mutate())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_temperaturas', filter }, () => mutate())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'haccp_vencimientos', filter }, () => mutate())
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [RESTAURANTE_ID, supabase, mutate])
+  }, [RESTAURANTE_ID, supabase, mutate, sinLectura])
 
   // -------------------------------------------------------------------------
   // EQUIPOS

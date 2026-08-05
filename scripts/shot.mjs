@@ -42,6 +42,7 @@ const clicks = typeof args.click === 'string' ? args.click.split('||').map(s => 
 const fullPage = args.full === true
 const waitMs = args.wait ? parseInt(String(args.wait), 10) || 0 : 0
 const probe = typeof args.probe === "string" ? args.probe : null
+const medirRed = args.net === true
 
 if (!ruta) {
   console.error('Uso: node scripts/shot.mjs --ruta /stock [--viewport mobile|desktop] [--cuenta bros|demo] [--out docs/shots/x.png] [--click "sel1||sel2"] [--full]')
@@ -96,6 +97,23 @@ try {
   })
   const page = await context.newPage()
 
+  // --net: mide lo que baja la pantalla desde Supabase (REST). Sirve para
+  // comparar el peso de una vista antes y después de un cambio de queries.
+  const net = new Map()
+  let netOn = false
+  if (medirRed) {
+    page.on('response', async (res) => {
+      if (!netOn) return
+      const url = res.url()
+      if (!url.includes('/rest/v1/')) return
+      let bytes = 0
+      try { bytes = (await res.body()).length } catch { return }
+      const tabla = url.split('/rest/v1/')[1].split('?')[0]
+      const prev = net.get(tabla) ?? { n: 0, bytes: 0 }
+      net.set(tabla, { n: prev.n + 1, bytes: prev.bytes + bytes })
+    })
+  }
+
   console.log(`Login como "${cuenta}" (${login.email})...`)
   await page.goto(`${BASE}/login`, { waitUntil: 'networkidle', timeout: 60000 })
   await page.fill('input[type="email"]', login.email)
@@ -108,6 +126,7 @@ try {
   await dismissTours(page)
 
   console.log(`Capturando ${ruta} (${viewport})...`)
+  netOn = true   // solo cuenta lo de la pantalla, no lo del login
   await page.goto(`${BASE}${ruta}`, { waitUntil: 'networkidle', timeout: 60000 })
   await sleep(2500)
   await dismissTours(page)
@@ -136,6 +155,17 @@ try {
     }, probe)
     console.log(`Probe "${probe}": ${found.length} match(es)`)
     for (const f of found) console.log('  -', f)
+  }
+
+  if (medirRed) {
+    const filas = [...net.entries()].sort((a, b) => b[1].bytes - a[1].bytes)
+    const total = filas.reduce((s, [, v]) => s + v.bytes, 0)
+    const reqs = filas.reduce((s, [, v]) => s + v.n, 0)
+    console.log(`\nRed Supabase: ${reqs} requests · ${(total / 1024).toFixed(0)} kB`)
+    for (const [tabla, v] of filas.slice(0, 12)) {
+      console.log(`  ${String(Math.round(v.bytes / 1024)).padStart(5)} kB  ${String(v.n).padStart(2)}x  ${tabla}`)
+    }
+    console.log('')
   }
 
   const file = resolve(out)

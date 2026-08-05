@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef, type CSSProperties } from 'react'
 import { useAuth } from '@/lib/auth/context'
 import { useTareas } from '@/lib/hooks/useTareas'
-import { useRecetas } from '@/lib/hooks/useRecetas'
+import { useRecetasLite } from '@/lib/hooks/useRecetasLite'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
 import { syncMiseDesdeTarea } from '@/lib/ops/syncMise'
@@ -62,7 +62,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   const { perfil } = useAuth()
   const restauranteId = useRestauranteId()
   const { tareas, loading, agregarTarea, actualizarTarea, cambiarEstado, eliminarTarea } = useTareas()
-  const { recetas } = useRecetas()
+  const { recetas } = useRecetasLite()
   const recetasSimple = useMemo(() => recetas.map(r => ({ id: r.id, nombre: r.nombre })), [recetas])
   const { limpieza, registrarLimpieza, crearTareaLimpieza } = useHaccp()
   const { turnosActivos } = useTurnosServicio()

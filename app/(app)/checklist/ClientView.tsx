@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth/context'
 import { useChecklist } from '@/lib/hooks/useChecklist'
-import { useRecetas } from '@/lib/hooks/useRecetas'
+import { useRecetasLite } from '@/lib/hooks/useRecetasLite'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { createClient } from '@/lib/supabase/client'
 import { ProductoMiseCard, PLAZA_TO_SECCION, MISE_PRIO_TO_TAREA } from '@/components/mise/ProductoMiseCard'
@@ -44,6 +44,8 @@ const FREQ_LABELS: Record<RutinaFrecuencia, string> = {
   diaria: 'Diaria', semanal: 'Semanal', quincenal: 'Quincenal', mensual: 'Mensual',
 }
 type Tab = 'apertura' | 'cierre' | 'rutina'
+// Referencia estable para las tarjetas sin plazas asociadas (ver memo de ProductoMiseCard).
+const SIN_PLAZAS: PlatoPlaza[] = []
 function fmtFecha(d: string) {
   return new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
 }
@@ -85,10 +87,11 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     agregarRutina, actualizarRutina, eliminarRutina, toggleRutina,
     registrarAuditoriaRutina, guardarAuditoriaPasada,
   } = useChecklist()
-  const { recetas } = useRecetas()
+  const { recetas } = useRecetasLite()
   const { tareas, agregarTarea, cambiarEstado: cambiarEstadoTarea } = useTareas()
   const { rendimientoMap } = useProduccionRegistros()
-  const { crearVencimiento } = useHaccp()
+  // Solo se usa para crear el vencimiento desde la etiqueta — sin descargar HACCP.
+  const { crearVencimiento } = useHaccp({ soloEscritura: true })
   const { fichajeAbierto, marcarSalida } = useFichaje()
   const { turnosActivos } = useTurnosServicio()
 
@@ -102,7 +105,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       if (porciones && porciones > 0 && ings.length > 0) {
         const UNIDADES_G: Record<string, number> = { g: 1, kg: 1000, ml: 1, lt: 1000, l: 1000 }
         const totalG = ings.reduce((s, i) => {
-          const factor = UNIDADES_G[i.unidad] ?? 0
+          const factor = UNIDADES_G[i.unidad ?? ''] ?? 0
           return s + (parseFloat(String(i.cantidad)) || 0) * factor
         }, 0)
         if (totalG > 0) pesoPorcion = Math.round(totalG / porciones)
@@ -632,14 +635,17 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   ) => {
     // usuario_id: quién hizo la última acción sobre este registro — alimenta
     // el reporte de auditoría "pase de turno incumplido" (Reportes → Auditoría).
-    await upsertRegistro(itemId, fecha, turno, { ...d, usuario_id: authPerfil?.miembro_id ?? null })
-    if (d.completado === undefined) return
     // Vínculo por FK (checklist_item_id), no por título. Refleja el tilde del mise
     // en la(s) tarea(s) de producción originadas por este item.
-    const matchingTareas = tareas.filter(t => t.turno_fecha === today && t.checklist_item_id === itemId)
-    for (const mt of matchingTareas) {
-      await cambiarEstadoTarea(mt.id, d.completado ? 'listo' : 'pendiente')
-    }
+    // No se encadena con await al upsert: las dos escrituras son independientes y
+    // ambas son optimistas, así que salen juntas en vez de una después de la otra.
+    const matchingTareas = d.completado === undefined
+      ? []
+      : tareas.filter(t => t.turno_fecha === today && t.checklist_item_id === itemId)
+    await Promise.all([
+      upsertRegistro(itemId, fecha, turno, { ...d, usuario_id: authPerfil?.miembro_id ?? null }),
+      ...matchingTareas.map(mt => cambiarEstadoTarea(mt.id, d.completado ? 'listo' : 'pendiente')),
+    ])
   }, [upsertRegistro, tareas, cambiarEstadoTarea, today, authPerfil])
 
   const handleCrearTarea = useCallback(async (params: CrearTareaParams) => {
@@ -689,6 +695,24 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       }
     }
   }, [agregarTarea, authPerfil, today])
+
+  // Handlers estables para la tarjeta memoizada. actualizarItem/eliminarItem
+  // vienen del hook sin memoizar (una referencia nueva por render): pasarlos
+  // directo re-renderizaba las 40+ tarjetas del mise en cada cambio de estado.
+  // actualizarItemRef ya existe más arriba (lo usa el drag & drop).
+  const eliminarItemRef = useRef(eliminarItem)
+  eliminarItemRef.current = eliminarItem
+
+  const handlePrioChange = useCallback(async (i: MisePlaceItem, prio: MisePrioridad) => {
+    // Solo cambia la prioridad. La creación de tarea es explícita (panel de
+    // producción de la card / AddItemSheet), no un efecto del ciclo del badge
+    // — evita tareas fantasma por un tap de más.
+    await actualizarItemRef.current(i.id, { prioridad: prio })
+  }, [])
+
+  const handleDeleteItem = useCallback(async (id: string) => {
+    await eliminarItemRef.current(id)
+  }, [])
 
   const handleCrearVencimientoDesdeMise = useCallback(async (params: { producto_nombre: string; fecha_vencimiento: string; fecha_apertura: string }) => {
     await crearVencimiento({
@@ -1112,7 +1136,9 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                     fecha={fecha}
                     turno={turno}
                     recetaInfo={item.receta_id ? recetaInfoMap[item.receta_id] : undefined}
-                    platoPlazo={item.receta_id ? (platoPlazoMap[item.receta_id] ?? []) : []}
+                    // SIN_PLAZAS constante: un `[]` literal acá sería una prop
+                    // nueva en cada render y anularía el memo de la tarjeta.
+                    platoPlazo={item.receta_id ? (platoPlazoMap[item.receta_id] ?? SIN_PLAZAS) : SIN_PLAZAS}
                     hasTareaPendiente={tareasHoySet.has(item.id)}
                     rendimientoPromedio={item.receta_id ? rendimientoMap[item.receta_id] : null}
                     regCierreAnterior={regCierreAnteriorMap[item.id] ?? null}
@@ -1120,13 +1146,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                     onUpsert={handleMiseUpsert}
                     onCrearTarea={handleCrearTarea}
                     onCrearVencimiento={handleCrearVencimientoDesdeMise}
-                    onPrioChange={async (i, prio) => {
-                      // Solo cambia la prioridad. La creación de tarea es explícita
-                      // (panel de producción de la card / AddItemSheet), no un efecto
-                      // del ciclo del badge — evita tareas fantasma por un tap de más.
-                      await actualizarItem(i.id, { prioridad: prio })
-                    }}
-                    onDelete={eliminarItem}
+                    onPrioChange={handlePrioChange}
+                    onDelete={handleDeleteItem}
                   />
                 )}
               </div>
