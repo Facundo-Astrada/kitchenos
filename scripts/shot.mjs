@@ -21,7 +21,12 @@ const CUENTAS = {
 function parseArgs(argv) {
   const args = {}
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i].startsWith('--')) args[argv[i].slice(2)] = argv[++i]
+    if (!argv[i].startsWith('--')) continue
+    const key = argv[i].slice(2)
+    // Flags booleanos (--full): el siguiente token es otro flag o no hay más.
+    const next = argv[i + 1]
+    if (next === undefined || next.startsWith('--')) args[key] = true
+    else args[key] = argv[++i]
   }
   return args
 }
@@ -31,16 +36,22 @@ const ruta = args.ruta
 const viewport = args.viewport || 'mobile'
 const cuenta = args.cuenta || 'demo'
 const out = args.out || `docs/shots/${(ruta || '').replace(/^\//, '').replace(/\//g, '-') || 'shot'}-${viewport}.png`
+// --click: selectores Playwright a clickear en orden antes de capturar, separados
+// por "||" (ej. abrir una plaza y después el "?" de la guía). --full: página entera.
+const clicks = typeof args.click === 'string' ? args.click.split('||').map(s => s.trim()).filter(Boolean) : []
+const fullPage = args.full === true
 
 if (!ruta) {
-  console.error('Uso: node scripts/shot.mjs --ruta /stock [--viewport mobile|desktop] [--cuenta bros|demo] [--out docs/shots/x.png]')
+  console.error('Uso: node scripts/shot.mjs --ruta /stock [--viewport mobile|desktop] [--cuenta bros|demo] [--out docs/shots/x.png] [--click "sel1||sel2"] [--full]')
   process.exit(1)
 }
 if (!VIEWPORTS[viewport]) {
   console.error(`viewport inválido: "${viewport}" (usar mobile|desktop)`)
   process.exit(1)
 }
-const login = CUENTAS[cuenta]
+// Override puntual: cualquier otra cuenta (ej. la tablet de cocina de un cliente)
+// sin agregarle una entrada fija a CUENTAS ni escribir su password en el repo.
+const login = (args.email && args.pass) ? { email: args.email, pass: args.pass } : CUENTAS[cuenta]
 if (!login) {
   console.error(`cuenta inválida: "${cuenta}" (usar bros|demo)`)
   process.exit(1)
@@ -102,8 +113,14 @@ try {
   await sleep(1500)
   await dismissTours(page)
 
+  for (const sel of clicks) {
+    console.log(`Click: ${sel}`)
+    await page.click(sel, { timeout: 15000 })
+    await sleep(1200)
+  }
+
   const file = resolve(out)
-  await page.screenshot({ path: file })
+  await page.screenshot({ path: file, fullPage })
   console.log('->', file)
 } finally {
   await browser.close()

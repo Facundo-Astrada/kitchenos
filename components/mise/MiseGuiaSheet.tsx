@@ -140,9 +140,9 @@ export function MiseGuiaSheet({ foco, onClose }: { foco?: MiseGuiaFoco; onClose:
         titulo="Apertura / Cierre / Rutina"
         demo={<DemoNavy><PillNavy activo>Apertura</PillNavy><PillNavy>Cierre</PillNavy><PillNavy>Rutina</PillNavy></DemoNavy>}
       >
-        <b>Apertura:</b> arrancás el turno. Contás lo que hay de cada ítem y mandás a producir lo que falta.<br />
-        <b>Cierre:</b> terminás el turno. Anotás cuánto quedó de cada ítem — no cuánto usaste, cuánto <i>queda</i>.<br />
-        <b>Rutina:</b> tareas recurrentes de la plaza (limpieza, descongelado, control de fechas). Cada una
+        <b>Apertura:</b>{' '}arrancás el turno. Contás lo que hay de cada ítem y mandás a producir lo que falta.<br />
+        <b>Cierre:</b>{' '}terminás el turno. Anotás cuánto quedó de cada ítem — no cuánto usaste, cuánto <i>queda</i>.<br />
+        <b>Rutina:</b>{' '}tareas recurrentes de la plaza (limpieza, descongelado, control de fechas). Cada una
         aparece solo el día que le toca. Ahí también caen las tareas de HACCP → Limpieza con &quot;Mostrar en OPS&quot;.
         <Repercute>si nadie completa el <b>Cierre</b>, el que abre mañana arranca a ciegas y tiene que contar todo de cero.</Repercute>
       </Bloque>
@@ -171,9 +171,10 @@ export function MiseGuiaSheet({ foco, onClose }: { foco?: MiseGuiaFoco; onClose:
           </DemoNavy>
         }
       >
-        <b>fact_check (Modo Control):</b> deja la lista en una sola línea por ítem, sin cantidades ni
-        botones. Para pasar rápido tildando lo que ya está listo — típico del jefe de cocina revisando la plaza.<br />
-        <b>settings:</b> crear, renombrar, reordenar o borrar las secciones de esta plaza.
+        <b>fact_check (Modo Control):</b>{' '}deja cada ítem en una sola línea — nombre, cantidad estándar y
+        el tilde, nada más. Para recorrer la plaza rápido marcando lo que ya está, sin cargar números.
+        Queda activado hasta que lo apagues.<br />
+        <b>settings:</b>{' '}crear, renombrar, reordenar o borrar las secciones de esta plaza.
       </Bloque>
 
       {/* ── LA TARJETA ── */}

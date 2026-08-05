@@ -345,6 +345,9 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
               return (
                 <button
                   key={f}
+                  // El tour del Coach apuntaba a "plan-sub-menu"/"plan-sub-eventos",
+                  // targets de la Planificación vieja que ya no existían.
+                  {...(f === 'menu' ? { 'data-coach-target': 'plan-sub-menu' } : f === 'evento' ? { 'data-coach-target': 'plan-sub-eventos' } : {})}
                   onClick={() => setFiltroTipo(f)}
                   style={{
                     flex: '1 1 auto', minWidth: 0, padding: '6px 8px', borderRadius: 999,
