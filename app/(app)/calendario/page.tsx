@@ -1,21 +1,24 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   useCalendario,
   TIPO_CONFIG,
   type EventoCalendario,
   type TipoEvento,
+  type NotaItemCalendario,
 } from '@/lib/hooks/useCalendario'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { useMenus, type MenuConPreparaciones } from '@/lib/hooks/useMenus'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
-import { useDebounce } from '@/lib/hooks/useDebounce'
 import { useSheetOpenWhen } from '@/lib/ui/chrome'
 import { createClient } from '@/lib/supabase/client'
 import { activarMenuParaFechas, rangoFechas } from '@/lib/menus/activarMenu'
+import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
+import { todasLasPlazas, plazaLabel, plazaColor } from '@/lib/constants'
+import type { Plaza } from '@/types'
 
 /* ─── Helpers ─── */
 
@@ -134,8 +137,9 @@ export default function CalendarioPage() {
   const [editEvento, setEditEvento] = useState<EventoCalendario | null>(null)
 
   const {
-    eventos, proveedores, notas, loading,
-    fetchEventos, crearEvento, actualizarEvento, eliminarEvento, guardarNota,
+    eventos, proveedores, notaItems, loading,
+    fetchEventos, crearEvento, actualizarEvento, eliminarEvento,
+    agregarNotaItem, eliminarNotaItem, asignarPlazaNotaItem,
   } = useCalendario()
   const { agregarTarea } = useTareas()
   const { menus: catalogoMenus } = useMenus()
@@ -188,59 +192,52 @@ export default function CalendarioPage() {
     }
   }
 
-  /* ── Notas del día seleccionado — autoguardado ── */
-  const [notaDraft, setNotaDraft] = useState('')
-  const [notaToast, setNotaToast] = useState<string | null>(null)
-  const notaTextareaRef = useRef<HTMLTextAreaElement>(null)
-  const lastSelectedDateRef = useRef<string>('')
-  const notaDebounced = useDebounce(notaDraft, 800)
+  /* ── Notas del día seleccionado — ítems individuales, enviables a Producción ── */
+  const { plazasCustom } = usePlazasCustom()
+  const [nuevoItemTexto, setNuevoItemTexto] = useState('')
+  const [agregandoItem, setAgregandoItem] = useState(false)
+  const [eligiendoPlazaId, setEligiendoPlazaId] = useState<string | null>(null)
+  const [enviandoItemId, setEnviandoItemId] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (lastSelectedDateRef.current === selectedDate) return
-    lastSelectedDateRef.current = selectedDate
-    setNotaDraft(notas[selectedDate]?.contenido ?? '')
-  }, [selectedDate, notas])
+  const itemsDelDia = notaItems[selectedDate] ?? []
 
-  useEffect(() => {
-    const actual = notas[selectedDate]?.contenido ?? ''
-    if (notaDebounced === actual) return
-    if (lastSelectedDateRef.current !== selectedDate) return
-    guardarNota(selectedDate, notaDebounced)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notaDebounced])
-
-  useEffect(() => {
-    if (!notaToast) return
-    const t = setTimeout(() => setNotaToast(null), 2200)
-    return () => clearTimeout(t)
-  }, [notaToast])
-
-  const convertirLineaEnTarea = async () => {
-    const ta = notaTextareaRef.current
-    if (!ta) return
-    const cursor = ta.selectionStart ?? notaDraft.length
-    const antes = notaDraft.slice(0, cursor)
-    const inicioLinea = antes.lastIndexOf('\n') + 1
-    const finLinea = notaDraft.indexOf('\n', cursor)
-    const linea = notaDraft.slice(inicioLinea, finLinea === -1 ? undefined : finLinea).trim()
-    if (!linea) {
-      setNotaToast('Ubicá el cursor en una línea con texto')
-      return
-    }
+  const handleAgregarItem = async () => {
+    const texto = nuevoItemTexto.trim()
+    if (!texto) return
+    setAgregandoItem(true)
     try {
-      await agregarTarea({
-        titulo: linea.slice(0, 120),
+      await agregarNotaItem(selectedDate, texto)
+      setNuevoItemTexto('')
+    } catch {
+      showToast('No se pudo agregar el ítem')
+    } finally {
+      setAgregandoItem(false)
+    }
+  }
+
+  const handleEnviarAPlaza = async (item: NotaItemCalendario, plaza: Plaza) => {
+    setEligiendoPlazaId(null)
+    setEnviandoItemId(item.id)
+    try {
+      const tareaId = await agregarTarea({
+        titulo: item.texto.slice(0, 120),
         descripcion: `Desde nota del calendario (${selectedDate})`,
         status: 'pendiente',
         estado: 'pendiente',
         prioridad: 'media',
         categoria: 'general',
+        modo: 'carta',
         seccion: 'general',
+        plaza,
+        turno_fecha: selectedDate,
         fecha_limite: selectedDate,
       })
-      setNotaToast('Tarea creada')
+      await asignarPlazaNotaItem(item.id, selectedDate, plaza, tareaId)
+      showToast(`Enviado a ${plazaLabel(plaza, plazasCustom)}`)
     } catch {
-      setNotaToast('No se pudo crear la tarea')
+      showToast('No se pudo enviar a Producción')
+    } finally {
+      setEnviandoItemId(null)
     }
   }
 
@@ -289,18 +286,19 @@ export default function CalendarioPage() {
       .flatMap(([, evs]) => evs)
       .slice(0, 3)
       .map(ev => ({ titulo: ev.titulo, fecha: ev.fecha_inicio }))
-    const diasConNota = Object.values(notas).filter(n => n.contenido.trim() !== '').length
+    const diasConNota = Object.values(notaItems).filter(items => items.length > 0).length
+    const itemsSeleccionado = notaItems[selectedDate] ?? []
     localStorage.setItem('kc_screen_context', JSON.stringify({
       screen: 'calendario',
       totalEventos: eventos.length,
       eventosHoy,
       eventosProximos,
       diaSeleccionado: selectedDate,
-      notaDiaSeleccionado: notas[selectedDate]?.contenido?.slice(0, 300) || null,
+      itemsNotaDiaSeleccionado: itemsSeleccionado.map(it => ({ texto: it.texto, plaza: it.plaza })).slice(0, 20),
       diasConNotaEsteMes: diasConNota,
     }))
     return () => localStorage.removeItem('kc_screen_context')
-  }, [eventos, eventosByDate, notas, selectedDate])
+  }, [eventos, eventosByDate, notaItems, selectedDate])
   const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate])
   const selectedEvents = eventosByDate[selectedDate] ?? []
 
@@ -879,40 +877,115 @@ export default function CalendarioPage() {
         {!loading && view === 'mes' && (() => {
           const maxPills = isDesktop ? 3 : 2
 
+          const plazasDisponibles = todasLasPlazas(plazasCustom)
+
           const notasPanel = (
             <div style={{ ...cardStyle, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>edit_note</span>
-                  Notas del día
-                </div>
-                {notaToast && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{notaToast}</span>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>edit_note</span>
+                Notas del día
               </div>
-              <textarea
-                ref={notaTextareaRef}
-                value={notaDraft}
-                onChange={e => setNotaDraft(e.target.value)}
-                placeholder="Anotá pendientes de la semana, lo que se habló en una reunión..."
-                style={{
-                  width: '100%', minHeight: isDesktop ? 200 : 90, resize: 'vertical',
-                  border: '1px solid var(--border)', borderRadius: 10, padding: 10,
-                  fontSize: 13, color: 'var(--text-1)', background: 'var(--bg)', outline: 'none',
-                  fontFamily: 'inherit', lineHeight: 1.5,
-                }}
-              />
-              <button
-                onClick={convertirLineaEnTarea}
-                disabled={!notaDraft.trim()}
-                style={{
-                  alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6,
-                  background: 'none', border: '1px solid var(--border)', borderRadius: 8,
-                  padding: '6px 12px', fontSize: 12, fontWeight: 600, color: 'var(--text-2)',
-                  cursor: notaDraft.trim() ? 'pointer' : 'default', opacity: notaDraft.trim() ? 1 : 0.5,
-                }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>task_alt</span>
-                Convertir línea en tarea
-              </button>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={nuevoItemTexto}
+                  onChange={e => setNuevoItemTexto(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAgregarItem() } }}
+                  placeholder="Agregar un ítem — pendiente, tema de reunión..."
+                  style={{
+                    flex: 1, padding: '9px 12px', borderRadius: 10, border: '1px solid var(--border)',
+                    background: 'var(--bg)', color: 'var(--text-1)', fontSize: 13, outline: 'none', fontFamily: 'inherit',
+                  }}
+                />
+                <button
+                  onClick={handleAgregarItem}
+                  disabled={!nuevoItemTexto.trim() || agregandoItem}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: 38, borderRadius: 10, border: 'none',
+                    background: nuevoItemTexto.trim() ? 'var(--navy)' : 'var(--border)',
+                    color: '#fff', cursor: nuevoItemTexto.trim() ? 'pointer' : 'default', flexShrink: 0,
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 20 }}>add</span>
+                </button>
+              </div>
+
+              {itemsDelDia.length === 0 ? (
+                <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>Sin ítems este día todavía.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  {itemsDelDia.map(item => {
+                    const color = item.plaza ? plazaColor(item.plaza as Plaza, plazasCustom) : null
+                    return (
+                      <div key={item.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 16, color: item.plaza ? '#22c55e' : 'var(--text-3)', marginTop: 2, flexShrink: 0 }}>
+                          {item.plaza ? 'check_circle' : 'radio_button_unchecked'}
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, color: 'var(--text-1)' }}>{item.texto}</div>
+
+                          {item.plaza ? (
+                            <span style={{
+                              display: 'inline-block', marginTop: 4, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 8,
+                              background: color + '18', color: color as string,
+                            }}>
+                              Enviado a {plazaLabel(item.plaza as Plaza, plazasCustom)}
+                            </span>
+                          ) : eligiendoPlazaId === item.id ? (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                              {plazasDisponibles.map(p => {
+                                const c = plazaColor(p, plazasCustom)
+                                return (
+                                  <button
+                                    key={p}
+                                    onClick={() => handleEnviarAPlaza(item, p)}
+                                    style={{
+                                      padding: '4px 10px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                                      fontSize: 11, fontWeight: 700, background: c + '18', color: c,
+                                    }}
+                                  >
+                                    {plazaLabel(p, plazasCustom)}
+                                  </button>
+                                )
+                              })}
+                              <button
+                                onClick={() => setEligiendoPlazaId(null)}
+                                style={{
+                                  padding: '4px 10px', borderRadius: 99, border: '1px solid var(--border)', cursor: 'pointer',
+                                  fontFamily: 'inherit', fontSize: 11, fontWeight: 700, background: 'none', color: 'var(--text-3)',
+                                }}
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setEligiendoPlazaId(item.id)}
+                              disabled={enviandoItemId === item.id}
+                              style={{
+                                marginTop: 4, display: 'flex', alignItems: 'center', gap: 4,
+                                background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                                fontSize: 11, fontWeight: 600, color: 'var(--accent)', fontFamily: 'inherit',
+                              }}
+                            >
+                              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>restaurant_menu</span>
+                              {enviandoItemId === item.id ? 'Enviando...' : 'Enviar a Producción'}
+                            </button>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => eliminarNotaItem(item.id, selectedDate)}
+                          title="Eliminar ítem"
+                          style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', display: 'flex', padding: 2, flexShrink: 0 }}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )
 
@@ -996,7 +1069,7 @@ export default function CalendarioPage() {
                     const isToday = dateStr === today()
                     const isSelected = dateStr === selectedDate
                     const dayEvents = eventosByDate[dateStr] ?? []
-                    const tieneNota = !!notas[dateStr]?.contenido?.trim()
+                    const tieneNota = (notaItems[dateStr]?.length ?? 0) > 0
 
                     return (
                       <div key={i} style={{ position: 'relative' }}>

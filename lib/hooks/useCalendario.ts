@@ -43,14 +43,15 @@ export interface Proveedor {
   restaurante_id: string
 }
 
-export interface NotaCalendario {
+export interface NotaItemCalendario {
   id: string
   restaurante_id: string
   fecha: string          // 'YYYY-MM-DD'
-  contenido: string
-  autor_id: string | null
+  texto: string
+  orden: number
+  plaza: string | null
+  tarea_id: string | null
   created_at: string
-  updated_at: string
 }
 
 interface PedidoRow {
@@ -79,7 +80,7 @@ export function useCalendario() {
   restIdRef.current = RESTAURANTE_ID
   const [eventos, setEventos] = useState<EventoCalendario[]>([])
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
-  const [notas, setNotas] = useState<Record<string, NotaCalendario>>({})
+  const [notaItems, setNotaItems] = useState<Record<string, NotaItemCalendario[]>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const supabase = useMemo(() => createClient(), [])
@@ -222,20 +223,28 @@ export function useCalendario() {
 
       setEventos([...eventosDb, ...pedidoEventos, ...prodEventos, ...menuEventos])
 
-      // 5. Notas del mes (vinculadas a la fecha, no al evento)
-      const { data: notasData, error: notasErr } = await supabase
-        .from('calendario_notas')
+      // 5. Ítems de nota del mes (vinculados a la fecha, uno por línea escrita)
+      const { data: itemsData, error: itemsErr } = await supabase
+        .from('calendario_nota_items')
         .select('*')
         .eq('restaurante_id', restIdRef.current)
         .gte('fecha', primerDia)
         .lte('fecha', ultimoDia)
+        .order('created_at', { ascending: true })
 
-      if (notasErr) throw notasErr
-      setNotas(prev => {
-        const next = { ...prev }
-        for (const n of (notasData ?? []) as NotaCalendario[]) next[n.fecha] = n
-        return next
-      })
+      if (itemsErr) throw itemsErr
+      // Se re-inicializan TODOS los días del rango pedido (no solo los que
+      // trajeron filas) para que un día que se quedó sin ítems no arrastre
+      // el estado local viejo.
+      const porFecha: Record<string, NotaItemCalendario[]> = {}
+      for (let d = new Date(primerDia + 'T12:00:00'); d <= new Date(ultimoDia + 'T12:00:00'); d.setDate(d.getDate() + 1)) {
+        porFecha[d.toISOString().slice(0, 10)] = []
+      }
+      for (const it of (itemsData ?? []) as NotaItemCalendario[]) {
+        if (!porFecha[it.fecha]) porFecha[it.fecha] = []
+        porFecha[it.fecha].push(it)
+      }
+      setNotaItems(prev => ({ ...prev, ...porFecha }))
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al cargar eventos del calendario'
       console.error('[useCalendario] fetchEventos Error:', msg)
@@ -245,41 +254,51 @@ export function useCalendario() {
     }
   }, [supabase])
 
-  /* Guarda (o borra si queda vacía) la nota de un día — upsert por (restaurante_id, fecha) */
-  const guardarNota = useCallback(async (fecha: string, contenido: string) => {
-    if (!restIdRef.current) return
-    const trimmed = contenido
-    if (trimmed.trim() === '') {
-      setNotas(prev => {
-        const existente = prev[fecha]
-        if (!existente) return prev
-        const next = { ...prev }
-        delete next[fecha]
-        return next
-      })
-      const { error } = await supabase
-        .from('calendario_notas')
-        .delete()
-        .eq('restaurante_id', restIdRef.current)
-        .eq('fecha', fecha)
-      if (error) console.error('[useCalendario] guardarNota (delete) Error:', error.message)
-      return
-    }
-
+  /* Agrega un ítem de nota (una línea) al final del día */
+  const agregarNotaItem = useCallback(async (fecha: string, texto: string) => {
+    if (!restIdRef.current || !texto.trim()) return
     try {
+      // El orden de la lista lo da created_at (server-side, sin ambigüedad),
+      // no un contador calculado en el cliente — dos ítems agregados en
+      // rápida sucesión podían pisarse el mismo índice.
       const { data, error } = await supabase
-        .from('calendario_notas')
-        .upsert(
-          { restaurante_id: restIdRef.current, fecha, contenido: trimmed, updated_at: new Date().toISOString() },
-          { onConflict: 'restaurante_id,fecha' },
-        )
+        .from('calendario_nota_items')
+        .insert({ restaurante_id: restIdRef.current, fecha, texto: texto.trim() })
         .select('*')
         .single()
       if (error) throw error
-      setNotas(prev => ({ ...prev, [fecha]: data as NotaCalendario }))
+      setNotaItems(prev => ({ ...prev, [fecha]: [...(prev[fecha] ?? []), data as NotaItemCalendario] }))
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al guardar la nota'
-      console.error('[useCalendario] guardarNota Error:', msg)
+      const msg = e instanceof Error ? e.message : 'Error al agregar el ítem'
+      console.error('[useCalendario] agregarNotaItem Error:', msg)
+      throw new Error(msg)
+    }
+  }, [supabase])
+
+  const eliminarNotaItem = useCallback(async (id: string, fecha: string) => {
+    try {
+      setNotaItems(prev => ({ ...prev, [fecha]: (prev[fecha] ?? []).filter(it => it.id !== id) }))
+      const { error } = await supabase.from('calendario_nota_items').delete().eq('id', id)
+      if (error) throw error
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al eliminar el ítem'
+      console.error('[useCalendario] eliminarNotaItem Error:', msg)
+    }
+  }, [supabase])
+
+  /* Marca el ítem con la plaza elegida + la tarea de Producción que se creó a partir de él */
+  const asignarPlazaNotaItem = useCallback(async (id: string, fecha: string, plaza: string, tareaId: string) => {
+    try {
+      setNotaItems(prev => ({
+        ...prev,
+        [fecha]: (prev[fecha] ?? []).map(it => it.id === id ? { ...it, plaza, tarea_id: tareaId } : it),
+      }))
+      const { error } = await supabase.from('calendario_nota_items').update({ plaza, tarea_id: tareaId }).eq('id', id)
+      if (error) throw error
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al enviar el ítem a Producción'
+      console.error('[useCalendario] asignarPlazaNotaItem Error:', msg)
+      throw new Error(msg)
     }
   }, [supabase])
 
@@ -368,13 +387,15 @@ export function useCalendario() {
   return {
     eventos,
     proveedores,
-    notas,
+    notaItems,
     loading,
     error,
     fetchEventos: fetchEventosTracked,
     crearEvento,
     actualizarEvento,
     eliminarEvento,
-    guardarNota,
+    agregarNotaItem,
+    eliminarNotaItem,
+    asignarPlazaNotaItem,
   }
 }
