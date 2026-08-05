@@ -88,6 +88,14 @@ Cada fila del header navy le come ~12% de alto a un celular. Reglas: la **fecha 
 
 En pantallas que se usan de pie y con apuro, todo número que se pueda derivar de otros dos es ruido. No mostrar `N × peso` **y** el total; no mostrar un déficit calculado en una caja propia **y** dentro del CTA que lo resuelve. Los controles que se tocan poco (prioridad, borrar) van en un panel que se expande, no en la fila principal. Recalcular en `onChange`, no en `onBlur`, para que el CTA reaccione mientras se tipea; y si el dato cargado ya completa el ítem, tildarlo solo en vez de exigir el tap extra.
 
+## Grilla CSS con `repeat(N,1fr)` no encoge por debajo del contenido — usar `minmax(0,1fr)`
+
+Un pill/badge con `whiteSpace:'nowrap'` dentro de una celda de grilla (ej. título de evento largo en el calendario) no tiene punto de corte — la columna `1fr` crece para acomodar ese ancho mínimo en vez de truncar, y la grilla entera se desborda del layout (se superpone a un panel al lado si hay un `flex` padre). Fix: `gridTemplateColumns: 'repeat(N, minmax(0, 1fr))'` en vez de `repeat(N,1fr)` — dejar que la columna sí pueda encoger a 0 para que el `overflow:hidden`+`textOverflow:ellipsis` del contenido interno recién ahí trunque contra el ancho real.
+
+## Modal centrado en desktop / full-screen en mobile — sin componente propio todavía
+
+No existe un componente que combine `useIsDesktop()` + `useSheetOpenWhen()` para este patrón — se arma a mano por pantalla (ver `app/(app)/calendario/page.tsx`, forms de evento y de planificar menú). Estructura: en `isDesktop`, backdrop `position:fixed,inset:0,zIndex:2000,background:rgba(0,0,0,.55)` + card centrada (`borderRadius:18, maxWidth:560, maxHeight:'calc(100dvh - 48px)', overflowY:'auto'`, cierra al click en el backdrop vía `onClick` en el wrapper + `stopPropagation` en la card); si no, el form full-screen de siempre (header navy). Candidato a extraer a `components/ui/` la próxima vez que se repita en una tercera pantalla.
+
 ## Grillas multi-columna sobre listas con drag vertical
 
 Un reordenar por long-press que compara `clientY` contra el centro de cada ítem (patrón del mise, `checklist/ClientView.tsx`) **se rompe** con dos tarjetas lado a lado: mismo centro vertical, el "más cercano" sale al azar. Si se agrega una grilla en desktop, condicionarla a `@media (min-width: 1024px) and (pointer: fine)` — no solo al ancho — para que una tablet táctil ancha (iPad landscape = 1024px) conserve columna única y drag funcionando.

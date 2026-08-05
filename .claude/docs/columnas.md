@@ -57,6 +57,8 @@
 | `caja_movimientos` | `caja_turno_id, medio_id(FK NOT NULL), tipo('retiro'\|'ingreso'), monto, motivo, creado_por` — el medio de efectivo se infiere por regex de nombre (`medios_pago` no tiene campo "tipo") | — |
 | `mesas` | `forma('cuadrada'\|'redonda'\|'rectangular')`, `ancho/alto NUMERIC` (% del canvas, editable con handle de resize), `rotacion INT`, `color TEXT NULL` (null=madera `#a9744f` o color de estado si ocupada) | — |
 | `salon_elementos` | `tipo('barra'\|'caja'\|'parrilla'\|'planta'\|'pared'\|'otro')`, `label`, `pos_x/pos_y/ancho/alto` (% del mundo), `rotacion`, `color` — mobiliario decorativo, no clickeable en servicio. **No está en `reset_demo_restaurante()`** — sumarla si se toca esa función | — |
+| `eventos` | `fecha_fin DATE NULL` — existe en la tabla pero el form de Calendario nunca la usa (siempre manda `null`); un evento multi-día requeriría cablearla. `recurrente`+`frecuencia` también existen pero el fetch no las procesa (filtra por rango de mes) — un evento "recurrente" hoy solo aparece el día que se creó | — |
+| `calendario_nota_items` | `restaurante_id, fecha, texto, orden(no usado, ordena por created_at), plaza TEXT NULL, tarea_id UUID NULL` — un ítem = una línea de nota del calendario. `plaza`+`tarea_id` se llenan juntos al "Enviar a Producción" (crea la tarea real vía `agregarTarea` y linkea); sin FK a `tareas` (igual que el resto de los links polimórficos del proyecto) | — |
 
 ## Unidades de ingredientes — trampas de conversión
 

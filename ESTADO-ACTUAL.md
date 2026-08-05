@@ -25,7 +25,7 @@ Este archivo es una foto del presente (qué existe, qué falta). El detalle hist
 | 10 | **Pase de Turno** | `/pase` | Funcional | Chat continuo entre turnos, prioridades, crear tarea desde mensaje, realtime, `@menciones` compartidas con la columna Importante de OPS. |
 | 11 | **HACCP / Limpieza** | `/haccp` | Funcional | Temperaturas, Vencimientos (color por días), Limpieza (con calendario + sync a OPS). Export PDF para Bromatología. |
 | 12 | **Reportes / CMV** | `/reportes` | Funcional | 10 tabs: Resumen, CMV, Presupuesto vs Real, Rendimiento por plaza, Food Cost, Compras, Precios/inflación, Producción, Caja, Auditoría. Export Excel contextual por tab. |
-| 13 | **Calendario** | `/calendario` | Funcional | Vista mensual + semanal, eventos con recurrencia, entregas de pedidos auto-integradas. |
+| 13 | **Calendario** | `/calendario` | Funcional | Grilla mensual estilo Google Calendar (celdas altas, píldoras de evento por color, botón Hoy, crear con un clic) + vista semanal. Notas por día como ítems individuales, cada uno enviable a Producción eligiendo plaza (crea la tarea real). "Planificar menú": elige un Menú del catálogo + rango de fechas y activa la producción de todos esos días de una (comparte lógica con "Cargar menú" de Planificación vía `lib/menus/activarMenu.ts`). Refleja automáticamente entregas de pedidos y menús activados (tareas.menu_id) como eventos de solo lectura. "Nuevo evento" es modal centrado en desktop, full-screen en mobile. Plan de expansión (rutinas recurrentes, más reflejos, Coach con contexto completo) en `CALENDARIO-PLAN.md`. |
 | 14 | **Turnos / Equipo** | `/turnos` | Funcional | Tabs Equipo/Turnos/Puestos. Sistema de puestos con nivel+plaza_default+módulos, overrides individuales por persona, fichaje real (clock-in/out → costo laboral). |
 | 15 | **Producción / Planificación** | `/produccion` | Funcional (vive embebido en OPS) | Planilla del día, calendario mensual con multi-select, multi-menú por día, "Sugerir producción" con IA (motor de reglas + narración, nunca cambia números). |
 | 16 | **Merma** | `/merma` | Funcional | Bottom sheet + módulo propio, 8 motivos, turno, plaza, costo estimado (descuenta `stock_actual`). |
@@ -81,7 +81,7 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 
 **Total: 43 tablas** con RLS habilitado. Aislamiento multi-tenant real vía `mi_restaurante_id()`. Todas las políticas UPDATE tienen `WITH CHECK` explícito.
 
-Nota: hay tablas adicionales sumadas después de este conteo (`menus`, `menu_preparaciones`, `stock_sectores`, `stock_estantes`, `cajas_turnos`, `caja_movimientos`, `salon_elementos`, `checklist_auditorias`, `presupuestos`, `demo_visitas`, etc.) — ver `.claude/docs/columnas.md` para el detalle columna por columna de cada una.
+Nota: hay tablas adicionales sumadas después de este conteo (`menus`, `menu_preparaciones`, `stock_sectores`, `stock_estantes`, `cajas_turnos`, `caja_movimientos`, `salon_elementos`, `checklist_auditorias`, `presupuestos`, `demo_visitas`, `calendario_nota_items`, etc.) — ver `.claude/docs/columnas.md` para el detalle columna por columna de cada una.
 
 ---
 

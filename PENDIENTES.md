@@ -61,6 +61,12 @@ Vitest + CI (typecheck+vitest+build por push/PR) + Playwright e2e (`e2e/salon-kd
 - Migrar a columnas reales cuando vuelva el acceso DDL: plazas custom (hoy JSONB en `restaurantes.configuracion.plazas_custom`, `usePlazasCustom.ts`) y cantidad de recipientes (hoy sufijo `" ×N"` en `checklist_items.recipiente_nombre`, `lib/ops/mise.ts`). Ambos funcionan bien y degradan de forma legible — migrar es directo cuando haya acceso a migraciones.
 - `tareas`/`MenuActivoView` no muestran `recipiente_nombre`/`peso_porcion` al ejecutar un menú activado en Producción (se cargan en el `OpsPanel` de Carta pero se pierden — `tareas` no tiene esas columnas). Decisión ago 2026: no vale la pena todavía (dato opcional, mayoría de menús se activan sin cargarlo) — retomar solo si el uso real en El Rescoldo lo pide.
 
+### Calendario — F2 a F5 del plan de expansión
+F1 (grilla estilo Google Calendar, notas por día como ítems enviables a Producción, Planificar menú por rango) ya deployado. Falta, en orden, según `CALENDARIO-PLAN.md`: F2 motor de rutinas recurrentes (generalizar `haccp_limpieza` a una tabla `rutinas` compartida — decisión de Facundo: generalizar, no duplicar por dominio), F3 más reflejos de solo lectura (menús de Carta, turnos, HACCP, cuenta corriente), F4 Coach con contexto completo del calendario + tools de agenda, F5 extras (ICS, feriados, semana tipo).
+
+### Demo El Rescoldo — menú duplicado
+Dos filas en `menus` con nombre "Noche de Asado - Día del Padre" y el mismo `created_at` (`e5c01d00-...d1` y `4622a73b-...`) — parecen un duplicado de seed, no algo que haya creado el usuario. Confunde el picker de "Cargar menú"/"Planificar menú" (aparece dos veces la misma opción). Revisar si conviene borrar una y sus tareas asociadas de junio.
+
 ### Carta — editor de composición (seguimiento auditoría ago 2026)
 - Unificar del todo la semántica de "Cantidad" entre modo Plato (porciones, con gramaje opcional que ya afecta costo) y modo Menú/Evento (siempre gramos para receta/producto, unidades para plato vinculado) — hoy es coherente pero son dos modelos distintos sin explicarse entre sí; evaluar si conviene converger a uno solo.
 

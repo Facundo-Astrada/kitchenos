@@ -44,6 +44,8 @@
 
 19. **`new Date().toISOString().split('T')[0]` ≠ `hoyOperativo()`.** `hoyOperativo()` (`lib/ops/turnos.ts`) calcula la fecha operativa en huso Argentina con corte configurable (antes de ~6am = día anterior) — fuente de verdad para `turno_fecha`. `toISOString()` da UTC, que de noche (UTC-3) ya cayó en el día siguiente. Toda comparación contra "hoy" en turnos/producción usa `hoyOperativo()`, nunca `toISOString()` a mano.
 
+20. **`const supabase = createClient()` sin `useMemo` en un hook rompe cualquier `useCallback`/`useEffect` que dependa de una función del hook.** `createClient()` (`lib/supabase/client.ts`) NO es singleton — crea un `SupabaseClient` nuevo en cada llamada. Si el hook lo asigna directo (sin memoizar) y alguno de sus `useCallback` lo tiene en deps, esa función cambia de referencia en cada render del hook → un `useEffect` de la pantalla que la usa como dep se re-dispara sin parar → loop de fetches que deja la pantalla trabada en "Cargando..." de forma intermitente (no siempre visible, pero pega igual en costo de red). Fix: `const supabase = useMemo(() => createClient(), [])` — patrón ya usado en `useTareas.ts`/`useMenus.ts`.
+
 ## Anti-patrón: funciones internas usadas como JSX en React
 
 **Síntoma:** el teclado se cierra al primer carácter, se pierde el focus, un form "se resetea" solo.
@@ -73,13 +75,13 @@ export default function Page() {
 
 ```ts
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
 
 export function useXxx() {
   const RESTAURANTE_ID = useRestauranteId()   // '' mientras carga
-  const supabase = createClient()             // browser client
+  const supabase = useMemo(() => createClient(), [])  // createClient() NO es singleton — ver gotcha #20
   const [items, setItems] = useState<T[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -102,7 +104,7 @@ export function useXxx() {
 
 1. **Guard al inicio de cada fetch:** `if (!RESTAURANTE_ID) return` — sin esto los queries devuelven datos vacíos o de otro tenant.
 2. **RESTAURANTE_ID en deps de useCallback** — omitirlo es stale closure; el hook queda apuntando al restaurante viejo si el usuario cambia de cuenta.
-3. **`createClient()`** — browser client siempre en hooks. Nunca el admin client.
+3. **`createClient()`** — browser client siempre en hooks, envuelto en `useMemo(() => createClient(), [])` (no es singleton, ver gotcha #20). Nunca el admin client.
 4. **Paginación con `useRef`, NO `useState`** — `page` como state en deps del `useCallback` del fetch recrea la función en cada avance → el `useEffect([fetch])` se re-dispara y resetea a página 0.
 
 ## Cache SWR — patrón estándar para hooks "lista al montar"
@@ -182,6 +184,10 @@ const { data } = await supabase.from('plato_recetas').select('cantidad_ops')
   .eq('receta_id', pr.receta_id).eq('plaza', opsPlaza).not('cantidad_ops', 'is', null)
 const total = data.reduce((s, r) => s + (r.cantidad_ops ?? 0), 0)
 ```
+
+## Activar menú (Planificación/Calendario) — helper compartido `lib/menus/activarMenu.ts`
+
+`activarMenuParaFechas(supabase, restauranteId, menu, fechas: string[])` — crea en `tareas` las preparaciones de un menú para cada fecha dada: dedupe por título dentro de `(menu_id, turno_fecha)`, carryover (borra lo pendiente de ayer) solo si el lote incluye el día real de `hoyOperativo()`. Usado por `app/(app)/produccion/page.tsx` (un día o varios sueltos, vía `multiSelectMode`) y por `app/(app)/calendario/page.tsx` ("Planificar menú", rango contiguo con `rangoFechas(desde, hasta)`). No reimplementar el loop de activación en un tercer lugar — extender este helper.
 
 ## OPS mise — helper compartido `lib/ops/mise.ts`
 
