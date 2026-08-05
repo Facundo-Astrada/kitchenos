@@ -130,6 +130,10 @@ Solo `Material Symbols Outlined`, nunca emoji ni SVG custom: `<span className="m
 
 Único lugar para el flujo plaza → sección → recipiente → cantidad+unidad → peso por porción. Recibe `initial?: OpsInitial`, emite `onSave(result: OpsResult)`. Lo usan `RecetaOpsSheet`, `CartaBoardCard`, `PlatoRecetasEditor`, `ItemRowInline` — no duplicar (existen copias viejas sin migrar en `carta/page.tsx` y `espacios/components/ItemEditPanel.tsx`, deuda conocida, no tocar sin que lo pidan). Constantes `PLAZAS_OPS`/`SECCIONES_OPS` en `lib/ops/mise.ts`. Plazas custom se mezclan solas (`usePlazasCustom()` interno, no pasar por prop). Prop `recipienteSugerencias?: string[]` agrega datalist (usar `useId()` para el id, puede haber más de un panel en pantalla).
 
+## Gramaje de un componente en pantalla — `peso_porcion` antes que `cantidad_ops`
+
+Toda pantalla que muestre "cuánto de esta preparación va en el plato" tiene que resolverlo igual: si hay `checklist_items.peso_porcion` para esa `receta_id+plaza`, ese es el gramaje (con su `peso_porcion_unidad`); si no, `plato_recetas.cantidad_ops` en gramos. Mostrar `cantidad_ops` a secas es un bug cuando el componente tiene recipiente — ahí ese campo son porciones por recipiente (ver `columnas.md` → `plato_recetas`). Los totales por plato suman el valor resuelto, no `cantidad_ops`. Al editar, cada rama escribe en su tabla: `peso_porcion` es un UPDATE directo a `checklist_items` (no hay suma que recalcular, es compartido por receta+plaza); `cantidad_ops` va por el hook y sí requiere recalcular el mise. Referencia: `CartaBoardCard.tsx` y `PlatosView` en `recetario/page.tsx`.
+
 ## Toggle switch compacto
 
 Para un booleano en un form, no usar `<input type="checkbox">` en caja grande con borde. Ya existe `SwitchRow` (ícono + label + descripción + pill deslizable) en `app/(app)/stock/ClientView.tsx` — revisar antes de escribir otro desde cero; candidato a extraer a `components/ui/` cuando se necesite en una segunda pantalla.

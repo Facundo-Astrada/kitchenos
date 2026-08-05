@@ -6,6 +6,11 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-08-05 (c) — Recetario/Platos: el tamaño por porción en la ficha técnica.**
+- *Síntoma*: el tamaño por porción cargado en el panel OPS (ej. 150 g) se veía en Carta y en Mesa de Trabajo/Carta, pero no en Recetario → Platos. Causa: `PlatosView` mostraba siempre `plato_recetas.cantidad_ops` como gramos, y con recipiente configurado ese campo son las porciones que entran en el recipiente (20 pax), no el gramaje — el gramaje real vive en `checklist_items.peso_porcion`.
+- Fix: Platos aplica el mismo criterio que `CartaBoardCard` — `peso_porcion` (con su unidad) cuando existe para esa `receta_id+plaza`, `cantidad_ops` en gramos cuando no. La edición inline escribe en la tabla que corresponde (UPDATE directo a `checklist_items` vs. hook + recálculo del mise), incluido el flush al desmontar por cambio de tab, y el total del plato suma los gramajes resueltos. Una sola query liviana, solo cuando la pestaña Platos está montada.
+- Regla nueva en `.claude/docs/ui.md` ("Gramaje de un componente en pantalla"), porque el patrón se repitió en tres pantallas.
+
 **Sesión 2026-08-05 (b) — OPS: separación menú/evento, guía del Mise y auditoría de performance.**
 - *Planificación mezclaba menú y evento*: un día con varios menús activos aplanaba todas las producciones en las mismas secciones sin poder distinguir de cuál venía cada una. Ahora cada menú activo es un bloque propio (badge Menú/Evento, nombre, avance, vaciar solo ese) + filtro Todo/Menú/Evento con conteos, y los puntos del calendario distinguen menú (verde) de evento (naranja).
 - *Guía de uso del Mise* (`components/mise/MiseGuiaSheet.tsx`): botón "?" en el header con la explicación de cada control — turnos, fases, progreso, Modo Control, checkbox, g/porc, recipiente, "hay ahora", producir, add_task, tarjeta de cierre — cada uno con qué hace y cómo repercute en el turno siguiente. Incluye "la primera vez que cargás lo que hay", linkeada desde el banner "recibís sin cierre del turno anterior".
