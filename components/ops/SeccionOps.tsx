@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ItemOps } from './ItemOps'
+import { ItemOps, type Densidad } from './ItemOps'
 import { QuickAdd } from './QuickAdd'
 import type { CrearTareaSheetConfirmData } from './CrearTareaSheet'
 import type { Tarea, OpsEstado, OpsModo, TareaPrioridad } from '@/types'
@@ -30,12 +30,14 @@ interface SeccionOpsProps {
   recetas?: { id: string; nombre: string }[]
   /** Handle de arrastre para reordenar columnas — opcional, no cambia nada si no se pasa. */
   dragHandleProps?: DragHandleProps
+  /** Densidad de fila de ItemOps — cómoda (default) o compacta. Ver ItemOps.tsx. */
+  densidad?: Densidad
 }
 
 export function SeccionOps({
   titulo, sublabel, color, items, subtareasByParent,
   onAddItem, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, modo, showSeccionChip, showPrioChip, recetas,
-  dragHandleProps,
+  dragHandleProps, densidad,
 }: SeccionOpsProps) {
   const [collapsed, setCollapsed] = useState(false)
 
@@ -128,6 +130,7 @@ export function SeccionOps({
               modo={modo}
               showSeccionChip={showSeccionChip}
               showPrioChip={showPrioChip}
+              densidad={densidad}
             />
           ))}
           {items.length === 0 && (

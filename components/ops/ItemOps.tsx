@@ -16,6 +16,13 @@ export function nextEstado(e: OpsEstado): OpsEstado {
   return cycle[(cycle.indexOf(e) + 1) % cycle.length]
 }
 
+// Densidad de la fila — "cómoda" (default, sin cambios) o "compacta": una
+// sola línea con tilde + nombre + cantidad, todo lo demás (chips, badges,
+// botones secundarios) se ve tocando la fila para expandirla. Ver MURO-PLAN.md
+// F2 — es la fila que después reusa el muro (F3), por eso vive acá y no en
+// cada pantalla que la usa.
+export type Densidad = 'comoda' | 'compacta'
+
 const ESTADO_STYLE: Record<OpsEstado, { bg: string; border: string; icon?: string; text?: string }> = {
   pendiente: { bg: 'transparent',  border: 'var(--border)' },
   en_curso:  { bg: '#3b82f6',      border: '#3b82f6',      icon: 'more_horiz' },
@@ -57,9 +64,10 @@ interface ItemOpsProps {
   modo?: OpsModo
   showSeccionChip?: boolean
   showPrioChip?: boolean
+  densidad?: Densidad
 }
 
-function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, depth = 0, showSeccionChip, showPrioChip }: ItemOpsProps) {
+function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, depth = 0, showSeccionChip, showPrioChip, densidad = 'comoda' }: ItemOpsProps) {
   const [expanded, setExpanded] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [prodSheetOpen, setProdSheetOpen] = useState(false)
@@ -104,6 +112,21 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
   // marcaba "turno ant." en tareas de HOY apenas pasada la medianoche UTC.
   const esDeTurnoAnterior = !!item.turno_fecha && item.turno_fecha < hoyOperativo()
 
+  // Compacta solo aplica al ítem de primer nivel: las subtareas (depth>0) ya
+  // renderizan sin chips ni botones secundarios hoy, así que ya son "compactas"
+  // por diseño — no hay nada que esconder ahí.
+  const compacta = densidad === 'compacta' && depth === 0
+  // En compacta colapsada se esconde todo lo que no sea tilde+nombre+cantidad;
+  // al expandir (mismo tap que abre subtareas) reaparece igual que en cómoda.
+  const mostrarDetalle = !compacta || expanded
+  const nameSpanStyle: React.CSSProperties = {
+    fontSize: depth > 0 ? 12 : 13,
+    fontWeight: depth > 0 ? 500 : 600,
+    color: isListo ? 'var(--text-3)' : 'var(--text-1)',
+    textDecoration: isListo ? 'line-through' : 'none',
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  }
+
   function startHold() {
     holdFired.current = false
     holdTimer.current = setTimeout(() => {
@@ -145,10 +168,13 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
       background: isDuda ? 'rgba(245,158,11,.07)' : 'transparent',
       borderLeft: isDuda ? '3px solid #f59e0b' : depth > 0 ? '2px solid var(--border)' : 'none',
       borderRadius: depth > 0 ? 8 : 10,
-      marginBottom: 3,
+      marginBottom: compacta && !expanded ? 1 : 3,
       paddingLeft: depth > 0 ? 2 : 0,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: depth > 0 ? '6px 10px' : '8px 10px' }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: depth > 0 ? '6px 10px' : compacta && !expanded ? '5px 10px' : '8px 10px',
+      }}>
 
         {/* Checkbox — cycles estado */}
         <button
@@ -182,96 +208,112 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
           onTouchCancel={clearHold}
           onContextMenu={(e) => e.preventDefault()}
         >
-          <span style={{
-            fontSize: depth > 0 ? 12 : 13,
-            fontWeight: depth > 0 ? 500 : 600,
-            color: isListo ? 'var(--text-3)' : 'var(--text-1)',
-            textDecoration: isListo ? 'line-through' : 'none',
-            display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {item.titulo}
-          </span>
-          {depth === 0 && esDeTurnoAnterior && (
-            <span style={{
-              display: 'inline-block', fontSize: 9, fontWeight: 700, padding: '1px 5px',
-              borderRadius: 4, marginTop: 1, background: 'rgba(245,158,11,.15)', color: '#d97706',
-            }}>
-              turno ant.
-            </span>
-          )}
-          {depth === 0 && item.categoria === 'pase_turno' && (
-            <span
-              title={item.descripcion ?? 'Pase de turno'}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, padding: '1px 5px',
-                borderRadius: 4, marginTop: 1, background: 'rgba(139,92,246,.14)', color: '#8b5cf6',
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 10 }}>event_upcoming</span>
-              pase de turno
-            </span>
-          )}
-          {showSeccionChip && depth === 0 && item.seccion && SECCION_LABELS[item.seccion] && (
-            <span style={{
-              display: 'inline-block', fontSize: 9, fontWeight: 600, padding: '1px 6px',
-              borderRadius: 4, marginTop: 2, marginLeft: esDeTurnoAnterior ? 4 : 0,
-              background: 'rgba(67,97,160,.1)', color: 'var(--accent)',
-            }}>
-              {SECCION_LABELS[item.seccion]}
-            </span>
-          )}
-          {showPrioChip && depth === 0 && (() => {
-            const chip = PRIO_CHIP[item.prioridad ?? 'baja']
-            if (!chip) return null
-            if (!onPrioridadChange) {
-              return (
+          {compacta && !expanded ? (
+            // Compacta colapsada: tilde + nombre + cantidad, lado a lado, una
+            // sola línea. Todo lo demás (badges, chips, botones) aparece al
+            // tocar la fila — no se pierde, se esconde.
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+              <span style={{ ...nameSpanStyle, display: 'block', flex: 1, minWidth: 0 }}>
+                {item.titulo}
+              </span>
+              {item.cantidad != null && (
                 <span style={{
-                  display: 'inline-block', fontSize: 10, fontWeight: 800, padding: '3px 8px',
-                  borderRadius: 6, marginTop: 3, marginLeft: 3,
-                  background: chip.bg, color: chip.color,
+                  flexShrink: 0, fontSize: 10, fontWeight: 700, padding: '1px 6px',
+                  borderRadius: 6, background: 'var(--bg)', border: '1px solid var(--border)',
+                  color: 'var(--text-3)', fontFamily: "'DM Mono', monospace",
                 }}>
-                  {chip.label}
+                  ×{item.cantidad}
                 </span>
-              )
-            }
-            return (
-              <button
-                onClick={(e) => { e.stopPropagation(); onPrioridadChange(item.id, nextPrioridad(item.prioridad ?? 'baja')) }}
-                title="Tocar para cambiar la prioridad"
-                style={{
-                  // Chip más grande y con borde propio: en el board por plazas
-                  // esta es LA forma de re-priorizar (ya no hay columna por
-                  // prioridad) — tenía que verse tocable, no solo una etiqueta.
-                  display: 'inline-flex', alignItems: 'center', gap: 2,
-                  fontSize: 10, fontWeight: 800, padding: '3px 8px',
-                  borderRadius: 6, marginTop: 3, marginLeft: 3,
-                  background: chip.bg, color: chip.color,
-                  border: `1px solid ${chip.color}40`, cursor: 'pointer', fontFamily: 'inherit',
-                  touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent',
-                }}
-              >
-                {chip.label}
-                <span className="material-symbols-outlined" style={{ fontSize: 11, opacity: .7 }}>sync_alt</span>
-              </button>
-            )
-          })()}
-          {item.cantidad != null && (
-            <span
-              title={`Cantidad a producir: ${item.cantidad}`}
-              style={{
-                display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '2px 7px',
-                borderRadius: 6, marginTop: 3, marginLeft: 3,
-                background: 'var(--bg)', border: '1px solid var(--border)',
-                color: 'var(--text-3)', fontFamily: "'DM Mono', monospace",
-              }}
-            >
-              ×{item.cantidad}
-            </span>
+              )}
+            </div>
+          ) : (
+            <>
+              <span style={{ ...nameSpanStyle, display: 'block' }}>
+                {item.titulo}
+              </span>
+              {depth === 0 && mostrarDetalle && esDeTurnoAnterior && (
+                <span style={{
+                  display: 'inline-block', fontSize: 9, fontWeight: 700, padding: '1px 5px',
+                  borderRadius: 4, marginTop: 1, background: 'rgba(245,158,11,.15)', color: '#d97706',
+                }}>
+                  turno ant.
+                </span>
+              )}
+              {depth === 0 && mostrarDetalle && item.categoria === 'pase_turno' && (
+                <span
+                  title={item.descripcion ?? 'Pase de turno'}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, padding: '1px 5px',
+                    borderRadius: 4, marginTop: 1, background: 'rgba(139,92,246,.14)', color: '#8b5cf6',
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 10 }}>event_upcoming</span>
+                  pase de turno
+                </span>
+              )}
+              {showSeccionChip && depth === 0 && mostrarDetalle && item.seccion && SECCION_LABELS[item.seccion] && (
+                <span style={{
+                  display: 'inline-block', fontSize: 9, fontWeight: 600, padding: '1px 6px',
+                  borderRadius: 4, marginTop: 2, marginLeft: esDeTurnoAnterior ? 4 : 0,
+                  background: 'rgba(67,97,160,.1)', color: 'var(--accent)',
+                }}>
+                  {SECCION_LABELS[item.seccion]}
+                </span>
+              )}
+              {showPrioChip && depth === 0 && mostrarDetalle && (() => {
+                const chip = PRIO_CHIP[item.prioridad ?? 'baja']
+                if (!chip) return null
+                if (!onPrioridadChange) {
+                  return (
+                    <span style={{
+                      display: 'inline-block', fontSize: 10, fontWeight: 800, padding: '3px 8px',
+                      borderRadius: 6, marginTop: 3, marginLeft: 3,
+                      background: chip.bg, color: chip.color,
+                    }}>
+                      {chip.label}
+                    </span>
+                  )
+                }
+                return (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onPrioridadChange(item.id, nextPrioridad(item.prioridad ?? 'baja')) }}
+                    title="Tocar para cambiar la prioridad"
+                    style={{
+                      // Chip más grande y con borde propio: en el board por plazas
+                      // esta es LA forma de re-priorizar (ya no hay columna por
+                      // prioridad) — tenía que verse tocable, no solo una etiqueta.
+                      display: 'inline-flex', alignItems: 'center', gap: 2,
+                      fontSize: 10, fontWeight: 800, padding: '3px 8px',
+                      borderRadius: 6, marginTop: 3, marginLeft: 3,
+                      background: chip.bg, color: chip.color,
+                      border: `1px solid ${chip.color}40`, cursor: 'pointer', fontFamily: 'inherit',
+                      touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent',
+                    }}
+                  >
+                    {chip.label}
+                    <span className="material-symbols-outlined" style={{ fontSize: 11, opacity: .7 }}>sync_alt</span>
+                  </button>
+                )
+              })()}
+              {item.cantidad != null && (
+                <span
+                  title={`Cantidad a producir: ${item.cantidad}`}
+                  style={{
+                    display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '2px 7px',
+                    borderRadius: 6, marginTop: 3, marginLeft: 3,
+                    background: 'var(--bg)', border: '1px solid var(--border)',
+                    color: 'var(--text-3)', fontFamily: "'DM Mono', monospace",
+                  }}
+                >
+                  ×{item.cantidad}
+                </span>
+              )}
+            </>
           )}
         </div>
 
         {/* Recipe icon */}
-        {depth === 0 && item.receta_id && (
+        {depth === 0 && item.receta_id && mostrarDetalle && (
           <button
             onClick={(e) => { e.stopPropagation(); setDrawerOpen(true) }}
             style={{ flexShrink: 0, padding: 4, background: 'none', border: 'none', cursor: 'pointer' }}
@@ -283,7 +325,7 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
         )}
 
         {/* Crear tarea desde este componente — hoy o para el próximo turno */}
-        {depth === 0 && item.receta_id && onCrearTareaDesdeItem && (
+        {depth === 0 && item.receta_id && onCrearTareaDesdeItem && mostrarDetalle && (
           <button
             onClick={(e) => { e.stopPropagation(); setCrearTareaSheetOpen(true) }}
             title="Crear tarea (hoy o mañana)"
@@ -295,8 +337,10 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
           </button>
         )}
 
-        {/* Expand — only top-level */}
-        {depth === 0 && (
+        {/* Expand — only top-level. En compacta se esconde: tocar el nombre
+            (handleNameClick) ya expande/colapsa, y el botón solo comía ancho
+            que la fila de una línea no tiene para regalar. */}
+        {depth === 0 && !compacta && (
           <button
             onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v) }}
             style={{ flexShrink: 0, padding: 4, background: 'none', border: 'none', cursor: 'pointer' }}

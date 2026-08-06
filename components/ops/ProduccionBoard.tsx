@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ItemOps } from './ItemOps'
+import { ItemOps, type Densidad } from './ItemOps'
 import { QuickAdd } from './QuickAdd'
 import type { CrearTareaSheetConfirmData } from './CrearTareaSheet'
 import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
@@ -93,6 +93,8 @@ interface ProduccionBoardProps {
    * vacío — el QuickAdd de la columna es la única forma de cargar producción.
    */
   vista?: 'todo' | 'carta'
+  /** Densidad de fila de ItemOps — cómoda (default) o compacta. Ver ItemOps.tsx. */
+  densidad?: Densidad
 }
 
 function capitalizar(s: string) {
@@ -102,7 +104,7 @@ function capitalizar(s: string) {
 export function ProduccionBoard({
   tareas, subtareasByParent, onAddItem, onEstadoChange, onAddSubtarea,
   onPrioridadChange, onCrearTareaDesdeItem, recetas, otros, restauranteId,
-  vista = 'todo',
+  vista = 'todo', densidad,
 }: ProduccionBoardProps) {
   const mostrarBandas = vista === 'todo'
   const { plazasCustom } = usePlazasCustom()
@@ -258,6 +260,7 @@ export function ProduccionBoard({
           onPrioridadChange={onPrioridadChange}
           onCrearTareaDesdeItem={onCrearTareaDesdeItem}
           recetas={recetas}
+          densidad={densidad}
           enfocada
           onFocus={() => setFoco(null)}
         />
@@ -310,6 +313,7 @@ export function ProduccionBoard({
                       onPrioridadChange={onPrioridadChange}
                       onCrearTareaDesdeItem={onCrearTareaDesdeItem}
                       recetas={recetas}
+                      densidad={densidad}
                       onFocus={() => setFoco({ banda: banda.id, columna: col.id })}
                     />
                   ))}
@@ -442,7 +446,7 @@ function BandaHeader({
 // ── Columna (una plaza, o un paso del menú) ─────────────────────────────────
 function ColumnaOps({
   columna, subtareasByParent, onAddItem, onEstadoChange, onAddSubtarea,
-  onPrioridadChange, onCrearTareaDesdeItem, recetas, onFocus, enfocada, coachTarget,
+  onPrioridadChange, onCrearTareaDesdeItem, recetas, onFocus, enfocada, coachTarget, densidad,
 }: {
   columna: ColumnaBoard
   subtareasByParent: Record<string, Tarea[]>
@@ -455,6 +459,7 @@ function ColumnaOps({
   onFocus: () => void
   enfocada?: boolean
   coachTarget?: string
+  densidad?: Densidad
 }) {
   const [cerrada, setCerrada] = useState(false)
   const { items, color, destino } = columna
@@ -548,6 +553,7 @@ function ColumnaOps({
             onPrioridadChange={onPrioridadChange}
             onCrearTareaDesdeItem={onCrearTareaDesdeItem}
             modo={destino.modo}
+            densidad={densidad}
           />
           <div style={{ marginTop: 4 }}>
             <QuickAdd onSave={handleAdd} recetas={recetas} />
@@ -560,7 +566,7 @@ function ColumnaOps({
 
 // ── Ítems ordenados por prioridad, con REF/Check plegados ───────────────────
 function ItemsPorPrioridad({
-  items, subtareasByParent, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, modo,
+  items, subtareasByParent, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, modo, densidad,
 }: {
   items: Tarea[]
   subtareasByParent: Record<string, Tarea[]>
@@ -569,6 +575,7 @@ function ItemsPorPrioridad({
   onPrioridadChange: (id: string, prioridad: TareaPrioridad) => void
   onCrearTareaDesdeItem: (item: Tarea, data: CrearTareaSheetConfirmData) => Promise<void>
   modo: OpsModo
+  densidad?: Densidad
 }) {
   const [verSecundarias, setVerSecundarias] = useState(false)
 
@@ -616,6 +623,7 @@ function ItemsPorPrioridad({
               // acá — es cómo se re-prioriza ahora que no hay columna por prioridad.
               showSeccionChip={false}
               showPrioChip
+              densidad={densidad}
             />
           </div>
         ))}

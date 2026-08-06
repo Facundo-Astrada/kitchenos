@@ -9,7 +9,7 @@ import { createClient } from '@/lib/supabase/client'
 import { syncMiseDesdeTarea } from '@/lib/ops/syncMise'
 import { OpsToggle, type OpsToggleValue } from '@/components/ops/OpsToggle'
 import { SeccionOps, type DragHandleProps } from '@/components/ops/SeccionOps'
-import { ItemOps } from '@/components/ops/ItemOps'
+import { ItemOps, type Densidad } from '@/components/ops/ItemOps'
 import type { CrearTareaSheetConfirmData } from '@/components/ops/CrearTareaSheet'
 import { QuickAdd } from '@/components/ops/QuickAdd'
 import { EventoBanner } from '@/components/ops/EventoBanner'
@@ -75,6 +75,29 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   function handleModoChange(m: OpsToggleValue) {
     setModo(m)
     localStorage.setItem('ops_modo', m)
+  }
+
+  // Densidad de fila — cómoda (default) o compacta. A diferencia de `modo`
+  // (qué mirás: Menú/Carta/Evento/Todo), esto es cuánto detalle por fila, y
+  // por eso se persiste por RESTAURANTE_ID (dispositivo), no globalmente: el
+  // celular del cocinero en servicio quiere compacto, el desktop del jefe
+  // quiere cómodo, y pueden ser la misma cuenta.
+  const [densidad, setDensidad] = useState<Densidad>('comoda')
+  useEffect(() => {
+    if (!restauranteId) return
+    try {
+      const raw = localStorage.getItem(`ops_densidad_${restauranteId}`)
+      if (raw === 'comoda' || raw === 'compacta') setDensidad(raw)
+    } catch {}
+  }, [restauranteId])
+  function toggleDensidad() {
+    setDensidad(prev => {
+      const next: Densidad = prev === 'comoda' ? 'compacta' : 'comoda'
+      if (restauranteId) {
+        try { localStorage.setItem(`ops_densidad_${restauranteId}`, next) } catch {}
+      }
+      return next
+    })
   }
 
   const [toast, setToast] = useState('')
@@ -517,7 +540,30 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
             </div>
           </div>
           <div className="ops-toggle-wrap" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-            <OpsToggle value={modo} onChange={handleModoChange} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
+              <button
+                onClick={toggleDensidad}
+                title={densidad === 'compacta' ? 'Vista compacta activa — tocar para volver a cómoda' : 'Activar vista compacta'}
+                style={{
+                  flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: densidad === 'compacta' ? 'rgba(255,255,255,.9)' : 'rgba(255,255,255,.1)',
+                  border: 'none', borderRadius: 8, padding: 7, cursor: 'pointer',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{
+                  fontSize: 18, color: densidad === 'compacta' ? 'var(--navy)' : 'rgba(255,255,255,.7)',
+                }}>
+                  density_small
+                </span>
+              </button>
+              {/* flex:1 — antes OpsToggle era el único hijo de .ops-toggle-wrap
+                  y el `align-items:stretch` del media query (mobile) lo estiraba
+                  solo. Con el botón de densidad al lado eso ya no alcanza: hay
+                  que pedirlo a mano o el toggle queda encogido a su contenido. */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <OpsToggle value={modo} onChange={handleModoChange} />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -568,6 +614,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
             recetas={recetasSimple}
             restauranteId={restauranteId}
             vista={modo === 'todo' ? 'todo' : 'carta'}
+            densidad={densidad}
             otros={
               <>
                 <NotaImportanteCard />
@@ -642,6 +689,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
                       showPrioChip
                       recetas={recetasSimple}
                       dragHandleProps={dragHandleProps}
+                      densidad={densidad}
                     />
                   )}
                 </div>
