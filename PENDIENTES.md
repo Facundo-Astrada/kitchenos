@@ -4,6 +4,19 @@ Lista priorizada de lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL.md`.
 
 ---
 
+## 🔴 Crítico
+
+### Verificar en pantalla los 7 commits de OPS/Mise (ago 2026)
+Todo el bloque de pase de turno + mise se deployó a producción validado por typecheck, 71 tests y pruebas contra la DB, **pero sin abrir la pantalla ni una vez**. Bros lo usa en servicio. Orden de prueba, de menor a mayor riesgo:
+1. Apertura: contar un ítem → Enter salta al campo del siguiente, centrado sobre el teclado; que no salte a secciones colapsadas ni se cuelgue en el último.
+2. Que el primer dígito reemplace el valor precargado (el `select()` nuevo) — antes contar 2 sobre un 10 heredado daba 102.
+3. "Producir X porc" → ítem en ámbar "en producción" + sube el contador; completar esa tarea en Producción → pasa a verde solo.
+4. Tildar a mano un ítem con déficit → el "hay ahora" queda en el target, no en 0.
+5. Cierre al 100% → "Entregar plaza" (aparece sin fichaje abierto) → el chip de turno salta al siguiente.
+6. **Dos dispositivos** (lo más frágil): tablet en el Mise sin tocar, marcar la tarea desde el celular → tiene que pintarse sola en 1-3 s. Y tildar/destildar rápido un ítem: tiene que quedar como lo dejaste, no revertirse a los 2 s por el eco de realtime.
+
+---
+
 ## 🟠 Alto
 
 ### Invitación de usuarios — falta config de Supabase
@@ -63,10 +76,18 @@ Tras la auditoría, entrar a Mise en mobile bajó de 2582 kB / 64 requests a 899
 - HACCP: 3 modales largos (limpieza/vencimientos/temperaturas) sin agrupar — mismo problema que tenía el modal de Stock (muchos campos heterogéneos sin secciones), candidato a la misma cura de fondo pero con otro tratamiento (no son checkboxes, no aplica `SwitchRow`).
 - OPS Producción: el orden de columnas (drag-and-drop) persiste en `localStorage` por dispositivo, no en DB — cada navegador recuerda su propio orden. Mover a una tabla nueva (ej. `ops_orden_columnas`) si se necesita compartido entre dispositivos del mismo restaurante.
 - Mise en tablet táctil ancha (iPad landscape, 1024px exactos): se queda en columna única porque la grilla de desktop está condicionada a `pointer: fine`. El motivo es que el reordenar es un long-press que compara `clientY` contra el centro vertical de cada ítem — con dos tarjetas lado a lado elige al azar. Para ganar la grilla ahí habría que hacer el drag 2D (comparar también `clientX` dentro de la fila). Solo si alguien usa el mise desde tablet.
-- Migrar a columnas reales cuando vuelva el acceso DDL: plazas custom (hoy JSONB en `restaurantes.configuracion.plazas_custom`, `usePlazasCustom.ts`) y cantidad de recipientes (hoy sufijo `" ×N"` en `checklist_items.recipiente_nombre`, `lib/ops/mise.ts`). Ambos funcionan bien y degradan de forma legible — migrar es directo cuando haya acceso a migraciones.
+- **El acceso DDL volvió** (ago 2026: dos migraciones aplicadas por el MCP de Supabase sin problemas). Eso desbloquea los dos workarounds "sin migración" que estaban congelados esperándolo: plazas custom (hoy JSONB en `restaurantes.configuracion.plazas_custom`, `usePlazasCustom.ts`) y cantidad de recipientes (hoy sufijo `" ×N"` en `checklist_items.recipiente_nombre`, `lib/ops/mise.ts`). Ninguno molesta en uso real y los dos degradan de forma legible, así que no es urgente — pero ya no hay excusa técnica.
 - `npm run lint` está roto: ESLint 9 no resuelve `tsconfig-paths/lib/tsconfig-loader` (lo pide `eslint-plugin-import` vía `eslint-config-next`). `npm run build` y el typecheck andan, así que no bloquea deploy. Fix probable: instalar `tsconfig-paths` como devDependency.
 - El resumen OPS de una fila en `ComposicionEditor.tsx` (~línea 1580) arma `plaza · sección · cantidad_ops+unidad` sin mirar `peso_porcion` — con recipiente muestra las porciones del recipiente, no el gramaje. Es un subtítulo de la config del mise (defendible), pero es el mismo patrón que se corrigió en Recetario/Platos; revisar si en uso real confunde.
-- `tareas`/`MenuActivoView` no muestran `recipiente_nombre`/`peso_porcion` al ejecutar un menú activado en Producción (se cargan en el `OpsPanel` de Carta pero se pierden — `tareas` no tiene esas columnas). Decisión ago 2026: no vale la pena todavía (dato opcional, mayoría de menús se activan sin cargarlo) — retomar solo si el uso real en El Rescoldo lo pide.
+
+### Mise / pase de turno — flecos de la tanda de agosto
+Todo lo grande quedó andando; esto es lo que se dejó explícitamente afuera.
+- **Auto-avance solo en apertura.** En el cierre el campo de conteo es otro y está siempre montado (no detrás de `editingStock`), así que el auto-foco necesita otro mecanismo — un ref al input en vez de abrir el editor. El cierre es igual de "vuelta contando" que la apertura, así que es el próximo paso natural.
+- **No hay botón de deshacer entrega.** `useCierresTurno.deshacerEntrega()` existe y la policy DELETE está, pero no está cableado a ninguna UI: hoy una entrega equivocada se arregla por SQL.
+- **Reportes → Auditoría sigue deduciendo** los pases incumplidos de la ausencia de registros de cierre. Ahora que `cierres_turno` es un hecho con autor y hora, ese reporte puede decir *quién* entregó y a qué hora en vez de solo que faltó.
+- **El rezagado.** Entregada la cena a la 01:20 la jornada rueda al día siguiente; si otro entra a las 02:00 y toca el chip "Cena" cae en la cena futura, no en la que se acaba de cerrar. Los chips cambian turno pero no fecha — el arreglo de fondo es navegación de fecha en el mise.
+- **`turnoActivo()` (`lib/ops/turnos.ts`) quedó sin callers** — lo reemplazó `turnoVigente()` en los dos que tenía. Sigue exportado y testeado; borrarlo o dejar un comentario que mande al nuevo, para que nadie lo agarre por error.
+- **Policies de `checklist_registros`**: podrían pasar del subquery a `checklist_items` a `restaurante_id = mi_restaurante_id()` ahora que la columna existe. Es más barato de evaluar (realtime chequea RLS por evento y por suscriptor), pero con 425 filas no hace falta y el blast radius es el mise de todas las cuentas.
 
 ### Calendario — F2 a F5 del plan de expansión
 F1 (grilla estilo Google Calendar, notas por día como ítems enviables a Producción, Planificar menú por rango) ya deployado. Falta, en orden, según `CALENDARIO-PLAN.md`: F2 motor de rutinas recurrentes (generalizar `haccp_limpieza` a una tabla `rutinas` compartida — decisión de Facundo: generalizar, no duplicar por dominio), F3 más reflejos de solo lectura (menús de Carta, turnos, HACCP, cuenta corriente), F4 Coach con contexto completo del calendario + tools de agenda, F5 extras (ICS, feriados, semana tipo).

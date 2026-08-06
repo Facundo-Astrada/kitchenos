@@ -21,7 +21,7 @@ Este archivo es una foto del presente (qué existe, qué falta). El detalle hist
 | 6 | **Proveedores** | `/proveedores` | Funcional | CRUD, CUIT, teléfono, rubro, historial de facturas, auto-creación desde facturas con IA. |
 | 7 | **Facturas** | `/facturas` | Funcional | Carga con ítems, OCR con IA, detección de variación de precio, cuentas por pagar (con vencimientos), reconciliación factura↔pedido, filtro de privacidad (gastos no-mercadería). |
 | 8 | **Carta** | `/carta` | Funcional | Ítems vinculados a recetas, food cost, 86, categorías dinámicas, tags dietarios, panel OPS unificado (plaza→sección→recipiente→cantidad), importación IA, foto, carta pública QR sin login (`/carta/[slug]`). Precio/FC visible solo admin. Editor unificado Plato/Menú/Evento (`ComposicionEditor`): costeo y switch de modo consistentes, buscador que no se cierra entre altas + gramaje inline con cadena Enter→sigue buscando, vistazo rápido de ingredientes en resultados, crear receta al vuelo con foto/texto IA (ingredientes editables, vinculables a stock existente o creables ahí mismo, procedimiento editable). |
-| 9 | **Checklist / Mise en Place** | `/checklist` | Funcional (vive embebido en OPS) | Mise por plaza, prioridades SP/P/REF/OK, rutinas con frecuencia, drag entre secciones, sub-secciones (1 nivel), plaza General, modo Control simplificado, auditoría con scoring/foto obligatoria/condicionales. Header de 2 filas (fecha solo si la jornada cruza medianoche, turno junto a la plaza, progreso con los tabs); tarjeta sin números redundantes: peso de porción junto al nombre, "hay ahora" en línea, déficit solo en el botón de producir (recalcula al tipear, auto-tilda si no falta nada), prioridad en el panel expandido. Grilla multi-columna en desktop con puntero real (el reordenar es un long-press táctil `clientY`-only). Botón "?" con guía de uso: hoja de lectura (cada control, qué hace y cómo repercute en el turno siguiente, incluido "la primera vez que cargás lo que hay") y recorrido guiado que la señala sobre la pantalla real. Tildar es optimista (se pinta en el frame del tap) y la lista no se vacía al cambiar de fase. |
+| 9 | **Checklist / Mise en Place** | `/checklist` | Funcional (vive embebido en OPS) | Mise por plaza, prioridades SP/P/REF/OK, rutinas con frecuencia, drag entre secciones, sub-secciones (1 nivel), plaza General, modo Control simplificado, auditoría con scoring/foto obligatoria/condicionales. Header de 2 filas (fecha solo si la jornada cruza medianoche, turno junto a la plaza, progreso con los tabs); tarjeta sin números redundantes: peso de porción junto al nombre, "hay ahora" en línea, déficit solo en el botón de producir (recalcula al tipear, auto-tilda si no falta nada), prioridad en el panel expandido. Grilla multi-columna en desktop con puntero real (el reordenar es un long-press táctil `clientY`-only). Botón "?" con guía de uso: hoja de lectura (cada control, qué hace y cómo repercute en el turno siguiente, incluido "la primera vez que cargás lo que hay") y recorrido guiado que la señala sobre la pantalla real. **El turno vigente lo decide la entrega, no el reloj**: al completar el cierre se entrega la plaza con un botón explícito (`cierres_turno`, por plaza, con autor y hora) y desde ese instante esa plaza está en el turno siguiente; el horario queda como red de contención para la plaza que se va sin cerrar. La apertura mide *ítems revisados*: despachar producción marca el ítem en ámbar "en producción" y suma al contador, y pasa a verde solo cuando la tarea se completa. Avisos persistentes al 100% (apertura descartable, cierre con la entrega). Auto-avance al siguiente campo con Enter o al despachar producción. Todo optimista y con sync instantáneo contra Producción en la misma pestaña + realtime entre dispositivos. |
 | 10 | **Pase de Turno** | `/pase` | Funcional | Chat continuo entre turnos, prioridades, crear tarea desde mensaje, realtime, `@menciones` compartidas con la columna Importante de OPS. |
 | 11 | **HACCP / Limpieza** | `/haccp` | Funcional | Temperaturas, Vencimientos (color por días), Limpieza (con calendario + sync a OPS). Export PDF para Bromatología. |
 | 12 | **Reportes / CMV** | `/reportes` | Funcional | 10 tabs: Resumen, CMV, Presupuesto vs Real, Rendimiento por plaza, Food Cost, Compras, Precios/inflación, Producción, Caja, Auditoría. Export Excel contextual por tab. |
@@ -45,7 +45,7 @@ Este archivo es una foto del presente (qué existe, qué falta). El detalle hist
 
 ---
 
-## 2. Tablas de Supabase (43 total)
+## 2. Tablas de Supabase (44 total)
 
 Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relaciones.
 
@@ -58,8 +58,8 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 ### Recetario y Carta (5)
 `recetas`, `ingredientes`, `carta_items` (+ `tags TEXT[]`), `carta_categorias`, `plato_recetas` (+ `plaza`)
 
-### Tareas y Checklist (6)
-`tareas`, `checklist_secciones`, `checklist_items`, `checklist_registros`, `checklist_rutina`, `checklist_rutina_registros`
+### Tareas y Checklist (7)
+`tareas`, `checklist_secciones`, `checklist_items`, `checklist_registros` (+ `restaurante_id`, lo llena un trigger), `checklist_rutina`, `checklist_rutina_registros`, `cierres_turno` (entrega de plaza por jornada+turno)
 
 ### Comunicación (1)
 `pase_mensajes`
@@ -79,7 +79,7 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 ### Servicio / Salón / Cobro / Fiscal (12)
 `estaciones`, `comandas`, `comanda_items`, `comanda_item_modificadores`, `eventos_cocina`, `mesas` (pos_x/pos_y + forma/ancho/alto/rotacion), `cuentas`, `medios_pago`, `pagos`, `config_fiscal`, `comprobantes`, `comprobante_items`
 
-**Total: 43 tablas** con RLS habilitado. Aislamiento multi-tenant real vía `mi_restaurante_id()`. Todas las políticas UPDATE tienen `WITH CHECK` explícito.
+**Total: 44 tablas** con RLS habilitado. Aislamiento multi-tenant real vía `mi_restaurante_id()`. Todas las políticas UPDATE tienen `WITH CHECK` explícito.
 
 Nota: hay tablas adicionales sumadas después de este conteo (`menus`, `menu_preparaciones`, `stock_sectores`, `stock_estantes`, `cajas_turnos`, `caja_movimientos`, `salon_elementos`, `checklist_auditorias`, `presupuestos`, `demo_visitas`, `calendario_nota_items`, etc.) — ver `.claude/docs/columnas.md` para el detalle columna por columna de cada una.
 
@@ -94,7 +94,8 @@ Nota: hay tablas adicionales sumadas después de este conteo (`menus`, `menu_pre
 | 2 | Media | Tipos desactualizados: campos legacy en `types/index.ts` que no matchean el schema DB actual en algunos casos puntuales. | `types/index.ts` |
 | 3 | Baja | Modo Servicio (`ModoServicio.tsx`) no conectado — probablemente se descarta, ver `DECISIONES.md`. | `components/dashboard/ModoServicio.tsx` |
 | 4 | Info | Scripts de migración con token de Supabase hardcodeado en algunos `.mjs`. | `scripts/*.mjs` |
-| 5 | Info | Vitest: 13 tests de máquina de estados. Playwright: `e2e/salon-kds.spec.ts` (requiere `npx playwright install chromium` + dev server). Testing Library para hooks pendiente. | — |
+| 5 | Info | Vitest: 71 tests en 4 archivos (máquina de estados, turnos/pase de turno, bus del mise, target/déficit). Playwright: `e2e/salon-kds.spec.ts` (requiere `npx playwright install chromium` + dev server). Testing Library para hooks pendiente. | — |
+| 6 | Media | `npm run lint` roto (ESLint 9 no resuelve `tsconfig-paths/lib/tsconfig-loader`). El build y el typecheck andan, así que no bloquea deploy, pero **hoy el único gate real es `npm run build`**. | `eslint.config.mjs` |
 
 ### Resueltos (histórico)
 RLS multi-tenant real (44 políticas UPDATE con `WITH CHECK`), login con hard-navigation, matching Facturas→Stock, descuento de stock por merma, `USUARIO_MOCK` hardcoded — todos con causa raíz y fix documentados en `HISTORIAL.md` y en `.claude/docs/hooks.md`.

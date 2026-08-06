@@ -88,6 +88,18 @@ Cada fila del header navy le come ~12% de alto a un celular. Reglas: la **fecha 
 
 En pantallas que se usan de pie y con apuro, todo número que se pueda derivar de otros dos es ruido. No mostrar `N × peso` **y** el total; no mostrar un déficit calculado en una caja propia **y** dentro del CTA que lo resuelve. Los controles que se tocan poco (prioridad, borrar) van en un panel que se expande, no en la fila principal. Recalcular en `onChange`, no en `onBlur`, para que el CTA reaccione mientras se tipea; y si el dato cargado ya completa el ítem, tildarlo solo en vez de exigir el tap extra.
 
+## Un control que colapsa su propia tarjeta va en la parte que no se mueve
+
+Si tildar un ítem oculta medio contenido de la tarjeta (el mise esconde recipiente, stock y CTA detrás de `!checked`), el checkbox tiene que vivir arriba a la izquierda, no abajo: puesto abajo, al tocarlo la tarjeta se encoge, todo lo de abajo salta y **el control del ítem siguiente aterriza donde quedó el dedo** — mis-tap garantizado en una lista larga que se tapea rápido. Además, la columna de círculos alineados a la izquierda *es* el indicador de progreso de un checklist: anclados abajo quedan a alturas irregulares (tarjetas con CTA, colapsadas, con bloques extra) y se pierde el escaneo. Si el problema es que el trabajo pasa abajo y el "listo" está arriba, la cura es que el fondo de la tarjeta pueda completar el ítem, no mudar el control.
+
+## Campo numérico precargado — `select()` al enfocar
+
+Todo input de conteo que llega con un valor anterior (heredado del turno pasado o ya cargado) necesita `onFocus={e => e.currentTarget.select()}`: sin eso el cursor va al final y el primer dígito **se appendea** — contar 2 sobre un 10 heredado guarda 102. Se nota poco tocando el campo a mano y se multiplica apenas hay auto-foco encadenado.
+
+## Recorrido encadenado de campos (auto-avance)
+
+Para que una vuelta de conteo se corra sin bajar el teclado: disparar el salto **solo con acciones explícitas** (Enter, o el CTA que cierra el ítem), nunca en el `blur` — si avanza al perder foco, tocar cualquier parte de la pantalla teletransporta a otra tarjeta. El orden tiene que replicar el del render e ignorar lo colapsado (saltar a un campo que no está en pantalla manda al usuario a la nada), saltear los ítems ya resueltos que no tienen campo, y hacer `scrollIntoView({ block: 'center' })` — con el teclado abierto la mitad de abajo de la pantalla no existe, `nearest` no alcanza.
+
 ## Grilla CSS con `repeat(N,1fr)` no encoge por debajo del contenido — usar `minmax(0,1fr)`
 
 Un pill/badge con `whiteSpace:'nowrap'` dentro de una celda de grilla (ej. título de evento largo en el calendario) no tiene punto de corte — la columna `1fr` crece para acomodar ese ancho mínimo en vez de truncar, y la grilla entera se desborda del layout (se superpone a un panel al lado si hay un `flex` padre). Fix: `gridTemplateColumns: 'repeat(N, minmax(0, 1fr))'` en vez de `repeat(N,1fr)` — dejar que la columna sí pueda encoger a 0 para que el `overflow:hidden`+`textOverflow:ellipsis` del contenido interno recién ahí trunque contra el ancho real.
