@@ -499,20 +499,18 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     if (toast) { const t = setTimeout(() => setToast(null), 2500); return () => clearTimeout(t) }
   }, [toast])
 
-  // ── Mensaje al completar el 100% de la plaza (apertura/cierre) ───────
-  // Una vez por plaza+turno+día — evita repetir el mensaje si el usuario
-  // destilda y vuelve a tildar el último ítem, o cambia de tab y vuelve.
-  // En cierre no va toast: la barra persistente de entrega (abajo) ya comunica
-  // que terminó, y encima pide una acción — un toast que se va solo taparía el
-  // paso que falta.
-  const plazaCompletaShownRef = useRef<Set<string>>(new Set())
-  useEffect(() => {
-    if (tab !== 'apertura' || !plaza || total === 0 || done !== total) return
-    const key = `${plaza}-${tab}-${fecha}`
-    if (plazaCompletaShownRef.current.has(key)) return
-    plazaCompletaShownRef.current.add(key)
-    setToast('Ya checkeaste tu plaza — estás listo para producir tranquilo')
-  }, [tab, plaza, fecha, total, done])
+  // ── Aviso al completar el 100% de la apertura ───────────────────────────
+  // Antes era un toast de 2,5s. Dos razones para que sea una barra persistente
+  // como la del cierre: el toast se va solo justo cuando el cocinero levanta la
+  // vista de la última bandeja, y además renderiza en la misma posición que la
+  // barra (z-300 sobre z-299), así que en el cierre se tapaban entre sí.
+  // Este no pide ninguna acción, así que se puede cerrar con la X — si no,
+  // quedaría tapando ítems durante todo el servicio.
+  const [avisoAperturaOculto, setAvisoAperturaOculto] = useState<string | null>(null)
+  const avisoAperturaKey = plaza && turnoServicioId ? `${plaza}-${fecha}-${turnoServicioId}` : null
+  const mostrarAvisoApertura =
+    tab === 'apertura' && !!avisoAperturaKey && total > 0 && done === total &&
+    avisoAperturaOculto !== avisoAperturaKey
 
   // ── Entrega de la plaza — el pase de turno como acto explícito ──────────
   // Cerrar la plaza y marcar la salida propia son dos cosas distintas: el
@@ -1556,6 +1554,32 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           padding: '12px 16px', fontSize: 13, fontWeight: 600, textAlign: 'center',
           boxShadow: '0 8px 24px rgba(34,197,94,.3)',
         }}>{toast}</div>
+      )}
+
+      {/* Aviso persistente — apertura 100% completa. Solo informa (el trabajo
+          que sigue es producir, no tocar el mise), así que se puede cerrar. */}
+      {mostrarAvisoApertura && (
+        <div style={{
+          position: 'fixed', bottom: 'var(--toast-bottom)', left: 16, right: 16, zIndex: 299,
+          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14,
+          padding: '10px 10px 10px 14px', boxShadow: '0 8px 24px rgba(0,0,0,.18)',
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#22c55e', flexShrink: 0 }}>check_circle</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-1)' }}>¡Terminaste la apertura!</div>
+            <div style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
+              {total} {total === 1 ? 'ítem contado' : 'ítems contados'} — a producir tranquilo
+            </div>
+          </div>
+          <button
+            onClick={() => setAvisoAperturaOculto(avisoAperturaKey)}
+            title="Cerrar aviso"
+            style={{ ...btnReset, flexShrink: 0, padding: 8, color: 'var(--text-3)' }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
+          </button>
+        </div>
       )}
 
       {/* Barra persistente — cierre 100% completo.
