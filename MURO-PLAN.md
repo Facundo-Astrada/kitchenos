@@ -1,7 +1,7 @@
 # Muro de cocina — plan de implementación
 
 > Idea de Facundo (2026-08-06) + hallazgos del código.
-> **Estado:** F1 ✅ (commit `1091b8e`, verificado contra la DB real de El Rescoldo) · F2 pendiente · F3 pendiente.
+> **Estado:** F1 ✅ (`1091b8e`) · F2 ✅ (`b70c246`, verificado en pantalla) · F3 pendiente.
 >
 > **Decisiones ya tomadas — no volver a abrirlas:**
 > - El jefe **mira y también toca**. El muro no es de solo lectura.
@@ -71,7 +71,7 @@ Un detalle a corregir de paso: `syncMiseDesdeTarea` (`lib/ops/syncMise.ts`) escr
 
 ---
 
-### F2 — Densidad compacta en Producción · *chico, útil por sí sola*
+### F2 ✅ — Densidad compacta en Producción · *chico, útil por sí sola*
 
 Esto es la "vista minimalista". **No va como quinta pestaña del toggle**: el toggle responde a *qué mirás* (Menú/Carta/Evento/Todo) y la densidad a *cuánto detalle*. Mezclarlos obliga a elegir entre ver el evento o verlo simple.
 
