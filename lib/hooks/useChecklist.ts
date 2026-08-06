@@ -10,7 +10,14 @@ import type {
 } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
 import { parseTurnoFase } from '@/lib/ops/turnos'
-import { onMiseRegistroPatch } from '@/lib/ops/miseBus'
+import { onMiseRegistroPatch, type MiseRegistroPatch } from '@/lib/ops/miseBus'
+
+/** Identidad de un registro: la misma tupla que su índice único en la DB. */
+function claveRegistro(itemId: string, fecha: string, turno: string): string {
+  return `${itemId}|${fecha}|${turno}`
+}
+// Ventana en la que el eco de una escritura propia se descarta.
+const ECO_MS = 3000
 
 // Pase de turno incumplido (Fase 3, jul 2026): un (fecha, turno, plaza) tuvo
 // apertura pero NINGÚN cierre completado — se deduce de checklist_registros,
@@ -179,18 +186,37 @@ export function useChecklist() {
     }
   }, [fetchRegistros, fetchRutinaRegistros])
 
-  // ── Puente con Producción (misma pestaña) ───────────────────────────────
-  // Marcar una tarea como hecha en Producción escribe el registro del mise por
-  // fuera de este hook, así que sin esto el cambio no se veía hasta el próximo
-  // fetchAll — y en OPS las tabs no se desmontan, así que ese fetchAll podía
-  // no llegar nunca. Ver lib/ops/miseBus.ts.
-  useEffect(() => onMiseRegistroPatch(patch => {
+  // ── Registros que llegan de afuera de este hook ─────────────────────────
+  // Dos fuentes, misma aplicación: el bus en memoria (Producción en ESTA
+  // pestaña, ver lib/ops/miseBus.ts) y realtime (otro dispositivo). En los dos
+  // casos se parchea la lista en vez de refetchear: el payload ya trae la fila.
+
+  // Escrituras propias recientes. Cada write vuelve por realtime como eco; ya
+  // está aplicado de forma optimista, y aplicarlo tarde puede pisar un cambio
+  // posterior (tildar y destildar rápido deja el tilde viejo ganando). Ver
+  // hooks.md #18.
+  const escriturasPropias = useRef<Map<string, number>>(new Map())
+  const marcarEscrituraPropia = useCallback((itemId: string, fecha: string, turno: string) => {
+    const m = escriturasPropias.current
+    m.set(claveRegistro(itemId, fecha, turno), Date.now())
+    // Poda: sin esto el Map crece todo el turno (40+ ítems × cada corrección).
+    if (m.size > 200) {
+      const corte = Date.now() - ECO_MS
+      for (const [k, t] of m) if (t < corte) m.delete(k)
+    }
+  }, [])
+
+  const aplicarRegistroLocal = useCallback((patch: MiseRegistroPatch, esPropia = false) => {
     const vista = vistaRef.current
     // Parche de otra fecha/turno: se ignora. Cuando el usuario navegue ahí, el
-    // fetch va a traer el estado real.
+    // fetch va a traer el estado real igual.
     if (!vista || patch.fecha !== vista.fecha || patch.turno !== vista.turno) return
-    // Ítem que no es de este restaurante (dos instancias del hook conviviendo).
+    // Ítem ajeno — puede haber dos instancias del hook conviviendo.
     if (itemIdsRef.current.length > 0 && !itemIdsRef.current.includes(patch.itemId)) return
+    if (!esPropia) {
+      const t = escriturasPropias.current.get(claveRegistro(patch.itemId, patch.fecha, patch.turno))
+      if (t && Date.now() - t < ECO_MS) return
+    }
     const { itemId, fecha, turno, ...datos } = patch
     setRegistros(prev => {
       const idx = prev.findIndex(r => r.checklist_item_id === itemId && r.fecha === fecha && r.turno === turno)
@@ -206,7 +232,38 @@ export function useChecklist() {
       next[idx] = { ...next[idx], ...datos }
       return next
     })
-  }), [])
+  }, [])
+
+  // Producción, misma pestaña: instantáneo, sin red. Cubre el caso del cocinero
+  // que marca la tarea y mira el mise en el mismo teléfono.
+  useEffect(() => onMiseRegistroPatch(patch => {
+    marcarEscrituraPropia(patch.itemId, patch.fecha, patch.turno)
+    aplicarRegistroLocal(patch, true)
+  }), [aplicarRegistroLocal, marcarEscrituraPropia])
+
+  // Otro dispositivo: la tablet de cocina mostrando el mise mientras alguien
+  // marca desde su celular. Filtrado por restaurante — para eso se agregó
+  // checklist_registros.restaurante_id (migración 20260806b).
+  useEffect(() => {
+    if (!RESTAURANTE_ID) return
+    const ch = supabase
+      .channel(`checklist-reg-rt-${RESTAURANTE_ID}`)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'checklist_registros',
+        filter: `restaurante_id=eq.${RESTAURANTE_ID}`,
+      }, payload => {
+        // Los DELETE traen solo la PK (replica identity default) — no hay nada
+        // que parchear y la app no borra registros.
+        const row = payload.new as Partial<MisePlaceRegistro> | null
+        if (!row?.checklist_item_id || !row.fecha || !row.turno) return
+        aplicarRegistroLocal({
+          itemId: row.checklist_item_id, fecha: row.fecha, turno: row.turno,
+          completado: row.completado, cantidad_actual: row.cantidad_actual ?? null,
+        })
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [RESTAURANTE_ID, supabase, aplicarRegistroLocal])
 
   // ── Secciones CRUD ──
   async function agregarSeccion(datos: { nombre: string; icono: string; orden: number; plaza: Plaza; tipo?: ChecklistSeccionTipo; producto_ids?: string[]; parent_id?: string | null }) {
@@ -320,6 +377,9 @@ export function useChecklist() {
     itemId: string, fecha: string, turno: string,
     datos: { completado?: boolean; cantidad_actual?: number | null; usuario_id?: string | null },
   ) => {
+    // Antes del optimista: el eco de este write vuelve por realtime en 1-3s y
+    // sin esto podría pisar un tap posterior sobre el mismo ítem.
+    marcarEscrituraPropia(itemId, fecha, turno)
     setRegistros(prev => {
       const idx = prev.findIndex(r => r.checklist_item_id === itemId && r.fecha === fecha && r.turno === turno)
       if (idx === -1) {
@@ -345,7 +405,7 @@ export function useChecklist() {
       console.error('[useChecklist] upsertRegistro Error:', msg)
       throw new Error(msg)
     }
-  }, [supabase, fetchRegistros])
+  }, [supabase, fetchRegistros, marcarEscrituraPropia])
 
   // ── Rutinas CRUD ──
   async function agregarRutina(datos: {
