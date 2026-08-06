@@ -10,6 +10,7 @@ import type {
 } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
 import { parseTurnoFase } from '@/lib/ops/turnos'
+import { onMiseRegistroPatch } from '@/lib/ops/miseBus'
 
 // Pase de turno incumplido (Fase 3, jul 2026): un (fecha, turno, plaza) tuvo
 // apertura pero NINGÚN cierre completado — se deduce de checklist_registros,
@@ -99,7 +100,13 @@ export function useChecklist() {
   const itemIdsRef = useRef<string[]>([])
   useEffect(() => { itemIdsRef.current = items.map(i => i.id) }, [items])
 
+  // Qué fecha+turno está mostrando esta instancia. Lo necesita el puente con
+  // Producción de abajo: un parche de otro turno no se puede aplicar sobre esta
+  // lista (se vería un tilde en el turno equivocado).
+  const vistaRef = useRef<{ fecha: string; turno: string } | null>(null)
+
   const fetchRegistros = useCallback(async (fecha: string, turno: string) => {
+    vistaRef.current = { fecha, turno }
     if (!RESTAURANTE_ID) { setRegistros([]); return }
     try {
       let itemIds = itemIdsRef.current
@@ -171,6 +178,35 @@ export function useChecklist() {
       setDynamicLoading(false)
     }
   }, [fetchRegistros, fetchRutinaRegistros])
+
+  // ── Puente con Producción (misma pestaña) ───────────────────────────────
+  // Marcar una tarea como hecha en Producción escribe el registro del mise por
+  // fuera de este hook, así que sin esto el cambio no se veía hasta el próximo
+  // fetchAll — y en OPS las tabs no se desmontan, así que ese fetchAll podía
+  // no llegar nunca. Ver lib/ops/miseBus.ts.
+  useEffect(() => onMiseRegistroPatch(patch => {
+    const vista = vistaRef.current
+    // Parche de otra fecha/turno: se ignora. Cuando el usuario navegue ahí, el
+    // fetch va a traer el estado real.
+    if (!vista || patch.fecha !== vista.fecha || patch.turno !== vista.turno) return
+    // Ítem que no es de este restaurante (dos instancias del hook conviviendo).
+    if (itemIdsRef.current.length > 0 && !itemIdsRef.current.includes(patch.itemId)) return
+    const { itemId, fecha, turno, ...datos } = patch
+    setRegistros(prev => {
+      const idx = prev.findIndex(r => r.checklist_item_id === itemId && r.fecha === fecha && r.turno === turno)
+      if (idx === -1) {
+        return [...prev, {
+          id: `optimistic-${itemId}-${fecha}-${turno}`,
+          checklist_item_id: itemId, fecha, turno,
+          completado: false, cantidad_actual: null,
+          ...datos,
+        } as MisePlaceRegistro]
+      }
+      const next = [...prev]
+      next[idx] = { ...next[idx], ...datos }
+      return next
+    })
+  }), [])
 
   // ── Secciones CRUD ──
   async function agregarSeccion(datos: { nombre: string; icono: string; orden: number; plaza: Plaza; tipo?: ChecklistSeccionTipo; producto_ids?: string[]; parent_id?: string | null }) {

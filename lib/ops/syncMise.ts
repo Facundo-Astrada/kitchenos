@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { TurnoServicio } from '@/types'
 import { turnoVigente, encodeTurnoFase, horaEnTz } from './turnos'
+import { emitMiseRegistroPatch } from './miseBus'
 
 // Refleja el estado de una tarea de producción en el registro del mise que la originó.
 // Vínculo por FK (tareas.checklist_item_id), no por título. Reemplaza el viejo
@@ -25,8 +26,22 @@ export async function syncMiseDesdeTarea(
   const fase = horaEnTz(new Date()) < 16 ? 'apertura' : 'cierre'
   const vigente = turnoVigente({ turnos: turnosServicio, plaza: ctx?.plaza, entregados: ctx?.entregados })
   const turno = vigente ? encodeTurnoFase(vigente.turnoId, fase) : fase
-  await supabase.from('checklist_registros').upsert(
+
+  // Optimista, igual que el tilde del propio mise (ver useChecklist.upsertRegistro):
+  // el mise se repinta en el mismo frame del tap y la escritura viaja después.
+  // Sin esto el cambio tardaba en aparecer lo que tardara el próximo fetchAll.
+  const patch = { itemId: checklistItemId, fecha, turno, completado }
+  emitMiseRegistroPatch(patch)
+
+  const { error } = await supabase.from('checklist_registros').upsert(
     { checklist_item_id: checklistItemId, fecha, turno, completado },
     { onConflict: 'checklist_item_id,fecha,turno' },
   )
+  if (error) {
+    // Rollback aproximado: revierte el toggle. No restaura "no había registro"
+    // (para eso haría falta leer el estado previo, otro round-trip en el camino
+    // crítico); el próximo fetchAll trae la verdad del servidor igual.
+    emitMiseRegistroPatch({ ...patch, completado: !completado })
+    console.error('[syncMiseDesdeTarea] upsert Error:', error.message)
+  }
 }

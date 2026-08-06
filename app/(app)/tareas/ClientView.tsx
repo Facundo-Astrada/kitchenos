@@ -284,14 +284,20 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
 
   // ── Sync bidireccional con Mise ───────────────────────────────
   // Al cambiar estado de tarea, refleja en checklist_registros el item vinculado por FK.
+  // Las dos escrituras son independientes y las dos son optimistas, así que
+  // salen juntas: encadenarlas ponía el registro del mise a esperar el
+  // round-trip de la tarea (ver hooks.md, "Escrituras del camino crítico").
   const handleEstadoChange = useCallback(async (id: string, estado: OpsEstado) => {
-    await cambiarEstado(id, estado)
     const tarea = tareasRef.current.find(t => t.id === id)
-    if (!tarea?.checklist_item_id) return
-    await syncMiseDesdeTarea(
-      createClient(), tarea.checklist_item_id, today, estado === 'listo', turnosActivosRef.current,
-      { plaza: tarea.plaza, entregados: entregadosRef.current },
-    )
+    await Promise.all([
+      cambiarEstado(id, estado),
+      tarea?.checklist_item_id
+        ? syncMiseDesdeTarea(
+            createClient(), tarea.checklist_item_id, today, estado === 'listo', turnosActivosRef.current,
+            { plaza: tarea.plaza, entregados: entregadosRef.current },
+          )
+        : Promise.resolve(),
+    ])
   }, [cambiarEstado, today])
 
   // ── Cambiar prioridad directo desde la card de OPS (Menú/Evento) ──────
