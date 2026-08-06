@@ -115,8 +115,8 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
         <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 5 }}>El mise es la foto de tu plaza</div>
         <div style={{ fontSize: 12.5, lineHeight: 1.55, color: 'rgba(255,255,255,.85)' }}>
           Cada ítem de esta lista es algo que tiene que estar preparado y en cantidad antes del servicio.
-          Al <b>abrir</b> contás lo que hay y producís lo que falta. Al <b>cerrar</b> anotás lo que quedó.
-          Ese número es exactamente el que va a ver quien abra el próximo turno.
+          Al <b>abrir</b> contás lo que hay y producís lo que falta. Al <b>cerrar</b> anotás lo que quedó
+          y <b>entregás la plaza</b>. Ese número es exactamente el que va a ver quien abra el próximo turno.
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
           <PillNavy activo>Apertura</PillNavy>
@@ -125,7 +125,9 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
           <span className={ICON} style={{ fontSize: 15, color: 'rgba(255,255,255,.5)' }}>arrow_forward</span>
           <PillNavy activo>Cierre</PillNavy>
           <span className={ICON} style={{ fontSize: 15, color: 'rgba(255,255,255,.5)' }}>arrow_forward</span>
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,.7)', fontWeight: 600 }}>apertura de mañana</span>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,.7)', fontWeight: 600 }}>entrega</span>
+          <span className={ICON} style={{ fontSize: 15, color: 'rgba(255,255,255,.5)' }}>arrow_forward</span>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,.7)', fontWeight: 600 }}>turno siguiente</span>
         </div>
       </div>
 
@@ -150,7 +152,7 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
         <b>Cierre:</b>{' '}terminás el turno. Anotás cuánto quedó de cada ítem — no cuánto usaste, cuánto <i>queda</i>.<br />
         <b>Rutina:</b>{' '}tareas recurrentes de la plaza (limpieza, descongelado, control de fechas). Cada una
         aparece solo el día que le toca. Ahí también caen las tareas de HACCP → Limpieza con &quot;Mostrar en OPS&quot;.
-        <Repercute>si nadie completa el <b>Cierre</b>, el que abre mañana arranca a ciegas y tiene que contar todo de cero.</Repercute>
+        <Repercute>si nadie completa el <b>Cierre</b> y entrega la plaza, el que abre después sigue viendo este turno y tiene que contar todo de cero.</Repercute>
       </Bloque>
 
       <Bloque
@@ -164,8 +166,9 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
           </DemoNavy>
         }
       >
-        Cuántos ítems de <b>toda la plaza</b> están tildados en este turno y esta fase. Cada sección
-        (Heladera, Secos, Estación…) además lleva su propio contador en su encabezado.
+        Cuántos ítems de <b>toda la plaza</b> llevás resueltos en este turno y esta fase. En apertura cuenta
+        lo <b>revisado</b>: los tildados en verde y también los que quedaron en ámbar con su producción
+        despachada. Cada sección (Heladera, Secos, Estación…) además lleva su propio contador en su encabezado.
       </Bloque>
 
       <Bloque
@@ -194,7 +197,26 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
       >
         Tildás cuando ese ítem <b>ya está como tiene que estar</b>: hay la cantidad pedida, o ya lo produjiste.
         No significa &quot;lo miré&quot;, significa &quot;está&quot;. La tarjeta se apaga y suma al progreso de arriba.
-        <Repercute>si ese ítem tenía una tarea en <b>Producción</b>, tildarlo acá la marca como lista allá — y al revés.</Repercute>
+        <br /><br />
+        Si lo tildás a mano cuando todavía figuraba faltante, el recipiente <b>queda completo</b>: tildar
+        es afirmar que está, así que el número se acomoda solo al objetivo. Antes quedaba verde con el
+        último conteo — casi siempre un 0 — y ese 0 era lo que se encontraba después el del cierre.
+        Destildar no toca el número, y en <b>Cierre</b> tampoco se pisa nada: ahí el número es justamente
+        lo que estás contando.
+        <Repercute>si ese ítem tenía una tarea en <b>Producción</b>, tildarlo acá la marca como lista allá — y al revés, al instante y en todos los dispositivos que tengan el mise abierto.</Repercute>
+      </Bloque>
+
+      <Bloque
+        titulo="El círculo ámbar — está en producción"
+        demo={
+          <span className={ICON} style={{ fontSize: 26, color: '#f59e0b' }}>pending</span>
+        }
+      >
+        Cuando despachás la producción de un ítem, la tarjeta se pinta en ámbar con el cartel
+        <b> &quot;en producción&quot;</b> y ya suma al progreso de arriba: la apertura mide <b>ítems revisados</b>,
+        no ítems cocinados — pasaste, contaste y decidiste, que es lo que se hace en la vuelta.
+        Verde es &quot;está en su lugar&quot;; ámbar es &quot;está en el horno&quot;.
+        <Repercute>cuando esa tarea se completa en <b>Producción</b>, el ítem pasa a verde solo. Nadie tiene que volver al mise a tildarlo.</Repercute>
       </Bloque>
 
       <Bloque
@@ -241,8 +263,13 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
       >
         Contás lo que hay físicamente y lo escribís. El número de la derecha es el objetivo, no se toca.
         Viene precargado con lo que dejó registrado el cierre anterior: si es correcto lo dejás, si no lo corregís.
+        Al tocarlo el número heredado queda <b>seleccionado</b>, así que escribís encima sin borrar — contar 2
+        sobre un 10 heredado da 2, no 102.
         <br /><br />
         Si al cargarlo <b>llega al objetivo, el ítem se tilda solo</b>. Si falta, aparece el botón rojo de producir.
+        <br /><br />
+        <b>Enter</b> guarda y <b>salta al siguiente ítem</b>, con su campo abierto y la tarjeta centrada sobre el
+        teclado: la vuelta se hace de corrido, sin bajar el teclado ni buscar la próxima tarjeta con el dedo.
         <Repercute>este conteo es el que aparece como stock de arranque, y lo que cargues al <b>cerrar</b> es lo que va a ver el turno siguiente.</Repercute>
       </Bloque>
 
@@ -261,6 +288,9 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
         Aparece solo cuando hay déficit y ya trae la cuenta hecha: objetivo − lo que hay (+ lo que el salón ya
         pidió hoy). Un tap crea la tarea en <b>Producción</b> con la cantidad exacta, prioridad alta y para hoy.
         No hace falta abrir nada más.
+        <br /><br />
+        Despachar cierra el ítem para esta vuelta: queda en <b>ámbar &quot;en producción&quot;</b> y el foco
+        <b> salta al siguiente</b>, igual que con Enter.
       </Bloque>
 
       <Bloque
@@ -304,6 +334,55 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
         Los cinco puntitos son el semáforo — verde si quedó cerca del objetivo, amarillo o rojo si quedó poco.
         Tildar el ítem en cierre significa &quot;lo conté y lo dejé registrado&quot;.
         <Repercute>ese número entra tal cual en <b>HAY AHORA</b> de la próxima apertura. Un cierre bien contado le ahorra media hora al turno que entra.</Repercute>
+      </Bloque>
+
+      {/* ── TERMINAR EL TURNO ── */}
+      <Titulo>Terminar la vuelta y entregar</Titulo>
+
+      <Bloque
+        titulo="¡Terminaste la apertura!"
+        demo={
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 10px', borderRadius: 11,
+            background: 'var(--bg)', border: '1px solid var(--border)',
+          }}>
+            <span className={ICON} style={{ fontSize: 18, color: '#22c55e' }}>check_circle</span>
+            <div style={{ lineHeight: 1.25 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-1)' }}>¡Terminaste la apertura!</div>
+              <div style={{ fontSize: 9, color: 'var(--text-3)' }}>20 ítems revisados — 6 en producción</div>
+            </div>
+          </div>
+        }
+      >
+        Cuando no queda ningún ítem sin revisar aparece abajo este aviso, y <b>se queda ahí</b> hasta que lo
+        cerrás con la ✕ — no es un mensaje de 2 segundos que se pierde si estabas mirando la olla.
+        Si dejaste producción despachada lo aclara (&quot;6 en producción&quot;): la vuelta está hecha, la
+        cocina todavía no. Es solo información; no hay nada más que tocar en el mise.
+      </Bloque>
+
+      <Bloque
+        titulo="Entregar plaza — el pase de turno"
+        demo={
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 13px', borderRadius: 10,
+            background: '#22c55e', color: '#fff', fontSize: 11.5, fontWeight: 700,
+          }}>
+            <span className={ICON} style={{ fontSize: 15 }}>outbox</span>
+            Entregar plaza
+          </span>
+        }
+      >
+        Con el <b>Cierre</b> completo aparece esta barra. Tocar <b>Entregar plaza</b> es lo que pasa el turno:
+        a partir de ahí el mise de esa plaza muestra el turno siguiente, con tus números de cierre como
+        referencia, y queda registrado quién entregó y a qué hora.
+        <br /><br />
+        Lo dispara la entrega, no el reloj. Antes el mise cambiaba de turno por hora, y el que entraba
+        temprano a hacer el almuerzo terminaba cargando sus tildes sobre la cena de anoche.
+        <br /><br />
+        <b>Entregar no es fichar la salida.</b> Son dos cosas distintas y ese era el otro problema: la plaza
+        es del turno y la salida es tuya. Entregás primero — aunque no hayas fichado la entrada — y recién
+        ahí la barra ofrece <b>Marcar salida</b>, si tenías un fichaje abierto.
+        <Repercute>el que abre después arranca sobre lo que vos entregaste. Sin entrega, sigue viendo el turno anterior.</Repercute>
       </Bloque>
 
       {/* ── PRIMERA VEZ ── */}

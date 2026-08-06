@@ -24,6 +24,13 @@ export interface MisePaso {
   texto: string
   /** Fase que hay que estar viendo para que el control exista. */
   fase?: 'apertura' | 'cierre'
+  /**
+   * El control solo existe bajo cierta condición del turno (ej. la barra de
+   * entrega, que aparece con el cierre completo). Si no está, se saltea rápido
+   * en vez de dejar el "Buscando…" el segundo y medio que espera un control
+   * que debería estar ahí.
+   */
+  opcional?: boolean
 }
 
 // El orden sigue el de la guía escrita: primero el header, después la
@@ -50,7 +57,7 @@ export const MISE_PASOS: MisePaso[] = [
     target: 'mise-progreso',
     fase: 'apertura',
     titulo: 'El avance de la plaza',
-    texto: 'Cuántos ítems de toda la plaza están tildados en este turno y esta fase. Cada sección además lleva su propio contador a la derecha de su nombre.',
+    texto: 'Cuánto llevás resuelto de toda la plaza en este turno y esta fase. En apertura cuenta lo revisado: los tildados en verde y también los que quedaron en ámbar con la producción ya despachada. Cada sección lleva además su propio contador.',
   },
   {
     target: 'mise-modo-control',
@@ -68,7 +75,13 @@ export const MISE_PASOS: MisePaso[] = [
     target: 'mise-item-check',
     fase: 'apertura',
     titulo: 'Tildar un ítem',
-    texto: 'Tildás cuando ese ítem ya está como tiene que estar: hay la cantidad pedida o ya lo produjiste. No es "lo miré", es "está". Si ese ítem tenía una tarea en Producción, tildarlo acá la cierra allá — y al revés.',
+    texto: 'Tildás cuando ese ítem ya está como tiene que estar: hay la cantidad pedida o ya lo produjiste. No es "lo miré", es "está". Si lo tildás a mano cuando figuraba faltante, el recipiente queda completo — tildar es afirmar que está. Si tenía una tarea en Producción, tildarlo acá la cierra allá al instante, y al revés.',
+  },
+  {
+    target: 'mise-item-check',
+    fase: 'apertura',
+    titulo: 'Ámbar: está en producción',
+    texto: 'Cuando despachás la producción de un ítem, el círculo se pone ámbar y la tarjeta dice "en producción". Verde es "está en su lugar", ámbar es "está en el horno". Ya suma al avance —la apertura mide lo revisado, no lo cocinado— y pasa a verde solo cuando la tarea se completa en Producción.',
   },
   {
     target: 'mise-item-peso',
@@ -86,13 +99,19 @@ export const MISE_PASOS: MisePaso[] = [
     target: 'mise-item-hayahora',
     fase: 'apertura',
     titulo: 'Hay ahora',
-    texto: 'El único número que cargás en apertura: contás lo que hay y lo escribís. Viene precargado con lo que dejó el cierre anterior. Si llega al objetivo, el ítem se tilda solo; si falta, aparece el botón rojo de producir.',
+    texto: 'El único número que cargás en apertura: contás lo que hay y lo escribís. Viene precargado con lo que dejó el cierre anterior, y al tocarlo queda seleccionado — escribís encima sin borrar. Si llega al objetivo, el ítem se tilda solo; si falta, aparece el botón rojo de producir.',
+  },
+  {
+    target: 'mise-item-hayahora',
+    fase: 'apertura',
+    titulo: 'Enter: guardar y seguir',
+    texto: 'Enter guarda el número y salta al siguiente ítem, con su campo abierto y la tarjeta centrada arriba del teclado. La vuelta se hace de corrido: contás, Enter, contás, Enter — sin bajar el teclado ni buscar la próxima tarjeta.',
   },
   {
     target: 'mise-item-producir',
     fase: 'apertura',
     titulo: 'Producir lo que falta',
-    texto: 'Aparece solo cuando hay déficit y ya trae la cuenta hecha: objetivo − lo que hay + lo que el salón ya pidió hoy. Un tap crea la tarea en Producción con la cantidad exacta, prioridad alta y para hoy.',
+    texto: 'Aparece solo cuando hay déficit y ya trae la cuenta hecha: objetivo − lo que hay + lo que el salón ya pidió hoy. Un tap crea la tarea en Producción con la cantidad exacta, prioridad alta y para hoy. El ítem queda en ámbar y el foco salta al siguiente, igual que con Enter.',
   },
   {
     target: 'mise-item-tarea',
@@ -107,9 +126,17 @@ export const MISE_PASOS: MisePaso[] = [
     texto: 'La tarjeta cambia: escribís cuánto quedó de cada ítem. Los cinco puntitos son el semáforo contra el objetivo. Ese número entra tal cual en "Hay ahora" de la próxima apertura — un cierre bien contado le ahorra media hora al turno que entra.',
   },
   {
+    target: 'mise-entregar',
+    fase: 'cierre',
+    // Solo existe con el cierre 100% completo — en plena vuelta no está.
+    opcional: true,
+    titulo: 'Entregar la plaza',
+    texto: 'Con el cierre completo aparece esta barra abajo. "Entregar plaza" es lo que pasa el turno: el mise queda parado en el turno siguiente con tus números como referencia, y se registra quién entregó y a qué hora. Lo dispara la entrega, no el reloj.',
+  },
+  {
     target: null,
     titulo: 'Eso es todo',
-    texto: 'El "?" del header te deja esta explicación siempre a mano, en texto o en pantalla. Volvé cuando quieras.',
+    texto: 'Entregar la plaza no es fichar tu salida: entregás primero y recién ahí la barra ofrece "Marcar salida", si tenías fichaje abierto. El "?" del header te deja esta explicación siempre a mano, en texto o en pantalla.',
   },
 ]
 
@@ -164,7 +191,7 @@ export function MiseTourOverlay({ faseActual, onSetFase, onFinish }: {
     // Cambiar de fase dispara un fetch del mise: la lista queda en "Cargando…"
     // y los controles no existen todavía. Con una ventana corta el paso de
     // cierre se salteaba solo aunque el ítem estuviera bien. ~3s de margen.
-    const MAX = cambiaFase ? 24 : 10
+    const MAX = cambiaFase ? 24 : paso.opcional ? 4 : 10
 
     function buscar() {
       if (cancelado) return
