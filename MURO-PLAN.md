@@ -1,7 +1,7 @@
 # Muro de cocina — plan de implementación
 
 > Idea de Facundo (2026-08-06) + hallazgos del código.
-> **Estado:** F1 ✅ (`1091b8e`) · F2 ✅ (`b70c246`, verificado en pantalla) · F3 pendiente.
+> **Estado:** F1 ✅ (`1091b8e`) · F2 ✅ (`b70c246`, verificado en pantalla) · F3 ✅ (`9d6d4a1`, verificado en pantalla — **falta verificar en tablet real**).
 >
 > **Decisiones ya tomadas — no volver a abrirlas:**
 > - El jefe **mira y también toca**. El muro no es de solo lectura.
@@ -87,7 +87,13 @@ Esto es la "vista minimalista". **No va como quinta pestaña del toggle**: el to
 
 ---
 
-### F3 — El muro · *el grueso del trabajo*
+### F3 ✅ — El muro · *el grueso del trabajo*
+
+**Desviaciones del plan original, decididas al implementar:**
+- **Las columnas muestran Producción (`tareas`), no el Mise.** El mockup de abajo sugería el `3/11` del Mise como progreso de columna, pero la interacción definida más abajo ("tap cicla pendiente→en_curso→listo→duda") es de `OpsEstado`, que el Mise no tiene (solo `completado: boolean`). Con la interacción ya fijada, mezclar los dos dejaba de ser coherente — se resolvió a favor de una sola fuente de datos por columna.
+- **Atribución de `en_curso` faltaba** — el mockup pedía "Nico · 6′" para un ítem en curso, pero F1 solo cubrió `listo`. Se agregó `tareas.estado_por` + `estado_at` (un solo par, cubre `en_curso` y `duda` — no tres columnas separadas), mismo criterio que `completado_por` de F1. Confirmado con Facundo antes de tocar el schema.
+
+El resto del plan (ruta, registro del módulo, reglas de layout, datos de entregas, wake lock, rollover, interacción) se implementó tal como está escrito abajo.
 
 **Ruta:** `app/(servicio)/muro/page.tsx`, dentro del group de servicio (hereda full-screen, oscuro y offline banner). **No** es un flag de `/operaciones`: esa pantalla está hecha para operar (tabs, FAB del Coach, nav inferior, teclado) y el muro necesita lo contrario.
 
@@ -120,7 +126,7 @@ Esto es la "vista minimalista". **No va como quinta pestaña del toggle**: el to
 
 **Datos**
 - Producción del día: `useTareas` filtrado igual que `topLevel` de `tareas/ClientView` (hoy + carryover de ayer sin completar), **sin filtrar por modo** — el muro es el turno entero, como "Todo".
-- Progreso del mise por plaza: `useChecklist` ya calcula algo equivalente (`gridProgress` en `checklist/ClientView`). Va como el `3/11` del encabezado — extraerlo a `lib/ops/` para no duplicarlo.
+- ~~Progreso del mise por plaza...~~ — no implementado, ver "Desviaciones" arriba: el `3/11` del encabezado es de `tareas` (listas/total de esa columna), no del Mise.
 - Entregas: `useCierresTurno().entregados`.
 - Nombres: `useEquipo().miembros`, cruzado contra `completado_por` (F1) y `asignado_a`.
 
