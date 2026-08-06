@@ -21,6 +21,44 @@ export const SECCIONES_OPS = [
   { id: 'estacion',   label: 'Estación',        icono: 'countertops' },
 ]
 
+// ── Stock objetivo y déficit de un ítem del mise ────────────────────────
+// La misma fórmula se estaba escribiendo en tres lugares de ProductoMiseCard
+// (el déficit que pinta el botón, el auto-tilde del campo "hay ahora" y el
+// tilde manual). Una sola definición: si divergen, la pantalla dice "falta
+// producir 2" y al tildar guarda otra cosa.
+
+interface ItemStockInfo {
+  cantidad: number
+  recipiente_nombre?: string | null
+  recipiente_capacidad?: number | null
+  demanda_viva?: number | null
+}
+
+export function tieneRecipienteMise(item: ItemStockInfo): boolean {
+  return !!(item.recipiente_nombre && item.recipiente_capacidad != null)
+}
+
+/**
+ * Cuánto tiene que HABER para que no falte producir nada.
+ * Con recipiente: lo que entra en el recipiente más lo ya pedido desde el salón
+ * (`demanda_viva`), para que después de servir esa demanda el recipiente siga
+ * completo. Sin recipiente: la cantidad del mise.
+ */
+export function targetStockMise(item: ItemStockInfo): number {
+  if (tieneRecipienteMise(item)) return (item.recipiente_capacidad ?? 0) + (item.demanda_viva ?? 0)
+  return item.cantidad
+}
+
+/**
+ * Cuánto falta producir. `null` = no aplica: sin recipiente no hay noción de
+ * déficit (no hay contra qué comparar), y sin stock contado tampoco — por eso
+ * un ítem que nadie contó no muestra botón de producir.
+ */
+export function deficitMise(item: ItemStockInfo, stock: number | null): number | null {
+  if (!tieneRecipienteMise(item) || stock === null) return null
+  return Math.max(0, targetStockMise(item) - stock)
+}
+
 // ── "Cuántos recipientes iguales" sin columna nueva (DDL de Supabase caído,
 // ver hooks.md #13) — se codifica como sufijo " ×N" en recipiente_nombre,
 // que además es perfectamente legible como texto humano en cualquier

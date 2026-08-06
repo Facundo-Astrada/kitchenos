@@ -8,6 +8,7 @@ import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, 
 import { CrearTareaSheet, type CrearTareaSheetConfirmData } from '@/components/ops/CrearTareaSheet'
 import { parseTurnoFase } from '@/lib/ops/turnos'
 import type { MisePlaceItem, MisePrioridad, TareaPrioridad } from '@/types'
+import { tieneRecipienteMise, targetStockMise, deficitMise } from '@/lib/ops/mise'
 
 // ── Exported interfaces ───────────────────────────────────────
 export interface PlatoPlaza {
@@ -227,7 +228,7 @@ function ProductoMiseCardBase({
   // Demanda viva: porciones pedidas desde el salón en el turno actual (prep-list-update).
   // Se suma al target del recipiente para que "falta producir" contemple lo ya vendido.
   const demandaViva = item.demanda_viva ?? 0
-  const tieneRecipiente = !!(item.recipiente_nombre && item.recipiente_capacidad != null)
+  const tieneRecipiente = tieneRecipienteMise(item)
 
   // Valor "en vivo" mientras se escribe (antes del blur que persiste), para que
   // el CTA de producir reaccione al tipear en vez de esperar a salir del campo —
@@ -235,9 +236,7 @@ function ProductoMiseCardBase({
   const stockLive = editingStock
     ? (stockInput === '' || isNaN(parseFloat(stockInput)) ? null : parseFloat(stockInput))
     : stockDisplay
-  const deficit = tieneRecipiente && stockLive !== null
-    ? Math.max(0, (item.recipiente_capacidad ?? 0) + demandaViva - stockLive)
-    : null
+  const deficit = deficitMise(item, stockLive)
 
   // Peso total que debería haber en TODOS los recipientes juntos, a partir de
   // lo que ya se carga por OPS: capacidad objetivo (en porciones) × peso de
@@ -337,6 +336,26 @@ function ProductoMiseCardBase({
     }
   }
 
+  // Tildar a mano un ítem al que todavía le faltaba producir es afirmar "esto
+  // ya está resuelto", así que también deja el número: el recipiente queda
+  // completo. Es el inverso exacto del auto-tilde del campo "hay ahora" (stock
+  // completo → se tilda solo). Sin esto el ítem quedaba verde conservando el
+  // último stock cargado — típicamente 0 —, y ese 0 es lo que se encontraba
+  // después el que hace el cierre, que es lo único que viaja al turno siguiente.
+  //
+  // Solo al MARCAR (destildar no toca el número) y solo en apertura: en el
+  // cierre el número es justamente lo que se está contando, pisarlo sería lo
+  // contrario de lo que el cierre hace.
+  function handleToggleCheck() {
+    const marcando = !checked
+    const target = targetStockMise(item)
+    const completaStock = marcando && !esCierre && target > 0 && (stockDisplay ?? 0) < target
+    return onUpsert(item.id, fecha, turno, {
+      completado: marcando,
+      ...(completaStock ? { cantidad_actual: target } : {}),
+    })
+  }
+
   // Atajo de un tap desde el CTA de déficit — sin abrir el sheet, prioridad alta por defecto.
   function handleCrearTareaRapida(cantidad: number) {
     return crearTarea(cantidad, 'alta', 'hoy', null)
@@ -361,7 +380,7 @@ function ProductoMiseCardBase({
         {/* Checkbox */}
         <button
           data-coach-target="mise-item-check"
-          onClick={() => onUpsert(item.id, fecha, turno, { completado: !checked })}
+          onClick={handleToggleCheck}
           style={{ ...btnReset, flexShrink: 0 }}
         >
           <span className="material-symbols-outlined" style={{
@@ -596,9 +615,7 @@ function ProductoMiseCardBase({
                   const vFinal = (!v && v !== 0) ? null : v
                   // Si con este stock ya no falta producir nada, se tilda solo —
                   // evita el tap extra de ir a buscar el checkbox después de contar.
-                  const deficitFinal = vFinal !== null
-                    ? Math.max(0, (item.recipiente_capacidad ?? 0) + demandaViva - vFinal)
-                    : null
+                  const deficitFinal = deficitMise(item, vFinal)
                   onUpsert(item.id, fecha, turno, {
                     cantidad_actual: vFinal,
                     ...(deficitFinal === 0 && !checked ? { completado: true } : {}),
