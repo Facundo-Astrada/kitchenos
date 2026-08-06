@@ -18,8 +18,9 @@ import { useFichaje } from '@/lib/hooks/useFichaje'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
 import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
+import { useCierresTurno } from '@/lib/hooks/useCierresTurno'
 import { todasLasPlazas, plazaLabel, plazaIcon } from '@/lib/constants'
-import { hoyOperativo, sumarDias, turnoActivo, turnoAnterior, encodeTurnoFase, cierreIncompleto, fechaEnTz } from '@/lib/ops/turnos'
+import { hoyOperativo, sumarDias, turnoVigente, turnoAnterior, turnoSiguiente, encodeTurnoFase, cierreIncompleto, fechaEnTz } from '@/lib/ops/turnos'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import SectionEditor from '@/components/checklist/SectionEditor'
 import type { Plaza, MisePlaceItem, MisePrioridad, ChecklistSeccionConfig, RutinaFrecuencia, ChecklistRutina, ChecklistRutinaRegistro, RutinaCondicion } from '@/types'
@@ -94,6 +95,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const { crearVencimiento } = useHaccp({ soloEscritura: true })
   const { fichajeAbierto, marcarSalida } = useFichaje()
   const { turnosActivos } = useTurnosServicio()
+  const { entregados, entregaDe, entregarPlaza } = useCierresTurno()
 
   // Build receta info map (id → { porciones, pesoPorcion, vidaUtilDias }) for MiseCard display
   const recetaInfoMap = useMemo(() => {
@@ -197,6 +199,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const [cierreAnteriorIncompleto, setCierreAnteriorIncompleto] = useState(false)
   const [modoControl, setModoControl] = useState(false)
   const [cerrandoTurno, setCerrandoTurno] = useState(false)
+  const [entregando, setEntregando] = useState(false)
 
   useEffect(() => {
     setModoControl(localStorage.getItem('checklist_modo_control') === 'true')
@@ -210,17 +213,26 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     })
   }
 
-  const fecha = hoyOperativo()
-
-  // Turno de servicio activo (almuerzo/cena/...) — default automático por
-  // hora, editable a mano (selector de chips en el header). Solo se
-  // auto-selecciona una vez; después de eso el usuario tiene el control.
-  const [turnoServicioId, setTurnoServicioId] = useState<string | null>(null)
-  useEffect(() => {
-    if (turnoServicioId !== null) return
-    const activo = turnoActivo(new Date(), turnosActivos)
-    if (activo) setTurnoServicioId(activo.id)
-  }, [turnosActivos, turnoServicioId])
+  // ── Dónde está parada esta plaza: el par (jornada, turno) ───────────────
+  // Lo decide la entrega, no el reloj. Si la plaza ya entregó el turno, la
+  // pantalla pasa al siguiente en ese mismo instante — sean las 01:20 o las
+  // 16:00 (ver lib/ops/turnos.ts: turnoVigente). El horario configurado solo
+  // manda cuando nadie entregó, que es la red de contención para la plaza que
+  // se va sin cerrar.
+  //
+  // `turnoManual` es el override del usuario (chips del header): mientras no
+  // toque un chip, la pantalla SIGUE al resolutor, y por eso el pase hecho
+  // desde otro dispositivo se ve acá al momento (realtime de useCierresTurno).
+  // Antes se auto-seleccionaba una sola vez y quedaba congelado.
+  const [turnoManual, setTurnoManual] = useState<string | null>(null)
+  const vigente = useMemo(
+    () => turnoVigente({ turnos: turnosActivos, entregados, plaza }),
+    [turnosActivos, entregados, plaza],
+  )
+  const turnoServicioId = turnoManual ?? vigente?.turnoId ?? null
+  // La jornada acompaña al turno: entregar la cena del 5 a la 01:20 deja la
+  // pantalla en el almuerzo del 6, no en el del 5 (que ya pasó).
+  const fecha = vigente?.jornada ?? hoyOperativo()
 
   const fase: 'apertura' | 'cierre' = tab === 'rutina' ? 'apertura' : tab
   // checklist_registros.turno codifica turno+fase ('cena:apertura'); si el
@@ -470,16 +482,18 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   }, [items, registros, plazasCustom])
 
   // Set of checklist_item_ids that already have a pending/in-progress tarea today
+  // `fecha` y no hoyOperativo(): si el pase ya adelantó la jornada (cena
+  // entregada 01:20 → almuerzo del día siguiente), las tareas que corresponden
+  // son las de esa jornada, no las de la que todavía marca el reloj.
   const tareasHoySet = useMemo(() => {
-    const today = hoyOperativo()
     const s = new Set<string>()
     for (const t of tareas) {
-      if (t.turno_fecha === today && t.estado !== 'listo' && t.checklist_item_id) {
+      if (t.turno_fecha === fecha && t.estado !== 'listo' && t.checklist_item_id) {
         s.add(t.checklist_item_id)
       }
     }
     return s
-  }, [tareas])
+  }, [tareas, fecha])
 
   useEffect(() => {
     if (toast) { const t = setTimeout(() => setToast(null), 2500); return () => clearTimeout(t) }
@@ -488,20 +502,52 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // ── Mensaje al completar el 100% de la plaza (apertura/cierre) ───────
   // Una vez por plaza+turno+día — evita repetir el mensaje si el usuario
   // destilda y vuelve a tildar el último ítem, o cambia de tab y vuelve.
-  // En cierre, si el usuario tiene un fichaje abierto, el toast se omite —
-  // la barra persistente de "Cerrar turno" (abajo) ya comunica que terminó.
+  // En cierre no va toast: la barra persistente de entrega (abajo) ya comunica
+  // que terminó, y encima pide una acción — un toast que se va solo taparía el
+  // paso que falta.
   const plazaCompletaShownRef = useRef<Set<string>>(new Set())
   useEffect(() => {
-    if (tab === 'rutina' || !plaza || total === 0 || done !== total) return
+    if (tab !== 'apertura' || !plaza || total === 0 || done !== total) return
     const key = `${plaza}-${tab}-${fecha}`
     if (plazaCompletaShownRef.current.has(key)) return
     plazaCompletaShownRef.current.add(key)
-    if (tab === 'cierre') {
-      if (!fichajeAbierto) setToast('Cierre completo — ¡buen trabajo hoy!')
-    } else {
-      setToast('Ya checkeaste tu plaza — estás listo para producir tranquilo')
+    setToast('Ya checkeaste tu plaza — estás listo para producir tranquilo')
+  }, [tab, plaza, fecha, total, done])
+
+  // ── Entrega de la plaza — el pase de turno como acto explícito ──────────
+  // Cerrar la plaza y marcar la salida propia son dos cosas distintas: el
+  // segundo cocinero que se queda media hora más no tiene por qué retrasar el
+  // pase, y el que ficha salida sin haber contado nada no entregó nada.
+  const entregaActual = plaza && turnoServicioId ? entregaDe(fecha, turnoServicioId, plaza) : undefined
+  const proximoTurno = useMemo(() => {
+    if (!turnoServicioId) return null
+    const sig = turnoSiguiente(fecha, turnoServicioId, turnosActivos)
+    if (!sig) return null
+    return turnosActivos.find(t => t.id === sig.turnoId) ?? null
+  }, [fecha, turnoServicioId, turnosActivos])
+
+  async function handleEntregarPlaza() {
+    if (!plaza || !turnoServicioId || entregando) return
+    const nombreProximo = proximoTurno?.nombre ?? 'el turno siguiente'
+    if (!confirm(`¿Entregar ${plazaLabel(plaza, plazasCustom)}? El turno de la plaza pasa a ${nombreProximo} para todos.`)) return
+    setEntregando(true)
+    try {
+      // Quedarse parado en el turno recién entregado: para el resto de la
+      // cocina el resolutor ya apunta al siguiente, pero al que entregó no se
+      // le puede vaciar la pantalla en la cara.
+      setTurnoManual(turnoServicioId)
+      await entregarPlaza({
+        jornada: fecha, turnoId: turnoServicioId, plaza,
+        cerradoPor: authPerfil?.miembro_id ?? null,
+        itemsTotal: total, itemsCompletados: done,
+      })
+      setToast(`Plaza entregada — el turno pasa a ${nombreProximo}`)
+    } catch (e: unknown) {
+      setToast('Error al entregar: ' + (e instanceof Error ? e.message : 'desconocido'))
+    } finally {
+      setEntregando(false)
     }
-  }, [tab, plaza, fecha, total, done, fichajeAbierto])
+  }
 
   async function handleCerrarTurno() {
     if (!fichajeAbierto || cerrandoTurno) return
@@ -626,7 +672,13 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
   }, [])
 
-  const today = hoyOperativo()
+  // Alias de la jornada resuelta (ver `fecha` arriba) para todo lo que compara
+  // contra "hoy": tareas del día, creación de tareas. Sigue al pase, no al
+  // reloj — si no, entregada la cena a la 01:20 el mise pasaría al almuerzo del
+  // 6 mientras las tareas seguirían buscándose en la jornada del 5.
+  // Nombre propio porque handleMiseUpsert recibe un parámetro `fecha` que lo
+  // taparía.
+  const today = fecha
 
   // Wrapper de upsertRegistro: al cambiar completado, sincroniza la tarea de producción matching
   const handleMiseUpsert = useCallback(async (
@@ -817,7 +869,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                 {turnosActivos.map(t => {
                   const activo = (turnoServicioId ?? turnosActivos[0].id) === t.id
                   return (
-                    <button key={t.id} onClick={() => setTurnoServicioId(t.id)} style={{
+                    <button key={t.id} onClick={() => setTurnoManual(t.id)} style={{
                       ...btnReset,
                       padding: '3px 10px', borderRadius: 999,
                       fontSize: 11, fontWeight: 700,
@@ -1506,33 +1558,64 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         }}>{toast}</div>
       )}
 
-      {/* Barra persistente — cierre 100% completo + turno (fichaje) abierto */}
-      {tab === 'cierre' && plaza && total > 0 && done === total && fichajeAbierto && (
+      {/* Barra persistente — cierre 100% completo.
+          Ya no está condicionada al fichaje: entregar la plaza es del turno, no
+          de la persona, y el que no fichó entrada igual tiene que poder pasar
+          el turno. El botón de salida (fichaje) queda detrás de la entrega. */}
+      {tab === 'cierre' && plaza && total > 0 && done === total && (
         <div style={{
           position: 'fixed', bottom: 'var(--toast-bottom)', left: 16, right: 16, zIndex: 299,
           background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14,
           padding: '10px 10px 10px 14px', boxShadow: '0 8px 24px rgba(0,0,0,.18)',
           display: 'flex', alignItems: 'center', gap: 10,
         }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#22c55e', flexShrink: 0 }}>task_alt</span>
+          <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#22c55e', flexShrink: 0 }}>
+            {entregaActual ? 'published_with_changes' : 'task_alt'}
+          </span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-1)' }}>Cierre completo</div>
-            <div style={{ fontSize: 10.5, color: 'var(--text-3)' }}>Ya podés marcar tu salida</div>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-1)' }}>
+              {entregaActual ? 'Plaza entregada' : 'Cierre completo'}
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
+              {entregaActual
+                ? `${new Date(entregaActual.cerrado_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}${proximoTurno ? ` · la plaza pasó a ${proximoTurno.nombre}` : ''}`
+                : proximoTurno ? `Entregala para pasar a ${proximoTurno.nombre}` : 'Entregala para pasar el turno'}
+            </div>
           </div>
-          <button
-            onClick={handleCerrarTurno}
-            disabled={cerrandoTurno}
-            style={{
-              flexShrink: 0, padding: '10px 14px', borderRadius: 10, border: 'none',
-              background: '#ef4444', color: '#fff', fontSize: 12.5, fontWeight: 700,
-              cursor: cerrandoTurno ? 'default' : 'pointer', fontFamily: 'inherit',
-              opacity: cerrandoTurno ? 0.6 : 1,
-              display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>stop_circle</span>
-            {cerrandoTurno ? 'Cerrando…' : 'Cerrar turno'}
-          </button>
+          {/* Entregar primero; una vez entregada, la barra ofrece la salida
+              personal (solo si hay fichaje abierto que cerrar). */}
+          {!entregaActual ? (
+            <button
+              onClick={handleEntregarPlaza}
+              disabled={entregando}
+              data-coach-target="mise-entregar"
+              style={{
+                flexShrink: 0, padding: '10px 14px', borderRadius: 10, border: 'none',
+                background: '#22c55e', color: '#fff', fontSize: 12.5, fontWeight: 700,
+                cursor: entregando ? 'default' : 'pointer', fontFamily: 'inherit',
+                opacity: entregando ? 0.6 : 1,
+                display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>outbox</span>
+              {entregando ? 'Entregando…' : 'Entregar plaza'}
+            </button>
+          ) : fichajeAbierto ? (
+            <button
+              onClick={handleCerrarTurno}
+              disabled={cerrandoTurno}
+              style={{
+                flexShrink: 0, padding: '10px 14px', borderRadius: 10, border: 'none',
+                background: '#ef4444', color: '#fff', fontSize: 12.5, fontWeight: 700,
+                cursor: cerrandoTurno ? 'default' : 'pointer', fontFamily: 'inherit',
+                opacity: cerrandoTurno ? 0.6 : 1,
+                display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>stop_circle</span>
+              {cerrandoTurno ? 'Cerrando…' : 'Marcar salida'}
+            </button>
+          ) : null}
         </div>
       )}
     </div>

@@ -118,6 +118,99 @@ export function turnoAnterior(
 }
 
 /**
+ * El turno inmediatamente siguiente en la secuencia circular, con su jornada.
+ * Espejo exacto de turnoAnterior: cerrar el último turno del día avanza la
+ * jornada un día, porque el almuerzo que sigue a la cena del 5 es el del 6.
+ */
+export function turnoSiguiente(
+  jornada: string, turnoId: string, turnos: TurnoServicio[],
+): { jornada: string; turnoId: string } | null {
+  const activos = turnos.filter(t => t.activo)
+  if (activos.length === 0) return null
+  const ordenados = ordenarPorHorario(activos)
+  const idx = ordenados.findIndex(t => t.id === turnoId)
+  if (idx === -1) return null
+  if (idx === ordenados.length - 1) return { jornada: sumarDias(jornada, 1), turnoId: ordenados[0].id }
+  return { jornada, turnoId: ordenados[idx + 1].id }
+}
+
+// ── Pase de turno explícito (Fase 4, ago 2026) ───────────────────────────
+// El turno vigente ya no lo adivina el reloj: lo decide la entrega. Cuando una
+// plaza termina de cargar su cierre y toca "Entregar plaza", queda una fila en
+// cierres_turno y desde ese instante esa plaza está en el turno siguiente —
+// sean las 01:20 o las 16:00. El horario pasa a ser la red de contención de la
+// plaza que no entrega nunca, no la fuente de verdad.
+
+/** Clave de una entrega. Misma forma acá y en useCierresTurno — no reimplementar. */
+export function claveCierre(jornada: string, turnoId: string, plaza: string): string {
+  return `${jornada}|${turnoId}|${plaza}`
+}
+
+/**
+ * Turno que dicta el reloj, coherente con la jornada que devuelve hoyOperativo.
+ *
+ * turnoActivo() responde otra pregunta ("cuál arrancó último") y, cuando todavía
+ * no arrancó ninguno, cae al último de la lista — el de anoche. Eso es cierto a
+ * las 02:00, donde la jornada TAMBIÉN sigue siendo la de ayer, y falso a las
+ * 08:00: ahí la jornada ya rodó (corte 05:00) pero el turno seguía apuntando a
+ * la cena de anoche, así que el que entraba temprano a hacer el mise del
+ * almuerzo se encontraba parado sobre un turno que todavía no había pasado.
+ * Acá las dos respuestas hablan siempre del mismo día.
+ */
+function turnoPorReloj(now: Date, ordenados: TurnoServicio[], tz: string, corte: number): TurnoServicio {
+  const nowMin = minutosDelDiaEnTz(now, tz)
+  for (let i = ordenados.length - 1; i >= 0; i--) {
+    if (minutosDeHHMM(ordenados[i].desde) <= nowMin) return ordenados[i]
+  }
+  // Antes del corte la jornada sigue siendo la de ayer → el turno de anoche,
+  // que cruzó medianoche y todavía está cerrando. Pasado el corte la jornada ya
+  // es la de hoy y el de anoche no le pertenece → el primero que viene.
+  return nowMin < corte * 60 ? ordenados[ordenados.length - 1] : ordenados[0]
+}
+
+/**
+ * Dónde está parada una plaza ahora mismo: (jornada, turno).
+ *
+ * Orden de prioridad, y es lo único que hay que entender de esta función:
+ *   1. el pase — si la plaza ya entregó el turno que resolvió el reloj, avanza;
+ *   2. el reloj — si no hubo entrega, el horario configurado.
+ *
+ * Sin `plaza`/`entregados` degrada al reloj solo, que es lo que necesitan los
+ * callers que no operan sobre una plaza concreta (ver syncMise).
+ */
+export function turnoVigente(opts: {
+  now?: Date
+  turnos: TurnoServicio[]
+  entregados?: ReadonlySet<string>
+  plaza?: string | null
+  tz?: string
+  corte?: number
+}): { jornada: string; turnoId: string } | null {
+  const {
+    now = new Date(), turnos, entregados, plaza,
+    tz = TZ_DEFAULT, corte = CORTE_JORNADA_DEFAULT,
+  } = opts
+  const activos = turnos.filter(t => t.activo)
+  if (activos.length === 0) return null
+  const ordenados = ordenarPorHorario(activos)
+
+  let jornada = hoyOperativo(now, corte, tz)
+  let turnoId = turnoPorReloj(now, ordenados, tz, corte).id
+  if (!plaza || !entregados || entregados.size === 0) return { jornada, turnoId }
+
+  // Mientras esta plaza ya haya entregado el turno en el que está parada,
+  // avanzar. El loop cubre dos entregas seguidas (cerró almuerzo y cena
+  // temprano) y corta siempre: el tope es la cantidad de turnos activos.
+  for (let i = 0; i < ordenados.length && entregados.has(claveCierre(jornada, turnoId, plaza)); i++) {
+    const sig = turnoSiguiente(jornada, turnoId, ordenados)
+    if (!sig) break
+    jornada = sig.jornada
+    turnoId = sig.turnoId
+  }
+  return { jornada, turnoId }
+}
+
+/**
  * checklist_registros.turno codifica turno+fase ('cena:apertura') en la
  * misma columna TEXT que antes solo guardaba la fase ('apertura'/'cierre').
  * Se resuelve UNA VEZ al escribir, nunca se re-deriva al leer — si se

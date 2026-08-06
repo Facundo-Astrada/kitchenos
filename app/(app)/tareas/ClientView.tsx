@@ -19,6 +19,7 @@ import { useHaccp, type HaccpLimpieza } from '@/lib/hooks/useHaccp'
 import { limpiezaTocaFecha } from '@/lib/haccp/recurrencia'
 import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
 import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
+import { useCierresTurno } from '@/lib/hooks/useCierresTurno'
 import type { Tarea, OpsModo, OpsEstado, TareaPrioridad } from '@/types'
 
 const PEDIDOS_COL_ID = '__pedidos__'
@@ -66,6 +67,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   const recetasSimple = useMemo(() => recetas.map(r => ({ id: r.id, nombre: r.nombre })), [recetas])
   const { limpieza, registrarLimpieza, crearTareaLimpieza } = useHaccp()
   const { turnosActivos } = useTurnosServicio()
+  const { entregados } = useCierresTurno()
 
   const today = hoyOperativo()
 
@@ -97,6 +99,11 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   useEffect(() => { tareasRef.current = tareas }, [tareas])
   const turnosActivosRef = useRef(turnosActivos)
   useEffect(() => { turnosActivosRef.current = turnosActivos }, [turnosActivos])
+  // Las entregas de plaza, por la misma razón: syncMiseDesdeTarea tiene que
+  // escribir en el turno donde el mise está parado (que puede haber avanzado
+  // por un pase), no en el que dice el reloj.
+  const entregadosRef = useRef(entregados)
+  useEffect(() => { entregadosRef.current = entregados }, [entregados])
 
   // ── Reordenar columnas (drag & drop) — orden persistido por restaurante+modo ──
   const [ordenSecciones, setOrdenSecciones] = useState<string[]>([])
@@ -281,7 +288,10 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     await cambiarEstado(id, estado)
     const tarea = tareasRef.current.find(t => t.id === id)
     if (!tarea?.checklist_item_id) return
-    await syncMiseDesdeTarea(createClient(), tarea.checklist_item_id, today, estado === 'listo', turnosActivosRef.current)
+    await syncMiseDesdeTarea(
+      createClient(), tarea.checklist_item_id, today, estado === 'listo', turnosActivosRef.current,
+      { plaza: tarea.plaza, entregados: entregadosRef.current },
+    )
   }, [cambiarEstado, today])
 
   // ── Cambiar prioridad directo desde la card de OPS (Menú/Evento) ──────

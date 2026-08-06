@@ -465,6 +465,23 @@ export interface TurnoServicio {
   activo: boolean   // los turnos NUNCA se borran (romperían registros históricos), se desactivan
 }
 
+// DB: cierres_turno — el pase de turno como hecho, no como deducción.
+// Una fila = "esta plaza entregó este turno de esta jornada". Es lo que activa
+// el turno siguiente al momento (ver lib/ops/turnos.ts: turnoVigente).
+export interface CierreTurno {
+  id: string
+  restaurante_id: string
+  jornada: string        // 'YYYY-MM-DD' — jornada operativa, no fecha calendario
+  turno_id: string       // TurnoServicio.id
+  plaza: string
+  cerrado_por: string | null   // equipo_miembros.id como texto (convención de usuario_id)
+  cerrado_at: string
+  // Foto del momento de la entrega — no se recalcula después.
+  items_total: number | null
+  items_completados: number | null
+  created_at: string
+}
+
 export interface ChecklistItemTarea {
   texto: string
   completado: boolean
