@@ -6,8 +6,15 @@ Lista priorizada de lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL.md`.
 
 ## 🔴 Crítico
 
+### Verificar el Muro en una tablet real (ago 2026)
+`/muro` (MURO-PLAN.md F3) se verificó a fondo contra datos reales pero solo en navegador de escritorio/mobile emulado — es la única pantalla del proyecto que no se puede dar por cerrada sin probarla en el dispositivo real. Dos puntos que el plan marcó como los más frágiles y que ningún navegador de escritorio ejercita:
+1. **Wake lock** — que la pantalla no se apague sola con la tablet colgada horas sin que nadie la toque.
+2. **Rollover de las 05:00** — el timer que recalcula la jornada operativa cada 30s; confirmar que a esa hora el muro pasa solo al turno nuevo sin que haga falta recargar.
+
+También pendiente: probar la franja de entregas con una entrega real (hoy solo se vio con "—" en todas las plazas).
+
 ### Verificar en pantalla los 7 commits de OPS/Mise (ago 2026)
-Todo el bloque de pase de turno + mise se deployó a producción validado por typecheck, 71 tests y pruebas contra la DB, **pero sin abrir la pantalla ni una vez**. Bros lo usa en servicio. Orden de prueba, de menor a mayor riesgo:
+Todo el bloque de pase de turno + mise se deployó a producción validado por typecheck, 71 tests y pruebas contra la DB, **pero sin abrir la pantalla ni una vez**. Bros lo usa en servicio. De paso, esta sesión encontró y arregló un bug real ahí (loop de renders en `/checklist`, ver `HISTORIAL.md`) — reduce el riesgo pero no reemplaza la prueba manual. Orden de prueba, de menor a mayor riesgo:
 1. Apertura: contar un ítem → Enter salta al campo del siguiente, centrado sobre el teclado; que no salte a secciones colapsadas ni se cuelgue en el último.
 2. Que el primer dígito reemplace el valor precargado (el `select()` nuevo) — antes contar 2 sobre un 10 heredado daba 102.
 3. "Producir X porc" → ítem en ámbar "en producción" + sube el contador; completar esa tarea en Producción → pasa a verde solo.
@@ -72,7 +79,6 @@ Tras la auditoría, entrar a Mise en mobile bajó de 2582 kB / 64 requests a 899
 - **`productos` 66 kB en OPS** — sale del panel del Kitchen Coach, que baja 1000 filas solo para contar cuántas están en crítico (`CoachPanelContent.tsx`). Resolver con un count server-side (vista o RPC: `stock_actual <= stock_critico` es comparación entre columnas, PostgREST no la soporta directo).
 
 ### Backlog chico — sin síntoma de usuario reportado, priorizar solo si molesta en uso real
-- Warning "Maximum update depth exceeded" en `/checklist` (preexistente, no rompe funcionalidad visible — candidatos: `useChecklist`, `useProduccionRegistros`, o `ClientView.tsx`, no investigado a fondo).
 - HACCP: 3 modales largos (limpieza/vencimientos/temperaturas) sin agrupar — mismo problema que tenía el modal de Stock (muchos campos heterogéneos sin secciones), candidato a la misma cura de fondo pero con otro tratamiento (no son checkboxes, no aplica `SwitchRow`).
 - OPS Producción: el orden de columnas (drag-and-drop) persiste en `localStorage` por dispositivo, no en DB — cada navegador recuerda su propio orden. Mover a una tabla nueva (ej. `ops_orden_columnas`) si se necesita compartido entre dispositivos del mismo restaurante.
 - Mise en tablet táctil ancha (iPad landscape, 1024px exactos): se queda en columna única porque la grilla de desktop está condicionada a `pointer: fine`. El motivo es que el reordenar es un long-press que compara `clientY` contra el centro vertical de cada ítem — con dos tarjetas lado a lado elige al azar. Para ganar la grilla ahí habría que hacer el drag 2D (comparar también `clientX` dentro de la fila). Solo si alguien usa el mise desde tablet.
@@ -88,6 +94,9 @@ Todo lo grande quedó andando; esto es lo que se dejó explícitamente afuera.
 - **El rezagado.** Entregada la cena a la 01:20 la jornada rueda al día siguiente; si otro entra a las 02:00 y toca el chip "Cena" cae en la cena futura, no en la que se acaba de cerrar. Los chips cambian turno pero no fecha — el arreglo de fondo es navegación de fecha en el mise.
 - **`turnoActivo()` (`lib/ops/turnos.ts`) quedó sin callers** — lo reemplazó `turnoVigente()` en los dos que tenía. Sigue exportado y testeado; borrarlo o dejar un comentario que mande al nuevo, para que nadie lo agarre por error.
 - **Policies de `checklist_registros`**: podrían pasar del subquery a `checklist_items` a `restaurante_id = mi_restaurante_id()` ahora que la columna existe. Es más barato de evaluar (realtime chequea RLS por evento y por suscriptor), pero con 425 filas no hace falta y el blast radius es el mise de todas las cuentas.
+
+### Muro — F4 del plan (MURO-PLAN.md)
+Solo después de una semana de uso real en servicio, y cada ítem es una hipótesis a validar, no un pendiente fijo: tomar/asignar una tarea desde el muro, sonido o parpadeo en una `duda` nueva, cronómetro por ítem en curso con umbral de color (como el KDS), foto del turno al entregar.
 
 ### Calendario — F2 a F5 del plan de expansión
 F1 (grilla estilo Google Calendar, notas por día como ítems enviables a Producción, Planificar menú por rango) ya deployado. Falta, en orden, según `CALENDARIO-PLAN.md`: F2 motor de rutinas recurrentes (generalizar `haccp_limpieza` a una tabla `rutinas` compartida — decisión de Facundo: generalizar, no duplicar por dominio), F3 más reflejos de solo lectura (menús de Carta, turnos, HACCP, cuenta corriente), F4 Coach con contexto completo del calendario + tools de agenda, F5 extras (ICS, feriados, semana tipo).

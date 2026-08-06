@@ -35,13 +35,14 @@ Este archivo es una foto del presente (qué existe, qué falta). El detalle hist
 | 20 | **Kitchen Coach (IA)** | API `/api/coach` + FAB | Funcional | Chat con FAB draggable, tours guiados por pantalla (19/19 con cobertura), datos reales server-side (M1), tool use agéntico (crear tarea, marcar 86, registrar merma, sugerir producción). |
 | 21 | **Modo Servicio / Salón** | `/salon` | Funcional | Mapa de mesas con forma/tamaño/rotación reales (editor canvas con zoom/pan), comandas con modificadores, cobro, arqueo de caja, Kitchen Coach propio. Sin conexión: bloqueado + banner. |
 | 22 | **Ventas** | `/ventas` | Funcional | Importación desde Excel/CSV y texto libre con IA, revisión editable, KPIs, ranking de platos, food cost teórico. |
-| 24 | **OPS — Workspace diario** | `/operaciones` | Funcional | Puerta de entrada única a Producción/Mise/Planificación. Board por plazas (Carta) o pasos (Menú/Evento), modo "Todo" con bandas apilables, columna Importante, drag&drop de columnas persistido. REF/Check van plegados solo si hay SP/P arriba — si no, se abren solos (`baja` es además el fallback de prioridad y dejaba columnas llenas viéndose vacías). |
+| 24 | **OPS — Workspace diario** | `/operaciones` | Funcional | Puerta de entrada única a Producción/Mise/Planificación. Producción: Carta y "Todo" agrupan por PLAZA (quién lo ejecuta), Menú/Evento por paso; prioridad ordena y colorea dentro de cada columna (SP/P arriba, REF/Check plegados salvo que no haya nada arriba, para no dejar columnas llenas viéndose vacías), drag&drop de columnas persistido. Densidad cómoda/compacta (fila de una línea) por dispositivo, botón junto al toggle. |
 | 25 | **Mesa de Trabajo** | `/espacios` | BETA (solo desktop) | Tab Producción (board anidado espacio→plaza→sección→sub-sección→producción) + tab Stock (Kanban productos×sectores con drag&drop, multi-select, columnas colapsables) + tab Carta (board de platos con OPS por plaza). Plazas custom por restaurante (JSONB, sin tabla nueva). |
 | 26 | **KDS (Kitchen Display)** | `/kds` | Funcional | Selector de estación, tarjetas por comanda con cronómetro por umbral, bump por ítem/comanda, labels en español, sin Coach (regla inamovible), offline con cola IndexedDB. |
 | 27 | **Modo Emprendimiento** | perfil por restaurante | Funcional (piloto: VOGLIO Farina) | `restaurantes.configuracion.perfil='emprendimiento'` oculta módulos de servicio de restaurante incluso siendo admin; `/tareas` propia; Mesa de Trabajo/Stock sin auto-seed de plazas de restaurante. |
+| 28 | **Muro** | `/muro` | Funcional (sin verificar en tablet real) | Tablet única para toda la cocina, solo admin/chef. Columnas por plaza sobre Producción (no el Mise): pendientes listados por prioridad, listos colapsan a "+N listas", plazas sin pendientes se encogen si hay más de 5. Tap cicla pendiente→en_curso→listo, toque largo marca duda (sube a franja de alertas con quién y hace cuánto), tap en el encabezado enfoca esa plaza a pantalla completa. Franja de entregas por plaza abajo. Wake lock + refetch al volver de suspensión, rollover de jornada por timer. |
 | ~~23~~ | ~~OPS — Ingeniería de Menú~~ | ~~`/ingenieria-menu`~~ | **Eliminado** | Reemplazado por el modelo Menú unificado (Carta→Planificación→Producción). |
 
-**Resumen:** 27 módulos funcionales (incluye salón, KDS, modo emprendimiento piloteado), 0 parciales, 0 críticos pendientes.
+**Resumen:** 28 módulos funcionales (incluye salón, KDS, muro, modo emprendimiento piloteado), 0 parciales, 0 críticos pendientes.
 
 ---
 
@@ -59,7 +60,7 @@ Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relacio
 `recetas`, `ingredientes`, `carta_items` (+ `tags TEXT[]`), `carta_categorias`, `plato_recetas` (+ `plaza`)
 
 ### Tareas y Checklist (7)
-`tareas`, `checklist_secciones`, `checklist_items`, `checklist_registros` (+ `restaurante_id`, lo llena un trigger), `checklist_rutina`, `checklist_rutina_registros`, `cierres_turno` (entrega de plaza por jornada+turno)
+`tareas` (+ `completado_por`, `estado_por`/`estado_at` — autoría de listo / en_curso·duda, para el Muro), `checklist_secciones`, `checklist_items`, `checklist_registros` (+ `restaurante_id`, lo llena un trigger), `checklist_rutina`, `checklist_rutina_registros`, `cierres_turno` (entrega de plaza por jornada+turno)
 
 ### Comunicación (1)
 `pase_mensajes`
@@ -116,7 +117,7 @@ Auth: proxy.ts (NO middleware.ts — breaking change Next 16)
 app/
   (app)/          ← rutas protegidas (dashboard + módulos)
   (auth)/         ← login + register (públicas)
-  (servicio)/     ← salon/page + kds/page (fondo oscuro fijo en KDS, tema app en Salón)
+  (servicio)/     ← salon/page + kds/page + muro/page (fondo oscuro fijo en KDS/Muro, tema app en Salón)
   (publico)/      ← carta/[slug] (vidriera QR sin login)
   api/            ← coach, facturas, listas-precios, recetas/import, recetas/save, ingest/escpos, ...
 lib/
