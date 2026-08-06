@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useState } from 'react'
+import { memo, useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/lib/auth/context'
 import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
@@ -179,6 +179,9 @@ interface ProductoMiseCardProps {
   rendimientoPromedio?: number | null
   regCierreAnterior?: number | null
   restauranteNombre: string
+  // Auto-avance de la vuelta: el ítem anterior terminó y mandó el foco acá.
+  autoFocus?: boolean
+  onAvanzar?: (desdeItemId: string) => void
   onUpsert: (id: string, fecha: string, turno: string, d: { completado?: boolean; cantidad_actual?: number | null }) => Promise<void>
   onCrearTarea: (params: CrearTareaParams) => Promise<void>
   onPrioChange: (item: MisePlaceItem, prio: MisePrioridad) => void
@@ -189,6 +192,7 @@ interface ProductoMiseCardProps {
 function ProductoMiseCardBase({
   item, reg, fecha, turno, recetaInfo, platoPlazo, hasTareaPendiente,
   rendimientoPromedio, regCierreAnterior, restauranteNombre,
+  autoFocus, onAvanzar,
   onUpsert, onCrearTarea, onPrioChange, onDelete, onCrearVencimiento,
 }: ProductoMiseCardProps) {
   // `turno` viene codificado como '<turnoId>:<fase>' cuando el restaurante tiene
@@ -357,16 +361,33 @@ function ProductoMiseCardBase({
   }
 
   // Atajo de un tap desde el CTA de déficit — sin abrir el sheet, prioridad alta por defecto.
-  function handleCrearTareaRapida(cantidad: number) {
-    return crearTarea(cantidad, 'alta', 'hoy', null)
+  // Despachar la producción cierra el ítem para esta vuelta, así que además
+  // manda el foco al siguiente: el recorrido se corre sin bajar el teclado.
+  async function handleCrearTareaRapida(cantidad: number) {
+    await crearTarea(cantidad, 'alta', 'hoy', null)
+    onAvanzar?.(item.id)
   }
+
+  // El ítem anterior pidió saltar acá. Abre el campo de stock y trae la tarjeta
+  // a la vista: `center` y no `nearest` porque con el teclado abierto la mitad
+  // de abajo de la pantalla no existe.
+  // Deps solo [autoFocus] a propósito: agregar stockDisplay/checked haría que
+  // el editor se reabra solo cada vez que cambia el stock.
+  const cardRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!autoFocus || checked || esCierre) return
+    setStockInput(stockDisplay?.toString() ?? '')
+    setEditingStock(true)
+    cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoFocus])
 
   function handleConfirmCrearTarea(data: CrearTareaSheetConfirmData) {
     return crearTarea(data.cantidad, data.prioridad, data.dia, data.nota)
   }
 
   return (
-    <div style={{
+    <div ref={cardRef} style={{
       background: checked ? 'rgba(34,197,94,.04)' : enProduccion ? 'rgba(245,158,11,.05)' : 'var(--surface)',
       border: `1px solid ${checked ? 'rgba(34,197,94,.22)' : enProduccion ? 'rgba(245,158,11,.32)' : isBajo ? 'rgba(249,115,22,.3)' : 'var(--border)'}`,
       borderRadius: 14, overflow: 'hidden',
@@ -559,7 +580,12 @@ function ProductoMiseCardBase({
                     const v = stockInput === '' ? null : parseFloat(stockInput)
                     onUpsert(item.id, fecha, turno, { cantidad_actual: (!v && v !== 0) ? null : v })
                   }}
-                  onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                  onFocus={e => e.currentTarget.select()}
+                  onKeyDown={e => {
+                    if (e.key !== 'Enter') return
+                    ;(e.target as HTMLInputElement).blur()
+                    onAvanzar?.(item.id)
+                  }}
                   style={{
                     background: 'none', border: 'none', outline: 'none', padding: 0,
                     width: '100%', fontSize: 14, fontWeight: 800, color: '#3b82f6',
@@ -621,7 +647,17 @@ function ProductoMiseCardBase({
                     ...(deficitFinal === 0 && !checked ? { completado: true } : {}),
                   })
                 }}
-                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                // Select-all al enfocar: el campo llega precargado con el stock
+                // anterior, y sin esto el primer dígito se APPENDEA (contar 2
+                // sobre un 10 heredado daba 102).
+                onFocus={e => e.currentTarget.select()}
+                // Enter = "listo, siguiente". El blur persiste el número por el
+                // onBlur de arriba y recién después se manda el foco.
+                onKeyDown={e => {
+                  if (e.key !== 'Enter') return
+                  ;(e.target as HTMLInputElement).blur()
+                  onAvanzar?.(item.id)
+                }}
                 style={{
                   width: 96, padding: '5px 9px', borderRadius: 8, boxSizing: 'border-box',
                   border: '1.5px solid #3b82f6', background: 'rgba(59,130,246,.08)',
@@ -784,6 +820,8 @@ export const ProductoMiseCard = memo(ProductoMiseCardBase, (prev, next) => (
   prev.fecha === next.fecha &&
   prev.turno === next.turno &&
   prev.hasTareaPendiente === next.hasTareaPendiente &&
+  prev.autoFocus === next.autoFocus &&
+  prev.onAvanzar === next.onAvanzar &&
   prev.regCierreAnterior === next.regCierreAnterior &&
   prev.rendimientoPromedio === next.rendimientoPromedio &&
   prev.recetaInfo === next.recetaInfo &&

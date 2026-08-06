@@ -493,6 +493,50 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const done = plazaItems.filter(i => regMap[i.id]?.completado).length + enProduccion
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
 
+  // ── Auto-avance de la vuelta ────────────────────────────────────────────
+  // El cocinero recorre la plaza de arriba abajo contando. Al terminar un ítem
+  // (Enter en el campo, o despachar producción) el foco salta al campo del
+  // siguiente y la tarjeta se trae a la vista, así el recorrido entero se corre
+  // sin bajar el teclado ni buscar dónde tocar.
+  //
+  // El orden replica el del render: por sección raíz, sus ítems, después sus
+  // sub-secciones. Las secciones colapsadas quedan afuera — saltar a un campo
+  // que no está en pantalla sería teletransportar al usuario a la nada.
+  const ordenVisible = useMemo(() => {
+    const out: MisePlaceItem[] = []
+    for (const sec of rootSecciones) {
+      if (collapsed[sec.id]) continue
+      out.push(...(grouped[sec.id] ?? []))
+      for (const child of (childSeccionesByParent[sec.id] ?? [])) {
+        if (collapsed[child.id]) continue
+        out.push(...(grouped[child.id] ?? []))
+      }
+    }
+    return out
+  }, [rootSecciones, childSeccionesByParent, grouped, collapsed])
+
+  const [autoFocusItemId, setAutoFocusItemId] = useState<string | null>(null)
+  // Por ref y no por deps: `regMap` cambia en cada tilde, y si handleAvanzar
+  // cambiara de identidad con él, las 41 tarjetas memoizadas se re-renderizarían
+  // en cada toque — justo lo que el memo de ProductoMiseCard existe para evitar.
+  const ordenVisibleRef = useRef(ordenVisible)
+  useEffect(() => { ordenVisibleRef.current = ordenVisible }, [ordenVisible])
+  const regMapRef = useRef(regMap)
+  useEffect(() => { regMapRef.current = regMap }, [regMap])
+
+  const handleAvanzar = useCallback((desdeItemId: string) => {
+    const orden = ordenVisibleRef.current
+    const idx = orden.findIndex(i => i.id === desdeItemId)
+    if (idx === -1) return
+    // Los ya tildados no tienen campo (la tarjeta se colapsa), así que se saltean.
+    for (let k = idx + 1; k < orden.length; k++) {
+      if (regMapRef.current[orden[k].id]?.completado) continue
+      setAutoFocusItemId(orden[k].id)
+      return
+    }
+    setAutoFocusItemId(null)   // era el último con campo: no hay a dónde ir
+  }, [])
+
   // Progreso por plaza para el grid selector — mismo criterio que el contador
   // de arriba, si no la grilla y la plaza abierta dirían números distintos.
   const gridProgress = useMemo(() => {
@@ -1215,6 +1259,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                     // nueva en cada render y anularía el memo de la tarjeta.
                     platoPlazo={item.receta_id ? (platoPlazoMap[item.receta_id] ?? SIN_PLAZAS) : SIN_PLAZAS}
                     hasTareaPendiente={tareasHoySet.has(item.id)}
+                    autoFocus={autoFocusItemId === item.id}
+                    onAvanzar={handleAvanzar}
                     rendimientoPromedio={item.receta_id ? rendimientoMap[item.receta_id] : null}
                     regCierreAnterior={regCierreAnteriorMap[item.id] ?? null}
                     restauranteNombre={restauranteNombre}
