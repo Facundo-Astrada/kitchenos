@@ -168,20 +168,27 @@ export function useTareas(opts?: { soloEscritura?: boolean }) {
   // `estado` (OpsEstado) es la única fuente de verdad del avance de la tarea.
   // `status` (legacy) y `completed_at` se derivan acá para que cualquier lector
   // legacy (Reportes) quede consistente sin una segunda forma de escribir status.
-  // `completado_por` sale de acá y no de un parámetro: es el único punto de
-  // escritura de `estado` en todo el proyecto (ver MURO-PLAN.md F1), así que
-  // resolverlo adentro es la única forma de que ningún caller nuevo se lo olvide.
+  // `completado_por`/`estado_por` salen de acá y no de un parámetro: es el
+  // único punto de escritura de `estado` en todo el proyecto (ver MURO-PLAN.md
+  // F1/F3), así que resolverlo adentro es la única forma de que ningún caller
+  // nuevo se lo olvide. `estado_por/at` cubre en_curso y duda (mismo par para
+  // las dos — "quién puso la tarea en el estado actual y desde cuándo"; listo
+  // tiene su propio par por separado). No es acumulativo: se limpia al salir
+  // del estado y se recalcula la próxima vez que vuelve a entrar.
   const cambiarEstado = useCallback(async (id: string, estado: OpsEstado) => {
     const status = estado === 'listo' ? 'completada' : 'pendiente'
     const completed_at = estado === 'listo' ? new Date().toISOString() : null
     const completado_por = estado === 'listo' ? (perfil?.miembro_id ?? null) : null
+    const conAtribucion = estado === 'en_curso' || estado === 'duda'
+    const estado_por = conAtribucion ? (perfil?.miembro_id ?? null) : null
+    const estado_at = conAtribucion ? new Date().toISOString() : null
     const optimistic = (prev: Tarea[] | undefined) =>
-      (prev ?? []).map(t => t.id === id ? { ...t, estado, status, completed_at, completado_por } : t)
+      (prev ?? []).map(t => t.id === id ? { ...t, estado, status, completed_at, completado_por, estado_por, estado_at } : t)
 
     marcarEscrituraPropia(id)
     await mutate(
       async (current) => {
-        const { error } = await supabase.from('tareas').update({ estado, status, completed_at, completado_por }).eq('id', id)
+        const { error } = await supabase.from('tareas').update({ estado, status, completed_at, completado_por, estado_por, estado_at }).eq('id', id)
         if (error) throw error
         return optimistic(current)
       },

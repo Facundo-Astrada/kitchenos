@@ -199,18 +199,19 @@ if (items.length === 0) return <div>No hay datos todavía</div>
 
 `#shell` tiene `max-width:420px; height:100dvh; overflow:hidden` (pensado para la app logueada) — una vista pública con contenido más largo queda recortada si hereda ese overflow. Fix: layout del route group con `position:fixed; inset:0; overflowY:'auto'` (un `fixed` no es clippeado por `overflow:hidden` de un ancestro sin `transform`/`filter`/`contain`). Ver `app/(publico)/layout.tsx`; `app/(servicio)/layout.tsx` usa la misma técnica con `overflow:hidden` (scroll interno propio) en vez de `overflowY:auto`.
 
-## Vista de servicio (Salón / KDS) — reglas UI inamovibles
+## Vista de servicio (Salón / KDS / Muro) — reglas UI inamovibles
 
 Route group propio (`app/(servicio)/`), sin BottomNav, UX radicalmente distinta al dashboard de gestión.
 
 - **Botones masivos** (≥64px alto) y **swipe amplio** para acciones principales — se toca con guantes y urgencia.
-- **KDS**: fondo oscuro fijo (`#111`, texto blanco) por luz ambiental de cocina y pantallas grasientas — único lugar de tema oscuro fijo. **Salón sigue el tema de la app** (`var(--bg)`/`var(--surface)`/`var(--text-1)`).
-- **Cero menús desplegables durante el despacho** — nada de `<select>`/dropdown/modal con opciones en KDS o mapa activo; todo 1 tap o 1 swipe.
-- Fuente grande (≥18px labels, ≥24px nombres de plato). Sin animaciones de entrada costosas (KDS recibe updates realtime, bloquearían taps). Tablet-first (768-1024px horizontal), desktop funciona, celular secundario para KDS.
+- **KDS y Muro**: fondo oscuro fijo (`#111`, texto blanco) por luz ambiental de cocina y pantallas grasientas — únicos lugares de tema oscuro fijo. **Salón sigue el tema de la app** (`var(--bg)`/`var(--surface)`/`var(--text-1)`).
+- **Cero menús desplegables durante el despacho** — nada de `<select>`/dropdown/modal con opciones en KDS, Muro o mapa activo; todo 1 tap o 1 swipe.
+- Fuente grande (≥18px labels, ≥24px nombres de plato/plaza). Sin animaciones de entrada costosas (KDS y Muro reciben updates realtime, bloquearían taps). Tablet-first (768-1024px horizontal), desktop funciona, celular secundario.
 - **Español siempre**, incluso jerga POS en inglés: "EN HOLD"→"EN ESPERA", "All-day"→"Consolidado", "Recall"→"Recuperar", "Bumpeado"→"Despachado", "FIRE"→"MARCHAR". Excepción: "86" (agotado) no se traduce.
-- **Tema por ruta**: `app/(servicio)/layout.tsx` decide con `usePathname()` (`esKds = pathname.startsWith('/kds')`). Mobile/tablet (<1024px): `position:fixed;inset:0;overflow:hidden`, scroll interno por sub-vista. Desktop (≥1024px): convive con `SidebarNav` (`dark` prop solo en KDS) vía `useIsDesktop()`.
-- **Coach FAB: sí en Salón, no en KDS.** Salón monta `<KitchenCoachFAB />` directo (vista `'mapa'`), contexto propio (`kc_screen_context`, screen `'salon'`) y tour en `lib/coach/tours.ts` (`TOURS.salon`). KDS nunca lo muestra — distrae durante el despacho.
-- En KDS no usar tokens de tema (fondo fijo). En Salón sí usar tokens; únicos hex fijos permitidos: colores semánticos (verde listo `#2e7d32`, rojo cuenta `#a04343`, dorado propina `#c9a227`, madera mesa `#a9744f`) y `#fff` sobre botones de color.
+- **Tema por ruta**: `app/(servicio)/layout.tsx` decide con `usePathname()` (`esOscuro = pathname.startsWith('/kds') || pathname.startsWith('/muro')`). Mobile/tablet (<1024px): `position:fixed;inset:0;overflow:hidden`, scroll interno por sub-vista. Desktop (≥1024px): convive con `SidebarNav` (`dark` prop en KDS y Muro) vía `useIsDesktop()`.
+- **Coach FAB: sí en Salón, no en KDS ni Muro.** Salón monta `<KitchenCoachFAB />` directo (vista `'mapa'`), contexto propio (`kc_screen_context`, screen `'salon'`) y tour en `lib/coach/tours.ts` (`TOURS.salon`). KDS y Muro nunca lo muestran — distrae del despacho/monitoreo.
+- En KDS y Muro no usar tokens de tema (fondo fijo). En Salón sí usar tokens; únicos hex fijos permitidos: colores semánticos (verde listo `#2e7d32`, rojo cuenta `#a04343`, dorado propina `#c9a227`, madera mesa `#a9744f`) y `#fff` sobre botones de color.
+- **Muro** (`app/(servicio)/muro/page.tsx`, MURO-PLAN.md F3): tablet única para toda la cocina, monitoreo + acción del jefe sobre Producción (no el Mise — estados `pendiente/en_curso/listo/duda` son de `tareas`, el Mise no los tiene). Vista general **nunca scrollea**: lo pendiente se lista, lo `listo` colapsa a `+N listas` (se ve completo solo en el foco de esa plaza). Con más de 5 plazas, las vacías se encogen a una tira angosta. Reusa `nextEstado` de `ItemOps.tsx` para el ciclo de tap, no lo reimplementa. Atribución de `en_curso`/`duda` vía `tareas.estado_por/estado_at` (un solo par para los dos estados — `listo` tiene el suyo propio, `completado_por/completed_at`).
 
 ## Editor del plano del salón — zoom/pan
 

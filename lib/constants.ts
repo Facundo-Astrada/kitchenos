@@ -92,6 +92,7 @@ export type ModuloId =
   | 'kds'
   | 'clientes'
   | 'coach'
+  | 'muro'
 
 export const MODULO_CONFIG: Record<
   ModuloId,
@@ -122,6 +123,7 @@ export const MODULO_CONFIG: Record<
   kds: { label: 'KDS Cocina', icon: 'kitchen', href: '/kds' },
   clientes: { label: 'Clientes', icon: 'contacts', href: '/clientes' },
   coach: { label: 'Coach', icon: 'forum', href: '/coach' },
+  muro: { label: 'Muro', icon: 'view_kanban', href: '/muro' },
 }
 
 // Módulos accesibles por rol (base hardcodeada — se sobrescribe con puestos/permisos del admin)
@@ -130,13 +132,13 @@ export const MODULOS_POR_ROL: Record<Rol, ModuloId[]> = {
     'home', 'operaciones', 'recetario', 'stock', 'pedidos',
     'haccp', 'reportes', 'calendario',
     'carta', 'pase', 'facturas', 'merma', 'equipo', 'configuracion', 'ventas', 'espacios',
-    'salon', 'kds', 'clientes',
+    'salon', 'kds', 'clientes', 'muro',
   ],
   chef: [
     'home', 'operaciones', 'recetario', 'stock', 'pedidos',
     'haccp', 'reportes', 'calendario',
     'carta', 'pase', 'facturas', 'merma', 'equipo', 'ventas', 'espacios',
-    'salon', 'kds', 'clientes',
+    'salon', 'kds', 'clientes', 'muro',
   ],
   parrilla:   ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta', 'merma', 'calendario', 'haccp'],
   frios:      ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta', 'merma', 'calendario', 'haccp'],
@@ -183,6 +185,7 @@ export const RUTA_A_MODULO: Record<string, string> = {
   '/salon': 'salon',
   '/kds': 'kds',
   '/clientes': 'clientes',
+  '/muro': 'muro',
   // /perfil — not listed: modulo = undefined → always accessible
   // /tareas, /checklist, /produccion — rutas viejas: redirigen a /operaciones (tab correspondiente).
   // La vista real vive embebida en OPS. Mapeadas a 'operaciones' por consistencia de permisos.

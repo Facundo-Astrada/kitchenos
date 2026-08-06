@@ -506,6 +506,10 @@ export interface Tarea {
   completed_at?: string | null
   // equipo_miembros.id como texto — quién la pasó a listo (null al despasar).
   completado_por?: string | null
+  // Quién puso la tarea en su estado actual (en_curso o duda) y desde cuándo
+  // — se limpia al salir de ese estado. listo usa completado_por, no esto.
+  estado_por?: string | null
+  estado_at?: string | null
   restaurante_id: string
   created_at: string
   // Ops fields

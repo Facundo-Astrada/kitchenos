@@ -35,6 +35,7 @@ const MODULO_LABEL: Record<string, string> = {
   kds: 'KDS',
   calendario: 'Calendario',
   pase: 'Pase',
+  muro: 'Muro',
 }
 
 export default function RouteGuard({ children }: { children: React.ReactNode }) {

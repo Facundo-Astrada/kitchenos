@@ -5,17 +5,18 @@ import { useOnlineStatus } from '@/lib/offline/useOnlineStatus'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import SidebarNav from '@/components/shell/SidebarNav'
 
-// Layout de la vista de servicio (Salón + KDS)
-// KDS: fondo oscuro fijo (regla inamovible de despacho — alto contraste, pantallas grasientas).
+// Layout de la vista de servicio (Salón + KDS + Muro)
+// KDS y Muro: fondo oscuro fijo (regla inamovible de pantallas de cocina — alto
+// contraste, pantallas grasientas, se leen a distancia).
 // Salón: sigue el tema de la app (var(--bg)/var(--text-1)) como el resto de las pantallas (jul 2026).
 // Desktop (≥1024px, Sesión 3 C1): convive con el sidebar de gestión, en vez de tapar toda la pantalla.
-// Tablet/mobile: full-screen como antes (KDS sigue siendo tablet-first).
+// Tablet/mobile: full-screen como antes (KDS y Muro son tablet-first).
 // Ver .claude/docs/ui.md § "Vista de servicio"
 export default function ServicioLayout({ children }: { children: React.ReactNode }) {
   const online = useOnlineStatus()
   const isDesktop = useIsDesktop()
   const pathname = usePathname()
-  const esKds = pathname?.startsWith('/kds') ?? false
+  const esOscuro = pathname?.startsWith('/kds') || pathname?.startsWith('/muro') || false
 
   const contenido = (
     <div
@@ -24,8 +25,8 @@ export default function ServicioLayout({ children }: { children: React.ReactNode
         inset: isDesktop ? undefined : 0,
         flex: isDesktop ? 1 : undefined,
         minHeight: isDesktop ? 0 : undefined,
-        background: esKds ? '#111' : 'var(--bg)',
-        color: esKds ? '#fff' : 'var(--text-1)',
+        background: esOscuro ? '#111' : 'var(--bg)',
+        color: esOscuro ? '#fff' : 'var(--text-1)',
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
@@ -49,7 +50,7 @@ export default function ServicioLayout({ children }: { children: React.ReactNode
 
   return (
     <div style={{ display: 'flex', height: '100dvh', overflow: 'hidden' }}>
-      <SidebarNav dark={esKds} />
+      <SidebarNav dark={esOscuro} />
       {contenido}
     </div>
   )
