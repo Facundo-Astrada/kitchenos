@@ -460,31 +460,11 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     }
   }, [fotoAuditoriaPend, fecha, registrarAuditoriaRutina, tareas, agregarTarea, authPerfil])
 
-  const total = plazaItems.length
-  const done = plazaItems.filter(i => regMap[i.id]?.completado).length
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0
-
-  // Progreso por plaza para el grid selector
-  const gridProgress = useMemo(() => {
-    const totals: Record<string, number> = {}
-    const completos: Record<string, number> = {}
-    items.forEach(i => { totals[i.plaza] = (totals[i.plaza] ?? 0) + 1 })
-    registros.forEach(r => {
-      if (r.completado) {
-        const item = items.find(it => it.id === r.checklist_item_id)
-        if (item) completos[item.plaza] = (completos[item.plaza] ?? 0) + 1
-      }
-    })
-    return todasLasPlazas(plazasCustom).reduce((acc, p) => {
-      acc[p] = { total: totals[p] ?? 0, done: completos[p] ?? 0 }
-      return acc
-    }, {} as Record<string, { total: number; done: number }>)
-  }, [items, registros, plazasCustom])
-
   // Set of checklist_item_ids that already have a pending/in-progress tarea today
   // `fecha` y no hoyOperativo(): si el pase ya adelantó la jornada (cena
   // entregada 01:20 → almuerzo del día siguiente), las tareas que corresponden
   // son las de esa jornada, no las de la que todavía marca el reloj.
+  // Va antes del contador de abajo porque es parte de él.
   const tareasHoySet = useMemo(() => {
     const s = new Set<string>()
     for (const t of tareas) {
@@ -494,6 +474,51 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     }
     return s
   }, [tareas, fecha])
+
+  // ── Qué mide el contador de la apertura: ítems REVISADOS ────────────────
+  // Un ítem está revisado cuando se contó y quedó resuelto (`completado`) o
+  // cuando se despachó su producción: en los dos casos el cocinero ya lo miró
+  // y decidió qué hacer. Dejarlo sin contar hasta que salga del horno hacía que
+  // la apertura no pudiera cerrarse nunca, cuando la apertura mide la vuelta a
+  // la plaza, no la cocina terminada.
+  //
+  // Solo en apertura. En el cierre el tilde mide cuánto QUEDÓ, y tener una
+  // tarea abierta no dice nada sobre eso (además el botón de producir ni se
+  // renderiza en cierre).
+  const total = plazaItems.length
+  const enProduccion = useMemo(() => (
+    tab !== 'apertura' ? 0
+      : plazaItems.filter(i => !regMap[i.id]?.completado && tareasHoySet.has(i.id)).length
+  ), [tab, plazaItems, regMap, tareasHoySet])
+  const done = plazaItems.filter(i => regMap[i.id]?.completado).length + enProduccion
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0
+
+  // Progreso por plaza para el grid selector — mismo criterio que el contador
+  // de arriba, si no la grilla y la plaza abierta dirían números distintos.
+  const gridProgress = useMemo(() => {
+    const totals: Record<string, number> = {}
+    const completos: Record<string, number> = {}
+    items.forEach(i => { totals[i.plaza] = (totals[i.plaza] ?? 0) + 1 })
+    const yaContados = new Set<string>()
+    registros.forEach(r => {
+      if (r.completado) {
+        const item = items.find(it => it.id === r.checklist_item_id)
+        if (item) {
+          completos[item.plaza] = (completos[item.plaza] ?? 0) + 1
+          yaContados.add(r.checklist_item_id)
+        }
+      }
+    })
+    items.forEach(i => {
+      if (!yaContados.has(i.id) && tareasHoySet.has(i.id)) {
+        completos[i.plaza] = (completos[i.plaza] ?? 0) + 1
+      }
+    })
+    return todasLasPlazas(plazasCustom).reduce((acc, p) => {
+      acc[p] = { total: totals[p] ?? 0, done: completos[p] ?? 0 }
+      return acc
+    }, {} as Record<string, { total: number; done: number }>)
+  }, [items, registros, plazasCustom, tareasHoySet])
 
   useEffect(() => {
     if (toast) { const t = setTimeout(() => setToast(null), 2500); return () => clearTimeout(t) }
@@ -1568,8 +1593,14 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#22c55e', flexShrink: 0 }}>check_circle</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-1)' }}>¡Terminaste la apertura!</div>
+            {/* Con producción despachada el aviso lo dice: la vuelta está
+                hecha, la cocina no. Decir solo "terminaste" con 12 cosas en el
+                horno sería mentir. */}
             <div style={{ fontSize: 10.5, color: 'var(--text-3)' }}>
-              {total} {total === 1 ? 'ítem contado' : 'ítems contados'} — a producir tranquilo
+              {total} {total === 1 ? 'ítem revisado' : 'ítems revisados'}
+              {enProduccion > 0
+                ? ` — ${enProduccion} en producción`
+                : ' — a producir tranquilo'}
             </div>
           </div>
           <button

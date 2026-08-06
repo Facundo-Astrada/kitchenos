@@ -203,6 +203,14 @@ function ProductoMiseCardBase({
   const [showDelete, setShowDelete] = useState(false)
 
   const checked = reg?.completado ?? false
+  // Estado intermedio de apertura: todavía no está hecho, pero su producción ya
+  // se despachó — el cocinero lo revisó y decidió. Se pinta distinto del verde
+  // a propósito: verde = está en su lugar, ámbar = está en el horno. Cuando la
+  // tarea se completa en Producción, syncMise escribe `completado` y pasa a
+  // verde solo, sin que nadie vuelva a tocar el mise.
+  // No aplica en cierre: ahí el tilde mide cuánto QUEDÓ y una tarea abierta no
+  // dice nada sobre eso.
+  const enProduccion = !checked && !esCierre && hasTareaPendiente
   const cantActual = reg?.cantidad_actual ?? null
   const isBajo = cantActual !== null && item.cantidad > 0 && cantActual < item.cantidad
   const prio = PRIO_CFG[item.prioridad] ?? PRIO_CFG.ref
@@ -340,8 +348,8 @@ function ProductoMiseCardBase({
 
   return (
     <div style={{
-      background: checked ? 'rgba(34,197,94,.04)' : 'var(--surface)',
-      border: `1px solid ${checked ? 'rgba(34,197,94,.22)' : isBajo ? 'rgba(249,115,22,.3)' : 'var(--border)'}`,
+      background: checked ? 'rgba(34,197,94,.04)' : enProduccion ? 'rgba(245,158,11,.05)' : 'var(--surface)',
+      border: `1px solid ${checked ? 'rgba(34,197,94,.22)' : enProduccion ? 'rgba(245,158,11,.32)' : isBajo ? 'rgba(249,115,22,.3)' : 'var(--border)'}`,
       borderRadius: 14, overflow: 'hidden',
       opacity: checked ? 0.72 : 1,
       transition: 'all .2s',
@@ -357,8 +365,10 @@ function ProductoMiseCardBase({
           style={{ ...btnReset, flexShrink: 0 }}
         >
           <span className="material-symbols-outlined" style={{
-            fontSize: 24, color: checked ? '#22c55e' : 'var(--border)', transition: 'color .15s',
-          }}>{checked ? 'check_circle' : 'radio_button_unchecked'}</span>
+            fontSize: 24,
+            color: checked ? '#22c55e' : enProduccion ? '#f59e0b' : 'var(--border)',
+            transition: 'color .15s',
+          }}>{checked ? 'check_circle' : enProduccion ? 'pending' : 'radio_button_unchecked'}</span>
         </button>
 
         {/* Name */}
@@ -383,6 +393,15 @@ function ProductoMiseCardBase({
           </div>
           {item.receta_id && !checked && (
             <span style={{ fontSize: 9, color: '#4361a0', fontWeight: 600 }}>receta</span>
+          )}
+          {enProduccion && (
+            <span style={{
+              marginLeft: item.receta_id ? 6 : 0, fontSize: 9, fontWeight: 700,
+              padding: '1px 6px', borderRadius: 99,
+              background: 'rgba(245,158,11,.14)', color: '#b45309',
+            }}>
+              en producción
+            </span>
           )}
           {demandaViva > 0 && !checked && (
             <span style={{
@@ -432,7 +451,9 @@ function ProductoMiseCardBase({
           >
             <span className="material-symbols-outlined" style={{
               fontSize: 20,
-              color: crearTareaSheetOpen ? '#4361a0' : hasTareaPendiente ? '#22c55e' : 'var(--text-3)',
+              // Ámbar y no verde cuando hay tarea abierta: verde quedó reservado
+              // para "está hecho", que es lo que dice el tilde de la izquierda.
+              color: crearTareaSheetOpen ? '#4361a0' : hasTareaPendiente ? '#f59e0b' : 'var(--text-3)',
               transition: 'color .15s',
             }}>
               {hasTareaPendiente ? 'task_alt' : 'add_task'}
