@@ -286,11 +286,11 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
       tarea?.checklist_item_id
         ? syncMiseDesdeTarea(
             createClient(), tarea.checklist_item_id, today, estado === 'listo', turnosActivosRef.current,
-            { plaza: tarea.plaza, entregados: entregadosRef.current },
+            { plaza: tarea.plaza, entregados: entregadosRef.current, usuarioId: perfil?.miembro_id ?? null },
           )
         : Promise.resolve(),
     ])
-  }, [cambiarEstado, today])
+  }, [cambiarEstado, today, perfil])
 
   // ── Cambiar prioridad directo desde la card de OPS (Menú/Evento) ──────
   const handlePrioridadChange = useCallback((id: string, prioridad: TareaPrioridad) => {

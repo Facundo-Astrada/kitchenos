@@ -19,7 +19,7 @@ export async function syncMiseDesdeTarea(
   fecha: string,
   completado: boolean,
   turnosServicio: TurnoServicio[],
-  ctx?: { plaza?: string | null; entregados?: ReadonlySet<string> },
+  ctx?: { plaza?: string | null; entregados?: ReadonlySet<string>; usuarioId?: string | null },
 ): Promise<void> {
   // horaEnTz y no getHours(): getHours() es la hora del proceso, que en el
   // server es UTC — a las 22:00 ART daría 01:00 y escribiría 'apertura'.
@@ -33,8 +33,13 @@ export async function syncMiseDesdeTarea(
   const patch = { itemId: checklistItemId, fecha, turno, completado }
   emitMiseRegistroPatch(patch)
 
+  // usuario_id: "quién hizo la última acción sobre este registro" — mismo
+  // significado que el upsert manual del propio mise (ClientView.tsx
+  // handleMiseUpsert), no "quién lo completó": se manda tal cual venga, tanto
+  // al tildar como al destildar. Sin esto, completar una tarea desde
+  // Producción dejaba el registro del mise sin autor.
   const { error } = await supabase.from('checklist_registros').upsert(
-    { checklist_item_id: checklistItemId, fecha, turno, completado },
+    { checklist_item_id: checklistItemId, fecha, turno, completado, usuario_id: ctx?.usuarioId ?? null },
     { onConflict: 'checklist_item_id,fecha,turno' },
   )
   if (error) {

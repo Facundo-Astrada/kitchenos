@@ -5,6 +5,7 @@ import useSWR, { useSWRConfig } from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import type { Tarea, ChecklistItemTarea, OpsEstado } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
+import { useAuth } from '@/lib/auth/context'
 
 function parseTarea(t: Record<string, unknown>): Tarea {
   return {
@@ -57,6 +58,7 @@ async function fetchTareasData(key: string): Promise<Tarea[]> {
 export function useTareas(opts?: { soloEscritura?: boolean }) {
   const RESTAURANTE_ID = useRestauranteId()
   const supabase = useMemo(() => createClient(), [])
+  const { perfil } = useAuth()
 
   const swrKey = RESTAURANTE_ID && !opts?.soloEscritura ? `tareas-${RESTAURANTE_ID}` : null
   // Con soloEscritura el `mutate` local no apunta a ninguna key: para que las
@@ -166,22 +168,26 @@ export function useTareas(opts?: { soloEscritura?: boolean }) {
   // `estado` (OpsEstado) es la única fuente de verdad del avance de la tarea.
   // `status` (legacy) y `completed_at` se derivan acá para que cualquier lector
   // legacy (Reportes) quede consistente sin una segunda forma de escribir status.
+  // `completado_por` sale de acá y no de un parámetro: es el único punto de
+  // escritura de `estado` en todo el proyecto (ver MURO-PLAN.md F1), así que
+  // resolverlo adentro es la única forma de que ningún caller nuevo se lo olvide.
   const cambiarEstado = useCallback(async (id: string, estado: OpsEstado) => {
     const status = estado === 'listo' ? 'completada' : 'pendiente'
     const completed_at = estado === 'listo' ? new Date().toISOString() : null
+    const completado_por = estado === 'listo' ? (perfil?.miembro_id ?? null) : null
     const optimistic = (prev: Tarea[] | undefined) =>
-      (prev ?? []).map(t => t.id === id ? { ...t, estado, status, completed_at } : t)
+      (prev ?? []).map(t => t.id === id ? { ...t, estado, status, completed_at, completado_por } : t)
 
     marcarEscrituraPropia(id)
     await mutate(
       async (current) => {
-        const { error } = await supabase.from('tareas').update({ estado, status, completed_at }).eq('id', id)
+        const { error } = await supabase.from('tareas').update({ estado, status, completed_at, completado_por }).eq('id', id)
         if (error) throw error
         return optimistic(current)
       },
       { optimisticData: optimistic, revalidate: false, rollbackOnError: true }
     )
-  }, [supabase, mutate, marcarEscrituraPropia])
+  }, [supabase, mutate, marcarEscrituraPropia, perfil])
 
   const toggleChecklistItem = useCallback(async (id: string, checklist: ChecklistItemTarea[], itemIdx: number) => {
     const updated = checklist.map((c, i) => i === itemIdx ? { ...c, completado: !c.completado } : c)
