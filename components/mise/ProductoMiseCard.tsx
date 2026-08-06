@@ -233,6 +233,7 @@ function ProductoMiseCardBase({
   // Se suma al target del recipiente para que "falta producir" contemple lo ya vendido.
   const demandaViva = item.demanda_viva ?? 0
   const tieneRecipiente = tieneRecipienteMise(item)
+  const mostrarPeso = tieneRecipiente && item.peso_porcion != null
 
   // Valor "en vivo" mientras se escribe (antes del blur que persiste), para que
   // el CTA de producir reaccione al tipear en vez de esperar a salir del campo —
@@ -416,41 +417,47 @@ function ProductoMiseCardBase({
           style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
           onClick={() => setShowDelete(v => !v)}
         >
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-            <span style={{
-              fontSize: 13, fontWeight: 600, flex: 1, minWidth: 0,
-              color: checked ? 'var(--text-3)' : 'var(--text-1)',
-              textDecoration: checked ? 'line-through' : 'none',
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block',
-            }}>
-              {item.nombre}
-            </span>
-            {tieneRecipiente && item.peso_porcion != null && !checked && (
-              <span data-coach-target="mise-item-peso" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', flexShrink: 0 }}>
-                {item.peso_porcion}{item.peso_porcion_unidad ?? 'g'}/porc
-              </span>
-            )}
+          {/* El nombre se lleva la fila entera y puede caer a dos líneas. Los
+              chips accesorios (peso por porción, receta, en producción) bajan a
+              la fila de abajo: cuando compartían línea con el nombre, el
+              "88g/porc" le comía el ancho y en celular quedaba "Salsa criolla
+              de la…" — un dato secundario tapando el único que hay que leer. */}
+          <div style={{
+            fontSize: 13, fontWeight: 600, lineHeight: 1.25,
+            color: checked ? 'var(--text-3)' : 'var(--text-1)',
+            textDecoration: checked ? 'line-through' : 'none',
+            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+            overflow: 'hidden', overflowWrap: 'anywhere',
+          }}>
+            {item.nombre}
           </div>
-          {item.receta_id && !checked && (
-            <span style={{ fontSize: 9, color: '#4361a0', fontWeight: 600 }}>receta</span>
-          )}
-          {enProduccion && (
-            <span style={{
-              marginLeft: item.receta_id ? 6 : 0, fontSize: 9, fontWeight: 700,
-              padding: '1px 6px', borderRadius: 99,
-              background: 'rgba(245,158,11,.14)', color: '#b45309',
-            }}>
-              en producción
-            </span>
-          )}
-          {demandaViva > 0 && !checked && (
-            <span style={{
-              marginLeft: item.receta_id ? 6 : 0, fontSize: 9, fontWeight: 700,
-              padding: '1px 6px', borderRadius: 99,
-              background: 'rgba(249,115,22,.13)', color: '#f97316',
-            }}>
-              Pedidas hoy: {demandaViva}
-            </span>
+          {!checked && (mostrarPeso || item.receta_id || enProduccion || demandaViva > 0) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const, marginTop: 2 }}>
+              {mostrarPeso && (
+                <span data-coach-target="mise-item-peso" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)' }}>
+                  {item.peso_porcion}{item.peso_porcion_unidad ?? 'g'}/porc
+                </span>
+              )}
+              {item.receta_id && (
+                <span style={{ fontSize: 9, color: '#4361a0', fontWeight: 600 }}>receta</span>
+              )}
+              {enProduccion && (
+                <span style={{
+                  fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99,
+                  background: 'rgba(245,158,11,.14)', color: '#b45309',
+                }}>
+                  en producción
+                </span>
+              )}
+              {demandaViva > 0 && (
+                <span style={{
+                  fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99,
+                  background: 'rgba(249,115,22,.13)', color: '#f97316',
+                }}>
+                  Pedidas hoy: {demandaViva}
+                </span>
+              )}
+            </div>
           )}
         </div>
 

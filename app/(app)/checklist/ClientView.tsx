@@ -19,6 +19,8 @@ import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
 import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
 import { useCierresTurno } from '@/lib/hooks/useCierresTurno'
+import { useNotasPlaza } from '@/lib/hooks/useNotasPlaza'
+import { NotasPlaza } from '@/components/ops/NotasPlaza'
 import { todasLasPlazas, plazaLabel, plazaIcon } from '@/lib/constants'
 import { hoyOperativo, sumarDias, turnoVigente, turnoAnterior, turnoSiguiente, encodeTurnoFase, cierreIncompleto, fechaEnTz } from '@/lib/ops/turnos'
 import PhotoPicker from '@/components/ui/PhotoPicker'
@@ -96,6 +98,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const { fichajeAbierto, marcarSalida } = useFichaje()
   const { turnosActivos } = useTurnosServicio()
   const { entregados, entregaDe, entregarPlaza } = useCierresTurno()
+  const { notasDe, agregar: agregarNota, eliminar: eliminarNota } = useNotasPlaza()
 
   // Build receta info map (id → { porciones, pesoPorcion, vidaUtilDias }) for MiseCard display
   const recetaInfoMap = useMemo(() => {
@@ -1045,6 +1048,30 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       <div ref={scrollContainerRef} style={{ flex: 1, overflow: 'auto', padding: '10px 12px', paddingBottom: 120 }}>
         {loading && (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>Cargando...</div>
+        )}
+
+        {/* ── Notas de la plaza ── Lo primero de la pantalla: es el contexto que
+            dejó el turno anterior ("chequeá el orden, el servicio fue pesado",
+            "ingresó pescado") y hay que leerlo antes de empezar a tildar. Vive
+            en pase_mensajes, así que lo que se escribe acá también se lee en el
+            Pase y en la columna de esta plaza en Producción. */}
+        {!loading && plaza && (
+          <div style={{
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 12, padding: '8px 10px', marginBottom: 10,
+          }}>
+            <div style={{
+              fontSize: 10, fontWeight: 800, color: 'var(--text-3)',
+              textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6,
+            }}>
+              Notas de {plazaLabel(plaza, plazasCustom)}
+            </div>
+            <NotasPlaza
+              notas={notasDe(plaza)}
+              onAgregar={(texto, importante) => agregarNota({ plaza, texto, importante })}
+              onEliminar={eliminarNota}
+            />
+          </div>
         )}
 
         {/* ── Arrastre del turno anterior (solo en apertura) — nunca bloquea,

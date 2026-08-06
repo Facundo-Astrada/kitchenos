@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ItemOps, type Densidad } from './ItemOps'
 import { QuickAdd } from './QuickAdd'
+import { NotasPlaza } from './NotasPlaza'
 import type { CrearTareaSheetConfirmData } from './CrearTareaSheet'
 import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
+import { useNotasPlaza } from '@/lib/hooks/useNotasPlaza'
 import { plazaColor, plazaIcon, plazaLabel, todasLasPlazas } from '@/lib/constants'
-import type { OpsEstado, OpsModo, Plaza, Tarea, TareaPrioridad } from '@/types'
+import type { OpsEstado, OpsModo, PaseMensaje, Plaza, Tarea, TareaPrioridad } from '@/types'
 
 // ── Board de OPS Producción, vista "Todo" ────────────────────────────────────
 //
@@ -62,6 +64,12 @@ interface ColumnaBoard {
   items: Tarea[]
   /** Qué tarea crear cuando se usa el QuickAdd de esta columna. */
   destino: { modo: OpsModo; plaza: string | null; seccion: string | null }
+  /**
+   * La plaza real que representa la columna, cuando la representa. Solo las
+   * columnas de Carta son plazas: las de Menú/Evento son pasos del menú, y ahí
+   * una "nota de plaza" no significaría nada. Null también en "Sin plaza".
+   */
+  plazaKey?: string | null
 }
 
 interface BandaBoard {
@@ -108,6 +116,10 @@ export function ProduccionBoard({
 }: ProduccionBoardProps) {
   const mostrarBandas = vista === 'todo'
   const { plazasCustom } = usePlazasCustom()
+  // Un solo hook para todo el board (una query + una suscripción realtime),
+  // no uno por columna: con 6 plazas serían 6 canales abiertos para leer la
+  // misma tabla.
+  const { notasDe, agregar: agregarNota, eliminar: eliminarNota } = useNotasPlaza()
 
   // Bandas plegadas — persistido por restaurante (un turno sin evento cierra
   // esa banda una vez y no la vuelve a ver).
@@ -171,6 +183,7 @@ export function ProduccionBoard({
         color: esSinPlaza ? '#94a3b8' : plazaColor(key as Plaza, plazasCustom),
         items: porPlaza.get(key) ?? [],
         destino: { modo: 'carta' as OpsModo, plaza: esSinPlaza ? null : key, seccion: 'general' },
+        plazaKey: esSinPlaza ? null : key,
       }
     })
 
@@ -261,6 +274,9 @@ export function ProduccionBoard({
           onCrearTareaDesdeItem={onCrearTareaDesdeItem}
           recetas={recetas}
           densidad={densidad}
+          notasDe={notasDe}
+          onAgregarNota={agregarNota}
+          onEliminarNota={eliminarNota}
           enfocada
           onFocus={() => setFoco(null)}
         />
@@ -314,6 +330,9 @@ export function ProduccionBoard({
                       onCrearTareaDesdeItem={onCrearTareaDesdeItem}
                       recetas={recetas}
                       densidad={densidad}
+                      notasDe={notasDe}
+                      onAgregarNota={agregarNota}
+                      onEliminarNota={eliminarNota}
                       onFocus={() => setFoco({ banda: banda.id, columna: col.id })}
                     />
                   ))}
@@ -447,6 +466,7 @@ function BandaHeader({
 function ColumnaOps({
   columna, subtareasByParent, onAddItem, onEstadoChange, onAddSubtarea,
   onPrioridadChange, onCrearTareaDesdeItem, recetas, onFocus, enfocada, coachTarget, densidad,
+  notasDe, onAgregarNota, onEliminarNota,
 }: {
   columna: ColumnaBoard
   subtareasByParent: Record<string, Tarea[]>
@@ -460,14 +480,18 @@ function ColumnaOps({
   enfocada?: boolean
   coachTarget?: string
   densidad?: Densidad
+  notasDe: (plaza: string) => PaseMensaje[]
+  onAgregarNota: (args: { plaza: string; texto: string; importante?: boolean }) => Promise<void>
+  onEliminarNota: (id: string) => Promise<void>
 }) {
   const [cerrada, setCerrada] = useState(false)
-  const { items, color, destino } = columna
+  const { items, color, destino, plazaKey } = columna
 
   const listos = items.filter(i => i.estado === 'listo').length
   const total = items.length
   const pct = total > 0 ? listos / total : 0
   const sp = items.filter(i => (i.prioridad ?? 'baja') === 'critica' && i.estado !== 'listo').length
+  const notas = plazaKey ? notasDe(plazaKey) : []
 
   const handleAdd = useCallback(async (titulo: string, recetaId?: string) => {
     await onAddItem({
@@ -512,6 +536,21 @@ function ColumnaOps({
           </span>
         </button>
 
+        {/* Con la columna plegada las notas no se ven — el contador es lo que
+            avisa que hay algo escrito para esta plaza. */}
+        {notas.length > 0 && (
+          <span
+            title={notas.length === 1 ? '1 nota de plaza' : `${notas.length} notas de plaza`}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 2, flexShrink: 0,
+              fontSize: 10, fontWeight: 800, padding: '1px 5px', borderRadius: 5,
+              background: 'rgba(245,158,11,.14)', color: '#d97706',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 12 }}>sticky_note_2</span>
+            {notas.length}
+          </span>
+        )}
         {sp > 0 && (
           <span style={{
             fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 5, flexShrink: 0,
@@ -545,6 +584,15 @@ function ColumnaOps({
 
       {!cerrada && (
         <div style={{ padding: '6px 10px 10px' }}>
+          {/* Arriba de las tareas a propósito: es lo que hay que leer antes de
+              empezar a trabajar la plaza, no un pie de página. */}
+          {plazaKey && (
+            <NotasPlaza
+              notas={notas}
+              onAgregar={(texto, importante) => onAgregarNota({ plaza: plazaKey, texto, importante })}
+              onEliminar={onEliminarNota}
+            />
+          )}
           <ItemsPorPrioridad
             items={items}
             subtareasByParent={subtareasByParent}

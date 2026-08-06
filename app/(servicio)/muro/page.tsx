@@ -6,10 +6,11 @@ import { useEquipo } from '@/lib/hooks/useEquipo'
 import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
 import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
 import { useCierresTurno } from '@/lib/hooks/useCierresTurno'
+import { useNotasPlaza } from '@/lib/hooks/useNotasPlaza'
 import { nextEstado } from '@/components/ops/ItemOps'
 import { todasLasPlazas, plazaLabel, plazaIcon, plazaColor } from '@/lib/constants'
 import { hoyOperativo, sumarDias, turnoActivo } from '@/lib/ops/turnos'
-import type { Tarea, OpsEstado, Plaza } from '@/types'
+import type { Tarea, OpsEstado, PaseMensaje, Plaza } from '@/types'
 
 // ══════════════════════════════════════════════════════════════
 // EL MURO — MURO-PLAN.md F3. Tablet colgada en la cocina, para toda la
@@ -58,6 +59,8 @@ interface ColumnaMuro {
   pendientes: Tarea[]
   listasCount: number
   total: number
+  /** Notas que dejó el turno anterior para esta plaza (ver useNotasPlaza). */
+  notas: PaseMensaje[]
 }
 
 // ── Wake lock — tipado propio: la API es reciente y no siempre está en el
@@ -77,6 +80,10 @@ export default function MuroPage() {
   const { plazasCustom } = usePlazasCustom()
   const { turnosActivos } = useTurnosServicio()
   const { entregaDe, mutate: refetchCierres } = useCierresTurno()
+  // Solo lectura en el muro: la nota se escribe desde el Mise o desde la
+  // columna de la plaza en Producción, con teclado. Acá se cuelga a la vista
+  // de toda la cocina, que es para lo que sirve.
+  const { notasDe, mutate: refetchNotas } = useNotasPlaza()
 
   // ── Tick — recalcula "hace cuánto" y fuerza el rollover de jornada. Una
   // pantalla que nadie toca no se re-renderiza sola: sin este timer, a las
@@ -103,6 +110,7 @@ export default function MuroPage() {
       pedirWakeLock().then(s => { sentinel = s })
       refetch()
       refetchCierres()
+      refetchNotas()
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => {
@@ -164,9 +172,10 @@ export default function MuroPage() {
         pendientes,
         listasCount: items.length - pendientes.length,
         total: items.length,
+        notas: esSinPlaza ? [] : notasDe(key),
       }
     })
-  }, [topLevel, plazasCustom])
+  }, [topLevel, plazasCustom, notasDe])
 
   // Con muchas plazas, las vacías se encogen a una tira angosta — dan lugar
   // a las que sí tienen trabajo pendiente sin desaparecer del todo.
@@ -296,7 +305,9 @@ export default function MuroPage() {
           <ColumnaMuroView
             key={col.key}
             columna={col}
-            angosta={encogerVacias && col.pendientes.length === 0}
+            // Una plaza sin trabajo pendiente pero con una nota del turno
+            // anterior no se encoge: la nota es justamente lo que hay que leer.
+            angosta={encogerVacias && col.pendientes.length === 0 && col.notas.length === 0}
             nombrePorId={nombrePorId}
             ahoraMs={ahoraMs}
             onFoco={() => setFoco(col.key)}
@@ -396,6 +407,8 @@ function ColumnaMuroView({
         </span>
       </button>
 
+      <NotasMuro notas={columna.notas} />
+
       <div style={{ flex: 1, overflowY: 'auto', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: 4 }}>
         {columna.pendientes.map(item => (
           <FilaMuro key={item.id} item={item} nombrePorId={nombrePorId} ahoraMs={ahoraMs} onTap={onTap} onHold={onHold} />
@@ -417,6 +430,42 @@ function ColumnaMuroView({
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+// ── Notas de la plaza — lo que dejó escrito el turno anterior ──────────────
+// Solo lectura, y sin plegar: si se puede esconder, en una tablet que nadie
+// toca queda escondida para siempre. Se muestran las dos más nuevas; el resto
+// se lee en el Mise o en el Pase, que es donde se escriben.
+function NotasMuro({ notas }: { notas: PaseMensaje[] }) {
+  if (notas.length === 0) return null
+  const visibles = notas.slice(0, 2)
+  return (
+    <div style={{
+      flexShrink: 0, padding: '7px 10px', display: 'flex', flexDirection: 'column', gap: 5,
+      background: 'rgba(245,158,11,.1)', borderBottom: `1px solid ${AMBAR}33`,
+    }}>
+      {visibles.map(n => (
+        <div key={n.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 16, color: AMBAR, flexShrink: 0, marginTop: 1 }}>
+            sticky_note_2
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontSize: 13.5, color: 'rgba(255,255,255,.9)', lineHeight: 1.3, overflowWrap: 'anywhere' }}>
+              {n.texto}
+            </span>
+            <span style={{ display: 'block', fontSize: 11, color: 'rgba(255,255,255,.4)', marginTop: 1 }}>
+              {n.usuario_nombre ?? 'Alguien'} · {new Date(n.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          </span>
+        </div>
+      ))}
+      {notas.length > visibles.length && (
+        <span style={{ fontSize: 11, fontWeight: 700, color: AMBAR }}>
+          +{notas.length - visibles.length} más
+        </span>
+      )}
     </div>
   )
 }
@@ -535,6 +584,12 @@ function FocoPlaza({
           {columna.listasCount}/{columna.total}
         </span>
       </div>
+
+      {columna.notas.length > 0 && (
+        <div style={{ flexShrink: 0, marginBottom: 10, borderRadius: 12, overflow: 'hidden' }}>
+          <NotasMuro notas={columna.notas} />
+        </div>
+      )}
 
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
         {items.map(item => (
