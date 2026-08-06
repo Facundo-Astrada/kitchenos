@@ -1,6 +1,7 @@
 # Muro de cocina — plan de implementación
 
-> Idea de Facundo (2026-08-06) + hallazgos del código. Estado: **propuesta, sin implementar**.
+> Idea de Facundo (2026-08-06) + hallazgos del código.
+> **Estado:** F1 ✅ (commit `1091b8e`, verificado contra la DB real de El Rescoldo) · F2 pendiente · F3 pendiente.
 >
 > **Decisiones ya tomadas — no volver a abrirlas:**
 > - El jefe **mira y también toca**. El muro no es de solo lectura.
@@ -44,7 +45,7 @@ Un detalle a corregir de paso: `syncMiseDesdeTarea` (`lib/ops/syncMise.ts`) escr
 
 ## 3. Fases
 
-### F1 — `completado_por` en tareas · *chico, habilita todo lo demás*
+### F1 ✅ — `completado_por` en tareas · *chico, habilita todo lo demás*
 
 **Qué se toca**
 
