@@ -36,6 +36,9 @@ const cuentaName = args.cuenta || 'demo'
 // local en vez de producción (ej. verificar un cambio antes de deployar).
 const base = args.base || 'https://kos-app-one.vercel.app'
 const out = args.out || `docs/shots/${ruta.replace(/^\//, '').replace(/\//g, '-') || 'home'}-${viewportName}.png`
+const clicks = (args.click || '').split('|').map(s => s.trim()).filter(Boolean)
+const esperaClick = Number(args.esperaClick) || 1200
+const scroll = Number(args.scroll) || 0
 
 const viewport = VIEWPORTS[viewportName]
 if (!viewport) {
@@ -63,6 +66,22 @@ try {
 
   await page.goto(`${base}${ruta}`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(3500)
+
+  // --click: selectores separados por "|" que se tocan en orden antes de
+  // capturar. Para pantallas que no son una ruta (una hoja, un panel, un tab
+  // que no está en la URL) — ej. la guía del Mise, que se abre desde el "?".
+  for (const sel of clicks) {
+    await page.locator(sel).first().click()
+    await page.waitForTimeout(esperaClick)
+  }
+
+  // --scroll: píxeles de rueda sobre el centro de la pantalla, para ver una
+  // parte de abajo de una lista larga (o de la hoja que abrió --click).
+  if (scroll) {
+    await page.mouse.move(viewport.width / 2, viewport.height / 2)
+    await page.mouse.wheel(0, scroll)
+    await page.waitForTimeout(700)
+  }
 
   await page.screenshot({ path: out, fullPage: false })
   console.log(`Screenshot guardado en ${out}`)
