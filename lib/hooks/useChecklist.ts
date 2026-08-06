@@ -38,6 +38,11 @@ interface ChecklistConfig {
   rutinas: ChecklistRutina[]
 }
 
+// Vacíos compartidos — ver el `??` de abajo: la identidad tiene que ser estable.
+const SIN_SECCIONES: ChecklistSeccionConfig[] = []
+const SIN_ITEMS: MisePlaceItem[] = []
+const SIN_RUTINAS: ChecklistRutina[] = []
+
 async function fetchChecklistConfig(key: string): Promise<ChecklistConfig> {
   const rid = key.slice('checklist-config-'.length)
   const supabase = createClient()
@@ -74,9 +79,14 @@ export function useChecklist() {
     }
   )
 
-  const secciones = config?.secciones ?? []
-  const items = config?.items ?? []
-  const rutinas = config?.rutinas ?? []
+  // Fallbacks constantes, no `?? []`: mientras el config no resolvió (o el
+  // restaurante todavía no cargó), un array nuevo por render le cambia la
+  // identidad a `items` en cada vuelta, y cualquier efecto de la pantalla que
+  // lo tenga en deps y llame a un setState se dispara solo, sin parar —
+  // "Maximum update depth exceeded" en el mise antes de que abra la lista.
+  const secciones = config?.secciones ?? SIN_SECCIONES
+  const items = config?.items ?? SIN_ITEMS
+  const rutinas = config?.rutinas ?? SIN_RUTINAS
 
   // ── Estado dinámico (registros dependen de fecha/turno) ──
   const [registros, setRegistros] = useState<MisePlaceRegistro[]>([])
