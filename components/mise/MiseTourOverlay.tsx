@@ -123,7 +123,15 @@ export const MISE_PASOS: MisePaso[] = [
     target: 'mise-item-cierre',
     fase: 'cierre',
     titulo: 'En Cierre se registra, no se produce',
-    texto: 'La tarjeta cambia: escribís cuánto quedó de cada ítem. Los cinco puntitos son el semáforo contra el objetivo. Ese número entra tal cual en "Hay ahora" de la próxima apertura — un cierre bien contado le ahorra media hora al turno que entra.',
+    texto: 'La tarjeta cambia: escribís cuánto quedó de cada ítem. Los cinco puntitos son el semáforo contra el objetivo. Se cuenta igual de rápido que la apertura: el número anterior queda seleccionado al tocar el campo, escribirlo tilda el ítem solo (contar ES la acción del cierre) y Enter salta al siguiente. Ese número entra tal cual en "Hay ahora" de la próxima apertura — un cierre bien contado le ahorra media hora al turno que entra.',
+  },
+  {
+    target: 'mise-item-producir-manana',
+    fase: 'cierre',
+    // Solo aparece cuando lo contado no llegó al objetivo.
+    opcional: true,
+    titulo: 'Lo que faltó, para mañana',
+    texto: 'Si lo que contaste no llega al objetivo aparece este botón. Es el espejo del botón rojo de la apertura, pero mirando al turno siguiente: un toque y la tarea queda cargada en Producción con fecha de mañana. El que abre mañana ya se la encuentra, sin depender de que alguien se haya acordado de anotarla.',
   },
   {
     target: 'mise-entregar',

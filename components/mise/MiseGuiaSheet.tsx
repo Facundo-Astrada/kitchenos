@@ -332,8 +332,32 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
       >
         En cierre la tarjeta cambia: en vez de producir, se registra. Escribís cuánto quedó de cada ítem.
         Los cinco puntitos son el semáforo — verde si quedó cerca del objetivo, amarillo o rojo si quedó poco.
-        Tildar el ítem en cierre significa &quot;lo conté y lo dejé registrado&quot;.
+        <br /><br />
+        Se cuenta igual de rápido que la apertura: al tocar el campo el número anterior queda
+        <b> seleccionado</b> (escribís encima, sin borrar), <b>escribir el número tilda el ítem</b> — contar
+        <i> es</i> la acción del cierre, no hace falta tocar además el círculo — y <b>Enter</b> guarda y
+        <b> salta al siguiente</b> sin contar, con la tarjeta centrada. Borrar el número lo destilda; entrar
+        y salir del campo sin escribir no toca nada.
         <Repercute>ese número entra tal cual en <b>HAY AHORA</b> de la próxima apertura. Un cierre bien contado le ahorra media hora al turno que entra.</Repercute>
+      </Bloque>
+
+      <Bloque
+        titulo="Lo que faltó, para mañana"
+        demo={
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 10,
+            background: 'rgba(67,97,160,.1)', color: '#4361a0', fontSize: 12, fontWeight: 700,
+          }}>
+            <span className={ICON} style={{ fontSize: 14 }}>event_upcoming</span>
+            Producir mañana 9 u
+          </span>
+        }
+      >
+        Si lo que contaste no llega al objetivo, aparece este botón. Es el espejo del botón rojo de la
+        apertura, pero mirando al turno siguiente: lo que descubrís al cerrar se produce mañana, no ahora.
+        Un toque y la tarea queda cargada en <b>Producción</b> con fecha de mañana — antes había que
+        anotarlo aparte y volver a cargarlo al día siguiente.
+        <Repercute>el que abre mañana ya se encuentra el trabajo cargado, sin depender de que alguien se haya acordado.</Repercute>
       </Bloque>
 
       {/* ── TERMINAR EL TURNO ── */}

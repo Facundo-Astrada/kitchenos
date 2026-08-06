@@ -369,19 +369,68 @@ function ProductoMiseCardBase({
     onAvanzar?.(item.id)
   }
 
-  // El ítem anterior pidió saltar acá. Abre el campo de stock y trae la tarjeta
-  // a la vista: `center` y no `nearest` porque con el teclado abierto la mitad
-  // de abajo de la pantalla no existe.
+  // ── Cierre: contar es la acción ─────────────────────────────────────────
+  // Escribir cuánto quedó tilda el ítem, igual que en apertura completar el
+  // stock lo tilda solo. Antes el cierre pedía dos gestos por ítem — el número
+  // y el círculo —, el doble que la apertura, y por eso se sentía más lento.
+  //
+  // El tilde se toca SOLO cuando el número cruza entre vacío y cargado: entrar
+  // al campo y salir sin escribir no puede destildar lo que alguien tildó a
+  // mano, y corregir un 5 por un 3 no lo destilda tampoco.
+  function persistirCierre() {
+    const parsed = cantInput === '' ? null : parseFloat(cantInput)
+    const vFinal = parsed === null || isNaN(parsed) ? null : parsed
+    const tenia = cantActual !== null
+    const tiene = vFinal !== null
+    return onUpsert(item.id, fecha, turno, {
+      cantidad_actual: vFinal,
+      ...(tiene && !tenia && !checked ? { completado: true } : {}),
+      ...(!tiene && tenia && checked ? { completado: false } : {}),
+    })
+  }
+
+  // Lo que faltó para llegar al estándar, ya contado. Es el espejo del déficit
+  // de la apertura, pero mirando al turno siguiente: lo que se descubre al
+  // cerrar se produce mañana, no ahora.
+  const faltaCierre = esCierre && cantActual !== null && item.cantidad > 0
+    ? Math.max(0, item.cantidad - cantActual)
+    : 0
+  const [cierreDespachado, setCierreDespachado] = useState(false)
+
+  async function handleProducirManana(cantidad: number) {
+    await crearTarea(cantidad, 'alta', 'manana', null)
+    setCierreDespachado(true)
+  }
+
+  // El ítem anterior pidió saltar acá. Abre el campo y trae la tarjeta a la
+  // vista: `center` y no `nearest` porque con el teclado abierto la mitad de
+  // abajo de la pantalla no existe.
   // Deps solo [autoFocus] a propósito: agregar stockDisplay/checked haría que
   // el editor se reabra solo cada vez que cambia el stock.
   const cardRef = useRef<HTMLDivElement>(null)
+  const cierreInputRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
-    if (!autoFocus || checked || esCierre) return
+    if (!autoFocus || checked) return
+    cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    // El campo del cierre está siempre montado (no tiene modo "editando" como
+    // el de apertura), así que acá alcanza con enfocarlo — el select() lo hace
+    // su propio onFocus.
+    if (esCierre) { cierreInputRef.current?.focus(); return }
     setStockInput(stockDisplay?.toString() ?? '')
     setEditingStock(true)
-    cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoFocus])
+
+  // El campo del cierre vive en estado local (se tipea antes de persistir), pero
+  // la tarjeta NO se remonta al cambiar de fase ni cuando terminan de llegar los
+  // registros del turno: sin esto, pasar de apertura a cierre dejaba en el campo
+  // el número de la apertura, y el primer blur lo escribía como si fuera lo
+  // contado al cerrar. Se resincroniza solo mientras nadie lo esté editando.
+  const regCantidad = reg?.cantidad_actual ?? null
+  useEffect(() => {
+    if (document.activeElement === cierreInputRef.current) return
+    setCantInput(regCantidad?.toString() ?? '')
+  }, [regCantidad, turno])
 
   function handleConfirmCrearTarea(data: CrearTareaSheetConfirmData) {
     return crearTarea(data.cantidad, data.prioridad, data.dia, data.nota)
@@ -466,20 +515,29 @@ function ProductoMiseCardBase({
           <div data-coach-target="mise-item-cierre" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             <StockDots cantActual={cantActual} target={item.cantidad} />
             <input
+              ref={cierreInputRef}
               type="number"
               value={cantInput}
               onChange={e => setCantInput(e.target.value)}
-              onBlur={() => {
-                const v = cantInput === '' ? null : parseFloat(cantInput)
-                onUpsert(item.id, fecha, turno, { cantidad_actual: isNaN(v as number) ? null : v })
+              onBlur={persistirCierre}
+              // Select-all al enfocar, igual que el campo de apertura: llega
+              // precargado con lo contado antes y sin esto el primer dígito se
+              // APPENDEA (corregir un 10 a 2 daba 102).
+              onFocus={e => e.currentTarget.select()}
+              // Enter = "contado, siguiente". El blur persiste el número por el
+              // onBlur de arriba y recién después se manda el foco.
+              onKeyDown={e => {
+                if (e.key !== 'Enter') return
+                ;(e.target as HTMLInputElement).blur()
+                onAvanzar?.(item.id)
               }}
               inputMode="decimal"
               placeholder="—"
               style={{
-                width: 40, padding: '3px 4px', borderRadius: 7, flexShrink: 0,
+                width: 56, padding: '5px 6px', borderRadius: 8, flexShrink: 0,
                 border: `1.5px solid ${isBajo ? '#f97316' : cantActual !== null ? '#22c55e' : 'var(--border)'}`,
                 background: isBajo ? 'rgba(249,115,22,.07)' : cantActual !== null ? 'rgba(34,197,94,.07)' : 'var(--bg)',
-                fontSize: 12, fontWeight: 700, fontFamily: "'DM Mono', monospace",
+                fontSize: 13, fontWeight: 700, fontFamily: "'DM Mono', monospace",
                 color: 'var(--text-1)', textAlign: 'center', outline: 'none',
               }}
             />
@@ -489,8 +547,11 @@ function ProductoMiseCardBase({
           </div>
         )}
 
-        {/* Production toggle — abre el sheet unificado de crear tarea */}
-        {!checked && (
+        {/* Production toggle — abre el sheet unificado de crear tarea.
+            En cierre sigue disponible con el ítem tildado: ahí el tilde
+            significa "ya lo conté", no "no hay nada que hacer", y contar es
+            justamente el momento en que aparece lo que falta producir. */}
+        {(!checked || esCierre) && (
           <button
             data-coach-target="mise-item-tarea"
             onClick={() => setCrearTareaSheetOpen(true)}
@@ -508,6 +569,32 @@ function ProductoMiseCardBase({
           </button>
         )}
       </div>
+
+      {/* ── Cierre: lo que faltó → producción de mañana ──
+          Espejo del CTA de déficit de la apertura. Ahí el número que contás se
+          convierte en trabajo de hoy; acá, en trabajo de mañana. Sin esto, el
+          cierre detecta el faltante y no hace nada con él: había que anotarlo
+          aparte y cargarlo a mano al día siguiente. */}
+      {esCierre && faltaCierre > 0 && !cierreDespachado && (
+        <div style={{ padding: '0 12px 10px', paddingLeft: 44 }}>
+          <button
+            data-coach-target="mise-item-producir-manana"
+            onClick={() => handleProducirManana(faltaCierre)}
+            disabled={creating}
+            style={{
+              width: '100%', padding: '9px 0', borderRadius: 10, border: 'none',
+              background: creating ? 'var(--border)' : 'rgba(67,97,160,.1)',
+              color: creating ? 'var(--text-3)' : '#4361a0',
+              fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
+              cursor: creating ? 'default' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>event_upcoming</span>
+            {creating ? 'Creando...' : `Producir mañana ${faltaCierre} ${item.unidad}`}
+          </button>
+        </div>
+      )}
 
       {/* ── Etiqueta de producción — visible al marcar como lista (opcional por restaurante) ── */}
       {checked && vencimientosHabilitados && (
