@@ -58,7 +58,7 @@ export function OpsToggle({ value, onChange }: OpsToggleProps) {
                 letterSpacing: '.03em', lineHeight: 1.25, textAlign: 'center',
                 maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}>
-                {m === 'carta' ? 'Por prioridad' : m === 'todo' ? 'Carta+Menú+Evento' : 'Por categoría'}
+                {m === 'carta' ? 'Por plaza' : m === 'todo' ? 'Carta+Menú+Evento' : 'Por categoría'}
               </span>
             )}
           </button>

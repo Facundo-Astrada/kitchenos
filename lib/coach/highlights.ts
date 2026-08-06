@@ -1,7 +1,7 @@
 export const COACH_HIGHLIGHT_IDS = [
   // OPS
   'ops-tab-produccion', 'ops-tab-mise', 'ops-tab-planificacion',
-  'prod-seccion-sp', 'prod-fab-add',
+  'prod-columna-plaza', 'prod-fab-add',
   'mise-stock-box', 'mise-producir-box', 'mise-fab-add', 'mise-tab-rutina',
   'plan-sub-menu', 'plan-sub-eventos',
   // Carta

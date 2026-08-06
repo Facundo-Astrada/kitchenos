@@ -53,19 +53,19 @@ export const TOURS: Record<string, TourStep[]> = {
     {
       targetId: 'ops-tab-produccion',
       title: 'Producción',
-      description: 'El tablero operativo del turno. Cargás todo lo que hay que cocinar, organizás por prioridad y seguís el avance del equipo en tiempo real. Funciona como una lista de producción viva que refleja el estado real de la cocina.',
+      description: 'El tablero operativo del turno. Cargás todo lo que hay que cocinar, organizado por plaza, y seguís el avance del equipo en tiempo real. Funciona como una lista de producción viva que refleja el estado real de la cocina.',
     },
     {
-      targetId: 'prod-seccion-sp',
+      targetId: 'prod-columna-plaza',
       requireTab: 'produccion',
-      title: 'Super Prioridad (SP)',
-      description: 'Las preparaciones más críticas del turno, las que bloquean el servicio si no salen. Deben atacarse primero. Las secciones siguientes son Prioridad, Refuerzo y Check, en orden descendente de urgencia.',
+      title: 'Una columna por plaza',
+      description: 'Cada columna es una plaza: parrilla, fríos, pastelería… El cocinero mira una sola y ahí está todo lo suyo. Tocá el nombre de la plaza para verla sola a pantalla completa. La prioridad no desapareció: ordena los ítems dentro de la columna (SP y P arriba, refuerzos y checks plegados abajo) y se cambia tocando el chip del ítem.',
     },
     {
-      targetId: 'prod-seccion-sp',
+      targetId: 'prod-columna-plaza',
       requireTab: 'produccion',
       title: 'Agregar preparación',
-      description: 'Cada sección tiene un campo para agregar una preparación nueva. Podés tipear el nombre o vincularlo a una receta del recetario para que la información de porciones y plaza se complete automáticamente.',
+      description: 'Cada columna tiene un campo para agregar una preparación nueva, que nace ya con esa plaza asignada. Podés tipear el nombre o vincularlo a una receta del recetario para que la información de porciones y plaza se complete automáticamente.',
     },
     {
       targetId: 'ops-tab-mise',
@@ -208,12 +208,12 @@ export const TOURS: Record<string, TourStep[]> = {
     {
       targetId: 'tareas-header',
       title: 'Modo Carta y Menú',
-      description: 'Carta: organizás la producción por prioridad (SP, Prioridad, Refuerzo, Check). Menú: organizás por sección del menú del día (Entrada, Proteína, Pasta...). Cambiá de modo según cómo preferís ver la lista del turno.',
+      description: 'Carta: la producción del servicio normal, organizada por plaza. Menú: organizada por sección del menú del día (Entrada, Proteína, Pasta...). Evento: lo mismo pero aparte, para no mezclarlo con el servicio. Todo: los tres juntos en un solo tablero.',
     },
     {
-      targetId: 'prod-seccion-sp',
-      title: 'Super Prioridad',
-      description: 'Las preparaciones más críticas: las que bloquean el servicio si no salen primero. Deben resolverse antes que cualquier otra cosa. Podés vincular una tarea a una receta para que arrastre automáticamente porciones y plaza.',
+      targetId: 'prod-columna-plaza',
+      title: 'Una columna por plaza',
+      description: 'Cada columna es una plaza y ahí está todo lo que le toca cocinar. Tocá el nombre para verla sola a pantalla completa. Dentro de la columna manda la prioridad: SP y P arriba, refuerzos y checks plegados detrás de un "+N". Podés vincular una tarea a una receta para que arrastre automáticamente porciones y plaza.',
     },
     {
       targetId: 'tareas-lista',

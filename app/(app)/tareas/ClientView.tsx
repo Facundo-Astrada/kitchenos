@@ -33,14 +33,6 @@ function fmtFecha(d: string) {
   return new Date(d + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
-// ── Prioridades (orden de display) ───────────────────────────
-const PRIORIDADES = [
-  { id: 'critica',  label: 'SP',  sublabel: 'Super Prioridad', color: '#ef4444' },
-  { id: 'alta',     label: 'P',   sublabel: 'Prioridad',       color: '#f97316' },
-  { id: 'media',    label: 'REF', sublabel: 'Refuerzo',        color: '#3b82f6' },
-  { id: 'baja',     label: 'Check',sublabel: 'Check',           color: '#64748b' },
-] as const
-
 // Secciones usadas solo para EventoBanner y handleGenerarLista
 const SECCIONES_CARTA = [
   { id: 'caliente', label: 'Cocina Caliente', color: '#ef4444' },
@@ -366,28 +358,24 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   }, [agregarTarea, modoStorage, today, perfil, secciones])
 
   // ── Columnas a renderizar, reordenadas según lo que el usuario haya
-  // arrastrado (persistido en localStorage, por restaurante+modo):
-  // - Carta: prioridad (SP/P/REF/Check) + Pedidos + Limpieza.
-  // - Menú/Evento: sección dinámica del menú activo + Pedidos + Limpieza (antes
-  //   faltaban acá — una limpieza de rutina cargada en HACCP quedaba invisible
-  //   en Producción salvo que se cambiara a modo Carta o Todo).
-  // - Todo: no usa estas columnas — lo arma ProduccionBoard (bandas Carta por
-  //   plaza / Menú y Evento por paso / Otros).
+  // arrastrado (persistido en localStorage, por restaurante+modo).
+  //
+  // Solo Menú/Evento pasan por acá: sección dinámica del menú activo + Pedidos
+  // + Limpieza (antes faltaban acá — una limpieza de rutina cargada en HACCP
+  // quedaba invisible en Producción salvo que se cambiara a modo Carta o Todo).
+  //
+  // Carta y Todo los arma ProduccionBoard, agrupando por PLAZA (quién lo
+  // ejecuta) en vez de por prioridad: una columna por prioridad obligaba al
+  // cocinero de Parrilla a leer las cuatro columnas para juntar lo suyo. La
+  // prioridad no se pierde — ordena y colorea los ítems dentro de la columna.
   const columnasBase = useMemo<ColumnaDef[]>(() => {
-    if (modo === 'menu' || modo === 'evento') {
-      const conocidas = new Set<string>(SECCIONES_MENU.map(s => s.id))
-      const presentes: string[] = []
-      for (const t of topLevel) { const s = (t.seccion ?? '').trim(); if (s && !presentes.includes(s)) presentes.push(s) }
-      return [
-        ...SECCIONES_MENU.filter(s => presentes.includes(s.id)),
-        ...presentes.filter(s => !conocidas.has(s)).map(s => ({ id: s, label: s, color: '#64748b' })),
-        { id: PEDIDOS_COL_ID, label: 'Pedidos', color: '#0ea5e9' },
-        { id: LIMPIEZA_COL_ID, label: 'Limpieza', color: '#10b981' },
-      ]
-    }
-    // modo === 'carta' — 'todo' no pasa por acá: lo renderiza ProduccionBoard.
+    if (modo !== 'menu' && modo !== 'evento') return []
+    const conocidas = new Set<string>(SECCIONES_MENU.map(s => s.id))
+    const presentes: string[] = []
+    for (const t of topLevel) { const s = (t.seccion ?? '').trim(); if (s && !presentes.includes(s)) presentes.push(s) }
     return [
-      ...PRIORIDADES.map(p => ({ id: p.id, label: p.label, sublabel: p.sublabel, color: p.color })),
+      ...SECCIONES_MENU.filter(s => presentes.includes(s.id)),
+      ...presentes.filter(s => !conocidas.has(s)).map(s => ({ id: s, label: s, color: '#64748b' })),
       { id: PEDIDOS_COL_ID, label: 'Pedidos', color: '#0ea5e9' },
       { id: LIMPIEZA_COL_ID, label: 'Limpieza', color: '#10b981' },
     ]
@@ -403,13 +391,11 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     })
   }, [columnasBase, ordenSecciones])
 
+  // Solo Menú/Evento — Carta y Todo van por ProduccionBoard.
   function itemsDeColumna(col: ColumnaDef): Tarea[] {
-    if (modo === 'menu' || modo === 'evento') {
-      return topLevel
-        .filter((t) => (t.seccion ?? '') === col.id)
-        .sort((a, b) => (PRIO_SORT[a.prioridad ?? 'baja'] ?? 3) - (PRIO_SORT[b.prioridad ?? 'baja'] ?? 3))
-    }
-    return topLevel.filter((t) => (t.prioridad ?? 'baja') === col.id)
+    return topLevel
+      .filter((t) => (t.seccion ?? '') === col.id)
+      .sort((a, b) => (PRIO_SORT[a.prioridad ?? 'baja'] ?? 3) - (PRIO_SORT[b.prioridad ?? 'baja'] ?? 3))
   }
 
   // ── Recuadro Pedidos: notas libres, no accionan nada — se anotan y se
@@ -557,7 +543,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
         )}
       </div>
 
-      {/* ── Lista agrupada por prioridad ── */}
+      {/* ── Carta y Todo: board por plaza. Menú/Evento: columnas por paso ── */}
       <div data-coach-target="tareas-lista" style={{ flex: 1, overflowY: 'auto', padding: '10px 12px 120px' }}>
         {restauranteId && (
           <EventoBanner
@@ -570,7 +556,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
             Cargando...
           </div>
-        ) : modo === 'todo' ? (
+        ) : modo === 'todo' || modo === 'carta' ? (
           <ProduccionBoard
             tareas={topLevel}
             subtareasByParent={subtareasByParent}
@@ -581,6 +567,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
             onCrearTareaDesdeItem={handleCrearTareaDesdeItem}
             recetas={recetasSimple}
             restauranteId={restauranteId}
+            vista={modo === 'todo' ? 'todo' : 'carta'}
             otros={
               <>
                 <NotaImportanteCard />
@@ -612,7 +599,6 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
                 <div
                   key={col.id}
                   ref={(el) => registerSecZone(col.id, el)}
-                  {...(col.id === 'critica' ? { 'data-coach-target': 'prod-seccion-sp' } : {})}
                   style={{
                     transform: isDragging && dragOffset ? `translate(${dragOffset.dx}px, ${dragOffset.dy}px)` : undefined,
                     position: isDragging ? 'relative' : undefined,
@@ -644,14 +630,16 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
                       color={col.color}
                       items={itemsDeColumna(col)}
                       subtareasByParent={subtareasByParent}
-                      onAddItem={(titulo, recetaId) => handleAddItem((modo === 'menu' || modo === 'evento') ? 'media' : col.id, titulo, recetaId)}
+                      onAddItem={(titulo, recetaId) => handleAddItem('media', titulo, recetaId)}
                       onEstadoChange={handleEstadoChange}
                       onAddSubtarea={handleAddSubtarea}
                       onPrioridadChange={handlePrioridadChange}
                       onCrearTareaDesdeItem={handleCrearTareaDesdeItem}
                       modo={modoStorage}
-                      showSeccionChip={!(modo === 'menu' || modo === 'evento')}
-                      showPrioChip={modo === 'menu' || modo === 'evento'}
+                      // La columna ya es el paso del menú: el chip que hace falta
+                      // acá es el de prioridad, que es como se re-prioriza.
+                      showSeccionChip={false}
+                      showPrioChip
                       recetas={recetasSimple}
                       dragHandleProps={dragHandleProps}
                     />

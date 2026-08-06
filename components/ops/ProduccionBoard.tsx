@@ -85,6 +85,14 @@ interface ProduccionBoardProps {
   /** Recuadros de Pedidos y Limpieza — los arma la pantalla, van en la banda "Otros". */
   otros?: ReactNode
   restauranteId: string
+  /**
+   * 'todo': una banda por origen (Carta / Menú / Evento), cada una con su
+   * encabezado plegable, y solo las que tienen algo cargado.
+   * 'carta': solo el servicio normal. Sin encabezado de banda (lo dice el toggle
+   * del header) y con las columnas de plaza siempre presentes, incluso en un día
+   * vacío — el QuickAdd de la columna es la única forma de cargar producción.
+   */
+  vista?: 'todo' | 'carta'
 }
 
 function capitalizar(s: string) {
@@ -94,7 +102,9 @@ function capitalizar(s: string) {
 export function ProduccionBoard({
   tareas, subtareasByParent, onAddItem, onEstadoChange, onAddSubtarea,
   onPrioridadChange, onCrearTareaDesdeItem, recetas, otros, restauranteId,
+  vista = 'todo',
 }: ProduccionBoardProps) {
+  const mostrarBandas = vista === 'todo'
   const { plazasCustom } = usePlazasCustom()
 
   // Bandas plegadas — persistido por restaurante (un turno sin evento cierra
@@ -138,10 +148,15 @@ export function ProduccionBoard({
       else porPlaza.set(key, [t])
     }
     const ordenPlazas = todasLasPlazas(plazasCustom).map(String)
+    // En "Todo" solo se listan las plazas que hoy tienen algo (más las que el
+    // usuario haya agregado a mano): el board es un resumen del turno y las
+    // columnas vacías serían ruido. En la vista Carta, en cambio, están todas
+    // siempre — es el tablero donde se carga el trabajo, y la plaza que hoy no
+    // tiene nada es justamente la que necesita un lugar donde escribirlo.
     const keysPlaza = [
-      ...ordenPlazas.filter(p => porPlaza.has(p)),
+      ...ordenPlazas.filter(p => vista === 'carta' || porPlaza.has(p) || plazasExtra.includes(p)),
       ...[...porPlaza.keys()].filter(k => k !== SIN_PLAZA && !ordenPlazas.includes(k)),
-      ...plazasExtra.filter(p => !porPlaza.has(p)),
+      ...plazasExtra.filter(p => !ordenPlazas.includes(p) && !porPlaza.has(p)),
     ]
     if (porPlaza.has(SIN_PLAZA)) keysPlaza.push(SIN_PLAZA)
 
@@ -186,9 +201,12 @@ export function ProduccionBoard({
     }
 
     const out: BandaBoard[] = []
-    if (columnasCarta.length > 0) {
+    // En la vista Carta la banda va aunque esté vacía: es toda la pantalla, y
+    // sin columnas no habría dónde escribir la primera tarea del día.
+    if (columnasCarta.length > 0 || vista === 'carta') {
       out.push({ id: 'carta', titulo: 'Carta', icono: 'menu_book', color: '#3b82f6', columnas: columnasCarta })
     }
+    if (vista === 'carta') return out
     const colMenu = columnasPorPaso(porModo('menu'), 'menu')
     if (colMenu.length > 0) {
       out.push({ id: 'menu', titulo: 'Menú', icono: 'restaurant', color: '#8b5cf6', columnas: colMenu })
@@ -198,7 +216,7 @@ export function ProduccionBoard({
       out.push({ id: 'evento', titulo: 'Evento', icono: 'celebration', color: '#f97316', columnas: colEvento })
     }
     return out
-  }, [tareas, plazasCustom, plazasExtra])
+  }, [tareas, plazasCustom, plazasExtra, vista])
 
   const plazasDisponibles = useMemo(() => {
     const usadas = new Set(bandas.find(b => b.id === 'carta')?.columnas.map(c => c.id) ?? [])
@@ -250,22 +268,27 @@ export function ProduccionBoard({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {bandas.map(banda => {
-        const cerrada = bandasCerradas.includes(banda.id)
+        // Con una sola banda (modo Carta) el encabezado repetiría lo que ya dice
+        // el toggle del header, y peor: dejaría plegar la única banda de la
+        // pantalla — se veía una pantalla vacía sin motivo aparente.
+        const cerrada = mostrarBandas && bandasCerradas.includes(banda.id)
         const items = banda.columnas.flatMap(c => c.items)
         const listos = items.filter(i => i.estado === 'listo').length
         const sp = items.filter(i => (i.prioridad ?? 'baja') === 'critica' && i.estado !== 'listo').length
         return (
           <section key={banda.id}>
-            <BandaHeader
-              titulo={banda.titulo}
-              icono={banda.icono}
-              color={banda.color}
-              listos={listos}
-              total={items.length}
-              sp={sp}
-              cerrada={cerrada}
-              onToggle={() => toggleBanda(banda.id)}
-            />
+            {mostrarBandas && (
+              <BandaHeader
+                titulo={banda.titulo}
+                icono={banda.icono}
+                color={banda.color}
+                listos={listos}
+                total={items.length}
+                sp={sp}
+                cerrada={cerrada}
+                onToggle={() => toggleBanda(banda.id)}
+              />
+            )}
             {!cerrada && (
               <>
                 <div style={{
@@ -273,10 +296,13 @@ export function ProduccionBoard({
                   gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
                   gap: 10, alignItems: 'start',
                 }}>
-                  {banda.columnas.map(col => (
+                  {banda.columnas.map((col, idx) => (
                     <ColumnaOps
                       key={col.id}
                       columna={col}
+                      // Ancla del tour del Coach: la primera plaza de Carta es
+                      // la que se señala al explicar cómo está organizado el board.
+                      coachTarget={banda.id === 'carta' && idx === 0 ? 'prod-columna-plaza' : undefined}
                       subtareasByParent={subtareasByParent}
                       onAddItem={onAddItem}
                       onEstadoChange={onEstadoChange}
@@ -416,7 +442,7 @@ function BandaHeader({
 // ── Columna (una plaza, o un paso del menú) ─────────────────────────────────
 function ColumnaOps({
   columna, subtareasByParent, onAddItem, onEstadoChange, onAddSubtarea,
-  onPrioridadChange, onCrearTareaDesdeItem, recetas, onFocus, enfocada,
+  onPrioridadChange, onCrearTareaDesdeItem, recetas, onFocus, enfocada, coachTarget,
 }: {
   columna: ColumnaBoard
   subtareasByParent: Record<string, Tarea[]>
@@ -428,6 +454,7 @@ function ColumnaOps({
   recetas: { id: string; nombre: string }[]
   onFocus: () => void
   enfocada?: boolean
+  coachTarget?: string
 }) {
   const [cerrada, setCerrada] = useState(false)
   const { items, color, destino } = columna
@@ -451,10 +478,13 @@ function ColumnaOps({
   }, [onAddItem, destino])
 
   return (
-    <div style={{
-      background: 'var(--surface)', border: '1px solid var(--border)',
-      borderRadius: 14, overflow: 'hidden', marginBottom: 2,
-    }}>
+    <div
+      {...(coachTarget ? { 'data-coach-target': coachTarget } : {})}
+      style={{
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 14, overflow: 'hidden', marginBottom: 2,
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', padding: '9px 12px', gap: 8 }}>
         <button
           onClick={onFocus}
