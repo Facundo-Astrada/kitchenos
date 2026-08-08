@@ -7,7 +7,9 @@ import { NotasPlaza } from './NotasPlaza'
 import type { CrearTareaSheetConfirmData } from './CrearTareaSheet'
 import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
 import { useNotasPlaza } from '@/lib/hooks/useNotasPlaza'
+import { useCierresTurno } from '@/lib/hooks/useCierresTurno'
 import { plazaColor, plazaIcon, plazaLabel, todasLasPlazas } from '@/lib/constants'
+import { hoyOperativo } from '@/lib/ops/turnos'
 import type { OpsEstado, OpsModo, PaseMensaje, Plaza, Tarea, TareaPrioridad } from '@/types'
 
 // ── Board de OPS Producción, vista "Todo" ────────────────────────────────────
@@ -120,6 +122,30 @@ export function ProduccionBoard({
   // no uno por columna: con 6 plazas serían 6 canales abiertos para leer la
   // misma tabla.
   const { notasDe, agregar: agregarNota, eliminar: eliminarNota } = useNotasPlaza()
+
+  // ── Corte del pase de turno, por plaza ──────────────────────────────────
+  // Lo que se terminó ANTES de que la plaza entregara es trabajo del turno que
+  // se fue: se pliega para que el que entra abra en lo que le toca, no en 40
+  // filas verdes. Lo que se tilde DESPUÉS de la entrega queda a la vista (el
+  // que sale casi siempre se queda un rato más), y a las 05:00 se va todo solo
+  // con el rollover de la jornada.
+  //
+  // Se compara por timestamp y NO por turno a propósito: entregar la plaza es
+  // justamente lo que hace avanzar su turno vigente, así que preguntar "¿ya
+  // entregó el turno actual?" se responde que no en el instante siguiente a la
+  // entrega y el plegado se apagaría solo. La hora de corte no tiene ese
+  // problema, y además sirve igual con uno, dos o cinco turnos por día.
+  const { cierres } = useCierresTurno()
+  const cortePorPlaza = useMemo(() => {
+    const hoy = hoyOperativo()
+    const m = new Map<string, string>()
+    for (const c of cierres) {
+      if (c.jornada !== hoy) continue
+      const prev = m.get(c.plaza)
+      if (!prev || c.cerrado_at > prev) m.set(c.plaza, c.cerrado_at)
+    }
+    return m
+  }, [cierres])
 
   // Bandas plegadas — persistido por restaurante (un turno sin evento cierra
   // esa banda una vez y no la vuelve a ver).
@@ -277,6 +303,7 @@ export function ProduccionBoard({
           notasDe={notasDe}
           onAgregarNota={agregarNota}
           onEliminarNota={eliminarNota}
+          corte={columnaFoco.plazaKey ? cortePorPlaza.get(columnaFoco.plazaKey) ?? null : null}
           enfocada
           onFocus={() => setFoco(null)}
         />
@@ -333,6 +360,7 @@ export function ProduccionBoard({
                       notasDe={notasDe}
                       onAgregarNota={agregarNota}
                       onEliminarNota={eliminarNota}
+                      corte={col.plazaKey ? cortePorPlaza.get(col.plazaKey) ?? null : null}
                       onFocus={() => setFoco({ banda: banda.id, columna: col.id })}
                     />
                   ))}
@@ -466,7 +494,7 @@ function BandaHeader({
 function ColumnaOps({
   columna, subtareasByParent, onAddItem, onEstadoChange, onAddSubtarea,
   onPrioridadChange, onCrearTareaDesdeItem, recetas, onFocus, enfocada, coachTarget, densidad,
-  notasDe, onAgregarNota, onEliminarNota,
+  notasDe, onAgregarNota, onEliminarNota, corte,
 }: {
   columna: ColumnaBoard
   subtareasByParent: Record<string, Tarea[]>
@@ -483,15 +511,34 @@ function ColumnaOps({
   notasDe: (plaza: string) => PaseMensaje[]
   onAgregarNota: (args: { plaza: string; texto: string; importante?: boolean }) => Promise<void>
   onEliminarNota: (id: string) => Promise<void>
+  /** Hora de la última entrega de esta plaza hoy — corte del plegado. */
+  corte?: string | null
 }) {
   const [cerrada, setCerrada] = useState(false)
+  const [verEntregadas, setVerEntregadas] = useState(false)
   const { items, color, destino, plazaKey } = columna
 
+  // El contador del header cuenta la JORNADA entera, plegado incluido: el
+  // plegado es qué filas se dibujan, no cuánto se hizo. Si también se achicara,
+  // el header mentiría sobre el día.
   const listos = items.filter(i => i.estado === 'listo').length
   const total = items.length
   const pct = total > 0 ? listos / total : 0
   const sp = items.filter(i => (i.prioridad ?? 'baja') === 'critica' && i.estado !== 'listo').length
   const notas = plazaKey ? notasDe(plazaKey) : []
+
+  const { activos, entregadas } = useMemo(() => {
+    if (!corte) return { activos: items, entregadas: [] as Tarea[] }
+    const a: Tarea[] = [], e: Tarea[] = []
+    for (const t of items) {
+      // Sin completed_at no se pliega: es la dirección segura del error (se ve
+      // de más, no de menos). Solo lo tienen las filas anteriores a que se
+      // empezara a estampar.
+      if (t.estado === 'listo' && t.completed_at && t.completed_at < corte) e.push(t)
+      else a.push(t)
+    }
+    return { activos: a, entregadas: e }
+  }, [items, corte])
 
   const handleAdd = useCallback(async (titulo: string, recetaId?: string) => {
     await onAddItem({
@@ -594,7 +641,7 @@ function ColumnaOps({
             />
           )}
           <ItemsPorPrioridad
-            items={items}
+            items={activos}
             subtareasByParent={subtareasByParent}
             onEstadoChange={onEstadoChange}
             onAddSubtarea={onAddSubtarea}
@@ -602,7 +649,43 @@ function ColumnaOps({
             onCrearTareaDesdeItem={onCrearTareaDesdeItem}
             modo={destino.modo}
             densidad={densidad}
+            // Con todo entregado la columna no está vacía, está terminada —
+            // "Sin preparaciones aún" diría lo contrario de lo que pasó.
+            silenciarVacio={entregadas.length > 0}
           />
+
+          {/* ── Lo terminado antes del pase ──
+              La hora explica por qué está escondido: sin ella parece que las
+              tareas se perdieron. */}
+          {entregadas.length > 0 && (
+            <>
+              <button onClick={() => setVerEntregadas(v => !v)} style={verMasStyle}>
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>
+                  {verEntregadas ? 'expand_less' : 'expand_more'}
+                </span>
+                {verEntregadas
+                  ? 'Ocultar lo entregado'
+                  : `${entregadas.length} ${entregadas.length === 1 ? 'lista' : 'listas'} antes de las ${new Date(corte!).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`}
+              </button>
+              {verEntregadas && entregadas.map(item => (
+                <div key={item.id} style={{ borderLeft: '3px solid var(--border)', borderRadius: 6, paddingLeft: 2 }}>
+                  <ItemOps
+                    item={item}
+                    subtareas={subtareasByParent[item.id] ?? []}
+                    onEstadoChange={onEstadoChange}
+                    onAddSubtarea={onAddSubtarea}
+                    onPrioridadChange={onPrioridadChange}
+                    onCrearTareaDesdeItem={onCrearTareaDesdeItem}
+                    modo={destino.modo}
+                    showSeccionChip={false}
+                    showPrioChip
+                    densidad={densidad}
+                  />
+                </div>
+              ))}
+            </>
+          )}
+
           <div style={{ marginTop: 4 }}>
             <QuickAdd onSave={handleAdd} recetas={recetas} />
           </div>
@@ -615,6 +698,7 @@ function ColumnaOps({
 // ── Ítems ordenados por prioridad, con REF/Check plegados ───────────────────
 function ItemsPorPrioridad({
   items, subtareasByParent, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, modo, densidad,
+  silenciarVacio,
 }: {
   items: Tarea[]
   subtareasByParent: Record<string, Tarea[]>
@@ -624,6 +708,8 @@ function ItemsPorPrioridad({
   onCrearTareaDesdeItem: (item: Tarea, data: CrearTareaSheetConfirmData) => Promise<void>
   modo: OpsModo
   densidad?: Densidad
+  /** No mostrar el vacío: la columna está plegada, no sin trabajo. */
+  silenciarVacio?: boolean
 }) {
   const [verSecundarias, setVerSecundarias] = useState(false)
 
@@ -680,6 +766,7 @@ function ItemsPorPrioridad({
   }
 
   if (items.length === 0) {
+    if (silenciarVacio) return null
     return <div style={{ padding: '8px 2px', fontSize: 12, color: 'var(--text-3)' }}>Sin preparaciones aún</div>
   }
 
