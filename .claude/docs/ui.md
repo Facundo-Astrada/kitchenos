@@ -112,7 +112,15 @@ Un pill/badge con `whiteSpace:'nowrap'` dentro de una celda de grilla (ej. títu
 
 ## Modal centrado en desktop / full-screen en mobile — sin componente propio todavía
 
-No existe un componente que combine `useIsDesktop()` + `useSheetOpenWhen()` para este patrón — se arma a mano por pantalla (ver `app/(app)/calendario/page.tsx`, forms de evento y de planificar menú). Estructura: en `isDesktop`, backdrop `position:fixed,inset:0,zIndex:2000,background:rgba(0,0,0,.55)` + card centrada (`borderRadius:18, maxWidth:560, maxHeight:'calc(100dvh - 48px)', overflowY:'auto'`, cierra al click en el backdrop vía `onClick` en el wrapper + `stopPropagation` en la card); si no, el form full-screen de siempre (header navy). Candidato a extraer a `components/ui/` la próxima vez que se repita en una tercera pantalla.
+No existe un componente que combine `useIsDesktop()` + `useSheetOpenWhen()` para este patrón — se arma a mano por pantalla (ver `app/(app)/calendario/page.tsx`, forms de evento y de planificar menú; y el modal de alta/edición en `app/(app)/stock/ClientView.tsx`, con blur en el backdrop además del tinte). Estructura: en `isDesktop`, backdrop `position:fixed,inset:0,zIndex:2000,background:rgba(0,0,0,.55)` (opcional `backdropFilter:'blur(4px)'`) + card centrada (`borderRadius:18, maxWidth:560, maxHeight:'calc(100dvh - 48px)', overflowY:'auto'`, cierra al click en el backdrop vía `onClick` en el wrapper + `stopPropagation` en la card); si no, el form full-screen/sheet de siempre. Ya se repitió en una tercera pantalla — extraer a `components/ui/` la próxima vez que se toque uno de estos tres.
+
+## Input editable inline — nunca `button → autoFocus` tras montar
+
+Un campo que se activa con `button onClick → setState → <input autoFocus>` no abre el teclado en iOS/Android: el input recién existe en el render siguiente, fuera del gesto de touch síncrono que el navegador exige para levantarlo. Mismo problema con `setTimeout(() => ref.current?.focus(), N)`. Fix: el input está **siempre montado** — `readOnly` + estilos transparentes en modo lectura (se sigue leyendo como texto plano), `onFocus` dispara el modo edición y hace `e.currentTarget.select()`, `onBlur` guarda. Fuente ≥16px en mobile o iOS hace zoom automático al enfocar. Referencia: celda de stock y editor de mínimo en `app/(app)/stock/ClientView.tsx`; el modo "Stockear" de la misma pantalla ya lo resolvía así desde antes (para eso sirve mirarlo como ejemplo).
+
+## Columnas de tabla angostas en mobile — presupuestar contra el padding del `<td>`, no contra el `<col>`
+
+Con `table-layout:fixed` y `box-sizing:border-box` (Tailwind preflight), el ancho del `<col>` es el ancho **total** de la celda — el contenido disponible real es `ancho del <col> - padding horizontal del <td>`. Un div/input hijo con `width` fijo mayor a ese resto se desborda del fondo de la celda sin que nada avise en el código (no hay clipping por default): visualmente el número queda descentrado o se sale del fondo resaltado. Recalcular el presupuesto real en el breakpoint angosto (`isNarrow`, <480px) cada vez que se fija un `width` en px dentro de una celda — y si hay un dato redundante con otra parte de la fila (ej. la unidad ya está en el subtítulo del producto), sacarlo del breakpoint apretado en vez de forzar que entre.
 
 ## Grillas multi-columna sobre listas con drag vertical
 
