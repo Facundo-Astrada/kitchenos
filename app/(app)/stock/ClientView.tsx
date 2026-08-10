@@ -83,7 +83,7 @@ function parseTSV(text: string): PasteRow[] {
   }).filter(r => r.nombre.length >= 2)
 }
 
-type FiltroEstado = 'all' | 'critico' | 'bajo' | 'pendiente' | 'inmovil' | 'unidad'
+type FiltroEstado = 'all' | 'bajo' | 'pendiente' | 'inmovil' | 'unidad'
 const INMOVIL_DIAS = 60
 const PRECIO_SOSPECHOSO_UMBRAL = 2000
 
@@ -99,7 +99,7 @@ function esUnidadSospechosa(p: { unidad: string; precio_unitario: number | null 
 function esPendiente(p: { stock_actual: number; precio_unitario: number | null; fuera_de_uso?: boolean | null }): boolean {
   return !p.fuera_de_uso && p.stock_actual === 0 && !p.precio_unitario
 }
-type SortMode = 'default' | 'valor_desc' | 'nombre_asc' | 'nombre_desc'
+type SortMode = 'default' | 'valor_desc' | 'nombre_asc' | 'nombre_desc' | 'nivel_desc' | 'nivel_asc'
 
 interface FormData {
   nombre: string
@@ -107,7 +107,6 @@ interface FormData {
   unidad: string
   stock_actual: string
   stock_minimo: string
-  stock_critico: string
   precio_unitario: string
   // unidad de compra (opcional)
   unidad_compra: string
@@ -127,7 +126,6 @@ const FORM_EMPTY: FormData = {
   unidad: 'kg',
   stock_actual: '0',
   stock_minimo: '0',
-  stock_critico: '0',
   precio_unitario: '0',
   unidad_compra: '',
   cantidad_por_envase: '',
@@ -152,6 +150,13 @@ function fmtValor(n: number) {
 function valorStock(p: ProductoConEstado) {
   if (!p.precio_unitario || p.precio_unitario === 0) return 0
   return p.stock_actual * p.precio_unitario
+}
+
+/** % de stock contra el mínimo. null = sin mínimo definido (no es comparable). */
+function nivelPct(p: { stock_actual: number; stock_minimo: number | null }): number | null {
+  const min = p.stock_minimo ?? 0
+  if (min <= 0) return null
+  return p.stock_actual / min
 }
 
 type ProdItem = MisePlaceItem & { registro: MisePlaceRegistro | null }
@@ -281,16 +286,14 @@ export default function StockPage() {
   // Inline stock edit
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValue, setEditValue] = useState('')
-  const inputRef = useRef<HTMLInputElement>(null)
 
-  // Inline edit de umbrales (mínimo / crítico)
-  const [editThr, setEditThr] = useState<{ id: string; min: string; crit: string } | null>(null)
+  // Inline edit de umbral mínimo
+  const [editThr, setEditThr] = useState<{ id: string; min: string } | null>(null)
   const guardarUmbrales = useCallback(async () => {
     if (!editThr) return
     const min = parseNumAR(editThr.min) ?? 0
-    const crit = parseNumAR(editThr.crit) ?? 0
     try {
-      await actualizarProducto(editThr.id, { stock_minimo: min, stock_critico: crit })
+      await actualizarProducto(editThr.id, { stock_minimo: min })
     } catch { /* noop */ }
     setEditThr(null)
   }, [editThr, actualizarProducto])
@@ -656,7 +659,7 @@ export default function StockPage() {
   }
 
   // ── Sugerir mínimos (Feature 2) ──
-  type Sugerencia = { id: string; nombre: string; unidad: string; entregas: number; sugerido_minimo: number; sugerido_critico: number }
+  type Sugerencia = { id: string; nombre: string; unidad: string; entregas: number; sugerido_minimo: number }
   const [showSugerir, setShowSugerir] = useState(false)
   const [sugLoading, setSugLoading] = useState(false)
   const [sugerencias, setSugerencias] = useState<Sugerencia[]>([])
@@ -738,7 +741,7 @@ export default function StockPage() {
     try {
       const elegidas = sugerencias.filter(s => sugSelected.has(s.id))
       for (const s of elegidas) {
-        await actualizarProducto(s.id, { stock_minimo: s.sugerido_minimo, stock_critico: s.sugerido_critico })
+        await actualizarProducto(s.id, { stock_minimo: s.sugerido_minimo, stock_critico: 0 })
       }
       setShowSugerir(false)
       setSugToast(`${elegidas.length} producto${elegidas.length !== 1 ? 's' : ''} con mínimo sugerido`)
@@ -888,8 +891,8 @@ export default function StockPage() {
       list = inmovilLoaded ? productos.filter(esInmovil) : []
     } else if (estadoFilter === 'unidad') {
       list = productos.filter(esUnidadSospechosa)
-    } else if (estadoFilter !== 'all') {
-      list = list.filter(p => p.estado === estadoFilter)
+    } else if (estadoFilter === 'bajo') {
+      list = list.filter(p => p.estado !== 'ok')
     }
     if (catFilters.length) list = list.filter(p => catFilters.includes(p.categoria))
     if (provFilters.length) list = list.filter(p => provFilters.includes(p.proveedor_id ?? '__sin__'))
@@ -904,6 +907,15 @@ export default function StockPage() {
       list = [...list].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
     } else if (sortMode === 'nombre_desc') {
       list = [...list].sort((a, b) => b.nombre.localeCompare(a.nombre, 'es'))
+    } else if (sortMode === 'nivel_desc' || sortMode === 'nivel_asc') {
+      const dir = sortMode === 'nivel_desc' ? -1 : 1
+      list = [...list].sort((a, b) => {
+        const na = nivelPct(a), nb = nivelPct(b)
+        if (na === null && nb === null) return a.nombre.localeCompare(b.nombre, 'es')
+        if (na === null) return 1
+        if (nb === null) return -1
+        return (na - nb) * dir
+      })
     }
     return list
   }, [productos, estadoFilter, catFilters, provFilters, secFilters, search, sortMode, esInmovil, inmovilLoaded])
@@ -921,23 +933,22 @@ export default function StockPage() {
     [filtered]
   )
 
-  const nCritico = useMemo(() => productos.filter(p => p.estado === 'critico').length, [productos])
-  const nBajo = useMemo(() => productos.filter(p => p.estado === 'bajo').length, [productos])
+  const nAlerta = useMemo(() => productos.filter(p => p.estado !== 'ok').length, [productos])
   const nPendiente = useMemo(() => productos.filter(esPendiente).length, [productos])
   const nUnidadSospechosa = useMemo(() => productos.filter(esUnidadSospechosa).length, [productos])
 
   useEffect(() => {
     // Insights accionables para Kitchen Coach (no solo conteos)
-    const criticos = productos
-      .filter(p => p.estado === 'critico')
-      .map(p => ({ nombre: p.nombre, stock: p.stock_actual, critico: p.stock_critico, unidad: p.unidad }))
+    const bajoMinimo = productos
+      .filter(p => p.estado !== 'ok')
+      .map(p => ({ nombre: p.nombre, stock: p.stock_actual, minimo: p.stock_minimo, unidad: p.unidad }))
       .slice(0, 8)
     const sinPrecio = productos.filter(p => !p.precio_unitario || p.precio_unitario <= 0).length
     const valorTotalStock = productos.reduce((acc, p) => acc + valorStock(p), 0)
-    // categorías con más productos en riesgo (crítico o bajo)
+    // categorías con más productos en riesgo (bajo el mínimo)
     const riesgoPorCat: Record<string, number> = {}
     for (const p of productos) {
-      if (p.estado === 'critico' || p.estado === 'bajo') riesgoPorCat[p.categoria] = (riesgoPorCat[p.categoria] ?? 0) + 1
+      if (p.estado !== 'ok') riesgoPorCat[p.categoria] = (riesgoPorCat[p.categoria] ?? 0) + 1
     }
     const categoriasEnRiesgo = Object.entries(riesgoPorCat)
       .sort((a, b) => b[1] - a[1]).slice(0, 3)
@@ -947,15 +958,15 @@ export default function StockPage() {
       screen: 'stock',
       tab: activeTab,
       total: productos.length,
-      criticos,            // top-8 con nombre + cuánto queda vs umbral
-      bajos: nBajo,
+      bajoMinimo,           // top-8 con nombre + cuánto queda vs el mínimo
+      nBajoMinimo: nAlerta,
       pendientes: nPendiente, // sin stock y sin precio (a completar)
       sinPrecio,           // subvalúan el food cost de las recetas
       valorTotalStock: Math.round(valorTotalStock),
       categoriasEnRiesgo,
     }))
     return () => localStorage.removeItem('kc_screen_context')
-  }, [productos, activeTab, nCritico, nBajo, nPendiente])
+  }, [productos, activeTab, nAlerta, nPendiente])
 
   // Quick mode: lista filtrada por sector, críticos/bajos primero
   const sortByEstado = useCallback((arr: ProductoConEstado[]) => {
@@ -1017,7 +1028,6 @@ export default function StockPage() {
   function startEdit(p: ProductoConEstado) {
     setEditingId(p.id)
     setEditValue(String(p.stock_actual))
-    setTimeout(() => inputRef.current?.select(), 30)
   }
 
   async function commitEdit(id: string) {
@@ -1048,7 +1058,6 @@ export default function StockPage() {
       unidad: p.unidad,
       stock_actual: String(p.stock_actual),
       stock_minimo: String(p.stock_minimo),
-      stock_critico: String(p.stock_critico),
       precio_unitario: String(p.precio_unitario || 0),
       unidad_compra: p.unidad_compra ?? '',
       cantidad_por_envase: p.cantidad_por_envase != null ? String(p.cantidad_por_envase) : '',
@@ -1084,7 +1093,7 @@ export default function StockPage() {
         unidad: form.unidad,
         stock_actual: parseNumAR(form.stock_actual) ?? 0,
         stock_minimo: parseNumAR(form.stock_minimo) ?? 0,
-        stock_critico: parseNumAR(form.stock_critico) ?? 0,
+        stock_critico: 0,
         activo: true,
         precio_unitario: parseNumAR(form.precio_unitario) ?? 0,
         unidad_compra: showUnidadCompra && form.unidad_compra.trim() ? form.unidad_compra.trim() : null,
@@ -1150,8 +1159,8 @@ export default function StockPage() {
         ? ['#', 'Producto', 'Categoría', 'Unidad', 'Precio', 'Stock', 'Valor', 'Estado']
         : ['#', 'Producto', 'Categoría', 'Unidad', 'Stock', 'Estado']],
       body: filtered.map((p, i) => isAdmin
-        ? [i + 1, p.nombre, p.categoria, p.unidad, fmtPrecio(p.precio_unitario), p.stock_actual, valorStock(p) > 0 ? fmtValor(valorStock(p)) : '—', p.estado === 'critico' ? 'CRÍTICO' : p.estado === 'bajo' ? 'BAJO' : 'OK']
-        : [i + 1, p.nombre, p.categoria, p.unidad, p.stock_actual, p.estado === 'critico' ? 'CRÍTICO' : p.estado === 'bajo' ? 'BAJO' : 'OK']),
+        ? [i + 1, p.nombre, p.categoria, p.unidad, fmtPrecio(p.precio_unitario), p.stock_actual, valorStock(p) > 0 ? fmtValor(valorStock(p)) : '—', p.estado !== 'ok' ? 'BAJO' : 'OK']
+        : [i + 1, p.nombre, p.categoria, p.unidad, p.stock_actual, p.estado !== 'ok' ? 'BAJO' : 'OK']),
       styles: { fontSize: 9 },
       headStyles: { fillColor: [30, 41, 59] },
     })
@@ -1175,10 +1184,7 @@ export default function StockPage() {
     if (esPendiente(p)) return (
       <span style={{ background: 'rgba(239,68,68,.12)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 6, padding: '2px 6px', fontSize: 9, fontWeight: 700, color: '#fca5a5', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>Pendiente</span>
     )
-    if (p.estado === 'critico') return (
-      <span style={{ background: 'rgba(239,68,68,.15)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 6, padding: '2px 6px', fontSize: 9, fontWeight: 700, color: '#fca5a5', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>Crítico</span>
-    )
-    if (p.estado === 'bajo') return (
+    if (p.estado !== 'ok') return (
       <span style={{ background: 'rgba(245,158,11,.15)', border: '1px solid rgba(245,158,11,.3)', borderRadius: 6, padding: '2px 6px', fontSize: 9, fontWeight: 700, color: '#fcd34d', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>Bajo</span>
     )
     return (
@@ -1195,7 +1201,6 @@ export default function StockPage() {
         'Unidad': p.unidad,
         'Stock actual': p.stock_actual,
         'Stock mínimo': p.stock_minimo,
-        'Stock crítico': p.stock_critico,
         'Precio unitario': p.precio_unitario,
         'Estado': p.estado,
         'Fuera de uso': p.fuera_de_uso ? 'Sí' : 'No',
@@ -1203,8 +1208,6 @@ export default function StockPage() {
       })),
     }])
   }
-
-  const nAlerta = nCritico + nBajo
 
   return (
     <PageTransition>
@@ -1220,17 +1223,10 @@ export default function StockPage() {
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', scrollbarWidth: 'none' }}>
             <button
               data-coach-target="stock-kpis"
-              onClick={() => setEstadoFilter(f => f === 'critico' ? 'all' : 'critico')}
-              style={{ background: estadoFilter === 'critico' ? 'rgba(239,68,68,.4)' : 'rgba(239,68,68,.2)', border: `1px solid ${estadoFilter === 'critico' ? 'rgba(239,68,68,.7)' : 'rgba(239,68,68,.35)'}`, borderRadius: 8, padding: '5px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
-            >
-              <span style={{ fontSize: 15, fontWeight: 700, color: '#fca5a5', fontFamily: "'DM Mono', monospace" }}>{nCritico}</span>
-              <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.07em' }}>Crítico</span>
-            </button>
-            <button
               onClick={() => setEstadoFilter(f => f === 'bajo' ? 'all' : 'bajo')}
               style={{ background: estadoFilter === 'bajo' ? 'rgba(245,158,11,.3)' : 'rgba(245,158,11,.15)', border: `1px solid ${estadoFilter === 'bajo' ? 'rgba(245,158,11,.6)' : 'rgba(245,158,11,.3)'}`, borderRadius: 8, padding: '5px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
             >
-              <span style={{ fontSize: 15, fontWeight: 700, color: '#fcd34d', fontFamily: "'DM Mono', monospace" }}>{nBajo}</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: '#fcd34d', fontFamily: "'DM Mono', monospace" }}>{nAlerta}</span>
               <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.07em' }}>Bajo</span>
             </button>
             {nPendiente > 0 && (
@@ -1604,9 +1600,9 @@ export default function StockPage() {
             {isDesktop && <col style={{ width: '14%' }} />}
             {isDesktop && <col style={{ width: '16%' }} />}
             {isAdmin && <col style={{ width: isDesktop ? '10%' : 64 }} />}
-            <col style={{ width: isDesktop ? '18%' : isNarrow ? 64 : 96 }} />
+            <col style={{ width: isDesktop ? '14%' : isNarrow ? 64 : 84 }} />
             <col style={{ width: isDesktop ? '6%' : isNarrow ? 62 : 56 }} />
-            {isAdmin && <col style={{ width: isDesktop ? '6%' : 64 }} />}
+            {isAdmin && <col style={{ width: isDesktop ? '10%' : 92 }} />}
           </colgroup>
           <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
             <tr>
@@ -1621,7 +1617,18 @@ export default function StockPage() {
                 </span>
               </th>
               {isDesktop && <th style={{ ...thStyle, background: 'var(--navy)', textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Categoría</th>}
-              {isDesktop && <th style={{ ...thStyle, background: 'var(--navy)', textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Nivel</th>}
+              {isDesktop && (
+                <th
+                  onClick={() => setSortMode(s => s === 'nivel_desc' ? 'nivel_asc' : s === 'nivel_asc' ? 'default' : 'nivel_desc')}
+                  title="Ordenar por nivel de stock"
+                  style={{ ...thStyle, background: 'var(--navy)', textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)', cursor: 'pointer', userSelect: 'none' }}
+                >
+                  Nivel
+                  <span className="material-symbols-outlined" style={{ fontSize: 14, verticalAlign: 'middle', marginLeft: 2, color: sortMode === 'nivel_desc' || sortMode === 'nivel_asc' ? '#fff' : 'rgba(255,255,255,.35)' }}>
+                    {sortMode === 'nivel_asc' ? 'arrow_upward' : 'arrow_downward'}
+                  </span>
+                </th>
+              )}
               {isAdmin && <th style={{ ...thStyle, background: 'var(--navy)', textAlign: 'right', paddingRight: 8 }}>Precio</th>}
               <th style={{ ...thStyle, background: '#243a5e', color: 'rgba(255,255,255,.9)' }}>Stock</th>
               <th style={{ ...thStyle, background: 'var(--navy)' }}>Estado</th>
@@ -1679,7 +1686,6 @@ export default function StockPage() {
                         {isNarrow && (
                           <div style={{ fontSize: 9.5, color: 'var(--text-3)', marginTop: 2, fontFamily: "'DM Mono', monospace", display: 'flex', gap: 8 }}>
                             <span>mín <b style={{ color: '#d97706' }}>{p.stock_minimo ?? 0}</b></span>
-                            <span>crít <b style={{ color: '#dc2626' }}>{p.stock_critico ?? 0}</b></span>
                           </div>
                         )}
                       </div>
@@ -1697,7 +1703,7 @@ export default function StockPage() {
                     {isDesktop && (() => {
                       const min = p.stock_minimo ?? 0
                       const pct = min > 0 ? Math.min(100, Math.round((p.stock_actual / min) * 100)) : (p.stock_actual > 0 ? 100 : 0)
-                      const barColor = p.estado === 'critico' ? '#dc2626' : p.estado === 'bajo' ? '#d97706' : '#10b981'
+                      const barColor = p.estado !== 'ok' ? '#d97706' : '#10b981'
                       return (
                         <td style={{ padding: '11px 10px 11px 8px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1720,69 +1726,64 @@ export default function StockPage() {
                     {/* Stock + umbrales editables — HORIZONTAL alineado */}
                     <td style={{ padding: '8px 6px', background: 'color-mix(in srgb, var(--accent) 6%, transparent)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                        {/* Número de stock (sub-columna derecha, ancho fijo) */}
-                        <div style={{ width: 62, textAlign: 'right', flexShrink: 0 }}>
-                        {editingId === p.id ? (
+                        {/* Número de stock (sub-columna derecha, ancho fijo) — input siempre montado: onFocus abre teclado nativo en el mismo gesto */}
+                        <div style={{ width: 78, display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: 3, flexShrink: 0 }}>
                           <input
-                            ref={inputRef}
                             type="text"
                             inputMode="decimal"
-                            value={editValue}
+                            readOnly={!canEdit}
+                            value={editingId === p.id ? editValue : String(p.stock_actual)}
+                            onFocus={e => { if (canEdit) { startEdit(p); e.currentTarget.select() } }}
                             onChange={e => setEditValue(e.target.value)}
-                            onBlur={() => commitEdit(p.id)}
+                            onBlur={() => { if (editingId === p.id) commitEdit(p.id) }}
                             onKeyDown={e => {
-                              if (e.key === 'Enter') commitEdit(p.id)
-                              if (e.key === 'Escape') cancelEdit()
+                              if (e.key === 'Enter') e.currentTarget.blur()
+                              if (e.key === 'Escape') { cancelEdit(); e.currentTarget.blur() }
                             }}
-                            style={{ width: 54, textAlign: 'center', fontSize: 14, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--navy)', color: '#fff', border: '1px solid rgba(255,255,255,.3)', borderRadius: 6, padding: '3px 4px', outline: 'none' }}
-                          />
-                        ) : (
-                          <button
-                            onClick={e => { if (canEdit) { e.stopPropagation(); startEdit(p) } }}
+                            onClick={e => e.stopPropagation()}
                             title="Tocá para editar stock"
-                            style={{ background: 'none', border: 'none', cursor: canEdit ? 'pointer' : 'default', padding: 0, fontSize: 16, fontWeight: 800, lineHeight: 1, fontFamily: "'DM Mono', monospace", color: p.estado === 'critico' ? '#dc2626' : p.estado === 'bajo' ? '#d97706' : 'var(--text-1)', whiteSpace: 'nowrap' }}
-                          >
-                            {p.stock_actual}
-                            <span style={{ fontSize: 9, fontWeight: 400, color: 'var(--text-3)', marginLeft: 2 }}>{p.unidad_uso ?? p.unidad}</span>
-                          </button>
-                        )}
+                            style={{
+                              width: 54, textAlign: 'right', padding: '3px 4px',
+                              fontSize: isDesktop ? 14 : 16,
+                              fontWeight: 800, fontFamily: "'DM Mono', monospace", lineHeight: 1.1,
+                              color: editingId === p.id ? '#fff' : (p.estado !== 'ok' ? '#d97706' : 'var(--text-1)'),
+                              background: editingId === p.id ? 'var(--navy)' : 'transparent',
+                              border: editingId === p.id ? '1px solid rgba(255,255,255,.3)' : '1px solid transparent',
+                              borderRadius: 6, outline: 'none',
+                              cursor: canEdit ? 'pointer' : 'default',
+                            }}
+                          />
+                          <span style={{ fontSize: 9, color: 'var(--text-3)', flexShrink: 0 }}>{p.unidad_uso ?? p.unidad}</span>
                         </div>
 
-                        {/* Separador vertical + Mín/Crít — oculto en pantallas muy angostas (<480px) */}
+                        {/* Separador vertical + Mín — oculto en pantallas muy angostas (<480px) */}
                         {!isNarrow && <div style={{ width: 1, alignSelf: 'stretch', minHeight: 22, background: 'var(--border)', opacity: 0.6 }} />}
 
-                        {/* Mín / Crít (sub-columna izquierda, ancho fijo) */}
-                        {!isNarrow && <div style={{ width: 84, textAlign: 'left', flexShrink: 0 }}>
-                        {editThr?.id === p.id ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 3 }} onClick={e => e.stopPropagation()}>
+                        {/* Mín (sub-columna izquierda, ancho fijo) — input siempre montado: onFocus abre teclado nativo en el mismo gesto */}
+                        {!isNarrow && (
+                          <div style={{ width: 52, textAlign: 'left', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                            <span style={{ fontSize: 9.5, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace" }}>mín </span>
                             <input
-                              type="text" inputMode="decimal" value={editThr.min} autoFocus
+                              type="text"
+                              inputMode="decimal"
+                              readOnly={!canEdit}
+                              value={editThr?.id === p.id ? editThr.min : String(p.stock_minimo ?? 0)}
+                              onFocus={e => { if (canEdit) { setEditThr({ id: p.id, min: String(p.stock_minimo ?? 0) }); e.currentTarget.select() } }}
                               onChange={e => setEditThr(t => t && { ...t, min: e.target.value })}
-                              onKeyDown={e => { if (e.key === 'Enter') guardarUmbrales(); if (e.key === 'Escape') setEditThr(null) }}
-                              style={{ width: 30, textAlign: 'center', fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--bg)', color: '#d97706', border: '1px solid var(--border)', borderRadius: 5, padding: '2px 1px', outline: 'none' }}
+                              onBlur={() => { if (editThr?.id === p.id) guardarUmbrales() }}
+                              onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setEditThr(null); e.currentTarget.blur() } }}
+                              title="Tocá para editar el mínimo"
+                              style={{
+                                width: 32, textAlign: 'left', padding: '1px 2px',
+                                fontSize: isDesktop ? 10 : 16,
+                                fontWeight: 700, fontFamily: "'DM Mono', monospace", color: '#d97706',
+                                background: editThr?.id === p.id ? 'var(--bg)' : 'transparent',
+                                border: `1px solid ${editThr?.id === p.id ? 'var(--border)' : 'transparent'}`,
+                                borderRadius: 5, outline: 'none', cursor: canEdit ? 'pointer' : 'default',
+                              }}
                             />
-                            <input
-                              type="text" inputMode="decimal" value={editThr.crit}
-                              onChange={e => setEditThr(t => t && { ...t, crit: e.target.value })}
-                              onKeyDown={e => { if (e.key === 'Enter') guardarUmbrales(); if (e.key === 'Escape') setEditThr(null) }}
-                              style={{ width: 30, textAlign: 'center', fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--bg)', color: '#dc2626', border: '1px solid var(--border)', borderRadius: 5, padding: '2px 1px', outline: 'none' }}
-                            />
-                            <button onClick={guardarUmbrales} aria-label="Guardar umbrales" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
-                              <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#10b981' }}>check_circle</span>
-                            </button>
                           </div>
-                        ) : (
-                          <button
-                            onClick={e => { if (canEdit) { e.stopPropagation(); setEditThr({ id: p.id, min: String(p.stock_minimo ?? 0), crit: String(p.stock_critico ?? 0) }) } }}
-                            title="Tocá para editar mínimo y crítico"
-                            aria-label="Editar mínimo y crítico"
-                            style={{ background: 'none', border: 'none', cursor: canEdit ? 'pointer' : 'default', padding: 0, fontSize: 9.5, lineHeight: 1, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                          >
-                            <span>mín <b style={{ color: '#d97706' }}>{p.stock_minimo ?? 0}</b></span>
-                            <span>crít <b style={{ color: '#dc2626' }}>{p.stock_critico ?? 0}</b></span>
-                          </button>
                         )}
-                        </div>}
                       </div>
                     </td>
                     {/* Estado */}
@@ -1792,7 +1793,7 @@ export default function StockPage() {
                     {/* Acciones */}
                     {isAdmin && (
                     <td style={{ padding: '11px 4px', textAlign: 'center' }}>
-                      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                         {!p.fuera_de_uso && (
                         <button
                           onClick={(e) => { e.stopPropagation(); addToCart(p) }}
@@ -1801,7 +1802,7 @@ export default function StockPage() {
                           disabled={cart.some(it => it.producto_id === p.id)}
                           style={{ background: 'none', border: 'none', cursor: cart.some(it => it.producto_id === p.id) ? 'default' : 'pointer', padding: 0, display: 'flex' }}
                         >
-                          <span className="material-symbols-outlined" style={{ fontSize: 19, color: cart.some(it => it.producto_id === p.id) ? 'var(--accent)' : (p.estado === 'critico' || p.estado === 'bajo') ? 'var(--accent)' : 'var(--text-3)' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 19, color: cart.some(it => it.producto_id === p.id) ? 'var(--accent)' : p.estado !== 'ok' ? 'var(--accent)' : 'var(--text-3)' }}>
                             {cart.some(it => it.producto_id === p.id) ? 'shopping_cart' : 'add_shopping_cart'}
                           </span>
                         </button>
@@ -1814,6 +1815,16 @@ export default function StockPage() {
                         >
                           <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'var(--text-3)' }}>delete_sweep</span>
                         </button>
+                        {puedeEliminar && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeleteId(p.id) }}
+                          aria-label="Eliminar producto"
+                          title="Eliminar producto"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'var(--text-3)' }}>delete</span>
+                        </button>
+                        )}
                       </div>
                     </td>
                     )}
@@ -1859,17 +1870,30 @@ export default function StockPage() {
       {modalOpen && (
         <SheetChrome>
         <div
-          style={{ position: 'absolute', inset: 0, zIndex: 50, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}
+          style={{
+            position: 'absolute', inset: 0, zIndex: 50, display: 'flex', flexDirection: 'column',
+            justifyContent: isDesktop ? 'center' : 'flex-end',
+            alignItems: 'center',
+            padding: isDesktop ? 24 : 0,
+          }}
           onClick={e => { if (e.target === e.currentTarget) setModalOpen(false) }}
         >
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)' }} onClick={() => setModalOpen(false)} />
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,.32)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }} onClick={() => setModalOpen(false)} />
           <div
-            style={{ position: 'relative', background: 'var(--surface)', borderRadius: '16px 16px 0 0', maxHeight: '92%', display: 'flex', flexDirection: 'column', boxShadow: '0 -8px 40px rgba(0,0,0,.3)' }}
+            style={{
+              position: 'relative', background: 'var(--surface)',
+              borderRadius: isDesktop ? 16 : '16px 16px 0 0',
+              width: isDesktop ? 'min(560px, 92vw)' : '100%',
+              maxHeight: isDesktop ? '86vh' : '92%',
+              display: 'flex', flexDirection: 'column',
+              boxShadow: isDesktop ? '0 20px 60px rgba(0,0,0,.35)' : '0 -8px 40px rgba(0,0,0,.3)',
+              border: isDesktop ? '1px solid var(--border)' : 'none',
+            }}
             onClick={e => e.stopPropagation()}
           >
             {/* Header fijo — separado del contenido scrolleable por un hairline, no por una caja */}
             <div style={{ flexShrink: 0, padding: '20px 16px 14px', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 16px' }} />
+              {!isDesktop && <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 16px' }} />}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-1)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {editingProducto ? editingProducto.nombre : 'Nuevo producto'}
@@ -2003,7 +2027,7 @@ export default function StockPage() {
               </div>
 
               {/* ── Stock ── */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={lblStyle}>Stock actual</span>
                   <input type="text" inputMode="decimal" value={form.stock_actual} onChange={e => setForm(f => ({ ...f, stock_actual: e.target.value }))} style={inputStyle} />
@@ -2011,10 +2035,6 @@ export default function StockPage() {
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={{ ...lblStyle, color: 'rgba(245,158,11,.9)' }}>Mínimo</span>
                   <input type="text" inputMode="decimal" value={form.stock_minimo} onChange={e => setForm(f => ({ ...f, stock_minimo: e.target.value }))} style={{ ...inputStyle, borderColor: 'rgba(245,158,11,.4)' }} />
-                </label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span style={{ ...lblStyle, color: 'rgba(239,68,68,.9)' }}>Crítico</span>
-                  <input type="text" inputMode="decimal" value={form.stock_critico} onChange={e => setForm(f => ({ ...f, stock_critico: e.target.value }))} style={{ ...inputStyle, borderColor: 'rgba(239,68,68,.4)' }} />
                 </label>
               </div>
 
@@ -2306,7 +2326,7 @@ export default function StockPage() {
                   <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', marginTop: 4 }}>Por sector físico</div>
                   {sectores.map(sec => {
                     const items = stockeables.filter(p => p.sector_id === sec.id)
-                    const criticos = items.filter(p => p.estado === 'critico').length
+                    const bajos = items.filter(p => p.estado !== 'ok').length
                     return (
                       <button key={sec.id}
                         onClick={() => startQuick(items, sec.nombre, sec.id)}
@@ -2321,7 +2341,7 @@ export default function StockPage() {
                           </span>
                         </span>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                          {criticos > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: '#ef4444', background: 'rgba(239,68,68,.1)', padding: '2px 7px', borderRadius: 99 }}>{criticos} crítico{criticos > 1 ? 's' : ''}</span>}
+                          {bajos > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: '#d97706', background: 'rgba(245,158,11,.1)', padding: '2px 7px', borderRadius: 99 }}>{bajos} bajo{bajos > 1 ? 's' : ''}</span>}
                           <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{items.length} prod.</span>
                         </span>
                       </button>
@@ -2369,7 +2389,7 @@ export default function StockPage() {
               {sectores.length > 0 && <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', marginTop: 4 }}>Por categoría</div>}
               {categoriasFiltro.map(cat => {
                 const count = stockeables.filter(p => p.categoria === cat).length
-                const criticos = stockeables.filter(p => p.categoria === cat && p.estado === 'critico').length
+                const bajos = stockeables.filter(p => p.categoria === cat && p.estado !== 'ok').length
                 return (
                   <button key={cat}
                     onClick={() => startQuick(stockeables.filter(p => p.categoria === cat), cat)}
@@ -2377,7 +2397,7 @@ export default function StockPage() {
                   >
                     <span style={{ color: 'var(--text-1)' }}>{cat}</span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {criticos > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: '#ef4444', background: 'rgba(239,68,68,.1)', padding: '2px 7px', borderRadius: 99 }}>{criticos} crítico{criticos > 1 ? 's' : ''}</span>}
+                      {bajos > 0 && <span style={{ fontSize: 10, fontWeight: 700, color: '#d97706', background: 'rgba(245,158,11,.1)', padding: '2px 7px', borderRadius: 99 }}>{bajos} bajo{bajos > 1 ? 's' : ''}</span>}
                       <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{count} prod.</span>
                     </span>
                   </button>
@@ -2531,8 +2551,7 @@ export default function StockPage() {
             </div>
 
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 24px 0', gap: 12 }}>
-              {p.estado === 'critico' && <span style={{ fontSize: 10, fontWeight: 700, color: '#ef4444', background: 'rgba(239,68,68,.1)', padding: '3px 10px', borderRadius: 99 }}>CRÍTICO</span>}
-              {p.estado === 'bajo' && <span style={{ fontSize: 10, fontWeight: 700, color: '#f59e0b', background: 'rgba(245,158,11,.1)', padding: '3px 10px', borderRadius: 99 }}>BAJO</span>}
+              {p.estado !== 'ok' && <span style={{ fontSize: 10, fontWeight: 700, color: '#f59e0b', background: 'rgba(245,158,11,.1)', padding: '3px 10px', borderRadius: 99 }}>BAJO</span>}
               <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-1)', textAlign: 'center', lineHeight: 1.2 }}>{p.nombre}</div>
               <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{p.categoria}</div>
               <div style={{ fontSize: 13, color: 'var(--text-2)' }}>
@@ -2734,7 +2753,6 @@ export default function StockPage() {
                         </div>
                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
                           <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(245,158,11,.95)' }}>mín {s.sugerido_minimo} {s.unidad}</div>
-                          <div style={{ fontSize: 10, color: 'rgba(239,68,68,.9)' }}>crít {s.sugerido_critico} {s.unidad}</div>
                         </div>
                       </button>
                     )
@@ -2828,7 +2846,9 @@ export default function StockPage() {
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.6)' }} onClick={() => setDeleteId(null)} />
           <div style={{ position: 'relative', background: 'var(--surface)', borderRadius: 16, padding: 24, width: '100%', boxShadow: '0 8px 40px rgba(0,0,0,.4)' }}>
             <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', margin: '0 0 8px' }}>Eliminar producto</h3>
-            <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 20px' }}>Esta acción desactiva el producto. ¿Confirmás?</p>
+            <p style={{ fontSize: 13, color: 'var(--text-2)', margin: '0 0 20px' }}>
+              <strong>{productos.find(p => p.id === deleteId)?.nombre}</strong> se desactiva y deja de aparecer en el inventario. ¿Confirmás?
+            </p>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setDeleteId(null)} style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: '11px', fontSize: 13, fontWeight: 700, color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'inherit' }}>Cancelar</button>
               <button onClick={handleDelete} style={{ flex: 1, background: '#ef4444', border: 'none', borderRadius: 10, padding: '11px', fontSize: 13, fontWeight: 700, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>Eliminar</button>
@@ -3262,9 +3282,6 @@ export default function StockPage() {
                                 )}
                                 {item.stock_minimo !== null && (
                                   <p style={{ fontSize: 11, color: 'var(--text-2)', margin: 0 }}>Mín: <b>{item.stock_minimo}</b></p>
-                                )}
-                                {item.stock_critico !== null && (
-                                  <p style={{ fontSize: 11, color: '#ef4444', margin: 0 }}>Crít: <b>{item.stock_critico}</b></p>
                                 )}
                               </div>
                             </div>
