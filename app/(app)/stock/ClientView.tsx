@@ -1726,8 +1726,10 @@ export default function StockPage() {
                     {/* Stock + umbrales editables — HORIZONTAL alineado */}
                     <td style={{ padding: '8px 6px', background: 'color-mix(in srgb, var(--accent) 6%, transparent)' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                        {/* Número de stock (sub-columna derecha, ancho fijo) — input siempre montado: onFocus abre teclado nativo en el mismo gesto */}
-                        <div style={{ width: 78, display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: 3, flexShrink: 0 }}>
+                        {/* Número de stock (sub-columna derecha, ancho fijo) — input siempre montado: onFocus abre teclado nativo en el mismo gesto.
+                            La unidad solo se repite acá en desktop: en móvil ya está en el renglón de abajo del producto y sacarla evita
+                            que el bloque se desborde de la columna angosta (64px en <480px). */}
+                        <div style={{ width: isDesktop ? 78 : isNarrow ? 50 : 54, display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: 3, flexShrink: 0 }}>
                           <input
                             type="text"
                             inputMode="decimal"
@@ -1743,7 +1745,7 @@ export default function StockPage() {
                             onClick={e => e.stopPropagation()}
                             title="Tocá para editar stock"
                             style={{
-                              width: 54, textAlign: 'right', padding: '3px 4px',
+                              width: isDesktop ? 54 : isNarrow ? 50 : 54, textAlign: 'right', padding: isNarrow ? '3px 3px' : '3px 4px',
                               fontSize: isDesktop ? 14 : 16,
                               fontWeight: 800, fontFamily: "'DM Mono', monospace", lineHeight: 1.1,
                               color: editingId === p.id ? '#fff' : (p.estado !== 'ok' ? '#d97706' : 'var(--text-1)'),
@@ -1753,7 +1755,7 @@ export default function StockPage() {
                               cursor: canEdit ? 'pointer' : 'default',
                             }}
                           />
-                          <span style={{ fontSize: 9, color: 'var(--text-3)', flexShrink: 0 }}>{p.unidad_uso ?? p.unidad}</span>
+                          {isDesktop && <span style={{ fontSize: 9, color: 'var(--text-3)', flexShrink: 0 }}>{p.unidad_uso ?? p.unidad}</span>}
                         </div>
 
                         {/* Separador vertical + Mín — oculto en pantallas muy angostas (<480px) */}
