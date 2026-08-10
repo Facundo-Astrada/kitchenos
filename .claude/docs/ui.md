@@ -100,6 +100,12 @@ Todo input de conteo que llega con un valor anterior (heredado del turno pasado 
 
 Para que una vuelta de conteo se corra sin bajar el teclado: disparar el salto **solo con acciones explícitas** (Enter, o el CTA que cierra el ítem), nunca en el `blur` — si avanza al perder foco, tocar cualquier parte de la pantalla teletransporta a otra tarjeta. El orden tiene que replicar el del render e ignorar lo colapsado (saltar a un campo que no está en pantalla manda al usuario a la nada), saltear los ítems ya resueltos que no tienen campo, y hacer `scrollIntoView({ block: 'center' })` — con el teclado abierto la mitad de abajo de la pantalla no existe, `nearest` no alcanza.
 
+Los atajos de una vuelta (select-all, Enter→siguiente, auto-tilde al completar el dato, CTA que convierte el número en tarea) son **un paquete, no features sueltas**: si una fase los tiene todos y su gemela ninguna, la segunda se siente rota aunque funcione. Al agregar un atajo a la apertura de algo, revisar si el cierre lo necesita igual.
+
+## El nombre de un ítem no comparte línea con datos accesorios
+
+Nombre y chips (peso por porción, "receta", estado) en la misma fila flex significa que el chip se lleva su ancho y el nombre se trunca — el único dato que hay que leer queda en "Salsa criolla de la…" para que se vea un "88g/porc" que se puede leer abajo. El nombre se lleva la fila entera (dos líneas con `-webkit-line-clamp: 2`) y los chips bajan a una fila propia con `flexWrap`. Vale para celular y desktop por igual: el ancho de la tarjeta en una grilla de columnas es igual de escaso en los dos.
+
 ## Grilla CSS con `repeat(N,1fr)` no encoge por debajo del contenido — usar `minmax(0,1fr)`
 
 Un pill/badge con `whiteSpace:'nowrap'` dentro de una celda de grilla (ej. título de evento largo en el calendario) no tiene punto de corte — la columna `1fr` crece para acomodar ese ancho mínimo en vez de truncar, y la grilla entera se desborda del layout (se superpone a un panel al lado si hay un `flex` padre). Fix: `gridTemplateColumns: 'repeat(N, minmax(0, 1fr))'` en vez de `repeat(N,1fr)` — dejar que la columna sí pueda encoger a 0 para que el `overflow:hidden`+`textOverflow:ellipsis` del contenido interno recién ahí trunque contra el ancho real.

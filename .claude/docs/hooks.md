@@ -38,7 +38,7 @@
 
 16. **Un `Record<Enum, Config>` copiado en dos archivos puede desincronizarse silenciosamente** (key con label/color de otra key) y un array de ciclo puede no incluir todos los valores del union — TS no avisa en ninguno de los dos casos. Al copiar, verificar contra el tipo real (`grep 'export type X'`) que estén todos los valores.
 
-17. **Un hook "trae todo X del restaurante" montado dentro de cada ítem de una lista multiplica el request por la cantidad de ítems.** Extraer a un componente wrapper de montaje diferido (ej. al abrir una sheet), no dentro del ítem que se renderiza siempre.
+17. **Un hook "trae todo X del restaurante" montado dentro de cada ítem de una lista multiplica el request por la cantidad de ítems.** Extraer a un componente wrapper de montaje diferido (ej. al abrir una sheet), no dentro del ítem que se renderiza siempre. Si además el hook abre un canal de realtime, multiplica también las suscripciones: montarlo una vez en el contenedor y bajar los datos por props (`useNotasPlaza` se llama una vez en `ProduccionBoard` y expone `notasDe(plaza)`, en vez de una vez por columna).
 
 18. **Canal de realtime sin filtrar por `restaurante_id` y sin ignorar el eco de la propia escritura dispara un refetch completo en cada evento**, incluido el de la propia escritura optimista. Patrón: `filter: 'restaurante_id=eq.'+RESTAURANTE_ID`; `Map<id,timestamp>` de ids propios recientes para ignorar el eco; debounce (~400ms) antes de refetchear para que un batch dispare un solo `mutate()`.
 
