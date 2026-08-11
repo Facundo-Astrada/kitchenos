@@ -12,6 +12,7 @@ import { useAuth } from '@/lib/auth/context'
 import { createClient } from '@/lib/supabase/client'
 import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, supportsWebUSB, supportsWebBluetooth } from '@/lib/print/escpos'
 import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
+import { fechaEnTz, TZ_DEFAULT } from '@/lib/ops/turnos'
 
 // ── Helpers ─────────────────────────────────────────────
 const fmtDate = (d: string | null) => {
@@ -28,7 +29,7 @@ const fmtTime = (d: string) => {
   const date = new Date(d)
   return date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
 }
-const today = () => new Date().toISOString().slice(0, 10)
+const today = () => fechaEnTz(new Date(), TZ_DEFAULT)
 
 const EQUIPO_ICONS: Record<string, string> = {
   camara: 'kitchen', freezer: 'ac_unit', heladera: 'thermostat',

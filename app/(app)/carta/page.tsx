@@ -2319,6 +2319,7 @@ function RentabilidadView({
   }, [items, ventasMap])
 
   // ── Feature 2: Reprecio por inflación ──
+  const FC_SOSPECHOSO = 200 // por encima de esto es casi siempre un error de unidades, no un plato caro de verdad
   const [targetFC, setTargetFC] = useState('32')
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [aplicando, setAplicando] = useState(false)
@@ -2326,10 +2327,14 @@ function RentabilidadView({
     const t = parseFloat(targetFC.replace(',', '.'))
     if (!(t > 0)) return []
     return items
-      .filter(i => i.food_cost_pct != null && (i.food_cost_pct ?? 0) > t && (i.costo_porcion ?? 0) > 0)
+      .filter(i => i.food_cost_pct != null && (i.food_cost_pct ?? 0) > t && (i.food_cost_pct ?? 0) <= FC_SOSPECHOSO && (i.costo_porcion ?? 0) > 0)
       .map(i => ({ item: i, sugerido: Math.round((i.costo_porcion ?? 0) / (t / 100)) }))
       .sort((a, b) => (b.item.food_cost_pct ?? 0) - (a.item.food_cost_pct ?? 0))
   }, [items, targetFC])
+  const reprecioSospechosos = useMemo(
+    () => items.filter(i => (i.food_cost_pct ?? 0) > FC_SOSPECHOSO),
+    [items],
+  )
   const reprecioKey = reprecio.map(r => r.item.id).join(',')
   useEffect(() => { setSel(new Set(reprecio.map(r => r.item.id))) }, [reprecioKey]) // eslint-disable-line react-hooks/exhaustive-deps
   async function aplicarReprecio() {
@@ -2477,6 +2482,11 @@ function RentabilidadView({
               style={{ width: 56, border: '1px solid var(--border)', background: 'var(--surface)', borderRadius: 8, padding: '6px 8px', fontSize: 14, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: 'var(--text-1)', textAlign: 'center', outline: 'none' }} />
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)' }}>%</span>
           </div>
+          {reprecioSospechosos.length > 0 && (
+            <div style={{ background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 10, padding: '10px 12px', fontSize: 11.5, color: '#991b1b', lineHeight: 1.5 }}>
+              {reprecioSospechosos.length} plato{reprecioSospechosos.length !== 1 ? 's' : ''} con food cost por encima de {FC_SOSPECHOSO}% — casi siempre es un error de unidades en la receta (porciones o cantidad mal cargadas), no un plato caro de verdad. Se excluyeron del reprecio automático: revisalos en Recetario antes de tocar el precio.
+            </div>
+          )}
           {reprecio.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
               Ningún plato supera el food cost objetivo. 👌
