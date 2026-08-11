@@ -1,8 +1,17 @@
 # KitchenOS — Arquitectura Técnica
 
-**Stack:** Next.js 16.2.0 · React 19.2.4 · TypeScript 5 · Supabase · Tailwind v4 · Vercel
+**Stack:** Next.js 16.2.0 (App Router, Turbopack) · React 19.2.4 · TypeScript 5 · Supabase · Tailwind v4 · Vercel
 **Idioma UI:** Español argentino.
-**Target:** Mobile-first (Facundo prueba en celular). Desktop funciona pero no es prioridad.
+**Target:** Mobile-first en la app de gestión; tablet fija en Muro/KDS; desktop soportado (Mesa de Trabajo es BETA solo-desktop).
+**URL Producción:** https://kos-app-one.vercel.app · **Supabase:** https://clipcxcbtlibswfzsgzk.supabase.co
+
+Este documento es el mapa estructural (carpetas, inventario de hooks/rutas/tablas). El detalle vive en los docs condicionales — no se duplica acá:
+- Columnas reales, trampas de nombres, convenciones de datos → `.claude/docs/columnas.md`
+- Patrón de hooks, gotchas de Supabase, SWR, realtime → `.claude/docs/hooks.md`
+- RLS: función central, patrón de políticas → `.claude/docs/rls.md`
+- UI/CSS, componentes canónicos, tema → `.claude/docs/ui.md`
+- Importación (facturas, carta, stock) → `.claude/docs/importador.md`
+- Testing → `.claude/docs/testing.md`
 
 ---
 
@@ -11,510 +20,318 @@
 ```
 kitchenos/
 ├── app/
-│   ├── (app)/                    # Rutas protegidas (requieren auth)
-│   │   ├── layout.tsx            # Shell: AuthProvider, BottomNav, MoreMenu, KitchenCoachFAB
-│   │   ├── page.tsx              # Dashboard /
-│   │   ├── calendario/page.tsx
-│   │   ├── carta/page.tsx
-│   │   ├── checklist/page.tsx    # Mise en place
-│   │   ├── configuracion/page.tsx
-│   │   ├── facturas/page.tsx
-│   │   ├── haccp/page.tsx
-│   │   ├── merma/page.tsx
-│   │   ├── pase/page.tsx
-│   │   ├── pedidos/page.tsx
-│   │   ├── perfil/page.tsx
-│   │   ├── produccion/page.tsx
-│   │   ├── proveedores/page.tsx
-│   │   ├── recetario/
-│   │   │   ├── page.tsx          # Lista
-│   │   │   └── [id]/page.tsx     # Detalle
-│   │   ├── reportes/page.tsx
-│   │   ├── stock/page.tsx
-│   │   ├── tareas/page.tsx
-│   │   └── turnos/page.tsx
-│   ├── (auth)/
-│   │   ├── login/page.tsx
-│   │   └── register/page.tsx
-│   └── api/
-│       ├── coach/route.ts        # Kitchen Coach IA
-│       ├── facturas/route.ts     # OCR facturas con IA
-│       ├── listas-precios/route.ts  # OCR listas de precios
-│       ├── migrate/route.ts      # Admin: correr migraciones
-│       └── recetas/
-│           ├── import/route.ts   # Importar recetas con IA
-│           └── save/route.ts     # Guardar receta (service role, evita RLS)
+│   ├── (app)/                 # Rutas protegidas — shell con BottomNav/SidebarNav + KitchenCoachFAB
+│   │   ├── page.tsx           # Dashboard /
+│   │   ├── carta/, recetario/[id]/, stock/, facturas/, pedidos/, proveedores/
+│   │   ├── tareas/, checklist/, produccion/, operaciones/  # OPS: Mise+Producción+Planificación
+│   │   ├── espacios/          # Mesa de Trabajo (BETA, solo desktop)
+│   │   ├── haccp/, merma/, calendario/, turnos/, ventas/, clientes/
+│   │   ├── reportes/, reportes/personal/
+│   │   ├── configuracion/, configuracion/fiscal/
+│   │   ├── coach/, perfil/, onboarding/
+│   ├── (auth)/                 # login, register, registro-invitado — públicas
+│   ├── (servicio)/             # Tablets fijas de cocina/salón, layout propio
+│   │   ├── kds/                # Kitchen Display — sin Coach (regla inamovible)
+│   │   ├── salon/, salon/config/
+│   │   └── muro/               # Pantalla única de cocina, wake lock + rollover 05:00
+│   ├── (publico)/
+│   │   └── carta/[slug]/       # Carta pública QR sin login
+│   └── api/                    # 34 route handlers — ver §4
 ├── lib/
-│   ├── auth/
-│   │   └── context.tsx           # AuthProvider + useAuth hook
-│   ├── hooks/                    # 19 custom hooks
-│   │   ├── useCalendario.ts
-│   │   ├── useCarta.ts
-│   │   ├── useChecklist.ts
-│   │   ├── useDebounce.ts
-│   │   ├── useEquipo.ts
-│   │   ├── useFacturas.ts
-│   │   ├── useHaccp.ts
-│   │   ├── useKitchenCoach.ts
-│   │   ├── useMerma.ts
-│   │   ├── usePase.ts
-│   │   ├── usePedidos.ts
-│   │   ├── usePermisos.ts
-│   │   ├── useProduccion.ts
-│   │   ├── useProveedores.ts
-│   │   ├── useRecetas.ts
-│   │   ├── useReportes.ts
-│   │   ├── useRestauranteId.ts
-│   │   ├── useStock.ts
-│   │   └── useTareas.ts
-│   ├── supabase/
-│   │   ├── client.ts             # Browser client (anon key) - @supabase/ssr
-│   │   ├── server.ts             # SSR client para server components
-│   │   └── admin.ts              # Service role client (server-only, bypassea RLS)
-│   ├── constants.ts              # ROLES, PLAZAS, MODULOS, BOTTOM_NAV
-│   └── utils.ts                  # cn() helper (clsx + tailwind-merge)
+│   ├── auth/context.tsx        # AuthProvider + useAuth
+│   ├── hooks/                  # 51 hooks — ver §3
+│   ├── supabase/                client.ts (browser) · server.ts (SSR) · admin.ts (service role) · paginate.ts (fetchAllRows, tope 1000/req)
+│   ├── ops/                     mise.ts (upsertMiseChecklistItem), turnos.ts (hoyOperativo/fechaEnTz/turnoVigente), miseBus.ts, syncMise.ts
+│   ├── coach/                   history.ts, restaurante.ts, stream.ts, highlights.ts, tours.ts, types.ts, tools/{registry,propose}.ts
+│   ├── fiscal/                  wsaa.ts, wsfev1.ts, wsfe-directo.ts, qr.ts, index.ts (ARCA/AFIP)
+│   ├── comanda/                 stateMachine.ts (+ test) — máquina de estados comanda/ítem
+│   ├── offline/                 bumpQueue.ts (cola IndexedDB), useOnlineStatus.ts
+│   ├── servicio/                useAlertasSonoras.ts
+│   ├── salon/elementos.ts · stock/{precios,syncPrecios}.ts · checklist/secciones.ts · menus/activarMenu.ts
+│   ├── recetas/iaImport.ts · produccion/sugerencia.ts · haccp/recurrencia.ts · permisos/server.ts · api/tenant.ts · print/escpos.ts
+│   ├── exportPDF.ts, exportar.ts, demo.ts
+│   └── constants.ts             # ROLES, PLAZAS, MODULOS, BOTTOM_NAV
 ├── components/
-│   ├── coach/
-│   │   └── KitchenCoachFAB.tsx   # Chat flotante del asistente IA
-│   ├── dashboard/
-│   │   ├── DashboardHeader.tsx   # Avatar + KPIs (3/12) + botones tema/notifs
-│   │   ├── MiPlaza.tsx           # Widget mise en place de la plaza del user
-│   │   ├── ModoServicio.tsx      # UI sin datos reales (parcial)
-│   │   ├── ModulosGrid.tsx       # Grilla de accesos filtrada por rol
-│   │   ├── PasePreview.tsx       # Últimos mensajes del pase
-│   │   ├── StockCriticoSection.tsx
-│   │   └── WelcomeDashboard.tsx  # 5 pasos guiados para restaurantes nuevos
-│   ├── merma/
-│   │   └── MermaBottomSheet.tsx
-│   ├── providers/
-│   │   └── ThemeProvider.tsx     # dark/light mode
-│   └── shell/
-│       ├── ActionButton.tsx
-│       ├── BottomNav.tsx         # Navbar flotante (INICIO/TAREAS/RECETARIO/STOCK/MÁS)
-│       ├── Header.tsx
-│       ├── MoreMenu.tsx          # Menú "MÁS" con módulos secundarios
-│       ├── PageHeader.tsx
-│       └── RouteGuard.tsx        # Spinner mientras loading=true, lock screen si no hay perfil
-├── types/
-│   └── index.ts                  # Todos los tipos/interfaces (Rol, Producto, Receta, Tarea…)
-├── scripts/                      # Migraciones y seeds (*.mjs via pg o Management API)
-│   ├── migrate.mjs
-│   ├── migrate-carta.mjs
-│   ├── migrate-checklist.mjs
-│   ├── migrate-checklist-v2.mjs
-│   ├── migrate-facturas.mjs
-│   ├── migrate-final.mjs
-│   ├── migrate-haccp.mjs
-│   ├── migrate-pase.mjs
-│   ├── migrate-pedidos.mjs
-│   ├── migrate-s4s5.mjs
-│   ├── create-test-user.mjs
-│   ├── seed.mjs
-│   ├── seed-data.mjs
-│   ├── diagnose.mjs
-│   ├── gen-reporte.cjs
-│   └── verify-e2e.mjs
-├── proxy.ts                      # Auth middleware (Next 16 renombrado de middleware.ts)
-├── package.json
-├── tsconfig.json
-├── next.config.ts
-├── tailwind.config.ts
-├── .env.local                    # Secrets (NO commitear)
-├── .env.local.example
-├── CLAUDE.md                     # Instrucciones para Claude Code (este proyecto)
-├── AGENTS.md                     # Recordatorio: Next 16 tiene breaking changes
-├── README.md
-├── ESTADO-ACTUAL.md
-├── ARQUITECTURA.md               # Este archivo
-├── PENDIENTES.md
-└── DECISIONES.md
+│   ├── ui/          # Canónicos: SegmentedTabs, FilterChips, EmptyState, HeaderAction, Avatar, Num, SwitchRow, Skeleton, PhotoPicker, ImageCropModal
+│   ├── shell/        BottomNav, SidebarNav, DesktopShell, Header, MoreMenu, PageHeader, RouteGuard, DemoBanner
+│   ├── ops/          OpsPanel (fuente única plaza→sección→recipiente→cantidad), ProduccionBoard, CrearTareaSheet, NotasPlaza, QuickAdd, RecetaDrawer, ProduccionSheet(Conectada), EventoBanner, ItemOps, SeccionOps, OpsToggle, NotaImportanteCard
+│   ├── mise/         ProductoMiseCard, MiseGuiaSheet, MiseTourOverlay
+│   ├── coach/        KitchenCoachFAB, CoachPanelContent, CoachActionCard
+│   ├── salon/        PanZoomCanvas, Sillas, VistaCaja
+│   ├── stock/        MultiSelectFiltro, CarritoCompras
+│   ├── importador/   ImportadorUniversal, ImportadorArchivo, ImportadorFichasTecnicas
+│   ├── facturas/     BulkUploadDrawer, ExcelPOSImportModal
+│   ├── dashboard/    DashboardHeader, MiPlaza, ModoServicio (sin conectar), ModulosGrid, PasePreview, StockCriticoSection, WelcomeDashboard
+│   ├── pedidos/, produccion/, recetas/, checklist/, onboarding/, desktop/, merma/, pase/, providers/
+│   └── SWRFallback.tsx, PageTransition.tsx, ErrorReporter.tsx
+├── types/index.ts               # Tipos centralizados (un solo archivo — ver DECISIONES.md)
+├── e2e/salon-kds.spec.ts        # Playwright
+├── scripts/                     # ~50 scripts: migraciones históricas (migrate-*.mjs), seeds, fixes puntuales de datos, exportadores PDF
+├── proxy.ts                     # Auth (reemplaza middleware.ts — breaking change Next 16)
+├── CLAUDE.md, AGENTS.md, ESTADO-ACTUAL.md, ARQUITECTURA.md, PENDIENTES.md, DECISIONES.md, HISTORIAL.md
+└── .claude/{agents,docs,skills}/
 ```
 
 ---
 
-## 2. Hooks (19)
+## 2. Rutas de página
 
-Todos los hooks del cliente siguen el mismo patrón:
+| Grupo | Layout | Contenido |
+|---|---|---|
+| `(app)` | Shell con nav + Coach FAB, requiere sesión | Dashboard, Carta, Recetario, Stock, Compras (`/facturas`), Pedidos, Proveedores, Tareas/Checklist/Producción (embebidos en OPS `/operaciones`), Mesa de Trabajo (`/espacios`), HACCP, Merma, Calendario, Turnos, Ventas, Clientes, Reportes (+ `/reportes/personal`), Configuración (+ `/configuracion/fiscal`), Coach, Perfil, Onboarding |
+| `(auth)` | Público | `/login`, `/register`, `/registro-invitado` |
+| `(servicio)` | Layout propio, fondo fijo, tablets dedicadas | `/kds`, `/salon` (+ `/salon/config`), `/muro` |
+| `(publico)` | Sin sesión | `/carta/[slug]` — vidriera QR |
 
-```ts
-import { useEffect, useState, useCallback } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { useRestauranteId } from './useRestauranteId'
+`proxy.ts` marca públicas `/login`, `/register`, `/registro-invitado`, `/carta/` (con slash — `/carta` a secas es la gestión interna) y todo `/api/*`; el resto exige `user` vía `supabase.auth.getUser()`.
 
-export function useXxx() {
-  const RESTAURANTE_ID = useRestauranteId()
-  const supabase = createClient()
-  const [items, setItems] = useState<T[]>([])
-  const [loading, setLoading] = useState(true)
+---
 
-  const fetchXxx = useCallback(async () => { /* select + setItems */ }, [])
-  useEffect(() => { fetchXxx() }, [fetchXxx])
+## 3. Hooks (51)
 
-  // CRUD
-  async function agregar() { /* insert + refetch */ }
-  async function actualizar() { /* update + refetch */ }
-  async function eliminar() { /* delete o soft-delete + refetch */ }
+Todos siguen el patrón documentado en `.claude/docs/hooks.md` (guard `if (!RESTAURANTE_ID) return`, `createClient()` envuelto en `useMemo`, SWR para listas "al montar", realtime filtrado por `restaurante_id`). Acá solo el inventario.
 
-  return { items, loading, agregar, actualizar, eliminar, refetch: fetchXxx }
-}
-```
-
+### Core / Auth / Config
 | Hook | Qué hace | Tabla(s) |
 |---|---|---|
-| `useRestauranteId` | Lee `restaurante_id` del `AuthProvider` con fallback al UUID mock. Base de todos los demás hooks. | — |
-| `usePermisos` | Lee `rol_permisos` del restaurante actual y expone flags (`puedeEscribirStock`, `puedeEditarRecetas`, `puedeEliminar`, `modulosVisibles`). | `rol_permisos` |
-| `useDebounce` | Utilidad — no es dominio. | — |
-| `useRecetas` | CRUD de recetas + ingredientes. `calcFoodCost()` exportado. Paginación (`PAGE_SIZE=20`). **`agregarReceta` y `agregarIngrediente` van vía `/api/recetas/save` (service role) para evitar RLS**. Realtime sub a recetas + ingredientes. | `recetas`, `ingredientes` |
-| `useStock` | CRUD productos, cálculo de estado (ok/bajo/crítico). Usa columnas `stock_actual`, `stock_minimo`, `stock_critico`, `precio_unitario`. | `productos` |
-| `useTareas` | CRUD tareas con prioridad/plaza/checklist. `status` (NO `completada`), `fecha_limite`. Realtime. | `tareas` |
-| `useChecklist` | Secciones, items, registros y rutinas de mise en place por plaza. | `checklist_secciones`, `checklist_items`, `checklist_registros`, `checklist_rutina`, `checklist_rutina_registros` |
-| `useProveedores` | CRUD proveedores. Auto-creación desde facturas (si no existe, crea). | `proveedores` |
-| `useFacturas` | CRUD facturas y items. Integra con OCR IA (`/api/facturas`). Actualiza `precio_historial`. | `facturas`, `factura_items`, `precio_historial` |
-| `usePedidos` | CRUD pedidos, items, estados, recepción parcial, WhatsApp/PDF. | `pedidos`, `pedido_items` |
-| `useCarta` | CRUD carta, vínculo a receta, food cost preview, 86. | `carta_items` |
-| `usePase` | Mensajes del pase, realtime, filtros por turno/plaza/prioridad. Envío aún usa `USUARIO_MOCK` para `usuario_nombre` (ver PENDIENTES). | `pase_mensajes` |
-| `useHaccp` | 3 sub-módulos: temperaturas (con bulk), vencimientos, limpieza. Bulk insert + export PDF. | `haccp_equipos`, `haccp_temperaturas`, `haccp_vencimientos`, `haccp_limpieza`, `haccp_limpieza_registros` |
-| `useReportes` | Agrega datos de facturas, recetas, stock, producción para CMV y gráficos. No escribe; solo queries read-only. | (varias) |
-| `useCalendario` | CRUD eventos, auto-genera eventos desde pedidos (fecha_entrega_esperada), vista mensual + semanal. | `eventos` |
-| `useEquipo` | CRUD miembros, upsert turnos (unique por miembro+fecha), CRUD puestos. | `equipo_miembros`, `turnos`, `puestos` |
-| `useProduccion` | Planilla del día, asignación por miembro, platos compuestos y componentes. | `platos_compuestos`, `plato_componentes`, `produccion_diaria` |
-| `useMerma` | Registro de merma con motivo/plaza/turno/costo. Integra con `/merma` módulo y MermaBottomSheet. | `merma` |
-| `useKitchenCoach` | Cliente del endpoint `/api/coach`. Envía messages + contexto (stock crítico, vencimientos, food cost). | — |
+| `useRestauranteId` | Lee `restaurante_id` del `AuthProvider`; `''` mientras carga — base de todos los demás. | — |
+| `usePermisos` | Resuelve módulos visibles: admin→todo, puesto→`permisos_app`±overrides, fallback `rol_permisos`. | `rol_permisos`, `restaurantes`, `equipo_miembros`, `puestos` |
+| `useUserRol` | Rol crudo del usuario actual. | `equipo_miembros` |
+| `useRestauranteConfig` | Lee/escribe `restaurantes.configuracion` (JSONB), una sola key SWR compartida. | `restaurantes` |
+| `usePlazasCustom` | Plazas custom por restaurante — JSONB en `configuracion`, sin tabla nueva. | `restaurantes`, `checklist_items`, `checklist_secciones`, `espacio_plazas` |
+| `useImpresionConfig` | Config de impresión (ESC/POS) por establecimiento. | `restaurantes` |
+| `useTurnosServicio` | Turnos de servicio configurables (almuerzo/cena/…) del restaurante. | `restaurantes` |
+| `useOnboardingProgress` | Progreso del wizard de alta + conteos para `WelcomeDashboard`. | `user_restaurantes`, `restaurantes`, + conteos varios |
+| `useDebounce` | Utilidad genérica, no es dominio. | — |
+| `useIsDesktop` / `useDesktopShortcuts` | Detección de viewport + atajos de teclado en desktop. | — |
 
----
-
-## 3. API Routes
-
-Todas son `POST` salvo donde se indique. Corren en el runtime de Node.js (no edge) porque algunas usan el service role key y llaman al Anthropic API.
-
-| Ruta | Método | Qué hace |
+### Stock / Productos / Compras
+| Hook | Qué hace | Tabla(s) |
 |---|---|---|
-| `/api/coach` | POST | Proxy a Claude Sonnet 4.6. Recibe `messages[]` + `context` (stockCritico, vencimientos, foodCost, usuario, rol, restaurante). Usa el `ANTHROPIC_API_KEY`. Arma system prompt con el contexto y devuelve `content`. |
-| `/api/facturas` | POST | OCR de factura con Claude Sonnet 4.6. Recibe imagen (base64) o texto. Extrae `{proveedor_nombre, proveedor_cuit, fecha, tipo_factura, items[], subtotal, iva_total, total}`. Tiene demo result cuando no hay API key. |
-| `/api/listas-precios` | POST | OCR de lista de precios de proveedor. Claude Sonnet 4.6. Devuelve `items[]` con nombre, precio, unidad, cantidad_envase. |
-| `/api/recetas/import` | POST | Importación de receta con IA. Acepta `mode: 'camera' | 'gallery' | 'file' | 'audio' | 'text' | 'glink' | 'multi'`. **Haiku (`claude-haiku-4-5-20251001`)** para texto simple, **Sonnet (`claude-sonnet-4-6`)** para imágenes y multi-import. También soporta `adjust` (ajustes sobre resultado previo, Haiku). Devuelve `{recetas}[]` para multi o resultado único. |
-| `/api/recetas/save` | POST | **Crítico** — Usa `createAdminClient()` (service role) para insertar receta + ingredientes bypasseando RLS. Tres modos: (a) receta + ingredientes batch, (b) `addIngredientsOnly=true` para sumar ingredientes a receta existente, (c) solo receta. Llamado desde `useRecetas.agregarReceta`. |
-| `/api/migrate` | POST | Admin utility — corre migraciones SQL via service role. No para uso frontend. |
+| `useStock` | CRUD productos, cálculo de estado (ok/bajo — "crítico" sigue en DB en 0). | `productos` |
+| `useStockSectores` / `useStockEstantes` | CRUD de sectores físicos y sub-niveles, alimentan el board de Stock. | `stock_sectores`, `stock_estantes` |
+| `useCategoriasProducto` | CRUD categorías dinámicas de producto. | `categorias_producto` |
+| `useProveedores` | CRUD proveedores; auto-creación desde facturas. | `proveedores`, `facturas` |
+| `usePreciosProveedores` | Comparador de precios entre proveedores para un producto. | `productos`, `factura_items` |
+| `useFacturas` | CRUD facturas + items, integra OCR IA, actualiza `precio_historial`. | `facturas`, `factura_items`, `productos`, `precio_historial`, `ingredientes`, `proveedores`, `recetas` |
+| `useCategoriasGasto` | CRUD categorías de gasto (filtro de privacidad en Compras). | `categorias_gasto`, `facturas` |
+| `usePedidos` | CRUD pedidos/items, recepción parcial (suma a `productos.stock_actual`). | `pedidos`, `pedido_items`, `facturas`, `factura_items`, `productos` |
+
+### Recetario / Carta / Menús / Packaging
+| Hook | Qué hace | Tabla(s) |
+|---|---|---|
+| `useRecetas` | CRUD recetas + ingredientes, `calcFoodCost()`. Altas vía `/api/recetas/save` (service role). | `recetas`, `carta_items`, `ingredientes` |
+| `useRecetasLite` | Variante liviana — solo nombres/porciones, para autocompletar. | `recetas` |
+| `useCarta` | CRUD carta, categorías, vínculo receta↔plato, `ComposicionEditor` (Plato/Menú/Evento). | `carta_categorias`, `carta_items`, `plato_recetas`, `plato_packaging`, `recetas`, `ingredientes`, `productos` |
+| `useMenus` | CRUD menús (fijo/evento) + preparaciones; activación crea tareas. | `menus`, `menu_preparaciones`, `tareas` |
+| `usePackagingGrupos` | Grupos de packaging reutilizables y su asignación a platos. | `packaging_grupos`, `packaging_grupo_items`, `plato_packaging`, `productos` |
+
+### OPS — Tareas / Mise / Checklist
+| Hook | Qué hace | Tabla(s) |
+|---|---|---|
+| `useTareas` | CRUD tareas, ventana de 60 días, realtime. | `tareas` |
+| `useChecklist` | Secciones, items, registros, rutinas y auditorías del mise. | `checklist_secciones`, `checklist_items`, `checklist_registros`, `checklist_rutina`, `checklist_rutina_registros`, `checklist_auditorias` |
+| `useNotasPlaza` | Notas por plaza (misma tabla que el Pase). | `pase_mensajes` |
+| `useCierresTurno` | Entrega de plaza por jornada+turno (`cierres_turno`), corte para el plegado del pase. | `cierres_turno` |
+| `useProduccionRegistros` | Registros puntuales de producción (Mesa de Trabajo). | `produccion_registros` |
+
+### Comunicación / HACCP
+| Hook | Qué hace | Tabla(s) |
+|---|---|---|
+| `usePase` | Mensajes del pase, realtime, filtros turno/plaza/prioridad. | `pase_mensajes` |
+| `useHaccp` | Temperaturas (bulk), vencimientos, limpieza + sync a rutinas OPS. | `haccp_equipos`, `haccp_temperaturas`, `haccp_vencimientos`, `haccp_limpieza`, `haccp_limpieza_registros`, `checklist_rutina` |
+
+### Calendario / Equipo / Producción / Merma
+| Hook | Qué hace | Tabla(s) |
+|---|---|---|
+| `useCalendario` | Eventos, notas por día, refleja pedidos/menús activados. | `eventos`, `pedidos`, `produccion_diaria`, `tareas`, `menus`, `calendario_nota_items`, `proveedores` |
+| `useEquipo` | CRUD miembros, upsert turnos, CRUD puestos. | `equipo_miembros`, `turnos`, `puestos` |
+| `useFichaje` | Clock-in/out, costo laboral (`horas_total` es `GENERATED ALWAYS`, no mandarla). | `turnos_personal`, `equipo_miembros` |
+| `useProduccion` | Planilla del día, asignación por miembro, componentes de platos. | `platos_compuestos`, `plato_componentes`, `produccion_diaria` |
+| `useMerma` | Registro de merma, descuenta `stock_actual`. | `merma`, `productos` |
+
+### Ventas / Reportes
+| Hook | Qué hace | Tabla(s) |
+|---|---|---|
+| `useVentas` | Importación/CRUD de ventas manuales + items (Excel/CSV/IA). | `ventas`, `ventas_items` |
+| `useVentasCerradas` | Ventas ya cobradas desde el Salón (comandas cerradas). | `cuentas`, `comandas` |
+| `useReporteVentas` | Agregación de ventas del Salón para Reportes → Caja. | `cuentas`, `equipo_miembros`, `pagos`, `medios_pago`, `comandas` |
+| `useReportes` | Agrega facturas/recetas/stock/producción/presupuesto para CMV y gráficos — solo lectura. | (múltiples, ver hook) |
+
+### Salón / Servicio / Cobro
+| Hook | Qué hace | Tabla(s) |
+|---|---|---|
+| `useEspacios` | Board Mesa de Trabajo: espacios físicos → plazas. | `espacios`, `espacio_plazas` |
+| `useMesas` | Mapa de mesas (forma/tamaño/rotación), vínculo a cuenta abierta. | `mesas`, `cuentas` |
+| `useSalonElementos` | Mobiliario decorativo del canvas del Salón. | `salon_elementos` |
+| `useEstaciones` | Estaciones del KDS. | `estaciones` |
+| `useComandas` | CRUD comandas/items/modificadores, bump, eventos de cocina. | `comandas`, `comanda_items`, `comanda_item_modificadores`, `eventos_cocina` |
+| `useMediosPago` | CRUD medios de pago. | `medios_pago` |
+| `useCuenta` | Cuenta abierta de una mesa: pagos, cierre. | `pagos`, `cuentas`, `mesas` |
+| `useCajaTurno` | Apertura/cierre de caja, movimientos, arqueo ciego. | `cajas_turnos`, `caja_movimientos`, `pagos` |
+
+### Clientes / Coach
+| Hook | Qué hace | Tabla(s) |
+|---|---|---|
+| `useClientes` | CRUD clientes + cuentas corrientes (fiado). | `clientes`, `cuentas` |
+| `useCuentaCorriente` | Movimientos de cuenta corriente de un cliente. | `cuenta_corriente_movimientos` |
+| `useKitchenCoach` | Cliente del endpoint `/api/coach` — streaming, sin tabla propia. | — |
 
 ---
 
-## 4. Supabase — 28 tablas
+## 4. API Routes (34)
 
-URL: `https://clipcxcbtlibswfzsgzk.supabase.co`. Management API: `https://api.supabase.com/v1/projects/clipcxcbtlibswfzsgzk/database/query` (para inspeccionar columnas antes de escribir queries — ver §Convenciones).
+Corren en runtime Node (no edge) — usan service role y/o Anthropic API. Todas `POST` salvo donde se indique.
 
-### Core
-```sql
-restaurantes        (id uuid PK, nombre, ciudad, configuracion jsonb, created_at)
-user_restaurantes   (id uuid PK, user_id uuid FK auth.users, restaurante_id FK, rol, created_at)
-rol_permisos        (id, restaurante_id FK, rol, modulos_visibles text[],
-                     puede_editar_stock/recetas/carta/equipo/eliminar bool,
-                     created_at, updated_at)
-```
+| Ruta | Qué hace |
+|---|---|
+| `/api/coach` | Chat del Kitchen Coach (Sonnet 4.6). Contexto server-side (stock crítico, vencimientos, food cost) + tool use agéntico (`crear_tarea`, `marcar_86`, `registrar_merma`, sugerir producción). |
+| `/api/coach/confirm` | Confirma/ejecuta una acción propuesta por el Coach (`lib/coach/tools/propose.ts`). |
+| `/api/recetas/save` | **Único endpoint con `createAdminClient()`** — bypassea RLS. Insert receta+ingredientes, solo-receta, sumar ingredientes, o "Completar con IA". |
+| `/api/recetas/import` | Importación de receta con IA — modos cámara/galería/archivo/audio/texto/glink/multi. Haiku para texto/ajustes, Sonnet para imágenes/multi. |
+| `/api/recetas/auto-link-ingredientes` | Vincula ingredientes de receta a productos de stock existentes por nombre. |
+| `/api/carta/import` | Importación de ítems de carta con IA (Haiku). |
+| `/api/carta/86` | Marca/desmarca un ítem de carta como no disponible. |
+| `/api/facturas` | OCR de factura (Sonnet) — proveedor, items, IVA, total. Demo result sin API key. |
+| `/api/listas-precios` | OCR de lista de precios de proveedor (Sonnet). |
+| `/api/ventas/import` | Importación de ventas desde Excel/CSV/texto libre con IA (Haiku). |
+| `/api/importador/facturas-universal` | Importador universal de facturas (múltiples formatos), motor central del flujo de importación. |
+| `/api/importador/facturas-fudo` | Importador de facturas desde export de Fudo. |
+| `/api/importador/stock-fudo` | Importador de stock desde export de Fudo. |
+| `/api/importador/productos-desde-facturas` | Crea/matchea productos de stock a partir de items de facturas ya cargadas. |
+| `/api/importador/fichas-tecnicas` | Importa fichas técnicas (recetas con costeo) en bloque (Sonnet). |
+| `/api/importador/mapeo` | Sugiere mapeo de columnas para un archivo importado (Haiku). |
+| `/api/importador/import` | Ejecuta la importación ya mapeada/confirmada. |
+| `/api/importador/undo` | Deshace el último lote importado. |
+| `/api/stock/rebuild` | Reconstruye stock desde el histórico de facturas/movimientos. |
+| `/api/stock/sync-precio` | Sincroniza el precio de un producto puntual con su última factura. |
+| `/api/stock/sync-precios-facturas` | Sincronización masiva de precios desde facturas. |
+| `/api/stock/sugerir-minimos` | Sugiere `stock_minimo`/`stock_critico` en base a consumo histórico. |
+| `/api/stock/import-planilla` | Importa una planilla de stock (Haiku para mapeo de columnas). |
+| `/api/produccion/sugerencia` | Motor de reglas + narración IA para "Sugerir producción" (nunca cambia números). |
+| `/api/produccion/sugerencia/explicar` | Explica en lenguaje natural una sugerencia de producción (Haiku). |
+| `/api/salon/prep-list-update` | Incrementa `checklist_items.demanda_viva` al enviar una comanda desde el Salón. |
+| `/api/salon/merma-auto` | Registra merma automática desde eventos del Salón (ej. anulación de comanda). |
+| `/api/ingest/escpos` | Ingesta de tickets/comandas vía protocolo ESC/POS (impresoras fiscales/comandas). |
+| `/api/fiscal/emitir` | Emisión de comprobante fiscal (WSFEv1/ARCA). |
+| `/api/fiscal/config` | Lee/escribe `config_fiscal` del restaurante. |
+| `/api/fiscal/comprobantes` | Consulta comprobantes fiscales emitidos. |
+| `/api/invitar` | Invita un usuario nuevo al restaurante (Supabase Auth invite). |
+| `/api/cron/reset-demo` | GET, `CRON_SECRET` — resetea nocturnamente el restaurante demo clonando El Rescoldo real. |
+| `/api/log-error` | Recibe errores del cliente (`ErrorReporter.tsx`) para diagnóstico. |
 
-### Productos / Inventario
-```sql
-productos           (id, nombre, categoria, unidad,
-                     stock_actual numeric, stock_minimo numeric, stock_critico numeric,  ← OJO: NO "cantidad"
-                     precio_unitario numeric, proveedor_id FK,
-                     restaurante_id FK, activo, created_at, updated_at)
-```
+---
 
-### Proveedores / Compras
-```sql
-proveedores         (id, nombre, telefono, rubro, dias_entrega text[], activo, restaurante_id, created_at, updated_at)
-facturas            (id, restaurante_id, proveedor_nombre, proveedor_cuit,
-                     numero_factura, tipo_factura, fecha_factura date, fecha_carga,
-                     condicion_pago, subtotal, iva_total, total numeric,
-                     imagen_url, status, notas, usuario_id, created_at)
-factura_items       (id, factura_id FK, producto_nombre, producto_id FK,
-                     cantidad, unidad, precio_unitario, alicuota_iva,
-                     subtotal, precio_anterior, created_at)
-precio_historial    (id, producto_id FK, precio_anterior, precio_nuevo,
-                     variacion_porcentaje, factura_id FK, fecha, restaurante_id)
-pedidos             (id, proveedor_id FK, proveedor_nombre, fecha_pedido date,
-                     fecha_entrega_esperada date, status, notas,
-                     total_estimado, usuario_id, restaurante_id, created_at)
-pedido_items        (id, pedido_id FK, producto_nombre, producto_id FK,
-                     cantidad, unidad, precio_estimado,
-                     cantidad_recibida, recibido bool)
-```
+## 5. Supabase — 78 tablas
 
-### Recetario y Carta
-```sql
-recetas             (id, nombre, categoria, porciones, tiempo_min,
-                     precio_venta numeric, procedimiento text,
-                     status text DEFAULT 'published',   -- 'published' | 'draft'
-                     activa bool DEFAULT true,
-                     restaurante_id FK, created_at, updated_at)
-ingredientes        (id, receta_id FK, nombre, cantidad numeric, unidad,
-                     costo_unitario numeric, unidad_costo, created_at)
-carta_items         (id, nombre, descripcion, precio_venta numeric, categoria,
-                     receta_id FK, disponible bool, foto_url, orden,
-                     restaurante_id FK, created_at)
-```
+Todas con RLS habilitado, aislamiento multi-tenant real vía `mi_restaurante_id()` (ver `.claude/docs/rls.md` para la función y el patrón de políticas — **no son `USING(true)`**, esa era una nota de mayo 2026 ya superada). Columnas exactas y trampas de nombres → `.claude/docs/columnas.md`.
 
-### Tareas y Checklist
-```sql
-tareas              (id, titulo, descripcion,
-                     status text,                     -- 'pendiente' | 'en_proceso' | 'completada' — NO "completada"
-                     prioridad, categoria, plaza, asignado_a, creado_por,
-                     fecha_limite timestamptz,        -- NO "fecha_vencimiento"
-                     tiempo_estimado_min, receta_id FK,
-                     checklist jsonb, completed_at,
-                     restaurante_id FK, created_at)
-checklist_secciones        (id, nombre, icono, plaza, orden, restaurante_id, created_at)
-checklist_items            (id, plaza, seccion, seccion_id FK, nombre,
-                            cantidad, unidad, prioridad (sp/p/ref/chk),
-                            ubicacion, receta_id FK, orden,
-                            restaurante_id, created_at)
-checklist_registros        (id, checklist_item_id FK, fecha date, turno,
-                            completado bool, cantidad_actual, usuario_id, hora_completado)
-checklist_rutina           (id, nombre, frecuencia (diaria/semanal/quincenal/mensual),
-                            plaza, ultima_vez, orden, restaurante_id, created_at)
-checklist_rutina_registros (id, rutina_id FK, fecha, completado, usuario_id)
-```
-
-### Comunicación
-```sql
-pase_mensajes       (id, texto, tipo, prioridad, plaza,
-                     turno_fecha date, turno_tipo (almuerzo/cena/noche),
-                     usuario_id, usuario_nombre, leido_por jsonb,
-                     restaurante_id, created_at)
-```
-
-### HACCP
-```sql
-haccp_equipos              (id, nombre, tipo, ubicacion, plaza,
-                            temp_min, temp_max, activo, restaurante_id, created_at)
-haccp_temperaturas         (id, equipo_id FK, temperatura, dentro_rango bool,
-                            observacion, accion_correctiva, usuario_id, restaurante_id, created_at)
-haccp_vencimientos         (id, producto_nombre, producto_id FK, lote,
-                            fecha_apertura, fecha_vencimiento date,
-                            ubicacion, status, usuario_id, restaurante_id, created_at)
-haccp_limpieza             (id, tarea_limpieza, area, frecuencia,
-                            usuario_id, ultimo_registro, restaurante_id, created_at)
-haccp_limpieza_registros   (id, limpieza_id FK, fecha, completado, usuario_id, observacion, created_at)
-```
-
-### Calendario y Equipo
-```sql
-eventos             (id, titulo, descripcion, tipo (proveedor/reserva/stock/reunion/otro),
-                     fecha_inicio, fecha_fin, hora_inicio, hora_fin, color,
-                     recurrente bool, frecuencia, proveedor_id FK,
-                     usuario_id, restaurante_id, created_at)
-equipo_miembros     (id, auth_user_id FK auth.users, nombre, apellido, rol,
-                     puesto_id FK, plaza_asignada, telefono, email,
-                     fecha_ingreso date, activo, foto_url,
-                     restaurante_id, created_at)
-turnos              (id, miembro_id FK, fecha date, turno_tipo,   -- UNIQUE (miembro_id, fecha)
-                     hora_entrada, hora_salida, notas, restaurante_id, created_at)
-puestos             (id, nombre, descripcion, tareas_funciones,
-                     permisos_app text[], restaurante_id, created_at)
-```
-
-### Producción
-```sql
-platos_compuestos   (id, nombre, categoria, descripcion, foto_url,
-                     carta_item_id FK, orden, activo,
-                     restaurante_id, created_at, updated_at)
-plato_componentes   (id, plato_compuesto_id FK, nombre, receta_id FK,
-                     notas_produccion, orden, created_at)
-produccion_diaria   (id, fecha date, plato_compuesto_id FK, componente_id FK,
-                     status (pendiente/en_proceso/listo), cantidad,
-                     usuario_asignado, notas, restaurante_id, created_at, updated_at)
-```
-
-### Merma
-```sql
-merma               (id, producto_nombre, producto_id FK, cantidad, unidad,
-                     motivo (vencimiento/error_coccion/mala_recepcion/...),
-                     motivo_detalle, plaza, usuario_id, usuario_nombre,
-                     fecha date, turno (apertura/servicio/cierre),
-                     costo_estimado, restaurante_id, created_at)
-```
+| Dominio | Tablas |
+|---|---|
+| Core / Auth (4) | `restaurantes`, `perfiles`, `user_restaurantes`, `rol_permisos` |
+| Productos / Stock (5) | `productos`, `categorias_producto`, `stock_sectores`, `stock_estantes`, `precio_historial` |
+| Proveedores / Compras (6) | `proveedores`, `facturas`, `factura_items`, `pedidos`, `pedido_items`, `categorias_gasto` |
+| Recetario / Carta (7) | `recetas`, `ingredientes`, `carta_items`, `carta_categorias`, `plato_recetas`, `plato_plazas`, `plato_packaging` |
+| Menús (2) | `menus`, `menu_preparaciones` |
+| Packaging (2) | `packaging_grupos`, `packaging_grupo_items` |
+| Tareas / OPS / Mise (8) | `tareas`, `checklist_secciones`, `checklist_items`, `checklist_registros`, `checklist_rutina`, `checklist_rutina_registros`, `checklist_auditorias`, `cierres_turno` |
+| Comunicación (2) | `pase_mensajes`, `calendario_nota_items` |
+| HACCP (5) | `haccp_equipos`, `haccp_temperaturas`, `haccp_vencimientos`, `haccp_limpieza`, `haccp_limpieza_registros` |
+| Calendario / Equipo (6) | `eventos`, `evento_items`, `puestos`, `equipo_miembros`, `turnos`, `turnos_personal` |
+| Producción (5) | `platos_compuestos`, `plato_componentes`, `produccion_diaria`, `produccion_registros`, `estaciones` |
+| Merma (1) | `merma` |
+| Ventas (2) | `ventas`, `ventas_items` |
+| Salón / Servicio (9) | `espacios`, `espacio_plazas`, `mesas`, `salon_elementos`, `comandas`, `comanda_items`, `comanda_item_modificadores`, `eventos_cocina`, `cuentas` |
+| Caja / Pagos (4) | `medios_pago`, `pagos`, `cajas_turnos`, `caja_movimientos` |
+| Fiscal ARCA (5) | `config_fiscal`, `comprobantes`, `comprobante_items`, `fiscal_config`, `fiscal_tickets` |
+| Clientes (2) | `clientes`, `cuenta_corriente_movimientos` |
+| Presupuestos (1) | `presupuestos` |
+| Coach (1) | `coach_acciones` |
+| Demo / Sistema (1) | `demo_visitas` |
 
 ### Relaciones clave
-- Todo `restaurante_id` → `restaurantes.id`.
-- `user_restaurantes.user_id` → `auth.users.id` (Supabase Auth).
-- `equipo_miembros.auth_user_id` → `auth.users.id` (opcional, para login).
-- `ingredientes.receta_id` → `recetas.id`.
-- `carta_items.receta_id` → `recetas.id`.
-- `factura_items.factura_id` → `facturas.id`; `factura_items.producto_id` → `productos.id`.
-- `pedido_items.pedido_id` → `pedidos.id`; `pedido_items.producto_id` → `productos.id`.
-- `checklist_items.seccion_id` → `checklist_secciones.id`; opcionalmente `.receta_id` → `recetas.id`.
-- `turnos.miembro_id` → `equipo_miembros.id`; UNIQUE (miembro_id, fecha).
-- `equipo_miembros.puesto_id` → `puestos.id`.
-- `plato_componentes.plato_compuesto_id` → `platos_compuestos.id`; `.receta_id` → `recetas.id`.
+Todo `restaurante_id` → `restaurantes.id`. `user_restaurantes.user_id` / `equipo_miembros.auth_user_id` → `auth.users.id`. `ingredientes.receta_id` y `carta_items.receta_id` → `recetas.id`. `plato_recetas.plato_id` (no `receta_id`) → `carta_items.id`. Varios links son polimórficos sin FK por decisión (`menu_preparaciones.ref_id`, `checklist_secciones` ↔ HACCP por nombre `ilike`) — documentados como tales en `columnas.md`, no son deuda.
 
-### RLS
-Todas las tablas tienen RLS habilitado. **Las políticas actuales son permisivas (`USING (true)`)** para desarrollo. Antes de producción multi-tenant real hay que cambiarlas a:
-```sql
-USING (restaurante_id IN (
-  SELECT restaurante_id FROM user_restaurantes WHERE user_id = auth.uid()
-))
-```
-Mientras tanto, operaciones sensibles (como crear recetas desde el cliente con anon key) van por API routes que usan service role (ver `/api/recetas/save`).
+### Demo pública
+`reset_demo_restaurante()` clona El Rescoldo real → restaurante demo cada noche (cron con `CRON_SECRET`). Clona 59 de las 78 tablas — el resto son seeds únicos o no scopeadas por restaurante. **Toda tabla nueva con `restaurante_id` debe sumarse a esa función** o queda vacía en la demo.
 
 ---
 
-## 5. Autenticación
+## 6. Autenticación
 
-### Flujo
-1. **`proxy.ts`** (raíz del proyecto, reemplaza `middleware.ts` por breaking change en Next.js 16) intercepta cada request. Crea un `createServerClient` de `@supabase/ssr`, lee cookies, llama a `supabase.auth.getUser()`. Si no hay sesión y la ruta no es pública (`/login`, `/register`, `/api/*`), redirige a `/login`. Si hay sesión y estás en `/login` o `/register`, redirige a `/`.
-2. **`AuthProvider`** (`lib/auth/context.tsx`) se monta en `(app)/layout.tsx` y wrappea toda la app protegida. Dos `useEffect`:
-   - El primero escucha `supabase.auth.onAuthStateChange` y también hace `getSession()` inicial como fallback. Solo setea `user`, no hace queries DB (para evitar deadlocks del cliente Supabase).
-   - El segundo dispara cuando `user` cambia y carga el perfil: `SELECT rol, restaurante_id FROM user_restaurantes WHERE user_id = u.id`, luego `SELECT nombre, apellido, plaza_asignada FROM equipo_miembros WHERE auth_user_id = u.id`. Mapea a `PerfilAuth` con `initials`, `color` (derivado hash del UUID), `rol` (via `mapRol()`).
-3. **`RouteGuard`** (`components/shell/RouteGuard.tsx`) muestra spinner si `loading=true`, lock screen si no hay perfil, y children si todo OK.
+1. **`proxy.ts`** (raíz, reemplaza `middleware.ts` — breaking change Next 16) crea un `createServerClient` de `@supabase/ssr`, llama `supabase.auth.getUser()`. Sin sesión y ruta no pública → `/login`. Con sesión en `/login`/`/register` → `/`.
+2. **`AuthProvider`** (`lib/auth/context.tsx`) — dos `useEffect` separados para evitar deadlock: (1) setea `user` vía `onAuthStateChange`+`getSession()`, sin queries DB; (2) carga perfil cuando `user` cambia (`user_restaurantes` → `equipo_miembros`), con reintentos y backoff para la race de hard-navigation. Detalle completo, incluidos los gotchas de reintento/timeout, en `.claude/docs/hooks.md` → "AuthProvider — cómo funciona".
+3. **`RouteGuard`** — spinner mientras `loading`, lock screen sin perfil, children si OK.
 
 ### Roles (DB → app)
-El mapeo DB→app en `mapRol()` existe porque los roles legacy en DB no matchean uno-a-uno con los roles de UI:
-| DB rol | App `Rol` type |
-|---|---|
-| `admin` | `admin` |
-| `sous_chef` | `chef` |
-| `cocinero` | `parrilla` / `frios` / `calientes` / `pase` / `pasteleria` / `panaderia` / `linea` (según `plaza_asignada`) |
-| `bachero` | `ayudante` |
-| `compras` | `admin` (mapeo especial — usuario de compras tiene acceso admin-like pero a subset de módulos) |
+`mapRol()` traduce roles legacy de DB a los roles de UI: `admin→admin`, `sous_chef→chef`, `cocinero→` (plaza asignada), `bachero→ayudante`, `compras→admin` (subset de módulos).
 
 ### Sign up
-`signUp(email, password, restauranteName, nombre?, apellido?)` hace 5 pasos en secuencia:
-1. `supabase.auth.signUp` → crea auth user.
-2. Genera `restauranteId` con `crypto.randomUUID()` y hace `INSERT INTO restaurantes`.
-3. `INSERT INTO user_restaurantes (user_id, restaurante_id, rol='admin')`.
-4. `INSERT INTO equipo_miembros (nombre, apellido, rol='admin', auth_user_id, restaurante_id, activo=true)`.
-5. Seed de 5 filas en `rol_permisos` (admin, sous_chef, cocinero, bachero, compras) con el set de módulos visibles y flags de permiso correspondientes.
-
-Luego setea `perfil` directamente en el context para evitar que `loadPerfil` quede atrapado en la race condition de "onAuthStateChange disparó antes de que existan las filas".
-
-### Sign out
-`supabase.auth.signOut()` + `window.location.href = '/login'` para forzar full reload y limpiar la cookie server-side.
+`signUp()`: crea `auth.users` → `restaurantes` → `user_restaurantes` (rol admin) → `equipo_miembros` → seed de `rol_permisos` (5 roles). Setea `perfil` directo en el context para evitar la race de `onAuthStateChange`.
 
 ---
 
-## 6. IA (Anthropic)
+## 7. IA (Anthropic)
 
-### Modelos usados
 | Caso | Modelo | Por qué |
 |---|---|---|
-| Kitchen Coach chat | `claude-sonnet-4-6` | Necesita razonar con contexto estructurado del restaurante. |
-| OCR facturas | `claude-sonnet-4-6` | Imágenes + extracción estructurada compleja (items + IVA + total). |
-| OCR listas de precios | `claude-sonnet-4-6` | Ídem — imágenes y muchos productos. |
-| Importar receta — texto simple | `claude-haiku-4-5-20251001` | Haiku alcanza y es barato/rápido. |
-| Importar receta — imagen/foto/PDF | `claude-sonnet-4-6` | Visión multimodal, mejores resultados. |
-| Importar receta — ajustes sobre resultado | `claude-haiku-4-5-20251001` | Es transformación text-in / text-out. |
-| Multi-import (archivo con varias recetas) | `claude-sonnet-4-6` | Necesita parsing robusto de documento largo. |
+| Kitchen Coach chat | `claude-sonnet-4-6` | Razonamiento con contexto estructurado + tool use agéntico. |
+| OCR facturas / listas de precios | `claude-sonnet-4-6` | Imágenes + extracción estructurada compleja. |
+| Importar receta — imagen/multi-import/fichas técnicas | `claude-sonnet-4-6` | Visión multimodal, documentos largos. |
+| Importar receta — texto simple / ajustes | `claude-haiku-4-5-20251001` | Transformación texto-in/texto-out, barato y rápido. |
+| Import de carta, ventas, planilla de stock, mapeo de columnas, explicar sugerencia de producción, productos desde facturas | `claude-haiku-4-5-20251001` | Extracción estructurada de complejidad media. |
 
-### Prompts clave
-- **Coach** (`/api/coach/route.ts`): system prompt con contexto inyectado — usuario, rol, restaurante, stock crítico, vencimientos próximos, food cost por receta. "Respondé de forma concisa y práctica."
-- **Recetas import** (`/api/recetas/import/route.ts`): devuelve JSON estricto con `nombre_sugerido, categoria_sugerida, porciones, tiempo_minutos, ingredientes[], procedimiento[]`. Reglas: comas decimales (formato argentino), unidades `kg|g|l|ml|u`. Multi-import usa `{recetas: [...]}`. Hay `getDemoResult()` de fallback cuando no hay créditos.
-- **Facturas** (`/api/facturas/route.ts`): extrae `{proveedor_nombre, proveedor_cuit, fecha_factura, tipo_factura, numero_factura, condicion_pago, items[], subtotal, iva_total, total, notas}`. Montos en ARS sin símbolo. Normaliza nombres ("LOMO VETADO X KG" → "Lomo vetado"). Alícuotas `21 | 10.5 | 27 | 0`.
-- **Listas de precios** (`/api/listas-precios/route.ts`): extrae `{items: [{producto_nombre, precio_unitario, unidad, cantidad_envase, observaciones}], moneda, fecha_detectada, notas}`.
-
-Todos los endpoints devuelven demo data cuando `ANTHROPIC_API_KEY` no está seteada, para poder testear la UI sin consumir créditos.
+Todos los endpoints devuelven demo data si `ANTHROPIC_API_KEY` no está seteada.
 
 ---
 
-## 7. Variables de entorno
+## 8. Variables de entorno
 
-`.env.local` (no se commitea):
 ```bash
-# Supabase — proyecto clipcxcbtlibswfzsgzk
+# Supabase
 NEXT_PUBLIC_SUPABASE_URL=https://clipcxcbtlibswfzsgzk.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key>        # usado por browser client
-SUPABASE_SERVICE_ROLE_KEY=<service role key>     # server-only, bypassea RLS
-SUPABASE_URL=https://clipcxcbtlibswfzsgzk.supabase.co
-SUPABASE_MANAGEMENT_TOKEN=sbp_...                # para migraciones via Management API
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_...   # browser — NUNCA sb_secret_...
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_...             # server-only, lib/supabase/admin.ts
+SUPABASE_MANAGEMENT_TOKEN=sbp_...                   # migraciones/DDL vía Management API
 
 # IA
-ANTHROPIC_API_KEY=sk-ant-...                     # Claude Sonnet 4.6 + Haiku 4.5
-OPENAI_API_KEY=sk-...                            # reservado, no se usa actualmente
+ANTHROPIC_API_KEY=sk-ant-...
+
+# App
+NEXT_PUBLIC_SITE_URL=https://kos-app-one.vercel.app  # links de invitación/reset (Supabase Auth redirect)
+CRON_SECRET=...                                       # protege /api/cron/reset-demo
 ```
-
-**Reglas:**
-- `NEXT_PUBLIC_*` se inyecta al bundle del browser — nunca poner secrets acá.
-- `SUPABASE_SERVICE_ROLE_KEY` solo se usa en `lib/supabase/admin.ts` que solo debe importarse desde API routes / server components / scripts.
-- En Vercel, las mismas vars están configuradas en Project Settings → Environment Variables (Production + Preview).
+Las mismas vars están en Vercel → Project Settings → Environment Variables (Production + Preview). `NEXT_PUBLIC_*` se inyecta al bundle del browser — nunca un secret ahí.
 
 ---
 
-## 8. Dependencias (package.json)
+## 9. Dependencias
 
-**Runtime:**
-- `next` 16.2.0 (App Router con Turbopack)
-- `react` 19.2.4 / `react-dom` 19.2.4
-- `@supabase/ssr` ^0.9.0 (cookies + server client)
-- `@supabase/supabase-js` ^2.99.2
-- `jspdf` ^4.2.1 + `jspdf-autotable` ^5.0.7 (PDFs — fichas técnicas, reportes, HACCP)
-- `xlsx` ^0.18.5 (import/export Excel)
-- `clsx` ^2.1.1 + `tailwind-merge` ^3.5.0 (helper `cn()`)
-- `pg` ^8.20.0 (scripts de migración directo a Postgres)
+**Runtime clave:** `next` 16.2.0, `react`/`react-dom` 19.2.4, `@supabase/ssr` + `@supabase/supabase-js`, `swr` (cache estándar de hooks-lista), `zod` (validación), `jspdf`+`jspdf-autotable`, `xlsx`, `framer-motion`/`motion`, `qrcode`, `react-easy-crop`, `node-forge` (fiscal ARCA), `unpdf`, `pg` (scripts), `clsx`+`tailwind-merge`.
 
-**Dev:**
-- `typescript` ^5, `@types/node`, `@types/react`, `@types/react-dom`
-- `tailwindcss` ^4 + `@tailwindcss/postcss` ^4
-- `eslint` ^9 + `eslint-config-next` 16.2.0
+**Dev:** `typescript` ^5, `tailwindcss` ^4, `eslint` ^9 (roto — ver PENDIENTES), `vitest` ^4 + `@vitest/coverage-v8`, `@playwright/test`, `mammoth`, `adm-zip`.
 
-**No instalado (por decisión):**
-- Chart.js / Recharts → gráficos con CSS divs
-- date-fns / dayjs → Date API nativa
-- zod → validación ad-hoc en los hooks
-- formik / react-hook-form → `useState` controlado
+**No instalado (por decisión):** Chart.js/Recharts (gráficos = CSS divs), date-fns/dayjs (Date API nativa + helpers propios de `lib/ops/turnos.ts`), react-hook-form/formik (`useState` controlado).
 
 ---
 
-## 9. Convenciones de código
+## 10. Convenciones
 
-### Generales
-- **Idioma:** Español argentino en UI, comentarios en español o inglés según contexto.
-- **Nombres de archivo:** `camelCase.ts` para hooks (`useRecetas.ts`), `PascalCase.tsx` para componentes (`DashboardHeader.tsx`), `kebab-case` para rutas de Next (`/carta`, `/pase`).
-- **Barrel files:** no se usan, imports absolutos vía `@/`.
-- **Paths:** `@/` alias mapea a la raíz del proyecto (configurado en `tsconfig.json`).
+Reglas completas en CLAUDE.md (críticas), `.claude/docs/hooks.md` (hooks/Supabase) y `.claude/docs/ui.md` (UI/CSS). Resumen:
+- **Archivos:** `camelCase.ts` hooks, `PascalCase.tsx` componentes, `kebab-case` rutas. Sin barrel files, imports vía `@/`.
+- **TypeScript:** `strict: true`, tipos centralizados en `types/index.ts`.
+- **Iconos:** Material Symbols Outlined únicamente — no emoji, no SVG custom.
+- **Gráficos:** CSS divs (`width: X%`) — no Chart.js.
+- **PDFs:** `jsPDF` + `jspdf-autotable`. **Excel:** `xlsx`.
 
-### Hooks pattern
-- Siempre usar `const supabase = createClient()` del browser client (`@/lib/supabase/client`).
-- Siempre usar `const RESTAURANTE_ID = useRestauranteId()` — nunca hardcodear el mock ID.
-- `useCallback` con deps completas cuando captura valores del hook. Las deps vacías `[]` son un bug latente.
-- Realtime subs en `useEffect`, cleanup con `removeChannel`.
+---
 
-### Queries Supabase
-- **Antes de escribir una query nueva, verificar columnas reales de la tabla**. Los nombres no siempre son intuitivos por deuda de migraciones:
-  - `productos` usa `stock_actual` (no `cantidad`), `stock_minimo`, `stock_critico`, `precio_unitario`.
-  - `tareas` usa `status` (no `completada`), `fecha_limite` (no `fecha_vencimiento`), `completed_at`.
-  - `recetas` usa `status` (`'published' | 'draft'`) y `activa` bool para soft-delete.
-- Para verificar: Management API
-  ```bash
-  curl -X POST https://api.supabase.com/v1/projects/clipcxcbtlibswfzsgzk/database/query \
-       -H "Authorization: Bearer $SUPABASE_MANAGEMENT_TOKEN" \
-       -H "Content-Type: application/json" \
-       -d '{"query":"SELECT column_name FROM information_schema.columns WHERE table_name = '\''productos'\''"}'
-  ```
+## 11. Testing
 
-### UI / CSS
-- **CSS variables** (no hex hardcoded en componentes):
-  - `var(--navy)` #1c2d4a — header primario
-  - `var(--accent)` #4361a0 — botones, énfasis
-  - `var(--bg)` — background general (light/dark)
-  - `var(--surface)` — cards y sheets
-  - `var(--border)` — separadores
-  - `var(--text-1/2/3)` — niveles de contraste de texto
-- **Navy header pattern:** `background: 'var(--navy)', padding: '46px 16px 14px'` (46px para status bar iOS).
-- **Food cost colors:** verde <30%, amarillo 30-35%, rojo >35%.
-- **Dark mode:** true black (#0a0a0a bg, #141414 surface, #222222 border).
-- **Floating navbar:** `BottomNav` con `border-radius: 20px` y `margin: '0 10px 10px'`. Ocupa ~62-66px + 10px margen = ~72-76px. Los FABs deben ir en `bottom: 100+` para no taparse.
-- **Iconos:** Material Symbols Outlined (`<span className="material-symbols-outlined">add</span>`). NO emoji, NO SVG custom.
+Vitest (`npm test`) para lógica pura (máquina de estados de comandas, turnos/pase de turno, bus del mise). Playwright (`npm run test:e2e`, requiere dev server + `npx playwright install chromium`) para `e2e/salon-kds.spec.ts`. CI corre typecheck+vitest+build en cada push/PR. Convenciones completas en `.claude/docs/testing.md`.
 
-### Gráficos
-- **No hay Chart.js**. Todos los charts son divs con `width: ${x}%` y CSS. Razón: peso del bundle y simplicidad; la app es mobile-first y los gráficos son dashboards sencillos.
+---
 
-### PDFs
-- `jsPDF` + `jspdf-autotable`. Patrón: crear `new jsPDF()`, setear fuentes, `autoTable(doc, {head, body, ...})`, `doc.save('filename.pdf')`.
+## 12. Deploy
 
-### TypeScript
-- `strict: true`. `any` solo en callbacks de terceros cuando es inevitable.
-- Tipos en `types/index.ts` — un solo archivo centralizado (ver DECISIONES.md para la razón).
-- Interfaces para shape de datos DB, types unión para enums (`TipoFactura`, `EstadoStock`, `Rol`).
-
-### Deploy
-- `npx vercel --prod --yes` desde la raíz del proyecto. Vercel detecta Next.js automáticamente.
-- Antes de deploy: `npx next build` para verificar typecheck + compilación limpia.
-- URL de prod: https://kitchenos-three.vercel.app
+`git push` a `main` → GitHub (`Facundo-Astrada/kitchenos`) → Vercel auto-deploy. `npm run build` (typecheck + compilación) es el gate real antes de pushear — `npm run lint` está roto (ver PENDIENTES) y no bloquea. URL de prod: https://kos-app-one.vercel.app.

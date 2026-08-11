@@ -6,16 +6,16 @@ Lista priorizada de lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL.md`.
 
 ## 🔴 Crítico
 
-### Verificar el Muro en una tablet real (ago 2026)
-`/muro` (MURO-PLAN.md F3) se verificó a fondo contra datos reales pero solo en navegador de escritorio/mobile emulado — es la única pantalla del proyecto que no se puede dar por cerrada sin probarla en el dispositivo real. Dos puntos que el plan marcó como los más frágiles y que ningún navegador de escritorio ejercita:
-1. **Wake lock** — que la pantalla no se apague sola con la tablet colgada horas sin que nadie la toque.
-2. **Rollover de las 05:00** — el timer que recalcula la jornada operativa cada 30s; confirmar que a esa hora el muro pasa solo al turno nuevo sin que haga falta recargar.
-
-También pendiente: probar la franja de entregas con una entrega real (hoy solo se vio con "—" en todas las plazas), y ver en la tablet la franja de notas de plaza (ago 2026) — que se lea a dos metros y que aparezca sola por realtime al escribirla desde el Mise.
+Sin ítems abiertos ahora mismo.
 
 ---
 
 ## 🟠 Alto
+
+### Muro en tablet real — quedan dos puntos sueltos (ago 2026)
+`/muro` (MURO-PLAN.md F3) ya se colgó en una tablet real de la cocina. **Wake lock y rollover de las 05:00, verificados y funcionando** (11/08). El wake lock usa la Screen Wake Lock API estándar (`app/(servicio)/muro/page.tsx` ~L66-75) y degrada en silencio si el navegador no la soporta (tablets viejas, Safari <16.4) — no es un bug a arreglar, pero si el dispositivo cambia de modelo conviene resubir el timeout de pantalla del SO como red de contención.
+
+Falta: probar la franja de entregas con una entrega real (hoy solo se vio con "—" en todas las plazas), y ver en la tablet la franja de notas de plaza (ago 2026) — que se lea a dos metros y que aparezca sola por realtime al escribirla desde el Mise.
 
 ### Mise en dos dispositivos — lo único sin verificar del bloque de agosto
 Todo el resto del bloque OPS/Mise (apertura, cierre, entrega de plaza, plegado del pase) ya se usó en servicio real en Bros. Falta el escenario multi-dispositivo, que es el más frágil y el que no se puede probar solo: tablet en el Mise sin tocar + marcar la tarea desde el celular → tiene que pintarse sola en 1-3 s. Y tildar/destildar rápido un ítem: tiene que quedar como lo dejaste, no revertirse a los 2 s por el eco de realtime (`hooks.md` #23).
@@ -28,9 +28,6 @@ Código completo (endpoint `/api/invitar`, UI en Equipo, página `/registro-invi
 
 ### Fiscal ARCA — homologación end-to-end
 Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/emitir/route.ts`). Falta: certificado real de ARCA del contribuyente, probar contra el servidor de testing de AFIP, URLs de prod en `config_fiscal`, cachear token/sign WSAA en Supabase.
-
-### ARQUITECTURA.md severamente desactualizado (encontrado 11/08 por research externo)
-Es el primer doc que lee un agente nuevo y describe una app que ya no existe: dice "28 tablas" (son 44+), "19 hooks" (son 49, lista vieja), políticas RLS "permisivas USING(true) para desarrollo" (hoy es RLS real multi-tenant), URL de prod vieja (`kitchenos-three.vercel.app`), no menciona salón/KDS/muro/ventas/clientes/fiscal, y cuenta 17 rutas cuando hay 24+. Riesgo real: un agente que lo lea escribe queries contra un esquema viejo y asume RLS permisivo. Regenerar desde el código o, como mínimo, ponerle un encabezado "desactualizado, ver ESTADO-ACTUAL.md y .claude/docs/columnas.md" hasta que se pueda regenerar entero.
 
 ### OPS Consolidación — diferido
 Reset de `demanda_viva` al aperturar la plaza (hoy solo se lee, el salón la incrementa, nadie la resetea). "Copiar a otro día" e "Ingredientes consolidados" (se sacaron con la planilla legacy) — reimplementar sobre `tareas` si el usuario los pide.

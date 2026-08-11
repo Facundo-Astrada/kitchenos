@@ -47,43 +47,11 @@ Este archivo es una foto del presente (qué existe, qué falta). El detalle hist
 
 ---
 
-## 2. Tablas de Supabase (44 total)
+## 2. Tablas de Supabase (78 total, regenerado 11/08)
 
-Ver `ARQUITECTURA.md` §Supabase para el esquema completo con columnas y relaciones.
+Ver `ARQUITECTURA.md` §5 para el desglose completo por dominio (20 grupos) y §Supabase para relaciones clave. Columna por columna → `.claude/docs/columnas.md`.
 
-### Core (3)
-`restaurantes`, `user_restaurantes`, `rol_permisos`
-
-### Operación diaria (7)
-`productos`, `proveedores`, `facturas`, `factura_items`, `precio_historial`, `pedidos`, `pedido_items`
-
-### Recetario y Carta (5)
-`recetas`, `ingredientes`, `carta_items` (+ `tags TEXT[]`), `carta_categorias`, `plato_recetas` (+ `plaza`)
-
-### Tareas y Checklist (7)
-`tareas` (+ `completado_por`, `estado_por`/`estado_at` — autoría de listo / en_curso·duda, para el Muro), `checklist_secciones`, `checklist_items`, `checklist_registros` (+ `restaurante_id`, lo llena un trigger), `checklist_rutina`, `checklist_rutina_registros`, `cierres_turno` (entrega de plaza por jornada+turno)
-
-### Comunicación (1)
-`pase_mensajes`
-
-### HACCP (5)
-`haccp_equipos`, `haccp_temperaturas`, `haccp_vencimientos`, `haccp_limpieza`, `haccp_limpieza_registros`
-
-### Calendario y Equipo (4)
-`eventos`, `equipo_miembros`, `turnos`, `puestos`
-
-### Producción (4)
-`platos_compuestos`, `plato_componentes` (+ `plaza`, `cantidad_diaria`, `unidad`), `plato_plazas` (ingredientes[] por plaza), `produccion_diaria`
-
-### Merma (1)
-`merma`
-
-### Servicio / Salón / Cobro / Fiscal (12)
-`estaciones`, `comandas`, `comanda_items`, `comanda_item_modificadores`, `eventos_cocina`, `mesas` (pos_x/pos_y + forma/ancho/alto/rotacion), `cuentas`, `medios_pago`, `pagos`, `config_fiscal`, `comprobantes`, `comprobante_items`
-
-**Total: 44 tablas** con RLS habilitado. Aislamiento multi-tenant real vía `mi_restaurante_id()`. Todas las políticas UPDATE tienen `WITH CHECK` explícito.
-
-Nota: hay tablas adicionales sumadas después de este conteo (`menus`, `menu_preparaciones`, `stock_sectores`, `stock_estantes`, `cajas_turnos`, `caja_movimientos`, `salon_elementos`, `checklist_auditorias`, `presupuestos`, `demo_visitas`, `calendario_nota_items`, etc.) — ver `.claude/docs/columnas.md` para el detalle columna por columna de cada una.
+**Total: 78 tablas** con RLS habilitado. Aislamiento multi-tenant real vía `mi_restaurante_id()` (ver `.claude/docs/rls.md`).
 
 ---
 
