@@ -55,6 +55,7 @@ No se cargan solos: abrirlos cuando la tarea entra en su tema.
 | Escribir una query o migración contra una tabla existente | `.claude/docs/columnas.md` o `/supabase-check` |
 | Aplicar o revisar políticas RLS | `.claude/docs/rls.md` |
 | Tocar el flujo de importación (facturas, carta, stock) | `.claude/docs/importador.md` |
+| Escribir o tocar un test (Vitest/Playwright) | `.claude/docs/testing.md` |
 
 Endpoints clave de importación: `/api/importador/facturas-universal` · `/api/stock/rebuild` · `/api/recetas/auto-link-ingredientes`
 
@@ -73,35 +74,24 @@ curl -X POST https://api.supabase.com/v1/projects/clipcxcbtlibswfzsgzk/database/
 
 ---
 
-## Skills disponibles
+## Departamento de Ingeniería (Claude)
 
-| Skill | Cuándo usarla |
-|---|---|
-| `/new-module nombre` | Crear módulo nuevo (page + hook) |
-| `/impacto símbolo` | Análisis de impacto antes de tocar código compartido (hook, helper, componente) — grafo local con graphify, sin tokens |
-| `/coach-screen pantalla` | Integrar Kitchen Coach completo en una pantalla (contexto + targets + tour + suggestions + acciones) |
-| `/supabase-check tabla` | Verificar columnas reales antes de queries |
-| `/debug-error descripción` | Resolver errores (400, 42501, datos vacíos) |
-| `/deploy` | Build + validación + deploy a Vercel |
-| `/pr-review` | Revisar cambios antes de deployar |
-| `/estimate feature` | Estimar esfuerzo de una feature |
-| `/add-rls tabla` | Aplicar RLS multi-tenant correcto a una tabla |
-| `/new-app nombre` | Scaffoldear proyecto nuevo (Antigravity) |
-| `/create-skill nombre` | Crear skill nueva |
-| `/update-status` | Cerrar sesión: actualizar PENDIENTES, ESTADO-ACTUAL y docs |
+Todo lo que Claude usa para trabajar en KitchenOS — agentes, skills y docs — organizado por función. No es una capa nueva: es el mismo motor de siempre, mapeado para saber a quién recurrir según lo que estés por hacer.
 
-## Agentes disponibles
+| Categoría | Qué cubre | Quién |
+|---|---|---|
+| **Resumen** | Foto del estado del proyecto | `ESTADO-ACTUAL.md` (28 módulos), `SESION.md` (última sesión) |
+| **Proyectos** | Backlog y rationale | `PENDIENTES.md` (🔴🟠🟡🟢), `DECISIONES.md`, `/estimate feature` |
+| **Código** | Construir features y schema | agente `db-designer`, agente `migrator`, `/new-module nombre`, `/impacto símbolo`, docs `hooks.md`/`ui.md`/`columnas.md`/`importador.md`, skills `supabase`, `supabase-postgres-best-practices`, `vercel-composition-patterns`, `vercel-react-best-practices`, `web-design-guidelines` |
+| **Pruebas** | Convenciones de testing | `.claude/docs/testing.md`, `npm test` (Vitest), `npm run test:e2e` (Playwright) |
+| **Despliegues** | Build, validar, salir a prod | `/deploy`, `/pr-review`, `git push` → Vercel auto |
+| **Monitoreo** | Salud de producción | `/prod-status` (advisories de Supabase, estado del último deploy, deuda técnica abierta), skill `vercel-optimize` (costo/performance de lo ya deployado) |
+| **Errores** | Diagnosticar y arreglar bugs | agente `bug-fixer`, `/debug-error descripción`, `/supabase-check tabla`, doc `rls.md` |
+| **Documentación** | Mantener docs y manuales al día | `/update-manual`, `/update-status`, `/shot` (captura pantallas de prod para manuales/verificación) |
+| **Equipo** | El roster de agentes | `db-designer`, `ui-auditor`, `spec-to-code`, `migrator`, `bug-fixer`, `rls-enforcer` — invocar con "Usá el agente [nombre] para esto: ..." |
+| **Configuración** | RLS, integraciones, meta | `CLAUDE.md`/`AGENTS.md`, agente `rls-enforcer`, `/add-rls tabla`, `/coach-screen pantalla`, `/create-skill nombre` |
 
-| Agente | Cuándo usarlo |
-|---|---|
-| `db-designer` | Diseñar tablas Supabase desde un brief |
-| `ui-auditor` | Auditar UI contra convenciones visuales |
-| `spec-to-code` | Convertir brief en plan + código |
-| `migrator` | Scripts SQL seguros para cambios en DB |
-| `bug-fixer` | Diagnosticar y corregir bugs (RLS, hooks, auth) |
-| `rls-enforcer` | Aplicar RLS multi-tenant real a todas las tablas |
-
-Invocar: `Usá el agente bug-fixer para esto: [descripción del bug]`
+`/new-app nombre` queda fuera de esta tabla: es tooling cross-proyecto (scaffolding para clientes nuevos de Antigravity), no de KitchenOS.
 
 ---
 
