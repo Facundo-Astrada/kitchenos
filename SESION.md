@@ -1,18 +1,23 @@
-# Sesión — 2026-08-10
+# Sesión — 2026-08-11
 
-Tema: UX de Stock — 5 pedidos puntuales de Facundo sobre `/stock`, no salió de `PENDIENTES.md`. 2 commits (`7bf9d61`, `8608566`), en producción, confirmado en pantalla y en celular real.
+Tema: research externo de KitchenOS (Cowork) + estructura de "Departamento de Ingeniería" + limpieza de lo que salió de ahí. 2 commits (`e30d76f`, `b515e08`), en producción.
 
 ## Qué se cerró
-- Eliminar producto desde la fila, modal centrado con blur en desktop, orden por columna Nivel, teclado móvil arreglado en la celda de stock y en mínimo (input siempre montado, no `autoFocus` tras montar), y "crítico" colapsado a "bajo" en toda la pantalla (chip, badge, modal, sugerencias, exports, Stockear) — `stock_critico` sigue en DB en 0, `useStock.ts` intacto.
-- Bug propio detectado por Facundo con captura real del celular (el input de stock se desbordaba de su columna en <480px) — arreglado y deployado en el mismo bloque.
-- Reglas nuevas en `ui.md`: input inline siempre montado (nunca `button→autoFocus`), y presupuestar el ancho de una celda contra el padding del `<td>`, no contra el `<col>`, en tablas angostas.
+- **Departamento de Ingeniería**: `CLAUDE.md` unifica las tablas viejas de skills/agentes en una sola sección de 10 categorías. Cerró los 2 huecos reales que no tenían dueño: Pruebas (`.claude/docs/testing.md`) y Monitoreo (skill `/prod-status`).
+- **Investigación de KitchenOS en Cowork** (3 entregables: qué hace la app y qué sabe de cocina, patrón "startup corrida por Claude", skills útiles en GitHub) — verificados punto por punto, no tomados al pie de la letra. De esa verificación:
+  - 6 skills oficiales instaladas: `supabase`, `supabase-postgres-best-practices`, `vercel-composition-patterns`, `vercel-react-best-practices`, `vercel-optimize`, `web-design-guidelines`.
+  - 2 bugs reales confirmados y arreglados: fecha de HACCP calculada en UTC (mostraba el día siguiente de noche, PDF a Bromatología incluido) y Reprecio sugiriendo precios absurdos cuando una receta tiene datos rotos (porciones mal cargadas → FC de cientos de miles de %). Ambos con guard nuevo (`fechaEnTz` en HACCP, techo de 200% en Reprecio).
+- **Higiene de docs**: `ESTADO-ACTUAL.md` (Compras no Facturas, Limpieza y Mantenimiento no HACCP, 11 tabs de Reportes no 10, sumado el módulo Clientes que faltaba, Ingeniería de menú marcada "movida a Carta→Rentabilidad" no "eliminada"), `DECISIONES.md` §4 corregida (el salón existe y es funcional, la decisión de "no hay modo servicio" se revirtió hace rato y nunca quedó registrado), `hooks.md` #19 refinada (`fechaEnTz` vs `hoyOperativo` son dos conceptos de "hoy" distintos, no intercambiables).
+- Borrados 5 archivos sueltos en la raíz arrastrados desde julio — debris de paquetes npm, confirmado que no los usaba nada.
+- Se evaluó armar una rama "Finanzas" de estructura organizativa — se descubrió que ya existe (bot de Telegram + dashboard de `ORGANIZACION FACU/whatsapp-inbox`, en producción, con saldos reales). Se dejó plan escrito en `docs/PLAN-FACTURACION-ESTUDIO.md` de esa carpeta para una sesión aparte, ahí, no en KitchenOS.
 
 ## Qué quedó a medias
-- Rango 480-1023px de la celda de stock (tablet o ventana de navegador angosta): probablemente también aprieta el número y el mínimo lado a lado — encontrado por análisis, sin captura que lo confirme. Anotado en `PENDIENTES.md`, no tocado.
-- **El Muro sigue sin verificar en tablet real** — 🔴 Crítico, va para la tercera sesión seguida sin tocarse porque esta se desvió a Stock (checklist de 4 pasos en `HISTORIAL.md`, sesión 2026-08-08).
+- Los 2 fixes de código (HACCP, Reprecio) solo se verificaron con `tsc --noEmit`, no a ojo en el navegador.
+- `ARQUITECTURA.md` sigue desactualizado (dice 28 tablas y 19 hooks; son 44+ y 49) — documentado en `PENDIENTES.md` 🟠, no tocado: es un parche que no alcanza, necesita regenerarse entero.
+- Del research de Cowork, 3 cosas quedaron en manos de Facundo, no de código: rotar la contraseña de Franco (viajó en texto plano a un prompt), sentarse con él por los datos rotos del recetario de Bros (261 recetas sin costeo, 333 sin precio, 3 con porciones imposibles), y cargar los 3 costos de infra de KitchenOS (Anthropic/Vercel/Supabase) en la Sheet de Finanzas.
 
 ## Probar primero mañana
-En el celular: repasar rápido las 5 mejoras de Stock en uso real, no solo el punto puntual que ya se corrigió. Si aparece una captura del rango tablet (480-1023px), mandarla para cerrar ese pendiente también.
+Entrar a `/haccp` de noche (después de las ~21h) y confirmar que la fecha en pantalla y en el PDF exportado es la de hoy, no la de mañana. En Carta → Rentabilidad → Reprecio, confirmar que aparece el aviso rojo si hay platos con FC > 200%.
 
 ## Próximo paso concreto
-El 🔴 de siempre sigue siendo el mismo: colgar `/muro` en la tablet de la cocina. Si se prefiere seguir puliendo Stock, seguir desde el pendiente de tablet recién anotado en `PENDIENTES.md`.
+El 🔴 de siempre no se tocó esta sesión: colgar `/muro` en la tablet de la cocina. Si se prefiere seguir con lo de hoy: `ARQUITECTURA.md` para regenerar, o abrir sesión nueva en `whatsapp-inbox/` para la facturación de estudio (plan ya escrito ahí).

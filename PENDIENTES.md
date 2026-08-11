@@ -29,6 +29,9 @@ Código completo (endpoint `/api/invitar`, UI en Equipo, página `/registro-invi
 ### Fiscal ARCA — homologación end-to-end
 Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/emitir/route.ts`). Falta: certificado real de ARCA del contribuyente, probar contra el servidor de testing de AFIP, URLs de prod en `config_fiscal`, cachear token/sign WSAA en Supabase.
 
+### ARQUITECTURA.md severamente desactualizado (encontrado 11/08 por research externo)
+Es el primer doc que lee un agente nuevo y describe una app que ya no existe: dice "28 tablas" (son 44+), "19 hooks" (son 49, lista vieja), políticas RLS "permisivas USING(true) para desarrollo" (hoy es RLS real multi-tenant), URL de prod vieja (`kitchenos-three.vercel.app`), no menciona salón/KDS/muro/ventas/clientes/fiscal, y cuenta 17 rutas cuando hay 24+. Riesgo real: un agente que lo lea escribe queries contra un esquema viejo y asume RLS permisivo. Regenerar desde el código o, como mínimo, ponerle un encabezado "desactualizado, ver ESTADO-ACTUAL.md y .claude/docs/columnas.md" hasta que se pueda regenerar entero.
+
 ### OPS Consolidación — diferido
 Reset de `demanda_viva` al aperturar la plaza (hoy solo se lee, el salón la incrementa, nadie la resetea). "Copiar a otro día" e "Ingredientes consolidados" (se sacaron con la planilla legacy) — reimplementar sobre `tareas` si el usuario los pide.
 
@@ -75,6 +78,12 @@ Entrar a Mise en mobile bajó de 2582 kB / 64 requests a 899 kB / 46. Lo que que
 - **`tareas` 594 kB** — lo más pesado. La ventana de 60 días de `useTareas` hoy recorta 11 filas (preventiva, no ahorro real). Apretarla a ~3 semanas daría el salto, pero rompe Planificación al navegar a un día viejo: antes hay que hacer que consulte por su cuenta las fechas fuera de la ventana.
 - **`productos` 66 kB** — el panel del Coach baja 1000 filas solo para contar las críticas (`CoachPanelContent.tsx`). Necesita un count server-side (vista o RPC: `stock_actual <= stock_critico` es comparación entre columnas y PostgREST no la soporta).
 
+### Ventas en 0 pero Ingeniería de menú muestra unidades vendidas (encontrado 11/08, Bros)
+`/ventas` mostraba 0 ventas en agosto, pero Carta → Rentabilidad → Ingeniería mostraba platos con 361 y 550 unidades vendidas. O son dos fuentes de datos que no se hablan (comandas del salón vs. importación manual de ventas), o el filtro de período de `/ventas` no mira lo mismo que Rentabilidad. Investigar antes de confiar en cualquiera de las dos pantallas para decisiones.
+
+### Loop teórico-vs-real de stock — no cerrado
+Se puede calcular consumo teórico (venta × receta) y se puede contar inventario real, pero no hay pantalla que muestre la varianza entre ambos. Marcado como hueco desde el relevamiento original del proyecto, confirmado que sigue abierto (11/08).
+
 ### Backlog chico — sin síntoma de usuario reportado, priorizar solo si molesta en uso real
 - HACCP: 3 modales largos (limpieza/vencimientos/temperaturas) sin agrupar — mismo problema que tenía el modal de Stock (muchos campos heterogéneos sin secciones), candidato a la misma cura de fondo pero con otro tratamiento (no son checkboxes, no aplica `SwitchRow`).
 - OPS Producción: el orden de columnas (drag-and-drop) persiste en `localStorage` por dispositivo, no en DB — cada navegador recuerda su propio orden. Mover a una tabla nueva (ej. `ops_orden_columnas`) si se necesita compartido entre dispositivos del mismo restaurante.
@@ -82,7 +91,7 @@ Entrar a Mise en mobile bajó de 2582 kB / 64 requests a 899 kB / 46. Lo que que
 - **El acceso DDL volvió** (ago 2026), así que los dos workarounds "sin migración" ya podrían tener tabla/columna real: plazas custom (JSONB en `restaurantes.configuracion.plazas_custom`, `usePlazasCustom.ts`) y cantidad de recipientes (sufijo `" ×N"` en `checklist_items.recipiente_nombre`, `lib/ops/mise.ts`). Ninguno molesta en uso real y los dos degradan legible — no es urgente, pero ya no hay excusa técnica.
 - Carta / `ComposicionEditor`: la semántica de "Cantidad" es distinta en modo Plato (porciones, gramaje opcional que afecta costo) y en Menú/Evento (gramos para receta/producto, unidades para plato vinculado). Hoy es coherente pero son dos modelos que no se explican entre sí; evaluar converger solo si confunde en uso real.
 - `npm run lint` está roto: ESLint 9 no resuelve `tsconfig-paths/lib/tsconfig-loader` (lo pide `eslint-plugin-import` vía `eslint-config-next`). `npm run build` y el typecheck andan, así que no bloquea deploy. Fix probable: instalar `tsconfig-paths` como devDependency.
-- **Archivos sueltos en la raíz sin commitear, arrastrados desde jul 2026** — `mcp-index.js`, `mcp-sdk-client.js`, `mcp-stdio.js`, `modelcontextprotocol-sdk-1.30.0.tgz`, `supabase-mcp-server-supabase-0.9.0.tgz`, más `.claude/settings.json` modificado. Esperan una decisión de Facundo: van al repo, al `.gitignore` o se borran. Cada `git status` de cada sesión los muestra.
+- **`.claude/settings.json` modificado sin commitear** — arrastrado desde jul 2026, sigue esperando una decisión de Facundo (commitear o revertir). Los 5 archivos sueltos (`mcp-*.js`, dos `.tgz`) que lo acompañaban se borraron el 11/08 (eran debris de paquetes npm, no se usaban).
 - El resumen OPS de una fila en `ComposicionEditor.tsx` (~línea 1580) arma `plaza · sección · cantidad_ops+unidad` sin mirar `peso_porcion` — con recipiente muestra las porciones del recipiente, no el gramaje. Es un subtítulo de la config del mise (defendible), pero es el mismo patrón que se corrigió en Recetario/Platos; revisar si en uso real confunde.
 - **Stock — celda de stock apretada en rango 480-1023px** (tablet o ventana de navegador angosta, ago 2026): en ese ancho la celda muestra el número editable **y** el editor de mínimo lado a lado en una columna de solo 84px — no entran los dos (encontrado por análisis, sin captura real que lo confirme). El breakpoint <480px (celular) y el de desktop (≥1024px) están arreglados y verificados en pantalla real. Solo tocar si aparece una captura de ese rango específico.
 
@@ -112,6 +121,7 @@ Hoy el Coach solo responde preguntas de navegación; el pedido es que ayude a ca
 - Extensión `unaccent` instalada en el schema `public` — debería vivir en un schema propio (`extensions`); buena práctica, sin riesgo real hoy.
 - Bucket público `fotos` tiene política SELECT amplia que permite listar todos los archivos (no solo acceder por URL conocida) — evaluar si conviene restringir el listado.
 - Protección de contraseñas filtradas (HaveIBeenPwned) no está activada en Supabase Auth — activar desde el dashboard, sin código.
+- `checklist_registros_set_restaurante()` es `SECURITY DEFINER` sin `REVOKE EXECUTE` — ejecutable por `anon`/`authenticated` vía RPC directo (encontrado 11/08 corriendo `get_advisors`, mismo patrón que `reset_demo_restaurante()` arriba).
 
 ---
 

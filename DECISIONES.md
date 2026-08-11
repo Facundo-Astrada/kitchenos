@@ -36,19 +36,16 @@ Registro de decisiones tomadas con Facundo durante el diseño y construcción de
 
 ---
 
-## 4. No hay modo servicio real
+## 4. Modo servicio — REVERTIDA (ver estado real más abajo)
 
-**Decisión:** El "Modo Servicio" que estaba planeado (pantalla full-screen con comandas en vivo, tiempos por plato, KDS estilo) **se difiere o descarta**.
-**Por qué:**
-- Requiere integración con una caja/POS (TouchBistro, Maxirest, Tango, SAP…) o escribir un POS propio. Ambas opciones son trabajo de meses y no resuelven el dolor principal del Rescoldo.
-- El valor real que Facundo necesita del módulo "servicio" ya está cubierto por: Tareas (producción del día), Pase de Turno (mensajes entre turnos), 86/Carta (items no disponibles), Mise en place (listo para servicio).
-- Un KDS rojo/verde de comandas en vivo requiere integrarse con el sistema de comandas del salón — fuera de scope.
-**Cómo se aplica:**
-- `components/dashboard/ModoServicio.tsx` existe como placeholder UI pero no está conectado a datos.
-- En `ESTADO-ACTUAL.md` figura como "Parcial" pero no se invierte trabajo en él.
-- Si en el futuro se reactiva, tendría que ser como agregado pro de un plan superior, conectado a un POS específico.
+**Decisión original (2026, antes de la expansión):** El "Modo Servicio" que estaba planeado (pantalla full-screen con comandas en vivo, tiempos por plato, KDS estilo) **se difiere o descarta**. Corolario original: "No hay modelo de salón (mesas, meseros, cuentas). KitchenOS es un sistema para cocina únicamente."
+**Por qué se pensó así en su momento:**
+- Requiere integración con una caja/POS (TouchBistro, Maxirest, Tango, SAP…) o escribir un POS propio. Ambas opciones son trabajo de meses.
+- Un KDS rojo/verde de comandas en vivo requiere integrarse con el sistema de comandas del salón — en ese momento, fuera de scope.
 
-**Corolario:** No hay modelo de "salón" (mesas, meseros, cuentas). KitchenOS es un sistema para **cocina** únicamente. El puente cocina↔salón lo hace la app de caja que ya tiene el restaurante.
+**Qué pasó:** la decisión se revirtió en la expansión de fundación (ver `[[project_kitchenos_expansion]]` en memoria, y `docs/gestion salon KOS/PLAN-FASE-1/2/3.md`). Hoy existen y están **funcionales**: `/salon` (mapa de mesas propio, comandas con modificadores, cobro, arqueo de caja), `/kds` (KDS con recall/all-day, algo que ni los competidores LatAm tienen), `/muro` (tablet de cocina). KitchenOS construyó su propio POS liviano en vez de integrarse con uno externo — la premisa "requiere meses de integración con un POS ajeno" dejó de aplicar porque se escribió el propio. `components/dashboard/ModoServicio.tsx` (el placeholder viejo) es el único resabio de la decisión original; no se usa.
+
+**Corolario actualizado:** KitchenOS sí tiene modelo de salón — mesas, comandas, cobro, caja — como parte del producto, no como puente a una app externa.
 
 ---
 
