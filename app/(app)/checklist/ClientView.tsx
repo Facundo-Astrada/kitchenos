@@ -29,11 +29,6 @@ import type { Plaza, MisePlaceItem, MisePrioridad, ChecklistSeccionConfig, Rutin
 
 // ── Constants ──
 const PLAZAS: Plaza[] = ['parrilla', 'frios', 'calientes', 'pase', 'pasteleria', 'panaderia', 'general']
-const PLAZA_LABELS: Record<Plaza, string> = {
-  parrilla: 'Parrilla', frios: 'Fríos', calientes: 'Calientes',
-  pase: 'Pase', pasteleria: 'Pastelería', panaderia: 'Panadería',
-  general: 'General',
-}
 const UNIDADES = ['u', 'kg', 'g', 'l', 'ml', 'pax', 'porc', 'bandeja', 'gastro', 'tupper']
 
 const PRIO_CYCLE: MisePrioridad[] = ['sp', 'p', 'ref', 'chk']
@@ -157,21 +152,26 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
 
   const { plazasCustom } = usePlazasCustom()
 
-  // Plazas asignadas al usuario (equipo_miembros.plaza_asignada, coma-separadas)
+  // Plazas asignadas al usuario (equipo_miembros.plaza_asignada, coma-separadas).
+  // toLowerCase porque el campo se carga a mano desde Equipo y entra tanto
+  // 'parrilla' como 'Parrilla'; comparado crudo, la versión con mayúscula no
+  // matcheaba y la asignación quedaba en la nada.
   const userPlazas: Plaza[] = useMemo(() => {
     if (!authPerfil?.plaza_asignada) return []
     return authPerfil.plaza_asignada
       .split(',')
-      .map((p: string) => p.trim())
+      .map((p: string) => p.trim().toLowerCase())
       .filter((p: string) => (PLAZAS as readonly string[]).includes(p)) as Plaza[]
   }, [authPerfil])
 
-  // Plazas a mostrar en el selector: si tiene ≥2 asignadas, solo esas + general
-  // (las custom son de producción/mise, no roles de staff — no aplican acá)
-  const plazasForSelector: Plaza[] = useMemo(() => {
-    if (userPlazas.length < 2) return todasLasPlazas(plazasCustom)
-    return userPlazas.includes('general') ? userPlazas : [...userPlazas, 'general']
-  }, [userPlazas, plazasCustom])
+  // TODAS las plazas, siempre, para todos. La plaza asignada dice dónde arranca
+  // cada uno, no qué puede mirar: en el servicio real la gente cubre la plaza
+  // de al lado, y el mise es lo primero que hay que poder abrir para hacerlo.
+  // Mismo criterio que OPS, que nunca filtró tareas por plaza.
+  const plazasForSelector: Plaza[] = useMemo(
+    () => todasLasPlazas(plazasCustom),
+    [plazasCustom],
+  )
 
   const autoPlaza: Plaza | null = (() => {
     if (userPlazas.length === 1) return userPlazas[0]
@@ -1109,26 +1109,28 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           )}
         </div>
 
-        {/* Switcher de plazas — solo si el usuario tiene ≥2 asignadas */}
-        {userPlazas.length > 1 && (
-          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, scrollbarWidth: 'none' }}>
-            {plazasForSelector.map(p => (
-              <button
-                key={p}
-                onClick={() => setPlaza(p)}
-                style={{
-                  padding: '5px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
-                  background: plaza === p ? '#fff' : 'rgba(255,255,255,0.15)',
-                  color: plaza === p ? 'var(--navy)' : 'rgba(255,255,255,0.65)',
-                  fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-                  flexShrink: 0, fontFamily: 'inherit',
-                }}
-              >
-                {PLAZA_LABELS[p]}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Switcher de plazas — siempre, con todas. Es el camino para cubrir la
+            plaza de al lado sin volver a la grilla; antes solo aparecía para
+            quien tuviera ≥2 asignadas, que en la práctica era nadie.
+            plazaLabel y no PLAZA_LABELS: las plazas custom no están en ese
+            record y salían en blanco. */}
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, scrollbarWidth: 'none' }}>
+          {plazasForSelector.map(p => (
+            <button
+              key={p}
+              onClick={() => setPlaza(p)}
+              style={{
+                padding: '5px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
+                background: plaza === p ? '#fff' : 'rgba(255,255,255,0.15)',
+                color: plaza === p ? 'var(--navy)' : 'rgba(255,255,255,0.65)',
+                fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
+                flexShrink: 0, fontFamily: 'inherit',
+              }}
+            >
+              {plazaLabel(p, plazasCustom)}
+            </button>
+          ))}
+        </div>
 
         {/* Modo control banner */}
         {modoControl && (
