@@ -1390,17 +1390,43 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                 {modoControl ? (() => {
                   // Tres decisiones por ítem, sin salir de la fila: está (tilde),
                   // con qué urgencia hay que producirlo (badge que cicla) y
-                  // mandalo a Producción (+). El tilde ocupa toda el área del
-                  // nombre porque es la acción que se repite; los otros dos son
-                  // botones chicos al borde para no comerse el ancho.
+                  // despacharlo (+). El tilde ocupa toda el área del nombre
+                  // porque es la acción que se repite; los otros dos son botones
+                  // chicos al borde para no comerse el ancho.
+                  //
+                  // La fila tiene tres estados, con el mismo idioma de color que
+                  // la tarjeta completa:
+                  //   pendiente  → blanca, los tres controles vivos
+                  //   producción → ámbar: "ya lo vi y va a salir". El próximo
+                  //                control de este ítem es el cierre, no ahora
+                  //   ok         → verde tachado: "esto está"
+                  // Resuelto de cualquiera de las dos formas, los dos botones se
+                  // apagan en gris: no queda nada que decidir y el gris lo dice
+                  // antes de que nadie los toque. El de prioridad además NO debe
+                  // tocarse una vez despachado — movería el badge del mise pero
+                  // no la prioridad de la tarea ya creada, y quedarían diciendo
+                  // cosas distintas.
                   const tildado = regMap[item.id]?.completado ?? false
                   const esCierre = fase === 'cierre'
                   const enviada = (esCierre ? tareasPaseDespachadasSet : tareasHoySet).has(item.id)
                   const prioCfg = PRIO_CFG[item.prioridad] ?? PRIO_CFG.ref
+                  const resuelto = tildado || enviada
+                  // El tilde gana sobre el despacho: si alguien tildó un ítem que
+                  // estaba en producción es porque ya llegó a la plaza.
+                  const enProd = enviada && !tildado
+                  const btnApagado: React.CSSProperties = {
+                    background: 'var(--bg)', border: '1px solid var(--border)',
+                    color: 'var(--text-3)', cursor: 'default',
+                  }
+                  const btnVivo: React.CSSProperties = {
+                    background: prioCfg.bg, border: `1.5px solid ${prioCfg.color}`, color: prioCfg.color,
+                  }
                   return (
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: 4,
                     borderBottom: '1px solid var(--border)',
+                    background: tildado ? 'rgba(34,197,94,.05)' : enProd ? 'rgba(245,158,11,.09)' : 'transparent',
+                    transition: 'background .15s',
                   }}>
                     <button
                       onClick={() => handleMiseUpsert(item.id, fecha, turno, { completado: !tildado })}
@@ -1413,62 +1439,75 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                     >
                       <span className="material-symbols-outlined" style={{
                         fontSize: 22, flexShrink: 0,
-                        color: tildado ? '#22c55e' : 'var(--border)',
+                        color: tildado ? '#22c55e' : enProd ? '#f59e0b' : 'var(--border)',
                         transition: 'color .15s',
                       }}>
-                        {tildado ? 'check_circle' : 'radio_button_unchecked'}
+                        {tildado ? 'check_circle' : enProd ? 'pending' : 'radio_button_unchecked'}
                       </span>
                       <span style={{
-                        flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-1)',
+                        flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600,
+                        color: enProd ? '#b45309' : 'var(--text-1)',
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         textDecoration: tildado ? 'line-through' : 'none',
                         opacity: tildado ? 0.55 : 1,
                       }}>
                         {item.nombre}
                       </span>
-                      {item.cantidad > 0 && (
+                      {/* Despachado, la cantidad estándar deja de ser lo que hay
+                          que mirar — lo que importa es que ese ítem ya tiene
+                          destino. El cartel ocupa su lugar en vez de sumarse:
+                          en esta fila no sobra ancho. */}
+                      {enProd ? (
+                        <span style={{
+                          fontSize: 9, fontWeight: 800, color: '#b45309', flexShrink: 0,
+                          textTransform: 'uppercase', letterSpacing: '.04em',
+                        }}>
+                          {esCierre ? 'Pasa al turno' : 'En producción'}
+                        </span>
+                      ) : item.cantidad > 0 && (
                         <span style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0 }}>
                           {item.cantidad} {item.unidad}
                         </span>
                       )}
                     </button>
                     <button
-                      onClick={() => handlePrioChange(item, nextPrioControl(item.prioridad))}
-                      title={`Prioridad ${prioCfg.label} — tap para cambiar`}
+                      onClick={() => { if (!resuelto) handlePrioChange(item, nextPrioControl(item.prioridad)) }}
+                      disabled={resuelto}
+                      title={
+                        tildado ? 'Tildado — no hay prioridad que definir'
+                          : enProd ? `Despachado con prioridad ${prioCfg.label}`
+                          : `Prioridad ${prioCfg.label} — tap para cambiar`
+                      }
                       style={{
                         ...btnReset, width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
-                        background: prioCfg.bg, border: `1.5px solid ${prioCfg.color}`,
-                        fontSize: 10, fontWeight: 800, color: prioCfg.color, transition: 'all .15s',
+                        fontSize: 10, fontWeight: 800, transition: 'all .15s',
                         WebkitTapHighlightColor: 'transparent',
+                        ...(resuelto ? btnApagado : btnVivo),
                       }}
                     >
                       {prioCfg.label}
                     </button>
                     <button
-                      onClick={() => { if (!enviada) handleCrearTareaControl(item) }}
-                      disabled={enviada}
+                      onClick={() => { if (!resuelto) handleCrearTareaControl(item) }}
+                      disabled={resuelto}
                       title={
-                        enviada
-                          ? (esCierre ? 'Ya pasa al turno siguiente' : 'Ya está en Producción')
-                          : esCierre
-                            ? `Pasar al turno siguiente con prioridad ${prioCfg.label}`
-                            : `Mandar a Producción con prioridad ${prioCfg.label}`
+                        tildado ? 'Tildado — no hace falta producirlo'
+                          : enProd ? (esCierre ? 'Ya pasa al turno siguiente' : 'Ya está en Producción')
+                          : esCierre ? `Pasar al turno siguiente con prioridad ${prioCfg.label}`
+                          : `Mandar a Producción con prioridad ${prioCfg.label}`
                       }
                       style={{
                         ...btnReset, width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
-                        marginRight: 2,
-                        background: enviada ? 'rgba(34,197,94,.13)' : prioCfg.bg,
-                        border: `1.5px solid ${enviada ? '#22c55e' : prioCfg.color}`,
-                        color: enviada ? '#22c55e' : prioCfg.color,
-                        cursor: enviada ? 'default' : 'pointer', transition: 'all .15s',
+                        marginRight: 2, transition: 'all .15s',
                         WebkitTapHighlightColor: 'transparent',
+                        ...(resuelto ? btnApagado : btnVivo),
                       }}
                     >
                       {/* En cierre el ícono es el mismo 'event_upcoming' que usa
                           el botón "Producir mañana" de la tarjeta completa: el
                           gesto es distinto, el destino es el mismo. */}
                       <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
-                        {enviada ? 'assignment_turned_in' : esCierre ? 'event_upcoming' : 'add'}
+                        {enProd ? 'assignment_turned_in' : esCierre ? 'event_upcoming' : 'add'}
                       </span>
                     </button>
                   </div>

@@ -63,7 +63,7 @@ export const MISE_PASOS: MisePaso[] = [
     target: 'mise-modo-control',
     fase: 'apertura',
     titulo: 'Modo Control',
-    texto: 'Deja cada ítem en una sola línea con tres decisiones y ningún número: el tilde (está como tiene que estar), el badge de prioridad —un tap lo cicla SP → P → REF— y el +, que despacha el ítem con esa prioridad y sin cantidad. En el cierre ese + arma el pase de turno: el que entra hereda qué falta y con qué urgencia, no cuánto quedó. Las cantidades se hablan en la cocina. Queda activado hasta que lo apagues.',
+    texto: 'Deja cada ítem en una sola línea con tres decisiones y ningún número: el tilde (está como tiene que estar), el badge de prioridad —un tap lo cicla SP → P → REF— y el +, que despacha el ítem con esa prioridad y sin cantidad. La fila queda verde tachada si la tildaste y ámbar si la despachaste (ese ítem no se vuelve a mirar hasta el cierre); en los dos casos los botones se apagan en gris. En el cierre ese + arma el pase de turno: el que entra hereda qué falta y con qué urgencia, no cuánto quedó. Las cantidades se hablan en la cocina. Queda activado hasta que lo apagues.',
   },
   {
     target: 'mise-secciones-cfg',
