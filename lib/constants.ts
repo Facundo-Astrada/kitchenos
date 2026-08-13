@@ -93,6 +93,7 @@ export type ModuloId =
   | 'clientes'
   | 'coach'
   | 'muro'
+  | 'bitacora'
 
 export const MODULO_CONFIG: Record<
   ModuloId,
@@ -124,6 +125,7 @@ export const MODULO_CONFIG: Record<
   clientes: { label: 'Clientes', icon: 'contacts', href: '/clientes' },
   coach: { label: 'Coach', icon: 'forum', href: '/coach' },
   muro: { label: 'Muro', icon: 'view_kanban', href: '/muro' },
+  bitacora: { label: 'Bitácora', icon: 'history_edu', href: '/bitacora' },
 }
 
 // Módulos accesibles por rol (base hardcodeada — se sobrescribe con puestos/permisos del admin)
@@ -132,13 +134,13 @@ export const MODULOS_POR_ROL: Record<Rol, ModuloId[]> = {
     'home', 'operaciones', 'recetario', 'stock', 'pedidos',
     'haccp', 'reportes', 'calendario',
     'carta', 'pase', 'facturas', 'merma', 'equipo', 'configuracion', 'ventas', 'espacios',
-    'salon', 'kds', 'clientes', 'muro',
+    'salon', 'kds', 'clientes', 'muro', 'bitacora',
   ],
   chef: [
     'home', 'operaciones', 'recetario', 'stock', 'pedidos',
     'haccp', 'reportes', 'calendario',
     'carta', 'pase', 'facturas', 'merma', 'equipo', 'ventas', 'espacios',
-    'salon', 'kds', 'clientes', 'muro',
+    'salon', 'kds', 'clientes', 'muro', 'bitacora',
   ],
   parrilla:   ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta', 'merma', 'calendario', 'haccp'],
   frios:      ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta', 'merma', 'calendario', 'haccp'],
@@ -186,6 +188,7 @@ export const RUTA_A_MODULO: Record<string, string> = {
   '/kds': 'kds',
   '/clientes': 'clientes',
   '/muro': 'muro',
+  '/bitacora': 'bitacora',
   // /perfil — not listed: modulo = undefined → always accessible
   // /tareas, /checklist, /produccion — rutas viejas: redirigen a /operaciones (tab correspondiente).
   // La vista real vive embebida en OPS. Mapeadas a 'operaciones' por consistencia de permisos.

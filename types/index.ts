@@ -572,6 +572,42 @@ export interface Evento {
   created_at: string
 }
 
+// ── Bitácora — hoja de ruta / reuniones de equipo ───────────
+export type BitacoraTipo = 'reunion' | 'nota' | 'lista' | 'idea'
+
+export interface BitacoraParticipante {
+  id: string
+  nombre: string
+}
+
+// DB: bitacora_entradas (id, titulo, tipo, fecha, autor_id, autor_nombre, participantes jsonb, fijada, archivada, restaurante_id, created_at, updated_at)
+export interface BitacoraEntrada {
+  id: string
+  titulo: string
+  tipo: BitacoraTipo
+  fecha: string
+  autor_id?: string | null
+  autor_nombre?: string | null
+  participantes: BitacoraParticipante[]
+  fijada: boolean
+  archivada: boolean
+  restaurante_id: string
+  created_at: string
+  updated_at: string
+}
+
+// DB: bitacora_items (id, entrada_id, texto, nivel, orden, completado, restaurante_id, created_at)
+export interface BitacoraItem {
+  id: string
+  entrada_id: string
+  texto: string
+  nivel: number
+  orden: number
+  completado: boolean
+  restaurante_id: string
+  created_at: string
+}
+
 // ── Checklist Mise en Place ─────────────────────────────────
 export type ChecklistSeccion = string
 export type MisePrioridad = 'sp' | 'p' | 'ref' | 'chk'
