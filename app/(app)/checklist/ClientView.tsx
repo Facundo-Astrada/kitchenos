@@ -487,6 +487,21 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     return s
   }, [tareas, fecha])
 
+  // El mismo set para la jornada siguiente. Lo que se despacha en el cierre es
+  // producción de mañana, así que "este ítem ya está despachado" se responde
+  // con otra fecha — sin esto el + del Modo Control no tenía cómo saberlo en
+  // cierre y el mismo ítem se podía mandar dos veces.
+  const tareasMananaSet = useMemo(() => {
+    const manana = sumarDias(fecha, 1)
+    const s = new Set<string>()
+    for (const t of tareas) {
+      if (t.turno_fecha === manana && t.estado !== 'listo' && t.checklist_item_id) {
+        s.add(t.checklist_item_id)
+      }
+    }
+    return s
+  }, [tareas, fecha])
+
   // ── Qué mide el contador de la apertura: ítems REVISADOS ────────────────
   // Un ítem está revisado cuando se contó y quedó resuelto (`completado`) o
   // cuando se despachó su producción: en los dos casos el cocinero ya lo miró
@@ -851,14 +866,20 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // Por eso la tarea sale sin cantidad: en el control nadie pesa nada, y pedir
   // un número acá obligaría a abrir un sheet y romper el recorrido. La cantidad
   // la pone después quien produce, o se saca del estándar del ítem.
+  //
+  // El día lo decide la fase, igual que en la tarjeta completa: lo que falta al
+  // abrir se produce hoy, lo que se descubre al cerrar se produce mañana (queda
+  // como 'pase_turno'). Mandar a producción de hoy desde el cierre sería cargar
+  // trabajo a un turno que está terminando.
   const handleCrearTareaControl = useCallback(async (item: MisePlaceItem) => {
     const plazasItem = item.receta_id ? (platoPlazoMap[item.receta_id] ?? SIN_PLAZAS) : SIN_PLAZAS
     const primaryPlaza = plazasItem.length > 0 ? plazasItem[0].plaza : item.plaza
+    const dia = fase === 'cierre' ? 'manana' : 'hoy'
     await handleCrearTarea({
       titulo: item.nombre,
       seccion: PLAZA_TO_SECCION[primaryPlaza] ?? 'general',
       prioridad: MISE_PRIO_TO_TAREA[item.prioridad] ?? 'alta',
-      dia: 'hoy',
+      dia,
       nota: null,
       cantidad: null,
       receta_id: item.receta_id ?? null,
@@ -866,8 +887,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       plazas: plazasItem,
       checklist_item_id: item.id,
     })
-    setToast(`A producción: ${item.nombre}`)
-  }, [handleCrearTarea, platoPlazoMap])
+    setToast(dia === 'manana' ? `A producción de mañana: ${item.nombre}` : `A producción: ${item.nombre}`)
+  }, [handleCrearTarea, platoPlazoMap, fase])
 
   const handleCrearVencimientoDesdeMise = useCallback(async (params: { producto_nombre: string; fecha_vencimiento: string; fecha_apertura: string }) => {
     await crearVencimiento({
@@ -1284,7 +1305,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                   // nombre porque es la acción que se repite; los otros dos son
                   // botones chicos al borde para no comerse el ancho.
                   const tildado = regMap[item.id]?.completado ?? false
-                  const enviada = tareasHoySet.has(item.id)
+                  const esCierre = fase === 'cierre'
+                  const enviada = (esCierre ? tareasMananaSet : tareasHoySet).has(item.id)
                   const prioCfg = PRIO_CFG[item.prioridad] ?? PRIO_CFG.ref
                   return (
                   <div style={{
@@ -1336,7 +1358,11 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                     <button
                       onClick={() => { if (!enviada) handleCrearTareaControl(item) }}
                       disabled={enviada}
-                      title={enviada ? 'Ya está en Producción' : `Mandar a Producción con prioridad ${prioCfg.label}`}
+                      title={
+                        enviada
+                          ? (esCierre ? 'Ya está en la producción de mañana' : 'Ya está en Producción')
+                          : `Mandar a Producción ${esCierre ? 'de mañana ' : ''}con prioridad ${prioCfg.label}`
+                      }
                       style={{
                         ...btnReset, width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
                         marginRight: 2,
@@ -1347,8 +1373,11 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                         WebkitTapHighlightColor: 'transparent',
                       }}
                     >
+                      {/* En cierre el ícono es el mismo 'event_upcoming' que usa
+                          el botón "Producir mañana" de la tarjeta completa: el
+                          gesto es distinto, el destino es el mismo. */}
                       <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
-                        {enviada ? 'assignment_turned_in' : 'add'}
+                        {enviada ? 'assignment_turned_in' : esCierre ? 'event_upcoming' : 'add'}
                       </span>
                     </button>
                   </div>
