@@ -180,9 +180,11 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
           </DemoNavy>
         }
       >
-        <b>fact_check (Modo Control):</b>{' '}deja cada ítem en una sola línea — nombre, cantidad estándar y
-        el tilde, nada más. Para recorrer la plaza rápido marcando lo que ya está, sin cargar números.
-        Queda activado hasta que lo apagues.<br />
+        <b>fact_check (Modo Control):</b>{' '}deja cada ítem en una sola línea con tres decisiones y ningún
+        número: el <b>tilde</b> (está como tiene que estar), el <b>badge de prioridad</b> — un tap lo cicla
+        SP → P → REF — y el <b>+</b>, que manda el ítem a <b>Producción</b> para hoy con esa prioridad y sin
+        cantidad (la pone después quien lo produce). El + queda en verde cuando ya hay tarea abierta.
+        Para recorrer la plaza rápido. Queda activado hasta que lo apagues.<br />
         <b>settings:</b>{' '}crear, renombrar, reordenar o borrar las secciones de esta plaza.
       </Bloque>
 

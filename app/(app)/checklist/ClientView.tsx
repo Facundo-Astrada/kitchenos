@@ -72,6 +72,15 @@ function nextPrio(current: string): MisePrioridad {
   return PRIO_CYCLE[(idx + 1) % PRIO_CYCLE.length]
 }
 
+// En Modo Control el badge solo recorre las prioridades de producción: el tilde
+// verde ya dice "esto está", así que un 'chk' verde al lado del check se leería
+// como un segundo tilde. Si el ítem venía en 'chk', el primer tap cae en SP.
+const PRIO_CYCLE_CONTROL: MisePrioridad[] = ['sp', 'p', 'ref']
+function nextPrioControl(current: string): MisePrioridad {
+  const idx = PRIO_CYCLE_CONTROL.indexOf(current as MisePrioridad)
+  return PRIO_CYCLE_CONTROL[(idx + 1) % PRIO_CYCLE_CONTROL.length]
+}
+
 const btnReset: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer', padding: 0,
   display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -836,6 +845,30 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     await eliminarItemRef.current(id)
   }, [])
 
+  // ── Modo Control: producir de un tap ────────────────────────────────────
+  // El control es un recorrido de ojo: se mira la heladera y se decide en el
+  // acto "esto está" (tilde) o "esto hay que producirlo" (prioridad + envío).
+  // Por eso la tarea sale sin cantidad: en el control nadie pesa nada, y pedir
+  // un número acá obligaría a abrir un sheet y romper el recorrido. La cantidad
+  // la pone después quien produce, o se saca del estándar del ítem.
+  const handleCrearTareaControl = useCallback(async (item: MisePlaceItem) => {
+    const plazasItem = item.receta_id ? (platoPlazoMap[item.receta_id] ?? SIN_PLAZAS) : SIN_PLAZAS
+    const primaryPlaza = plazasItem.length > 0 ? plazasItem[0].plaza : item.plaza
+    await handleCrearTarea({
+      titulo: item.nombre,
+      seccion: PLAZA_TO_SECCION[primaryPlaza] ?? 'general',
+      prioridad: MISE_PRIO_TO_TAREA[item.prioridad] ?? 'alta',
+      dia: 'hoy',
+      nota: null,
+      cantidad: null,
+      receta_id: item.receta_id ?? null,
+      plaza: primaryPlaza,
+      plazas: plazasItem,
+      checklist_item_id: item.id,
+    })
+    setToast(`A producción: ${item.nombre}`)
+  }, [handleCrearTarea, platoPlazoMap])
+
   const handleCrearVencimientoDesdeMise = useCallback(async (params: { producto_nombre: string; fecha_vencimiento: string; fecha_apertura: string }) => {
     await crearVencimiento({
       producto_nombre: params.producto_nombre,
@@ -1037,7 +1070,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           }}>
             <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'rgba(255,255,255,.7)' }}>fact_check</span>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.7)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
-              Modo Control — solo tildá lo que está listo
+              Modo Control — tildá lo que está, o mandalo a producir
             </span>
           </div>
         )}
@@ -1244,38 +1277,83 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                   borderBottom: isInsertAfter ? '2px solid var(--accent)' : '2px solid transparent',
                 }}
               >
-                {modoControl ? (
-                  <button
-                    onClick={() => handleMiseUpsert(item.id, fecha, turno, { completado: !regMap[item.id]?.completado })}
-                    style={{
-                      width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '10px 4px', background: 'none', border: 'none', cursor: 'pointer',
-                      fontFamily: 'inherit', textAlign: 'left',
-                      borderBottom: '1px solid var(--border)',
-                      WebkitTapHighlightColor: 'transparent',
-                    }}
-                  >
-                    <span className="material-symbols-outlined" style={{
-                      fontSize: 22, flexShrink: 0,
-                      color: regMap[item.id]?.completado ? '#22c55e' : 'var(--border)',
-                      transition: 'color .15s',
-                    }}>
-                      {regMap[item.id]?.completado ? 'check_circle' : 'radio_button_unchecked'}
-                    </span>
-                    <span style={{
-                      flex: 1, fontSize: 14, fontWeight: 600, color: 'var(--text-1)',
-                      textDecoration: regMap[item.id]?.completado ? 'line-through' : 'none',
-                      opacity: regMap[item.id]?.completado ? 0.55 : 1,
-                    }}>
-                      {item.nombre}
-                    </span>
-                    {item.cantidad > 0 && (
-                      <span style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0 }}>
-                        {item.cantidad} {item.unidad}
+                {modoControl ? (() => {
+                  // Tres decisiones por ítem, sin salir de la fila: está (tilde),
+                  // con qué urgencia hay que producirlo (badge que cicla) y
+                  // mandalo a Producción (+). El tilde ocupa toda el área del
+                  // nombre porque es la acción que se repite; los otros dos son
+                  // botones chicos al borde para no comerse el ancho.
+                  const tildado = regMap[item.id]?.completado ?? false
+                  const enviada = tareasHoySet.has(item.id)
+                  const prioCfg = PRIO_CFG[item.prioridad] ?? PRIO_CFG.ref
+                  return (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    borderBottom: '1px solid var(--border)',
+                  }}>
+                    <button
+                      onClick={() => handleMiseUpsert(item.id, fecha, turno, { completado: !tildado })}
+                      style={{
+                        flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '10px 4px', background: 'none', border: 'none', cursor: 'pointer',
+                        fontFamily: 'inherit', textAlign: 'left',
+                        WebkitTapHighlightColor: 'transparent',
+                      }}
+                    >
+                      <span className="material-symbols-outlined" style={{
+                        fontSize: 22, flexShrink: 0,
+                        color: tildado ? '#22c55e' : 'var(--border)',
+                        transition: 'color .15s',
+                      }}>
+                        {tildado ? 'check_circle' : 'radio_button_unchecked'}
                       </span>
-                    )}
-                  </button>
-                ) : (
+                      <span style={{
+                        flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-1)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        textDecoration: tildado ? 'line-through' : 'none',
+                        opacity: tildado ? 0.55 : 1,
+                      }}>
+                        {item.nombre}
+                      </span>
+                      {item.cantidad > 0 && (
+                        <span style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0 }}>
+                          {item.cantidad} {item.unidad}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handlePrioChange(item, nextPrioControl(item.prioridad))}
+                      title={`Prioridad ${prioCfg.label} — tap para cambiar`}
+                      style={{
+                        ...btnReset, width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+                        background: prioCfg.bg, border: `1.5px solid ${prioCfg.color}`,
+                        fontSize: 10, fontWeight: 800, color: prioCfg.color, transition: 'all .15s',
+                        WebkitTapHighlightColor: 'transparent',
+                      }}
+                    >
+                      {prioCfg.label}
+                    </button>
+                    <button
+                      onClick={() => { if (!enviada) handleCrearTareaControl(item) }}
+                      disabled={enviada}
+                      title={enviada ? 'Ya está en Producción' : `Mandar a Producción con prioridad ${prioCfg.label}`}
+                      style={{
+                        ...btnReset, width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+                        marginRight: 2,
+                        background: enviada ? 'rgba(34,197,94,.13)' : prioCfg.bg,
+                        border: `1.5px solid ${enviada ? '#22c55e' : prioCfg.color}`,
+                        color: enviada ? '#22c55e' : prioCfg.color,
+                        cursor: enviada ? 'default' : 'pointer', transition: 'all .15s',
+                        WebkitTapHighlightColor: 'transparent',
+                      }}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                        {enviada ? 'assignment_turned_in' : 'add'}
+                      </span>
+                    </button>
+                  </div>
+                  )
+                })() : (
                   <ProductoMiseCard
                     item={item}
                     reg={regMap[item.id]}

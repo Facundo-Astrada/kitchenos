@@ -63,7 +63,7 @@ export const MISE_PASOS: MisePaso[] = [
     target: 'mise-modo-control',
     fase: 'apertura',
     titulo: 'Modo Control',
-    texto: 'Deja cada ítem en una sola línea — nombre, cantidad estándar y el tilde. Para recorrer la plaza rápido marcando lo que ya está, sin cargar números. Queda activado hasta que lo apagues.',
+    texto: 'Deja cada ítem en una sola línea con tres decisiones y ningún número: el tilde (está como tiene que estar), el badge de prioridad —un tap lo cicla SP → P → REF— y el +, que manda el ítem a Producción para hoy con esa prioridad y sin cantidad. El + queda en verde cuando ya hay tarea abierta. Queda activado hasta que lo apagues.',
   },
   {
     target: 'mise-secciones-cfg',
