@@ -31,6 +31,12 @@ export interface CrearTareaParams {
   plaza: string          // raw plaza name → tarea.plaza field
   plazas: PlatoPlaza[]   // multi-plaza sub-tasks
   checklist_item_id: string | null  // FK al item del mise que origina la tarea
+  // Overrides del par (jornada, categoría) que normalmente se deduce de `dia`.
+  // Los usa el despacho del Modo Control en cierre, donde "el turno siguiente"
+  // puede ser la cena de hoy y no mañana. Sin esto, cerrar el almuerzo dejaba
+  // la producción dos turnos más adelante y la cena no la veía nunca.
+  turnoFecha?: string
+  categoria?: 'produccion' | 'pase_turno'
 }
 
 // Prioridad del ítem del mise (badge propio, sp/p/ref/chk) → dominio real

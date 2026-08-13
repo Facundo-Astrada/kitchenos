@@ -487,15 +487,39 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     return s
   }, [tareas, fecha])
 
-  // El mismo set para la jornada siguiente. Lo que se despacha en el cierre es
-  // producción de mañana, así que "este ítem ya está despachado" se responde
-  // con otra fecha — sin esto el + del Modo Control no tenía cómo saberlo en
-  // cierre y el mismo ítem se podía mandar dos veces.
-  const tareasMananaSet = useMemo(() => {
-    const manana = sumarDias(fecha, 1)
+  // ── El pase de turno viaja como tarea, no como número ───────────────────
+  // Cerrar en Modo Control no deja cuánto quedó: deja QUÉ hay que producir y
+  // con qué prioridad. La cantidad se habla en la cocina. Esas dos caras del
+  // mismo pase son estos dos sets, y los dos se reconocen por la categoría
+  // 'pase_turno' — el marcador que distingue la producción heredada de la que
+  // se crea dentro del turno.
+  //
+  // `jornadaProxima` puede ser HOY (cerrando el almuerzo, el siguiente es la
+  // cena del mismo día): por eso la categoría es parte del filtro y no alcanza
+  // con la fecha, o una tarea creada en la apertura de hoy se leería como pase.
+  const jornadaProxima = useMemo(() => {
+    const sig = turnoServicioId ? turnoSiguiente(fecha, turnoServicioId, turnosActivos) : null
+    return sig?.jornada ?? sumarDias(fecha, 1)
+  }, [fecha, turnoServicioId, turnosActivos])
+
+  // Lo que YO despacho al cerrar — apaga el + para no mandar dos veces lo mismo.
+  const tareasPaseDespachadasSet = useMemo(() => {
     const s = new Set<string>()
     for (const t of tareas) {
-      if (t.turno_fecha === manana && t.estado !== 'listo' && t.checklist_item_id) {
+      if (t.categoria === 'pase_turno' && t.turno_fecha === jornadaProxima && t.estado !== 'listo' && t.checklist_item_id) {
+        s.add(t.checklist_item_id)
+      }
+    }
+    return s
+  }, [tareas, jornadaProxima])
+
+  // Lo que RECIBO del turno anterior — un ítem con producción heredada no está
+  // "sin cerrar": el turno de antes lo miró y decidió, que es exactamente lo
+  // que el cierre tiene que dejar dicho.
+  const tareasPaseRecibidasSet = useMemo(() => {
+    const s = new Set<string>()
+    for (const t of tareas) {
+      if (t.categoria === 'pase_turno' && t.turno_fecha === fecha && t.estado !== 'listo' && t.checklist_item_id) {
         s.add(t.checklist_item_id)
       }
     }
@@ -509,16 +533,37 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // la apertura no pudiera cerrarse nunca, cuando la apertura mide la vuelta a
   // la plaza, no la cocina terminada.
   //
-  // Solo en apertura. En el cierre el tilde mide cuánto QUEDÓ, y tener una
-  // tarea abierta no dice nada sobre eso (además el botón de producir ni se
-  // renderiza en cierre).
+  // En el cierre vale lo mismo, pero mirando el pase: un ítem despachado al
+  // turno siguiente está tan resuelto como uno contado — "falta esto, va con
+  // prioridad P" es una forma legítima de cerrarlo. Por eso el set cambia según
+  // la fase: en apertura, la producción de hoy; en cierre, la que se está
+  // dejando para el turno que entra. Una tarea de hoy no cierra nada al cerrar.
   const total = plazaItems.length
-  const enProduccion = useMemo(() => (
-    tab !== 'apertura' ? 0
-      : plazaItems.filter(i => !regMap[i.id]?.completado && tareasHoySet.has(i.id)).length
-  ), [tab, plazaItems, regMap, tareasHoySet])
+  const enProduccion = useMemo(() => {
+    if (tab === 'rutina') return 0
+    const set = tab === 'cierre' ? tareasPaseDespachadasSet : tareasHoySet
+    return plazaItems.filter(i => !regMap[i.id]?.completado && set.has(i.id)).length
+  }, [tab, plazaItems, regMap, tareasHoySet, tareasPaseDespachadasSet])
   const done = plazaItems.filter(i => regMap[i.id]?.completado).length + enProduccion
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
+
+  // ── Lo que llega del turno anterior, ya filtrado ────────────────────────
+  // El efecto de más arriba deja los pendientes crudos (sin registro de cierre).
+  // Acá se le descuentan los que vienen con producción despachada: ésos no
+  // están "sin cerrar", están en curso. Va en un memo aparte y no dentro del
+  // efecto para no re-consultar el cierre anterior cada vez que cambia una tarea.
+  const pendientesSinResolver = useMemo(
+    () => pendientesTurnoAnterior.filter(i => !tareasPaseRecibidasSet.has(i.id)),
+    [pendientesTurnoAnterior, tareasPaseRecibidasSet],
+  )
+  const recibidosEnProduccion = useMemo(
+    () => plazaItems.filter(i => tareasPaseRecibidasSet.has(i.id)),
+    [plazaItems, tareasPaseRecibidasSet],
+  )
+  // "Nadie registró el cierre" solo es cierto si tampoco dejaron producción: un
+  // turno que cerró despachando todo hizo la vuelta completa, y acusarlo de no
+  // haber cerrado sería falso y además enseñaría a ignorar el banner.
+  const cierreAnteriorSinRastro = cierreAnteriorIncompleto && recibidosEnProduccion.length === 0
 
   // ── Auto-avance de la vuelta ────────────────────────────────────────────
   // El cocinero recorre la plaza de arriba abajo contando. Al terminar un ítem
@@ -799,7 +844,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     if (params.dia === 'manana') {
       turnoFecha = sumarDias(today, 1)
     }
-    const categoria = params.dia === 'manana' ? 'pase_turno' : 'produccion'
+    if (params.turnoFecha) turnoFecha = params.turnoFecha
+    const categoria = params.categoria ?? (params.dia === 'manana' ? 'pase_turno' : 'produccion')
     const descripcion = params.nota ?? (params.cantidad != null ? `Preparar ${params.cantidad}` : null)
     await agregarTarea({
       titulo: params.titulo,
@@ -867,19 +913,20 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // un número acá obligaría a abrir un sheet y romper el recorrido. La cantidad
   // la pone después quien produce, o se saca del estándar del ítem.
   //
-  // El día lo decide la fase, igual que en la tarjeta completa: lo que falta al
-  // abrir se produce hoy, lo que se descubre al cerrar se produce mañana (queda
-  // como 'pase_turno'). Mandar a producción de hoy desde el cierre sería cargar
-  // trabajo a un turno que está terminando.
+  // El destino lo decide la fase. En apertura, producción de hoy. En cierre, la
+  // tarea es el pase de turno: viaja al TURNO SIGUIENTE (la cena de hoy si se
+  // está cerrando el almuerzo; mañana solo si este era el último del día), y por
+  // eso la jornada se calcula con turnoSiguiente en vez de sumar un día a ciegas.
   const handleCrearTareaControl = useCallback(async (item: MisePlaceItem) => {
     const plazasItem = item.receta_id ? (platoPlazoMap[item.receta_id] ?? SIN_PLAZAS) : SIN_PLAZAS
     const primaryPlaza = plazasItem.length > 0 ? plazasItem[0].plaza : item.plaza
-    const dia = fase === 'cierre' ? 'manana' : 'hoy'
+    const esCierre = fase === 'cierre'
     await handleCrearTarea({
       titulo: item.nombre,
       seccion: PLAZA_TO_SECCION[primaryPlaza] ?? 'general',
       prioridad: MISE_PRIO_TO_TAREA[item.prioridad] ?? 'alta',
-      dia,
+      dia: esCierre ? 'manana' : 'hoy',
+      ...(esCierre ? { turnoFecha: jornadaProxima, categoria: 'pase_turno' as const } : {}),
       nota: null,
       cantidad: null,
       receta_id: item.receta_id ?? null,
@@ -887,8 +934,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       plazas: plazasItem,
       checklist_item_id: item.id,
     })
-    setToast(dia === 'manana' ? `A producción de mañana: ${item.nombre}` : `A producción: ${item.nombre}`)
-  }, [handleCrearTarea, platoPlazoMap, fase])
+    setToast(esCierre ? `Pasa al turno siguiente: ${item.nombre}` : `A producción: ${item.nombre}`)
+  }, [handleCrearTarea, platoPlazoMap, fase, jornadaProxima])
 
   const handleCrearVencimientoDesdeMise = useCallback(async (params: { producto_nombre: string; fecha_vencimiento: string; fecha_apertura: string }) => {
     await crearVencimiento({
@@ -1137,23 +1184,63 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
             que está justo abajo. En ese caso va solo el aviso de una línea.
             El detalle se muestra únicamente cuando sí hubo cierre y quedaron
             algunos colgados: ahí los nombres son información nueva. ── */}
-        {!loading && tab === 'apertura' && pendientesTurnoAnterior.length > 0 && (
+        {/* ── Lo que el turno anterior dejó en producción ──────────────────
+            El pase por tarea: cuando el cierre se hizo en Modo Control no hay
+            números que heredar, hay decisiones. Esto es lo que el turno que
+            entra tiene que seguir — qué falta y con qué urgencia. La cantidad
+            se habla en la cocina, a propósito: acá nadie inventa un número. ── */}
+        {!loading && tab === 'apertura' && recibidosEnProduccion.length > 0 && (
           <div style={{
-            background: cierreAnteriorIncompleto ? 'rgba(239, 68, 68, 0.12)' : 'rgba(250, 204, 21, 0.15)',
-            borderLeft: `3px solid ${cierreAnteriorIncompleto ? '#ef4444' : '#facc15'}`,
+            background: 'rgba(245,158,11,0.10)',
+            borderLeft: '3px solid #f59e0b',
+            borderRadius: 12, marginBottom: 10, overflow: 'hidden',
+          }}>
+            <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#b45309', flexShrink: 0 }}>pending</span>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: '#78350f', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                Te dejaron en producción
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#92400e', flexShrink: 0 }}>
+                {recibidosEnProduccion.length} para hacer
+              </span>
+            </div>
+            <div style={{ padding: '0 14px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {recibidosEnProduccion.map(item => {
+                const p = PRIO_CFG[item.prioridad] ?? PRIO_CFG.ref
+                return (
+                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+                    <span style={{
+                      flexShrink: 0, minWidth: 30, textAlign: 'center', padding: '2px 6px', borderRadius: 6,
+                      background: p.bg, border: `1px solid ${p.color}`,
+                      fontSize: 10, fontWeight: 800, color: p.color,
+                    }}>{p.label}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: '#78350f', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {item.nombre}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {!loading && tab === 'apertura' && pendientesSinResolver.length > 0 && (
+          <div style={{
+            background: cierreAnteriorSinRastro ? 'rgba(239, 68, 68, 0.12)' : 'rgba(250, 204, 21, 0.15)',
+            borderLeft: `3px solid ${cierreAnteriorSinRastro ? '#ef4444' : '#facc15'}`,
             borderRadius: 12,
             marginBottom: 10,
             overflow: 'hidden',
           }}>
             <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 16, color: cierreAnteriorIncompleto ? '#dc2626' : '#ca8a04', flexShrink: 0 }}>
-                {cierreAnteriorIncompleto ? 'report' : 'warning'}
+              <span className="material-symbols-outlined" style={{ fontSize: 16, color: cierreAnteriorSinRastro ? '#dc2626' : '#ca8a04', flexShrink: 0 }}>
+                {cierreAnteriorSinRastro ? 'report' : 'warning'}
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: cierreAnteriorIncompleto ? '#7f1d1d' : '#78350f', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-                  {cierreAnteriorIncompleto ? 'Recibís sin cierre del turno anterior' : 'Pendiente del turno anterior'}
+                <div style={{ fontSize: 12, fontWeight: 700, color: cierreAnteriorSinRastro ? '#7f1d1d' : '#78350f', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                  {cierreAnteriorSinRastro ? 'Recibís sin cierre del turno anterior' : 'Pendiente del turno anterior'}
                 </div>
-                {cierreAnteriorIncompleto && (
+                {cierreAnteriorSinRastro && (
                   <div style={{ fontSize: 12, color: '#7f1d1d', lineHeight: 1.4, marginTop: 3 }}>
                     Nadie registró el cierre. Contá lo que veas al arrancar.{' '}
                     <button
@@ -1168,15 +1255,15 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                   </div>
                 )}
               </div>
-              {!cierreAnteriorIncompleto && (
+              {!cierreAnteriorSinRastro && (
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#92400e', flexShrink: 0 }}>
-                  {pendientesTurnoAnterior.length} sin cerrar
+                  {pendientesSinResolver.length} sin cerrar
                 </span>
               )}
             </div>
-            {!cierreAnteriorIncompleto && (
+            {!cierreAnteriorSinRastro && (
               <div style={{ padding: '0 14px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {pendientesTurnoAnterior.map(item => (
+                {pendientesSinResolver.map(item => (
                   <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
                     <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#ca8a04', flexShrink: 0 }}>radio_button_unchecked</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -1306,7 +1393,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                   // botones chicos al borde para no comerse el ancho.
                   const tildado = regMap[item.id]?.completado ?? false
                   const esCierre = fase === 'cierre'
-                  const enviada = (esCierre ? tareasMananaSet : tareasHoySet).has(item.id)
+                  const enviada = (esCierre ? tareasPaseDespachadasSet : tareasHoySet).has(item.id)
                   const prioCfg = PRIO_CFG[item.prioridad] ?? PRIO_CFG.ref
                   return (
                   <div style={{
@@ -1360,8 +1447,10 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                       disabled={enviada}
                       title={
                         enviada
-                          ? (esCierre ? 'Ya está en la producción de mañana' : 'Ya está en Producción')
-                          : `Mandar a Producción ${esCierre ? 'de mañana ' : ''}con prioridad ${prioCfg.label}`
+                          ? (esCierre ? 'Ya pasa al turno siguiente' : 'Ya está en Producción')
+                          : esCierre
+                            ? `Pasar al turno siguiente con prioridad ${prioCfg.label}`
+                            : `Mandar a Producción con prioridad ${prioCfg.label}`
                       }
                       style={{
                         ...btnReset, width: 30, height: 30, borderRadius: '50%', flexShrink: 0,

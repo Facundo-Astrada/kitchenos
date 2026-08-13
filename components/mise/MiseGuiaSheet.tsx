@@ -182,9 +182,16 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
       >
         <b>fact_check (Modo Control):</b>{' '}deja cada ítem en una sola línea con tres decisiones y ningún
         número: el <b>tilde</b> (está como tiene que estar), el <b>badge de prioridad</b> — un tap lo cicla
-        SP → P → REF — y el <b>+</b>, que manda el ítem a <b>Producción</b> para hoy con esa prioridad y sin
-        cantidad (la pone después quien lo produce). El + queda en verde cuando ya hay tarea abierta.
-        Para recorrer la plaza rápido. Queda activado hasta que lo apagues.<br />
+        SP → P → REF — y el <b>+</b>, que despacha el ítem con esa prioridad y sin cantidad. El + queda en
+        verde cuando ese ítem ya está despachado.
+        <br /><br />
+        <b>En el cierre el + arma el pase de turno.</b> Cerrar en Modo Control no deja números, deja
+        decisiones: cada ítem termina tildado (&quot;esto está&quot;) o despachado (&quot;esto falta, va con
+        prioridad P&quot;), y eso es lo que hereda el turno siguiente — lo ve en el aviso ámbar
+        <b> &quot;Te dejaron en producción&quot;</b> con la prioridad de cada uno. Las cantidades se hablan en la
+        cocina; la app no inventa un número que nadie contó. La contra es que el que abre no recibe el
+        &quot;quedaban 8&quot; de referencia: si querés ese dato, ese cierre hacelo con la tarjeta completa.
+        Queda activado hasta que lo apagues.<br />
         <b>settings:</b>{' '}crear, renombrar, reordenar o borrar las secciones de esta plaza.
       </Bloque>
 
