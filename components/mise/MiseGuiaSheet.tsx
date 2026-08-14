@@ -135,16 +135,6 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
       <Titulo>Arriba de todo</Titulo>
 
       <Bloque
-        titulo="Almuerzo / Cena — turno de servicio"
-        demo={<DemoNavy><PillNavy activo>Almuerzo</PillNavy><PillNavy>Cena</PillNavy></DemoNavy>}
-      >
-        Cada turno de servicio tiene su propia lista y sus propios números. Lo que tildás o contás en
-        Almuerzo no se mezcla con Cena. Se selecciona solo por hora, pero podés cambiarlo a mano.
-        Si tu restaurante tiene un solo turno configurado, este selector no aparece.
-        <Repercute>el cierre de <b>Almuerzo</b> es la referencia de la apertura de <b>Cena</b>, no la del día siguiente.</Repercute>
-      </Bloque>
-
-      <Bloque
         titulo="Apertura / Cierre / Rutina"
         demo={<DemoNavy><PillNavy activo>Apertura</PillNavy><PillNavy>Cierre</PillNavy><PillNavy>Rutina</PillNavy></DemoNavy>}
       >
@@ -156,14 +146,40 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
       </Bloque>
 
       <Bloque
-        titulo="Los chips de plaza — entrás a cualquiera"
-        demo={<DemoNavy><PillNavy activo>Calientes</PillNavy><PillNavy>Fríos</PillNavy><PillNavy>Pase</PillNavy></DemoNavy>}
+        titulo="El título — plaza y turno"
+        demo={
+          <DemoNavy>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Parrilla</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.55)' }}>· Almuerzo</span>
+            <span className={ICON} style={{ fontSize: 15, color: 'rgba(255,255,255,.55)' }}>expand_more</span>
+          </DemoNavy>
+        }
       >
-        Debajo del título están todas las plazas del restaurante y podés abrir cualquiera: tildar, cambiar
-        prioridades y mandar a producir. La plaza que tenés asignada decide en cuál <b>arrancás</b>, no cuál
-        podés mirar — en el servicio real se cubre la plaza de al lado todo el tiempo y el mise es lo primero
-        que hay que poder abrir para hacerlo.
-        <Repercute>lo que tocás en otra plaza es idéntico a que lo hubiera hecho quien la tiene asignada: mismo mise, mismas tareas.</Repercute>
+        Dice dónde estás parado y con un tap se cambia. Abre la lista de <b>todas las plazas</b> con el
+        avance de cada una — sirve para ver de un vistazo dónde hace falta una mano antes de entrar — y
+        abajo el <b>turno</b>.
+        <br /><br />
+        Podés abrir cualquier plaza y operarla completa: tildar, cambiar prioridades, mandar a producir. La
+        plaza que tenés asignada decide en cuál <b>arrancás</b>, no cuál podés mirar — en el servicio se
+        cubre la plaza de al lado todo el tiempo.
+        <br /><br />
+        El turno se elige solo por hora y por la entrega; cambiarlo a mano es para casos puntuales. Cada
+        turno tiene su propia lista y sus propios números: lo que contás en Almuerzo no se mezcla con Cena.
+        <Repercute>lo que tocás en otra plaza es idéntico a que lo hubiera hecho quien la tiene asignada: mismo mise, mismas tareas. Y el cierre de <b>Almuerzo</b> es la referencia de la apertura de <b>Cena</b>, no la del día siguiente.</Repercute>
+      </Bloque>
+
+      <Bloque
+        titulo="El header se pliega al bajar"
+        demo={
+          <DemoNavy>
+            <span className={ICON} style={{ fontSize: 16, color: 'rgba(255,255,255,.7)' }}>keyboard_double_arrow_up</span>
+          </DemoNavy>
+        }
+      >
+        Cuando scrolleás hacia abajo, los tabs de OPS y el título se pliegan solos y queda únicamente la
+        fila de Apertura/Cierre/Rutina con el progreso. Al primer gesto hacia arriba vuelve todo. Es para que
+        la pantalla la ocupen los ítems y no los botones: en una tablet el header entero eran unos ocho
+        ítems menos a la vista.
       </Bloque>
 
       <Bloque

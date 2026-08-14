@@ -23,6 +23,7 @@ import { useNotasPlaza } from '@/lib/hooks/useNotasPlaza'
 import { NotasPlaza } from '@/components/ops/NotasPlaza'
 import { todasLasPlazas, plazaLabel, plazaIcon } from '@/lib/constants'
 import { hoyOperativo, sumarDias, turnoVigente, turnoAnterior, turnoSiguiente, encodeTurnoFase, cierreIncompleto, fechaEnTz } from '@/lib/ops/turnos'
+import { setOpsChromeCompact } from '@/lib/ops/chromeBus'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import SectionEditor from '@/components/checklist/SectionEditor'
 import type { Plaza, MisePlaceItem, MisePrioridad, ChecklistSeccionConfig, RutinaFrecuencia, ChecklistRutina, ChecklistRutinaRegistro, RutinaCondicion } from '@/types'
@@ -210,6 +211,12 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const [pendientesTurnoAnterior, setPendientesTurnoAnterior] = useState<MisePlaceItem[]>([])
   const [cierreAnteriorIncompleto, setCierreAnteriorIncompleto] = useState(false)
   const [modoControl, setModoControl] = useState(false)
+  // Hoja de plaza + turno (la abre el título) y menú de las acciones que no se
+  // tocan durante el servicio (guía, editar secciones).
+  const [showPlazaSheet, setShowPlazaSheet] = useState(false)
+  const [showMenu, setShowMenu] = useState(false)
+  // Notas de plaza vacías: colapsadas a un chip hasta que alguien quiera escribir.
+  const [notasAbiertas, setNotasAbiertas] = useState(false)
   const [cerrandoTurno, setCerrandoTurno] = useState(false)
   const [entregando, setEntregando] = useState(false)
 
@@ -242,6 +249,11 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     [turnosActivos, entregados, plaza],
   )
   const turnoServicioId = turnoManual ?? vigente?.turnoId ?? null
+  // El turno que se está mirando, para leerlo en el título ("Parrilla · Cena").
+  const turnoActual = useMemo(
+    () => turnosActivos.find(t => t.id === (turnoServicioId ?? turnosActivos[0]?.id)) ?? null,
+    [turnosActivos, turnoServicioId],
+  )
   // La jornada acompaña al turno: entregar la cena del 5 a la 01:20 deja la
   // pantalla en el almuerzo del 6, no en el del 5 (que ya pasó).
   const fecha = vigente?.jornada ?? hoyOperativo()
@@ -718,6 +730,40 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   useEffect(() => { actualizarItemRef.current = actualizarItem }, [actualizarItem])
   useEffect(() => { groupedRef.current = grouped }, [grouped])
 
+  // ── Chrome que se pliega al recorrer la lista ───────────────────────────
+  // Bajando, el título y los tabs de OPS se pliegan y queda solo la fila de
+  // fases; al primer gesto hacia arriba vuelve todo. Los umbrales (12px de
+  // zona muerta arriba, 8px de desplazamiento mínimo) están para que el
+  // rebote del scroll táctil no lo haga parpadear.
+  const [chromeCompacto, setChromeCompacto] = useState(false)
+  const chromeCompactoRef = useRef(false)
+  const ultimoScrollY = useRef(0)
+  const aplicarChrome = useCallback((compacto: boolean) => {
+    if (chromeCompactoRef.current === compacto) return
+    chromeCompactoRef.current = compacto
+    setChromeCompacto(compacto)
+    setOpsChromeCompact(compacto)
+  }, [])
+  const handleListScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const y = e.currentTarget.scrollTop
+    const delta = y - ultimoScrollY.current
+    ultimoScrollY.current = y
+    if (y < 12) { aplicarChrome(false); return }
+    if (delta > 8) aplicarChrome(true)
+    else if (delta < -8) aplicarChrome(false)
+  }, [aplicarChrome])
+
+  // Cambiar de plaza o de fase es empezar una vuelta nueva: el header vuelve
+  // entero aunque el scroll haya quedado a mitad de camino. Y al desmontarse
+  // (salir del mise) hay que devolverle los tabs a OPS, o el otro panel se
+  // abriría sin su propia navegación.
+  useEffect(() => {
+    scrollContainerRef.current?.scrollTo({ top: 0 })
+    ultimoScrollY.current = 0
+    aplicarChrome(false)
+  }, [plaza, tab, aplicarChrome])
+  useEffect(() => () => { setOpsChromeCompact(false) }, [])
+
   useEffect(() => {
     if (!dragging) return
     // Mutable current-Y so the RAF loop always reads the latest value
@@ -1021,65 +1067,105 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
             La fecha NO se muestra salvo que la jornada operativa (corte 05:00,
             ver hoyOperativo) no coincida con el día calendario real — ej. cerrando
             a la 1am la jornada sigue siendo "ayer" y ahí sí vale la pena avisar. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 10 }}>
-          <button onClick={() => setPlaza(null)} style={btnReset}>
-            <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>arrow_back</span>
-          </button>
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>{plazaLabel(plaza, plazasCustom)}</span>
-            {fecha !== fechaEnTz(new Date()) && (
+        <div style={{
+          maxHeight: chromeCompacto ? 0 : 60, opacity: chromeCompacto ? 0 : 1,
+          overflow: 'hidden', transition: 'max-height .18s ease, opacity .14s ease',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 10 }}>
+            {/* Título-selector: plaza y turno en un solo control. Reemplaza a la
+                flecha de volver (que iba a la grilla), a la fila de chips de
+                plaza y a los chips de turno — tres cosas que se tocan poco y
+                ocupaban lugar permanente. Lo que se lee sigue estando; lo que se
+                elige entró en la hoja. */}
+            <button
+              data-coach-target="mise-plaza-turno"
+              onClick={() => setShowPlazaSheet(true)}
+              style={{
+                ...btnReset, flex: 1, minWidth: 0, justifyContent: 'flex-start', gap: 6,
+                padding: '4px 8px 4px 2px', borderRadius: 10,
+                WebkitTapHighlightColor: 'transparent',
+              }}
+            >
               <span style={{
-                fontSize: 10, fontWeight: 700, color: '#facc15',
-                background: 'rgba(250,204,21,.15)', borderRadius: 999, padding: '2px 8px',
+                fontSize: 17, fontWeight: 700, color: '#fff',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
-                {fmtFecha(fecha)}
+                {plazaLabel(plaza, plazasCustom)}
               </span>
-            )}
-            {tab !== 'rutina' && turnosActivos.length > 1 && (
-              <div data-coach-target="mise-turno" style={{ display: 'flex', gap: 4 }}>
-                {turnosActivos.map(t => {
-                  const activo = (turnoServicioId ?? turnosActivos[0].id) === t.id
-                  return (
-                    <button key={t.id} onClick={() => setTurnoManual(t.id)} style={{
-                      ...btnReset,
-                      padding: '3px 10px', borderRadius: 999,
-                      fontSize: 11, fontWeight: 700,
-                      background: activo ? '#fff' : 'rgba(255,255,255,.12)',
-                      color: activo ? 'var(--navy)' : 'rgba(255,255,255,.6)',
-                      transition: 'all .15s',
-                    }}>
-                      {t.nombre}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
+              {tab !== 'rutina' && turnoActual && (
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,.55)', flexShrink: 0 }}>
+                  · {turnoActual.nombre}
+                </span>
+              )}
+              <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'rgba(255,255,255,.55)', flexShrink: 0 }}>
+                expand_more
+              </span>
+              {fecha !== fechaEnTz(new Date()) && (
+                <span style={{
+                  fontSize: 10, fontWeight: 700, color: '#facc15', flexShrink: 0,
+                  background: 'rgba(250,204,21,.15)', borderRadius: 999, padding: '2px 8px',
+                }}>
+                  {fmtFecha(fecha)}
+                </span>
+              )}
+            </button>
+            {/* Modo Control se queda afuera del menú: es un modo que se prende y
+                apaga durante la vuelta, y además es el que hace entrar más
+                ítems en pantalla. */}
+            <button
+              data-coach-target="mise-modo-control"
+              onClick={toggleModoControl}
+              title={modoControl ? 'Modo Control activo — tap para volver a OPS' : 'Activar Modo Control'}
+              style={{
+                ...btnReset,
+                background: modoControl ? 'rgba(255,255,255,.9)' : 'rgba(255,255,255,.1)',
+                borderRadius: 8, padding: 6, flexShrink: 0,
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18, color: modoControl ? 'var(--navy)' : 'rgba(255,255,255,.7)' }}>
+                fact_check
+              </span>
+            </button>
+            {/* Guía y editar secciones: se usan una vez y no durante el servicio. */}
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <button
+                data-coach-target="mise-secciones-cfg"
+                onClick={() => setShowMenu(v => !v)}
+                title="Más opciones"
+                style={{ ...btnReset, background: 'rgba(255,255,255,.1)', borderRadius: 8, padding: 6 }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'rgba(255,255,255,.7)' }}>more_vert</span>
+              </button>
+              {showMenu && (
+                <>
+                  <div onClick={() => setShowMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                  <div style={{
+                    position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 41,
+                    background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12,
+                    boxShadow: '0 8px 24px rgba(0,0,0,.18)', overflow: 'hidden', minWidth: 190,
+                  }}>
+                    {[
+                      { icon: 'help', label: 'Cómo funciona el Mise', run: () => setGuia({ foco: null }) },
+                      { icon: 'settings', label: 'Editar secciones', run: () => setShowSectionEditor(true) },
+                    ].map(o => (
+                      <button
+                        key={o.icon}
+                        onClick={() => { setShowMenu(false); o.run() }}
+                        style={{
+                          ...btnReset, width: '100%', justifyContent: 'flex-start', gap: 10,
+                          padding: '11px 14px', borderRadius: 0,
+                          fontSize: 13, fontWeight: 600, color: 'var(--text-1)',
+                        }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)' }}>{o.icon}</span>
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-          {/* Guía de uso — siempre a mano, sin pasar por el Coach */}
-          <button
-            onClick={() => setGuia({ foco: null })}
-            title="Cómo funciona el Mise"
-            style={{ ...btnReset, background: 'rgba(255,255,255,.1)', borderRadius: 8, padding: 6, marginRight: 4 }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'rgba(255,255,255,.7)' }}>help</span>
-          </button>
-          <button
-            data-coach-target="mise-modo-control"
-            onClick={toggleModoControl}
-            title={modoControl ? 'Modo Control activo — tap para volver a OPS' : 'Activar Modo Control'}
-            style={{
-              ...btnReset,
-              background: modoControl ? 'rgba(255,255,255,.9)' : 'rgba(255,255,255,.1)',
-              borderRadius: 8, padding: 6, marginRight: 4,
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 18, color: modoControl ? 'var(--navy)' : 'rgba(255,255,255,.7)' }}>
-              fact_check
-            </span>
-          </button>
-          <button data-coach-target="mise-secciones-cfg" onClick={() => setShowSectionEditor(true)} style={{ ...btnReset, background: 'rgba(255,255,255,.1)', borderRadius: 8, padding: 6 }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'rgba(255,255,255,.7)' }}>settings</span>
-          </button>
         </div>
 
         {/* Fila 2: tabs + progreso, misma fila — libera la fila propia que tenía la barra */}
@@ -1109,37 +1195,20 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           )}
         </div>
 
-        {/* Switcher de plazas — siempre, con todas. Es el camino para cubrir la
-            plaza de al lado sin volver a la grilla; antes solo aparecía para
-            quien tuviera ≥2 asignadas, que en la práctica era nadie.
-            plazaLabel y no PLAZA_LABELS: las plazas custom no están en ese
-            record y salían en blanco. */}
-        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, scrollbarWidth: 'none' }}>
-          {plazasForSelector.map(p => (
-            <button
-              key={p}
-              onClick={() => setPlaza(p)}
-              style={{
-                padding: '5px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
-                background: plaza === p ? '#fff' : 'rgba(255,255,255,0.15)',
-                color: plaza === p ? 'var(--navy)' : 'rgba(255,255,255,0.65)',
-                fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-                flexShrink: 0, fontFamily: 'inherit',
-              }}
-            >
-              {plazaLabel(p, plazasCustom)}
-            </button>
-          ))}
-        </div>
 
-        {/* Modo control banner */}
+        {/* Modo control banner — recordatorio, no control: se pliega con el
+            resto del chrome al bajar por la lista. */}
         {modoControl && (
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6,
-            background: 'rgba(255,255,255,.12)', borderRadius: 8, padding: '5px 10px',
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: 'rgba(255,255,255,.12)', borderRadius: 8,
+            maxHeight: chromeCompacto ? 0 : 40, marginBottom: chromeCompacto ? 0 : 6,
+            padding: chromeCompacto ? '0 10px' : '5px 10px',
+            opacity: chromeCompacto ? 0 : 1, overflow: 'hidden',
+            transition: 'max-height .18s ease, opacity .14s ease, padding .18s ease, margin .18s ease',
           }}>
             <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'rgba(255,255,255,.7)' }}>fact_check</span>
-            <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.7)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.7)', letterSpacing: '.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
               Modo Control — tildá lo que está, o mandalo a producir
             </span>
           </div>
@@ -1148,7 +1217,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       </div>
 
       {/* Body */}
-      <div ref={scrollContainerRef} style={{ flex: 1, overflow: 'auto', padding: '10px 12px', paddingBottom: 120 }}>
+      <div ref={scrollContainerRef} onScroll={handleListScroll} style={{ flex: 1, overflow: 'auto', padding: '10px 12px', paddingBottom: 120 }}>
         {loading && (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>Cargando...</div>
         )}
@@ -1158,7 +1227,11 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
             "ingresó pescado") y hay que leerlo antes de empezar a tildar. Vive
             en pase_mensajes, así que lo que se escribe acá también se lee en el
             Pase y en la columna de esta plaza en Producción. */}
-        {!loading && plaza && (
+        {/* Sin notas cargadas el bloque entero se reduce a un chip de una línea:
+            vacío no dice nada y se comía la primera pantalla, que es justo la
+            que tiene que mostrar ítems. Con una nota, se abre solo — el contexto
+            del turno anterior no se esconde nunca detrás de un tap. */}
+        {!loading && plaza && (notasDe(plaza).length > 0 || notasAbiertas ? (
           <div style={{
             background: 'var(--surface)', border: '1px solid var(--border)',
             borderRadius: 12, padding: '8px 10px', marginBottom: 10,
@@ -1175,7 +1248,19 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
               onEliminar={eliminarNota}
             />
           </div>
-        )}
+        ) : (
+          <button
+            onClick={() => setNotasAbiertas(true)}
+            style={{
+              ...btnReset, gap: 6, marginBottom: 8, padding: '5px 10px', borderRadius: 999,
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              fontSize: 11, fontWeight: 600, color: 'var(--text-3)',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>sticky_note_2</span>
+            Dejar una nota de plaza
+          </button>
+        ))}
 
         {/* ── Arrastre del turno anterior (solo en apertura) — nunca bloquea,
             solo avisa. No le pide al que entra que reconstruya el cierre
@@ -1854,6 +1939,101 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           }}
           onClose={() => setShowAddSheet(null)}
         />
+      )}
+      {/* Hoja de plaza + turno — lo que antes eran la fila de chips de plaza,
+          los chips de turno y la flecha a la grilla. Trae de la grilla lo único
+          que la hacía valiosa: el progreso de cada plaza, para saber dónde hace
+          falta una mano antes de entrar. */}
+      {showPlazaSheet && (
+        <div
+          onClick={() => setShowPlazaSheet(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,.45)',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '100%', maxWidth: 520, maxHeight: '80vh', overflow: 'auto',
+              background: 'var(--bg)', borderRadius: '18px 18px 0 0', padding: '14px 14px 24px',
+            }}
+          >
+            <div style={{
+              width: 36, height: 4, borderRadius: 99, background: 'var(--border)',
+              margin: '0 auto 12px',
+            }} />
+            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>
+              Plaza
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 16 }}>
+              {plazasForSelector.map(p => {
+                const gp = gridProgress[p] ?? { total: 0, done: 0 }
+                const gpPct = gp.total > 0 ? Math.round((gp.done / gp.total) * 100) : 0
+                const completo = gp.total > 0 && gp.done === gp.total
+                const activa = p === plaza
+                return (
+                  <button
+                    key={p}
+                    onClick={() => { setPlaza(p); setShowPlazaSheet(false) }}
+                    style={{
+                      ...btnReset, width: '100%', gap: 10, padding: '10px 12px', borderRadius: 12,
+                      background: activa ? 'rgba(67,97,160,.10)' : 'var(--surface)',
+                      border: `1px solid ${activa ? 'var(--accent)' : 'var(--border)'}`,
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 20, flexShrink: 0, color: completo ? '#22c55e' : '#4361a0' }}>
+                      {plazaIcon(p, plazasCustom)}
+                    </span>
+                    <span style={{ flex: 1, textAlign: 'left', fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>
+                      {plazaLabel(p, plazasCustom)}
+                    </span>
+                    {gp.total > 0 ? (
+                      <>
+                        <div style={{ width: 56, height: 3, background: 'var(--border)', borderRadius: 99, overflow: 'hidden', flexShrink: 0 }}>
+                          <div style={{ width: `${gpPct}%`, height: '100%', background: completo ? '#22c55e' : '#4361a0' }} />
+                        </div>
+                        <span style={{
+                          fontSize: 11, fontFamily: "'DM Mono', monospace", flexShrink: 0,
+                          color: completo ? '#22c55e' : 'var(--text-3)',
+                        }}>{gp.done}/{gp.total}</span>
+                      </>
+                    ) : (
+                      <span style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0 }}>Sin ítems</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+            {turnosActivos.length > 1 && (
+              <>
+                <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>
+                  Turno
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {turnosActivos.map(t => {
+                    const activo = (turnoServicioId ?? turnosActivos[0].id) === t.id
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() => { setTurnoManual(t.id); setShowPlazaSheet(false) }}
+                        style={{
+                          ...btnReset, flex: 1, padding: '10px 0', borderRadius: 12,
+                          fontSize: 13, fontWeight: 700,
+                          background: activo ? 'var(--navy)' : 'var(--surface)',
+                          border: `1px solid ${activo ? 'var(--navy)' : 'var(--border)'}`,
+                          color: activo ? '#fff' : 'var(--text-2)',
+                        }}
+                      >
+                        {t.nombre}
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
       {showSectionEditor && (
         <SectionEditor

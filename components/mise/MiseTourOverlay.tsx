@@ -42,10 +42,10 @@ export const MISE_PASOS: MisePaso[] = [
     texto: 'Voy a ir señalando cada control de esta plaza y qué hace. Tocá en cualquier lado para avanzar, o "Saltar" para salir cuando quieras.',
   },
   {
-    target: 'mise-turno',
+    target: 'mise-plaza-turno',
     fase: 'apertura',
-    titulo: 'Almuerzo / Cena',
-    texto: 'Cada turno de servicio tiene su propia lista y sus propios números: lo que tildás o contás en Almuerzo no se mezcla con Cena. Se elige solo por hora y podés cambiarlo a mano. El cierre de Almuerzo es la referencia de la apertura de Cena.',
+    titulo: 'Plaza y turno',
+    texto: 'Acá leés dónde estás parado: la plaza y el turno de servicio. Un tap abre la lista de todas las plazas con el avance de cada una, y podés entrar a cualquiera — la plaza asignada define dónde arrancás, no cuál mirás. Abajo de esa lista se cambia el turno. Cada turno tiene su propia lista y sus propios números: lo que contás en Almuerzo no se mezcla con Cena, y el cierre de Almuerzo es la referencia de la apertura de Cena.',
   },
   {
     target: 'mise-fases',
@@ -68,8 +68,8 @@ export const MISE_PASOS: MisePaso[] = [
   {
     target: 'mise-secciones-cfg',
     fase: 'apertura',
-    titulo: 'Editar secciones',
-    texto: 'Crear, renombrar, reordenar o borrar las secciones de esta plaza (Heladera, Secos, Estación…). Los ítems se arrastran entre secciones con un toque largo.',
+    titulo: 'El menú de los tres puntos',
+    texto: 'Acá adentro están las dos cosas que no se tocan durante el servicio: esta guía y Editar secciones (crear, renombrar, reordenar o borrar las secciones de la plaza — Heladera, Secos, Estación…). Los ítems se arrastran entre secciones con un toque largo, sin pasar por el menú.',
   },
   {
     target: 'mise-item-check',

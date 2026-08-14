@@ -6,6 +6,7 @@ import TareasPage from '@/app/(app)/tareas/ClientView'
 import { ProduccionView } from '@/app/(app)/produccion/page'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { hoyOperativo } from '@/lib/ops/turnos'
+import { onOpsChromeCompact } from '@/lib/ops/chromeBus'
 
 type Tab = 'produccion' | 'mise' | 'planificacion'
 
@@ -68,6 +69,13 @@ export default function OperacionesPage() {
     return () => localStorage.removeItem('kc_screen_context')
   }, [tab, tareas])
 
+  // El mise avisa cuándo plegar. Solo él lo emite, y al desmontarse o cambiar
+  // de plaza/fase manda `false`, así que los otros paneles nunca se quedan sin
+  // su navegación. El cambio de tab lo restaura por las dudas.
+  const [chromeCompacto, setChromeCompacto] = useState(false)
+  useEffect(() => onOpsChromeCompact(setChromeCompacto), [])
+  useEffect(() => { setChromeCompacto(false) }, [tab])
+
   // Listen for kc-set-tab event from the coach tour (y desde Planificación → Producción)
   useEffect(() => {
     function handleSetTab(e: Event) {
@@ -88,9 +96,17 @@ export default function OperacionesPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      {/* Tab header */}
+      {/* Tab header — se pliega mientras se recorre la lista del mise (ver
+          lib/ops/chromeBus): en una tablet estas franjas fijas se comían un
+          tercio de la pantalla, que son ocho ítems que no se ven. Vuelve entero
+          al primer scroll hacia arriba. */}
       <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 0', flexShrink: 0 }}>
-        <div style={{ display: 'flex', gap: 6, paddingBottom: 10 }}>
+        <div style={{
+          display: 'flex', gap: 6,
+          maxHeight: chromeCompacto ? 0 : 44, paddingBottom: chromeCompacto ? 0 : 10,
+          opacity: chromeCompacto ? 0 : 1, overflow: 'hidden',
+          transition: 'max-height .18s ease, opacity .14s ease, padding .18s ease',
+        }}>
           {TABS.map(t => (
             <button
               key={t.id}
