@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth/context'
 import { useChecklist } from '@/lib/hooks/useChecklist'
@@ -24,6 +25,7 @@ import { NotasPlaza } from '@/components/ops/NotasPlaza'
 import { todasLasPlazas, plazaLabel, plazaIcon } from '@/lib/constants'
 import { hoyOperativo, sumarDias, turnoVigente, turnoAnterior, turnoSiguiente, encodeTurnoFase, cierreIncompleto, fechaEnTz } from '@/lib/ops/turnos'
 import { setOpsChromeCompact } from '@/lib/ops/chromeBus'
+import { SheetChrome } from '@/lib/ui/chrome'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import SectionEditor from '@/components/checklist/SectionEditor'
 import type { Plaza, MisePlaceItem, MisePrioridad, ChecklistSeccionConfig, RutinaFrecuencia, ChecklistRutina, ChecklistRutinaRegistro, RutinaCondicion } from '@/types'
@@ -214,7 +216,18 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // Hoja de plaza + turno (la abre el título) y menú de las acciones que no se
   // tocan durante el servicio (guía, editar secciones).
   const [showPlazaSheet, setShowPlazaSheet] = useState(false)
-  const [showMenu, setShowMenu] = useState(false)
+  // El menú guarda dónde se abrió: sale por portal, así que necesita las
+  // coordenadas del botón para pegarse abajo suyo.
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null)
+  const menuBtnRef = useRef<HTMLButtonElement>(null)
+  const abrirMenu = useCallback(() => {
+    setMenuPos(prev => {
+      if (prev) return null
+      const r = menuBtnRef.current?.getBoundingClientRect()
+      if (!r) return null
+      return { top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) }
+    })
+  }, [])
   // Notas de plaza vacías: colapsadas a un chip hasta que alguien quiera escribir.
   const [notasAbiertas, setNotasAbiertas] = useState(false)
   const [cerrandoTurno, setCerrandoTurno] = useState(false)
@@ -743,6 +756,9 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     chromeCompactoRef.current = compacto
     setChromeCompacto(compacto)
     setOpsChromeCompact(compacto)
+    // El botón que ancla el menú se pliega con el header: dejarlo abierto lo
+    // dejaría flotando sobre la lista, apuntando a nada.
+    if (compacto) setMenuPos(null)
   }, [])
   const handleListScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const y = e.currentTarget.scrollTop
@@ -1126,45 +1142,20 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                 fact_check
               </span>
             </button>
-            {/* Guía y editar secciones: se usan una vez y no durante el servicio. */}
-            <div style={{ position: 'relative', flexShrink: 0 }}>
-              <button
-                data-coach-target="mise-secciones-cfg"
-                onClick={() => setShowMenu(v => !v)}
-                title="Más opciones"
-                style={{ ...btnReset, background: 'rgba(255,255,255,.1)', borderRadius: 8, padding: 6 }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'rgba(255,255,255,.7)' }}>more_vert</span>
-              </button>
-              {showMenu && (
-                <>
-                  <div onClick={() => setShowMenu(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
-                  <div style={{
-                    position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 41,
-                    background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12,
-                    boxShadow: '0 8px 24px rgba(0,0,0,.18)', overflow: 'hidden', minWidth: 190,
-                  }}>
-                    {[
-                      { icon: 'help', label: 'Cómo funciona el Mise', run: () => setGuia({ foco: null }) },
-                      { icon: 'settings', label: 'Editar secciones', run: () => setShowSectionEditor(true) },
-                    ].map(o => (
-                      <button
-                        key={o.icon}
-                        onClick={() => { setShowMenu(false); o.run() }}
-                        style={{
-                          ...btnReset, width: '100%', justifyContent: 'flex-start', gap: 10,
-                          padding: '11px 14px', borderRadius: 0,
-                          fontSize: 13, fontWeight: 600, color: 'var(--text-1)',
-                        }}
-                      >
-                        <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)' }}>{o.icon}</span>
-                        {o.label}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+            {/* Guía y editar secciones: se usan una vez y no durante el servicio.
+                El desplegable sale por portal y con coordenadas medidas: acá
+                adentro quedaría recortado por el overflow:hidden del contenedor
+                que se pliega, y por debajo del BottomNav (z-100) si fuera un
+                absolute normal. */}
+            <button
+              ref={menuBtnRef}
+              data-coach-target="mise-secciones-cfg"
+              onClick={abrirMenu}
+              title="Más opciones"
+              style={{ ...btnReset, background: 'rgba(255,255,255,.1)', borderRadius: 8, padding: 6, flexShrink: 0 }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'rgba(255,255,255,.7)' }}>more_vert</span>
+            </button>
           </div>
         </div>
 
@@ -1944,25 +1935,67 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           los chips de turno y la flecha a la grilla. Trae de la grilla lo único
           que la hacía valiosa: el progreso de cada plaza, para saber dónde hace
           falta una mano antes de entrar. */}
-      {showPlazaSheet && (
+      {menuPos && createPortal(
+        <>
+          <div onClick={() => setMenuPos(null)} style={{ position: 'fixed', inset: 0, zIndex: 1999 }} />
+          <div style={{
+            position: 'fixed', top: menuPos.top, right: menuPos.right, zIndex: 2000,
+            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12,
+            boxShadow: '0 8px 24px rgba(0,0,0,.22)', overflow: 'hidden', minWidth: 200,
+          }}>
+            {[
+              { icon: 'help', label: 'Cómo funciona el Mise', run: () => setGuia({ foco: null }) },
+              { icon: 'settings', label: 'Editar secciones', run: () => setShowSectionEditor(true) },
+            ].map(o => (
+              <button
+                key={o.icon}
+                onClick={() => { setMenuPos(null); o.run() }}
+                style={{
+                  ...btnReset, width: '100%', justifyContent: 'flex-start', gap: 10,
+                  padding: '12px 14px', borderRadius: 0,
+                  fontSize: 13, fontWeight: 600, color: 'var(--text-1)',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)' }}>{o.icon}</span>
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </>,
+        document.body,
+      )}
+      {showPlazaSheet && createPortal(
+        <SheetChrome>
+        {/* Ventana centrada, no bottom sheet: abajo chocaba con el BottomNav
+            (que es z-100) y con el FAB del Coach, y el selector de turno quedaba
+            tapado justo cuando hay dos turnos. zIndex 2000 y useSheetOpen() por
+            SheetChrome — el FAB se esconde solo mientras esté abierta.
+            Portal a body por lo mismo que MiseGuiaSheet: montada en el árbol de
+            la pantalla, el panel lateral del Coach se le pone encima en desktop. */}
         <div
           onClick={() => setShowPlazaSheet(false)}
           style={{
-            position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,.45)',
-            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+            position: 'fixed', inset: 0, zIndex: 2000,
+            background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
           }}
         >
           <div
             onClick={e => e.stopPropagation()}
             style={{
-              width: '100%', maxWidth: 520, maxHeight: '80vh', overflow: 'auto',
-              background: 'var(--bg)', borderRadius: '18px 18px 0 0', padding: '14px 14px 24px',
+              width: '100%', maxWidth: 460, maxHeight: 'calc(100dvh - 48px)', overflowY: 'auto',
+              background: 'var(--bg)', borderRadius: 18, padding: '16px 16px 18px',
+              boxShadow: '0 20px 50px rgba(0,0,0,.35)',
             }}
           >
-            <div style={{
-              width: 36, height: 4, borderRadius: 99, background: 'var(--border)',
-              margin: '0 auto 12px',
-            }} />
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
+              <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>
+                Cambiar de plaza
+              </span>
+              <button onClick={() => setShowPlazaSheet(false)} style={{ ...btnReset, padding: 2 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-3)' }}>close</span>
+              </button>
+            </div>
             <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 8 }}>
               Plaza
             </div>
@@ -2034,6 +2067,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
             )}
           </div>
         </div>
+        </SheetChrome>,
+        document.body,
       )}
       {showSectionEditor && (
         <SectionEditor
