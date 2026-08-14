@@ -1,19 +1,16 @@
-# Sesión — 2026-08-11 (b)
-
-Tema: cierre del 🔴 del Muro en tablet real + regeneración completa de `ARQUITECTURA.md`. Sin commits nuevos aún (a confirmar con Facundo).
+# Sesión — 2026-08-14
 
 ## Qué se cerró
-- **Muro en tablet real**: wake lock y rollover de las 05:00, confirmados por Facundo funcionando en la tablet de la cocina. El wake lock ya estaba diseñado para degradar en silencio en dispositivos/navegadores sin soporte (`app/(servicio)/muro/page.tsx` ~L66-75) — no hay código que arreglar, solo un riesgo operativo si cambia el modelo de tablet (compensar con el timeout de pantalla del SO). 🔴 quedó vacío; los dos puntos que faltaban del mismo ítem (franja de entregas con dato real, notas de plaza legibles en tablet) bajaron a 🟠.
-- **`ARQUITECTURA.md` regenerado entero desde el código**, no parcheado. Hallazgo real: el proyecto tiene **78 tablas** (no 44+) y **51 hooks** (no 49) — la deuda de docs era mayor de lo que decía el propio `PENDIENTES.md`. Relevado con `list_tables` (Supabase MCP) + Glob/Grep sobre `lib/hooks`, `app/api`, `app/**/page.tsx`, `proxy.ts`, `package.json`. Cambio de enfoque: en vez de duplicar columnas/gotchas que ya viven en `.claude/docs/{columnas,hooks,rls}.md`, `ARQUITECTURA.md` pasó a ser el mapa estructural (inventario + un-liners) que apunta a esos docs para el detalle — evita que se desactualice de nuevo por duplicación.
-- `ESTADO-ACTUAL.md` §2 corregida (decía "44 total" con una lista de "tablas agregadas después" que ya no tenía sentido con el conteo real de 78) — ahora apunta a `ARQUITECTURA.md` §5.
-- `PENDIENTES.md`: sacado el ítem de "ARQUITECTURA.md desactualizado" (resuelto), muro en tablet movido de 🔴 a 🟠 con los dos puntos que faltan.
+- **Bitácora F1 deployada**: `/bitacora`, hoja de ruta/reuniones de equipo (reemplaza el Google Docs del equipo). Tablas `bitacora_entradas`/`bitacora_items` con RLS+realtime, hook `useBitacora`, editor tipo-doc (Enter parte la línea en el cursor y crea la siguiente, Tab indenta, Backspace al inicio fusiona con la anterior, checkbox, pegar multilínea desde Docs se parte en ítems), participantes desde el día 1, solo admin/chef.
+- Dos bugs reales encontrados y arreglados con pruebas Playwright contra dev server + verificación en DB: (1) crear ítem esperaba el round-trip de red antes de limpiar el input — tipear rápido pegaba dos líneas en una; fix con id generado en cliente + estado optimista de verdad (hooks.md #24). (2) refrescar a mitad de escribir volvía a la lista y podía perder una línea sin Enter; fix con sessionStorage + flush del borrador en visibilitychange/beforeunload/unmount (hooks.md #25).
+- Sumadas las dos tablas nuevas a `reset_demo_restaurante()` (la demo se quedaba sin Bitácora tras el reset nocturno) — verificado corriendo la función.
+- Deployado a producción (push a main).
 
 ## Qué quedó a medias
-- Los cambios de esta sesión (`ARQUITECTURA.md`, `ESTADO-ACTUAL.md`, `PENDIENTES.md`) están sin commitear — confirmar con Facundo antes de pushear, ya que no hubo código funcional, solo docs.
-- `.claude/settings.json` sigue modificado sin commitear, arrastrado desde julio — no tocado, sigue esperando la decisión de Facundo (commitear o revertir).
+Nada — F1 completo y en producción.
 
 ## Probar primero mañana
-Nada de código para verificar — la sesión fue documentación. Si se pushea, confirmar que `ARQUITECTURA.md` se ve bien renderizado en GitHub (tablas largas).
+Nada bloqueante. Si se sigue con Bitácora, probar el flush de borrador en un celular real (iOS Safari puede comportarse distinto que Chromium en `visibilitychange`).
 
 ## Próximo paso concreto
-Confirmar y pushear el commit de docs. Después, el 🟠 más nuevo es terminar de verificar el Muro (franja de entregas con una entrega real, notas de plaza a dos metros en la tablet) o el resto del backlog 🟠 (Mise en dos dispositivos, invitación de usuarios, Fiscal ARCA).
+Bitácora F2: convertir un ítem en tarea real de OPS (`tarea_id` en `bitacora_items`) + arrastrar a la reunión siguiente los ítems que quedaron abiertos. Si no es el foco, resto del backlog 🟠 (Mise en dos dispositivos, invitación de usuarios, Fiscal ARCA).

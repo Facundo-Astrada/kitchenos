@@ -107,6 +107,12 @@ Solo después de una semana de uso real en servicio, y cada ítem es una hipóte
 ### Calendario — F2 a F5 del plan de expansión
 F1 (grilla estilo Google Calendar, notas por día como ítems enviables a Producción, Planificar menú por rango) ya deployado. Falta, en orden, según `CALENDARIO-PLAN.md`: F2 motor de rutinas recurrentes (generalizar `haccp_limpieza` a una tabla `rutinas` compartida — decisión de Facundo: generalizar, no duplicar por dominio), F3 más reflejos de solo lectura (menús de Carta, turnos, HACCP, cuenta corriente), F4 Coach con contexto completo del calendario + tools de agenda, F5 extras (ICS, feriados, semana tipo).
 
+### Bitácora — F2 y F3 del plan (ago 2026)
+F1 deployado (13/08): `/bitacora`, tablas `bitacora_entradas`/`bitacora_items` con RLS+realtime, edición tipo-doc (Enter parte línea, Tab indenta, pegar multilínea desde Docs), participantes desde el día 1, solo admin/chef. Falta, en orden: F2 estados/tipos por ítem (tema/acuerdo/acción/pregunta) + convertir un ítem en tarea real de OPS (`tarea_id` en `bitacora_items`, hoy sin esa columna) + arrastrar a la reunión siguiente los ítems que quedaron abiertos. F3 plantillas de reunión recurrente, ítem→pase de turno, export PDF.
+
+### shot.mjs — `--base` documentado pero no implementado
+`.claude/skills/shot/SKILL.md` documenta un flag `--base` para apuntar al dev server local; `scripts/shot.mjs` tiene `const BASE` hardcodeado a producción y no lee `args.base`. Encontrado ago 2026 al necesitar probar una pantalla nueva contra local (se resolvió con un script Playwright aparte). Fix: `const BASE = args.base || 'https://kos-app-one.vercel.app'`.
+
 ### Demo El Rescoldo — menú duplicado
 Dos filas en `menus` con nombre "Noche de Asado - Día del Padre" y el mismo `created_at` (`e5c01d00-...d1` y `4622a73b-...`) — parecen un duplicado de seed, no algo que haya creado el usuario. Confunde el picker de "Cargar menú"/"Planificar menú" (aparece dos veces la misma opción). Revisar si conviene borrar una y sus tareas asociadas de junio.
 

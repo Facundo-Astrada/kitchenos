@@ -41,17 +41,18 @@ Este archivo es una foto del presente (qué existe, qué falta). El detalle hist
 | 27 | **Modo Emprendimiento** | perfil por restaurante | Funcional (piloto: VOGLIO Farina) | `restaurantes.configuracion.perfil='emprendimiento'` oculta módulos de servicio de restaurante incluso siendo admin; `/tareas` propia; Mesa de Trabajo/Stock sin auto-seed de plazas de restaurante. |
 | 28 | **Muro** | `/muro` | Funcional (sin verificar en tablet real) | Tablet única para toda la cocina, solo admin/chef. Columnas por plaza sobre Producción (no el Mise): pendientes listados por prioridad, listos colapsan a "+N listas", plazas sin pendientes se encogen si hay más de 5. Tap cicla pendiente→en_curso→listo, toque largo marca duda (sube a franja de alertas con quién y hace cuánto), tap en el encabezado enfoca esa plaza a pantalla completa. Franja de entregas por plaza abajo. Notas de plaza en solo lectura bajo el encabezado de cada columna, sin poder plegarse (en una tablet que nadie toca, lo que se esconde queda escondido) — una plaza con nota no se encoge. Wake lock + refetch al volver de suspensión, rollover de jornada por timer. |
 | 29 | **Clientes** | `/clientes` | Funcional | No estaba documentado acá (encontrado ago 2026). Dos tabs: Clientes y Cuentas Corrientes (fiado). Filtros por cantidad de compras, última compra, grupo. Se vincula al cobrar en Salón. |
+| 30 | **Bitácora** | `/bitacora` | Funcional (F1) | Hoja de ruta / reuniones de equipo — reemplaza el Google Docs de lluvia de ideas. Lista de entradas (reunión/nota/lista/idea) con buscador y filtro + documento tipo-doc: Enter parte la línea y crea la siguiente, Tab indenta, Backspace al inicio fusiona con la anterior, checkbox por ítem, pegar texto multilíneas desde Docs lo parte en ítems. Participantes desde el día 1 (chips contra el equipo real). Creación de ítems optimista de punta a punta (id generado en el cliente); la entrada abierta persiste en sessionStorage y el borrador sin confirmar se guarda solo al cambiar de pestaña/app o cerrar. Solo admin/chef. Falta F2 (ítem→tarea de OPS, arrastre de pendientes a la próxima reunión) y F3 (plantillas, ítem→pase, export). |
 | ~~23~~ | ~~OPS — Ingeniería de Menú~~ | ~~`/ingenieria-menu`~~ | **Movido, no eliminado** | La pantalla vieja se sacó, pero la función sigue viva y más completa dentro de Carta → Rentabilidad → Ingeniería (matriz Estrellas/Caballos/Puzzles/Perros + Reprecio + Salud, ver fila 8). |
 
-**Resumen:** 29 módulos funcionales (incluye salón, KDS, muro, modo emprendimiento piloteado, clientes), 0 parciales, 0 críticos pendientes.
+**Resumen:** 30 módulos funcionales (incluye salón, KDS, muro, modo emprendimiento piloteado, clientes, bitácora), 0 parciales, 0 críticos pendientes.
 
 ---
 
-## 2. Tablas de Supabase (78 total, regenerado 11/08)
+## 2. Tablas de Supabase (80 total — 78 regenerado 11/08 + `bitacora_entradas`/`bitacora_items` 13/08)
 
-Ver `ARQUITECTURA.md` §5 para el desglose completo por dominio (20 grupos) y §Supabase para relaciones clave. Columna por columna → `.claude/docs/columnas.md`.
+Ver `ARQUITECTURA.md` §5 para el desglose completo por dominio (20 grupos, desactualizado en el conteo — pendiente próxima regeneración) y §Supabase para relaciones clave. Columna por columna → `.claude/docs/columnas.md`.
 
-**Total: 78 tablas** con RLS habilitado. Aislamiento multi-tenant real vía `mi_restaurante_id()` (ver `.claude/docs/rls.md`).
+**Total: 80 tablas** con RLS habilitado. Aislamiento multi-tenant real vía `mi_restaurante_id()` (ver `.claude/docs/rls.md`).
 
 ---
 
