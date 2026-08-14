@@ -156,6 +156,41 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
       </Bloque>
 
       <Bloque
+        titulo="Los chips de plaza — entrás a cualquiera"
+        demo={<DemoNavy><PillNavy activo>Calientes</PillNavy><PillNavy>Fríos</PillNavy><PillNavy>Pase</PillNavy></DemoNavy>}
+      >
+        Debajo del título están todas las plazas del restaurante y podés abrir cualquiera: tildar, cambiar
+        prioridades y mandar a producir. La plaza que tenés asignada decide en cuál <b>arrancás</b>, no cuál
+        podés mirar — en el servicio real se cubre la plaza de al lado todo el tiempo y el mise es lo primero
+        que hay que poder abrir para hacerlo.
+        <Repercute>lo que tocás en otra plaza es idéntico a que lo hubiera hecho quien la tiene asignada: mismo mise, mismas tareas.</Repercute>
+      </Bloque>
+
+      <Bloque
+        titulo="Te dejaron en producción"
+        demo={
+          <div style={{
+            background: 'rgba(245,158,11,.10)', borderLeft: '3px solid #f59e0b',
+            borderRadius: 8, padding: '6px 9px', display: 'inline-flex', alignItems: 'center', gap: 6,
+          }}>
+            <span className={ICON} style={{ fontSize: 15, color: '#b45309' }}>pending</span>
+            <span style={{ fontSize: 10, fontWeight: 800, color: '#78350f', textTransform: 'uppercase', letterSpacing: '.05em' }}>
+              3 para hacer
+            </span>
+          </div>
+        }
+      >
+        Aviso ámbar arriba de la lista, en <b>Apertura</b>. Es lo que el turno anterior dejó despachado al
+        cerrar: cada ítem con su <b>prioridad</b> (SP / P / REF), que es el orden en que conviene atacarlos.
+        No trae cantidades a propósito — cuando el cierre se hace en Modo Control lo que se hereda son
+        decisiones, no números, y cuánto hacer de cada cosa se habla en la cocina.
+        <br /><br />
+        Esos ítems ya tienen su tarea en <b>Producción</b>: no hay que volver a crearla. Cuando se completan
+        allá, se tildan solos acá.
+        <Repercute>si cerrás despachando, el que entra recibe este aviso en vez de un cierre vacío — y el rojo de &quot;recibís sin cierre&quot; no le aparece.</Repercute>
+      </Bloque>
+
+      <Bloque
         titulo="La barra de progreso — 0/20"
         demo={
           <DemoNavy>
@@ -166,9 +201,10 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
           </DemoNavy>
         }
       >
-        Cuántos ítems de <b>toda la plaza</b> llevás resueltos en este turno y esta fase. En apertura cuenta
-        lo <b>revisado</b>: los tildados en verde y también los que quedaron en ámbar con su producción
-        despachada. Cada sección (Heladera, Secos, Estación…) además lleva su propio contador en su encabezado.
+        Cuántos ítems de <b>toda la plaza</b> llevás resueltos en este turno y esta fase. Cuenta lo
+        <b> revisado</b>, no lo terminado: los tildados en verde y también los que quedaron en ámbar con su
+        producción despachada — en los dos casos ya los miraste y decidiste. Vale igual en apertura y en
+        cierre. Cada sección (Heladera, Secos, Estación…) además lleva su propio contador en su encabezado.
       </Bloque>
 
       <Bloque
@@ -433,7 +469,9 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
         demo={<span className={ICON} style={{ fontSize: 24, color: '#f97316' }}>counter_1</span>}
       >
         La primera vez (o cuando aparece el aviso rojo <b>&quot;Recibís sin cierre del turno anterior&quot;</b>) no hay
-        ningún número de referencia: nadie registró un cierre todavía. Es normal y no bloquea nada.
+        ningún número de referencia: nadie registró un cierre todavía. Es normal y no bloquea nada. Ese rojo
+        aparece solo cuando el turno anterior no dejó <i>nada</i> — ni tildes ni producción despachada; si
+        cerraron en Modo Control vas a ver el aviso ámbar en su lugar.
         <div style={{ margin: '8px 0 0', paddingLeft: 2 }}>
           <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>
             <b>1.</b> Recorré la plaza con el celular y contá lo que ves, ítem por ítem.<br />
