@@ -112,7 +112,15 @@ Un pill/badge con `whiteSpace:'nowrap'` dentro de una celda de grilla (ej. títu
 
 ## Modal centrado en desktop / full-screen en mobile — sin componente propio todavía
 
-No existe un componente que combine `useIsDesktop()` + `useSheetOpenWhen()` para este patrón — se arma a mano por pantalla (ver `app/(app)/calendario/page.tsx`, forms de evento y de planificar menú; y el modal de alta/edición en `app/(app)/stock/ClientView.tsx`, con blur en el backdrop además del tinte). Estructura: en `isDesktop`, backdrop `position:fixed,inset:0,zIndex:2000,background:rgba(0,0,0,.55)` (opcional `backdropFilter:'blur(4px)'`) + card centrada (`borderRadius:18, maxWidth:560, maxHeight:'calc(100dvh - 48px)', overflowY:'auto'`, cierra al click en el backdrop vía `onClick` en el wrapper + `stopPropagation` en la card); si no, el form full-screen/sheet de siempre. Ya se repitió en una tercera pantalla — extraer a `components/ui/` la próxima vez que se toque uno de estos tres.
+No existe un componente que combine `useIsDesktop()` + `useSheetOpenWhen()` para este patrón — se arma a mano por pantalla (ver `app/(app)/calendario/page.tsx`, forms de evento y de planificar menú; y el modal de alta/edición en `app/(app)/stock/ClientView.tsx`, con blur en el backdrop además del tinte). Estructura: en `isDesktop`, backdrop `position:fixed,inset:0,zIndex:2000,background:rgba(0,0,0,.55)` (opcional `backdropFilter:'blur(4px)'`) + card centrada (`borderRadius:18, maxWidth:560, maxHeight:'calc(100dvh - 48px)', overflowY:'auto'`, cierra al click en el backdrop vía `onClick` en el wrapper + `stopPropagation` en la card); si no, el form full-screen/sheet de siempre. **Cuarta copia** en `app/(app)/checklist/ClientView.tsx` (selector de plaza+turno, centrado en todos los anchos porque el contenido es corto) — ya se pagó dos veces el mismo bug al copiarlo mal (z-index bajo el nav, `useSheetOpen()` olvidado): extraer a `components/ui/` la próxima vez que se toque cualquiera de los cuatro.
+
+## Todo sheet/modal debe envolverse en `SheetChrome` (o llamar `useSheetOpen()`)
+
+Sin eso el FAB del Coach sigue flotando sobre el contenido del modal — se ve como un botón naranja tapando una fila de la lista. Para renders condicionales inline el wrapper es `{cond && <SheetChrome>…</SheetChrome>}` (`lib/ui/chrome.tsx`), que no se puede olvidar como sí se olvida el hook.
+
+## Overlay dentro de un contenedor que se pliega — sale por portal, no por `position:absolute`
+
+Un dropdown anclado a un botón que vive dentro de un contenedor con `overflow:hidden` (típico: un header que colapsa animando `maxHeight`) queda **recortado**: el `position:absolute` es clipeado por ese ancestro aunque se desborde visualmente hacia abajo. Fix: `createPortal(document.body)` + `position:fixed` con las coordenadas del botón medidas al abrir (`getBoundingClientRect()`), y cerrar el menú cuando el ancla desaparece (ej. cuando el header se pliega), o queda flotando apuntando a nada. Referencia: menú de tres puntos del Mise (`app/(app)/checklist/ClientView.tsx`).
 
 ## Input editable inline — nunca `button → autoFocus` tras montar
 

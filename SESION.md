@@ -1,16 +1,23 @@
-# Sesión — 2026-08-14
+# Sesión — 2026-08-13/15
+
+Mise / Modo Control. 6 commits (`7d9bec0` → `fafa883`), todo deployado, build + 71 tests verdes.
 
 ## Qué se cerró
-- **Bitácora F1 deployada**: `/bitacora`, hoja de ruta/reuniones de equipo (reemplaza el Google Docs del equipo). Tablas `bitacora_entradas`/`bitacora_items` con RLS+realtime, hook `useBitacora`, editor tipo-doc (Enter parte la línea en el cursor y crea la siguiente, Tab indenta, Backspace al inicio fusiona con la anterior, checkbox, pegar multilínea desde Docs se parte en ítems), participantes desde el día 1, solo admin/chef.
-- Dos bugs reales encontrados y arreglados con pruebas Playwright contra dev server + verificación en DB: (1) crear ítem esperaba el round-trip de red antes de limpiar el input — tipear rápido pegaba dos líneas en una; fix con id generado en cliente + estado optimista de verdad (hooks.md #24). (2) refrescar a mitad de escribir volvía a la lista y podía perder una línea sin Enter; fix con sessionStorage + flush del borrador en visibilitychange/beforeunload/unmount (hooks.md #25).
-- Sumadas las dos tablas nuevas a `reset_demo_restaurante()` (la demo se quedaba sin Bitácora tras el reset nocturno) — verificado corriendo la función.
-- Deployado a producción (push a main).
+- **Modo Control decide y despacha**: tilde + badge de prioridad que cicla SP→P→REF + `+` que manda a producción sin cantidad. Tres estados de fila legibles (blanca / ámbar despachada / verde tildada), con los botones apagados y deshabilitados una vez resuelta.
+- **El pase de turno viaja como tarea + prioridad, no como cantidad** (decisión tuya). Cerrar en Modo Control hereda *qué falta y con qué urgencia*. Cuatro piezas para que cierre: despacho al turno siguiente real, despachado cuenta como cerrado, contador del cierre suma lo despachado, aviso ámbar "Te dejaron en producción".
+- **Cualquier miembro entra a cualquier plaza.** Era restricción de UI: RLS nunca filtró por plaza.
+- **El header bajó de 4 franjas (~155px) a 3, y a 1 (~38px) al scrollear.** Título-selector de plaza+turno, `?`/`⚙` en un menú de tres puntos, notas vacías colapsadas.
+- Guía del "?", tour y Coach al día (incluida una afirmación falsa que el Coach arrastraba: que cambiar la prioridad crea la tarea sola).
 
 ## Qué quedó a medias
-Nada — F1 completo y en producción.
+- Nada a medias. Lo que se dejó afuera fue explícito: no extraje el modal centrado a `components/ui/` (es la 4ª copia y `ui.md` lo pide) porque implicaba tocar Calendario y Stock, fuera de lo pedido.
+- El commit `7d9bec0` quedó con el subject "@" por un heredoc mal armado. Cosmético; arreglarlo pide `amend` + force push a main, no lo hice por mi cuenta.
 
 ## Probar primero mañana
-Nada bloqueante. Si se sigue con Bitácora, probar el flush de borrador en un celular real (iOS Safari puede comportarse distinto que Chromium en `visibilitychange`).
+**Toda la tanda en la tablet real** — es lo único sin verificar y está anotado en `PENDIENTES.md` 🟠. En orden de probabilidad de necesitar ajuste:
+1. Los umbrales del plegado del header (12px zona muerta / 8px delta, en `handleListScroll`): si se siente nervioso o perezoso con el dedo, ese es el número.
+2. El cartel "En producción" de 9px en la fila despachada — que se lea y no coma el nombre.
+3. Contraste del ámbar y del gris apagado con la luz de la cocina.
 
 ## Próximo paso concreto
-Bitácora F2: convertir un ítem en tarea real de OPS (`tarea_id` en `bitacora_items`) + arrastrar a la reunión siguiente los ítems que quedaron abiertos. Si no es el foco, resto del backlog 🟠 (Mise en dos dispositivos, invitación de usuarios, Fiscal ARCA).
+Con Modo Control en manos del equipo, el ítem que se vuelve real es **que la sugerencia de producción descuente lo despachado como `pase_turno` en vez de asumir stock 0** (`lib/produccion/sugerencia.ts`). Hoy, si el equipo se acostumbra a cerrar en Modo Control, "Sugerir producción" va a pedir de más. Anotado en 🟢 con la salida propuesta.
