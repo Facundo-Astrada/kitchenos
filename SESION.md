@@ -1,23 +1,24 @@
-# Sesión — 2026-08-13/15
+# Sesión — 2026-08-16
 
-Mise / Modo Control. 6 commits (`7d9bec0` → `fafa883`), todo deployado, build + 71 tests verdes.
+Menú/Evento activable en el mise (SP/P/REF/OK + apertura/cierre). 1 commit (`b780dc9`), deployado, build + 80 tests verdes.
 
 ## Qué se cerró
-- **Modo Control decide y despacha**: tilde + badge de prioridad que cicla SP→P→REF + `+` que manda a producción sin cantidad. Tres estados de fila legibles (blanca / ámbar despachada / verde tildada), con los botones apagados y deshabilitados una vez resuelta.
-- **El pase de turno viaja como tarea + prioridad, no como cantidad** (decisión tuya). Cerrar en Modo Control hereda *qué falta y con qué urgencia*. Cuatro piezas para que cierre: despacho al turno siguiente real, despachado cuenta como cerrado, contador del cierre suma lo despachado, aviso ámbar "Te dejaron en producción".
-- **Cualquier miembro entra a cualquier plaza.** Era restricción de UI: RLS nunca filtró por plaza.
-- **El header bajó de 4 franjas (~155px) a 3, y a 1 (~38px) al scrollear.** Título-selector de plaza+turno, `?`/`⚙` en un menú de tres puntos, notas vacías colapsadas.
-- Guía del "?", tour y Coach al día (incluida una afirmación falsa que el Coach arrastraba: que cambiar la prioridad crea la tarea sola).
+- **Selector de prioridad SP/P/REF/Check en cada ítem del editor de menú** (`ComposicionEditor`) — estaba definido (`PRIORIDADES`) pero nunca se renderizaba; todos los ítems se guardaban hardcodeados en `'media'`.
+- **`menus.vigencia_desde/hasta`** — el menú/evento tiene una ventana de vigencia propia, editable en el editor, auto-sincronizada con "Fecha del evento" en modo evento.
+- **`checklist_items.menu_id`** + `lib/ops/menuMise.ts` (`sincronizarMiseDeMenu`, `desactivarMiseDeMenu`) — activa las preparaciones del menú como ítems propios del mise, keyed por `(restaurante_id, menu_id, plaza, nombre)` — **no** por `receta_id`, para no pisar el ítem permanente si el menú reusa una receta que la carta ya tiene ahí. Idempotente, con prune.
+- **Botón "Activar en el mise" / "Sacar"** en `MenusView`, con estados vigente/futuro/vencido.
+- **El mise filtra por vigencia** (`menuItemVisible()`) y muestra chip violeta con el nombre del menú.
+- Dos sistemas quedaron documentados como distintos a propósito (`hooks.md`): `activarMenuParaFechas` (Planificación/Calendario → `tareas`, un check por día) vs. `sincronizarMiseDeMenu` (→ `checklist_items`, persistente, re-chequeado en cada apertura/cierre). No se tocó el primero.
 
 ## Qué quedó a medias
-- Nada a medias. Lo que se dejó afuera fue explícito: no extraje el modal centrado a `components/ui/` (es la 4ª copia y `ui.md` lo pide) porque implicaba tocar Calendario y Stock, fuera de lo pedido.
-- El commit `7d9bec0` quedó con el subject "@" por un heredoc mal armado. Cosmético; arreglarlo pide `amend` + force push a main, no lo hice por mi cuenta.
+- **Verificación manual completa en navegador, sin terminar.** Confirmé con Playwright contra el dev server real (cuenta El Rescoldo) que el editor renderiza bien el selector de prioridad y los campos de vigencia, y que un ítem con OPS ya cargado los refleja correctamente. La vuelta completa — Guardar → "Activar en el mise" → toast → chip "En el mise" → ver el ítem en Operaciones/Mise/Apertura con su badge y su chip violeta — no se verificó de punta a punta (un intento de guardado tiró `Failed to fetch` de red en el entorno de prueba; el POST llegó a la base igual, así que no es necesariamente un bug de código, pero no se vio el resultado final en pantalla).
+- Until ese último tramo se mire en pantalla, tratar el flujo como "verificado por tests + build, no por uso real" — no asumir que el botón "Activar en el mise" funciona en producción sin probarlo una vez.
+- Los datos de prueba que tocó el smoke test en El Rescoldo (fecha/vigencia del evento "Noche de Asado – Día del Padre") se revirtieron a `null` por SQL directo — no quedó basura en la cuenta demo.
 
 ## Probar primero mañana
-**Toda la tanda en la tablet real** — es lo único sin verificar y está anotado en `PENDIENTES.md` 🟠. En orden de probabilidad de necesitar ajuste:
-1. Los umbrales del plegado del header (12px zona muerta / 8px delta, en `handleListScroll`): si se siente nervioso o perezoso con el dedo, ese es el número.
-2. El cartel "En producción" de 9px en la fila despachada — que se lea y no coma el nombre.
-3. Contraste del ámbar y del gris apagado con la luz de la cocina.
+1. En El Rescoldo (o Bros): editar un menú, cargar vigencia + prioridad en 2-3 preparaciones con plaza/sección, Guardar, volver a la lista y tocar "Activar en el mise" — confirmar el toast y que la card pasa a "En el mise · hasta …".
+2. Ir a Operaciones → Mise → la plaza usada → Apertura: confirmar que el ítem aparece con su badge de prioridad y el chip violeta del menú, y que tildarlo en apertura y en cierre funciona igual que un ítem del mise fijo.
+3. Confirmar visualmente que el ítem **desaparece solo** cuando se edita `vigencia_hasta` a una fecha pasada (o se aprieta "Sacar").
 
 ## Próximo paso concreto
-Con Modo Control en manos del equipo, el ítem que se vuelve real es **que la sugerencia de producción descuente lo despachado como `pase_turno` en vez de asumir stock 0** (`lib/produccion/sugerencia.ts`). Hoy, si el equipo se acostumbra a cerrar en Modo Control, "Sugerir producción" va a pedir de más. Anotado en 🟢 con la salida propuesta.
+Terminar la Fase 6 del plan (`PLAN-MENUS-MISE-2026-08.md`) con la verificación de pantalla real de arriba. Si aparece algo raro en "Activar en el mise" (el toast, el chip, o el ítem en el mise), es la primera pista — nada de esto pasó por un click real de punta a punta todavía.

@@ -56,6 +56,8 @@
 
 25. **Un input que solo vive en memoria hasta un commit explícito (Enter/blur) se pierde en un refresh o al cerrar la pestaña si el usuario no llegó a disparar ese commit.** No alcanza con guardar al montar/desmontar el componente — un `reload()` mata el JS sin correr el cleanup normal a tiempo para completar un `await` de red. Flush en `visibilitychange` (tab a segundo plano — confiable) + intento best-effort en `beforeunload` (no garantizado: el navegador puede cortar el fetch a mitad de camino) + flush en el cleanup del `useEffect` al desmontar/cambiar de entidad (100% confiable, es navegación dentro de la SPA). Usar una `ref` actualizada en cada render para leer el valor más reciente dentro del handler, no la clausura del `useEffect` (que solo se reinstala si sus deps cambian).
 
+26. **Cuando la visibilidad de la fila A depende de una columna de la fila embebida B (ej. `checklist_items` filtrado por `menus.vigencia_hasta`), el canal de realtime necesita un `.on(...)` propio sobre la tabla B además del de A.** Un UPDATE en B no toca ninguna fila de A, así que el listener de A nunca dispara y el cliente queda con el embed viejo hasta el próximo refetch manual. Agregar `.on('postgres_changes', {event:'UPDATE', table:'B', filter}, () => mutateConfig())` al mismo canal (`useChecklist.ts`, suscripción a `menus` adjunta a la de `checklist_items`, ago 2026).
+
 ## Anti-patrón: funciones internas usadas como JSX en React
 
 **Síntoma:** el teclado se cierra al primer carácter, se pierde el focus, un form "se resetea" solo.
@@ -202,7 +204,15 @@ const total = data.reduce((s, r) => s + (r.cantidad_ops ?? 0), 0)
 
 ## OPS mise — helper compartido `lib/ops/mise.ts`
 
-Única fuente de verdad para escribir un ítem del mise: `upsertMiseChecklistItem({supabase, restauranteId, recetaId, nombre, plaza, seccionMiseId, cantidad, unidad, recipienteNombre?, pesoPorcion?, pesoPorcionUnidad?})` — busca/crea la `checklist_secciones` de la plaza y hace el upsert. Usado por Carta (`handleComposicionSave`) y Recetario (`RecetaOpsSheet`) — no duplicar. `PLAZAS_OPS`/`SECCIONES_OPS` viven ahí y se re-exportan desde `carta/ComposicionEditor`; importar desde `@/lib/ops/mise` en código nuevo.
+Única fuente de verdad para escribir un ítem del mise: `upsertMiseChecklistItem({supabase, restauranteId, recetaId, nombre, plaza, seccionMiseId, cantidad, unidad, recipienteNombre?, pesoPorcion?, pesoPorcionUnidad?, prioridad?})` — busca/crea la `checklist_secciones` de la plaza y hace el upsert, keyed por `(restaurante_id, receta_id, plaza)`. Usado por Carta (`handleComposicionSave`, rama Plato) y Recetario (`RecetaOpsSheet`) — no duplicar. `PLAZAS_OPS`/`SECCIONES_OPS` viven ahí y se re-exportan desde `carta/ComposicionEditor`; importar desde `@/lib/ops/mise` en código nuevo. `resolverSeccionMise()` (misma resolución legacy-id-vs-UUID) está extraído para reusar sin duplicar la lógica.
+
+## Menú/Evento en el mise — NO confundir con "Activar menú" — `lib/ops/menuMise.ts`
+
+Dos sistemas distintos que parten del mismo `menu_preparaciones`, escriben a tablas distintas y no se enteran uno del otro:
+- **`activarMenuParaFechas`** (arriba) → `tareas`, una fila por preparación por día, checkbox único (pendiente/listo). Para "producí esto hoy/estos días".
+- **`sincronizarMiseDeMenu`** (`lib/ops/menuMise.ts`) → `checklist_items` con `menu_id`, keyed por `(restaurante_id, menu_id, plaza, nombre)` — **no** por `receta_id`, porque pisaría el ítem permanente del mise fijo si el menú reusa una receta que la carta ya tiene ahí. Persistente y re-chequeado en cada apertura/cierre mientras `menus.vigencia_desde/hasta` cubra el día (`menuItemVisible()`). Para "esto tiene que estar siempre stockeado mientras dure el menú" (ej. un ejecutivo de 1-2 semanas). Idempotente + prune: correr de nuevo tras editar el menú, no acumula ni deja huérfanos.
+
+`TAREA_PRIO_TO_MISE`/`MISE_PRIO_TO_TAREA` (`lib/ops/mise.ts` y `components/mise/ProductoMiseCard.tsx`) son inversos entre sí — si se toca uno, tocar el otro.
 
 ## Peso de la pantalla — el hook completo no siempre es el que va
 

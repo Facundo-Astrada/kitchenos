@@ -321,14 +321,18 @@ Tocá **+ Nuevo** y cargá nombre, precio, categoría, tags y composición (busc
 
 ### Camino 3 — Menús y eventos
 
-El mismo editor crea Menús fijos o Eventos: preparaciones por curso, con plaza, prioridad y cantidad. Es lo que después se **activa en Planificación** para producir.
+El mismo editor crea Menús fijos o Eventos: preparaciones por curso, con plaza, prioridad (SP/P/REF/Check) y cantidad. Además le cargás una **vigencia** (desde/hasta) — pensada para un menú ejecutivo que sale una o dos semanas.
+
+Hay dos formas de ponerlo en marcha, según lo que necesites:
+- **Activar en Planificación** (calendario) — genera una tarea de producción por día para cada preparación. Sirve para "avisale al equipo que hoy hay que producir esto".
+- **Activar en el mise** (botón en Carta → Menús) — mete las preparaciones en el mise de su plaza, con su prioridad. A diferencia de Planificación, esto queda **fijo mientras dure la vigencia**: se revisa en cada apertura y cada cierre, igual que cualquier otro ítem del mise, y desaparece solo cuando el menú deja de estar vigente.
 
 ## Qué pasa en la app
 
 | Módulo | Qué pasa |
 |---|---|
 | **Recetario** | Cada plato lee el food cost de sus recetas; un cambio de costo se refleja solo. |
-| **Mise / Producción** | Asignar un componente a OPS crea o actualiza el ítem de mise por plaza. |
+| **Mise / Producción** | Asignar un componente a OPS crea o actualiza el ítem de mise por plaza. "Activar en el mise" hace lo mismo para todo un menú/evento, mientras esté vigente. |
 | **Planificación** | Activar un menú genera las tareas de producción del día. |
 | **Pase / Servicio** | El **86** le avisa al equipo qué plato no sale. |
 | **Reportes / Ventas** | El precio de venta es la base del CMV, el margen y el ticket promedio. |
@@ -469,6 +473,8 @@ A diferencia de la Etapa 1 (que se hace una vez y se mantiene), esta etapa es **
 - 💡 Lo que queda sin terminar **se arrastra al día siguiente** (un día), para que nada se pierda.
 
 **2 · Mise** — El checklist de **mise en place** por plaza: las preparaciones previas que hay que dejar listas antes del servicio. Calcula **cuánto producir** según el recipiente y el tamaño de porción, y muestra el **déficit** ("te faltan 20 porciones, producí 1,5 kg"). Tiene una sub-pestaña **Rutina** con las tareas que se repiten (limpieza, controles) el día que corresponde.
+
+- 💡 Un ítem puede venir de un **Menú/Evento activado** desde Carta (ver sección 4) — se distingue con un chip violeta con el nombre del menú, y desaparece solo cuando el menú deja de estar vigente.
 
 **3 · Planificación** — Donde se arma la producción a futuro. Se **activa un menú o evento** (los que cargaste en la Carta) y eso **genera solas las tareas de producción** del día, repartidas por plaza. También se planifica por fecha.
 
