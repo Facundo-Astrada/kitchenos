@@ -48,7 +48,10 @@ async function fetchChecklistConfig(key: string): Promise<ChecklistConfig> {
   const supabase = createClient()
   const [secRes, itemRes, rutRes] = await Promise.all([
     supabase.from('checklist_secciones').select('*').eq('restaurante_id', rid).order('orden', { ascending: true }),
-    supabase.from('checklist_items').select('*').eq('restaurante_id', rid).order('orden', { ascending: true }),
+    // menus(...) embebido para saber vigencia — el filtro NUNCA va acá con
+    // .eq('menus.vigencia_hasta', …): sobre tabla embebida no filtra la fila
+    // padre (bug conocido de PostgREST). Se filtra en JS, ver menuItemVisible.
+    supabase.from('checklist_items').select('*, menus(nombre, vigencia_desde, vigencia_hasta)').eq('restaurante_id', rid).order('orden', { ascending: true }),
     supabase.from('checklist_rutina').select('*').eq('restaurante_id', rid).order('orden', { ascending: true }),
   ])
   if (secRes.error) throw secRes.error
@@ -106,6 +109,9 @@ export function useChecklist() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'checklist_secciones', filter }, () => mutateConfig())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'checklist_items', filter }, () => mutateConfig())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'checklist_rutina', filter }, () => mutateConfig())
+      // Desactivar un menú del mise solo toca menus.vigencia_hasta, no
+      // checklist_items — sin esto el mise no se enteraría hasta refrescar.
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'menus', filter }, () => mutateConfig())
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [RESTAURANTE_ID, supabase, mutateConfig])

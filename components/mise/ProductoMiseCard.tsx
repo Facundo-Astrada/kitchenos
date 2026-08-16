@@ -486,8 +486,16 @@ function ProductoMiseCardBase({
           }}>
             {item.nombre}
           </div>
-          {!checked && (mostrarPeso || item.receta_id || enProduccion || demandaViva > 0) && (
+          {!checked && (mostrarPeso || item.receta_id || enProduccion || demandaViva > 0 || item.menu_id) && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const, marginTop: 2 }}>
+              {/* Ítem de un menú/evento activado (PLAN-MENUS-MISE) — distingue
+                  de un vistazo lo del mise fijo de lo que se va cuando el
+                  menú deja de estar vigente. */}
+              {item.menu_id && item.menus?.nombre && (
+                <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(124,58,237,.13)', color: '#7c3aed' }}>
+                  {item.menus.nombre}
+                </span>
+              )}
               {mostrarPeso && (
                 <span data-coach-target="mise-item-peso" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)' }}>
                   {item.peso_porcion}{item.peso_porcion_unidad ?? 'g'}/porc

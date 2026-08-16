@@ -39,6 +39,8 @@ export interface CompPayload {
   nombre: string
   descripcion: string | null
   fechaEvento: string | null
+  vigenciaDesde: string | null
+  vigenciaHasta: string | null
   variantes: string[]
   precio: number
   categoria: string
@@ -66,6 +68,8 @@ export interface CompInicial {
   nombre: string
   descripcion: string | null
   fechaEvento?: string | null
+  vigenciaDesde?: string | null
+  vigenciaHasta?: string | null
   variantes?: string[]
   precio: number
   categoria: string
@@ -552,6 +556,17 @@ export default function ComposicionEditor({
   const [categoria, setCategoria] = useState(inicial?.categoria ?? categoriasCarta[0] ?? 'Principales')
   const [tags, setTags] = useState<string[]>(inicial?.tags ?? [])
   const [fechaEvento, setFechaEvento] = useState(inicial?.fechaEvento ?? '')
+  // Vigencia en el mise — cuánto dura activo un menú/evento (ver PLAN-MENUS-MISE).
+  // En modo evento arranca igual a la fecha del evento (un evento de un día);
+  // handleFechaEventoChange las mantiene sincronizadas mientras no se editen
+  // a mano, para no pisar un rango que el usuario ya extendió.
+  const [vigenciaDesde, setVigenciaDesde] = useState(inicial?.vigenciaDesde ?? inicial?.fechaEvento ?? '')
+  const [vigenciaHasta, setVigenciaHasta] = useState(inicial?.vigenciaHasta ?? inicial?.fechaEvento ?? '')
+  function handleFechaEventoChange(v: string) {
+    setVigenciaDesde(prev => (!prev || prev === fechaEvento) ? v : prev)
+    setVigenciaHasta(prev => (!prev || prev === fechaEvento) ? v : prev)
+    setFechaEvento(v)
+  }
   const [variantes, setVariantes] = useState<string[]>(inicial?.variantes ?? [])
   const [nuevaVariante, setNuevaVariante] = useState('')
 
@@ -779,6 +794,7 @@ export default function ComposicionEditor({
 
   async function handleSave() {
     if (!nombre.trim()) return
+    if (!esPlato && vigenciaDesde && vigenciaHasta && vigenciaHasta < vigenciaDesde) return
     setSaving(true)
     let secs
     if (esPlato) {
@@ -813,6 +829,8 @@ export default function ComposicionEditor({
       await onSave({
         tipo: modo, nombre: nombre.trim(), descripcion: descripcion.trim() || null,
         fechaEvento: modo === 'evento' ? (fechaEvento || null) : null,
+        vigenciaDesde: !esPlato ? (vigenciaDesde || null) : null,
+        vigenciaHasta: !esPlato ? (vigenciaHasta || null) : null,
         variantes: esPlato ? [] : variantes,
         precio: precioN, categoria, tags, secciones: secs,
       })
@@ -832,7 +850,7 @@ export default function ComposicionEditor({
             </button>
             <span style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{inicial ? 'Editar' : 'Nuevo'}</span>
           </div>
-          <button onClick={handleSave} disabled={saving || !nombre.trim()}
+          <button onClick={handleSave} disabled={saving || !nombre.trim() || (!esPlato && !!vigenciaDesde && !!vigenciaHasta && vigenciaHasta < vigenciaDesde)}
             style={{ background: nombre.trim() ? '#22c55e' : 'rgba(255,255,255,.2)', border: 'none', borderRadius: 8, padding: '6px 16px', fontSize: 13, fontWeight: 700, color: '#fff', cursor: nombre.trim() ? 'pointer' : 'default', fontFamily: 'inherit', opacity: saving ? .6 : 1 }}>
             {saving ? '…' : 'Guardar'}
           </button>
@@ -921,7 +939,25 @@ export default function ComposicionEditor({
           {modo === 'evento' && (
             <div style={{ marginBottom: 10 }}>
               <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>Fecha del evento</label>
-              <input type="date" value={fechaEvento} onChange={e => setFechaEvento(e.target.value)} style={{ ...inp }} />
+              <input type="date" value={fechaEvento} onChange={e => handleFechaEventoChange(e.target.value)} style={{ ...inp }} />
+            </div>
+          )}
+          {/* Vigencia en el mise — cuándo entra y sale de la apertura/cierre.
+              Sin esto no se puede activar el menú en el mise (ver botón en MenusView). */}
+          {!esPlato && (
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>
+                Vigencia en el mise <span style={{ textTransform: 'none', fontWeight: 500, color: 'var(--text-3)' }}>(cuándo aparece en la apertura/cierre)</span>
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input type="date" value={vigenciaDesde} onChange={e => setVigenciaDesde(e.target.value)} style={{ ...inp, flex: 1 }} />
+                <input type="date" value={vigenciaHasta} onChange={e => setVigenciaHasta(e.target.value)} style={{ ...inp, flex: 1 }} />
+              </div>
+              {vigenciaDesde && vigenciaHasta && vigenciaHasta < vigenciaDesde && (
+                <div style={{ fontSize: 11, color: '#dc2626', marginTop: 5, fontWeight: 600 }}>
+                  &quot;Hasta&quot; no puede ser antes que &quot;Desde&quot;
+                </div>
+              )}
             </div>
           )}
           <input value={descripcion} onChange={e => setDescripcion(e.target.value)} placeholder={modo === 'evento' ? 'Lugar, comensales estimados…' : 'Descripción (opcional)'} style={{ ...inp }} />
@@ -1570,6 +1606,7 @@ function ItemRowInline({
   const isDraft = item.tipo === 'receta' && !!item.ref_id && draftRecetaIds.has(item.ref_id)
   const recetaVinculada = item.tipo === 'receta' && item.ref_id ? recetas.find(r => r.id === item.ref_id) : null
   const plazaCfg = PLAZAS_OPS.find(p => p.id === item.plaza)
+  const prioCfg = PRIO_CFG[item.prioridad]
   // seccion_mise puede ser un id legacy de SECCIONES_OPS o un UUID real de
   // checklist_secciones (Sesión 2, B2) — sin el nombre cargado acá, mostrar
   // "Sección" en vez de filtrar el UUID crudo al chip.
@@ -1631,6 +1668,9 @@ function ItemRowInline({
             <div style={{ display: 'flex', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
               {item.variante && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(139,92,246,.12)', color: '#7c3aed' }}>{item.variante}</span>}
               {item.plaza && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(67,97,160,.1)', color: 'var(--accent)', textTransform: 'capitalize' }}>{plazaCfg?.label ?? item.plaza}</span>}
+              {/* Prioridad solo tiene sentido leerla de un vistazo cuando el ítem
+                  ya está en el mise (tiene plaza) — si no, todavía no importa. */}
+              {item.plaza && <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 99, background: `${prioCfg.color}18`, color: prioCfg.color }}>{prioCfg.label}</span>}
               {item.seccion_mise && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(14,116,144,.12)', color: '#0e7490' }}>{seccionLabel}</span>}
             </div>
           )}
@@ -1726,6 +1766,27 @@ function ItemRowInline({
               antes todo el bloque tenía el mismo peso visual gris. */}
           <div style={{ fontSize: 9, fontWeight: 800, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.08em', margin: '2px 2px 9px', paddingTop: 10, borderTop: '1px solid var(--border)' }}>
             Producción
+          </div>
+
+          {/* Prioridad en el mise — misma escala SP/P/REF/OK de checklist_items
+              (ver MISE_PRIO_TO_TAREA). Define con qué urgencia aparece en la
+              apertura/cierre cuando este ítem se active en el mise. */}
+          <label style={lbl}>Prioridad en el mise</label>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+            {PRIORIDADES.map(p => {
+              const active = item.prioridad === p.id
+              return (
+                <button key={p.id} onClick={() => onChange({ prioridad: p.id })}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, minWidth: 54,
+                    padding: '6px 10px', borderRadius: 10, border: `1.5px solid ${active ? p.color : 'var(--border)'}`,
+                    background: active ? p.bg : 'var(--surface)', cursor: 'pointer', fontFamily: 'inherit',
+                  }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: active ? p.color : 'var(--text-2)' }}>{p.label}</span>
+                  <span style={{ fontSize: 8, fontWeight: 600, color: active ? p.color : 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.03em' }}>{p.sublabel}</span>
+                </button>
+              )
+            })}
           </div>
 
           {/* OPS / Mise — mismo panel compartido que ficha y plato */}

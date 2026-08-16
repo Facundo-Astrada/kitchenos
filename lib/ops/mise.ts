@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { MisePlaceItem } from '@/types'
 
 // ── Constantes OPS / mise (fuente única) ────────────────────
 // Plazas de producción y secciones del mise. Antes vivían en
@@ -13,6 +14,14 @@ export const PLAZAS_OPS = [
   { id: 'pasteleria', label: 'Pastelería',  color: '#ec4899' },
   { id: 'panaderia',  label: 'Panadería',   color: '#84cc16' },
 ]
+
+// Escala de prioridad del mise (checklist_items.prioridad: sp/p/ref/chk) vs. la
+// escala de tareas/composición (critica/alta/media/baja, ver CompPrioridad en
+// ComposicionEditor y TareaPrioridad). MISE_PRIO_TO_TAREA (ProductoMiseCard.tsx)
+// tiene el sentido inverso — ambos mapas deben mantenerse en espejo.
+export const TAREA_PRIO_TO_MISE: Record<string, string> = {
+  critica: 'sp', alta: 'p', media: 'ref', baja: 'chk',
+}
 
 export const SECCIONES_OPS = [
   { id: 'heladera',   label: 'Heladera',        icono: 'kitchen' },
@@ -59,6 +68,20 @@ export function deficitMise(item: ItemStockInfo, stock: number | null): number |
   return Math.max(0, targetStockMise(item) - stock)
 }
 
+// ── Visibilidad de un ítem de menú/evento en el mise (PLAN-MENUS-MISE) ──
+// El mise fijo (menu_id null) siempre es visible. Un ítem de menú solo se
+// muestra si hoy cae dentro de la vigencia del menú — sin vigencia cargada
+// (o sin activar todavía) no se muestra. `hoy` es la jornada operativa
+// (hoyOperativo()/turno vigente), NO new Date() crudo.
+export function menuItemVisible(
+  item: Pick<MisePlaceItem, 'menu_id' | 'menus'>, hoy: string
+): boolean {
+  if (!item.menu_id) return true
+  const v = item.menus
+  if (!v?.vigencia_desde || !v.vigencia_hasta) return false
+  return hoy >= v.vigencia_desde && hoy <= v.vigencia_hasta
+}
+
 // ── "Cuántos recipientes iguales" sin columna nueva (DDL de Supabase caído,
 // ver hooks.md #13) — se codifica como sufijo " ×N" en recipiente_nombre,
 // que además es perfectamente legible como texto humano en cualquier
@@ -78,6 +101,35 @@ export function parseRecipienteNombre(raw: string | null | undefined): { nombre:
   return { nombre: raw.replace(RECIPIENTE_CANTIDAD_RE, ''), cantidad: parseInt(m[1], 10) || 1 }
 }
 
+// ── Resolver seccionMiseId (legacy de SECCIONES_OPS o UUID real de
+// checklist_secciones) a un seccion_id + nombre concretos, buscando o
+// creando la fila si hace falta. Compartido por upsertMiseChecklistItem
+// (rama plato) y sincronizarMiseDeMenu (rama menú/evento) — NO duplicar.
+export async function resolverSeccionMise(
+  supabase: SupabaseClient, restauranteId: string, plaza: string, seccionMiseId: string
+): Promise<{ seccionId: string | null; secNombre: string }> {
+  const secCfg = SECCIONES_OPS.find(s => s.id === seccionMiseId)
+  if (secCfg) {
+    // Legacy: buscar/crear por label (comportamiento histórico, compat)
+    const secNombre = secCfg.label
+    const secIcono = secCfg.icono
+    const secOrden = SECCIONES_OPS.findIndex(s => s.id === seccionMiseId)
+    const { data: secExistente } = await supabase.from('checklist_secciones').select('id')
+      .eq('restaurante_id', restauranteId).eq('plaza', plaza).ilike('nombre', secNombre).limit(1)
+    let seccionId = secExistente?.[0]?.id ?? null
+    if (!seccionId) {
+      const { data: newSec } = await supabase.from('checklist_secciones')
+        .insert({ nombre: secNombre, icono: secIcono, plaza, orden: secOrden, restaurante_id: restauranteId })
+        .select('id').single()
+      seccionId = newSec?.id ?? null
+    }
+    return { seccionId, secNombre }
+  }
+  // UUID real de checklist_secciones — usarlo directo, sin buscar/crear
+  const { data: secRow } = await supabase.from('checklist_secciones').select('nombre').eq('id', seccionMiseId).single()
+  return { seccionId: seccionMiseId, secNombre: secRow?.nombre ?? seccionMiseId }
+}
+
 // ── Upsert de un ítem del mise keyed por (restaurante, receta, plaza) ──
 // Extraído de handleComposicionSave (carta/page.tsx). Busca o crea la
 // checklist_seccion de la plaza y hace upsert del checklist_item, incluyendo
@@ -95,38 +147,16 @@ export async function upsertMiseChecklistItem(params: {
   recipienteCantidad?: number
   pesoPorcion?: number | null
   pesoPorcionUnidad?: string | null
+  prioridad?: string
 }): Promise<void> {
   const {
     supabase, restauranteId, recetaId, nombre, plaza, seccionMiseId,
     cantidad, unidad, recipienteCantidad = 1, pesoPorcion = null, pesoPorcionUnidad = null,
+    prioridad = 'sp',
   } = params
   const recipienteNombre = encodeRecipienteNombre(params.recipienteNombre ?? null, recipienteCantidad)
 
-  // seccionMiseId puede ser un id legacy de SECCIONES_OPS (4 fijas) o un UUID
-  // real de checklist_secciones (Sesión 2, B2 — secciones editables por plaza).
-  const secCfg = SECCIONES_OPS.find(s => s.id === seccionMiseId)
-  let seccionId: string | null
-  let secNombre: string
-  if (secCfg) {
-    // Legacy: buscar/crear por label (comportamiento histórico, compat)
-    secNombre = secCfg.label
-    const secIcono = secCfg.icono
-    const secOrden = SECCIONES_OPS.findIndex(s => s.id === seccionMiseId)
-    const { data: secExistente } = await supabase.from('checklist_secciones').select('id')
-      .eq('restaurante_id', restauranteId).eq('plaza', plaza).ilike('nombre', secNombre).limit(1)
-    seccionId = secExistente?.[0]?.id ?? null
-    if (!seccionId) {
-      const { data: newSec } = await supabase.from('checklist_secciones')
-        .insert({ nombre: secNombre, icono: secIcono, plaza, orden: secOrden, restaurante_id: restauranteId })
-        .select('id').single()
-      seccionId = newSec?.id ?? null
-    }
-  } else {
-    // UUID real de checklist_secciones — usarlo directo, sin buscar/crear
-    seccionId = seccionMiseId
-    const { data: secRow } = await supabase.from('checklist_secciones').select('nombre').eq('id', seccionMiseId).single()
-    secNombre = secRow?.nombre ?? seccionMiseId
-  }
+  const { seccionId, secNombre } = await resolverSeccionMise(supabase, restauranteId, plaza, seccionMiseId)
 
   const recipCapacidad = recipienteNombre ? cantidad : null
 
@@ -135,7 +165,7 @@ export async function upsertMiseChecklistItem(params: {
     .eq('restaurante_id', restauranteId).eq('receta_id', recetaId).eq('plaza', plaza).limit(1)
 
   const payload = {
-    cantidad, unidad, seccion_id: seccionId, seccion: secNombre,
+    cantidad, unidad, seccion_id: seccionId, seccion: secNombre, prioridad,
     recipiente_nombre: recipienteNombre, recipiente_capacidad: recipCapacidad,
     peso_porcion: pesoPorcion, peso_porcion_unidad: pesoPorcionUnidad,
   }
@@ -144,7 +174,7 @@ export async function upsertMiseChecklistItem(params: {
     await supabase.from('checklist_items').update(payload).eq('id', existente[0].id)
   } else {
     await supabase.from('checklist_items').insert({
-      nombre, plaza, receta_id: recetaId, prioridad: 'sp', orden: 0,
+      nombre, plaza, receta_id: recetaId, orden: 0,
       restaurante_id: restauranteId, ...payload,
     })
   }

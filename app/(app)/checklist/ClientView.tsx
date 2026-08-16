@@ -24,6 +24,7 @@ import { useNotasPlaza } from '@/lib/hooks/useNotasPlaza'
 import { NotasPlaza } from '@/components/ops/NotasPlaza'
 import { todasLasPlazas, plazaLabel, plazaIcon } from '@/lib/constants'
 import { hoyOperativo, sumarDias, turnoVigente, turnoAnterior, turnoSiguiente, encodeTurnoFase, cierreIncompleto, fechaEnTz } from '@/lib/ops/turnos'
+import { menuItemVisible } from '@/lib/ops/mise'
 import { setOpsChromeCompact } from '@/lib/ops/chromeBus'
 import { SheetChrome } from '@/lib/ui/chrome'
 import PhotoPicker from '@/components/ui/PhotoPicker'
@@ -374,8 +375,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   }, [plazaSecciones])
 
   const plazaItems = useMemo(() =>
-    items.filter(i => i.plaza === plaza || (plaza !== 'general' && i.plaza === 'general')),
-    [items, plaza])
+    items.filter(i => (i.plaza === plaza || (plaza !== 'general' && i.plaza === 'general')) && menuItemVisible(i, fecha)),
+    [items, plaza, fecha])
 
   const grouped = useMemo(() => {
     const map: Record<string, MisePlaceItem[]> = {}

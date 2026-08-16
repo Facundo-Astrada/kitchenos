@@ -656,6 +656,11 @@ export interface MisePlaceItem {
   peso_porcion?: number | null
   peso_porcion_unidad?: string | null
   demanda_viva?: number | null
+  // Ítem de menú/evento activado en el mise (PLAN-MENUS-MISE-2026-08) — null
+  // para el mise fijo de siempre. `menus` viene embebido por el select de
+  // useChecklist; el filtro de vigencia se aplica en JS, ver menuItemVisible.
+  menu_id?: string | null
+  menus?: { nombre: string; vigencia_desde: string | null; vigencia_hasta: string | null } | null
 }
 
 // ── Espacios físicos (mesa de trabajo) ───────────────────────

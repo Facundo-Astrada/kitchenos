@@ -3,6 +3,7 @@ import { useCallback, useMemo } from 'react'
 import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
+import { sincronizarMiseDeMenu, desactivarMiseDeMenu, type SincronizarMiseResultado } from '@/lib/ops/menuMise'
 
 export type MenuTipo = 'fijo' | 'evento'
 export type PrepTipo = 'plato' | 'receta' | 'producto' | null
@@ -37,11 +38,16 @@ export interface MenuConPreparaciones {
   tipo: MenuTipo
   descripcion: string | null
   fecha_evento: string | null
+  vigencia_desde: string | null
+  vigencia_hasta: string | null
   variantes: string[] | null
   precio: number | null
   activo: boolean
   created_at: string
   preparaciones: MenuPreparacion[]
+  // true si el menú tiene checklist_items propios (activado en el mise) —
+  // independiente de si hoy cae dentro de su vigencia (ver MenusView).
+  enMise: boolean
 }
 
 // Datos de una preparación al crear/editar (sin id ni menu_id — se asignan al guardar)
@@ -76,18 +82,21 @@ async function fetchMenusData(key: string): Promise<MenuConPreparaciones[]> {
 
   const ids = (menusData ?? []).map(m => m.id)
   let preps: MenuPreparacion[] = []
+  let idsEnMise = new Set<string>()
   if (ids.length > 0) {
-    const { data: prepData } = await supabase
-      .from('menu_preparaciones')
-      .select('*')
-      .in('menu_id', ids)
-      .order('orden', { ascending: true })
+    const [{ data: prepData }, { data: miseData }] = await Promise.all([
+      supabase.from('menu_preparaciones').select('*').in('menu_id', ids).order('orden', { ascending: true }),
+      // Una sola query agregada para las N cards de MenusView — no una por card.
+      supabase.from('checklist_items').select('menu_id').in('menu_id', ids),
+    ])
     preps = (prepData ?? []) as MenuPreparacion[]
+    idsEnMise = new Set((miseData ?? []).map((r: { menu_id: string | null }) => r.menu_id).filter((id): id is string => !!id))
   }
 
   return (menusData ?? []).map(m => ({
-    ...(m as Omit<MenuConPreparaciones, 'preparaciones'>),
+    ...(m as Omit<MenuConPreparaciones, 'preparaciones' | 'enMise'>),
     preparaciones: preps.filter(p => p.menu_id === m.id),
+    enMise: idsEnMise.has(m.id),
   }))
 }
 
@@ -112,7 +121,7 @@ export function useMenus() {
 
   // ── Crear menú + sus preparaciones ──
   const crearMenu = useCallback(async (
-    data: { nombre: string; tipo: MenuTipo; descripcion?: string | null; fecha_evento?: string | null; variantes?: string[] | null; precio?: number | null },
+    data: { nombre: string; tipo: MenuTipo; descripcion?: string | null; fecha_evento?: string | null; vigencia_desde?: string | null; vigencia_hasta?: string | null; variantes?: string[] | null; precio?: number | null },
     preps: PrepInput[],
   ): Promise<string | null> => {
     if (!RESTAURANTE_ID) return null
@@ -124,6 +133,8 @@ export function useMenus() {
         tipo: data.tipo,
         descripcion: data.descripcion ?? null,
         fecha_evento: data.fecha_evento ?? null,
+        vigencia_desde: data.vigencia_desde ?? null,
+        vigencia_hasta: data.vigencia_hasta ?? null,
         variantes: data.variantes && data.variantes.length > 0 ? data.variantes : null,
         precio: data.precio ?? null,
       })
@@ -162,12 +173,12 @@ export function useMenus() {
   // ── Actualizar menú: update + reemplazar preparaciones ──
   const actualizarMenu = useCallback(async (
     id: string,
-    data: { nombre: string; tipo: MenuTipo; descripcion?: string | null; fecha_evento?: string | null; variantes?: string[] | null; precio?: number | null },
+    data: { nombre: string; tipo: MenuTipo; descripcion?: string | null; fecha_evento?: string | null; vigencia_desde?: string | null; vigencia_hasta?: string | null; variantes?: string[] | null; precio?: number | null },
     preps: PrepInput[],
   ) => {
     const { error } = await supabase
       .from('menus')
-      .update({ nombre: data.nombre, tipo: data.tipo, descripcion: data.descripcion ?? null, fecha_evento: data.fecha_evento ?? null, variantes: data.variantes && data.variantes.length > 0 ? data.variantes : null, precio: data.precio ?? null, updated_at: new Date().toISOString() })
+      .update({ nombre: data.nombre, tipo: data.tipo, descripcion: data.descripcion ?? null, fecha_evento: data.fecha_evento ?? null, vigencia_desde: data.vigencia_desde ?? null, vigencia_hasta: data.vigencia_hasta ?? null, variantes: data.variantes && data.variantes.length > 0 ? data.variantes : null, precio: data.precio ?? null, updated_at: new Date().toISOString() })
       .eq('id', id)
     if (error) throw new Error(error.message)
 
@@ -267,5 +278,18 @@ export function useMenus() {
     await fetchMenus()
   }, [fetchMenus]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { menus, loading, fetchMenus, crearMenu, actualizarMenu, eliminarMenu }
+  // ── Mise: activar/desactivar (ver lib/ops/menuMise.ts, PLAN-MENUS-MISE) ──
+  const activarEnMise = useCallback(async (menu: MenuConPreparaciones): Promise<SincronizarMiseResultado | null> => {
+    if (!RESTAURANTE_ID) return null
+    const res = await sincronizarMiseDeMenu({ supabase, restauranteId: RESTAURANTE_ID, menu: { id: menu.id, preparaciones: menu.preparaciones } })
+    await fetchMenus()
+    return res
+  }, [RESTAURANTE_ID, fetchMenus]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const desactivarEnMise = useCallback(async (menuId: string) => {
+    await desactivarMiseDeMenu(supabase, menuId)
+    await fetchMenus()
+  }, [fetchMenus]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return { menus, loading, fetchMenus, crearMenu, actualizarMenu, eliminarMenu, activarEnMise, desactivarEnMise }
 }

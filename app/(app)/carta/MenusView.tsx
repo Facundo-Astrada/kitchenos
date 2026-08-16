@@ -3,6 +3,11 @@
 import { useState, useMemo } from 'react'
 import { useMenus, type MenuConPreparaciones, type MenuTipo } from '@/lib/hooks/useMenus'
 import { HeaderAction, FilterChips, EmptyState, type FilterChip } from '@/components/ui'
+import { hoyOperativo } from '@/lib/ops/turnos'
+
+function fmtFechaCorta(iso: string) {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
+}
 
 const TIPO_CHIPS: FilterChip<MenuTipo | 'todos'>[] = [
   { value: 'todos', label: 'Todos' },
@@ -21,7 +26,7 @@ export default function MenusView({
   onEditar: (menu: MenuConPreparaciones) => void
   onToast: (msg: string) => void
 }) {
-  const { menus, loading, eliminarMenu } = useMenus()
+  const { menus, loading, eliminarMenu, activarEnMise, desactivarEnMise } = useMenus()
   const [tipoFilter, setTipoFilter] = useState<MenuTipo | 'todos'>('todos')
 
   const filtered = useMemo(
@@ -68,6 +73,18 @@ export default function MenusView({
                   try { await eliminarMenu(menu.id); onToast('Menú eliminado') }
                   catch (e) { onToast('Error: ' + (e instanceof Error ? e.message : 'desconocido')) }
                 }}
+                onActivarMise={async () => {
+                  try {
+                    const res = await activarEnMise(menu)
+                    if (!res) return
+                    const sinOpsTxt = res.sinOps > 0 ? ` · ${res.sinOps} sin plaza (no van)` : ''
+                    onToast(`${res.creados} preparaciones al mise${sinOpsTxt}`)
+                  } catch (e) { onToast('Error: ' + (e instanceof Error ? e.message : 'desconocido')) }
+                }}
+                onSacarMise={async () => {
+                  try { await desactivarEnMise(menu.id); onToast('Sacado del mise') }
+                  catch (e) { onToast('Error: ' + (e instanceof Error ? e.message : 'desconocido')) }
+                }}
               />
             ))}
           </div>
@@ -78,12 +95,35 @@ export default function MenusView({
 }
 
 // ── Card de menú en la lista ──
-function MenuCard({ menu, onEdit, onDelete }: { menu: MenuConPreparaciones; onEdit: () => void; onDelete: () => void }) {
+function MenuCard({ menu, onEdit, onDelete, onActivarMise, onSacarMise }: {
+  menu: MenuConPreparaciones
+  onEdit: () => void
+  onDelete: () => void
+  onActivarMise: () => Promise<void>
+  onSacarMise: () => Promise<void>
+}) {
+  const [miseSaving, setMiseSaving] = useState(false)
   const porSeccion = useMemo(() => {
     const m = new Map<string, number>()
     for (const p of menu.preparaciones) m.set(p.paso, (m.get(p.paso) ?? 0) + 1)
     return [...m.entries()]
   }, [menu.preparaciones])
+
+  // ── Estado de vigencia en el mise (ver PLAN-MENUS-MISE-2026-08.md, Fase 4) ──
+  const hoy = hoyOperativo()
+  const sinVigencia = !menu.vigencia_desde || !menu.vigencia_hasta
+  const vigenciaVencida = !sinVigencia && menu.vigencia_hasta! < hoy
+  const vigenciaFutura = !sinVigencia && menu.vigencia_desde! > hoy
+  const vigente = !sinVigencia && !vigenciaVencida && !vigenciaFutura
+
+  async function handleActivar() {
+    setMiseSaving(true)
+    try { await onActivarMise() } finally { setMiseSaving(false) }
+  }
+  async function handleSacar() {
+    setMiseSaving(true)
+    try { await onSacarMise() } finally { setMiseSaving(false) }
+  }
 
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
@@ -117,11 +157,47 @@ function MenuCard({ menu, onEdit, onDelete }: { menu: MenuConPreparaciones; onEd
             ))}
           </div>
         )}
+        {/* Estado del mise — solo si ya se activó alguna vez (ver Fase 4) */}
+        {menu.enMise && (
+          <div style={{ marginTop: 8 }}>
+            {vigente ? (
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'rgba(34,197,94,.13)', color: '#16a34a', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 12 }}>playlist_add_check</span>
+                En el mise · hasta {fmtFechaCorta(menu.vigencia_hasta!)}
+              </span>
+            ) : vigenciaFutura ? (
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'var(--bg)', color: 'var(--text-3)', border: '1px solid var(--border)' }}>
+                Entra el {fmtFechaCorta(menu.vigencia_desde!)}
+              </span>
+            ) : (
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'var(--bg)', color: 'var(--text-3)', border: '1px solid var(--border)' }}>
+                Venció el {fmtFechaCorta(menu.vigencia_hasta!)}
+              </span>
+            )}
+          </div>
+        )}
       </div>
       <div style={{ display: 'flex', borderTop: '1px solid var(--border)' }}>
         <button onClick={onEdit} style={{ flex: 1, padding: '8px', background: 'none', border: 'none', borderRight: '1px solid var(--border)', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--accent)', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span> Editar
         </button>
+        {menu.enMise ? (
+          <button onClick={handleSacar} disabled={miseSaving} title="Sacar del mise"
+            style={{ flex: 1, padding: '8px', background: 'none', border: 'none', borderRight: '1px solid var(--border)', cursor: miseSaving ? 'default' : 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--text-3)', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, opacity: miseSaving ? .6 : 1 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>playlist_remove</span> Sacar
+          </button>
+        ) : (
+          <button onClick={handleActivar} disabled={miseSaving || sinVigencia || vigenciaVencida}
+            title={sinVigencia ? 'Cargá vigencia desde/hasta en Editar' : vigenciaVencida ? 'La vigencia ya venció — actualizala en Editar' : 'Activar en el mise'}
+            style={{
+              flex: 1, padding: '8px', background: 'none', border: 'none', borderRight: '1px solid var(--border)',
+              cursor: (miseSaving || sinVigencia || vigenciaVencida) ? 'default' : 'pointer', fontSize: 12, fontWeight: 600,
+              color: (sinVigencia || vigenciaVencida) ? 'var(--text-3)' : 'var(--accent)', fontFamily: 'inherit',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, opacity: miseSaving ? .6 : 1,
+            }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>playlist_add_check</span> Activar en el mise
+          </button>
+        )}
         <button onClick={onDelete} style={{ padding: '8px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#ef4444', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
         </button>

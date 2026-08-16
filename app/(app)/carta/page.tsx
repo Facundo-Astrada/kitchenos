@@ -16,7 +16,8 @@ import { useMenus, type MenuConPreparaciones } from '@/lib/hooks/useMenus'
 import { useChecklist } from '@/lib/hooks/useChecklist'
 import MenusView from './MenusView'
 import ComposicionEditor, { type CompPayload, type CompInicial } from './ComposicionEditor'
-import { upsertMiseChecklistItem, parseRecipienteNombre } from '@/lib/ops/mise'
+import { upsertMiseChecklistItem, parseRecipienteNombre, TAREA_PRIO_TO_MISE } from '@/lib/ops/mise'
+import { sincronizarMiseDeMenu } from '@/lib/ops/menuMise'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 // ── Helpers ─────────────────────────────────────────────
 const fmtMoney = (n: number) =>
@@ -3231,6 +3232,7 @@ export default function CartaPage() {
                 recipienteCantidad: it.recipiente_cantidad ?? 1,
                 pesoPorcion: it.peso_porcion ?? null,
                 pesoPorcionUnidad: it.peso_porcion_unidad ?? null,
+                prioridad: TAREA_PRIO_TO_MISE[it.prioridad] ?? 'sp',
               })
             }
           }
@@ -3264,11 +3266,23 @@ export default function CartaPage() {
         tipo: (payload.tipo === 'evento' ? 'evento' : 'fijo') as 'fijo' | 'evento',
         descripcion: payload.descripcion,
         fecha_evento: payload.fechaEvento,
+        vigencia_desde: payload.vigenciaDesde,
+        vigencia_hasta: payload.vigenciaHasta,
         variantes: payload.variantes,
         precio: payload.precio,
       }
       if (composing?.menuEditId) {
         await actualizarMenu(composing.menuEditId, data, preps)
+        // Si el menú ya estaba activo en el mise, re-sincronizar para que los
+        // cambios de esta edición (cantidad, plaza, prioridad) no lo dejen
+        // desfasado — el mise no se entera solo de un update en menu_preparaciones.
+        const supaSync = createClient()
+        const { count } = await supaSync.from('checklist_items')
+          .select('id', { count: 'exact', head: true })
+          .eq('menu_id', composing.menuEditId)
+        if (count && count > 0 && RESTAURANTE_ID) {
+          await sincronizarMiseDeMenu({ supabase: supaSync, restauranteId: RESTAURANTE_ID, menu: { id: composing.menuEditId, preparaciones: preps } })
+        }
       } else {
         const newId = await crearMenu(data, preps)
         if (!newId) throw new Error('No se pudo crear el menú (sin restaurante activo)')
@@ -3290,6 +3304,8 @@ export default function CartaPage() {
       nombre: menu.nombre,
       descripcion: menu.descripcion,
       fechaEvento: menu.fecha_evento,
+      vigenciaDesde: menu.vigencia_desde,
+      vigenciaHasta: menu.vigencia_hasta,
       variantes: menu.variantes ?? [],
       precio: menu.precio ?? 0,
       categoria: '',
