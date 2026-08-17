@@ -5,7 +5,7 @@ export const COACH_HIGHLIGHT_IDS = [
   'mise-stock-box', 'mise-producir-box', 'mise-fab-add', 'mise-tab-rutina',
   'plan-sub-menu', 'plan-sub-eventos',
   // Carta
-  'carta-header', 'carta-importar', 'carta-nuevo',
+  'carta-header', 'carta-importar', 'carta-nuevo', 'carta-menus',
   'carta-filtros', 'carta-lista', 'carta-rentabilidad',
   // Stock
   'stock-kpis', 'stock-funciones', 'stock-stockear',

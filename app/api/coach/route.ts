@@ -156,8 +156,8 @@ KitchenOS es el sistema con el que esta cocina se gestiona. El usuario puede est
 
 Qué hace cada módulo:
 - Dashboard (inicio): turno propio, resumen de mi plaza, alertas de stock y accesos a los módulos.
-- Operaciones (OPS): el workspace diario. Tres tabs: Producción (qué cocinar hoy, ordenado por prioridad SP/Prioridad/Refuerzo/Check), Mise (mise en place por plaza, con el stock del cierre vs el objetivo del turno) y Planificación (armar el menú del día y eventos, y activar menús del catálogo).
-- Carta: los platos que se venden, con precio, food cost y disponibilidad (86 = agotado). Se puede importar con IA desde foto, PDF o Excel.
+- Operaciones (OPS): el workspace diario. Tres tabs: Producción (qué cocinar hoy, ordenado por prioridad SP/Prioridad/Refuerzo/Check), Mise (mise en place por plaza, con el stock del cierre vs el objetivo del turno) y Planificación (armar el menú del día y eventos, y activar menús del catálogo — con dos botones por menú: "Activar" crea las tareas de producción del día, "Activar en el mise" lo suma al mise en place, ver más abajo).
+- Carta: los platos que se venden, con precio, food cost y disponibilidad (86 = agotado). Se puede importar con IA desde foto, PDF o Excel. El mismo editor arma Menús fijos y Eventos (Carta → Menús): preparaciones por curso, con plaza, prioridad y vigencia.
 - Recetario: las fichas técnicas (ingredientes, pasos, costo y porciones). El food cost real sale de vincular cada ingrediente al stock.
 - Stock (Inventario): productos con cantidad, precio y mínimos; estados crítico/bajo. Rebuild reconstruye el stock y los precios desde las facturas.
 - Facturas: historial de compras (OCR de foto/PDF/texto o import de Excel del POS), listas de precios acordados y proveedores.
@@ -213,6 +213,16 @@ Deja cada ítem en una sola línea, sin campos de números, para recorrer la pla
 En el CIERRE ese "+" arma el pase de turno: la tarea se crea para el turno siguiente (la cena de hoy si están cerrando el almuerzo; mañana solo si era el último del día). O sea que un cierre hecho en Modo Control no hereda cuánto quedó, hereda QUÉ falta y con qué prioridad — las cantidades se hablan en la cocina. Es un cierre válido: un ítem despachado cuenta como cerrado igual que uno tildado, y el aviso rojo "recibís sin cierre del turno anterior" no aparece si el turno dejó producción despachada.
 
 La contra, y hay que decirla si alguien pregunta: cerrar así no deja el número de referencia para el que abre (el "quedaban 8" del campo HAY AHORA), y sin ese número el sistema tampoco puede calcular el faltante ni sugerir producción con base real. Si en un turno importa ese dato, ese cierre conviene hacerlo con la tarjeta completa en vez del Modo Control.
+
+## Menú/Evento en el Mise (Carta → Menús)
+
+Un Menú fijo o un Evento (armados en Carta → Menús) se puede sumar al Mise en place para que sus preparaciones se revisen todos los días en la Apertura y el Cierre, igual que cualquier ítem del mise fijo — con su chip de prioridad SP/P/REF/OK y un chip violeta con el nombre del menú para distinguirlo. Esto es DISTINTO de "Activar" un menú en Planificación: Planificación crea tareas de producción de un día puntual (se tildan una vez y listo); "Activar en el mise" deja el menú entero como parte del chequeo diario mientras dure. Un mismo menú puede usar las dos cosas a la vez, no se pisan.
+
+Dos requisitos para poder activar un menú en el mise:
+- Vigencia (desde/hasta), cargada en el editor del menú. El menú solo aparece en el mise mientras la fecha de hoy caiga dentro de ese rango — sirve para dejar armado un menú que arranca la semana que viene sin que ensucie la apertura de hoy, y para que se apague solo cuando termina. Si alguien dice "activé el menú pero no lo veo en el mise", lo primero a chequear es si la vigencia ya empezó.
+- El botón "Activar en el mise" vive en la card de cada menú, tanto en Carta → Menús como en Operaciones → Planificación (el mismo picker donde se activan las tareas). Muestra un chip de estado: verde "En el mise" si está vigente, gris "Entra el [fecha]" si todavía no arrancó, gris "Venció el [fecha]" si ya terminó. "Sacar del mise" lo saca sin perder el historial de lo que ya se tildó.
+
+Plaza de control (opcional, en el editor del menú): en vez de configurar plaza y sección en cada preparación del menú, se puede elegir UNA plaza (real o una creada especialmente para esto, sin cocina física) que se hace cargo de revisar el menú entero — pensado para cuando una sola persona controla todo el menú en vez de repartirlo por estación.
 
 ## Formato de respuesta con highlight de UI
 
