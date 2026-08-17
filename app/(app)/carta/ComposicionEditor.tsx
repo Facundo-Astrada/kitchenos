@@ -996,7 +996,7 @@ export default function ComposicionEditor({
               </div>
               {plazaControl && (
                 <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 5 }}>
-                  Todas las preparaciones con sección cargada van a esta plaza al activar — la plaza que elijas abajo por ítem no importa.
+                  Todas las preparaciones van a esta plaza al activar, sin configurar OPS ítem por ítem — si no le elegís una sección propia, cae en &quot;Estación&quot;.
                 </div>
               )}
             </div>

@@ -144,6 +144,28 @@ describe('sincronizarMiseDeMenu — plazaControl (una sola persona controla el m
     expect(store.checklist_items.every(r => r.plaza === 'control')).toBe(true)
   })
 
+  it('con plazaControl, una preparación SIN plaza ni sección propias igual se sincroniza — la sección cae en el default', async () => {
+    const { supabase, store } = fakeSupabase()
+    const res = await sincronizarMiseDeMenu({
+      supabase, restauranteId: RID,
+      // Caso real: 15 preparaciones armadas con "Plaza de control" y nunca
+      // se abrió el OPS de ninguna — todas llegan con plaza/seccion_mise null.
+      menu: { id: MENU_ID, plazaControl: 'general', preparaciones: [PREP_SIN_OPS] },
+    })
+    expect(res).toEqual({ creados: 1, sinOps: 0 })
+    expect(store.checklist_items).toHaveLength(1)
+    expect(store.checklist_items[0]).toMatchObject({ plaza: 'general', seccion: 'Estación' })
+  })
+
+  it('con plazaControl, si la preparación SÍ eligió sección, se respeta esa en vez del default', async () => {
+    const { supabase, store } = fakeSupabase()
+    await sincronizarMiseDeMenu({
+      supabase, restauranteId: RID,
+      menu: { id: MENU_ID, plazaControl: 'general', preparaciones: [PREP_PARRILLA] },
+    })
+    expect(store.checklist_items[0]).toMatchObject({ plaza: 'general', seccion: 'Heladera' })
+  })
+
   it('dos preparaciones con el mismo nombre en la misma plaza de control no duplican filas', async () => {
     const { supabase, store } = fakeSupabase()
     const otraPrepMismoNombre: PrepInput = { ...PREP_PASTELERIA, nombre: PREP_PARRILLA.nombre }

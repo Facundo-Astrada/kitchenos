@@ -16,6 +16,12 @@ export interface SincronizarMiseResultado {
   sinOps: number
 }
 
+// Sección por defecto cuando plaza_control está activo y la preparación no
+// eligió una propia — con plaza_control el objetivo es "activar el menú
+// entero sin configurar OPS ítem por ítem", así que la sección deja de ser
+// obligatoria (a diferencia del mise fijo): cae acá en vez de quedar afuera.
+const SECCION_CONTROL_DEFAULT = 'estacion'
+
 /**
  * Upsert idempotente de checklist_items para un menú, keyed por
  * (restaurante_id, menu_id, plaza, nombre). Prune: borra los que ya no
@@ -31,12 +37,15 @@ export async function sincronizarMiseDeMenu(params: {
   // `plazaControl`: si está cargado, pisa la plaza de CADA preparación —
   // todo el menú va a esa plaza (real o custom), sin importar qué plaza
   // haya elegido cada ítem en el editor. Pensado para una plaza que no
-  // existe físicamente, controlada por una sola persona.
+  // existe físicamente, controlada por una sola persona. Además vuelve
+  // opcional la sección (cae en SECCION_CONTROL_DEFAULT si no se eligió
+  // una): el objetivo es activar el menú entero sin tocar OPS ítem por
+  // ítem, así que ninguna preparación se excluye por falta de sección.
   menu: { id: string; plazaControl?: string | null; preparaciones: PrepInput[] }
 }): Promise<SincronizarMiseResultado> {
   const { supabase, restauranteId, menu } = params
   const preparaciones = menu.plazaControl
-    ? menu.preparaciones.map(p => ({ ...p, plaza: menu.plazaControl! }))
+    ? menu.preparaciones.map(p => ({ ...p, plaza: menu.plazaControl!, seccion_mise: p.seccion_mise || SECCION_CONTROL_DEFAULT }))
     : menu.preparaciones
   const candidatas = preparaciones.filter(p => p.plaza && p.seccion_mise)
   const sinOps = preparaciones.length - candidatas.length
