@@ -108,3 +108,26 @@ export async function desactivarMiseDeMenu(supabase: SupabaseClient, menuId: str
   const ayer = sumarDias(hoyOperativo(), -1)
   await supabase.from('menus').update({ vigencia_hasta: ayer }).eq('id', menuId)
 }
+
+export interface EstadoMiseMenu {
+  sinVigencia: boolean
+  vigenciaVencida: boolean
+  vigenciaFutura: boolean
+  vigente: boolean
+}
+
+/**
+ * Deriva el estado de vigencia de un menú frente al mise — vigente, todavía
+ * no arrancó, o ya venció. Fuente única para el botón/chip "Activar en el
+ * mise" que se repite en MenusView (Carta) y en el picker de Planificación
+ * (OPS) — si la regla de vigencia cambia, se toca acá una sola vez.
+ */
+export function estadoMiseMenu(
+  menu: { vigencia_desde: string | null; vigencia_hasta: string | null }, hoy: string
+): EstadoMiseMenu {
+  const sinVigencia = !menu.vigencia_desde || !menu.vigencia_hasta
+  const vigenciaVencida = !sinVigencia && menu.vigencia_hasta! < hoy
+  const vigenciaFutura = !sinVigencia && menu.vigencia_desde! > hoy
+  const vigente = !sinVigencia && !vigenciaVencida && !vigenciaFutura
+  return { sinVigencia, vigenciaVencida, vigenciaFutura, vigente }
+}

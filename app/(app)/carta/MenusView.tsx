@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react'
 import { useMenus, type MenuConPreparaciones, type MenuTipo } from '@/lib/hooks/useMenus'
 import { HeaderAction, FilterChips, EmptyState, type FilterChip } from '@/components/ui'
 import { hoyOperativo } from '@/lib/ops/turnos'
+import { estadoMiseMenu } from '@/lib/ops/menuMise'
 
 function fmtFechaCorta(iso: string) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
@@ -110,11 +111,7 @@ function MenuCard({ menu, onEdit, onDelete, onActivarMise, onSacarMise }: {
   }, [menu.preparaciones])
 
   // ── Estado de vigencia en el mise (ver PLAN-MENUS-MISE-2026-08.md, Fase 4) ──
-  const hoy = hoyOperativo()
-  const sinVigencia = !menu.vigencia_desde || !menu.vigencia_hasta
-  const vigenciaVencida = !sinVigencia && menu.vigencia_hasta! < hoy
-  const vigenciaFutura = !sinVigencia && menu.vigencia_desde! > hoy
-  const vigente = !sinVigencia && !vigenciaVencida && !vigenciaFutura
+  const { sinVigencia, vigenciaVencida, vigenciaFutura, vigente } = estadoMiseMenu(menu, hoyOperativo())
 
   async function handleActivar() {
     setMiseSaving(true)

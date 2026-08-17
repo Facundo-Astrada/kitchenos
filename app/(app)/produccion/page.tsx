@@ -14,6 +14,7 @@ import { PLAZA_TO_SECCION } from '@/components/mise/ProductoMiseCard'
 import SugerenciaProduccionSheet from '@/components/produccion/SugerenciaProduccionSheet'
 import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
 import { activarMenuParaFechas } from '@/lib/menus/activarMenu'
+import { estadoMiseMenu } from '@/lib/ops/menuMise'
 
 // ── Helpers ─────────────────────────────────────────────────
 // fmtDate formatea un Date arbitrario de navegación de calendario (siempre
@@ -72,7 +73,8 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
   const router = useRouter()
   const RESTAURANTE_ID = useRestauranteId()
   const { agregarTarea, tareas, eliminarTarea, refetch: refetchTareas } = useTareas()
-  const { menus: catalogoMenus } = useMenus()
+  const { menus: catalogoMenus, activarEnMise, desactivarEnMise } = useMenus()
+  const [miseSavingId, setMiseSavingId] = useState<string | null>(null)
   const { miembros } = useEquipo()
 
   const [showMenuPicker, setShowMenuPicker] = useState(false)
@@ -150,6 +152,37 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
       showToast('Error: ' + msg)
     } finally {
       setCargandoMenu(false)
+    }
+  }
+
+  // ── Activar/sacar un menú del mise (checklist_items con apertura/cierre) —
+  // acción independiente de "Activar" (tareas, arriba): un menú puede tener
+  // tareas de un día puntual Y estar en el mise al mismo tiempo, no se pisan.
+  // Mismo motor que Carta → Menús (lib/ops/menuMise.ts), ver hooks.md.
+  async function handleActivarEnMise(e: React.MouseEvent, menu: MenuConPreparaciones) {
+    e.stopPropagation()
+    setMiseSavingId(menu.id)
+    try {
+      const res = await activarEnMise(menu)
+      if (!res) return
+      const sinOpsTxt = res.sinOps > 0 ? ` · ${res.sinOps} sin plaza (no van)` : ''
+      showToast(`${res.creados} preparaciones al mise${sinOpsTxt}`)
+    } catch (e: unknown) {
+      showToast('Error: ' + (e instanceof Error ? e.message : 'desconocido'))
+    } finally {
+      setMiseSavingId(null)
+    }
+  }
+  async function handleSacarMise(e: React.MouseEvent, menu: MenuConPreparaciones) {
+    e.stopPropagation()
+    setMiseSavingId(menu.id)
+    try {
+      await desactivarEnMise(menu.id)
+      showToast('Sacado del mise')
+    } catch (e: unknown) {
+      showToast('Error: ' + (e instanceof Error ? e.message : 'desconocido'))
+    } finally {
+      setMiseSavingId(null)
     }
   }
 
@@ -549,19 +582,56 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, opacity: multiSelectMode && diasSeleccionados.size === 0 ? .45 : 1 }}>
                   {catalogoMenus.map(menu => {
                     const disabled = cargandoMenu || (multiSelectMode && diasSeleccionados.size === 0)
+                    // Estado del mise — mismo criterio que Carta → Menús (lib/ops/menuMise.ts).
+                    const { sinVigencia, vigenciaVencida, vigenciaFutura, vigente } = estadoMiseMenu(menu, hoyOperativo())
+                    const miseSaving = miseSavingId === menu.id
                     return (
-                    <button key={menu.id} onClick={() => !disabled && activarMenu(menu)} disabled={disabled}
-                      style={{ textAlign: 'left', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 14px', cursor: disabled ? 'default' : 'pointer', fontFamily: 'inherit', opacity: cargandoMenu ? .6 : 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 99, textTransform: 'uppercase', letterSpacing: '.04em', background: menu.tipo === 'evento' ? 'rgba(139,92,246,.14)' : 'rgba(14,165,233,.14)', color: menu.tipo === 'evento' ? '#8b5cf6' : '#0ea5e9' }}>
-                          {menu.tipo === 'evento' ? 'Evento' : 'Fijo'}
-                        </span>
-                        <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{menu.nombre}</span>
-                        <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>{menu.preparaciones.length} prep.</span>
-                        <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--accent)' }}>add_circle</span>
+                    <div key={menu.id} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+                      {/* Activa TAREAS del día/rango elegido arriba — no toca el mise */}
+                      <button onClick={() => !disabled && activarMenu(menu)} disabled={disabled}
+                        style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '12px 14px', cursor: disabled ? 'default' : 'pointer', fontFamily: 'inherit', opacity: cargandoMenu ? .6 : 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 99, textTransform: 'uppercase', letterSpacing: '.04em', background: menu.tipo === 'evento' ? 'rgba(139,92,246,.14)' : 'rgba(14,165,233,.14)', color: menu.tipo === 'evento' ? '#8b5cf6' : '#0ea5e9' }}>
+                            {menu.tipo === 'evento' ? 'Evento' : 'Fijo'}
+                          </span>
+                          <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{menu.nombre}</span>
+                          <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>{menu.preparaciones.length} prep.</span>
+                          <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--accent)' }}>add_circle</span>
+                        </div>
+                        {menu.descripcion && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>{menu.descripcion}</div>}
+                      </button>
+                      {/* Activa el MISE (checklist_items, apertura/cierre) — independiente de arriba */}
+                      <div style={{ borderTop: '1px solid var(--border)', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {menu.enMise ? (
+                          <>
+                            {vigente ? (
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'rgba(34,197,94,.13)', color: '#16a34a' }}>
+                                En el mise · hasta {new Date(menu.vigencia_hasta! + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+                              </span>
+                            ) : vigenciaFutura ? (
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'var(--surface)', color: 'var(--text-3)', border: '1px solid var(--border)' }}>
+                                Entra el {new Date(menu.vigencia_desde! + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'var(--surface)', color: 'var(--text-3)', border: '1px solid var(--border)' }}>
+                                Venció el {new Date(menu.vigencia_hasta! + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+                              </span>
+                            )}
+                            <button onClick={e => handleSacarMise(e, menu)} disabled={miseSaving}
+                              style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: miseSaving ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600, color: 'var(--text-3)', opacity: miseSaving ? .6 : 1 }}>
+                              Sacar del mise
+                            </button>
+                          </>
+                        ) : (
+                          <button onClick={e => handleActivarEnMise(e, menu)} disabled={miseSaving || sinVigencia || vigenciaVencida}
+                            title={sinVigencia ? 'Cargá vigencia desde/hasta en Editar (Carta → Menús)' : vigenciaVencida ? 'La vigencia ya venció' : 'Activar en el mise'}
+                            style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: (miseSaving || sinVigencia || vigenciaVencida) ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, color: (sinVigencia || vigenciaVencida) ? 'var(--text-3)' : 'var(--accent)', opacity: miseSaving ? .6 : 1 }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>playlist_add_check</span>
+                            Activar en el mise
+                          </button>
+                        )}
                       </div>
-                      {menu.descripcion && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>{menu.descripcion}</div>}
-                    </button>
+                    </div>
                     )
                   })}
                 </div>

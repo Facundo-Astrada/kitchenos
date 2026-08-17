@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { PrepInput } from '@/lib/hooks/useMenus'
-import { sincronizarMiseDeMenu } from './menuMise'
+import { sincronizarMiseDeMenu, estadoMiseMenu } from './menuMise'
 import { menuItemVisible, TAREA_PRIO_TO_MISE, resolverSeccionMise } from './mise'
 
 // ── Fake Supabase mínimo — solo el subset de la query builder que
@@ -244,5 +244,31 @@ describe('menuItemVisible', () => {
   it('invisible el día anterior a "desde" y el día siguiente a "hasta"', () => {
     expect(menuItemVisible(CON_VIGENCIA, '2026-08-17')).toBe(false)
     expect(menuItemVisible(CON_VIGENCIA, '2026-09-01')).toBe(false)
+  })
+})
+
+describe('estadoMiseMenu — fuente única para el chip/botón "Activar en el mise" (MenusView y Planificación)', () => {
+  it('sin vigencia cargada: ni vigente, ni vencida, ni futura', () => {
+    const s = estadoMiseMenu({ vigencia_desde: null, vigencia_hasta: null }, '2026-08-20')
+    expect(s).toEqual({ sinVigencia: true, vigenciaVencida: false, vigenciaFutura: false, vigente: false })
+  })
+
+  it('hoy dentro del rango: vigente', () => {
+    const s = estadoMiseMenu({ vigencia_desde: '2026-08-18', vigencia_hasta: '2026-08-28' }, '2026-08-20')
+    expect(s.vigente).toBe(true)
+    expect(s.vigenciaVencida).toBe(false)
+    expect(s.vigenciaFutura).toBe(false)
+  })
+
+  it('hoy antes de vigencia_desde: futura', () => {
+    const s = estadoMiseMenu({ vigencia_desde: '2026-09-01', vigencia_hasta: '2026-09-10' }, '2026-08-20')
+    expect(s.vigenciaFutura).toBe(true)
+    expect(s.vigente).toBe(false)
+  })
+
+  it('hoy después de vigencia_hasta: vencida', () => {
+    const s = estadoMiseMenu({ vigencia_desde: '2026-08-01', vigencia_hasta: '2026-08-10' }, '2026-08-20')
+    expect(s.vigenciaVencida).toBe(true)
+    expect(s.vigente).toBe(false)
   })
 })
