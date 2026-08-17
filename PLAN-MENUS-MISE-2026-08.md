@@ -195,3 +195,30 @@ el mise desfasado.
 campos de la 2, y la 4 necesita el activador de la 3.
 
 `npm run build` antes de cada push. Commit por fase.
+
+---
+
+## Fase 7 (adenda, 2026-08-17) — Plaza de control
+
+Pedido de Facundo tras usar la Fase 4: "por lo general quien controla y chequea el menú es una
+sola persona" — en vez de configurar OPS ítem por ítem (plaza+sección) y de que el mise reparta
+el menú entre las estaciones reales, una plaza que puede no existir físicamente (custom, con su
+propio color) controla el menú entero.
+
+- `menus.plaza_control TEXT NULL` — si está cargada, **pisa** la plaza de cada preparación al
+  activar (`sincronizarMiseDeMenu`), sin importar qué plaza tenga configurada individualmente.
+- `OpsPanel` gana `forcedPlaza?: string` — con ella, la plaza deja de elegirse por ítem (arranca
+  directo en "Sección", ya scopeada a esa plaza).
+- **Riesgo real que apareció al diseñarlo, no hipotético**: si una preparación ya tenía una
+  `seccion_mise` (UUID real) configurada para OTRA plaza antes de activar `plaza_control`,
+  `resolverSeccionMise` la resolvía tal cual — el `checklist_item` quedaba con `plaza='control'`
+  pero `seccion_id` de una sección que vive en `checklist_secciones` con `plaza='parrilla'`. El
+  mise agrupa filtrando `checklist_secciones` por la plaza que se está mirando, así que ese ítem
+  se volvía invisible en silencio. Fix: `resolverSeccionMise` ahora es plaza-safe — si el UUID no
+  pertenece a la plaza pedida, resuelve por nombre bajo la plaza nueva (busca/crea) en vez de
+  reusar el id viejo.
+- Colisión de clave: dos preparaciones con el mismo nombre que plaza_control junta en la misma
+  plaza colisionan en `(plaza, nombre)` — `sincronizarMiseDeMenu` deduplica dentro de una misma
+  corrida (la segunda no inserta un `checklist_item` repetido).
+- 6 tests nuevos en `menuMise.test.ts` (override, colisión de nombre, reversión sin plaza_control,
+  y las 3 ramas de `resolverSeccionMise` plaza-safe) — 86 tests en total.

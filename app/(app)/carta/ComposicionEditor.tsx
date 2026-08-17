@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
+import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
 import { PLAZAS_OPS, SECCIONES_OPS } from '@/lib/ops/mise'
 import { useSheetOpen } from '@/lib/ui/chrome'
 import { usePermisos } from '@/lib/hooks/usePermisos'
@@ -41,6 +42,7 @@ export interface CompPayload {
   fechaEvento: string | null
   vigenciaDesde: string | null
   vigenciaHasta: string | null
+  plazaControl: string | null
   variantes: string[]
   precio: number
   categoria: string
@@ -70,6 +72,7 @@ export interface CompInicial {
   fechaEvento?: string | null
   vigenciaDesde?: string | null
   vigenciaHasta?: string | null
+  plazaControl?: string | null
   variantes?: string[]
   precio: number
   categoria: string
@@ -567,6 +570,16 @@ export default function ComposicionEditor({
     setVigenciaHasta(prev => (!prev || prev === fechaEvento) ? v : prev)
     setFechaEvento(v)
   }
+  // Plaza de control (opcional) — si está cargada, todo el menú se manda a
+  // esa plaza al activar en el mise, sin importar la plaza que tenga cada
+  // preparación (ver lib/ops/menuMise.ts). Una sola persona controla el
+  // menú entero desde una plaza que puede no existir físicamente.
+  const [plazaControl, setPlazaControl] = useState(inicial?.plazaControl ?? '')
+  const { plazasCustom } = usePlazasCustom()
+  const plazasControlDisponibles = useMemo(
+    () => [...PLAZAS_OPS, ...plazasCustom.map(c => ({ id: c.key, label: c.nombre, color: c.color }))],
+    [plazasCustom]
+  )
   const [variantes, setVariantes] = useState<string[]>(inicial?.variantes ?? [])
   const [nuevaVariante, setNuevaVariante] = useState('')
 
@@ -831,6 +844,7 @@ export default function ComposicionEditor({
         fechaEvento: modo === 'evento' ? (fechaEvento || null) : null,
         vigenciaDesde: !esPlato ? (vigenciaDesde || null) : null,
         vigenciaHasta: !esPlato ? (vigenciaHasta || null) : null,
+        plazaControl: !esPlato ? (plazaControl || null) : null,
         variantes: esPlato ? [] : variantes,
         precio: precioN, categoria, tags, secciones: secs,
       })
@@ -956,6 +970,33 @@ export default function ComposicionEditor({
               {vigenciaDesde && vigenciaHasta && vigenciaHasta < vigenciaDesde && (
                 <div style={{ fontSize: 11, color: '#dc2626', marginTop: 5, fontWeight: 600 }}>
                   &quot;Hasta&quot; no puede ser antes que &quot;Desde&quot;
+                </div>
+              )}
+            </div>
+          )}
+          {/* Plaza de control (opcional) — si se elige, todo el menú se manda
+              a esa plaza al activar en el mise, sin configurar OPS ítem por
+              ítem. Pensada para una plaza custom que no existe físicamente
+              (ver Configuración → Plazas), controlada por una sola persona. */}
+          {!esPlato && (
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>
+                Plaza de control <span style={{ textTransform: 'none', fontWeight: 500, color: 'var(--text-3)' }}>(opcional — manda todo el menú a una sola plaza)</span>
+              </label>
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                {plazasControlDisponibles.map(p => (
+                  <button key={p.id} type="button" onClick={() => setPlazaControl(plazaControl === p.id ? '' : p.id)}
+                    style={{ padding: '6px 12px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+                      background: plazaControl === p.id ? `${p.color}18` : 'var(--bg)',
+                      color: plazaControl === p.id ? p.color : 'var(--text-3)',
+                      outline: plazaControl === p.id ? `1.5px solid ${p.color}50` : '1px solid var(--border)' }}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              {plazaControl && (
+                <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 5 }}>
+                  Todas las preparaciones con sección cargada van a esta plaza al activar — la plaza que elijas abajo por ítem no importa.
                 </div>
               )}
             </div>
@@ -1104,6 +1145,7 @@ export default function ComposicionEditor({
                       recipientesUsados={recipientesUsados}
                       autoFocusCantidad={autoFocusCantidadUid === it._uid}
                       onCantidadCommitted={() => { setAutoFocusCantidadUid(null); setTimeout(() => searchRef.current?.focus(), 60) }}
+                      plazaControl={plazaControl || undefined}
                     />
                   ))}
 
@@ -1564,7 +1606,7 @@ function PlatoRecetasEditor({
 // ════════════════════════════════════════════════════════════
 function ItemRowInline({
   item, expanded, onToggle, onChange, onRemove, recetas, productos, cartaItems, variantes, draftRecetaIds, recipientesUsados,
-  autoFocusCantidad, onCantidadCommitted,
+  autoFocusCantidad, onCantidadCommitted, plazaControl,
 }: {
   item: ItemRow
   expanded: boolean
@@ -1579,6 +1621,9 @@ function ItemRowInline({
   recipientesUsados: string[]
   autoFocusCantidad?: boolean
   onCantidadCommitted?: () => void
+  // Plaza de control del menú (ver ComposicionEditor) — si está cargada, se
+  // fuerza en el OpsPanel de este ítem en vez de dejar elegir plaza.
+  plazaControl?: string
 }) {
   const [showResults, setShowResults] = useState(false)
   const [opsOpen, setOpsOpen] = useState(false)
@@ -1605,7 +1650,11 @@ function ItemRowInline({
   // Receta vinculada todavía sin realizar (idea/draft) → se pinta en rojo.
   const isDraft = item.tipo === 'receta' && !!item.ref_id && draftRecetaIds.has(item.ref_id)
   const recetaVinculada = item.tipo === 'receta' && item.ref_id ? recetas.find(r => r.id === item.ref_id) : null
-  const plazaCfg = PLAZAS_OPS.find(p => p.id === item.plaza)
+  // Con plaza de control cargada, esta preparación va ahí sin importar lo
+  // que tenga guardado en `item.plaza` (puede ser una plaza vieja, de antes
+  // de activar el control) — el resumen tiene que reflejar eso, no lo guardado.
+  const plazaEfectiva = plazaControl || item.plaza
+  const plazaCfg = PLAZAS_OPS.find(p => p.id === plazaEfectiva)
   const prioCfg = PRIO_CFG[item.prioridad]
   // seccion_mise puede ser un id legacy de SECCIONES_OPS o un UUID real de
   // checklist_secciones (Sesión 2, B2) — sin el nombre cargado acá, mostrar
@@ -1613,8 +1662,8 @@ function ItemRowInline({
   const seccionLabel = item.seccion_mise
     ? (SECCIONES_OPS.find(s => s.id === item.seccion_mise)?.label ?? (/^[0-9a-f-]{36}$/i.test(item.seccion_mise) ? 'Sección' : item.seccion_mise))
     : null
-  const opsResumen = item.plaza
-    ? `${plazaCfg?.label ?? item.plaza}${seccionLabel ? ' · ' + seccionLabel : ''}${item.cantidad_ops != null ? ' · ' + item.cantidad_ops + (item.unidad_ops ?? '') : ''}`
+  const opsResumen = plazaEfectiva
+    ? `${plazaCfg?.label ?? plazaEfectiva}${seccionLabel ? ' · ' + seccionLabel : ''}${item.cantidad_ops != null ? ' · ' + item.cantidad_ops + (item.unidad_ops ?? '') : ''}`
     : null
 
   // Sugerencias para vincular — buscan sobre el mismo texto que Nombre
@@ -1664,13 +1713,13 @@ function ItemRowInline({
             </div>
             {isDraft && <span style={{ fontSize: 8, fontWeight: 800, padding: '1px 5px', borderRadius: 99, background: 'rgba(220,38,38,.1)', color: '#dc2626', textTransform: 'uppercase', letterSpacing: '.04em', flexShrink: 0 }}>a realizar</span>}
           </div>
-          {!expanded && (item.plaza || item.seccion_mise || item.variante) && (
+          {!expanded && (plazaEfectiva || item.seccion_mise || item.variante) && (
             <div style={{ display: 'flex', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
               {item.variante && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(139,92,246,.12)', color: '#7c3aed' }}>{item.variante}</span>}
-              {item.plaza && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(67,97,160,.1)', color: 'var(--accent)', textTransform: 'capitalize' }}>{plazaCfg?.label ?? item.plaza}</span>}
+              {plazaEfectiva && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(67,97,160,.1)', color: 'var(--accent)', textTransform: 'capitalize' }}>{plazaCfg?.label ?? plazaEfectiva}</span>}
               {/* Prioridad solo tiene sentido leerla de un vistazo cuando el ítem
                   ya está en el mise (tiene plaza) — si no, todavía no importa. */}
-              {item.plaza && <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 99, background: `${prioCfg.color}18`, color: prioCfg.color }}>{prioCfg.label}</span>}
+              {plazaEfectiva && <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 99, background: `${prioCfg.color}18`, color: prioCfg.color }}>{prioCfg.label}</span>}
               {item.seccion_mise && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(14,116,144,.12)', color: '#0e7490' }}>{seccionLabel}</span>}
             </div>
           )}
@@ -1793,9 +1842,9 @@ function ItemRowInline({
           <label style={lbl}>OPS / Mise</label>
           {!opsOpen ? (
             <button onClick={() => setOpsOpen(true)}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', borderRadius: 9, border: `1px solid ${item.plaza ? (plazaCfg?.color ?? 'var(--accent)') + '55' : 'var(--border)'}`, background: item.plaza ? (plazaCfg?.color ?? 'var(--accent)') + '10' : 'var(--bg)', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 10 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 16, color: item.plaza ? (plazaCfg?.color ?? 'var(--accent)') : 'var(--accent)' }}>restaurant_menu</span>
-              <span style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 600, color: item.plaza ? 'var(--text-1)' : 'var(--text-3)' }}>
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', borderRadius: 9, border: `1px solid ${plazaEfectiva ? (plazaCfg?.color ?? 'var(--accent)') + '55' : 'var(--border)'}`, background: plazaEfectiva ? (plazaCfg?.color ?? 'var(--accent)') + '10' : 'var(--bg)', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 10 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16, color: plazaEfectiva ? (plazaCfg?.color ?? 'var(--accent)') : 'var(--accent)' }}>restaurant_menu</span>
+              <span style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 600, color: plazaEfectiva ? 'var(--text-1)' : 'var(--text-3)' }}>
                 {opsResumen ?? 'Asignar plaza, sección, recipiente…'}
               </span>
               <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)' }}>chevron_right</span>
@@ -1814,7 +1863,8 @@ function ItemRowInline({
                   pesoPorcion: item.peso_porcion,
                   pesoPorcionUnidad: item.peso_porcion_unidad,
                 }}
-                hasExisting={!!item.plaza}
+                forcedPlaza={plazaControl}
+                hasExisting={!!plazaEfectiva}
                 recipienteSugerencias={recipientesUsados}
                 onSave={r => { onChange({ plaza: r.plaza, seccion_mise: r.seccion, cantidad_ops: r.cantidad, unidad_ops: r.unidad, recipiente_nombre: r.recipienteNombre, peso_porcion: r.pesoPorcion, peso_porcion_unidad: r.pesoPorcionUnidad }); setOpsOpen(false) }}
                 onRemove={() => { onChange({ plaza: null, seccion_mise: null, cantidad_ops: null, unidad_ops: null, recipiente_nombre: null, peso_porcion: null, peso_porcion_unidad: null }); setOpsOpen(false) }}

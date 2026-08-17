@@ -49,19 +49,25 @@ const secTitle: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: 'v
 const secHint: React.CSSProperties = { fontSize: 11, color: 'var(--text-3)', marginTop: -4, marginBottom: 8 }
 
 export default function OpsPanel({
-  initial, hasExisting, saving, defaultUnidad = 'porc', recipienteSugerencias = [], onSave, onRemove, onCancel,
+  initial, hasExisting, saving, defaultUnidad = 'porc', recipienteSugerencias = [], forcedPlaza, onSave, onRemove, onCancel,
 }: {
   initial?: OpsInitial
   hasExisting?: boolean
   saving?: boolean
   defaultUnidad?: string
   recipienteSugerencias?: string[]
+  // Plaza fija (id de PLAZAS_OPS o de una plaza custom) — cuando viene
+  // cargada, la plaza deja de ser elegible acá: el panel arranca directo en
+  // "Sección del mise" ya scopeado a esa plaza. Usado por el editor de
+  // menú/evento cuando el menú tiene `plaza_control` (todo el menú va a una
+  // sola plaza, sin elegir por preparación).
+  forcedPlaza?: string
   onSave: (result: OpsResult) => void
   onRemove?: () => void
   onCancel?: () => void
 }) {
   const recipienteListId = useId()
-  const [plaza, setPlaza] = useState(initial?.plaza ?? '')
+  const [plaza, setPlaza] = useState(forcedPlaza ?? initial?.plaza ?? '')
   const [seccion, setSeccion] = useState(initial?.seccion ?? '')
   const [recipiente, setRecipiente] = useState(initial?.recipienteNombre ?? '')
   const [recipienteCantidad, setRecipienteCantidad] = useState(initial?.recipienteCantidad ?? 1)
@@ -88,6 +94,15 @@ export default function OpsPanel({
   const [nuevaSubseccionMode, setNuevaSubseccionMode] = useState(false)
   const [nuevaSubseccionNombre, setNuevaSubseccionNombre] = useState('')
   const [creandoSubseccion, setCreandoSubseccion] = useState(false)
+
+  // Si `forcedPlaza` cambia mientras el panel está abierto (ej. se cargó
+  // plaza_control en el menú recién ahora, o el ítem traía guardada una
+  // plaza vieja de antes de activar el control), no dejar un `plaza`/`seccion`
+  // desalineados — sincronizar y limpiar la sección, que era de otra plaza.
+  useEffect(() => {
+    if (forcedPlaza && forcedPlaza !== plaza) { setPlaza(forcedPlaza); setSeccion('') }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forcedPlaza])
 
   useEffect(() => {
     if (!plaza || !RESTAURANTE_ID) { setSeccionesDb([]); return }
@@ -203,20 +218,35 @@ export default function OpsPanel({
 
   return (
     <div>
-      {/* Plaza */}
-      <div style={secTitle}>Plaza de producción</div>
-      <div style={secHint}>Elegí dónde se cocina esta receta.</div>
-      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 14 }}>
-        {plazasDisponibles.map(p => (
-          <button key={p.id} onClick={() => { setPlaza(plaza === p.id ? '' : p.id); setSeccion(''); setNuevaSeccionMode(false); setNuevaSeccionNombre(''); setNuevaSubseccionMode(false); setNuevaSubseccionNombre('') }}
-            style={{ padding: '6px 12px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
-              background: plaza === p.id ? `${p.color}18` : 'var(--bg)',
-              color: plaza === p.id ? p.color : 'var(--text-3)',
-              outline: plaza === p.id ? `1.5px solid ${p.color}50` : '1px solid var(--border)' }}>
-            {p.label}
-          </button>
-        ))}
-      </div>
+      {/* Plaza — fija (sin elegir) cuando el menú tiene plaza_control */}
+      {forcedPlaza ? (
+        <div style={{ marginBottom: 14 }}>
+          <div style={secTitle}>Plaza de producción</div>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 99,
+            background: `${plazasDisponibles.find(p => p.id === forcedPlaza)?.color ?? '#6b7280'}18`,
+            color: plazasDisponibles.find(p => p.id === forcedPlaza)?.color ?? '#6b7280' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>lock</span>
+            <span style={{ fontSize: 12, fontWeight: 700 }}>{plazasDisponibles.find(p => p.id === forcedPlaza)?.label ?? forcedPlaza}</span>
+          </div>
+          <div style={secHint}>Fija por la plaza de control del menú.</div>
+        </div>
+      ) : (
+        <>
+          <div style={secTitle}>Plaza de producción</div>
+          <div style={secHint}>Elegí dónde se cocina esta receta.</div>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 14 }}>
+            {plazasDisponibles.map(p => (
+              <button key={p.id} onClick={() => { setPlaza(plaza === p.id ? '' : p.id); setSeccion(''); setNuevaSeccionMode(false); setNuevaSeccionNombre(''); setNuevaSubseccionMode(false); setNuevaSubseccionNombre('') }}
+                style={{ padding: '6px 12px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+                  background: plaza === p.id ? `${p.color}18` : 'var(--bg)',
+                  color: plaza === p.id ? p.color : 'var(--text-3)',
+                  outline: plaza === p.id ? `1.5px solid ${p.color}50` : '1px solid var(--border)' }}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       {plaza && (
         <>

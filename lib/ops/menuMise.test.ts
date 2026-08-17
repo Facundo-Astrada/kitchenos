@@ -2,60 +2,63 @@ import { describe, it, expect } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { PrepInput } from '@/lib/hooks/useMenus'
 import { sincronizarMiseDeMenu } from './menuMise'
-import { menuItemVisible, TAREA_PRIO_TO_MISE } from './mise'
+import { menuItemVisible, TAREA_PRIO_TO_MISE, resolverSeccionMise } from './mise'
 
 // ── Fake Supabase mínimo — solo el subset de la query builder que
 // sincronizarMiseDeMenu/resolverSeccionMise realmente usan (select/eq/ilike/
-// limit/single/insert/update/delete/in), en memoria. No es un mock genérico
-// reusable: alcanza para estos dos módulos, nada más. ──
+// is/limit/single/insert/update/delete/in/count), en memoria. No es un mock
+// genérico reusable: alcanza para estos dos módulos, nada más. ──
 type Row = Record<string, unknown>
 
-class FakeQueryBuilder implements PromiseLike<{ data: unknown; error: null }> {
+class FakeQueryBuilder implements PromiseLike<{ data: unknown; count: number | null; error: null }> {
   private filters: ((row: Row) => boolean)[] = []
   private mode: 'select' | 'insert' | 'update' | 'delete' = 'select'
   private insertPayload: Row | Row[] | null = null
   private updatePayload: Row | null = null
   private limitN: number | null = null
   private singleMode = false
+  private countMode = false
 
   constructor(private table: string, private store: Record<string, Row[]>) {
     this.store[table] ??= []
   }
 
-  select() { return this }
+  select(_cols?: string, opts?: { count?: string; head?: boolean }) { if (opts?.count) this.countMode = true; return this }
   insert(payload: Row | Row[]) { this.mode = 'insert'; this.insertPayload = payload; return this }
   update(payload: Row) { this.mode = 'update'; this.updatePayload = payload; return this }
   delete() { this.mode = 'delete'; return this }
   eq(col: string, val: unknown) { this.filters.push(row => row[col] === val); return this }
   ilike(col: string, val: string) { const v = String(val).toLowerCase(); this.filters.push(row => String(row[col] ?? '').toLowerCase() === v); return this }
   in(col: string, vals: unknown[]) { this.filters.push(row => vals.includes(row[col])); return this }
+  is(col: string, val: unknown) { this.filters.push(row => (row[col] ?? null) === val); return this }
   limit(n: number) { this.limitN = n; return this }
   single() { this.singleMode = true; return this }
 
-  private exec(): { data: unknown; error: null } {
+  private exec(): { data: unknown; count: number | null; error: null } {
     const rows = this.store[this.table]
     if (this.mode === 'insert') {
       const items = Array.isArray(this.insertPayload) ? this.insertPayload : [this.insertPayload as Row]
       const created = items.map((p, i) => ({ id: `${this.table}-${rows.length + i}-${Math.random().toString(36).slice(2, 7)}`, ...p }))
       rows.push(...created)
-      return { data: this.singleMode ? created[0] : created, error: null }
+      return { data: this.singleMode ? created[0] : created, count: null, error: null }
     }
     let matched = rows.filter(r => this.filters.every(f => f(r)))
     if (this.mode === 'update') {
       matched.forEach(r => Object.assign(r, this.updatePayload))
-      return { data: matched, error: null }
+      return { data: matched, count: null, error: null }
     }
     if (this.mode === 'delete') {
       const ids = new Set(matched.map(r => r.id))
       this.store[this.table] = rows.filter(r => !ids.has(r.id))
-      return { data: matched, error: null }
+      return { data: matched, count: null, error: null }
     }
+    if (this.countMode) return { data: null, count: matched.length, error: null }
     if (this.limitN != null) matched = matched.slice(0, this.limitN)
-    return { data: this.singleMode ? (matched[0] ?? null) : matched, error: null }
+    return { data: this.singleMode ? (matched[0] ?? null) : matched, count: null, error: null }
   }
 
-  then<TResult1 = { data: unknown; error: null }, TResult2 = never>(
-    onfulfilled?: ((value: { data: unknown; error: null }) => TResult1 | PromiseLike<TResult1>) | null,
+  then<TResult1 = { data: unknown; count: number | null; error: null }, TResult2 = never>(
+    onfulfilled?: ((value: { data: unknown; count: number | null; error: null }) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): PromiseLike<TResult1 | TResult2> {
     return Promise.resolve(this.exec()).then(onfulfilled, onrejected)
@@ -127,6 +130,70 @@ describe('sincronizarMiseDeMenu', () => {
     })
     expect(store.checklist_items).toHaveLength(1)
     expect(store.checklist_items[0]).toMatchObject({ prioridad: 'chk', cantidad: 20 })
+  })
+})
+
+describe('sincronizarMiseDeMenu — plazaControl (una sola persona controla el menú entero)', () => {
+  it('manda todas las candidatas a la plaza de control, sin importar la plaza de cada una', async () => {
+    const { supabase, store } = fakeSupabase()
+    const res = await sincronizarMiseDeMenu({
+      supabase, restauranteId: RID,
+      menu: { id: MENU_ID, plazaControl: 'control', preparaciones: [PREP_PARRILLA, PREP_PASTELERIA] },
+    })
+    expect(res.creados).toBe(2)
+    expect(store.checklist_items.every(r => r.plaza === 'control')).toBe(true)
+  })
+
+  it('dos preparaciones con el mismo nombre en la misma plaza de control no duplican filas', async () => {
+    const { supabase, store } = fakeSupabase()
+    const otraPrepMismoNombre: PrepInput = { ...PREP_PASTELERIA, nombre: PREP_PARRILLA.nombre }
+    const res = await sincronizarMiseDeMenu({
+      supabase, restauranteId: RID,
+      menu: { id: MENU_ID, plazaControl: 'control', preparaciones: [PREP_PARRILLA, otraPrepMismoNombre] },
+    })
+    expect(res.creados).toBe(1)
+    expect(store.checklist_items).toHaveLength(1)
+  })
+
+  it('reactivar sin plazaControl después de haber usado uno saca los ítems de la plaza vieja', async () => {
+    const { supabase, store } = fakeSupabase()
+    await sincronizarMiseDeMenu({ supabase, restauranteId: RID, menu: { id: MENU_ID, plazaControl: 'control', preparaciones: [PREP_PARRILLA] } })
+    expect(store.checklist_items[0].plaza).toBe('control')
+
+    await sincronizarMiseDeMenu({ supabase, restauranteId: RID, menu: { id: MENU_ID, preparaciones: [PREP_PARRILLA] } })
+    expect(store.checklist_items).toHaveLength(1)
+    expect(store.checklist_items[0].plaza).toBe('parrilla')
+  })
+})
+
+describe('resolverSeccionMise — no deja un checklist_item apuntando a una sección de otra plaza', () => {
+  it('UUID de sección que pertenece a la plaza pedida: se usa directo', async () => {
+    const { supabase, store } = fakeSupabase()
+    store.checklist_secciones = [{ id: 'sec-1', nombre: 'Heladera lateral', plaza: 'parrilla' }]
+    const { seccionId, secNombre } = await resolverSeccionMise(supabase, RID, 'parrilla', 'sec-1')
+    expect(seccionId).toBe('sec-1')
+    expect(secNombre).toBe('Heladera lateral')
+  })
+
+  it('UUID de sección de OTRA plaza (ej. plazaControl movió el ítem): resuelve por nombre bajo la plaza nueva, no reusa el id viejo', async () => {
+    const { supabase, store } = fakeSupabase()
+    store.checklist_secciones = [{ id: 'sec-1', nombre: 'Heladera lateral', plaza: 'parrilla' }]
+    const { seccionId, secNombre } = await resolverSeccionMise(supabase, RID, 'control', 'sec-1')
+    expect(seccionId).not.toBe('sec-1')
+    expect(secNombre).toBe('Heladera lateral')
+    const creada = store.checklist_secciones.find(s => s.id === seccionId)
+    expect(creada).toMatchObject({ nombre: 'Heladera lateral', plaza: 'control' })
+  })
+
+  it('si ya existe una sección con ese nombre en la plaza nueva, la reusa en vez de duplicarla', async () => {
+    const { supabase, store } = fakeSupabase()
+    store.checklist_secciones = [
+      { id: 'sec-1', nombre: 'Heladera lateral', plaza: 'parrilla', restaurante_id: RID },
+      { id: 'sec-2', nombre: 'Heladera lateral', plaza: 'control', parent_id: null, restaurante_id: RID },
+    ]
+    const { seccionId } = await resolverSeccionMise(supabase, RID, 'control', 'sec-1')
+    expect(seccionId).toBe('sec-2')
+    expect(store.checklist_secciones).toHaveLength(2)
   })
 })
 

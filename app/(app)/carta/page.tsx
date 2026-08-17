@@ -3268,6 +3268,7 @@ export default function CartaPage() {
         fecha_evento: payload.fechaEvento,
         vigencia_desde: payload.vigenciaDesde,
         vigencia_hasta: payload.vigenciaHasta,
+        plaza_control: payload.plazaControl,
         variantes: payload.variantes,
         precio: payload.precio,
       }
@@ -3281,7 +3282,7 @@ export default function CartaPage() {
           .select('id', { count: 'exact', head: true })
           .eq('menu_id', composing.menuEditId)
         if (count && count > 0 && RESTAURANTE_ID) {
-          await sincronizarMiseDeMenu({ supabase: supaSync, restauranteId: RESTAURANTE_ID, menu: { id: composing.menuEditId, preparaciones: preps } })
+          await sincronizarMiseDeMenu({ supabase: supaSync, restauranteId: RESTAURANTE_ID, menu: { id: composing.menuEditId, plazaControl: payload.plazaControl, preparaciones: preps } })
         }
       } else {
         const newId = await crearMenu(data, preps)
@@ -3306,6 +3307,7 @@ export default function CartaPage() {
       fechaEvento: menu.fecha_evento,
       vigenciaDesde: menu.vigencia_desde,
       vigenciaHasta: menu.vigencia_hasta,
+      plazaControl: menu.plaza_control,
       variantes: menu.variantes ?? [],
       precio: menu.precio ?? 0,
       categoria: '',

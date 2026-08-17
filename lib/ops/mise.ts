@@ -101,6 +101,26 @@ export function parseRecipienteNombre(raw: string | null | undefined): { nombre:
   return { nombre: raw.replace(RECIPIENTE_CANTIDAD_RE, ''), cantidad: parseInt(m[1], 10) || 1 }
 }
 
+// Busca una checklist_seccion por nombre dentro de una plaza, o la crea si
+// no existe. `orden` nuevo = cantidad de secciones raíz que ya tiene esa
+// plaza (mismo criterio que OpsPanel.handleCrearSeccion).
+async function resolverSeccionPorNombre(
+  supabase: SupabaseClient, restauranteId: string, plaza: string, nombre: string, icono: string
+): Promise<{ seccionId: string | null; secNombre: string }> {
+  const { data: secExistente } = await supabase.from('checklist_secciones').select('id')
+    .eq('restaurante_id', restauranteId).eq('plaza', plaza).ilike('nombre', nombre).limit(1)
+  let seccionId = secExistente?.[0]?.id ?? null
+  if (!seccionId) {
+    const { count } = await supabase.from('checklist_secciones').select('id', { count: 'exact', head: true })
+      .eq('restaurante_id', restauranteId).eq('plaza', plaza).is('parent_id', null)
+    const { data: newSec } = await supabase.from('checklist_secciones')
+      .insert({ nombre, icono, plaza, orden: count ?? 0, restaurante_id: restauranteId })
+      .select('id').single()
+    seccionId = newSec?.id ?? null
+  }
+  return { seccionId, secNombre: nombre }
+}
+
 // ── Resolver seccionMiseId (legacy de SECCIONES_OPS o UUID real de
 // checklist_secciones) a un seccion_id + nombre concretos, buscando o
 // creando la fila si hace falta. Compartido por upsertMiseChecklistItem
@@ -111,23 +131,18 @@ export async function resolverSeccionMise(
   const secCfg = SECCIONES_OPS.find(s => s.id === seccionMiseId)
   if (secCfg) {
     // Legacy: buscar/crear por label (comportamiento histórico, compat)
-    const secNombre = secCfg.label
-    const secIcono = secCfg.icono
-    const secOrden = SECCIONES_OPS.findIndex(s => s.id === seccionMiseId)
-    const { data: secExistente } = await supabase.from('checklist_secciones').select('id')
-      .eq('restaurante_id', restauranteId).eq('plaza', plaza).ilike('nombre', secNombre).limit(1)
-    let seccionId = secExistente?.[0]?.id ?? null
-    if (!seccionId) {
-      const { data: newSec } = await supabase.from('checklist_secciones')
-        .insert({ nombre: secNombre, icono: secIcono, plaza, orden: secOrden, restaurante_id: restauranteId })
-        .select('id').single()
-      seccionId = newSec?.id ?? null
-    }
-    return { seccionId, secNombre }
+    return resolverSeccionPorNombre(supabase, restauranteId, plaza, secCfg.label, secCfg.icono)
   }
-  // UUID real de checklist_secciones — usarlo directo, sin buscar/crear
-  const { data: secRow } = await supabase.from('checklist_secciones').select('nombre').eq('id', seccionMiseId).single()
-  return { seccionId: seccionMiseId, secNombre: secRow?.nombre ?? seccionMiseId }
+  // UUID real de checklist_secciones — usarlo directo SOLO si es de esta
+  // plaza. Si no (ej. menus.plaza_control mandó el ítem a una plaza distinta
+  // de la que tenía elegida al configurar OPS), resolver por nombre bajo la
+  // plaza nueva — dejar el checklist_item con un seccion_id de otra plaza lo
+  // vuelve invisible: el mise agrupa filtrando checklist_secciones por la
+  // plaza que se está mirando, y esa sección no aparecería en esa lista.
+  const { data: secRow } = await supabase.from('checklist_secciones').select('nombre, plaza').eq('id', seccionMiseId).single()
+  if (!secRow) return { seccionId: seccionMiseId, secNombre: seccionMiseId }
+  if (secRow.plaza === plaza) return { seccionId: seccionMiseId, secNombre: secRow.nombre }
+  return resolverSeccionPorNombre(supabase, restauranteId, plaza, secRow.nombre, 'inventory_2')
 }
 
 // ── Upsert de un ítem del mise keyed por (restaurante, receta, plaza) ──

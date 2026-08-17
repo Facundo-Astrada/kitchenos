@@ -28,11 +28,18 @@ export async function sincronizarMiseDeMenu(params: {
   // Acepta tanto un MenuConPreparaciones (MenuPreparacion[] es superset
   // estructural de PrepInput[]) como el `preps: PrepInput[]` recién armado
   // al guardar el editor — no hace falta adaptar nada en los callers.
-  menu: { id: string; preparaciones: PrepInput[] }
+  // `plazaControl`: si está cargado, pisa la plaza de CADA preparación —
+  // todo el menú va a esa plaza (real o custom), sin importar qué plaza
+  // haya elegido cada ítem en el editor. Pensado para una plaza que no
+  // existe físicamente, controlada por una sola persona.
+  menu: { id: string; plazaControl?: string | null; preparaciones: PrepInput[] }
 }): Promise<SincronizarMiseResultado> {
   const { supabase, restauranteId, menu } = params
-  const candidatas = menu.preparaciones.filter(p => p.plaza && p.seccion_mise)
-  const sinOps = menu.preparaciones.length - candidatas.length
+  const preparaciones = menu.plazaControl
+    ? menu.preparaciones.map(p => ({ ...p, plaza: menu.plazaControl! }))
+    : menu.preparaciones
+  const candidatas = preparaciones.filter(p => p.plaza && p.seccion_mise)
+  const sinOps = preparaciones.length - candidatas.length
 
   const { data: existentesData } = await supabase.from('checklist_items')
     .select('id, nombre, plaza')
@@ -43,6 +50,11 @@ export async function sincronizarMiseDeMenu(params: {
 
   for (const p of candidatas) {
     const clave = `${p.plaza}::${p.nombre}`
+    // Dos preparaciones con el mismo nombre pueden caer en la misma clave
+    // cuando plazaControl las junta a todas en una plaza — sin esto, la
+    // segunda insertaría un checklist_item duplicado en vez de actualizar
+    // el que acaba de crear la primera en esta misma pasada.
+    if (claveVivas.has(clave)) continue
     claveVivas.add(clave)
     const { seccionId, secNombre } = await resolverSeccionMise(supabase, restauranteId, p.plaza!, p.seccion_mise!)
     // menu_preparaciones no tiene recipiente_cantidad (solo la rama plato) —
@@ -74,7 +86,7 @@ export async function sincronizarMiseDeMenu(params: {
     await supabase.from('checklist_items').delete().in('id', idsABorrar)
   }
 
-  return { creados: candidatas.length, sinOps }
+  return { creados: claveVivas.size, sinOps }
 }
 
 /**
