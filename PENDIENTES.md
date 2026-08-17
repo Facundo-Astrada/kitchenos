@@ -114,6 +114,9 @@ F1 deployado (13/08): `/bitacora`, tablas `bitacora_entradas`/`bitacora_items` c
 ### Demo El Rescoldo — menú duplicado
 Dos filas en `menus` con nombre "Noche de Asado - Día del Padre" y el mismo `created_at` (`e5c01d00-...d1` y `4622a73b-...`) — parecen un duplicado de seed, no algo que haya creado el usuario. Confunde el picker de "Cargar menú"/"Planificar menú" (aparece dos veces la misma opción). Revisar si conviene borrar una y sus tareas asociadas de junio.
 
+### Marco "juego cercado" — 3 features derivadas (PLAN-JUEGO-CERCADO-2026-08.md)
+Fundamento conceptual externo (memoria de Claude Code: `project_fundamento_juego_cercado`) tradujo a 3 features scopeadas: **F1** lectura del servicio en `cierres_turno` (percepción + notas junto al dato duro, hoy el cierre solo guarda inventario) — mejor relación esfuerzo/diferenciación, arrancar por acá; **F2** historial de cambios en fichas técnicas (autor/fecha, hoy `useRecetas` actualiza sin dejar rastro); **F3** bandeja de propuestas visible (depende de F2, más ambigua, scopear en la sesión). Sesión aparte con Sonnet.
+
 ### Kitchen Coach — asistir activamente en el editor de Carta
 Hoy el Coach solo responde preguntas de navegación; el pedido es que ayude a cargar el menú abierto en `ComposicionEditor`. El pipeline de tool-use ya funciona (`crear_evento` en `app/api/coach/route.ts` ~L409 crea un evento con pasos por dictado). **Recomendado: B** — extender ese patrón con `agregar_componentes_menu(menu_id, componentes[])` que escribe a DB y el editor refresca; exige guardar el menú (aunque sea vacío) antes de pedirle al Coach que lo complete. La alternativa A (operar en vivo sobre el estado de React sin guardar) necesita un puente chat↔form que hoy no existe. Sesión aparte.
 
