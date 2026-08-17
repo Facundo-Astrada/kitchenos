@@ -1,21 +1,20 @@
 # Sesión — 2026-08-17
 
-Dos temas cerrados hoy: plaza de control en menús/eventos (mañana, `9fbe843`/`d2f4fd5`) y marco conceptual "juego cercado" aplicado al Coach + plan de mejoras (tarde, `f121315`). Build + 86 tests verdes, deployado.
+Cuarta vuelta del día sobre menú↔mise: paridad Planificación + Coach al día. 2 commits (`6867920`, `2e98400`), sobre el trabajo de plaza de control ya cerrado antes hoy (`9fbe843`/`d2f4fd5`, ver `HISTORIAL.md`). Build + 92 tests verdes, deployado.
 
 ## Qué se cerró
-- **Plaza de control** (`menus.plaza_control`): una sola plaza controla el menú/evento entero al activarlo en el mise, en vez de repartirlo por estación. Encontrado y arreglado un bug real de uso (menú de 15 preparaciones invisible en el mise por exigir sección aunque la plaza ya estuviera fijada) — `resolverSeccionMise` ahora es plaza-safe. Con esto, Fase 6-7 de `PLAN-MENUS-MISE-2026-08.md` queda cerrada.
-- **Kitchen Coach** (`app/api/coach/route.ts`): sección nueva de criterio — no sugiere cambios de receta/ideas durante servicio activo, trata desvíos como dato a corregir (no falla personal), compara contra el histórico propio de la casa. Deriva de un documento externo de fundamento de producto que Facundo compartió ("la cocina como juego cercado").
-- **Marco guardado en memoria de Claude Code** (no en este repo) para que sesiones futuras lo apliquen sin repetir el análisis, con nota explícita de usarlo cuando se integre el Coach por pantalla (skill `coach-screen`).
-- **3 oportunidades de mejora** cruzadas contra el código real, documentadas como plan ejecutable en `PLAN-JUEGO-CERCADO-2026-08.md`.
+- **"Activar en el mise" también desde OPS → Planificación**, no solo desde Carta → Menús — mismo picker donde ya se activan tareas, con una segunda acción independiente por card. `estadoMiseMenu()` extraído a `lib/ops/menuMise.ts` como fuente única de vigente/futuro/vencido, compartida entre las dos pantallas.
+- **Kitchen Coach actualizado**: sabe que un menú se activa en el mise (vigencia + apertura/cierre) además de en Planificación (tareas de un día), y que existe plaza de control. `carta-menus` sumado a `COACH_HIGHLIGHT_IDS` (antes no se podía señalar ese botón en el chat).
+- **Verificado en datos reales de Bros**: el menú "Cotidiano 18/8 a 28/8" (`plaza_control='general'`) sincronizó sus 15 preparaciones correctamente tras el fix de la mañana — confirmado por SQL, no solo por test.
 
 ## Qué quedó a medias
-- El prompt nuevo del Coach está en prod pero sin probar en una conversación real — no se vio todavía si cambia el comportamiento como se espera (ej. que efectivamente no empuje una sugerencia de receta en medio de un servicio).
-- Integración del marco en `docs/instructivo-carga-datos.md` — pospuesta a pedido de Facundo, sin fecha.
-- `PLAN-JUEGO-CERCADO-2026-08.md` no arrancó: son 3 fases scopeadas pero ninguna tiene código todavía.
+- **Dato real tocado en Bros, a confirmar con Facundo**: `vigencia_desde` de "Cotidiano 18/8 a 28/8" se movió de 18/08 a **17/08** (hoy) a pedido suyo, para poder ver el menú funcionando en el mise sin esperar a mañana. Preguntar si se deja así o se vuelve a 18/08 — no se decidió explícitamente que quede permanente.
+- El nuevo botón "Activar en el mise" del picker de Planificación no se probó todavía en pantalla real (solo build + tests) — sí se probó antes el de Carta → Menús.
 
 ## Probar primero mañana
-1. Kitchen Coach: una conversación real en pantalla de servicio (OPS/Mise) pidiendo algo tipo "¿probamos una receta nueva de X?" — confirmar que responde ofreciendo retomarlo fuera de servicio en vez de embalarse con la idea.
-2. Si hay uso real de "plaza de control" en Rescoldo/Bros esta semana, mirar si aparece algún caso borde no cubierto por los 6 tests nuevos (ej. plaza_control con 0 preparaciones, o cambiar plaza_control después de tener el menú activo hace tiempo).
+1. Bros, Operaciones → Mise → plaza General → Apertura: confirmar que las 15 preparaciones de "Cotidiano" aparecen con chip violeta del menú y badge REF (o su prioridad real).
+2. Confirmar con Facundo qué hacer con la vigencia movida (dejar 17/08 o volver a 18/08).
+3. Probar el botón "Activar en el mise" desde OPS → Planificación al menos una vez en pantalla.
 
 ## Próximo paso concreto
-Arrancar F1 de `PLAN-JUEGO-CERCADO-2026-08.md` (lectura del servicio en `cierres_turno`) en sesión aparte con Sonnet — es la de mejor relación esfuerzo/diferenciación de las tres.
+Dejar de agregar superficie a menú↔mise por un rato y usarlo en servicio real (Bros o Rescoldo) — es la cuarta sesión seguida tocando esta feature y el próximo hallazgo útil va a salir de uso real, no de seguir construyendo. Si vuelve a haber fricción de "configurar por ítem", el pendiente grande es que el Coach pueda armar/activar un menú completo por dictado (`PENDIENTES.md` → Kitchen Coach: asistir activamente en el editor de Carta).
