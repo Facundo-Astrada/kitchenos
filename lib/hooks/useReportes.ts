@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
 import { FAMILIA_GASTO_OBJETIVO_PCT, FAMILIA_DE_CATEGORIA_FINANCIERA, type FamiliaGasto } from './useCategoriasGasto'
 import type { CategoriaFinanciera } from '@/types'
+import type { FugaResultado } from '@/lib/reportes/fuga'
 
 export type Periodo = 'semana' | 'mes' | 'mes_anterior'
 
@@ -648,5 +649,23 @@ export function useReportes() {
     } finally { setLoading(false) }
   }, [RESTAURANTE_ID, supabase])
 
-  return { loading, error, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchPresupuestoFamilias, savePresupuestoFamilia, aplicarEstructuraEstandar, fetchRendimiento }
+  // ── Fuga de inventario (PLAN-4-CAPAS B5) — cálculo pesado, vive server-side ──
+  const fetchFuga = useCallback(async (periodo: Periodo): Promise<FugaResultado> => {
+    const vacio: FugaResultado = { desde: '', hasta: '', productos: [], noCalculables: [] }
+    if (!RESTAURANTE_ID) return vacio
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/reportes/fuga?periodo=${periodo}`)
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        throw new Error(body?.error ?? 'Error al calcular la fuga de inventario')
+      }
+      return await res.json() as FugaResultado
+    } catch (e: unknown) {
+      console.error('[useReportes] fetchFuga Error:', e)
+      return vacio
+    } finally { setLoading(false) }
+  }, [RESTAURANTE_ID])
+
+  return { loading, error, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchPresupuestoFamilias, savePresupuestoFamilia, aplicarEstructuraEstandar, fetchRendimiento, fetchFuga }
 }

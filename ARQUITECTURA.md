@@ -210,6 +210,7 @@ Corren en runtime Node (no edge) — usan service role y/o Anthropic API. Todas 
 | `/api/stock/import-planilla` | Importa una planilla de stock (Haiku para mapeo de columnas). |
 | `/api/produccion/sugerencia` | Motor de reglas + narración IA para "Sugerir producción" (nunca cambia números). |
 | `/api/produccion/sugerencia/explicar` | Explica en lenguaje natural una sugerencia de producción (Haiku). |
+| `/api/reportes/fuga` | Detección de fuga de inventario por producto (PLAN-4-CAPAS B5) — teórico vs. real (compras del período) vs. merma declarada, con tolerancia. Motor en `lib/reportes/fuga.ts`, traversal compartido en `lib/reportes/consumoTeorico.ts`. |
 | `/api/salon/prep-list-update` | Incrementa `checklist_items.demanda_viva` al enviar una comanda desde el Salón. |
 | `/api/salon/merma-auto` | Registra merma automática desde eventos del Salón (ej. anulación de comanda). |
 | `/api/ingest/escpos` | Ingesta de tickets/comandas vía protocolo ESC/POS (impresoras fiscales/comandas). |

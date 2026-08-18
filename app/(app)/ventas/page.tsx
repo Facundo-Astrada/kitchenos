@@ -10,8 +10,7 @@ import { useMediosPago } from '@/lib/hooks/useMediosPago'
 import type { Venta, VentaItem, OrigenVenta, CajaTurno, CajaMovimiento } from '@/types'
 import { SegmentedTabs, FilterChips, EmptyState, Num } from '@/components/ui'
 import type { SegmentedTab, FilterChip } from '@/components/ui'
-
-const normName = (s: string) => s.toLowerCase().trim().replace(/\s+/g, ' ')
+import { normalizarNombrePlato as normName, buildCartaItemLookup } from '@/lib/reportes/consumoTeorico'
 
 // ── Helpers ─────────────────────────────────────────────────
 
@@ -417,12 +416,14 @@ export default function VentasPage() {
 
   // ── Feature 2: Food cost teórico del período ──
   const fcTeorico = useMemo(() => {
-    const costMap = new Map<string, number>()
-    for (const ci of cartaItems) if (ci.costo_porcion != null) costMap.set(normName(ci.nombre), ci.costo_porcion)
+    const lookup = buildCartaItemLookup(cartaItems)
+    const costoPorId = new Map<string, number>()
+    for (const ci of cartaItems) if (ci.costo_porcion != null) costoPorId.set(ci.id, ci.costo_porcion)
     let costo = 0, ventasMatch = 0, totalItems = 0, matchedItems = 0
     for (const v of ventas) for (const it of (v.items ?? [])) {
       totalItems++
-      const c = costMap.get(normName(it.nombre_plato))
+      const id = lookup.get(normName(it.nombre_plato))
+      const c = id ? costoPorId.get(id) : undefined
       if (c != null) {
         matchedItems++
         costo += c * it.cantidad
@@ -431,7 +432,7 @@ export default function VentasPage() {
     }
     const fcPct = ventasMatch > 0 ? (costo / ventasMatch) * 100 : null
     const cobertura = totalItems > 0 ? Math.round((matchedItems / totalItems) * 100) : 0
-    return { costo, fcPct, cobertura, hayItems: totalItems > 0, hayCosto: costMap.size > 0 }
+    return { costo, fcPct, cobertura, hayItems: totalItems > 0, hayCosto: costoPorId.size > 0 }
   }, [ventas, cartaItems])
 
   // ── Feature 3: días del mes sin ventas cargadas ──

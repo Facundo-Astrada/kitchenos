@@ -203,7 +203,16 @@ Las categorías existentes siguen funcionando y ruedan hacia Gastos generales; l
 
 ## Bloque 5 — Detección de fuga: inventario contra facturación
 
-- [ ] **B5** · Una sesión, la más pesada del plan · Sin migración · Depende de B2
+- [x] **B5** · Una sesión, la más pesada del plan · Sin migración · Depende de B2
+
+**Decisiones de ejecución (dos desvíos del texto original, documentados en el docstring de `lib/reportes/fuga.ts`):**
+
+1. **`consumo_real` no es `stock_inicial + compras − stock_final`.** K-OS no historiza `productos.stock_actual` (valor vivo, sin snapshot por fecha) y la sesión es "sin migración" — no correspondía sumar una tabla de conteos para resolverlo. Se usa `consumo_real ≈ compras del período`, el mismo criterio que ya usa el CMV existente (`compras/ventas`) para aproximar costo de mercadería vendida sin inventario perpetuo.
+2. **Compras y merma matchean por nombre normalizado, no solo por `producto_id`.** Verificado contra producción: `factura_items.producto_id` está poblado en ~1% de las filas (el importador de facturas por IA solo carga `producto_nombre`) y `merma.producto_id` también queda vacío seguido. Sin fallback por nombre, el informe daría compras/merma en 0 para casi todo — el mismo problema que ya resuelve `usePedidos.recibirPedido` matcheando por nombre. Verificado con datos reales de El Rescoldo antes de dar el bloque por cerrado (ver `lib/reportes/fuga.ts`).
+
+**Se extrajo `lib/reportes/consumoTeorico.ts`** (con test Vitest) — el matching ventas↔carta_items por nombre normalizado que vivía duplicado en `ventas/page.tsx` (food cost teórico) y `carta/page.tsx` (RentabilidadView, ingeniería de menú), más la resolución de gramaje por producto (receta directa o `plato_recetas` compuesto) que usa la fuga.
+
+**Tab nuevo "Fuga" en Reportes** (no en Auditoría — el volumen de columnas pedía su propio tab). Tabla por producto con teórico/real/merma/desvío/tolerancia, más sección separada "No se puede calcular" (platos vendidos sin receta vinculada, o con receta pero sin ningún ingrediente linkeado a un producto de stock — incluye el caso subreceta-only).
 
 > *"Una fuga de inventarios instalada puede quebrar el negocio en poco tiempo. Los faltantes, además, crean un pésimo ambiente de trabajo, ya que todos son sospechosos."* — Clase 11
 

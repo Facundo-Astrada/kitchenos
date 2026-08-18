@@ -24,6 +24,7 @@ import {
   type RendimientoPlaza,
 } from '@/lib/hooks/useReportes'
 import { FAMILIA_GASTO_LABELS } from '@/lib/hooks/useCategoriasGasto'
+import type { FugaResultado } from '@/lib/reportes/fuga'
 import {
   usePreciosProveedores,
   type ComparadorPrecioProducto,
@@ -36,10 +37,10 @@ import { useReporteVentas, type ReporteVentas } from '@/lib/hooks/useReporteVent
 import { useCarta } from '@/lib/hooks/useCarta'
 import type { CajaTurno, ChecklistAuditoria } from '@/types'
 
-type Tab = 'resumen' | 'ventas' | 'cmv' | 'presupuesto' | 'rendimiento' | 'foodcost' | 'compras' | 'precios' | 'produccion' | 'caja' | 'auditoria'
+type Tab = 'resumen' | 'ventas' | 'cmv' | 'presupuesto' | 'rendimiento' | 'fuga' | 'foodcost' | 'compras' | 'precios' | 'produccion' | 'caja' | 'auditoria'
 
 // Tabs con export a Excel (Q3) — contextual al tab activo, mismos números que el render.
-const TABS_EXPORTABLES: Tab[] = ['cmv', 'compras', 'foodcost', 'presupuesto', 'rendimiento', 'caja', 'auditoria']
+const TABS_EXPORTABLES: Tab[] = ['cmv', 'compras', 'foodcost', 'presupuesto', 'rendimiento', 'fuga', 'caja', 'auditoria']
 
 // Rango de fechas simple para el histórico de auditorías — mismos períodos que el selector, sin comparación vs. anterior.
 function rangoAuditoria(periodo: Periodo): { from: string; to: string } {
@@ -69,6 +70,7 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'cmv', label: 'CMV', icon: 'savings' },
   { key: 'presupuesto', label: 'Presupuesto', icon: 'account_balance_wallet' },
   { key: 'rendimiento', label: 'Rendimiento', icon: 'speed' },
+  { key: 'fuga', label: 'Fuga', icon: 'inventory_2' },
   { key: 'foodcost', label: 'Food Cost', icon: 'restaurant' },
   { key: 'compras', label: 'Compras', icon: 'shopping_cart' },
   { key: 'precios', label: 'Precios', icon: 'trending_up' },
@@ -112,7 +114,7 @@ export default function ReportesPage() {
   const esAdmin = perfil?.rol === 'admin'
   const { puedeVer } = usePermisos()
   const RESTAURANTE_ID = useRestauranteId()
-  const { loading, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchPresupuestoFamilias, savePresupuestoFamilia, aplicarEstructuraEstandar, fetchRendimiento } = useReportes()
+  const { loading, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchPresupuestoFamilias, savePresupuestoFamilia, aplicarEstructuraEstandar, fetchRendimiento, fetchFuga } = useReportes()
   const { fetchComparador } = usePreciosProveedores()
   const { fetchHistorial } = useCajaTurno()
   const { medios } = useMediosPago()
@@ -174,6 +176,7 @@ export default function ReportesPage() {
   const [presuFamiliasData, setPresuFamiliasData] = useState<PresupuestoFamiliasData>({ rows: [], ventas: 0, ventasPeriodoAnterior: 0, ebitdaPct: 0 })
   const [aplicandoEstandar, setAplicandoEstandar] = useState(false)
   const [rendData, setRendData] = useState<RendimientoPlaza[]>([])
+  const [fugaData, setFugaData] = useState<FugaResultado>({ desde: '', hasta: '', productos: [], noCalculables: [] })
   const [cajaHistorial, setCajaHistorial] = useState<CajaTurno[]>([])
   const [auditoriaHistorial, setAuditoriaHistorial] = useState<ChecklistAuditoria[]>([])
   const [paseTurnoIncumplidos, setPaseTurnoIncumplidos] = useState<PaseTurnoIncumplido[]>([])
@@ -259,6 +262,11 @@ export default function ReportesPage() {
           setRendData(r)
           break
         }
+        case 'fuga': {
+          const f = await fetchFuga(p)
+          setFugaData(f)
+          break
+        }
         case 'caja': {
           const h = await fetchHistorial()
           setCajaHistorial(h)
@@ -280,7 +288,7 @@ export default function ReportesPage() {
     } finally {
       setTabLoading(false)
     }
-  }, [fetchResumen, fetchReporteVentas, fetchFoodCost, fetchCompras, fetchPrecios, fetchComparador, fetchProduccion, fetchCMV, fetchPresupuestoFamilias, fetchRendimiento, fetchHistorial, fetchAuditorias, fetchAuditoriaPaseTurno])
+  }, [fetchResumen, fetchReporteVentas, fetchFoodCost, fetchCompras, fetchPrecios, fetchComparador, fetchProduccion, fetchCMV, fetchPresupuestoFamilias, fetchRendimiento, fetchFuga, fetchHistorial, fetchAuditorias, fetchAuditoriaPaseTurno])
 
   useEffect(() => {
     loadTab(tab, periodo)
@@ -395,6 +403,32 @@ export default function ReportesPage() {
     }]
   }
 
+  function hojasFuga(): HojaExcel[] {
+    return [
+      {
+        nombre: 'Fuga por producto',
+        filas: fugaData.productos.map(row => ({
+          'Producto': row.productoNombre,
+          'Unidad': row.unidad,
+          'Consumo teórico': Math.round(row.consumoTeorico * 100) / 100,
+          'Consumo real (compras)': Math.round(row.consumoReal * 100) / 100,
+          'Merma declarada': Math.round(row.mermaDeclarada * 100) / 100,
+          'Diferencia': Math.round(row.diferencia * 100) / 100,
+          'Tolerancia': Math.round(row.tolerancia * 100) / 100,
+          'Estado': row.fuga ? 'Posible fuga' : 'Dentro de tolerancia',
+        })),
+      },
+      {
+        nombre: 'No se puede calcular',
+        filas: fugaData.noCalculables.map(nc => ({
+          'Plato': nc.nombre,
+          'Cantidad vendida': nc.cantidadVendida,
+          'Motivo': nc.motivo === 'sin_receta' ? 'Sin receta vinculada' : 'Receta sin producto de stock vinculado',
+        })),
+      },
+    ]
+  }
+
   function medioNombre(id: string): string {
     return medios.find(m => m.id === id)?.nombre ?? id
   }
@@ -489,6 +523,7 @@ export default function ReportesPage() {
       case 'foodcost': hojas = hojasFoodCost(); slug = 'food_cost'; break
       case 'presupuesto': hojas = hojasPresupuesto(); slug = 'presupuesto'; break
       case 'rendimiento': hojas = hojasRendimiento(); slug = 'rendimiento'; break
+      case 'fuga': hojas = hojasFuga(); slug = 'fuga'; break
       case 'caja': hojas = hojasCaja(); slug = 'caja'; break
       case 'auditoria': hojas = hojasAuditoria(); slug = 'auditoria'; break
       default: return
@@ -1141,6 +1176,73 @@ export default function ReportesPage() {
     )
   }
 
+  // ── Fuga de inventario (PLAN-4-CAPAS B5) ──
+  function fmtCantidad(n: number, unidad: string): string {
+    return `${n.toLocaleString('es-AR', { maximumFractionDigits: 1 })} ${unidad}`
+  }
+
+  function renderFuga() {
+    const { productos, noCalculables } = fugaData
+    if (productos.length === 0 && noCalculables.length === 0) {
+      return <EmptyState icon="inventory_2" text="Sin ventas con receta vinculada en el período — todavía no hay nada para comparar." />
+    }
+    const conFuga = productos.filter(p => p.fuga)
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <p style={{ fontSize: 12, color: 'var(--text-2)', margin: 0, lineHeight: 1.5 }}>
+          Compara lo que debería haberse consumido según lo vendido (consumo teórico, según la ficha de cada plato) contra lo comprado en el período. Aproximación: sin conteo de stock por fecha, &quot;consumo real&quot; usa las compras del período — mismo criterio que ya usa el CMV. La tolerancia sale de la merma esperada de cada producto (Stock → Estándar de recepción).
+        </p>
+
+        {conFuga.length > 0 && (
+          <div style={{ background: 'rgba(220,38,38,.08)', border: '1px solid rgba(220,38,38,.3)', borderRadius: 12, padding: 12, fontSize: 13, color: '#dc2626', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>warning</span>
+            {conFuga.length} producto{conFuga.length !== 1 ? 's' : ''} por encima de la tolerancia esperada
+          </div>
+        )}
+
+        {productos.map(row => {
+          const color = row.fuga ? '#dc2626' : '#16a34a'
+          return (
+            <div key={row.productoId} style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: `1px solid ${row.fuga ? 'rgba(220,38,38,.35)' : 'var(--border)'}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{row.productoNombre}</span>
+                {row.fuga && (
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: 'rgba(220,38,38,.12)', color: '#dc2626' }}>Posible fuga</span>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, fontSize: 12, color: 'var(--text-2)' }}>
+                <span>Teórico: <strong style={{ color: 'var(--text-1)' }}>{fmtCantidad(row.consumoTeorico, row.unidad)}</strong></span>
+                <span>Real (compras): <strong style={{ color: 'var(--text-1)' }}>{fmtCantidad(row.consumoReal, row.unidad)}</strong></span>
+                <span>Merma declarada: <strong style={{ color: 'var(--text-1)' }}>{fmtCantidad(row.mermaDeclarada, row.unidad)}</strong></span>
+              </div>
+              <div style={{ marginTop: 6, fontSize: 12, color, fontWeight: 600 }}>
+                Desvío: {row.diferencia >= 0 ? '+' : ''}{fmtCantidad(row.diferencia, row.unidad)} · tolerancia ±{fmtCantidad(row.tolerancia, row.unidad)}
+              </div>
+            </div>
+          )
+        })}
+
+        {noCalculables.length > 0 && (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+            <div style={{ padding: '11px 14px', background: 'rgba(217,119,6,.06)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#d97706' }}>link_off</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>No se puede calcular</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: '#d97706', borderRadius: 99, padding: '1px 7px' }}>{noCalculables.length}</span>
+            </div>
+            {noCalculables.map((nc, i) => (
+              <div key={nc.cartaItemId} style={{ padding: '9px 14px', borderTop: i > 0 ? '1px solid var(--border)' : 'none', display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13 }}>
+                <span style={{ color: 'var(--text-1)', fontWeight: 500 }}>{nc.nombre}</span>
+                <span style={{ color: 'var(--text-3)', fontSize: 12, textAlign: 'right' }}>
+                  {nc.cantidadVendida} vendidos · {nc.motivo === 'sin_receta' ? 'falta vincular receta' : 'receta sin producto de stock vinculado'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   function renderCaja() {
     if (!cajaHistorial.length) return <EmptyState icon="point_of_sale" text="Todavía no hay cierres de caja registrados" />
     return (
@@ -1422,6 +1524,7 @@ export default function ReportesPage() {
             {tab === 'cmv' && renderCMV()}
             {tab === 'presupuesto' && renderPresupuesto()}
             {tab === 'rendimiento' && renderRendimiento()}
+            {tab === 'fuga' && renderFuga()}
             {tab === 'foodcost' && renderFoodCost()}
             {tab === 'compras' && renderCompras()}
             {tab === 'precios' && renderPrecios()}

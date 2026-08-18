@@ -18,6 +18,7 @@ import MenusView from './MenusView'
 import ComposicionEditor, { type CompPayload, type CompInicial } from './ComposicionEditor'
 import { upsertMiseChecklistItem, parseRecipienteNombre, TAREA_PRIO_TO_MISE } from '@/lib/ops/mise'
 import { clasificarIngenieriaMenu } from '@/lib/carta/ingenieriaMenu'
+import { normalizarNombrePlato, buildCartaItemLookup } from '@/lib/reportes/consumoTeorico'
 import { sincronizarMiseDeMenu } from '@/lib/ops/menuMise'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 // ── Helpers ─────────────────────────────────────────────
@@ -2286,26 +2287,28 @@ function RentabilidadView({
 }) {
   const [tab, setTab] = useState<RentTab>('lista')
 
-  const norm = (s: string) => s.toLowerCase().trim().replace(/\s+/g, ' ')
-
   const sorted = useMemo(() =>
     items.filter(i => i.food_cost_pct != null).sort((a, b) => (a.food_cost_pct ?? 0) - (b.food_cost_pct ?? 0))
   , [items])
 
-  // Popularidad por plato desde ventas
+  // Popularidad por plato desde ventas — matching compartido con Ventas y con
+  // la detección de fuga (lib/reportes/consumoTeorico.ts, PLAN-4-CAPAS B5).
   const ventasMap = useMemo(() => {
-    const m = new Map<string, number>()
+    const lookup = buildCartaItemLookup(items)
+    const m = new Map<string, number>() // carta_item id -> cantidad vendida
     for (const v of ventas) for (const it of (v.items ?? [])) {
-      m.set(norm(it.nombre_plato), (m.get(norm(it.nombre_plato)) ?? 0) + (it.cantidad ?? 0))
+      const id = lookup.get(normalizarNombrePlato(it.nombre_plato))
+      if (!id) continue
+      m.set(id, (m.get(id) ?? 0) + (it.cantidad ?? 0))
     }
     return m
-  }, [ventas])
+  }, [ventas, items])
 
   // ── Feature 1: Ingeniería de menú (método Kasavana-Smith) ──
   const ing = useMemo(() => {
     const base = items
       .filter(i => i.food_cost_pct != null && i.margen_bruto != null)
-      .map(i => ({ item: i, pop: ventasMap.get(norm(i.nombre)) ?? 0, margin: i.margen_bruto ?? 0 }))
+      .map(i => ({ item: i, pop: ventasMap.get(i.id) ?? 0, margin: i.margen_bruto ?? 0 }))
     return clasificarIngenieriaMenu(base)
   }, [items, ventasMap])
 
