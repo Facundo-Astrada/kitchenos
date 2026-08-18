@@ -137,15 +137,11 @@ Tres campos, ninguno NOT NULL, ninguno bloqueante (R3).
 
 ## Bloque 3 — Proveedores: días de entrega e incidencias
 
-- [ ] **B3** · Una sesión · Migración + tabla nueva · Depende de B2 (comparte la sesión de recepción)
+- [x] **B3** · Una sesión · Migración + tabla nueva · Depende de B2 (comparte la sesión de recepción)
 
-**Parte A — días de entrega** (`proveedores`):
-```sql
-ALTER TABLE proveedores
-  ADD COLUMN IF NOT EXISTS dias_entrega INT[] NULL,      -- ISO 1-7, mismo criterio que checklist_rutina.dias_semana
-  ADD COLUMN IF NOT EXISTS horario_entrega TEXT NULL;    -- libre: "8 a 11 hs"
-```
-Usar el mismo criterio ISO 1-7 que `checklist_rutina.dias_semana` para no inventar una segunda convención en el mismo repo. Esto lo consume el bloque 10.
+**Parte A — días de entrega.** `proveedores.dias_entrega` **ya existía** en prod (no era parte del plan original de otro bloque, quedó fuera del radar de la auditoría) como `text[]` de etiquetas de día ("Lun"/"Lunes", inconsistente entre cuentas) con datos reales cargados en Rescoldo y Bros. El plan pedía crearla como `INT[]` ISO 1-7 — se decidió **no migrarla**: convertir una columna en uso con datos reales es trabajo de limpieza fuera del alcance de la sesión, y no había ningún consumidor todavía (B10 no está construido) que se beneficiara hoy de forzar la convención. Se sumó `horario_entrega TEXT NULL` (libre: "8 a 11 hs"), que sí era 100% nuevo.
+
+**Importante para B10:** cuando se llegue a "ordenar por próximo día de entrega", `dias_entrega` va a haber que leerlo como texto de días (con las dos variantes de formato conviviendo), no como ISO 1-7. Revisar el dato real en ese momento, no asumir el criterio de este plan.
 
 **Parte B — incidencias.** Tabla nueva:
 ```sql
@@ -368,7 +364,7 @@ Para cada producto:
   techo            = stock_maximo − stock_actual          (de B2, si está cargado)
   a_pedir          = min(a_pedir, techo)
 
-Agrupar por proveedor. Ordenar por próximo día de entrega (proveedores.dias_entrega, de B3).
+Agrupar por proveedor. Ordenar por próximo día de entrega (`proveedores.dias_entrega` — texto de días, no ISO 1-7, ver nota en bloque 3).
 ```
 
 Ahí están las 6 entradas del material completas: reservas, previsión, promedios de venta, inventario, hojas de producción (el mise) y días de pedido.

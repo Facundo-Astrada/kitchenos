@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import type { Pedido, PedidoItem, EstadoPedido } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
+import { useAuth } from '@/lib/auth/context'
 
 async function fetchPedidosData(key: string): Promise<Pedido[]> {
   const rid = key.slice('pedidos-'.length)
@@ -18,6 +19,7 @@ async function fetchPedidosData(key: string): Promise<Pedido[]> {
 
 export function usePedidos() {
   const RESTAURANTE_ID = useRestauranteId()
+  const { perfil } = useAuth()
   const supabase = useMemo(() => createClient(), [])
 
   const swrKey = RESTAURANTE_ID ? `pedidos-${RESTAURANTE_ID}` : null
@@ -181,6 +183,7 @@ export function usePedidos() {
       const todosRecibidos = items.every(it => it.recibido)
       const algunoRecibido = items.some(it => it.recibido)
       const nuevoStatus: EstadoPedido = todosRecibidos ? 'recibido' : algunoRecibido ? 'parcial' : 'enviado'
+      const proveedorId = pedidos.find(p => p.id === pedidoId)?.proveedor_id ?? null
 
       // Update each item
       for (const item of items) {
@@ -190,25 +193,41 @@ export function usePedidos() {
         }).eq('id', item.id)
         if (itemErr) throw itemErr
 
-        // Add received quantity to stock
-        if (item.recibido) {
-          const cantRecibida = item.cantidad_recibida ?? item.cantidad
-          if (cantRecibida > 0) {
-            // Find product in stock
-            const { data: prod } = await supabase.from('productos')
-              .select('id, stock_actual')
-              .eq('restaurante_id', RESTAURANTE_ID)
-              .ilike('nombre', item.producto_nombre)
-              .limit(1)
-              .single()
+        const cantRecibida = item.recibido ? (item.cantidad_recibida ?? item.cantidad) : 0
 
-            if (prod) {
-              const { error: stockErr } = await supabase.from('productos').update({
-                stock_actual: (prod.stock_actual || 0) + cantRecibida,
-              }).eq('id', prod.id)
-              if (stockErr) throw stockErr
-            }
+        // Add received quantity to stock
+        if (item.recibido && cantRecibida > 0) {
+          // Find product in stock
+          const { data: prod } = await supabase.from('productos')
+            .select('id, stock_actual')
+            .eq('restaurante_id', RESTAURANTE_ID)
+            .ilike('nombre', item.producto_nombre)
+            .limit(1)
+            .single()
+
+          if (prod) {
+            const { error: stockErr } = await supabase.from('productos').update({
+              stock_actual: (prod.stock_actual || 0) + cantRecibida,
+            }).eq('id', prod.id)
+            if (stockErr) throw stockErr
           }
+        }
+
+        // PLAN-4-CAPAS B3 — faltante sin fricción: se recibió menos de lo pedido
+        if (cantRecibida < item.cantidad) {
+          const delta = item.cantidad - cantRecibida
+          const { error: incErr } = await supabase.from('proveedor_incidencias').insert({
+            restaurante_id: RESTAURANTE_ID,
+            proveedor_id: proveedorId,
+            pedido_id: pedidoId,
+            producto_nombre: item.producto_nombre,
+            tipo: 'faltante',
+            cantidad_esperada: item.cantidad,
+            cantidad_recibida: cantRecibida,
+            importe: item.precio_estimado != null ? delta * item.precio_estimado : null,
+            creado_por: perfil?.miembro_id ?? null,
+          })
+          if (incErr) throw incErr
         }
       }
 
@@ -221,7 +240,7 @@ export function usePedidos() {
       console.error('[usePedidos] recibirPedido Error:', msg)
       throw new Error(msg)
     }
-  }, [fetchPedidos, RESTAURANTE_ID, supabase])
+  }, [fetchPedidos, RESTAURANTE_ID, supabase, pedidos, perfil])
 
   const eliminarPedido = useCallback(async (id: string) => {
     try {

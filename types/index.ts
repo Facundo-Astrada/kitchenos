@@ -346,17 +346,39 @@ export interface RegistroSanidad {
 }
 
 // ── Proveedores ─────────────────────────────────────────────
-// DB: proveedores (id, nombre, telefono, rubro, dias_entrega text[], activo, restaurante_id, created_at, updated_at)
+// DB: proveedores (id, nombre, telefono, rubro, dias_entrega text[], horario_entrega, activo, restaurante_id, created_at, updated_at)
 export interface Proveedor {
   id: string
   nombre: string
   telefono?: string | null
   rubro?: string | null
   dias_entrega?: string[] | null
+  horario_entrega?: string | null
   activo: boolean
   restaurante_id: string
   created_at: string
   updated_at?: string | null
+}
+
+// DB: proveedor_incidencias (id, restaurante_id, proveedor_id, pedido_id, producto_nombre, tipo,
+// cantidad_esperada, cantidad_recibida, importe, nota, foto_url, fecha, creado_por, created_at)
+export type TipoIncidenciaProveedor = 'faltante' | 'calidad' | 'fuera_de_horario' | 'precio' | 'devolucion'
+
+export interface ProveedorIncidencia {
+  id: string
+  restaurante_id: string
+  proveedor_id?: string | null
+  pedido_id?: string | null
+  producto_nombre: string
+  tipo: TipoIncidenciaProveedor
+  cantidad_esperada?: number | null
+  cantidad_recibida?: number | null
+  importe?: number | null
+  nota?: string | null
+  foto_url?: string | null
+  fecha: string
+  creado_por?: string | null
+  created_at: string
 }
 
 // ── Pedidos ─────────────────────────────────────────────────
