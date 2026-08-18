@@ -6,6 +6,15 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-08-18 (noche) — PLAN-4-CAPAS bloque B3: proveedores, horario de entrega e incidencias.** 1 commit (`01b6b9d`). Continuación directa de B2 (mismo día), siguiendo el plan propio.
+
+- **`proveedores.horario_entrega TEXT NULL`** — nuevo, libre ("8 a 11 hs"), en el modal junto a "Días de entrega".
+- **Desvío del plan encontrado al chequear el schema real, no ejecutado a ciegas**: `PLAN-4-CAPAS.md` pedía crear `dias_entrega` como `INT[]` ISO 1-7 (mismo criterio que `checklist_rutina.dias_semana`), pero la columna **ya existía** en prod como `text[]` de etiquetas de día — con datos reales cargados en Rescoldo y Bros, y encima con dos formatos conviviendo ("Lun" vs "Lunes"). Migrarla es limpieza de datos fuera de esta sesión, y todavía no hay ningún consumidor (B10 no está construido) que se beneficie hoy de forzar la convención. Se dejó como está y se documentó el desvío en el propio plan (bloques 3 y 10) para que B10 no asuma ISO cuando llegue.
+- **Tabla `proveedor_incidencias`** (faltante/calidad/fuera_de_horario/precio/devolucion) con RLS. La `faltante` se auto-crea **sin fricción, sin modal** en `usePedidos.recibirPedido` cuando `cantidad_recibida < cantidad` (cubre tanto lo parcial como lo que nunca se marcó recibido). El resto se carga a mano desde `/proveedores`, que ahora muestra por proveedor un resumen de los últimos 90 días en hechos ("3 faltantes · $18.400 en diferencias"), sin score compuesto — a propósito, para no discutir la fórmula en vez del proveedor.
+- `reset_demo_restaurante()` reescrita completa (mismo patrón que B2) para clonar `horario_entrega` y `proveedor_incidencias`; se corrió en vivo como parte de la verificación (no solo se leyó el SQL).
+- Verificado con Playwright contra el dev server real (no solo build+test): login, expandir un proveedor, cargar una incidencia de prueba, confirmar que quedó en la base con `restaurante_id`/`proveedor_id`/`creado_por` correctos, borrarla.
+- `npm run build` y `npm test` (98/98) verdes. Commit pusheado — deploy automático a Vercel.
+
 **Sesión 2026-08-18 — Hoja instructiva de OPS para la cocina + pipeline estandarizado.** Sin commits de app: todo es documentación y tooling. Arrancó de un pedido de Facundo ("una infografía de una hoja para explicar OPS a cocineros viejos que no usan checklists ni apps"), no de `PENDIENTES.md`.
 - **`docs/ops-modo-control-una-hoja.html`** — una A4 imprimible del día en OPS con **Modo Control** (sin modo stock, decisión explícita de Facundo): el orden en 4 pasos, la fila con sus tres botones, los tres colores, dónde se prende, la columna de Producción, el pase de turno y 3 dudas típicas. Publicada como Artifact.
 - Tres iteraciones a pedido: la primera versión era ilustrada con SVG y ~600 palabras; la segunda cambió a **capturas reales de producción** (cuenta de cocina de Bros) con cada botón recortado por separado, fondo blanco y ~180 palabras; la tercera fue solo alineación.

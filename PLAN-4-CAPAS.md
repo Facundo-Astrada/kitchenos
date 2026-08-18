@@ -407,3 +407,28 @@ B10 ◄─┘                                  necesita B2, B3, B8, B9
 **B1 a B7 se pueden hacer en cualquier orden** salvo B5, que espera a B2. Son siete sesiones sin dependencias cruzadas fuertes.
 
 **B8 es el punto de decisión.** Para cuando se llegue ahí, el track de validación ya debería tener respuesta sobre si reservas le importa a alguien.
+
+---
+
+## Qué se ve en la app después de cada bloque
+
+Criterio de aceptación de cada sesión: si al terminar no se puede señalar esto en pantalla, el bloque no está cerrado.
+
+| Bloque | Dónde | Qué se ve |
+|---|---|---|
+| **B1** | Carta → Rentabilidad → Ingeniería | **Ninguna pantalla nueva.** Cambia en qué cuadrante cae cada plato y los conteos de Estrellas / Caballos / Puzzles / Perros. **Sacar captura antes del deploy** — sin eso no hay con qué comparar. |
+| **B2** | Stock | Campo **Máximo** junto a Mínimo en el modal, desplegable **Estándar de recepción** (merma esperada + nota), y badge **`alto`** en la fila cuando el stock supera el máximo. La merma esperada ya viene precargada al abrir un producto. El badge no aparece hasta que se cargue algún máximo. |
+| **B3** | Proveedores · Pedidos | Días y horario de entrega en la ficha del proveedor. Bloque de **incidencias de los últimos 90 días** ("3 faltantes, 1 fuera de horario, $18.400 en diferencias"). Arranca vacío: se llena solo al recibir un pedido con menos de lo pedido. |
+| **B4** | Reportes → Presupuesto · Compras → Cat. de Gastos | El presupuesto pasa de **un número a una tabla de 4 filas** (materia prima, personal, alquiler, gastos generales) con objetivo, real, desvío en puntos y en plata, más **EBITDA calculado**. Botón "Usar estructura estándar". Y dos opciones nuevas al clasificar una categoría de gasto. |
+| **B5** | Reportes | Tabla por producto: consumo teórico, real, merma declarada, diferencia y si está dentro de tolerancia. **Y una segunda lista, separada**, de productos que no se pueden calcular por falta de receta vinculada. Esperar que al principio la segunda sea más larga que la primera. |
+| **B6** | Turnos → Puestos · Reportes → Personal | Objetivos por puesto (% postres, % café, ticket promedio). En Personal, columnas de **venta junto a las de producción**: una persona, una fila. Distancia al objetivo, sin ranking en rojo. |
+| **B7** | OPS · Carta | Pantalla nueva **Control de carta**, con CTA en OPS solo en la ventana previa a la apertura. Platos por plaza, tres botones por fila. **`no sale` marca el 86 solo** en la Carta; **`ajustar` crea la tarea** de producción. |
+| **B8** | Nav | Módulo **`/reservas`** con vista día y semana. Aislado: todavía no aparece en ningún otro lado. |
+| **B9** | OPS · Salón · Calendario · Dashboard | Cubiertos reservados arriba de OPS. Al sentar una mesa, el Salón **ofrece las reservas de esa franja**. Reflejo en Calendario y contador en Dashboard. Al cerrar turno, ofrece marcar los **no-show**. |
+| **B10** | OPS → Planificación · Pedidos | "Sugerir producción" **cambia sus números según las reservas** y lo narra ("sábado con 62 reservados contra un promedio de 45 — sugiero 38 % más"). Y botón nuevo **"Sugerir pedido"** en Pedidos, que precarga el carrito agrupado por proveedor. |
+
+**Los tres grupos, por si importa el orden de lo mostrable:**
+
+- **Se ve el mismo día, sin cargar nada antes:** B4, B7, B8, B9, B10.
+- **Se ve recién cuando hay datos:** B2 (hasta que se cargue un máximo), B3 (hasta la primera recepción incompleta), B6 (hasta que se carguen objetivos).
+- **No se ve, se corrige:** B1. Y B5, que se ve pero al principio muestra más problemas de datos que resultados.

@@ -1,20 +1,15 @@
-# Sesión — 2026-08-18 (PLAN-4-CAPAS, bloque B2)
+# Sesión — 2026-08-18 (noche, PLAN-4-CAPAS bloque B3)
 
 ## Qué se cerró
-- **PLAN-4-CAPAS bloque B2** — campos de la capa Definir en Stock: `stock_maximo`, `merma_esperada_pct`, `nota_recepcion` (migración `20260818_stock_definir_layer.sql`, las 3 NULL-ables). `calcEstado` (`useStock.ts`) pasa de 2 a 3 estados, suma `'alto'` cuando `stock_actual > stock_maximo`; `fuera_de_uso` sigue forzando `'ok'`. Stock de seguridad (mínimo × 1.25) no es columna, se calcula al vuelo.
-- UI: modal de Stock con campo Máximo junto a Mínimo, desplegable secundario "Estándar de recepción" (merma esperada + nota), badge "Alto" en la tabla. Encontrado y corregido en el camino: media docena de lugares en `stock/ClientView.tsx` que leían `estado !== 'ok'` para armar la lista de "hay que reponer" (KPIs, filtro, insights del Coach, colores de fila, export PDF) — con el estado nuevo eso incluía por error los productos con sobre-stock. Ahora pasan por `esBajoOCritico()`.
-- `scripts/precargar-mermas.mjs` (dry-run por default, `--apply` aplica): matchea por palabra completa contra la tabla de mermas de la síntesis §5.5, con lista de exclusión para no aplicarle merma de materia prima cruda a un derivado (jugo, salsa, polvo, enlatado…) — encontrado en la primera corrida contra El Rescoldo: 11 de 23 matches eran falsos positivos ("Fideos sabor pollo" → 20%, "Tomate en polvo" → 15%) antes del filtro. Corrido en la demo (El Rescoldo, `...0001`): 12/12 aplicados. **No corrido en Bros** (producción) — pendiente para cuando se decida.
-- `reset_demo_restaurante()` actualizada para clonar las 3 columnas nuevas (R1). `npm run build` y `npm test` (98/98) verdes. Commit `cd1a3b4`, pusheado — deploy automático a Vercel.
+- **PLAN-4-CAPAS bloque B3** — `proveedores.horario_entrega` (nuevo) y tabla `proveedor_incidencias` (faltante/calidad/fuera_de_horario/precio/devolucion) con RLS. La `faltante` se auto-crea sin fricción en `usePedidos.recibirPedido` cuando llega menos de lo pedido; el resto se carga a mano desde `/proveedores`, que ahora muestra por proveedor un resumen de 90 días en hechos, sin score. `reset_demo_restaurante()` actualizada y corrida en vivo. Verificado con Playwright contra el dev server real. `npm run build`/`npm test` (98/98) verdes. Commit `01b6b9d`, pusheado.
+- **Desvío documentado, no ejecutado a ciegas**: el plan pedía `dias_entrega` como `INT[]` ISO 1-7, pero esa columna ya existía en prod como `text[]` de días con datos reales — no se migró (limpieza fuera de alcance, sin consumidor todavía). Queda anotado en `PLAN-4-CAPAS.md` bloques 3 y 10 para cuando se llegue ahí.
 
 ## Qué quedó a medias
-- Nada de B2. El resto del plan (`PLAN-4-CAPAS.md`) sigue abierto: B3 a B10.
-- `precargar-mermas.mjs --apply` sin correr todavía contra Bros — correrlo cuando se confirme que la clasificación en la demo tiene sentido.
-- `.claude/settings.json` sigue con diff sin commitear desde jul 2026 — ya trackeado en `PENDIENTES.md` 🟢, no es de hoy.
-- `npm run lint` está roto en este entorno (falta `tsconfig-paths/lib/tsconfig-loader` en `node_modules`) — no es de esta sesión, no se tocó.
+- Nada de B3. Resto del plan (B4 a B10) sigue abierto.
+- De la sesión de B2 (sin confirmar todavía): badge "Alto" en Stock con un producto real, y si los 12 % de merma precargada en El Rescoldo tienen sentido para alguien que conoce la carta.
 
 ## Probar primero mañana
-- Stock → cargar un producto con Máximo bajo, subir el stock por encima, confirmar que aparece el badge "Alto" (celeste, no ámbar) y que NO cuenta en el KPI "en alerta" ni en el filtro "bajo".
-- Revisar los 12 productos de El Rescoldo con merma precargada — ¿tiene sentido el % para alguien que conoce la carta?
+- Recibir un pedido incompleto real (Bros o Rescoldo) y confirmar que la incidencia "faltante" aparece sola en `/proveedores` sin que nadie la cargue a mano.
 
 ## Próximo paso concreto
-Seguir con `PLAN-4-CAPAS.md` bloque B3 (proveedores: días de entrega e incidencias — depende de B2, comparte la sesión de recepción) — o B4/B6 si se prefiere variar de tema, son independientes.
+Seguir con `PLAN-4-CAPAS.md` — B4 (presupuesto por familias), B6 (desempeño por persona) o B7 (checklist de carta pre-servicio) son independientes entre sí, cualquiera sirve. B5 espera a que uno de estos esté listo para evaluar si conviene ir primero por ahí.
