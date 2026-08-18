@@ -6,6 +6,14 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-08-18 (noche, 2) — OPS: plaza General en azul + fix de duplicación menú/plaza en Producción.** 1 commit (`1b1e7c0`). Arrancó de una captura de Facundo en Bros: la plaza "GENERAL" (Carta) mostraba los mismos platos que ya estaban en la banda MENÚ.
+
+- **Plaza `general` distinguida en azul** (`#2563eb`, antes gris `#6b7280`) en las dos fuentes que la definen — `lib/constants.ts` (`PLAZA_COLORS`) y `lib/ops/mise.ts` (`PLAZAS_OPS`), mantenidas en espejo.
+- **Causa raíz real de la duplicación**: `handleCrearTarea` (`checklist/ClientView.tsx`) creaba **toda** tarea despachada desde el mise con `modo: 'carta'` hardcodeado, sin mirar si el `checklist_item` de origen tenía `menu_id`. Con `plaza_control='general'` en el menú, eso aterrizaba como columna "General" de la banda Carta en `ProduccionBoard`, duplicando visualmente lo que `activarMenuParaFechas` ya había puesto en la banda Menú. Fix: si `checklist_item.menu_id` existe, la tarea se crea con `modo: 'menu'` (sin `plaza`) — documentado en `hooks.md`.
+- **Limpieza de datos en Bros** (no solo el código): 11 tareas ya creadas con el bug se recategorizaron; 8 de ellas eran duplicado exacto de una tarea ya activada por Planificación para el mismo día — se fusionaron en una sola (heredando prioridad SP y estado `listo` de la que correspondía) y se borró la redundante. Las 3 restantes (dos de `Garbanzos fritos`, una de `verdes deco`, del 17/8, ya `listo`) no tenían par y quedaron como estaban, solo recategorizadas.
+- **Bug menor encontrado de paso, no arreglado**: dos filas de `Garbanzos fritos` se crearon con 1ms de diferencia — indicio de doble-tap táctil que el guard `if (creating) return` de `ProductoMiseCard.tsx` no alcanza a frenar (el `setState` no es síncrono). Anotado en `PENDIENTES.md`.
+- Verificado: `tsc --noEmit` limpio, `menuMise.test.ts` (21/21) verde, y por SQL directo contra Bros que `tareas.plaza = 'general'` quedó en 0 filas tras la limpieza.
+
 **Sesión 2026-08-18 (noche) — PLAN-4-CAPAS bloque B3: proveedores, horario de entrega e incidencias.** 1 commit (`01b6b9d`). Continuación directa de B2 (mismo día), siguiendo el plan propio.
 
 - **`proveedores.horario_entrega TEXT NULL`** — nuevo, libre ("8 a 11 hs"), en el modal junto a "Días de entrega".

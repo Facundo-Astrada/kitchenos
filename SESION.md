@@ -1,15 +1,17 @@
-# Sesión — 2026-08-18 (noche, PLAN-4-CAPAS bloque B3)
+# Sesión — 2026-08-18 (noche, 2) — OPS: plaza General + duplicación menú
 
 ## Qué se cerró
-- **PLAN-4-CAPAS bloque B3** — `proveedores.horario_entrega` (nuevo) y tabla `proveedor_incidencias` (faltante/calidad/fuera_de_horario/precio/devolucion) con RLS. La `faltante` se auto-crea sin fricción en `usePedidos.recibirPedido` cuando llega menos de lo pedido; el resto se carga a mano desde `/proveedores`, que ahora muestra por proveedor un resumen de 90 días en hechos, sin score. `reset_demo_restaurante()` actualizada y corrida en vivo. Verificado con Playwright contra el dev server real. `npm run build`/`npm test` (98/98) verdes. Commit `01b6b9d`, pusheado.
-- **Desvío documentado, no ejecutado a ciegas**: el plan pedía `dias_entrega` como `INT[]` ISO 1-7, pero esa columna ya existía en prod como `text[]` de días con datos reales — no se migró (limpieza fuera de alcance, sin consumidor todavía). Queda anotado en `PLAN-4-CAPAS.md` bloques 3 y 10 para cuando se llegue ahí.
+- **Plaza `general` en azul** (`#2563eb`) en vez de gris, en `lib/constants.ts` y `lib/ops/mise.ts` (mantenidas en espejo) — se destaca como especial, no es una plaza física.
+- **Fix de la duplicación menú/plaza**: `handleCrearTarea` (`checklist/ClientView.tsx`) creaba toda tarea despachada desde el mise con `modo: 'carta'` a ciegas. Ahora mira `checklist_item.menu_id`: si el ítem viene de un menú activado, la tarea nace con `modo: 'menu'` y no vuelve a aparecer como columna "General" de Carta duplicando la banda Menú. Documentado en `hooks.md`.
+- **Datos de Bros limpiados** (no solo el código): 11 tareas viejas creadas con el bug se recategorizaron; 8 eran duplicado exacto del mismo día y se fusionaron (heredando SP/`listo` donde correspondía) borrando la redundante. `tareas.plaza='general'` quedó en 0 filas.
+- Commit `1b1e7c0`, pusheado, deploy verde en Vercel. `tsc --noEmit` limpio, `menuMise.test.ts` 21/21.
 
 ## Qué quedó a medias
-- Nada de B3. Resto del plan (B4 a B10) sigue abierto.
-- De la sesión de B2 (sin confirmar todavía): badge "Alto" en Stock con un producto real, y si los 12 % de merma precargada en El Rescoldo tienen sentido para alguien que conoce la carta.
+- Nada de este tema — cerrado de punta a punta (código + datos + verificación).
 
 ## Probar primero mañana
-- Recibir un pedido incompleto real (Bros o Rescoldo) y confirmar que la incidencia "faltante" aparece sola en `/proveedores` sin que nadie la cargue a mano.
+- Abrir Producción en Bros y confirmar visualmente: la plaza General se ve azul, y ya no aparece como columna de Carta duplicando el menú activo.
+- Si se activa un menú nuevo con `plaza_control='general'` y se despacha un déficit desde el mise, confirmar que la tarea nace directo en la banda Menú (no en Carta).
 
 ## Próximo paso concreto
-Seguir con `PLAN-4-CAPAS.md` — B4 (presupuesto por familias), B6 (desempeño por persona) o B7 (checklist de carta pre-servicio) son independientes entre sí, cualquiera sirve. B5 espera a que uno de estos esté listo para evaluar si conviene ir primero por ahí.
+Sin tema abierto de esta sesión. Seguir con `PLAN-4-CAPAS.md` (B4, B6 o B7 — independientes entre sí) según lo que quedó en la sesión de B3 proveedores.
