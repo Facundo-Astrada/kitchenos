@@ -195,7 +195,7 @@ export interface CategoriaProducto {
   icono?: string | null
 }
 
-// DB: productos (id, nombre, categoria, categoria_id, unidad, unidad_uso, unidad_compra, cantidad_por_envase, stock_actual, stock_minimo, stock_critico, precio_unitario, proveedor_id, sector_id, fuera_de_uso, estante_id, orden_sector, restaurante_id, activo, created_at, updated_at)
+// DB: productos (id, nombre, categoria, categoria_id, unidad, unidad_uso, unidad_compra, cantidad_por_envase, stock_actual, stock_minimo, stock_critico, stock_maximo, precio_unitario, proveedor_id, sector_id, fuera_de_uso, estante_id, orden_sector, merma_esperada_pct, nota_recepcion, restaurante_id, activo, created_at, updated_at)
 export interface Producto {
   id: string
   nombre: string
@@ -208,6 +208,7 @@ export interface Producto {
   stock_actual: number
   stock_minimo: number
   stock_critico: number
+  stock_maximo?: number | null
   precio_unitario: number
   proveedor_id?: string | null
   es_produccion?: boolean | null
@@ -216,6 +217,8 @@ export interface Producto {
   fuera_de_uso?: boolean
   estante_id?: string | null
   orden_sector?: number
+  merma_esperada_pct?: number | null
+  nota_recepcion?: string | null
   restaurante_id: string
   activo: boolean
   created_at: string

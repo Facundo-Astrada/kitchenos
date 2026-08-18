@@ -99,6 +99,13 @@ function esUnidadSospechosa(p: { unidad: string; precio_unitario: number | null 
 function esPendiente(p: { stock_actual: number; precio_unitario: number | null; fuera_de_uso?: boolean | null }): boolean {
   return !p.fuera_de_uso && p.stock_actual === 0 && !p.precio_unitario
 }
+
+// 'alto' (sobre-stock) es un estado != 'ok' pero NO significa que haya que reponer —
+// es lo opuesto. Todo lo que hoy lee `estado !== 'ok'` para armar la lista de
+// "hay que comprar" tiene que pasar por acá en vez de comparar directo.
+function esBajoOCritico(p: { estado: 'ok' | 'bajo' | 'critico' | 'alto' }): boolean {
+  return p.estado === 'bajo' || p.estado === 'critico'
+}
 type SortMode = 'default' | 'valor_desc' | 'nombre_asc' | 'nombre_desc' | 'nivel_desc' | 'nivel_asc'
 
 interface FormData {
@@ -107,6 +114,7 @@ interface FormData {
   unidad: string
   stock_actual: string
   stock_minimo: string
+  stock_maximo: string
   precio_unitario: string
   // unidad de compra (opcional)
   unidad_compra: string
@@ -118,6 +126,8 @@ interface FormData {
   sector_id: string
   fuera_de_uso: boolean
   proveedor_id: string
+  merma_esperada_pct: string
+  nota_recepcion: string
 }
 
 const FORM_EMPTY: FormData = {
@@ -126,6 +136,7 @@ const FORM_EMPTY: FormData = {
   unidad: 'kg',
   stock_actual: '0',
   stock_minimo: '0',
+  stock_maximo: '',
   precio_unitario: '0',
   unidad_compra: '',
   cantidad_por_envase: '',
@@ -135,6 +146,8 @@ const FORM_EMPTY: FormData = {
   sector_id: '',
   fuera_de_uso: false,
   proveedor_id: '',
+  merma_esperada_pct: '',
+  nota_recepcion: '',
 }
 
 function fmtPrecio(n: number) {
@@ -307,6 +320,7 @@ export default function StockPage() {
   const [duplicadoWarn, setDuplicadoWarn] = useState<ProductoConEstado | null>(null)
   const [showUnidadCompra, setShowUnidadCompra] = useState(false)
   const [showMasOpciones, setShowMasOpciones] = useState(false)
+  const [showRecepcion, setShowRecepcion] = useState(false)
 
   // Badge de sobreprecio vs. otros proveedores (Q5) — solo para el producto en edición
   const badgeSobreprecio = useMemo(() => {
@@ -892,7 +906,7 @@ export default function StockPage() {
     } else if (estadoFilter === 'unidad') {
       list = productos.filter(esUnidadSospechosa)
     } else if (estadoFilter === 'bajo') {
-      list = list.filter(p => p.estado !== 'ok')
+      list = list.filter(esBajoOCritico)
     }
     if (catFilters.length) list = list.filter(p => catFilters.includes(p.categoria))
     if (provFilters.length) list = list.filter(p => provFilters.includes(p.proveedor_id ?? '__sin__'))
@@ -933,14 +947,14 @@ export default function StockPage() {
     [filtered]
   )
 
-  const nAlerta = useMemo(() => productos.filter(p => p.estado !== 'ok').length, [productos])
+  const nAlerta = useMemo(() => productos.filter(esBajoOCritico).length, [productos])
   const nPendiente = useMemo(() => productos.filter(esPendiente).length, [productos])
   const nUnidadSospechosa = useMemo(() => productos.filter(esUnidadSospechosa).length, [productos])
 
   useEffect(() => {
     // Insights accionables para Kitchen Coach (no solo conteos)
     const bajoMinimo = productos
-      .filter(p => p.estado !== 'ok')
+      .filter(esBajoOCritico)
       .map(p => ({ nombre: p.nombre, stock: p.stock_actual, minimo: p.stock_minimo, unidad: p.unidad }))
       .slice(0, 8)
     const sinPrecio = productos.filter(p => !p.precio_unitario || p.precio_unitario <= 0).length
@@ -948,7 +962,7 @@ export default function StockPage() {
     // categorías con más productos en riesgo (bajo el mínimo)
     const riesgoPorCat: Record<string, number> = {}
     for (const p of productos) {
-      if (p.estado !== 'ok') riesgoPorCat[p.categoria] = (riesgoPorCat[p.categoria] ?? 0) + 1
+      if (esBajoOCritico(p)) riesgoPorCat[p.categoria] = (riesgoPorCat[p.categoria] ?? 0) + 1
     }
     const categoriasEnRiesgo = Object.entries(riesgoPorCat)
       .sort((a, b) => b[1] - a[1]).slice(0, 3)
@@ -1046,6 +1060,7 @@ export default function StockPage() {
     setDuplicadoWarn(null)
     setShowUnidadCompra(false)
     setShowMasOpciones(false)
+    setShowRecepcion(false)
     setModalOpen(true)
   }
 
@@ -1058,6 +1073,7 @@ export default function StockPage() {
       unidad: p.unidad,
       stock_actual: String(p.stock_actual),
       stock_minimo: String(p.stock_minimo),
+      stock_maximo: p.stock_maximo != null ? String(p.stock_maximo) : '',
       precio_unitario: String(p.precio_unitario || 0),
       unidad_compra: p.unidad_compra ?? '',
       cantidad_por_envase: p.cantidad_por_envase != null ? String(p.cantidad_por_envase) : '',
@@ -1067,9 +1083,12 @@ export default function StockPage() {
       sector_id: p.sector_id ?? '',
       fuera_de_uso: !!p.fuera_de_uso,
       proveedor_id: p.proveedor_id ?? '',
+      merma_esperada_pct: p.merma_esperada_pct != null ? String(p.merma_esperada_pct) : '',
+      nota_recepcion: p.nota_recepcion ?? '',
     })
     setShowUnidadCompra(!!(p.unidad_compra || p.cantidad_por_envase))
     setShowMasOpciones(!!(p.es_produccion || p.fuera_de_uso || p.unidad_compra || p.cantidad_por_envase))
+    setShowRecepcion(!!(p.merma_esperada_pct || p.nota_recepcion))
     setFormError(null)
     setModalOpen(true)
   }
@@ -1094,6 +1113,7 @@ export default function StockPage() {
         stock_actual: parseNumAR(form.stock_actual) ?? 0,
         stock_minimo: parseNumAR(form.stock_minimo) ?? 0,
         stock_critico: 0,
+        stock_maximo: form.stock_maximo ? parseNumAR(form.stock_maximo) : null,
         activo: true,
         precio_unitario: parseNumAR(form.precio_unitario) ?? 0,
         unidad_compra: showUnidadCompra && form.unidad_compra.trim() ? form.unidad_compra.trim() : null,
@@ -1104,6 +1124,8 @@ export default function StockPage() {
         sector_id: form.sector_id || null,
         fuera_de_uso: form.fuera_de_uso,
         proveedor_id: form.proveedor_id || null,
+        merma_esperada_pct: showRecepcion && form.merma_esperada_pct ? parseNumAR(form.merma_esperada_pct) : null,
+        nota_recepcion: showRecepcion && form.nota_recepcion.trim() ? form.nota_recepcion.trim() : null,
       }
       if (editingProducto) {
         await actualizarProducto(editingProducto.id, datos)
@@ -1159,8 +1181,8 @@ export default function StockPage() {
         ? ['#', 'Producto', 'Categoría', 'Unidad', 'Precio', 'Stock', 'Valor', 'Estado']
         : ['#', 'Producto', 'Categoría', 'Unidad', 'Stock', 'Estado']],
       body: filtered.map((p, i) => isAdmin
-        ? [i + 1, p.nombre, p.categoria, p.unidad, fmtPrecio(p.precio_unitario), p.stock_actual, valorStock(p) > 0 ? fmtValor(valorStock(p)) : '—', p.estado !== 'ok' ? 'BAJO' : 'OK']
-        : [i + 1, p.nombre, p.categoria, p.unidad, p.stock_actual, p.estado !== 'ok' ? 'BAJO' : 'OK']),
+        ? [i + 1, p.nombre, p.categoria, p.unidad, fmtPrecio(p.precio_unitario), p.stock_actual, valorStock(p) > 0 ? fmtValor(valorStock(p)) : '—', p.estado.toUpperCase()]
+        : [i + 1, p.nombre, p.categoria, p.unidad, p.stock_actual, p.estado.toUpperCase()]),
       styles: { fontSize: 9 },
       headStyles: { fillColor: [30, 41, 59] },
     })
@@ -1183,6 +1205,9 @@ export default function StockPage() {
     )
     if (esPendiente(p)) return (
       <span style={{ background: 'rgba(239,68,68,.12)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 6, padding: '2px 6px', fontSize: 9, fontWeight: 700, color: '#fca5a5', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>Pendiente</span>
+    )
+    if (p.estado === 'alto') return (
+      <span style={{ background: 'rgba(56,189,248,.15)', border: '1px solid rgba(56,189,248,.3)', borderRadius: 6, padding: '2px 6px', fontSize: 9, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>Alto</span>
     )
     if (p.estado !== 'ok') return (
       <span style={{ background: 'rgba(245,158,11,.15)', border: '1px solid rgba(245,158,11,.3)', borderRadius: 6, padding: '2px 6px', fontSize: 9, fontWeight: 700, color: '#fcd34d', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>Bajo</span>
@@ -1703,7 +1728,7 @@ export default function StockPage() {
                     {isDesktop && (() => {
                       const min = p.stock_minimo ?? 0
                       const pct = min > 0 ? Math.min(100, Math.round((p.stock_actual / min) * 100)) : (p.stock_actual > 0 ? 100 : 0)
-                      const barColor = p.estado !== 'ok' ? '#d97706' : '#10b981'
+                      const barColor = esBajoOCritico(p) ? '#d97706' : '#10b981'
                       return (
                         <td style={{ padding: '11px 10px 11px 8px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1748,7 +1773,7 @@ export default function StockPage() {
                               width: isDesktop ? 54 : isNarrow ? 50 : 54, textAlign: 'right', padding: isNarrow ? '3px 3px' : '3px 4px',
                               fontSize: isDesktop ? 14 : 16,
                               fontWeight: 800, fontFamily: "'DM Mono', monospace", lineHeight: 1.1,
-                              color: editingId === p.id ? '#fff' : (p.estado !== 'ok' ? '#d97706' : 'var(--text-1)'),
+                              color: editingId === p.id ? '#fff' : (esBajoOCritico(p) ? '#d97706' : 'var(--text-1)'),
                               background: editingId === p.id ? 'var(--navy)' : 'transparent',
                               border: editingId === p.id ? '1px solid rgba(255,255,255,.3)' : '1px solid transparent',
                               borderRadius: 6, outline: 'none',
@@ -1804,7 +1829,7 @@ export default function StockPage() {
                           disabled={cart.some(it => it.producto_id === p.id)}
                           style={{ background: 'none', border: 'none', cursor: cart.some(it => it.producto_id === p.id) ? 'default' : 'pointer', padding: 0, display: 'flex' }}
                         >
-                          <span className="material-symbols-outlined" style={{ fontSize: 19, color: cart.some(it => it.producto_id === p.id) ? 'var(--accent)' : p.estado !== 'ok' ? 'var(--accent)' : 'var(--text-3)' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 19, color: cart.some(it => it.producto_id === p.id) ? 'var(--accent)' : esBajoOCritico(p) ? 'var(--accent)' : 'var(--text-3)' }}>
                             {cart.some(it => it.producto_id === p.id) ? 'shopping_cart' : 'add_shopping_cart'}
                           </span>
                         </button>
@@ -2029,7 +2054,7 @@ export default function StockPage() {
               </div>
 
               {/* ── Stock ── */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={lblStyle}>Stock actual</span>
                   <input type="text" inputMode="decimal" value={form.stock_actual} onChange={e => setForm(f => ({ ...f, stock_actual: e.target.value }))} style={inputStyle} />
@@ -2038,7 +2063,12 @@ export default function StockPage() {
                   <span style={{ ...lblStyle, color: 'rgba(245,158,11,.9)' }}>Mínimo</span>
                   <input type="text" inputMode="decimal" value={form.stock_minimo} onChange={e => setForm(f => ({ ...f, stock_minimo: e.target.value }))} style={{ ...inputStyle, borderColor: 'rgba(245,158,11,.4)' }} />
                 </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={{ ...lblStyle, color: 'rgba(56,189,248,.9)' }}>Máximo</span>
+                  <input type="text" inputMode="decimal" value={form.stock_maximo} onChange={e => setForm(f => ({ ...f, stock_maximo: e.target.value }))} placeholder="Sin límite" style={{ ...inputStyle, borderColor: 'rgba(56,189,248,.4)' }} />
+                </label>
               </div>
+              <p style={{ margin: '-4px 0 0', fontSize: 11, color: 'var(--text-3)' }}>Máximo — techo de compra, sobre todo para perecedero</p>
 
               {/* ── Más opciones (colapsable): producción interna, fuera de uso, unidad de compra ── */}
               <div>
@@ -2179,6 +2209,33 @@ export default function StockPage() {
                         </label>
                       </div>
                     )}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Estándar de recepción (colapsable): merma esperada, nota de recepción ── */}
+              <div>
+                <button
+                  onClick={() => setShowRecepcion(v => !v)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', color: 'var(--text-2)', fontFamily: 'inherit' }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                    {showRecepcion ? 'expand_less' : 'expand_more'}
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>Estándar de recepción</span>
+                </button>
+
+                {showRecepcion && (
+                  <div style={{ marginTop: 8, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={lblStyle}>Merma esperada (%)</span>
+                      <input type="text" inputMode="decimal" value={form.merma_esperada_pct} onChange={e => setForm(f => ({ ...f, merma_esperada_pct: e.target.value }))} placeholder="Ej: 10" style={inputStyle} />
+                      <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Tolerancia de merma normal al recibir/almacenar este producto</span>
+                    </label>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <span style={lblStyle}>Nota de recepción</span>
+                      <textarea value={form.nota_recepcion} onChange={e => setForm(f => ({ ...f, nota_recepcion: e.target.value }))} placeholder="Ej: rechazar si llega con manchas o golpes" rows={2} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
+                    </label>
                   </div>
                 )}
               </div>
@@ -2328,7 +2385,7 @@ export default function StockPage() {
                   <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', marginTop: 4 }}>Por sector físico</div>
                   {sectores.map(sec => {
                     const items = stockeables.filter(p => p.sector_id === sec.id)
-                    const bajos = items.filter(p => p.estado !== 'ok').length
+                    const bajos = items.filter(esBajoOCritico).length
                     return (
                       <button key={sec.id}
                         onClick={() => startQuick(items, sec.nombre, sec.id)}
@@ -2391,7 +2448,7 @@ export default function StockPage() {
               {sectores.length > 0 && <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', marginTop: 4 }}>Por categoría</div>}
               {categoriasFiltro.map(cat => {
                 const count = stockeables.filter(p => p.categoria === cat).length
-                const bajos = stockeables.filter(p => p.categoria === cat && p.estado !== 'ok').length
+                const bajos = stockeables.filter(p => p.categoria === cat && esBajoOCritico(p)).length
                 return (
                   <button key={cat}
                     onClick={() => startQuick(stockeables.filter(p => p.categoria === cat), cat)}
@@ -2553,7 +2610,8 @@ export default function StockPage() {
             </div>
 
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 24px 0', gap: 12 }}>
-              {p.estado !== 'ok' && <span style={{ fontSize: 10, fontWeight: 700, color: '#f59e0b', background: 'rgba(245,158,11,.1)', padding: '3px 10px', borderRadius: 99 }}>BAJO</span>}
+              {esBajoOCritico(p) && <span style={{ fontSize: 10, fontWeight: 700, color: '#f59e0b', background: 'rgba(245,158,11,.1)', padding: '3px 10px', borderRadius: 99 }}>BAJO</span>}
+              {p.estado === 'alto' && <span style={{ fontSize: 10, fontWeight: 700, color: '#38bdf8', background: 'rgba(56,189,248,.1)', padding: '3px 10px', borderRadius: 99 }}>ALTO</span>}
               <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-1)', textAlign: 'center', lineHeight: 1.2 }}>{p.nombre}</div>
               <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{p.categoria}</div>
               <div style={{ fontSize: 13, color: 'var(--text-2)' }}>

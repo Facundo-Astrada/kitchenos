@@ -9,6 +9,9 @@
 | `stock_sectores` | `id, restaurante_id, nombre, icono, orden, ultimo_conteo_at` — sectores físicos; `icono` de preset fijo (`shelves`,`ac_unit`,`kitchen`,`severe_cold`,`skillet`,`wine_bar`); `ultimo_conteo_at` se pisa solo al completar un recorrido de Stockear scopeado a ese sector | — |
 | `stock_estantes` | `id, restaurante_id, sector_id (FK CASCADE), nombre, orden` — sub-niveles dentro de un sector | — |
 | `productos` | `estante_id UUID NULL` (FK stock_estantes, SET NULL) + `orden_sector INT` — posición manual, drag en el board de Stock, alimenta el recorrido de Stockear | — |
+| `productos` | `stock_maximo NUMERIC NULL` — techo de compra, `calcEstado` (`useStock.ts`) devuelve `'alto'` cuando `stock_actual > stock_maximo`. `fuera_de_uso` sigue forzando `'ok'` sobre esto. Stock de seguridad (mínimo × 1.25) NO es columna — se calcula al vuelo | columna `stock_seguridad` (no existe) |
+| `productos` | `merma_esperada_pct NUMERIC NULL` — tolerancia de merma normal del producto (precarga: `scripts/precargar-mermas.mjs --apply`). Es de Stock, no de recetas: NO se aplica al costeo (eso ya lo hace `ingredientes.merma_pct` sobre el peso, `useRecetas.ts:56`). Único consumidor: bloque 5 de fuga de inventario | — |
+| `productos` | `nota_recepcion TEXT NULL` — estándar de recepción (rechazar si llega con X), campo secundario fuera del modal principal | — |
 | `tareas` | `status` (`'pendiente'\|'en_proceso'\|'completada'`) | `completada` (bool) |
 | `tareas` | `fecha_limite` | `fecha_vencimiento` |
 | `recetas` | `activa` (soft-delete), `status` (`'published'\|'draft'`) | `deleted`, `activo` |

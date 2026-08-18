@@ -4,9 +4,10 @@ import { useRef, useState } from 'react'
 import type { ProductoConEstado } from '@/lib/hooks/useStock'
 import type { StockSector, StockEstante } from '@/types'
 
-const ESTADO_COLOR: Record<string, string> = {
+const ESTADO_COLOR: Record<ProductoConEstado['estado'], string> = {
   critico: '#dc2626',
   bajo: '#d97706',
+  alto: '#38bdf8',
   ok: 'var(--text-3)',
 }
 

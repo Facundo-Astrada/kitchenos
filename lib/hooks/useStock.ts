@@ -7,14 +7,22 @@ import type { Producto } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
 
 export type ProductoConEstado = Producto & {
-  estado: 'ok' | 'bajo' | 'critico'
+  estado: 'ok' | 'bajo' | 'critico' | 'alto'
+  stock_seguridad: number
 }
 
-function calcEstado(p: Producto): 'ok' | 'bajo' | 'critico' {
+// Stock de seguridad: mínimo + 25% de protección contra incertidumbre de
+// demanda o retrasos de proveedores. No es columna — se calcula acá.
+function calcStockSeguridad(p: Producto): number {
+  return p.stock_minimo * 1.25
+}
+
+function calcEstado(p: Producto): 'ok' | 'bajo' | 'critico' | 'alto' {
   // Fuera de uso nunca genera alertas — sigue existiendo (vale capital) pero no se opera.
   if (p.fuera_de_uso) return 'ok'
   if (p.stock_actual <= p.stock_critico) return 'critico'
   if (p.stock_actual <= p.stock_minimo) return 'bajo'
+  if (p.stock_maximo != null && p.stock_actual > p.stock_maximo) return 'alto'
   return 'ok'
 }
 
@@ -29,7 +37,7 @@ async function fetchStockData(key: string): Promise<ProductoConEstado[]> {
     .order('categoria')
     .order('nombre')
   if (error) throw error
-  return (data ?? []).map((p) => ({ ...p, estado: calcEstado(p) }))
+  return (data ?? []).map((p) => ({ ...p, estado: calcEstado(p), stock_seguridad: calcStockSeguridad(p) }))
 }
 
 export function useStock() {
@@ -92,6 +100,7 @@ export function useStock() {
         ),
         { revalidate: false }
       )
+      // stock_seguridad depende solo de stock_minimo, que no cambia acá — no hace falta recalcular.
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al actualizar stock'
       console.error('[useStock] actualizarStock Error:', msg)
