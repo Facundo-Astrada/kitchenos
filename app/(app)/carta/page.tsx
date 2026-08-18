@@ -17,6 +17,7 @@ import { useChecklist } from '@/lib/hooks/useChecklist'
 import MenusView from './MenusView'
 import ComposicionEditor, { type CompPayload, type CompInicial } from './ComposicionEditor'
 import { upsertMiseChecklistItem, parseRecipienteNombre, TAREA_PRIO_TO_MISE } from '@/lib/ops/mise'
+import { clasificarIngenieriaMenu } from '@/lib/carta/ingenieriaMenu'
 import { sincronizarMiseDeMenu } from '@/lib/ops/menuMise'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 // ── Helpers ─────────────────────────────────────────────
@@ -2300,23 +2301,12 @@ function RentabilidadView({
     return m
   }, [ventas])
 
-  // ── Feature 1: Ingeniería de menú ──
+  // ── Feature 1: Ingeniería de menú (método Kasavana-Smith) ──
   const ing = useMemo(() => {
     const base = items
       .filter(i => i.food_cost_pct != null && i.margen_bruto != null)
       .map(i => ({ item: i, pop: ventasMap.get(norm(i.nombre)) ?? 0, margin: i.margen_bruto ?? 0 }))
-    const conVentas = base.some(x => x.pop > 0)
-    const avgPop = base.length ? base.reduce((s, x) => s + x.pop, 0) / base.length : 0
-    const avgMargin = base.length ? base.reduce((s, x) => s + x.margin, 0) / base.length : 0
-    const estrella: typeof base = [], caballo: typeof base = [], puzzle: typeof base = [], perro: typeof base = []
-    for (const x of base) {
-      const ph = x.pop >= avgPop, mh = x.margin >= avgMargin
-      if (ph && mh) estrella.push(x)
-      else if (ph && !mh) caballo.push(x)
-      else if (!ph && mh) puzzle.push(x)
-      else perro.push(x)
-    }
-    return { conVentas, hayDatos: base.length > 0, estrella, caballo, puzzle, perro }
+    return clasificarIngenieriaMenu(base)
   }, [items, ventasMap])
 
   // ── Feature 2: Reprecio por inflación ──
