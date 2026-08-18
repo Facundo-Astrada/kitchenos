@@ -56,6 +56,7 @@ No se cargan solos: abrirlos cuando la tarea entra en su tema.
 | Aplicar o revisar políticas RLS | `.claude/docs/rls.md` |
 | Tocar el flujo de importación (facturas, carta, stock) | `.claude/docs/importador.md` |
 | Escribir o tocar un test (Vitest/Playwright) | `.claude/docs/testing.md` |
+| Diseñar una feature nueva o discutir una idea de producto | `SINTESIS-ORGANIZACION-GASTRONOMICA.md` (base de conocimiento gastronómico, fuera del repo por copyright: `~/Desktop/START UP KOS/06-contexto-gastronomia/`) + `AUDITORIA-4-CAPAS.md` (qué cubre K-OS hoy contra ese material) |
 
 Endpoints clave de importación: `/api/importador/facturas-universal` · `/api/stock/rebuild` · `/api/recetas/auto-link-ingredientes`
 

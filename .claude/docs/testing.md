@@ -2,7 +2,7 @@
 
 ## Qué hay hoy
 
-**Vitest** — 4 archivos, todos testeando lógica pura (funciones sin IO), sin mocks de Supabase:
+**Vitest** — 5 archivos, todos testeando lógica pura (funciones sin IO), sin mocks de Supabase:
 
 | Archivo | Qué cubre |
 |---|---|
@@ -10,6 +10,7 @@
 | `lib/ops/miseBus.test.ts` | El bus de eventos que sincroniza Producción ↔ Mise en la misma pestaña (`emitMiseRegistroPatch`/`onMiseRegistroPatch`): entrega a suscriptores, desuscripción, fan-out a múltiples instancias montadas |
 | `lib/ops/turnos.test.ts` | Cálculo de fecha/hora en zona horaria ART (evita el bug de `toISOString()` cruzando de día), `turnoVigente`/`turnoActivo`/`turnoAnterior`/`turnoSiguiente`, `cierreIncompleto` |
 | `lib/comanda/stateMachine.test.ts` | Máquina de estados de comandas e ítems (salón/KDS): transiciones válidas, cancelación desde cualquier estado no-final, rechazo de saltos de estado |
+| `lib/carta/ingenieriaMenu.test.ts` | Clasificación de ingeniería de menú (Kasavana-Smith: umbral fijo de popularidad + promedio ponderado de rentabilidad): distribución sesgada de ventas, casos borde N=0/N=1, fallback sin ventas cargadas |
 
 **Playwright** — 1 spec: `e2e/salon-kds.spec.ts`, camino feliz salón → KDS → bump → reflejo en salón, con login real contra `admin@elrescoldo.com`. Requiere `npx playwright install chromium` + `npm run dev` corriendo en `localhost:3000`.
 
