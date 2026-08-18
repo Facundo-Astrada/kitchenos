@@ -13,7 +13,9 @@ export const PLAZA_ICONS: Record<Plaza, string> = {
   general: 'groups',
 }
 export const PLAZA_COLORS: Record<Plaza, string> = {
-  general: '#6b7280', parrilla: '#ef4444', frios: '#0ea5e9', calientes: '#f97316',
+  // Azul a propósito, distinto del resto: "general" no es una plaza física
+  // como las demás, así que se destaca para que se lea como especial.
+  general: '#2563eb', parrilla: '#ef4444', frios: '#0ea5e9', calientes: '#f97316',
   pase: '#8b5cf6', pasteleria: '#ec4899', panaderia: '#84cc16',
 }
 // Plazas de cocina usadas para sembrar el espacio "Cocina" por defecto

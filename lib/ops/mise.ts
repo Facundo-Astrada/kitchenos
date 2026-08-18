@@ -6,7 +6,8 @@ import type { MisePlaceItem } from '@/types'
 // ComposicionEditor; se centralizan acá para reusarlas desde el
 // recetario (botón OPS) y el helper de upsert sin import circular.
 export const PLAZAS_OPS = [
-  { id: 'general',    label: 'General',     color: '#6b7280' },
+  // Mismo azul que PLAZA_COLORS.general en lib/constants.ts — mantener en espejo.
+  { id: 'general',    label: 'General',     color: '#2563eb' },
   { id: 'parrilla',   label: 'Parrilla',    color: '#ef4444' },
   { id: 'frios',      label: 'Fríos',       color: '#0ea5e9' },
   { id: 'calientes',  label: 'Calientes',   color: '#f97316' },

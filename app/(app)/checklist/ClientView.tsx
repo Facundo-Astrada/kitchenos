@@ -910,16 +910,27 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     if (params.turnoFecha) turnoFecha = params.turnoFecha
     const categoria = params.categoria ?? (params.dia === 'manana' ? 'pase_turno' : 'produccion')
     const descripcion = params.nota ?? (params.cantidad != null ? `Preparar ${params.cantidad}` : null)
+
+    // Si el ítem que origina la tarea viene de un menú activado (checklist_item
+    // con menu_id — ver sincronizarMiseDeMenu), la tarea pertenece a la banda
+    // MENÚ del board de Producción, no a una plaza de Carta: si no, un menú con
+    // plaza_control='general' hacía aparecer la misma preparación dos veces —
+    // una vez en MENÚ (activada desde Planificación) y otra como columna
+    // "General" en Carta (despachada acá, desde el déficit del mise).
+    const origenItem = params.checklist_item_id ? items.find(it => it.id === params.checklist_item_id) : null
+    const menuId = origenItem?.menu_id ?? null
+
     await agregarTarea({
       titulo: params.titulo,
       descripcion,
       status: 'pendiente',
       prioridad: params.prioridad,
       categoria,
-      plaza: params.plaza,
+      plaza: menuId ? null : params.plaza,
       receta_id: params.receta_id,
-      seccion: params.seccion,
-      modo: 'carta',
+      seccion: menuId ? 'general' : params.seccion,
+      modo: menuId ? 'menu' : 'carta',
+      menu_id: menuId,
       turno_fecha: turnoFecha,
       estado: 'pendiente',
       cantidad: params.cantidad,
@@ -927,8 +938,9 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       asignado_a: null, creado_por: authPerfil?.miembro_id ?? null,
       fecha_limite: null, tiempo_estimado_min: null, checklist: [],
     })
-    // Sub-tasks for each extra plaza
-    if (params.plazas.length > 1) {
+    // Sub-tasks for each extra plaza — solo aplica a Carta (multi-plaza real
+    // de plato_plazas). Los ítems de menú no se reparten por plaza.
+    if (!menuId && params.plazas.length > 1) {
       for (const pp of params.plazas.slice(1)) {
         await agregarTarea({
           titulo: `[${pp.plaza}] ${params.titulo}`,
@@ -949,7 +961,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         })
       }
     }
-  }, [agregarTarea, authPerfil, today])
+  }, [agregarTarea, authPerfil, today, items])
 
   // Handlers estables para la tarjeta memoizada. actualizarItem/eliminarItem
   // vienen del hook sin memoizar (una referencia nueva por render): pasarlos
