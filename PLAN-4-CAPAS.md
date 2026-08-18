@@ -173,7 +173,9 @@ CREATE TABLE proveedor_incidencias (
 
 ## Bloque 4 — Presupuesto por familias de gasto
 
-- [ ] **B4** · Una sesión · Migración con cuidado de datos · Sin dependencias
+- [x] **B4** · Una sesión · Migración con cuidado de datos · Sin dependencias
+
+**Decisión de ejecución:** la pantalla nueva trabaja siempre en cadencia mensual (no se agregó selector de período para el desglose por familia) — es la cadencia que usa el material para la estructura 30/33/5/17, y evita cruzar familia×período en la UI sin que lo pidiera el plan. La vista vieja (monto total editable por período: semanal/mensual/trimestral/semestral/anual) se reemplazó por completo por la tabla de familias; las filas legacy con `familia=NULL` quedan en la tabla sin usarse (documentado en `columnas.md`). "Usar estructura estándar" reparte la facturación del mes anterior (o del mes en curso si no hay mes anterior con ventas) en 30/33/5/17.
 
 **El estado actual.** `presupuestos(restaurante_id, periodo, monto)` con `UNIQUE(restaurante_id, periodo)` — un número por período, sin desglose. Y por otro lado `categorias_gasto.categoria_financiera ∈ mercaderia | operacional | administrativo`.
 

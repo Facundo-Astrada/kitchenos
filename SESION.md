@@ -1,17 +1,18 @@
-# Sesión — 2026-08-18 (noche, 2) — OPS: plaza General + duplicación menú
+# Sesión — 2026-08-18 (PLAN-4-CAPAS bloque B4)
 
 ## Qué se cerró
-- **Plaza `general` en azul** (`#2563eb`) en vez de gris, en `lib/constants.ts` y `lib/ops/mise.ts` (mantenidas en espejo) — se destaca como especial, no es una plaza física.
-- **Fix de la duplicación menú/plaza**: `handleCrearTarea` (`checklist/ClientView.tsx`) creaba toda tarea despachada desde el mise con `modo: 'carta'` a ciegas. Ahora mira `checklist_item.menu_id`: si el ítem viene de un menú activado, la tarea nace con `modo: 'menu'` y no vuelve a aparecer como columna "General" de Carta duplicando la banda Menú. Documentado en `hooks.md`.
-- **Datos de Bros limpiados** (no solo el código): 11 tareas viejas creadas con el bug se recategorizaron; 8 eran duplicado exacto del mismo día y se fusionaron (heredando SP/`listo` donde correspondía) borrando la redundante. `tareas.plaza='general'` quedó en 0 filas.
-- Commit `1b1e7c0`, pusheado, deploy verde en Vercel. `tsc --noEmit` limpio, `menuMise.test.ts` 21/21.
+- **Presupuesto por familias de gasto** (Reportes → Presupuesto): pasó de un monto total editable por período a una tabla mensual de 4 familias (Materia prima 30%, Personal 33%, Alquiler 5%, Gastos generales 17%) con real %, desvío en puntos y en plata, más EBITDA calculado (objetivo 15%). Botón "Usar estructura estándar" reparte la facturación del mes anterior en esa estructura.
+- `categorias_gasto.categoria_financiera` pasó de 3 a 5 valores (suma `rrhh` y `alquiler`, antes escondidas en operacional/administrativo) — ya aparecen como opciones nuevas en Compras → Cat. de Gastos.
+- Migración `presupuestos`: columna `familia` + UNIQUE`(restaurante_id,periodo,familia)`. Filas legacy (`familia=NULL`) quedan en la tabla sin usarse — documentado en `columnas.md`. `reset_demo_restaurante()` actualizada para clonar la columna nueva.
+- Commit `0fa3045`, pusheado, deploy verde en Vercel. `npm run build` limpio, 98/98 tests Vitest.
 
 ## Qué quedó a medias
-- Nada de este tema — cerrado de punta a punta (código + datos + verificación).
+- Nada de este bloque — cerrado de punta a punta (migración + código + build + docs).
+- Gap preexistente detectado pero **fuera de alcance de B4**: `categorias_gasto` no está en `reset_demo_restaurante()` (no se creó en este plan, viene de julio). Si se toca esa función de nuevo, sumarla.
 
 ## Probar primero mañana
-- Abrir Producción en Bros y confirmar visualmente: la plaza General se ve azul, y ya no aparece como columna de Carta duplicando el menú activo.
-- Si se activa un menú nuevo con `plaza_control='general'` y se despacha un déficit desde el mise, confirmar que la tarea nace directo en la banda Menú (no en Carta).
+- Entrar a Reportes → Presupuesto en Bros o Rescoldo, tocar "Usar estructura estándar" y confirmar que reparte bien contra la facturación real.
+- Compras → Cat. de Gastos: crear/editar una categoría y confirmar que "Personal (RR.HH.)" y "Alquiler" aparecen en el selector.
 
 ## Próximo paso concreto
-Sin tema abierto de esta sesión. Seguir con `PLAN-4-CAPAS.md` (B4, B6 o B7 — independientes entre sí) según lo que quedó en la sesión de B3 proveedores.
+Seguir con `PLAN-4-CAPAS.md` (B6 o B7, independientes entre sí) o B5 (detección de fuga, depende de B2 que ya está cerrado).
