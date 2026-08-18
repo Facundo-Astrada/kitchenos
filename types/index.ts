@@ -158,7 +158,7 @@ export interface Factura {
 }
 
 // DB: categorias_gasto (id, restaurante_id, nombre, categoria_financiera, parent_id, activa, orden, created_at)
-export type CategoriaFinanciera = 'mercaderia' | 'operacional' | 'administrativo'
+export type CategoriaFinanciera = 'mercaderia' | 'rrhh' | 'alquiler' | 'operacional' | 'administrativo'
 export interface CategoriaGasto {
   id: string
   restaurante_id: string

@@ -2279,7 +2279,7 @@ function ManualEntryView({ onSubmit, onBack, proveedores }: {
 // CAT. DE GASTOS — ABM de categorías + asignación masiva por proveedor
 // ════════════════════════════════════════════════════════════
 const FINANCIERA_COLOR: Record<CategoriaFinanciera, string> = {
-  mercaderia: '#059669', operacional: '#4361a0', administrativo: '#d97706',
+  mercaderia: '#059669', rrhh: '#7c3aed', alquiler: '#0891b2', operacional: '#4361a0', administrativo: '#d97706',
 }
 
 function CategoriasGastoView({ showToast }: { showToast: (msg: string) => void }) {

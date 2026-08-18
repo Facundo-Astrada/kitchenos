@@ -20,10 +20,10 @@ import {
   type PrecioEvolucion,
   type ProduccionData,
   type CMVData,
-  type PresupuestoRow,
-  type PeriodoPresupuesto,
+  type PresupuestoFamiliasData,
   type RendimientoPlaza,
 } from '@/lib/hooks/useReportes'
+import { FAMILIA_GASTO_LABELS } from '@/lib/hooks/useCategoriasGasto'
 import {
   usePreciosProveedores,
   type ComparadorPrecioProducto,
@@ -82,10 +82,6 @@ const PLAZA_LABELS: Record<string, string> = {
   pase: 'Pase', pasteleria: 'Pastelería', panaderia: 'Panadería', general: 'General',
 }
 
-const PRESU_LABELS: Record<PeriodoPresupuesto, string> = {
-  semanal: 'Semanal', mensual: 'Mensual', trimestral: 'Trimestral', semestral: 'Semestral', anual: 'Anual',
-}
-
 function fmtMoney(n: number) {
   return '$' + n.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
@@ -116,7 +112,7 @@ export default function ReportesPage() {
   const esAdmin = perfil?.rol === 'admin'
   const { puedeVer } = usePermisos()
   const RESTAURANTE_ID = useRestauranteId()
-  const { loading, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchPresupuestos, savePresupuesto, fetchRendimiento } = useReportes()
+  const { loading, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchPresupuestoFamilias, savePresupuestoFamilia, aplicarEstructuraEstandar, fetchRendimiento } = useReportes()
   const { fetchComparador } = usePreciosProveedores()
   const { fetchHistorial } = useCajaTurno()
   const { medios } = useMediosPago()
@@ -175,7 +171,8 @@ export default function ReportesPage() {
   const [comparadorData, setComparadorData] = useState<{ comparador: ComparadorPrecioProducto[]; topSobreprecio: TopSobreprecioItem[] }>({ comparador: [], topSobreprecio: [] })
   const [produccionData, setProduccionData] = useState<ProduccionData>({ recetasProducidas: [], ingredientesMasUsados: [], horasEstimadas: 0 })
   const [cmvData, setCmvData] = useState<CMVData | null>(null)
-  const [presuData, setPresuData] = useState<PresupuestoRow[]>([])
+  const [presuFamiliasData, setPresuFamiliasData] = useState<PresupuestoFamiliasData>({ rows: [], ventas: 0, ventasPeriodoAnterior: 0, ebitdaPct: 0 })
+  const [aplicandoEstandar, setAplicandoEstandar] = useState(false)
   const [rendData, setRendData] = useState<RendimientoPlaza[]>([])
   const [cajaHistorial, setCajaHistorial] = useState<CajaTurno[]>([])
   const [auditoriaHistorial, setAuditoriaHistorial] = useState<ChecklistAuditoria[]>([])
@@ -253,8 +250,8 @@ export default function ReportesPage() {
           break
         }
         case 'presupuesto': {
-          const pr = await fetchPresupuestos()
-          setPresuData(pr)
+          const pr = await fetchPresupuestoFamilias()
+          setPresuFamiliasData(pr)
           break
         }
         case 'rendimiento': {
@@ -283,7 +280,7 @@ export default function ReportesPage() {
     } finally {
       setTabLoading(false)
     }
-  }, [fetchResumen, fetchReporteVentas, fetchFoodCost, fetchCompras, fetchPrecios, fetchComparador, fetchProduccion, fetchCMV, fetchPresupuestos, fetchRendimiento, fetchHistorial, fetchAuditorias, fetchAuditoriaPaseTurno])
+  }, [fetchResumen, fetchReporteVentas, fetchFoodCost, fetchCompras, fetchPrecios, fetchComparador, fetchProduccion, fetchCMV, fetchPresupuestoFamilias, fetchRendimiento, fetchHistorial, fetchAuditorias, fetchAuditoriaPaseTurno])
 
   useEffect(() => {
     loadTab(tab, periodo)
@@ -360,18 +357,28 @@ export default function ReportesPage() {
   }
 
   function hojasPresupuesto(): HojaExcel[] {
-    const periodos: PeriodoPresupuesto[] = ['semanal', 'mensual', 'trimestral', 'semestral', 'anual']
     return [{
-      nombre: 'Presupuesto vs Real',
-      filas: periodos.map(per => {
-        const row = presuData.find(r => r.periodo === per) ?? { periodo: per, presupuesto: 0, real: 0 }
-        return {
-          'Período': PRESU_LABELS[per],
+      nombre: 'Presupuesto por familia',
+      filas: [
+        ...presuFamiliasData.rows.map(row => ({
+          'Familia': FAMILIA_GASTO_LABELS[row.familia],
+          'Objetivo %': row.objetivoPct,
+          'Real %': Math.round(row.realPct * 10) / 10,
+          'Desvío (puntos)': Math.round(row.desvioPuntos * 10) / 10,
           'Presupuesto': row.presupuesto,
-          'Real': row.real,
-          'Diferencia': row.presupuesto - row.real,
-        }
-      }),
+          'Real ($)': Math.round(row.real),
+          'Desvío ($)': Math.round(row.desvioPlata),
+        })),
+        {
+          'Familia': 'EBITDA',
+          'Objetivo %': 15,
+          'Real %': Math.round(presuFamiliasData.ebitdaPct * 10) / 10,
+          'Desvío (puntos)': Math.round((presuFamiliasData.ebitdaPct - 15) * 10) / 10,
+          'Presupuesto': '',
+          'Real ($)': '',
+          'Desvío ($)': '',
+        },
+      ],
     }]
   }
 
@@ -1007,23 +1014,47 @@ export default function ReportesPage() {
     )
   }
 
-  // ── Presupuesto vs Real ──
+  // ── Presupuesto por familia de gasto (PLAN-4-CAPAS B4) ──
   function renderPresupuesto() {
-    const periodos: PeriodoPresupuesto[] = ['semanal', 'mensual', 'trimestral', 'semestral', 'anual']
+    const { rows, ventas, ventasPeriodoAnterior, ebitdaPct } = presuFamiliasData
+    const sinEstructura = rows.every(r => r.presupuesto === 0)
+    const ebitdaObjetivo = 15
+    const ebitdaColor = ebitdaPct >= ebitdaObjetivo ? '#16a34a' : ebitdaPct >= ebitdaObjetivo - 5 ? '#ca8a04' : '#dc2626'
+
+    async function handleEstructuraEstandar() {
+      const base = ventasPeriodoAnterior > 0 ? ventasPeriodoAnterior : ventas
+      if (base <= 0 || aplicandoEstandar) return
+      setAplicandoEstandar(true)
+      try {
+        await aplicarEstructuraEstandar(base)
+        const updated = await fetchPresupuestoFamilias()
+        setPresuFamiliasData(updated)
+      } finally { setAplicandoEstandar(false) }
+    }
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <p style={{ fontSize: 12, color: 'var(--text-2)', margin: 0, lineHeight: 1.5 }}>
-          Ingresá tu presupuesto de compras por período. Se compara contra las facturas confirmadas del período actual.
+          Presupuesto mensual por familia de gasto, contra las facturas categorizadas del mes. Objetivo estándar: 30 % materia prima, 33 % personal, 5 % alquiler, 17 % gastos generales — 15 % de EBITDA.
         </p>
-        {periodos.map(per => {
-          const row = presuData.find(r => r.periodo === per) ?? { periodo: per, presupuesto: 0, real: 0 }
-          const pct = row.presupuesto > 0 ? (row.real / row.presupuesto) * 100 : 0
+
+        {sinEstructura && (ventasPeriodoAnterior > 0 || ventas > 0) && (
+          <button onClick={handleEstructuraEstandar} disabled={aplicandoEstandar}
+            style={{ alignSelf: 'flex-start', padding: '9px 14px', borderRadius: 10, border: 'none', background: '#dc580c', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: aplicandoEstandar ? .6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>auto_awesome</span>
+            {aplicandoEstandar ? 'Aplicando…' : 'Usar estructura estándar'}
+          </button>
+        )}
+
+        {rows.map(row => {
           const over = row.presupuesto > 0 && row.real > row.presupuesto
-          const barCol = pct < 80 ? '#16a34a' : pct <= 100 ? '#ca8a04' : '#dc2626'
+          const pctBarra = row.presupuesto > 0 ? Math.min((row.real / row.presupuesto) * 100, 100) : Math.min(row.realPct, 100)
+          const barCol = row.desvioPuntos <= 0 ? '#16a34a' : row.desvioPuntos <= 3 ? '#ca8a04' : '#dc2626'
           return (
-            <div key={per} style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{PRESU_LABELS[per]}</span>
+            <div key={row.familia} style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{FAMILIA_GASTO_LABELS[row.familia]}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Objetivo {row.objetivoPct}%</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <span style={{ fontSize: 11, color: 'var(--text-3)' }}>$</span>
                   <input
@@ -1034,9 +1065,9 @@ export default function ReportesPage() {
                     onBlur={async (e) => {
                       const val = parseFloat(e.target.value) || 0
                       if (val !== row.presupuesto) {
-                        await savePresupuesto(per, val)
-                        const updated = await fetchPresupuestos()
-                        setPresuData(updated)
+                        await savePresupuestoFamilia(row.familia, val)
+                        const updated = await fetchPresupuestoFamilias()
+                        setPresuFamiliasData(updated)
                       }
                     }}
                     style={{
@@ -1047,26 +1078,36 @@ export default function ReportesPage() {
                   />
                 </div>
               </div>
-              {row.presupuesto > 0 ? (
-                <>
-                  <div style={{ background: 'var(--border)', borderRadius: 6, height: 20, overflow: 'hidden' }}>
-                    <div style={{ width: `${Math.min(pct, 100)}%`, height: '100%', background: barCol, borderRadius: 6, transition: 'width 0.4s' }} />
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 12 }}>
-                    <span style={{ color: 'var(--text-2)' }}>Gastado: <strong style={{ color: 'var(--text-1)' }}>{fmtMoney(row.real)}</strong></span>
-                    <span style={{ color: over ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
-                      {over ? `Excedido ${fmtMoney(row.real - row.presupuesto)}` : `Resta ${fmtMoney(row.presupuesto - row.real)}`}
-                    </span>
-                  </div>
-                </>
-              ) : (
-                <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                  Gastado este período: <strong style={{ color: 'var(--text-1)' }}>{fmtMoney(row.real)}</strong> · Definí un presupuesto para ver el avance
+              <div style={{ background: 'var(--border)', borderRadius: 6, height: 20, overflow: 'hidden' }}>
+                <div style={{ width: `${pctBarra}%`, height: '100%', background: barCol, borderRadius: 6, transition: 'width 0.4s' }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 12, flexWrap: 'wrap', gap: 4 }}>
+                <span style={{ color: 'var(--text-2)' }}>
+                  Real: <strong style={{ color: 'var(--text-1)' }}>{fmtPct(row.realPct)}</strong> · {fmtMoney(row.real)}
+                </span>
+                <span style={{ color: row.desvioPuntos <= 0 ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
+                  {row.desvioPuntos <= 0 ? '−' : '+'}{fmtPct(Math.abs(row.desvioPuntos))} vs. objetivo · {fmtMoney(Math.abs(row.desvioPlata))}
+                </span>
+              </div>
+              {row.presupuesto > 0 && (
+                <div style={{ fontSize: 11, color: over ? '#dc2626' : 'var(--text-3)', marginTop: 4 }}>
+                  {over ? `Excedido ${fmtMoney(row.real - row.presupuesto)} sobre el presupuesto cargado` : `Presupuesto: ${fmtMoney(row.presupuesto)}`}
                 </div>
               )}
             </div>
           )
         })}
+
+        <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: `1px solid ${ebitdaColor}55` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>EBITDA del mes</span>
+            <span style={{ fontSize: 20, fontWeight: 800, color: ebitdaColor }}>{fmtPct(ebitdaPct)}</span>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
+            Objetivo {ebitdaObjetivo}% · Ventas del mes: {fmtMoney(ventas)}
+            {ventas === 0 && ' · Sin ventas cargadas todavía este mes'}
+          </div>
+        </div>
       </div>
     )
   }

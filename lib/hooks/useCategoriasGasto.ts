@@ -8,8 +8,37 @@ import { useRestauranteId } from './useRestauranteId'
 
 export const CATEGORIA_FINANCIERA_LABELS: Record<CategoriaFinanciera, string> = {
   mercaderia: 'Compra de mercadería',
+  rrhh: 'Personal (RR.HH.)',
+  alquiler: 'Alquiler',
   operacional: 'Gastos operacionales',
   administrativo: 'Gastos administrativos',
+}
+
+// Familia de gasto (PLAN-4-CAPAS B4) — 4 familias del material de gestión,
+// contra las que se arma el presupuesto (objetivo 30/33/5/17). operacional y
+// administrativo ruedan juntas hacia "gastos generales".
+export type FamiliaGasto = 'materia_prima' | 'personal' | 'alquiler' | 'gastos_generales'
+
+export const FAMILIA_GASTO_LABELS: Record<FamiliaGasto, string> = {
+  materia_prima: 'Materia prima',
+  personal: 'Personal',
+  alquiler: 'Alquiler',
+  gastos_generales: 'Gastos generales',
+}
+
+export const FAMILIA_GASTO_OBJETIVO_PCT: Record<FamiliaGasto, number> = {
+  materia_prima: 30,
+  personal: 33,
+  alquiler: 5,
+  gastos_generales: 17,
+}
+
+export const FAMILIA_DE_CATEGORIA_FINANCIERA: Record<CategoriaFinanciera, FamiliaGasto> = {
+  mercaderia: 'materia_prima',
+  rrhh: 'personal',
+  alquiler: 'alquiler',
+  operacional: 'gastos_generales',
+  administrativo: 'gastos_generales',
 }
 
 async function fetchCategoriasGasto(key: string): Promise<CategoriaGasto[]> {

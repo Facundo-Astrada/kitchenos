@@ -3,6 +3,8 @@
 import { useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
+import { FAMILIA_GASTO_OBJETIVO_PCT, FAMILIA_DE_CATEGORIA_FINANCIERA, type FamiliaGasto } from './useCategoriasGasto'
+import type { CategoriaFinanciera } from '@/types'
 
 export type Periodo = 'semana' | 'mes' | 'mes_anterior'
 
@@ -64,13 +66,26 @@ export interface CMVData {
   costoLaboralAnterior: number | null
 }
 
-export type PeriodoPresupuesto = 'semanal' | 'mensual' | 'trimestral' | 'semestral' | 'anual'
-
-export interface PresupuestoRow {
-  periodo: PeriodoPresupuesto
+// Familia de gasto (PLAN-4-CAPAS B4) — el presupuesto se arma mensual, contra
+// las 4 familias del material de gestión (objetivo 30/33/5/17).
+export interface PresupuestoFamiliaRow {
+  familia: FamiliaGasto
+  objetivoPct: number
   presupuesto: number
   real: number
+  realPct: number
+  desvioPuntos: number
+  desvioPlata: number
 }
+
+export interface PresupuestoFamiliasData {
+  rows: PresupuestoFamiliaRow[]
+  ventas: number
+  ventasPeriodoAnterior: number
+  ebitdaPct: number
+}
+
+const FAMILIAS: FamiliaGasto[] = ['materia_prima', 'personal', 'alquiler', 'gastos_generales']
 
 export interface RendimientoPlaza {
   plaza: string
@@ -514,51 +529,87 @@ export function useReportes() {
     } finally { setLoading(false) }
   }, [RESTAURANTE_ID, supabase])
 
-  // ── Presupuesto vs Real ──
-  const fetchPresupuestos = useCallback(async (): Promise<PresupuestoRow[]> => {
-    if (!RESTAURANTE_ID) return []
+  // ── Presupuesto por familia de gasto (PLAN-4-CAPAS B4) ──
+  // Trabaja siempre en cadencia mensual: es la que usa el material de gestión
+  // para la estructura 30/33/5/17, y evita cruzar familia×período en la UI.
+  const fetchPresupuestoFamilias = useCallback(async (): Promise<PresupuestoFamiliasData> => {
+    const empty: PresupuestoFamiliasData = { rows: [], ventas: 0, ventasPeriodoAnterior: 0, ebitdaPct: 0 }
+    if (!RESTAURANTE_ID) return empty
     setLoading(true)
     try {
-      const { data: presu } = await supabase.from('presupuestos').select('periodo, monto').eq('restaurante_id', RESTAURANTE_ID)
-      const presuMap: Record<string, number> = {}
-      for (const p of (presu ?? [])) presuMap[p.periodo] = p.monto || 0
-
       const now = new Date()
       const y = now.getFullYear(), m = now.getMonth()
-      // Rangos del período actual
-      const startWeek = new Date(now); startWeek.setDate(now.getDate() - ((now.getDay() + 6) % 7))
-      const ranges: Record<PeriodoPresupuesto, string> = {
-        semanal: startWeek.toISOString().slice(0, 10),
-        mensual: new Date(y, m, 1).toISOString().slice(0, 10),
-        trimestral: new Date(y, Math.floor(m / 3) * 3, 1).toISOString().slice(0, 10),
-        semestral: new Date(y, m < 6 ? 0 : 6, 1).toISOString().slice(0, 10),
-        anual: new Date(y, 0, 1).toISOString().slice(0, 10),
-      }
+      const curFrom = new Date(y, m, 1).toISOString().slice(0, 10)
       const hoy = now.toISOString().slice(0, 10)
+      const prevFrom = new Date(y, m - 1, 1).toISOString().slice(0, 10)
+      const prevTo = new Date(new Date(y, m, 1).getTime() - 86400000).toISOString().slice(0, 10)
 
-      const periodos: PeriodoPresupuesto[] = ['semanal', 'mensual', 'trimestral', 'semestral', 'anual']
-      const rows = await Promise.all(periodos.map(async (per) => {
-        const { data } = await supabase.from('facturas').select('total')
+      const [presuRes, facturasRes, ventasRes, ventasPrevRes] = await Promise.all([
+        supabase.from('presupuestos').select('familia, monto')
+          .eq('restaurante_id', RESTAURANTE_ID).eq('periodo', 'mensual').not('familia', 'is', null),
+        supabase.from('facturas').select('total, categorias_gasto(categoria_financiera)')
           .eq('restaurante_id', RESTAURANTE_ID).eq('status', 'confirmada')
-          .gte('fecha_factura', ranges[per]).lte('fecha_factura', hoy)
-        const real = (data ?? []).reduce((s, f) => s + (f.total || 0), 0)
-        return { periodo: per, presupuesto: presuMap[per] ?? 0, real }
-      }))
-      return rows
+          .not('categoria_gasto_id', 'is', null)
+          .gte('fecha_factura', curFrom).lte('fecha_factura', hoy),
+        supabase.from('ventas').select('total_ventas')
+          .eq('restaurante_id', RESTAURANTE_ID).gte('fecha', curFrom).lte('fecha', hoy),
+        supabase.from('ventas').select('total_ventas')
+          .eq('restaurante_id', RESTAURANTE_ID).gte('fecha', prevFrom).lte('fecha', prevTo),
+      ])
+
+      const presuMap = new Map<FamiliaGasto, number>()
+      for (const p of (presuRes.data ?? [])) {
+        if (p.familia) presuMap.set(p.familia as FamiliaGasto, p.monto || 0)
+      }
+
+      const realMap = new Map<FamiliaGasto, number>()
+      for (const f of (facturasRes.data ?? []) as unknown as { total: number; categorias_gasto: { categoria_financiera: CategoriaFinanciera } | null }[]) {
+        const cf = f.categorias_gasto?.categoria_financiera
+        if (!cf) continue
+        const familia = FAMILIA_DE_CATEGORIA_FINANCIERA[cf]
+        realMap.set(familia, (realMap.get(familia) ?? 0) + (f.total || 0))
+      }
+
+      const ventas = (ventasRes.data ?? []).reduce((s, v) => s + (v.total_ventas || 0), 0)
+      const ventasPeriodoAnterior = (ventasPrevRes.data ?? []).reduce((s, v) => s + (v.total_ventas || 0), 0)
+
+      const rows: PresupuestoFamiliaRow[] = FAMILIAS.map(familia => {
+        const objetivoPct = FAMILIA_GASTO_OBJETIVO_PCT[familia]
+        const real = realMap.get(familia) ?? 0
+        const realPct = ventas > 0 ? (real / ventas) * 100 : 0
+        return {
+          familia, objetivoPct, presupuesto: presuMap.get(familia) ?? 0, real, realPct,
+          desvioPuntos: realPct - objetivoPct,
+          desvioPlata: real - (ventas * objetivoPct / 100),
+        }
+      })
+
+      const gastosTotales = rows.reduce((s, r) => s + r.real, 0)
+      const ebitdaPct = ventas > 0 ? ((ventas - gastosTotales) / ventas) * 100 : 0
+
+      return { rows, ventas, ventasPeriodoAnterior, ebitdaPct }
     } catch (e: unknown) {
-      console.error('[useReportes] fetchPresupuestos Error:', e)
-      return []
+      console.error('[useReportes] fetchPresupuestoFamilias Error:', e)
+      return empty
     } finally { setLoading(false) }
   }, [RESTAURANTE_ID, supabase])
 
-  const savePresupuesto = useCallback(async (periodo: PeriodoPresupuesto, monto: number) => {
+  const savePresupuestoFamilia = useCallback(async (familia: FamiliaGasto, monto: number) => {
     if (!RESTAURANTE_ID) return
     const { error } = await supabase.from('presupuestos').upsert(
-      { restaurante_id: RESTAURANTE_ID, periodo, monto, updated_at: new Date().toISOString() },
-      { onConflict: 'restaurante_id,periodo' }
+      { restaurante_id: RESTAURANTE_ID, periodo: 'mensual', familia, monto, updated_at: new Date().toISOString() },
+      { onConflict: 'restaurante_id,periodo,familia' }
     )
     if (error) throw error
   }, [RESTAURANTE_ID, supabase])
+
+  // Reparte una facturación prevista en la estructura estándar 30/33/5/17 (R4).
+  const aplicarEstructuraEstandar = useCallback(async (facturacionPrevista: number) => {
+    if (!RESTAURANTE_ID) return
+    await Promise.all(FAMILIAS.map(familia =>
+      savePresupuestoFamilia(familia, Math.round(facturacionPrevista * FAMILIA_GASTO_OBJETIVO_PCT[familia] / 100))
+    ))
+  }, [RESTAURANTE_ID, savePresupuestoFamilia])
 
   // ── Rendimiento por plaza ──
   const fetchRendimiento = useCallback(async (periodo: Periodo): Promise<RendimientoPlaza[]> => {
@@ -597,5 +648,5 @@ export function useReportes() {
     } finally { setLoading(false) }
   }, [RESTAURANTE_ID, supabase])
 
-  return { loading, error, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchPresupuestos, savePresupuesto, fetchRendimiento }
+  return { loading, error, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchPresupuestoFamilias, savePresupuestoFamilia, aplicarEstructuraEstandar, fetchRendimiento }
 }
