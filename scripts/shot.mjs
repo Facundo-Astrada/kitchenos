@@ -43,6 +43,34 @@ const fullPage = args.full === true
 const waitMs = args.wait ? parseInt(String(args.wait), 10) || 0 : 0
 const probe = typeof args.probe === "string" ? args.probe : null
 const medirRed = args.net === true
+// --ls "clave=valor||clave2=valor2": escribe localStorage ANTES de navegar a la
+// ruta. Necesario para las preferencias que viven solo en el browser y no se
+// pueden alcanzar con clicks desde una URL (ej. checklist_modo_control).
+const lsPairs = typeof args.ls === 'string'
+  ? args.ls.split('||').map(s => s.trim()).filter(Boolean).map(p => {
+      const i = p.indexOf('=')
+      return i === -1 ? [p, 'true'] : [p.slice(0, i), p.slice(i + 1)]
+    })
+  : []
+// --sel: recorta la foto al elemento que matchee (en vez de a la pantalla),
+// con --pad px de margen. Para explicar un control puntual en un manual.
+const sel = typeof args.sel === 'string' ? args.sel : null
+const pad = args.pad ? parseInt(String(args.pad), 10) || 0 : 0
+// --scroll N: baja N píxeles la lista antes de disparar. Sirve para sacar del
+// medio lo que tapa el FAB del Coach, o para llegar al fondo de una lista.
+const scrollY = args.scroll ? parseInt(String(args.scroll), 10) || 0 : 0
+// --clip "x,y,w,h" en píxeles CSS: recorte por coordenadas, para lo que no
+// tiene un selector propio (una fila de una lista, una banda del header).
+const clipArg = typeof args.clip === 'string'
+  ? (() => {
+      const n = args.clip.split(',').map(v => parseInt(v.trim(), 10))
+      if (n.length !== 4 || n.some(v => Number.isNaN(v))) {
+        console.error('--clip espera "x,y,ancho,alto" en píxeles CSS')
+        process.exit(1)
+      }
+      return { x: n[0], y: n[1], width: n[2], height: n[3] }
+    })()
+  : null
 
 if (!ruta) {
   console.error('Uso: node scripts/shot.mjs --ruta /stock [--viewport mobile|desktop] [--cuenta bros|demo] [--out docs/shots/x.png] [--click "sel1||sel2"] [--full]')
@@ -125,6 +153,13 @@ try {
   await sleep(4000)
   await dismissTours(page)
 
+  if (lsPairs.length > 0) {
+    console.log(`localStorage: ${lsPairs.map(([k, v]) => `${k}=${v}`).join(', ')}`)
+    await page.evaluate((pairs) => {
+      for (const [k, v] of pairs) localStorage.setItem(k, v)
+    }, lsPairs)
+  }
+
   console.log(`Capturando ${ruta} (${viewport})...`)
   netOn = true   // solo cuenta lo de la pantalla, no lo del login
   await page.goto(`${BASE}${ruta}`, { waitUntil: 'networkidle', timeout: 60000 })
@@ -139,6 +174,21 @@ try {
     await page.click(sel, { timeout: 15000 })
     await sleep(1200)
   }
+  // El scroll va en el contenedor que realmente scrollea (las listas de OPS
+  // viven en un panel con overflow propio, no en el body).
+  if (scrollY > 0) {
+    console.log(`Scroll: ${scrollY}px`)
+    await page.evaluate((y) => {
+      const scrollable = [...document.querySelectorAll('*')].find((el) => {
+        const s = getComputedStyle(el)
+        return /(auto|scroll)/.test(s.overflowY) && el.scrollHeight > el.clientHeight + 40
+      })
+      if (scrollable) scrollable.scrollTop = y
+      else window.scrollTo(0, y)
+    }, scrollY)
+    await sleep(700)
+  }
+
   // Espera extra antes de disparar la foto (animaciones, overlays que buscan
   // su target, listas que recargan al cambiar de tab).
   if (waitMs > 0) { console.log(`Esperando ${waitMs}ms...`); await sleep(waitMs) }
@@ -169,7 +219,24 @@ try {
   }
 
   const file = resolve(out)
-  await page.screenshot({ path: file, fullPage })
+  if (clipArg) {
+    console.log(`Recorte: ${clipArg.width}x${clipArg.height} en ${clipArg.x},${clipArg.y}`)
+    await page.screenshot({ path: file, clip: clipArg })
+  } else if (sel) {
+    const box = await page.locator(sel).first().boundingBox()
+    if (!box) throw new Error(`--sel "${sel}" no matcheó ningún elemento visible`)
+    const vpBox = page.viewportSize()
+    const clip = {
+      x: Math.max(0, box.x - pad),
+      y: Math.max(0, box.y - pad),
+      width: Math.min(vpBox.width, box.width + pad * 2),
+      height: Math.min(vpBox.height, box.height + pad * 2),
+    }
+    console.log(`Recorte: ${Math.round(clip.width)}x${Math.round(clip.height)} en ${Math.round(clip.x)},${Math.round(clip.y)}`)
+    await page.screenshot({ path: file, clip })
+  } else {
+    await page.screenshot({ path: file, fullPage })
+  }
   console.log('->', file)
 } finally {
   await browser.close()

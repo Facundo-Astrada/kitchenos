@@ -87,7 +87,7 @@ Todo lo que Claude usa para trabajar en KitchenOS — agentes, skills y docs —
 | **Despliegues** | Build, validar, salir a prod | `/deploy`, `/pr-review`, `git push` → Vercel auto |
 | **Monitoreo** | Salud de producción | `/prod-status` (advisories de Supabase, estado del último deploy, deuda técnica abierta), skill `vercel-optimize` (costo/performance de lo ya deployado) |
 | **Errores** | Diagnosticar y arreglar bugs | agente `bug-fixer`, `/debug-error descripción`, `/supabase-check tabla`, doc `rls.md` |
-| **Documentación** | Mantener docs y manuales al día | `/update-manual`, `/update-status`, `/shot` (captura pantallas de prod para manuales/verificación) |
+| **Documentación** | Mantener docs y manuales al día | `/update-manual`, `/update-status`, `/shot` (captura pantallas de prod para manuales/verificación), `/hoja-instructiva pantalla` (la hoja A4 imprimible que se cuelga en la cocina) |
 | **Equipo** | El roster de agentes | `db-designer`, `ui-auditor`, `spec-to-code`, `migrator`, `bug-fixer`, `rls-enforcer` — invocar con "Usá el agente [nombre] para esto: ..." |
 | **Configuración** | RLS, integraciones, meta | `CLAUDE.md`/`AGENTS.md`, agente `rls-enforcer`, `/add-rls tabla`, `/coach-screen pantalla`, `/create-skill nombre` |
 

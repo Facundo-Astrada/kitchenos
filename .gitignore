@@ -65,3 +65,6 @@ scripts/update-ingredientes.sql
 
 # graphify — grafo de código (artefacto local, se reconstruye con `graphify extract . --code-only`)
 graphify-out/
+
+# Hojas instructivas — la simulación de impresión que deja scripts/hoja-check.mjs
+docs/*.print.png

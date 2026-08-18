@@ -1,18 +1,19 @@
-# Sesión — 2026-08-17
+# Sesión — 2026-08-18
 
-Cuarta vuelta del día sobre menú↔mise: paridad Planificación + Coach al día. 2 commits (`6867920`, `2e98400`), sobre el trabajo de plaza de control ya cerrado antes hoy (`9fbe843`/`d2f4fd5`, ver `HISTORIAL.md`). Build + 92 tests verdes, deployado.
+Sesión de documentación, sin tocar código de app: la hoja instructiva de OPS para colgar en la cocina, y el pipeline para repetirla en cualquier pantalla. Sin commits todavía — todo está en el working tree.
 
 ## Qué se cerró
-- **"Activar en el mise" también desde OPS → Planificación**, no solo desde Carta → Menús — mismo picker donde ya se activan tareas, con una segunda acción independiente por card. `estadoMiseMenu()` extraído a `lib/ops/menuMise.ts` como fuente única de vigente/futuro/vencido, compartida entre las dos pantallas.
-- **Kitchen Coach actualizado**: sabe que un menú se activa en el mise (vigencia + apertura/cierre) además de en Planificación (tareas de un día), y que existe plaza de control. `carta-menus` sumado a `COACH_HIGHLIGHT_IDS` (antes no se podía señalar ese botón en el chat).
-- **Verificado en datos reales de Bros**: el menú "Cotidiano 18/8 a 28/8" (`plaza_control='general'`) sincronizó sus 15 preparaciones correctamente tras el fix de la mañana — confirmado por SQL, no solo por test.
+- **`docs/ops-modo-control-una-hoja.html`** — una A4 imprimible del día en OPS con Modo Control (sin modo stock, decisión de Facundo), con capturas reales de la cuenta de cocina de Bros y cada botón recortado por separado. Publicada como Artifact: https://claude.ai/code/artifact/61c44aaf-f8c1-47f2-a742-99ff8d7ed5d2
+- **Skill `hoja-instructiva`** + andamiaje reutilizable: `docs/hoja-base.css`, `scripts/build-hoja.mjs`, `scripts/hoja-check.mjs` (A4 + medianeras + anillos, sale con código 1 si falla), `scripts/hoja-medir.mjs`.
+- **`scripts/shot.mjs`**: flags nuevos `--ls`, `--clip`, `--scroll`; la lista de flags de su skill se corrigió entera contra el script real (estaba con drift).
 
 ## Qué quedó a medias
-- El nuevo botón "Activar en el mise" del picker de Planificación no se probó todavía en pantalla real (solo build + tests) — sí se probó antes el de Carta → Menús.
+- **Nada se commiteó.** El working tree tiene la hoja, el CSS base, los 3 scripts nuevos, la skill, las capturas de `docs/shots/` y los cambios de `CLAUDE.md`/`.gitignore`/`shot.mjs`. Sigue ahí también `.claude/settings.json` modificado desde jul 2026, esperando decisión.
+- La hoja no se imprimió todavía en papel real: entra en una A4 con 105px de sobra según `hoja-check`, pero eso es simulación de Chromium.
 
 ## Probar primero mañana
-1. Bros, Operaciones → Mise → plaza General → Apertura: confirmar que las 15 preparaciones de "Cotidiano" aparecen con chip violeta del menú y badge REF (o su prioridad real). La vigencia queda en 17/08 permanente — Facundo confirmó no revertirla.
-2. Probar el botón "Activar en el mise" desde OPS → Planificación al menos una vez en pantalla.
+1. Imprimir la hoja y verla en papel, a la distancia a la que se cuelga (los textos chicos son de 10,5px).
+2. Mostrársela a alguien de cocina antes de darla por buena — está escrita para quien no usa apps, y eso solo lo valida un cocinero.
 
 ## Próximo paso concreto
-Dejar de agregar superficie a menú↔mise por un rato y usarlo en servicio real (Bros o Rescoldo) — es la cuarta sesión seguida tocando esta feature y el próximo hallazgo útil va a salir de uso real, no de seguir construyendo. Si vuelve a haber fricción de "configurar por ítem", el pendiente grande es que el Coach pueda armar/activar un menú completo por dictado (`PENDIENTES.md` → Kitchen Coach: asistir activamente en el editor de Carta).
+Commitear lo de hoy. Después, decidir qué pasa con `docs/ops-guia-rapida.html` y `docs/manual-ops.*`: describen el flujo viejo (tabs en otro orden, "Cerrar turno" en vez de Entregar plaza, mise solo con números) y hoy se contradicen con la hoja nueva — actualizarlos o reemplazarlos por hojas por pantalla con la skill (ver `PENDIENTES.md` → "Las guías viejas de OPS contradicen la app").

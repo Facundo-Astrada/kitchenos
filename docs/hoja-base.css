@@ -1,0 +1,203 @@
+/* ══════════════════════════════════════════════════════════════
+   HOJA INSTRUCTIVA — base compartida
+   Una hoja = una pantalla de KitchenOS explicada en una A4 para
+   colgar en la cocina. Este archivo es el sistema; cada hoja pone
+   solo su contenido en docs/<nombre>.src.html.
+
+   Se empotra en el HTML final al compilar:
+       node scripts/build-hoja.mjs docs/<nombre>.src.html
+   Ver la skill `hoja-instructiva` para el procedimiento completo.
+
+   Reglas que sostienen la alineación — no romperlas al agregar
+   bloques nuevos:
+   · Toda grilla de ancho completo usa el mismo gap (12px), así las
+     columnas de bloques distintos caen en la misma medianera.
+   · Las secciones a dos columnas usan .par, siempre 1fr 1fr.
+   · El texto sangrado entra siempre a 12px del borde de su bloque.
+   · Los anillos van en % de la captura, con el alto derivado del
+     ancho por la proporción de esa captura (si no, salen óvalos).
+   ══════════════════════════════════════════════════════════════ */
+
+:root {
+  --sheet:   #ffffff;
+  --ink:     #1f2937;
+  --ink-2:   #4b5563;
+  --ink-3:   #8b95a3;
+  --line:    #e3e6ec;
+  --line-2:  #cbd2dd;
+  --navy:    #1c2d4a;
+  --accent:  #4361a0;
+  /* Semáforo de la app — mismos valores que lib/constants.ts */
+  --sp:      #ef4444;
+  --p:       #ea580c;
+  --ref:     #3b82f6;
+  --ok:      #16a34a;
+  --prod:    #d97706;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+/* La hoja es papel: blanca en los dos temas. El fondo de alrededor
+   acompaña al tema del visor para que no queme la vista de noche. */
+body {
+  margin: 0;
+  background: #d9dee6;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body { background: #10141a; }
+}
+:root[data-theme="dark"] body { background: #10141a; }
+
+.sheet {
+  max-width: 210mm;
+  margin: 0 auto;
+  background: var(--sheet);
+  padding-bottom: 14px;
+  box-shadow: 0 14px 40px rgba(28,45,74,.22);
+}
+
+/* ── Cabecera ──────────────────────────────────────────────── */
+.masthead {
+  background: var(--navy); color: #fff;
+  padding: 13px 20px 12px;
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+}
+.masthead h1 { font-size: 24px; font-weight: 800; letter-spacing: -.02em; margin: 0; }
+.masthead .sub {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: #93a7c9;
+}
+
+/* ── Bloques y títulos ─────────────────────────────────────── */
+.block { padding: 0 20px; margin-top: 12px; }
+.h {
+  display: flex; align-items: baseline; gap: 9px;
+  font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--navy); margin-bottom: 8px;
+  padding-bottom: 4px; border-bottom: 1.5px solid var(--navy);
+}
+.h em { font-style: normal; font-size: 10.5px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
+
+/* Un solo canal para todas las grillas de ancho completo: las columnas
+   de bloques distintos caen siempre en la misma medianera. */
+.orden, .chips, .dudas { display: grid; gap: 12px; }
+
+/* Dos columnas: misma grilla en todas las secciones, para que la
+   medianera baje recta por toda la hoja. Si las dos columnas llevan
+   pie, poner los hijos por filas (título, título, captura, captura,
+   pie, pie) y los pies arrancan a la misma altura aunque las capturas
+   no midan lo mismo. */
+.par { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; align-items: start; }
+
+/* ── El orden del día: pasos numerados ─────────────────────── */
+.orden { grid-template-columns: repeat(4, 1fr); }
+.paso { border: 1px solid var(--line); border-radius: 11px; padding: 9px 11px; }
+.paso-head { display: flex; align-items: center; gap: 7px; margin-bottom: 3px; }
+.paso .n {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 19px; height: 19px; border-radius: 50%; flex-shrink: 0;
+  background: var(--navy); color: #fff;
+  font-size: 11px; font-weight: 800; font-family: var(--mono);
+}
+.paso .t { font-size: 11px; font-weight: 800; color: var(--navy); letter-spacing: .02em; }
+.paso .d { font-size: 11.5px; color: var(--ink-2); line-height: 1.35; }
+
+/* Banda al margen: una variante del mismo tema (otro rol, otra lista).
+   3px de filete + 9px = los mismos 12px de sangría que el texto de las
+   tarjetas (1px de borde + 11px de padding). */
+.aparte {
+  margin: 8px 0 0; padding: 7px 11px 7px 9px;
+  background: #f4f6fb; border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0;
+  font-size: 11.5px; line-height: 1.4; color: var(--ink-2);
+}
+.aparte b { color: var(--navy); font-weight: 800; }
+
+/* ── Capturas ──────────────────────────────────────────────── */
+/* El filete va por adentro (::after), no como border del img: así la
+   caja de .fig mide exactamente lo que la imagen y los porcentajes de
+   los anillos caen sobre el píxel que corresponde. Con border, el marco
+   corre el origen 1px y los anillos salen ovalados. */
+.fig { position: relative; line-height: 0; border-radius: 10px; }
+.fig img { width: 100%; height: auto; display: block; border-radius: 10px; }
+.fig::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  border: 1px solid var(--line-2); border-radius: 10px;
+}
+
+/* Anillo sobre un control de la captura. Las cuatro medidas van en % de
+   la imagen (inline, porque cambian en cada hoja) y salen de medir los
+   píxeles con scripts/hoja-medir.mjs. El alto se calcula:
+       alto% = ancho% × (ancho_captura / alto_captura)
+   Sin eso el anillo es un óvalo. .sq para controles cuadrados. */
+.ring {
+  position: absolute; border: 2px solid var(--accent); border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(67,97,160,.12);
+}
+.ring.sq { border-radius: 9px; }
+
+/* ── Botones recortados uno por uno ────────────────────────── */
+/* Cada recorte tiene que traer su control al mismo tamaño relativo
+   (~79% de la caja del recorte), si no unos se ven más chicos que otros. */
+.chips { grid-template-columns: repeat(3, 1fr); margin-top: 10px; }
+.chip { display: flex; align-items: flex-start; gap: 9px; }
+.chip img { width: 30px; height: 30px; flex-shrink: 0; display: block; margin-top: 1px; }
+.chip b { display: block; font-size: 11.5px; font-weight: 800; color: var(--navy); }
+.chip span { font-size: 11.5px; color: var(--ink-2); line-height: 1.35; }
+
+/* ── Leyenda pegada a las bandas de una captura ────────────── */
+/* Para explicar filas/estados de una lista: la etiqueta se centra en la
+   banda que explica, con un filete que la señala. El `top` de cada una
+   va inline (sale de medir la captura). Si dos etiquetas se pisan, se
+   corre una con `top: calc(X% - 4px)` y se compensa el filete con
+   `--tick: 4px`: se cancelan, así que el filete sigue apuntando al
+   centro exacto de la banda a cualquier tamaño. */
+.bandas { display: grid; grid-template-columns: 1fr 132px; gap: 12px; }
+.bandas-cl { position: relative; }
+.bandas-cl > div { position: absolute; left: 0; right: 0; transform: translateY(-50%); padding-left: 12px; }
+.bandas-cl > div::before {
+  content: ""; position: absolute; left: 0; top: calc(50% + var(--tick, 0px)); margin-top: -1px;
+  width: 8px; height: 2px; background: var(--line-2);
+}
+.bandas-cl b { display: block; font-size: 10.5px; font-weight: 800; letter-spacing: .06em; line-height: 1.25; color: var(--navy); }
+.bandas-cl span { display: block; font-size: 10.5px; color: var(--ink-2); line-height: 1.25; }
+.bandas-cl .is-ok b   { color: var(--ok); }
+.bandas-cl .is-prod b { color: var(--prod); }
+
+/* ── Pies de captura, códigos y dudas ──────────────────────── */
+.nota { font-size: 11.5px; color: var(--ink-2); margin: 7px 0 0; line-height: 1.4; }
+.nota b { color: var(--navy); font-weight: 700; }
+.nowrap { white-space: nowrap; }
+
+.code {
+  display: inline-block; font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  padding: 0 4px; border-radius: 3px; vertical-align: 1px;
+}
+.code.sp  { color: var(--sp);  background: rgba(239,68,68,.1);  border: 1px solid var(--sp); }
+.code.p   { color: var(--p);   background: rgba(234,88,12,.1);  border: 1px solid var(--p); }
+.code.ref { color: var(--ref); background: rgba(59,130,246,.1); border: 1px solid var(--ref); }
+
+.dudas { grid-template-columns: repeat(3, 1fr); }
+/* 2,5px de filete + 9,5px = los mismos 12px de sangría que el resto */
+.duda { border-left: 2.5px solid var(--line-2); padding-left: 9.5px; }
+.duda b { display: block; font-size: 11.5px; color: var(--navy); font-weight: 800; }
+.duda span { font-size: 11px; color: var(--ink-2); line-height: 1.35; }
+
+/* ── Impresión: una sola A4 ────────────────────────────────── */
+@page { size: A4 portrait; margin: 8mm 9mm; }
+@media print {
+  body { background: #fff; }
+  .sheet { box-shadow: none; max-width: none; padding-bottom: 0; }
+  .masthead { padding: 10px 14px 9px; }
+  .masthead h1 { font-size: 21px; }
+  .block { padding: 0 14px; margin-top: 10px; }
+  .fig img, .fig, .fig::after { border-radius: 8px; }
+  .orden, .par, .bandas, .dudas, .chips, .fig { break-inside: avoid; }
+}

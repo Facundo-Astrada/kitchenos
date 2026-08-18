@@ -1,0 +1,145 @@
+<title>El día en OPS</title>
+<link rel="stylesheet" href="hoja-base.css">
+<!-- ══════════════════════════════════════════════════════════
+     OPS · MODO CONTROL — hoja instructiva de una A4.
+     Fuente editable: solo contenido. El sistema visual vive en
+     docs/hoja-base.css y las capturas en docs/shots/ (cómo se
+     sacan: docs/shots/README-hoja-ops.md).
+
+         node scripts/build-hoja.mjs docs/ops-modo-control-una-hoja.src.html
+
+     compila el .html final con todo empotrado. Ese archivo no se
+     edita a mano: se pisa en cada build.
+     ══════════════════════════════════════════════════════════ -->
+
+<div class="sheet">
+
+  <header class="masthead">
+    <h1>El día en OPS</h1>
+    <span class="sub">Modo Control · tildá lo que está, o mandalo a producir</span>
+  </header>
+
+  <!-- ══════════ EL ORDEN ══════════ -->
+  <section class="block">
+    <div class="h">El orden <em>el mismo todos los días</em></div>
+    <div class="orden">
+      <div class="paso">
+        <div class="paso-head"><span class="n">1</span><span class="t">MISE · APERTURA</span></div>
+        <div class="d">Abrí tu plaza y bajá por la lista, ítem por ítem.</div>
+      </div>
+      <div class="paso">
+        <div class="paso-head"><span class="n">2</span><span class="t">PRODUCCIÓN</span></div>
+        <div class="d">Cociná lo que se mandó. Tildá al terminar.</div>
+      </div>
+      <div class="paso">
+        <div class="paso-head"><span class="n">3</span><span class="t">MISE · CIERRE</span></div>
+        <div class="d">Segunda vuelta por la misma lista: tilde o <b>+</b>.</div>
+      </div>
+      <div class="paso">
+        <div class="paso-head"><span class="n">4</span><span class="t">ENTREGAR PLAZA</span></div>
+        <div class="d">Botón verde al pie. Eso pasa el turno.</div>
+      </div>
+    </div>
+    <p class="aparte"><b>El jefe de cocina</b> hace la misma vuelta en <b>Mise · General</b>, donde cae el menú del día entero. Lo que despacha ahí baja a Producción, a la columna de cada plaza.</p>
+  </section>
+
+  <!-- ══════════ LA FILA ══════════ -->
+  <section class="block">
+    <div class="h">La fila <em>tres botones, nada para escribir</em></div>
+    <div class="fig">
+      <img src="shots/mc-fila-blanca.png" alt="Fila del mise en Modo Control: verdes deco, código REF y botón más">
+      <!-- Anillos calcados de los píxeles de la captura, con 1,5px de aire
+           alrededor de cada control: es todo lo que permite el hueco de 4,5px
+           que hay entre el código y el +, sin que los dos anillos se toquen.
+           El círculo es más chico que esos dos botones en la app, así que su
+           anillo también. Alto = ancho × 7,192 (proporción 374×52). -->
+      <span class="ring" style="left:5.03%;  top:28.45%; width:5.88%; height:42.3%;"></span>
+      <span class="ring" style="left:77.95%; top:18.27%; width:8.69%; height:62.5%;"></span>
+      <span class="ring" style="left:87.04%; top:18.27%; width:8.69%; height:62.5%;"></span>
+    </div>
+    <div class="chips">
+      <div class="chip">
+        <img src="shots/btn-circulo.png" alt="Círculo de la fila">
+        <span><b>Tocá el nombre</b>Está como tiene que estar. Queda verde y tachado.</span>
+      </div>
+      <div class="chip">
+        <img src="shots/btn-codigo.png" alt="Código de urgencia">
+        <span><b>Tocá el código</b>Cambia la urgencia:<br><span class="nowrap"><span class="code sp">SP</span> → <span class="code p">P</span> → <span class="code ref">REF</span></span></span>
+      </div>
+      <div class="chip">
+        <img src="shots/btn-mas.png" alt="Botón más">
+        <span><b>Tocá el +</b>Lo manda a Producción con ese código. Sin cantidad.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ COLORES + DÓNDE SE PRENDE ══════════ -->
+  <section class="block">
+    <!-- Acá no hace falta grilla por filas: la columna izquierda no lleva pie,
+         así que el de la derecha va pegado a su captura. Los dos títulos
+         apoyan igual en la misma línea porque las celdas arrancan arriba. -->
+    <div class="par">
+
+      <div>
+        <div class="h">Los tres colores</div>
+        <div class="bandas">
+          <div class="fig">
+            <img src="shots/mc-filas.png" alt="Cinco filas del mise: dos verdes, dos ámbar y una blanca">
+          </div>
+          <!-- Centros medidos sobre la captura: verdes 20,5% · ámbar 59,7% ·
+               blanca 91,3%. La ámbar sube 4px para no pegarse a la blanca y
+               su filete baja los mismos 4px (--tick), así sigue señalando el
+               centro exacto de su banda. -->
+          <div class="bandas-cl">
+            <div class="is-ok"   style="top:20.5%;"><b>VERDE</b><span>Está. No hay nada que hacer.</span></div>
+            <div class="is-prod" style="top:calc(59.7% - 4px); --tick:4px;"><b>ÁMBAR</b><span>Ya lo mandaste. No se toca hasta el cierre.</span></div>
+            <div              style="top:91.3%;"><b>BLANCA</b><span>Falta decidir. Es lo único que te queda.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="h">Dónde se prende</div>
+        <div class="fig">
+          <img src="shots/mc-header.png" alt="Header del mise con el botón de Modo Control marcado">
+          <!-- Alto = ancho × 4,643 (proporción 390×84), con 2px de aire. -->
+          <span class="ring sq" style="left:77.95%; top:4.76%; width:8.59%; height:39.88%;"></span>
+        </div>
+        <p class="nota">Arriba a la derecha, en tu plaza: <b>se prende una vez y queda prendido</b>. Al lado elegís <b>Apertura</b> o <b>Cierre</b>; a la derecha ves cuánto llevás.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ══════════ PRODUCCIÓN + PASE ══════════ -->
+  <section class="block">
+    <!-- Por filas: las dos capturas no miden lo mismo de alto y así los dos
+         pies arrancan a la misma altura. -->
+    <div class="par">
+
+      <div class="h">Lo que mandaste, en Producción</div>
+      <div class="h">Lo que recibe el que entra mañana</div>
+
+      <div class="fig">
+        <img src="shots/prod-columna.png" alt="Columna de Calientes en Producción con tareas SP">
+      </div>
+      <div class="fig">
+        <img src="shots/mc-pase.png" alt="Aviso Te dejaron en producción con la lista y sus prioridades">
+      </div>
+
+      <p class="nota">Una columna por plaza, los <span class="code sp">SP</span> arriba de todo. <b>Tildar acá tilda el mise</b>, y al revés: nada se anota dos veces.</p>
+      <p class="nota">Lo que despachaste al cerrar aparece así en la apertura siguiente, <b>con la urgencia de cada cosa y sin cantidades</b>. Para eso se cierra.</p>
+
+    </div>
+  </section>
+
+  <!-- ══════════ DUDAS ══════════ -->
+  <section class="block">
+    <div class="dudas">
+      <div class="duda"><b>¿Y si me equivoco?</b><span>Tocá de nuevo. No se rompe nada y nadie te está midiendo.</span></div>
+      <div class="duda"><b>¿Anoto cantidades?</b><span>Ninguna. Cuánto hacer se habla en la cocina, como siempre.</span></div>
+      <div class="duda"><b>¿No está en la lista?</b><span>Agregalo al pie de la sección, ahí mismo.</span></div>
+    </div>
+  </section>
+
+</div>
