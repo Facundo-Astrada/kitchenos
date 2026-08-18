@@ -96,7 +96,7 @@ for (const x of base) {
 
 ## Bloque 2 — Los campos de la capa Definir en Stock
 
-- [ ] **B2** · Una sesión · Migración + script de precarga · Sin dependencias
+- [x] **B2** · Una sesión · Migración + script de precarga · Sin dependencias
 
 **Migración** (`productos`):
 ```sql
