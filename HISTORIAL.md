@@ -6,6 +6,20 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-08-18 (noche, 4) — PLAN-4-CAPAS bloque B5: detección de fuga de inventario.** 1 commit (`9f29c0b`). La sesión más pesada del plan — cierra el pendiente "Loop teórico-vs-real de stock — no cerrado" que estaba abierto desde el relevamiento original.
+
+- Tab nuevo **Fuga** en Reportes: por producto, compara consumo teórico (ventas × gramaje de la ficha técnica) contra consumo real y merma declarada del período, con tolerancia de `merma_esperada_pct` (B2). Platos vendidos sin receta vinculada, o con receta pero sin ningún ingrediente linkeado a stock, quedan aparte en "No se puede calcular" en vez de ensuciar la tabla principal.
+- **Desvío 1 — `consumo_real`:** la fórmula del plan es `stock_inicial + compras − stock_final`, pero K-OS no historiza `productos.stock_actual` (solo el valor vivo) y la sesión era "sin migración". Se usa `consumo_real ≈ compras del período`, mismo criterio que ya usa el CMV existente.
+- **Desvío 2 — matching por nombre, no solo `producto_id`:** verificado contra producción que `factura_items.producto_id` está poblado en ~1% de las filas (`facturas-universal` solo carga el nombre) y `merma.producto_id` también queda vacío seguido. Sin fallback por nombre normalizado el informe daba compras/merma en 0 para casi todo — se detectó corriendo el cálculo contra El Rescoldo real antes de cerrar el bloque, no se infirió del código. Anotado como pendiente de fondo aparte (arreglar el importador para que resuelva `producto_id` al insertar).
+- Se extrajo `lib/reportes/consumoTeorico.ts` (con test Vitest, 13 casos) — el matching ventas↔carta_items por nombre normalizado que vivía duplicado en `ventas/page.tsx` (food cost teórico) y `carta/page.tsx` (RentabilidadView), más la resolución de gramaje por producto que usa la fuga.
+- Verificado en vivo: `calcularFugaInventario` corrido contra El Rescoldo real (script temporal, borrado después) confirmó que detecta desvíos reales (Leche, Crema de Leche); `/api/reportes/fuga` probado autenticado (RLS real) en los 3 períodos, 200 en los tres; tab verificado visualmente con Playwright contra el dev server. `tsc`/`build`/111 tests Vitest en verde.
+
+**Sesión 2026-08-18 (noche, 3) — PLAN-4-CAPAS bloque B4: presupuesto por familias de gasto.** 1 commit (`0fa3045`).
+
+- Reportes → Presupuesto pasó de un monto total editable por período a una tabla mensual de 4 familias (Materia prima 30%, Personal 33%, Alquiler 5%, Gastos generales 17%) con real %, desvío en puntos/plata y EBITDA calculado (objetivo 15%). Botón "Usar estructura estándar" reparte la facturación del mes anterior en esa estructura.
+- `categorias_gasto.categoria_financiera` pasó de 3 a 5 valores (suma `rrhh` y `alquiler`, antes escondidas en operacional/administrativo).
+- Migración: `presupuestos.familia TEXT NULL` + `UNIQUE(restaurante_id,periodo,familia)`; filas legacy (`familia=NULL`) quedan sin usarse. `reset_demo_restaurante()` reescrita para clonar la columna nueva.
+
 **Sesión 2026-08-18 (noche, 2) — OPS: plaza General en azul + fix de duplicación menú/plaza en Producción.** 1 commit (`1b1e7c0`). Arrancó de una captura de Facundo en Bros: la plaza "GENERAL" (Carta) mostraba los mismos platos que ya estaban en la banda MENÚ.
 
 - **Plaza `general` distinguida en azul** (`#2563eb`, antes gris `#6b7280`) en las dos fuentes que la definen — `lib/constants.ts` (`PLAZA_COLORS`) y `lib/ops/mise.ts` (`PLAZAS_OPS`), mantenidas en espejo.

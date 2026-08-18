@@ -78,9 +78,6 @@ Entrar a Mise en mobile bajó de 2582 kB / 64 requests a 899 kB / 46. Lo que que
 ### Ventas en 0 pero Ingeniería de menú muestra unidades vendidas (encontrado 11/08, Bros)
 `/ventas` mostraba 0 ventas en agosto, pero Carta → Rentabilidad → Ingeniería mostraba platos con 361 y 550 unidades vendidas. O son dos fuentes de datos que no se hablan (comandas del salón vs. importación manual de ventas), o el filtro de período de `/ventas` no mira lo mismo que Rentabilidad. Investigar antes de confiar en cualquiera de las dos pantallas para decisiones.
 
-### Loop teórico-vs-real de stock — no cerrado
-Se puede calcular consumo teórico (venta × receta) y se puede contar inventario real, pero no hay pantalla que muestre la varianza entre ambos. Marcado como hueco desde el relevamiento original del proyecto, confirmado que sigue abierto (11/08).
-
 ### Backlog chico — sin síntoma de usuario reportado, priorizar solo si molesta en uso real
 - HACCP: 3 modales largos (limpieza/vencimientos/temperaturas) sin agrupar — mismo problema que tenía el modal de Stock (muchos campos heterogéneos sin secciones), candidato a la misma cura de fondo pero con otro tratamiento (no son checkboxes, no aplica `SwitchRow`).
 - OPS Producción: el orden de columnas (drag-and-drop) persiste en `localStorage` por dispositivo, no en DB — cada navegador recuerda su propio orden. Mover a una tabla nueva (ej. `ops_orden_columnas`) si se necesita compartido entre dispositivos del mismo restaurante.
@@ -126,6 +123,9 @@ Fundamento conceptual externo (memoria de Claude Code: `project_fundamento_juego
 
 ### Kitchen Coach — asistir activamente en el editor de Carta
 Hoy el Coach solo responde preguntas de navegación; el pedido es que ayude a cargar el menú abierto en `ComposicionEditor`. El pipeline de tool-use ya funciona (`crear_evento` en `app/api/coach/route.ts` ~L409 crea un evento con pasos por dictado). **Recomendado: B** — extender ese patrón con `agregar_componentes_menu(menu_id, componentes[])` que escribe a DB y el editor refresca; exige guardar el menú (aunque sea vacío) antes de pedirle al Coach que lo complete. La alternativa A (operar en vivo sobre el estado de React sin guardar) necesita un puente chat↔form que hoy no existe. Sesión aparte.
+
+### `factura_items.producto_id` / `merma.producto_id` casi nunca se completan (encontrado ago 2026, B5)
+Verificado contra producción: `factura_items.producto_id` está poblado en ~1% de las filas globalmente (el importador de facturas por IA, `facturas-universal`, solo carga `producto_nombre`) y `merma.producto_id` también queda vacío seguido. `lib/reportes/fuga.ts` ya resuelve esto con fallback por nombre normalizado, pero cualquier feature futura que agregue por `producto_id` directo (sin ese fallback) va a dar resultados vacíos. Fix de fondo: que `facturas-universal` intente resolver `producto_id` al insertar (mismo matching que ya usa `useFacturas.ts` en el guardado manual), o correr `/api/importador/productos-desde-facturas`-style backfill sobre lo histórico.
 
 ### Hardening de seguridad (`get_advisors`)
 - `reset_demo_restaurante()` es `SECURITY DEFINER` sin `REVOKE EXECUTE` — ejecutable por `anon`/`authenticated` vía RPC directo. Impacto acotado (solo resetea el restaurante demo) pero cualquiera con la publishable key podría spamearlo. Fix: `REVOKE EXECUTE ON FUNCTION reset_demo_restaurante() FROM anon, authenticated;` (solo el cron con service role debería poder llamarlo).
