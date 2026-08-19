@@ -4,8 +4,8 @@ Las usa `docs/ops-modo-control-una-hoja.src.html`. Procedimiento completo de
 este tipo de hoja: skill `hoja-instructiva`.
 
 ```bash
-node scripts/build-hoja.mjs docs/ops-modo-control-una-hoja.src.html   # empotra CSS + capturas
-node scripts/hoja-check.mjs docs/ops-modo-control-una-hoja.html       # A4, alineaciones, anillos
+node scripts/build-hoja.mjs docs/ops-modo-control-una-hoja.src.html         # empotra CSS + capturas
+node scripts/hoja-check.mjs docs/ops-modo-control-una-hoja.html --pdf       # A4, alineaciones, anillos + PDF
 ```
 
 Se sacaron de **producción con la cuenta de cocina de Bros** (`cocina@broscomedor.com`),

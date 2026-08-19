@@ -1,16 +1,19 @@
 // Verifica una hoja instructiva antes de publicarla: que entre en una sola A4,
 // que las columnas de todos los bloques caigan en la misma medianera, que las
 // filas que deberían empezar juntas empiecen juntas, y que ningún anillo haya
-// quedado ovalado. Deja además un PNG de cómo sale impresa.
+// quedado ovalado. Deja además un PNG de cómo sale impresa y, con --pdf, el
+// PDF para mandar por mail o imprimir sin abrir el HTML.
 //
-//   node scripts/hoja-check.mjs docs/ops-modo-control-una-hoja.html
+//   node scripts/hoja-check.mjs docs/ops-modo-control-una-hoja.html [--pdf]
 //
 // Sale con código 1 si algo no pasa, así se puede encadenar antes de publicar.
 import { pathToFileURL } from 'node:url'
 import { resolve, basename } from 'node:path'
 import pw from 'playwright'
 
-const archivo = process.argv[2] || 'docs/ops-modo-control-una-hoja.html'
+const args = process.argv.slice(2)
+const archivo = args.find(a => !a.startsWith('--')) || 'docs/ops-modo-control-una-hoja.html'
+const hacerPdf = args.includes('--pdf')
 // Caja útil de una A4 con los márgenes de @page (8mm arriba/abajo, 9mm a los
 // lados): 192mm x 281mm ≈ 726 x 1062 px CSS. Se deja 8px de colchón.
 const ANCHO = 726, ALTO = 1062
@@ -78,9 +81,18 @@ anillos.forEach((a, i) => {
 })
 if (anillos.length === 0) console.log('  · esta hoja no tiene anillos')
 
-// ── 5. Foto de cómo sale impresa ─────────────────────────────
+// ── 5. Foto de cómo sale impresa (y PDF si se pidió) ─────────
 await page.screenshot({ path: png, fullPage: true })
 console.log(`\n  impresión simulada -> ${png}`)
+
+if (hacerPdf) {
+  // Los márgenes salen de @page en hoja-base.css; preferCSSPageSize los respeta
+  // en vez de imponer los de Chromium. printBackground para que no se pierdan
+  // el navy de la cabecera ni los colores del semáforo.
+  const pdf = resolve(archivo).replace(/\.html$/, '.pdf')
+  await page.pdf({ path: pdf, printBackground: true, preferCSSPageSize: true })
+  console.log(`  PDF               -> ${pdf}`)
+}
 console.log(fallas === 0 ? '\n  todo en orden.\n' : `\n  ${fallas} cosa(s) para corregir.\n`)
 
 await browser.close()

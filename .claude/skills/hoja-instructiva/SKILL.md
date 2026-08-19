@@ -26,9 +26,9 @@ Cocineros veteranos que no usan apps ni checklists. Se entiende de un vistazo o 
 5. **Compilar y verificar**:
    ```bash
    node scripts/build-hoja.mjs docs/<nombre>.src.html
-   node scripts/hoja-check.mjs docs/<nombre>.html
+   node scripts/hoja-check.mjs docs/<nombre>.html --pdf
    ```
-   Tiene que dar todo ✓ (entra en A4, medianeras únicas, filas parejas, anillos redondos). Si no entra, recortar texto antes que achicar tipografía.
+   Tiene que dar todo ✓ (entra en A4, medianeras únicas, filas parejas, anillos redondos). Si no entra, recortar texto antes que achicar tipografía. `--pdf` deja el `.pdf` de una carilla para mandar o imprimir.
 6. **Mirar** el `.print.png` que deja el check.
 7. **Publicar** el `.html` como Artifact y anotar los comandos de captura en `docs/shots/README-<nombre>.md`.
 
