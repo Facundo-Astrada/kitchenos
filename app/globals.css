@@ -77,7 +77,6 @@ input, textarea, [contenteditable] {
 #shell {
   position: relative;
   width: 100%;
-  max-width: 420px;
   height: 100%;
   height: 100dvh;
   margin: 0 auto;
@@ -85,6 +84,20 @@ input, textarea, [contenteditable] {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* ── La columna centrada de 420px es una decisión de diseño para tablet, no
+   para celular. En celular NO se aplica: hay Android que reporta más de 420px
+   CSS de ancho (Motorola 1080px @ DPR 2.25 → 480px; Samsung y otros con
+   "Tamaño de pantalla" en chico → hasta 540px) y el shell quedaba con barras
+   navy a los costados — la app se veía más angosta que la pantalla, y los
+   elementos position:fixed (FABs, sheets) flotaban fuera de la columna.
+   El iPhone 12/13/14 nunca lo mostró porque reporta 390px.
+   Corte en 600px = sw600dp de Android: todo celular en vertical queda debajo. ── */
+@media (min-width: 600px) {
+  #shell {
+    max-width: 420px;
+  }
 }
 
 /* En desktop el shell ocupa toda la pantalla (DesktopShell maneja su propio layout) */
