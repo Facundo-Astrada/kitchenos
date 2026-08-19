@@ -80,12 +80,23 @@ function ordenarPorHorario(turnos: TurnoServicio[]): TurnoServicio[] {
 }
 
 /**
- * Turno de servicio vigente en este instante. Regla: el último turno que
- * arrancó sigue siendo el turno hasta que arranca el siguiente — así ningún
- * registro queda huérfano en los huecos entre turnos (ej. 01:30-09:00,
- * cocina cerrada pero alguien tildando mientras cierra la caja). `hasta` no
- * se usa acá — es solo informativo (para avisar "este turno ya debería
- * haber cerrado"), nunca determina la atribución.
+ * ⚠️ Probablemente NO es la que buscás: sin callers propios desde que
+ * `turnoVigente()` la reemplazó en los dos que tenía. **Para elegir qué turno
+ * MOSTRAR en una pantalla, usá `turnoVigente({turnos})`**, que resuelve jornada
+ * y turno acoplados (y respeta el pase si le pasás `plaza`+`entregados`).
+ *
+ * Esta mira hacia atrás a propósito: el último turno que arrancó sigue siendo
+ * el turno hasta que arranca el siguiente, así ningún registro queda huérfano
+ * en los huecos entre turnos (ej. 01:30-09:00, cocina cerrada pero alguien
+ * tildando mientras cierra la caja). Eso la hace correcta para **atribuir un
+ * registro** y equivocada para **elegir qué mostrar**: combinada a mano con
+ * `hoyOperativo()` devuelve pares (jornada, turno) que nunca existieron —
+ * entre el corte de jornada (05:00) y el primer turno (09:00) la jornada ya
+ * rodó a hoy pero esta sigue devolviendo la cena de anoche. Bug real: ago 2026,
+ * la rutina de turno abría en el turno tarde para el que llegaba a las 8:45.
+ *
+ * `hasta` no se usa acá — es solo informativo (para avisar "este turno ya
+ * debería haber cerrado"), nunca determina la atribución.
  */
 export function turnoActivo(now: Date, turnos: TurnoServicio[], tz: string = TZ_DEFAULT): TurnoServicio | null {
   const activos = turnos.filter(t => t.activo)

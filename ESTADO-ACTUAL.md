@@ -48,7 +48,7 @@ Este archivo es una foto del presente (qué existe, qué falta). El detalle hist
 
 ---
 
-## 2. Tablas de Supabase (81 total — 78 regenerado 11/08 + `bitacora_entradas`/`bitacora_items` 13/08 + `proveedor_incidencias` 18/08)
+## 2. Tablas de Supabase (83 total — 78 regenerado 11/08 + `bitacora_entradas`/`bitacora_items` 13/08 + `proveedor_incidencias` 18/08 + `rutina_turno_items`/`rutina_turno_registros` 19/08; verificado contra `information_schema` el 19/08)
 
 Ver `ARQUITECTURA.md` §5 para el desglose completo por dominio (20 grupos, desactualizado en el conteo — pendiente próxima regeneración) y §Supabase para relaciones clave. Columna por columna → `.claude/docs/columnas.md`.
 
