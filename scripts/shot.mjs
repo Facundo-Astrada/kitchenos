@@ -6,7 +6,7 @@ import { chromium } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
-const BASE = 'https://kos-app-one.vercel.app'
+const BASE_PROD = 'https://kos-app-one.vercel.app'
 
 const VIEWPORTS = {
   mobile: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
@@ -16,6 +16,10 @@ const VIEWPORTS = {
 const CUENTAS = {
   demo: { email: 'admin@elrescoldo.com', pass: 'kitchenos2026' },
   bros: { email: 'franco@broscomedor.com', pass: process.env.BROS_PASSWORD },
+  // Tablet fija de cocina (ver memoria "Bros — IDs y paths críticos"). Sirve
+  // para verificar lo que ve el equipo, no el dueño: sus permisos_app son un
+  // subconjunto (home/operaciones/recetario/stock/pase/carta).
+  broscocina: { email: 'cocina@broscomedor.com', pass: process.env.BROS_COCINA_PASSWORD },
 }
 
 function parseArgs(argv) {
@@ -32,6 +36,10 @@ function parseArgs(argv) {
 }
 
 const args = parseArgs(process.argv.slice(2))
+// --base http://localhost:3000 para capturar contra el dev server — sin esto no
+// hay forma de ver una pantalla que todavía no se deployó (la iteración de UI va
+// contra dev, el deploy es fin de bloque; ver CLAUDE.md → Método de trabajo).
+const BASE = typeof args.base === 'string' ? args.base.replace(/\/$/, '') : BASE_PROD
 const ruta = args.ruta
 const viewport = args.viewport || 'mobile'
 const cuenta = args.cuenta || 'demo'

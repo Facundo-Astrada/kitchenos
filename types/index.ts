@@ -776,6 +776,53 @@ export interface ChecklistAuditoria {
   created_at: string
 }
 
+// ── Rutina de turno (ago 2026) ───────────────────────────────
+// La secuencia de acciones que hace la cocina ENTERA al abrir y al cerrar un
+// turno ("9 hs en la cocina", "11.40 MEP y briefing", "bacha", "piso").
+//
+// NO confundir con `ChecklistRutina` pese al nombre: esa es limpieza POR PLAZA
+// con frecuencia (diaria/semanal/mensual) y puntaje de auditoría — responde
+// "¿cuándo toca la campana?". Esta responde "¿qué hago a las 11.40?". El propio
+// papel de Bros lleva "checklist de plaza" como un ítem adentro: esto envuelve
+// al mise, no lo duplica.
+export type RutinaTurnoFase = 'apertura' | 'cierre'
+
+// DB: rutina_turno_items (id, restaurante_id, texto, fase, horas, turnos, requiere_responsable, dias_semana, orden, activo, created_at)
+export interface RutinaTurnoItem {
+  id: string
+  restaurante_id: string
+  texto: string
+  fase: RutinaTurnoFase
+  /** Hora por turno de servicio: `{almuerzo:'11:00', cena:'19:00'}`. Sin clave = sin hora en ese turno. */
+  horas: Record<string, string>
+  /** null = va en todos los turnos (el caso normal). Array = solo en esos ('cenizas' solo cierra la noche). */
+  turnos?: string[] | null
+  /** Los ítems que en el papel terminan en dos puntos ("Anafes y plancha:") son slots: piden persona además del tilde. */
+  requiere_responsable: boolean
+  /** ISO 1=Lun..7=Dom; null = todos los días. Para "campana (jueves)". */
+  dias_semana?: number[] | null
+  orden: number
+  activo: boolean
+  created_at: string
+}
+
+// DB: rutina_turno_registros (id, restaurante_id, item_id, fecha, turno, completado, responsable_id, usuario_id, completado_at, created_at)
+export interface RutinaTurnoRegistro {
+  id: string
+  restaurante_id: string
+  item_id: string
+  fecha: string
+  /** id del turno de servicio ('almuerzo' | 'cena' | custom) — sin FK, los turnos viven en configuracion JSONB. */
+  turno: string
+  completado: boolean
+  /** El slot de las zonas de limpieza. Distinto de usuario_id: el encargado puede cerrar la fila de una zona que limpió otro. */
+  responsable_id?: string | null
+  usuario_id?: string | null
+  /** A qué hora se hizo de verdad, contra la hora a la que debía hacerse (item.horas). */
+  completado_at?: string | null
+  created_at: string
+}
+
 // ── Equipo & Puestos ─────────────────────────────────────────
 // DB: equipo_miembros (id, auth_user_id, nombre, apellido, rol, puesto_id, plaza_asignada, telefono, email, fecha_ingreso, activo, foto_url, modulos_extra, modulos_restringidos, restaurante_id, created_at)
 export interface EquipoMiembro {

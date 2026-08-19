@@ -4,17 +4,24 @@ import { useState, useEffect, useMemo } from 'react'
 import ChecklistPage from '@/app/(app)/checklist/ClientView'
 import TareasPage from '@/app/(app)/tareas/ClientView'
 import { ProduccionView } from '@/app/(app)/produccion/page'
+import { RutinaTurnoView } from '@/components/rutina/RutinaTurnoView'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { hoyOperativo } from '@/lib/ops/turnos'
 import { onOpsChromeCompact } from '@/lib/ops/chromeBus'
 
-type Tab = 'produccion' | 'mise' | 'planificacion'
+type Tab = 'produccion' | 'mise' | 'planificacion' | 'turno'
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'produccion',    label: 'Producción',   icon: 'task_alt' },
   { id: 'mise',          label: 'Mise',         icon: 'playlist_add_check' },
   { id: 'planificacion', label: 'Planificación', icon: 'factory' },
+  { id: 'turno',         label: 'Turno',        icon: 'schedule' },
 ]
+
+const TAB_IDS = TABS.map(t => t.id)
+function esTab(v: string | null): v is Tab {
+  return v != null && (TAB_IDS as string[]).includes(v)
+}
 
 // ══════════════════════════════════════════════════════════════
 // OPERACIONES PAGE (tab container principal)
@@ -36,7 +43,7 @@ export default function OperacionesPage() {
   // Tab inicial desde la URL (?tab=) — permite deep-link y redirects desde las rutas viejas
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get('tab')
-    if (t === 'produccion' || t === 'mise' || t === 'planificacion') setTab(t)
+    if (esTab(t)) setTab(t)
   }, [])
 
   // Marcar el tab activo como montado (se queda montado para preservar estado)
@@ -80,7 +87,7 @@ export default function OperacionesPage() {
   useEffect(() => {
     function handleSetTab(e: Event) {
       const { tab: newTab } = (e as CustomEvent<{ tab: Tab }>).detail
-      if (newTab === 'produccion' || newTab === 'mise' || newTab === 'planificacion') setTab(newTab)
+      if (esTab(newTab)) setTab(newTab)
     }
     window.addEventListener('kc-set-tab', handleSetTab)
     return () => window.removeEventListener('kc-set-tab', handleSetTab)
@@ -154,6 +161,11 @@ export default function OperacionesPage() {
       {mounted.has('planificacion') && (
         <div style={{ flex: 1, overflow: tab === 'planificacion' ? 'auto' : 'hidden', display: tab === 'planificacion' ? 'block' : 'none' }}>
           <ProduccionView embedded />
+        </div>
+      )}
+      {mounted.has('turno') && (
+        <div style={{ flex: 1, overflow: 'hidden', display: tab === 'turno' ? 'flex' : 'none', flexDirection: 'column' }}>
+          <RutinaTurnoView embedded />
         </div>
       )}
     </div>
