@@ -575,4 +575,56 @@ export const TOURS: Record<string, TourStep[]> = {
       description: 'Preguntame qué plazas todavía no tienen espacio asignado o cuántos productos del stock te faltan ubicar en un sector.',
     },
   ],
+
+  organigrama: [
+    {
+      targetId: null,
+      title: 'El organigrama de tu negocio',
+      description: 'Quién es quién, a qué área pertenece cada puesto y quién responde por cada etapa del día a día. Tocá Siguiente y te muestro las tres vistas.',
+    },
+    {
+      targetId: 'organigrama-tabs',
+      title: 'Plantel, Estructura y Cobertura',
+      description: 'Plantel muestra a la gente. Estructura muestra las áreas del negocio y los puestos de cada una. Cobertura cruza esas áreas con las etapas del día a día para detectar huecos.',
+    },
+    {
+      targetId: 'organigrama-plantel',
+      requireTab: 'plantel',
+      title: 'Las cartas del equipo',
+      description: 'Cada persona tiene su carta: puesto, plazas que cubre, módulos habilitados y antigüedad. Tocá una carta para darla vuelta y ver a quién reporta y sus tareas.',
+    },
+    {
+      targetId: 'organigrama-filtros',
+      requireTab: 'plantel',
+      title: 'Filtrar por área',
+      description: 'Mostrás solo la gente de un área puntual — útil cuando el equipo es grande y querés enfocarte en Cocina, Salón o RRHH.',
+    },
+    {
+      targetId: 'organigrama-estructura',
+      requireTab: 'estructura',
+      title: 'Las 12 áreas del negocio',
+      description: 'Dirección, Cocina, Salón, Compras, Calidad, Administración, Comercial, RRHH, Desarrollo de producto, Sistemas, Marketing e Infraestructura. Existen todas siempre, aunque estén inactivas: un negocio chico no tiene departamentos formales, pero la función existe igual y la cubre menos gente. Tocá Activa/Inactiva para prenderlas o apagarlas, elegí el responsable, y mirá el árbol de puestos de cada una.',
+    },
+    {
+      targetId: 'organigrama-cobertura',
+      requireTab: 'cobertura',
+      title: 'Quién responde en cada etapa',
+      description: 'Cada área pasa por cuatro etapas: Definir el estándar, Preparar antes de abrir, Ejecutar durante el servicio y Controlar el resultado. En rojo, lo que no tiene nadie a cargo en Definir, Preparar o Controlar — Ejecutar es distinto, ahí "todo el equipo" es la respuesta normal, no una alerta.',
+    },
+    {
+      targetId: 'organigrama-configurar',
+      title: 'Asistente de configuración',
+      description: 'Tres preguntas rápidas (tamaño del equipo, qué hacen además de cocina, quién sos vos) arman el organigrama inicial solas: activan las áreas que corresponden y te dejan como responsable de Dirección.',
+    },
+    {
+      targetId: 'organigrama-exportar',
+      title: 'Exportar en PDF',
+      description: 'Genera el organigrama completo para colgar en la cocina, más una hoja por puesto con sus tareas, a quién reporta y los módulos que tiene habilitados — el manual de puesto, armado solo con lo que ya cargaste.',
+    },
+    {
+      targetId: null,
+      title: '¡Ya conocés el Organigrama!',
+      description: 'Preguntame qué áreas están sin responsable, si hay puestos vacantes, o pedime ayuda para decidir qué activar según el tamaño de tu equipo.',
+    },
+  ],
 }

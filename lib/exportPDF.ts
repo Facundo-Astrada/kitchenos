@@ -188,3 +188,236 @@ export async function exportRecetaPDF(receta: PDFReceta) {
   const safeName = receta.nombre.replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ\s-]/g, '').replace(/\s+/g, '_').substring(0, 40)
   doc.save(`${safeName}_ficha_tecnica.pdf`)
 }
+
+// ══════════════════════════════════════════════════════════════
+// Organigrama — el árbol completo para colgar + una carilla por
+// puesto (nombre, área, a quién reporta, ocupantes, tareas y
+// módulos), generado solo con datos ya cargados.
+// ══════════════════════════════════════════════════════════════
+
+import {
+  construirArbolPuestos, NIVELES_ACCESO,
+  type Puesto, type Miembro, type AreaEstado, type PuestoNode,
+} from '@/lib/hooks/useEquipo'
+import { MODULO_CONFIG, type ModuloId } from '@/lib/constants'
+
+function nivelLabelPDF(nivel: string): string {
+  return NIVELES_ACCESO.find(n => n.value === nivel)?.label ?? nivel
+}
+
+export async function exportOrganigramaPDF(areas: AreaEstado[], puestos: Puesto[], miembros: Miembro[]) {
+  const { default: jsPDF } = await import('jspdf')
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const pageW = doc.internal.pageSize.getWidth()
+  const pageH = doc.internal.pageSize.getHeight()
+  const margin = 18
+  const contentW = pageW - margin * 2
+  let y = margin
+
+  const navy: [number, number, number] = [15, 23, 42]
+  const accent: [number, number, number] = [79, 70, 229]
+  const gray: [number, number, number] = [100, 116, 139]
+  const lightGray: [number, number, number] = [226, 232, 240]
+  const textDark: [number, number, number] = [30, 41, 59]
+
+  const today = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+  function drawHeader(subtitle: string) {
+    doc.setFillColor(...navy)
+    doc.rect(0, 0, pageW, 28, 'F')
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.setTextColor(255, 255, 255)
+    doc.text('KitchenOS', margin, 12)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
+    doc.setTextColor(200, 200, 220)
+    doc.text(subtitle, margin, 17)
+    doc.setFontSize(8)
+    doc.setTextColor(180, 180, 200)
+    doc.text(today, pageW - margin, 12, { align: 'right' })
+  }
+
+  function drawFooter(rightLabel: string) {
+    const footerY = pageH - 12
+    doc.setDrawColor(...lightGray)
+    doc.setLineWidth(0.3)
+    doc.line(margin, footerY - 4, pageW - margin, footerY - 4)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
+    doc.setTextColor(...gray)
+    doc.text(`Generado por KitchenOS — ${today}`, margin, footerY)
+    doc.text(rightLabel, pageW - margin, footerY, { align: 'right' })
+  }
+
+  function ensureSpace(h: number, subtitle: string) {
+    if (y + h > pageH - 20) {
+      doc.addPage()
+      drawHeader(subtitle)
+      y = 38
+    }
+  }
+
+  // ── Organigrama completo, por área ──
+  drawHeader('Organigrama')
+  y = 38
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(22)
+  doc.setTextColor(...textDark)
+  doc.text('Organigrama', margin, y)
+  y += 10
+  doc.setDrawColor(...lightGray)
+  doc.setLineWidth(0.4)
+  doc.line(margin, y, pageW - margin, y)
+  y += 10
+
+  const areasActivas = areas.filter(a => a.activa)
+
+  if (areasActivas.length === 0) {
+    doc.setFont('helvetica', 'italic')
+    doc.setFontSize(10)
+    doc.setTextColor(...gray)
+    doc.text('Sin áreas activas todavía.', margin, y)
+  }
+
+  for (const area of areasActivas) {
+    const puestosArea = puestos.filter(p => p.area_key === area.key)
+    ensureSpace(14, 'Organigrama')
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(12)
+    doc.setTextColor(...accent)
+    doc.text(area.nombre.toUpperCase(), margin, y)
+    y += 5
+
+    const responsablesNombres = area.responsables
+      .map(id => miembros.find(m => m.id === id))
+      .filter((m): m is Miembro => !!m)
+      .map(m => `${m.nombre} ${m.apellido}`)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(...gray)
+    doc.text(responsablesNombres.length ? `Responsable: ${responsablesNombres.join(', ')}` : 'Sin responsable asignado', margin, y)
+    y += 8
+
+    if (puestosArea.length === 0) {
+      doc.setFont('helvetica', 'italic')
+      doc.setFontSize(9)
+      doc.setTextColor(...gray)
+      doc.text('Sin puestos cargados en esta área.', margin + 4, y)
+      y += 8
+      continue
+    }
+
+    const printNode = (node: PuestoNode, depth: number) => {
+      const ocupantes = miembros.filter(m => m.puesto_id === node.id).map(m => `${m.nombre} ${m.apellido}`)
+      const ocupantesTxt = ocupantes.length ? ocupantes.join(', ') : 'Vacante'
+      const bullet = depth === 0 ? '•' : '–'
+      const line = `${'   '.repeat(depth)}${bullet} ${node.nombre} — ${ocupantesTxt}`
+      const lines = doc.splitTextToSize(line, contentW - depth * 6)
+      ensureSpace(lines.length * 5 + 1.5, 'Organigrama')
+      doc.setFont('helvetica', depth === 0 ? 'bold' : 'normal')
+      doc.setFontSize(depth === 0 ? 10 : 9)
+      doc.setTextColor(...textDark)
+      doc.text(lines, margin + depth * 6, y)
+      y += lines.length * 5 + 1.5
+      node.hijos.forEach(h => printNode(h, depth + 1))
+    }
+    construirArbolPuestos(puestosArea).forEach(n => printNode(n, 0))
+    y += 6
+  }
+
+  // ── Una carilla por puesto — el mini manual de puesto ──
+  for (const puesto of puestos) {
+    doc.addPage()
+    drawHeader('Manual de puesto')
+    y = 40
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(20)
+    doc.setTextColor(...textDark)
+    const nameLines = doc.splitTextToSize(puesto.nombre, contentW)
+    doc.text(nameLines, margin, y)
+    y += nameLines.length * 9 + 2
+
+    const areaNombre = areas.find(a => a.key === puesto.area_key)?.nombre ?? 'Sin área asignada'
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    doc.setTextColor(...gray)
+    doc.text(`${areaNombre}  ·  ${nivelLabelPDF(puesto.nivel)}`, margin, y)
+    y += 8
+
+    doc.setDrawColor(...lightGray)
+    doc.setLineWidth(0.4)
+    doc.line(margin, y, pageW - margin, y)
+    y += 10
+
+    const padre = puesto.reporta_a_puesto_id ? puestos.find(p => p.id === puesto.reporta_a_puesto_id) : undefined
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(...accent)
+    doc.text('REPORTA A', margin, y)
+    y += 5
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    doc.setTextColor(...textDark)
+    doc.text(padre ? padre.nombre : 'Nadie — raíz del organigrama', margin, y)
+    y += 10
+
+    const ocupantes = miembros.filter(m => m.puesto_id === puesto.id).map(m => `${m.nombre} ${m.apellido}`)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(...accent)
+    doc.text('OCUPA ESTE PUESTO', margin, y)
+    y += 5
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    doc.setTextColor(...textDark)
+    doc.text(ocupantes.length ? ocupantes.join(', ') : 'Vacante', margin, y)
+    y += 10
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(...accent)
+    doc.text('TAREAS Y FUNCIONES', margin, y)
+    y += 6
+
+    if (puesto.tareas_funciones.length === 0) {
+      doc.setFont('helvetica', 'italic')
+      doc.setFontSize(10)
+      doc.setTextColor(...gray)
+      doc.text('Sin tareas cargadas', margin, y)
+      y += 6
+    } else {
+      for (const t of puesto.tareas_funciones) {
+        const lines = doc.splitTextToSize(`•  ${t}`, contentW - 4)
+        ensureSpace(lines.length * 5 + 1.5, 'Manual de puesto')
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(10)
+        doc.setTextColor(...textDark)
+        doc.text(lines, margin, y)
+        y += lines.length * 5 + 1.5
+      }
+    }
+    y += 6
+
+    ensureSpace(20, 'Manual de puesto')
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(...accent)
+    doc.text('MÓDULOS HABILITADOS EN LA APP', margin, y)
+    y += 6
+
+    const modLabels = puesto.permisos_app.map(m => MODULO_CONFIG[m as ModuloId]?.label ?? m)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9.5)
+    doc.setTextColor(...textDark)
+    const modLines = doc.splitTextToSize(modLabels.length ? modLabels.join('  ·  ') : 'Ninguno', contentW)
+    doc.text(modLines, margin, y)
+
+    drawFooter(puesto.nombre)
+  }
+
+  doc.save(`organigrama_${today.replace(/\//g, '-')}.pdf`)
+}

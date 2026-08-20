@@ -40,4 +40,8 @@ export const COACH_HIGHLIGHT_IDS = [
   'cc-saldo', 'cc-nueva', 'cc-lista',
   // Mesa de trabajo (espacios)
   'espacios-tabs', 'espacios-nuevo', 'espacios-board', 'espacios-stock-board',
+  // Organigrama
+  'organigrama-tabs', 'organigrama-plantel', 'organigrama-filtros',
+  'organigrama-estructura', 'organigrama-cobertura',
+  'organigrama-configurar', 'organigrama-exportar',
 ] as const

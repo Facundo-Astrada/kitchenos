@@ -20,8 +20,13 @@ import { MiembroCard } from '@/components/organigrama/MiembroCard'
 import { CoberturaTable } from '@/components/organigrama/CoberturaTable'
 import { OrganigramaWizardSheet } from '@/components/organigrama/OrganigramaWizardSheet'
 import { ResponsablesPicker } from '@/components/organigrama/ResponsablesPicker'
+import { exportOrganigramaPDF } from '@/lib/exportPDF'
 
 type Tab = 'plantel' | 'estructura' | 'cobertura'
+const TAB_IDS: Tab[] = ['plantel', 'estructura', 'cobertura']
+function esTab(v: string | null): v is Tab {
+  return v != null && (TAB_IDS as string[]).includes(v)
+}
 
 export default function OrganigramaPage() {
   const {
@@ -35,15 +40,53 @@ export default function OrganigramaPage() {
   const [tab, setTab] = useState<Tab>('plantel')
   const [areaFiltro, setAreaFiltro] = useState<string>('todas')
   const [wizardOpen, setWizardOpen] = useState(false)
-
-  useEffect(() => {
-    localStorage.setItem('kc_screen_context', JSON.stringify({
-      screen: 'organigrama', tab, totalMiembros: miembros.length, totalPuestos: puestos.length,
-    }))
-    return () => localStorage.removeItem('kc_screen_context')
-  }, [tab, miembros.length, puestos.length])
+  const [exportando, setExportando] = useState(false)
 
   const areasActivas = useMemo(() => areas.filter(a => a.activa), [areas])
+
+  // Insights, no solo conteos: qué está mal y qué falta, para que el Coach
+  // pueda señalarlo sin tener que recorrer toda la pantalla.
+  useEffect(() => {
+    const areasSinResponsable = areasActivas.filter(a => a.responsables.length === 0).map(a => a.nombre)
+    const puestosVacantes = puestos.filter(p => !miembros.some(m => m.puesto_id === p.id)).map(p => p.nombre)
+    const capasCriticas: Capa[] = ['definir', 'preparar', 'controlar']
+    const huecosCobertura = areasActivas.reduce(
+      (acc, a) => acc + capasCriticas.filter(c => capaResponsables(a.key, c).length === 0).length,
+      0
+    )
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'organigrama',
+      tab,
+      totalMiembros: miembros.length,
+      totalPuestos: puestos.length,
+      totalAreasActivas: areasActivas.length,
+      areasSinResponsable: areasSinResponsable.slice(0, 5),
+      puestosVacantes: puestosVacantes.slice(0, 5),
+      huecosCobertura,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [tab, miembros, puestos, areasActivas, capaResponsables])
+
+  // El tour del Coach cambia de tab solo cuando un paso lo necesita.
+  useEffect(() => {
+    function handleSetTab(e: Event) {
+      const { tab: newTab } = (e as CustomEvent<{ tab: string }>).detail
+      if (esTab(newTab)) setTab(newTab)
+    }
+    window.addEventListener('kc-set-tab', handleSetTab)
+    return () => window.removeEventListener('kc-set-tab', handleSetTab)
+  }, [])
+
+  async function handleExportarPDF() {
+    setExportando(true)
+    try {
+      await exportOrganigramaPDF(areas, puestos, miembros)
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Error al generar el PDF')
+    } finally {
+      setExportando(false)
+    }
+  }
 
   const miembrosFiltrados = useMemo(() => {
     if (areaFiltro === 'todas') return miembros
@@ -100,10 +143,31 @@ export default function OrganigramaPage() {
                 {miembros.length} en el plantel · {areasActivas.length} áreas activas
               </p>
             </div>
-            {isAdmin && <HeaderAction label="Configurar" icon="auto_fix_high" onClick={() => setWizardOpen(true)} />}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <button
+                data-coach-target="organigrama-exportar"
+                onClick={handleExportarPDF}
+                disabled={exportando}
+                title="Exportar PDF"
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36,
+                  background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,.25)', borderRadius: 10,
+                  color: '#fff', cursor: exportando ? 'default' : 'pointer', opacity: exportando ? 0.6 : 1,
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                  {exportando ? 'progress_activity' : 'picture_as_pdf'}
+                </span>
+              </button>
+              {isAdmin && (
+                <div data-coach-target="organigrama-configurar">
+                  <HeaderAction label="Configurar" icon="auto_fix_high" onClick={() => setWizardOpen(true)} />
+                </div>
+              )}
+            </div>
           </div>
 
-          <div style={{ marginTop: 14 }}>
+          <div style={{ marginTop: 14 }} data-coach-target="organigrama-tabs">
             <SegmentedTabs
               tabs={[
                 { id: 'plantel', label: 'Plantel', icon: 'grid_view' },
@@ -116,7 +180,7 @@ export default function OrganigramaPage() {
           </div>
 
           {tab === 'plantel' && (
-            <div style={{ marginTop: 12 }}>
+            <div style={{ marginTop: 12 }} data-coach-target="organigrama-filtros">
               <FilterChips chips={filtroChips} active={areaFiltro} onChange={setAreaFiltro} context="onDark" />
             </div>
           )}
@@ -131,10 +195,13 @@ export default function OrganigramaPage() {
               subtitle="Asigná un puesto de esta área a algún miembro del equipo en Equipo → Puestos."
             />
           ) : (
-            <div style={{
-              display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-              gap: 12, padding: 16,
-            }}>
+            <div
+              data-coach-target="organigrama-plantel"
+              style={{
+                display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+                gap: 12, padding: 16,
+              }}
+            >
               {miembrosFiltrados.map(m => (
                 <MiembroCard key={m.id} miembro={m} puestos={puestos} miembros={miembros} />
               ))}
@@ -144,7 +211,7 @@ export default function OrganigramaPage() {
 
         {/* ── Vista Estructura ── */}
         {tab === 'estructura' && (
-          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }} data-coach-target="organigrama-estructura">
             {areas.map(estado => (
               <AreaBlock
                 key={estado.key}

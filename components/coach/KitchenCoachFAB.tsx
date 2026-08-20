@@ -131,6 +131,12 @@ const SUGGESTIONS_BY_SCREEN: Record<string, Suggestion[]> = {
     { label: '¿Qué plazas todavía no tienen espacio asignado?', action: 'send' },
     { label: '¿Cuántos productos me faltan asignar a un sector?', action: 'send' },
   ],
+  organigrama: [
+    { label: 'Ver recorrido del Organigrama', action: 'tour' },
+    { label: '¿Qué áreas están sin responsable?', action: 'send' },
+    { label: '¿Hay puestos vacantes?', action: 'send' },
+    { label: '¿Qué me conviene activar según el tamaño de mi equipo?', action: 'send' },
+  ],
 }
 
 const DEFAULT_SUGGESTIONS: Suggestion[] = [

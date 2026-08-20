@@ -30,7 +30,7 @@ const td: React.CSSProperties = {
 
 export function CoberturaTable({ areas, miembros, isAdmin, capaResponsables, onToggleCapaResponsable }: CoberturaTableProps) {
   return (
-    <div style={{ overflowX: 'auto', borderRadius: 14, border: '1px solid var(--border)' }}>
+    <div data-coach-target="organigrama-cobertura" style={{ overflowX: 'auto', borderRadius: 14, border: '1px solid var(--border)' }}>
       <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 580, background: 'var(--surface)' }}>
         <thead>
           <tr>

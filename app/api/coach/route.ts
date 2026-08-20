@@ -169,6 +169,7 @@ Qué hace cada módulo:
 - HACCP: temperaturas de equipos, vencimientos y limpieza (expediente para bromatología).
 - Pase: el chat de cocina del turno (mensajes por plaza, 86, urgencias).
 - Equipo y Turnos: miembros, puestos (con sus módulos habilitados) y la planilla semanal.
+- Organigrama: la estructura del negocio en cartas de puesto — quién es quién, a qué área pertenece cada puesto y a quién reporta (vista Plantel y Estructura), más la Vista Cobertura, que cruza las 12 áreas con las cuatro etapas del día a día (Definir, Preparar, Ejecutar, Controlar) para mostrar quién responde en cada una. Un asistente de 3 preguntas arma la configuración inicial, y se puede exportar todo en PDF (organigrama completo + una hoja por puesto) para colgar en la cocina.
 - Calendario: los eventos del restaurante.
 - Salón: el mapa de mesas del servicio. Cada mesa muestra estado por color (libre, ocupada, con cuenta pedida) y punto verde si hay platos listos. Se abre la cuenta de una mesa, se toma el pedido y se manda a cocina (KDS). Desde acá también se accede a la caja del turno.
 - KDS (pantalla de cocina): las comandas que entran del salón, organizadas por estación. El cocinero las despacha (marcha/bump) con swipe. Fondo oscuro, pensado para tablet en la línea. No se usa para gestión, solo para el despacho en vivo.
@@ -268,6 +269,12 @@ Ejemplo para riesgo de stock:
 
 Ejemplo para productos sin precio (subvalúan food cost):
 {"text":"Hay productos sin precio cargado. Eso subvalúa el food cost de las recetas que los usan, porque el sistema los cuenta como costo cero. Podés reconstruir el stock desde tus facturas para traer los precios reales automáticamente (botón Funciones → Rebuild).","highlight":"stock-funciones","overlay_text":"Importar, Rebuild, sugerir mínimos y más","options":["¿Cómo funciona el rebuild?","¿Qué recetas están mal calculadas?"]}
+
+Ejemplo para área sin responsable en el organigrama:
+{"text":"Tenés 2 áreas activas sin responsable: Compras y almacén, y RRHH. Nadie quedó a cargo de definir el estándar ahí, así que si falta algo en esa área no hay a quién reclamarle. Andá a Estructura y asignale un responsable a cada una.","highlight":"organigrama-estructura","overlay_text":"Cada área activa necesita al menos un responsable","options":["¿Cómo asigno un responsable?","¿Qué pasa si dejo un área sin nadie?"]}
+
+Ejemplo para huecos en la Vista Cobertura:
+{"text":"En Cobertura tenés 3 huecos: nadie prepara ni controla Compras y almacén, y nadie define RRHH. Ejecutar no cuenta como hueco — ahí todo el equipo es la respuesta normal, no hace falta un responsable único. El hueco real está en las otras tres etapas.","highlight":"organigrama-cobertura","overlay_text":"Rojo = sin responsable en Definir, Preparar o Controlar","options":["¿Cómo asigno responsable de una etapa?","¿Por qué Ejecutar es distinto?"]}
 
 Usá el contexto para dar consejos relevantes cuando el usuario lo necesite.`
 
