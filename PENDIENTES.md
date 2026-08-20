@@ -55,9 +55,6 @@ Prompt caching y tool use agéntico ya resueltos. Falta tabla `coach_conversacio
 ### Fotos — falta completar
 `PhotoPicker` (bucket `fotos`) integrado en recetario y carta. Falta `equipo_miembros.foto_url` y facturas, si se decide.
 
-### Exportar legajo PDF
-Desde `/turnos` → tab Puestos → ficha del puesto → "Exportar legajo": PDF con datos, funciones, miembros asignados.
-
 ### Notificaciones
 In-app vía Supabase realtime (tabla `notificaciones`), push web (PWA + service worker + VAPID), email/WhatsApp para alertas críticas (stock crítico, vencimientos).
 
@@ -88,6 +85,7 @@ Entrar a Mise en mobile bajó de 2582 kB / 64 requests a 899 kB / 46. Lo que que
 - **`usePermisos` traga el error real** (observado ago 2026 en consola con la cuenta `cocina@broscomedor.com`, dos veces por carga): loguea "Error al cargar permisos" genérico porque el `catch` usa `e instanceof Error ? e.message : 'Error al cargar permisos'` — y los errores de Supabase no son `Error` (ver `hooks.md` #2), así que el mensaje real nunca se ve. Hay un error de verdad ocurriendo ahí y hoy es indiagnosticable. Fix: extraer el mensaje con el patrón de #2 antes de decidir si además hay que arreglar la query.
 - **`.claude/settings.json` modificado sin commitear** — arrastrado desde jul 2026, sigue esperando una decisión de Facundo (commitear o revertir). Los 5 archivos sueltos (`mcp-*.js`, dos `.tgz`) que lo acompañaban se borraron el 11/08 (eran debris de paquetes npm, no se usaban).
 - El resumen OPS de una fila en `ComposicionEditor.tsx` (~línea 1580) arma `plaza · sección · cantidad_ops+unidad` sin mirar `peso_porcion` — con recipiente muestra las porciones del recipiente, no el gramaje. Es un subtítulo de la config del mise (defendible), pero es el mismo patrón que se corrigió en Recetario/Platos; revisar si en uso real confunde.
+- **Organigrama — dos simplificaciones deliberadas de la Fase 1** (ago 2026): reasignar `reporta_a_puesto_id` en la Estructura es un `<select>`, no drag-and-drop (se priorizó robustez sobre tiempo); y el árbol de una área solo considera puestos con ese `area_key` — un puesto que reporta a otro de área distinta cae como raíz en vez de anidarse cruzado. Ninguna molesta en uso real todavía; tocar solo si alguien lo pide.
 - **Stock — celda de stock apretada en rango 480-1023px** (tablet o ventana de navegador angosta, ago 2026): en ese ancho la celda muestra el número editable **y** el editor de mínimo lado a lado en una columna de solo 84px — no entran los dos (encontrado por análisis, sin captura real que lo confirme). El breakpoint <480px (celular) y el de desktop (≥1024px) están arreglados y verificados en pantalla real. Solo tocar si aparece una captura de ese rango específico.
 - **Despacho de tarea desde el mise, posible doble-tap táctil** (encontrado ago 2026, datos de Bros): dos filas idénticas (`Garbanzos fritos`, mismo día, ambas `listo`) creadas con 1ms de diferencia. `crearTarea` en `ProductoMiseCard.tsx` ya guarda con `if (creating) return` antes de `setCreating(true)`, pero ese estado no es síncrono — un `touchstart`+`click` disparando el handler dos veces en el mismo tick podría colarse antes del re-render. Se limpiaron los datos; si se repite, pasar a un lock por ref (síncrono) en vez de `useState`.
 

@@ -191,6 +191,8 @@ Trampas: `useEffect` antes de un `useMemo` que referencia (TS2448); `useEffect` 
 
 Prioridad de `puedeVer(modulo)`: (1) `isAdmin` → true siempre. (2) con `equipo_miembros.puesto_id`: módulos de `puestos.permisos_app` + `modulos_extra` − `modulos_restringidos`. (3) fallback `rol_permisos.modulos_visibles`. El hook carga el puesto via `equipo_miembros WHERE auth_user_id = user.id`; sin fila ahí, usa el fallback.
 
+**Agregar un `ModuloId` nuevo no lo habilita para puestos ya creados.** `permisos_app` es un array que queda congelado en el momento en que se crea el puesto desde la UI — sumar el módulo a `MODULOS_POR_ROL`/`MODULOS_ASIGNABLES` en código no lo retroactiva. Un usuario logueado con un puesto (no admin) sigue sin ver el módulo nuevo hasta que alguien lo tilda a mano en Turnos → Puestos → editar, o se hace un backfill puntual por SQL (`array_append(permisos_app, 'modulo')`). Si alguien reporta "no veo el módulo X" después de un deploy con un módulo nuevo, preguntar primero con qué cuenta/puesto está logueado y chequear su `permisos_app` antes de asumir que es un bug — con la cuenta admin nunca pasa (bypassea todo).
+
 ## OPS mise — suma acumulativa por receta+plaza
 
 `plato_recetas.cantidad_ops` = contribución individual de CADA plato. `checklist_items.cantidad` = suma de TODAS las contribuciones con misma `receta_id+plaza` — recalcular siempre al guardar, nunca hacer UPDATE con el valor ingresado directo:
