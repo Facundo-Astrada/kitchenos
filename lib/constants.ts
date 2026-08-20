@@ -87,6 +87,7 @@ export type ModuloId =
   | 'produccion'
   | 'merma'
   | 'equipo'
+  | 'organigrama'
   | 'configuracion'
   | 'ventas'
   | 'espacios'
@@ -119,6 +120,7 @@ export const MODULO_CONFIG: Record<
   produccion: { label: 'Producción', icon: 'factory', href: '/produccion' },
   merma: { label: 'Merma', icon: 'delete_sweep', href: '/merma' },
   equipo: { label: 'Equipo', icon: 'groups', href: '/turnos' },
+  organigrama: { label: 'Organigrama', icon: 'account_tree', href: '/organigrama' },
   configuracion: { label: 'Config', icon: 'settings', href: '/configuracion' },
   ventas: { label: 'Ventas', icon: 'bar_chart', href: '/ventas' },
   espacios: { label: 'Mesa de trabajo', icon: 'dashboard', href: '/espacios' },
@@ -135,13 +137,13 @@ export const MODULOS_POR_ROL: Record<Rol, ModuloId[]> = {
   admin: [
     'home', 'operaciones', 'recetario', 'stock', 'pedidos',
     'haccp', 'reportes', 'calendario',
-    'carta', 'pase', 'facturas', 'merma', 'equipo', 'configuracion', 'ventas', 'espacios',
+    'carta', 'pase', 'facturas', 'merma', 'equipo', 'organigrama', 'configuracion', 'ventas', 'espacios',
     'salon', 'kds', 'clientes', 'muro', 'bitacora',
   ],
   chef: [
     'home', 'operaciones', 'recetario', 'stock', 'pedidos',
     'haccp', 'reportes', 'calendario',
-    'carta', 'pase', 'facturas', 'merma', 'equipo', 'ventas', 'espacios',
+    'carta', 'pase', 'facturas', 'merma', 'equipo', 'organigrama', 'ventas', 'espacios',
     'salon', 'kds', 'clientes', 'muro', 'bitacora',
   ],
   parrilla:   ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta', 'merma', 'calendario', 'haccp'],
@@ -161,7 +163,7 @@ export const MODULOS_POR_ROL: Record<Rol, ModuloId[]> = {
 export const MODULOS_EMPRENDIMIENTO: ModuloId[] = [
   'home', 'espacios', 'tareas', 'recetario', 'carta', 'produccion',
   'stock', 'facturas', 'proveedores', 'pedidos', 'merma', 'reportes', 'ventas', 'clientes',
-  'calendario', 'equipo', 'configuracion', 'coach', 'pase', 'haccp',
+  'calendario', 'equipo', 'organigrama', 'configuracion', 'coach', 'pase', 'haccp',
 ]
 
 // ── Nav inferior (4 ítems fijos) ────────────────────────────
@@ -178,6 +180,7 @@ export const RUTA_A_MODULO: Record<string, string> = {
   '/reportes': 'reportes',
   '/calendario': 'calendario',
   '/turnos': 'equipo',
+  '/organigrama': 'organigrama',
   '/proveedores': 'proveedores',
   '/carta': 'carta',
   '/pase': 'pase',
@@ -198,6 +201,134 @@ export const RUTA_A_MODULO: Record<string, string> = {
   '/checklist': 'operaciones',
   '/produccion': 'operaciones',
 }
+
+// ── Catálogo de áreas (organigrama) ─────────────────────────
+// 12 funciones organizacionales fijas: dirección, cocina, salón, compras y
+// almacén, calidad y seguridad alimentaria, administración, comercial y
+// reservas, RRHH, desarrollo de producto, sistemas, marketing e
+// infraestructura. Fuente única del catálogo — la tabla `areas` en Supabase
+// solo guarda estado por restaurante (activa, responsable, orden), nunca el
+// catálogo en sí. Un negocio chico no tiene departamentos formales, pero las
+// funciones existen igual y las termina cubriendo menos gente — por eso un
+// área inactiva sigue en el catálogo con su explicación, nunca desaparece.
+export type AreaKey =
+  | 'direccion'
+  | 'cocina'
+  | 'salon'
+  | 'compras_almacen'
+  | 'calidad_seguridad'
+  | 'administracion'
+  | 'comercial_reservas'
+  | 'rrhh'
+  | 'id_producto'
+  | 'sistemas'
+  | 'marketing'
+  | 'infraestructura'
+
+export interface AreaCatalogoItem {
+  key: AreaKey
+  nombre: string
+  icon: string
+  color: string
+  explicacion: string
+  modulos: ModuloId[]
+  activaPorDefecto: boolean
+}
+
+export const AREA_CATALOGO: AreaCatalogoItem[] = [
+  {
+    key: 'direccion', nombre: 'Dirección', icon: 'explore', color: '#4361a0',
+    explicacion: 'Toma de decisiones final, filosofía del negocio, finanzas y presupuesto.',
+    modulos: ['home', 'reportes', 'ventas', 'configuracion'], activaPorDefecto: true,
+  },
+  {
+    key: 'cocina', nombre: 'Cocina', icon: 'local_fire_department', color: '#ef4444',
+    explicacion: 'Producción, mise en place, escandallos, plazas y pase — el corazón operativo.',
+    modulos: ['operaciones', 'recetario', 'produccion', 'pase', 'checklist', 'espacios', 'muro'], activaPorDefecto: true,
+  },
+  {
+    key: 'salon', nombre: 'Salón', icon: 'table_restaurant', color: '#8b5cf6',
+    explicacion: 'Servicio, rangos, relación con el cliente, cierre de caja.',
+    modulos: ['salon', 'clientes', 'kds'], activaPorDefecto: false,
+  },
+  {
+    key: 'compras_almacen', nombre: 'Compras y almacén', icon: 'local_shipping', color: '#f97316',
+    explicacion: 'Proveedores, recepción, inventario — evita la fuga que puede quebrar el negocio.',
+    modulos: ['stock', 'pedidos', 'proveedores', 'facturas', 'merma'], activaPorDefecto: true,
+  },
+  {
+    key: 'calidad_seguridad', nombre: 'Calidad y seguridad alimentaria', icon: 'health_and_safety', color: '#10b981',
+    explicacion: 'BPM/HACCP, trazabilidad. Institución constitutiva: sin esto, no operás.',
+    modulos: ['haccp', 'bitacora'], activaPorDefecto: true,
+  },
+  {
+    key: 'administracion', nombre: 'Administración', icon: 'account_balance', color: '#0ea5e9',
+    explicacion: 'Contabilidad, impuestos, nóminas, pólizas. En equipos chicos la cubre Dirección.',
+    modulos: ['facturas', 'reportes'], activaPorDefecto: false,
+  },
+  {
+    key: 'comercial_reservas', nombre: 'Comercial y reservas', icon: 'calendar_month', color: '#ec4899',
+    explicacion: 'Reservas, eventos, no-shows, cartera de clientes.',
+    modulos: ['calendario', 'clientes'], activaPorDefecto: false,
+  },
+  {
+    key: 'rrhh', nombre: 'RRHH', icon: 'groups', color: '#1e3a6e',
+    explicacion: 'Selección, capacitación, turnos y permisos de acceso por usuario.',
+    modulos: ['equipo'], activaPorDefecto: true,
+  },
+  {
+    key: 'id_producto', nombre: 'I+D · desarrollo de producto', icon: 'science', color: '#d97706',
+    explicacion: 'Cambios de carta, platos nuevos — el juego de autoría, fuera del servicio.',
+    modulos: ['recetario', 'carta'], activaPorDefecto: true,
+  },
+  {
+    key: 'sistemas', nombre: 'Sistemas', icon: 'settings', color: '#64748b',
+    explicacion: 'POS, mantenimiento de la app, gestión de datos.',
+    modulos: ['configuracion', 'coach'], activaPorDefecto: false,
+  },
+  {
+    key: 'marketing', nombre: 'Marketing y comunicación', icon: 'campaign', color: '#94a3b8',
+    explicacion: 'Redes, prensa, publicidad. Existe como función aunque hoy no tenga módulo propio.',
+    modulos: [], activaPorDefecto: false,
+  },
+  {
+    key: 'infraestructura', nombre: 'Infraestructura', icon: 'build', color: '#78716c',
+    explicacion: 'Mantenimiento del local, maquinaria e instalaciones. Sin módulo propio todavía.',
+    modulos: [], activaPorDefecto: false,
+  },
+]
+
+export function areaCatalogoItem(key: string): AreaCatalogoItem | undefined {
+  return AREA_CATALOGO.find(a => a.key === key)
+}
+
+// ── Capas del ciclo (Vista Cobertura) ────────────────────────
+// Definir → Preparar → Ejecutar → Controlar → vuelve a Definir (framework
+// propio, ver PLAN-4-CAPAS.md / AUDITORIA-4-CAPAS.md — no reproducir texto
+// del material de research de terceros, que es de uso interno). "Ejecutar"
+// es la única capa cuyo default sin responsable NO es una alerta: se
+// ejecuta en equipo durante el servicio, las otras tres sí necesitan que
+// alguien concreto responda.
+export type Capa = 'definir' | 'preparar' | 'ejecutar' | 'controlar'
+
+export const CAPAS: { key: Capa; label: string; icon: string; explicacion: string }[] = [
+  {
+    key: 'definir', label: 'Definir', icon: 'edit_note',
+    explicacion: 'El estándar de la temporada: qué se hace y cómo. Se fija una vez y se sostiene hasta el próximo cambio de carta o de proceso.',
+  },
+  {
+    key: 'preparar', label: 'Preparar', icon: 'inventory_2',
+    explicacion: 'El trabajo antes de abrir, día a día o semana a semana: compras, mise en place, organización — todo lo que deja el terreno listo.',
+  },
+  {
+    key: 'ejecutar', label: 'Ejecutar', icon: 'bolt',
+    explicacion: 'Lo que pasa mientras el local está abierto y atendiendo. Es tarea de todo el que está de turno, no de una sola persona.',
+  },
+  {
+    key: 'controlar', label: 'Controlar', icon: 'fact_check',
+    explicacion: 'El cierre y la revisión: qué salió bien, qué faltó, qué hay que ajustar antes de volver a definir el estándar.',
+  },
+]
 
 // ── Colores de prioridad ─────────────────────────────────────
 export const PRIORIDAD_CONFIG = {

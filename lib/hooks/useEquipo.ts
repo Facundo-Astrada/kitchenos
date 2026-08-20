@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
+import { AREA_CATALOGO, areaCatalogoItem, type AreaKey, type Capa } from '@/lib/constants'
 
 const SWR_OPTS = {
   revalidateOnFocus: false,
@@ -54,7 +55,94 @@ export interface Puesto {
   permisos_app: string[]        // ModuloId[]
   nivel: string                 // admin | sous_chef | cocinero | bachero
   plaza_default: string | null
+  reporta_a_puesto_id: string | null  // organigrama: puesto al que reporta. NULL = raíz
+  area_key: string | null             // organigrama: clave de AREA_CATALOGO
+  orden: number                        // organigrama: orden manual dentro del área
   restaurante_id: string
+  created_at: string
+}
+
+// Puesto con sus hijos directos resueltos, para renderizar el árbol del organigrama.
+export interface PuestoNode extends Puesto {
+  hijos: PuestoNode[]
+}
+
+// Descendientes de un puesto (vía reporta_a_puesto_id) — para no dejar
+// elegir como "reporta a" a alguien que ya está debajo en la cadena
+// (crearía un loop en el árbol del organigrama).
+export function idsDescendientes(id: string, todos: Puesto[]): Set<string> {
+  const hijosDirectos = (padreId: string) => todos.filter(p => p.reporta_a_puesto_id === padreId).map(p => p.id)
+  const set = new Set<string>()
+  const stack = hijosDirectos(id)
+  while (stack.length) {
+    const actual = stack.pop()!
+    if (set.has(actual)) continue
+    set.add(actual)
+    stack.push(...hijosDirectos(actual))
+  }
+  return set
+}
+
+// Arma el árbol de puestos a partir de reporta_a_puesto_id. Puestos cuyo
+// reporta_a_puesto_id apunta a un puesto inexistente (borrado, de otra
+// cuenta) caen como raíz en vez de perderse.
+export function construirArbolPuestos(puestos: Puesto[]): PuestoNode[] {
+  const porId = new Map(puestos.map(p => [p.id, p]))
+  const nodos = new Map<string, PuestoNode>(puestos.map(p => [p.id, { ...p, hijos: [] }]))
+  const raices: PuestoNode[] = []
+  for (const p of puestos) {
+    const nodo = nodos.get(p.id)!
+    const padreId = p.reporta_a_puesto_id
+    if (padreId && porId.has(padreId) && padreId !== p.id) {
+      nodos.get(padreId)!.hijos.push(nodo)
+    } else {
+      raices.push(nodo)
+    }
+  }
+  const porOrden = (a: PuestoNode, b: PuestoNode) => a.orden - b.orden || a.nombre.localeCompare(b.nombre)
+  const ordenarRec = (n: PuestoNode) => { n.hijos.sort(porOrden); n.hijos.forEach(ordenarRec) }
+  raices.sort(porOrden)
+  raices.forEach(ordenarRec)
+  return raices
+}
+
+// ── Áreas del organigrama ──
+
+export interface AreaRow {
+  id: string
+  restaurante_id: string
+  area_key: string
+  activa: boolean
+  responsables: string[]   // puede haber más de un responsable (socios, co-chefs)
+  orden: number
+  created_at: string
+}
+
+// Catálogo fijo (AREA_CATALOGO) fusionado con el estado guardado por cuenta.
+// Un área sin fila en `areas` todavía existe acá — activa según el default del
+// catálogo, sin responsable. Nunca desaparece (ver comentario en la migración).
+export interface AreaEstado {
+  key: AreaKey
+  nombre: string
+  icon: string
+  color: string
+  explicacion: string
+  modulos: string[]
+  activa: boolean
+  responsables: string[]
+  orden: number
+  guardada: boolean   // false = todavía no tiene fila propia en `areas`
+}
+
+// Responsable por (área, capa) — Vista Cobertura. Fila ausente en DB = sin
+// asignar: se lee "sin responsable" (alerta) salvo en 'ejecutar', que se lee
+// "todo el equipo" por defecto.
+export interface AreaCapaRow {
+  id: string
+  restaurante_id: string
+  area_key: string
+  capa: Capa
+  responsables: string[]
   created_at: string
 }
 
@@ -84,6 +172,7 @@ export interface PuestoTemplate {
   descripcion: string
   nivel: string
   plaza_default: string | null
+  area_key: AreaKey
   permisos_app: string[]
   tareas_funciones: string[]
   icon: string
@@ -95,6 +184,7 @@ export const PUESTO_TEMPLATES: PuestoTemplate[] = [
     descripcion: 'Jefatura de cocina, supervisión general de plazas',
     nivel: 'sous_chef',
     plaza_default: null,
+    area_key: 'cocina',
     icon: 'local_fire_department',
     permisos_app: [
       'home', 'operaciones', 'recetario', 'stock', 'pedidos',
@@ -111,6 +201,7 @@ export const PUESTO_TEMPLATES: PuestoTemplate[] = [
     descripcion: 'Encargado de brasa, fuegos y proteínas',
     nivel: 'cocinero',
     plaza_default: 'parrilla',
+    area_key: 'cocina',
     icon: 'outdoor_grill',
     permisos_app: ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta'],
     tareas_funciones: [
@@ -123,6 +214,7 @@ export const PUESTO_TEMPLATES: PuestoTemplate[] = [
     descripcion: 'Garde manger, ensaladas, entradas frías y salsas frías',
     nivel: 'cocinero',
     plaza_default: 'frios',
+    area_key: 'cocina',
     icon: 'ac_unit',
     permisos_app: ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta'],
     tareas_funciones: [
@@ -135,6 +227,7 @@ export const PUESTO_TEMPLATES: PuestoTemplate[] = [
     descripcion: 'Salsas, fondos, guarniciones y elaboraciones al fuego',
     nivel: 'cocinero',
     plaza_default: 'calientes',
+    area_key: 'cocina',
     icon: 'whatshot',
     permisos_app: ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta'],
     tareas_funciones: [
@@ -147,6 +240,7 @@ export const PUESTO_TEMPLATES: PuestoTemplate[] = [
     descripcion: 'Producción de postres, masas y repostería',
     nivel: 'cocinero',
     plaza_default: 'pasteleria',
+    area_key: 'cocina',
     icon: 'cake',
     permisos_app: ['home', 'operaciones', 'recetario', 'stock', 'pase'],
     tareas_funciones: [
@@ -159,6 +253,7 @@ export const PUESTO_TEMPLATES: PuestoTemplate[] = [
     descripcion: 'Producción de panes, masas fermentadas y bollería',
     nivel: 'cocinero',
     plaza_default: 'panaderia',
+    area_key: 'cocina',
     icon: 'bakery_dining',
     permisos_app: ['home', 'operaciones', 'recetario', 'stock', 'pase'],
     tareas_funciones: [
@@ -170,6 +265,7 @@ export const PUESTO_TEMPLATES: PuestoTemplate[] = [
     descripcion: 'Rota entre plazas según necesidad del servicio',
     nivel: 'cocinero',
     plaza_default: null,
+    area_key: 'cocina',
     icon: 'soup_kitchen',
     permisos_app: ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta'],
     tareas_funciones: [
@@ -182,6 +278,7 @@ export const PUESTO_TEMPLATES: PuestoTemplate[] = [
     descripcion: 'Apoyo operativo, limpieza y tareas de soporte',
     nivel: 'bachero',
     plaza_default: null,
+    area_key: 'cocina',
     icon: 'person',
     permisos_app: ['home', 'operaciones', 'pase'],
     tareas_funciones: [
@@ -223,9 +320,34 @@ async function fetchPuestosData(key: string): Promise<Puesto[]> {
     ...p,
     nivel: p.nivel ?? 'cocinero',
     plaza_default: p.plaza_default ?? null,
+    reporta_a_puesto_id: p.reporta_a_puesto_id ?? null,
+    area_key: p.area_key ?? null,
+    orden: p.orden ?? 0,
     tareas_funciones: p.tareas_funciones ?? [],
     permisos_app: p.permisos_app ?? [],
   })) as Puesto[]
+}
+
+async function fetchAreasData(key: string): Promise<AreaRow[]> {
+  const rid = key.slice('areas-'.length)
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('areas')
+    .select('*')
+    .eq('restaurante_id', rid)
+  if (error) throw error
+  return (data ?? []) as AreaRow[]
+}
+
+async function fetchAreaCapasData(key: string): Promise<AreaCapaRow[]> {
+  const rid = key.slice('area-capas-'.length)
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('area_capas')
+    .select('*')
+    .eq('restaurante_id', rid)
+  if (error) throw error
+  return (data ?? []) as AreaCapaRow[]
 }
 
 export function useEquipo() {
@@ -248,21 +370,125 @@ export function useEquipo() {
     SWR_OPTS,
   )
 
+  // ── Áreas (SWR) — catálogo fijo fusionado con el estado guardado ──
+  const { data: areasRaw = [], mutate: mutateAreas } = useSWR(
+    RESTAURANTE_ID ? `areas-${RESTAURANTE_ID}` : null,
+    fetchAreasData,
+    SWR_OPTS,
+  )
+
+  const areas: AreaEstado[] = useMemo(() => AREA_CATALOGO.map(cat => {
+    const row = areasRaw.find(a => a.area_key === cat.key)
+    return {
+      key: cat.key,
+      nombre: cat.nombre,
+      icon: cat.icon,
+      color: cat.color,
+      explicacion: cat.explicacion,
+      modulos: cat.modulos,
+      activa: row?.activa ?? cat.activaPorDefecto,
+      responsables: row?.responsables ?? [],
+      orden: row?.orden ?? 0,
+      guardada: !!row,
+    }
+  }), [areasRaw])
+
+  const fetchAreas = useCallback(async () => { await mutateAreas() }, [mutateAreas])
+
+  async function upsertAreaEstado(
+    area_key: AreaKey,
+    patch: Partial<Pick<AreaEstado, 'activa' | 'responsables' | 'orden'>>
+  ) {
+    const actual = areas.find(a => a.key === area_key)
+    const cat = areaCatalogoItem(area_key)
+    try {
+      const { error } = await supabase.from('areas').upsert({
+        restaurante_id: RESTAURANTE_ID,
+        area_key,
+        activa: patch.activa ?? actual?.activa ?? cat?.activaPorDefecto ?? false,
+        responsables: patch.responsables ?? actual?.responsables ?? [],
+        orden: patch.orden ?? actual?.orden ?? 0,
+      }, { onConflict: 'restaurante_id,area_key' })
+      if (error) throw error
+      await fetchAreas()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al guardar el área'
+      console.error('[useEquipo] upsertAreaEstado Error:', msg)
+      throw new Error(msg)
+    }
+  }
+
+  async function toggleAreaActiva(area_key: AreaKey) {
+    const actual = areas.find(a => a.key === area_key)
+    await upsertAreaEstado(area_key, { activa: !(actual?.activa ?? false) })
+  }
+
+  // Suma o quita a un miembro de la lista de responsables del área — no
+  // reemplaza la lista entera, porque puede haber más de un responsable
+  // (varios chefs, socios en Dirección).
+  async function toggleAreaResponsable(area_key: AreaKey, miembroId: string) {
+    const actual = areas.find(a => a.key === area_key)
+    const actuales = actual?.responsables ?? []
+    const siguientes = actuales.includes(miembroId)
+      ? actuales.filter(id => id !== miembroId)
+      : [...actuales, miembroId]
+    await upsertAreaEstado(area_key, { responsables: siguientes })
+  }
+
+  async function setAreaActiva(area_key: AreaKey, activa: boolean) {
+    await upsertAreaEstado(area_key, { activa })
+  }
+
+  // ── Cobertura (área × capa) — SWR ──
+  const { data: areaCapasRaw = [], mutate: mutateAreaCapas } = useSWR(
+    RESTAURANTE_ID ? `area-capas-${RESTAURANTE_ID}` : null,
+    fetchAreaCapasData,
+    SWR_OPTS,
+  )
+
+  const fetchAreaCapas = useCallback(async () => { await mutateAreaCapas() }, [mutateAreaCapas])
+
+  const capaResponsables = useCallback((area_key: string, capa: Capa): string[] => {
+    return areaCapasRaw.find(r => r.area_key === area_key && r.capa === capa)?.responsables ?? []
+  }, [areaCapasRaw])
+
+  async function toggleCapaResponsable(area_key: AreaKey, capa: Capa, miembroId: string) {
+    const actuales = capaResponsables(area_key, capa)
+    const siguientes = actuales.includes(miembroId)
+      ? actuales.filter(id => id !== miembroId)
+      : [...actuales, miembroId]
+    try {
+      const { error } = await supabase.from('area_capas').upsert({
+        restaurante_id: RESTAURANTE_ID,
+        area_key,
+        capa,
+        responsables: siguientes,
+      }, { onConflict: 'restaurante_id,area_key,capa' })
+      if (error) throw error
+      await fetchAreaCapas()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al guardar el responsable'
+      console.error('[useEquipo] toggleCapaResponsable Error:', msg)
+      throw new Error(msg)
+    }
+  }
+
   const fetchMiembros = useCallback(async () => { await mutateMiembros() }, [mutateMiembros])
 
   async function crearMiembro(
     datos: Omit<Miembro, 'id' | 'restaurante_id' | 'created_at' | 'activo' | 'modulos_extra' | 'modulos_restringidos'>
-  ) {
+  ): Promise<string> {
     try {
-      const { error } = await supabase.from('equipo_miembros').insert({
+      const { data, error } = await supabase.from('equipo_miembros').insert({
         ...datos,
         activo: true,
         modulos_extra: [],
         modulos_restringidos: [],
         restaurante_id: RESTAURANTE_ID,
-      })
+      }).select('id').single()
       if (error) throw error
       await fetchMiembros()
+      return data.id as string
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al crear miembro'
       console.error('[useEquipo] crearMiembro Error:', msg)
@@ -389,14 +615,15 @@ export function useEquipo() {
 
   async function crearPuesto(
     datos: Omit<Puesto, 'id' | 'restaurante_id' | 'created_at'>
-  ) {
+  ): Promise<string> {
     try {
-      const { error } = await supabase.from('puestos').insert({
+      const { data, error } = await supabase.from('puestos').insert({
         ...datos,
         restaurante_id: RESTAURANTE_ID,
-      })
+      }).select('id').single()
       if (error) throw error
       await fetchPuestos()
+      return data.id as string
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al crear puesto'
       console.error('[useEquipo] crearPuesto Error:', msg)
@@ -476,5 +703,12 @@ export function useEquipo() {
     actualizarPuesto,
     eliminarPuesto,
     getModulosMiembro,
+    areas,
+    fetchAreas,
+    toggleAreaActiva,
+    setAreaActiva,
+    toggleAreaResponsable,
+    capaResponsables,
+    toggleCapaResponsable,
   }
 }

@@ -31,6 +31,7 @@ const MODULO_LABEL: Record<string, string> = {
   merma: 'Merma',
   haccp: 'HACCP',
   equipo: 'Equipo',
+  organigrama: 'Organigrama',
   salon: 'Salón',
   kds: 'KDS',
   calendario: 'Calendario',

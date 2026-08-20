@@ -3,13 +3,13 @@
 import PageTransition from '@/components/PageTransition'
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import {
-  useEquipo, TURNO_CONFIG, NIVELES_ACCESO, PUESTO_TEMPLATES,
+  useEquipo, TURNO_CONFIG, NIVELES_ACCESO, PUESTO_TEMPLATES, idsDescendientes,
   type Miembro, type Puesto, type TurnoTipo, type Turno,
 } from '@/lib/hooks/useEquipo'
 import { useFichaje, type FichajeDia } from '@/lib/hooks/useFichaje'
 import { useAuth } from '@/lib/auth/context'
 import { usePermisos } from '@/lib/hooks/usePermisos'
-import { MODULO_CONFIG } from '@/lib/constants'
+import { MODULO_CONFIG, AREA_CATALOGO } from '@/lib/constants'
 
 // ── Constantes ──
 
@@ -22,7 +22,7 @@ const TURNO_TIPOS = Object.keys(TURNO_CONFIG) as TurnoTipo[]
 const MODULOS_ASIGNABLES = [
   'home', 'operaciones', 'recetario', 'stock', 'pedidos',
   'haccp', 'reportes', 'calendario', 'carta', 'pase',
-  'facturas', 'produccion', 'merma', 'equipo', 'ventas',
+  'facturas', 'produccion', 'merma', 'equipo', 'organigrama', 'ventas',
 ] as const
 
 // ── Helpers ──
@@ -100,10 +100,12 @@ const EMPTY_MIEMBRO_FORM: MiembroForm = {
 interface PuestoForm {
   nombre: string; descripcion: string; nivel: string
   plaza_default: string; permisos_app: string[]; tareas_funciones: string
+  area_key: string; reporta_a_puesto_id: string
 }
 const EMPTY_PUESTO_FORM: PuestoForm = {
   nombre: '', descripcion: '', nivel: 'cocinero',
   plaza_default: '', permisos_app: [], tareas_funciones: '',
+  area_key: '', reporta_a_puesto_id: '',
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -160,10 +162,12 @@ function MiembroFormDatos({
 }
 
 function PuestoFormBody({
-  form, setForm,
+  form, setForm, puestos, selfId,
 }: {
   form: PuestoForm
   setForm: React.Dispatch<React.SetStateAction<PuestoForm>>
+  puestos: Puesto[]
+  selfId?: string
 }) {
   function toggleModulo(modulo: string) {
     setForm(f => ({
@@ -206,6 +210,39 @@ function PuestoFormBody({
             </button>
           ))}
         </div>
+      </div>
+      <div>
+        <label style={{ ...labelStyle, marginBottom: 8 }}>Área</label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {AREA_CATALOGO.map(a => {
+            const active = form.area_key === a.key
+            return (
+              <button key={a.key} type="button"
+                onClick={() => setForm(f => ({ ...f, area_key: active ? '' : a.key }))}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 20,
+                  border: `1.5px solid ${active ? a.color : 'var(--border)'}`,
+                  background: active ? a.color + '18' : 'var(--surface)',
+                  color: active ? a.color : 'var(--text-2)',
+                  fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 15 }}>{a.icon}</span>
+                {a.nombre}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <div>
+        <label style={labelStyle}>Reporta a</label>
+        <select style={fieldStyle} value={form.reporta_a_puesto_id}
+          onChange={e => setForm(f => ({ ...f, reporta_a_puesto_id: e.target.value }))}>
+          <option value="">— Nadie (raíz del organigrama) —</option>
+          {puestos
+            .filter(p => p.id !== selfId && !(selfId && idsDescendientes(selfId, puestos).has(p.id)))
+            .map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+        </select>
       </div>
       <div>
         <label style={labelStyle}>Plaza OPS por defecto</label>
@@ -538,6 +575,8 @@ export default function TurnosPage() {
       plaza_default: selectedPuesto.plaza_default ?? '',
       permisos_app: selectedPuesto.permisos_app ?? [],
       tareas_funciones: (selectedPuesto.tareas_funciones ?? []).join('\n'),
+      area_key: selectedPuesto.area_key ?? '',
+      reporta_a_puesto_id: selectedPuesto.reporta_a_puesto_id ?? '',
     })
     setEditingPuesto(true)
   }
@@ -553,6 +592,8 @@ export default function TurnosPage() {
         plaza_default: puestoForm.plaza_default || null,
         permisos_app: puestoForm.permisos_app,
         tareas_funciones: puestoForm.tareas_funciones.split('\n').map(s => s.trim()).filter(Boolean),
+        area_key: puestoForm.area_key || null,
+        reporta_a_puesto_id: puestoForm.reporta_a_puesto_id || null,
       })
       setEditingPuesto(false); setPuestosView('list'); setSelectedPuesto(null)
     } catch (e: any) { alert(e.message) }
@@ -570,6 +611,9 @@ export default function TurnosPage() {
         plaza_default: puestoForm.plaza_default || null,
         permisos_app: puestoForm.permisos_app,
         tareas_funciones: puestoForm.tareas_funciones.split('\n').map(s => s.trim()).filter(Boolean),
+        area_key: puestoForm.area_key || null,
+        reporta_a_puesto_id: puestoForm.reporta_a_puesto_id || null,
+        orden: 0,
       })
       setPuestosView('list')
       showToast(`Puesto "${puestoForm.nombre}" creado`)
@@ -585,6 +629,8 @@ export default function TurnosPage() {
       plaza_default: tpl.plaza_default ?? '',
       permisos_app: [...tpl.permisos_app],
       tareas_funciones: tpl.tareas_funciones.join('\n'),
+      area_key: tpl.area_key,
+      reporta_a_puesto_id: '',
     })
     setPuestosView('nuevo')
   }
@@ -1664,7 +1710,7 @@ export default function TurnosPage() {
             {isEdit ? `Editar: ${selectedPuesto?.nombre}` : 'Nuevo puesto'}
           </h2>
         </div>
-        <PuestoFormBody form={puestoForm} setForm={setPuestoForm} />
+        <PuestoFormBody form={puestoForm} setForm={setPuestoForm} puestos={puestos} selfId={selectedPuesto?.id} />
         <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
           <button onClick={() => isEdit ? setEditingPuesto(false) : setPuestosView('list')} style={btnSecondary}>Cancelar</button>
           <button onClick={isEdit ? saveEditPuesto : saveNuevoPuesto} disabled={saving} style={btnPrimary}>
