@@ -203,7 +203,7 @@ export default function OrganigramaPage() {
               }}
             >
               {miembrosFiltrados.map(m => (
-                <MiembroCard key={m.id} miembro={m} puestos={puestos} miembros={miembros} />
+                <MiembroCard key={m.id} miembro={m} puestos={puestos} miembros={miembros} isAdmin={isAdmin} />
               ))}
             </div>
           )

@@ -10,6 +10,7 @@ import { useFichaje, type FichajeDia } from '@/lib/hooks/useFichaje'
 import { useAuth } from '@/lib/auth/context'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { MODULO_CONFIG, AREA_CATALOGO } from '@/lib/constants'
+import { DEEPLINK_EDITAR_ACCESOS_KEY } from '@/components/organigrama/MiembroCard'
 
 // ── Constantes ──
 
@@ -415,6 +416,28 @@ export default function TurnosPage() {
     setLocalExtra(m.modulos_extra); setLocalRestringidos(m.modulos_restringidos)
     setOverrideMode(false)
   }
+
+  // Deep-link desde la carta del Organigrama ("Editar accesos") — abre
+  // directamente la ficha de esa persona en modo Personalizar. Espera a que
+  // los miembros estén cargados; se consume una sola vez (se borra la key).
+  const deeplinkConsumido = useRef(false)
+  useEffect(() => {
+    if (deeplinkConsumido.current || loading || miembros.length === 0) return
+    let raw: string | null = null
+    try { raw = localStorage.getItem(DEEPLINK_EDITAR_ACCESOS_KEY) } catch { /* ignore */ }
+    if (!raw) return
+    deeplinkConsumido.current = true
+    localStorage.removeItem(DEEPLINK_EDITAR_ACCESOS_KEY)
+    try {
+      const { miembroId } = JSON.parse(raw) as { miembroId: string }
+      const m = miembros.find(mm => mm.id === miembroId)
+      if (m) {
+        setTab('equipo')
+        openFicha(m)
+        setOverrideMode(true)
+      }
+    } catch { /* ignore */ }
+  }, [loading, miembros])
 
   function startEditMiembro() {
     if (!selectedMiembro) return

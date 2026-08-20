@@ -8,9 +8,16 @@
 // manual de puesto, armado solo con datos que ya están cargados.
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Avatar } from '@/components/ui'
 import { NIVELES_ACCESO, type Miembro, type Puesto } from '@/lib/hooks/useEquipo'
 import { MODULO_CONFIG, PLAZA_ICONS, areaCatalogoItem, type ModuloId } from '@/lib/constants'
+
+// Deep-link a Turnos → Equipo para editar el acceso a módulos de una persona
+// puntual. Se resuelve del lado de Turnos (ver el useEffect que lo consume
+// en turnos/page.tsx) — localStorage, no query params, para no meter
+// useSearchParams/Suspense en una pantalla que hoy no lo necesita.
+export const DEEPLINK_EDITAR_ACCESOS_KEY = 'organigrama_editar_accesos'
 
 const NIVEL_GRADIENTE: Record<string, [string, string]> = {
   admin: ['#5b7bc4', '#3a5488'],
@@ -35,10 +42,18 @@ interface MiembroCardProps {
   miembro: Miembro
   puestos: Puesto[]
   miembros: Miembro[]
+  isAdmin?: boolean
 }
 
-export function MiembroCard({ miembro, puestos, miembros }: MiembroCardProps) {
+export function MiembroCard({ miembro, puestos, miembros, isAdmin = false }: MiembroCardProps) {
   const [flipped, setFlipped] = useState(false)
+  const router = useRouter()
+
+  function editarAccesos(e: React.MouseEvent) {
+    e.stopPropagation()
+    localStorage.setItem(DEEPLINK_EDITAR_ACCESOS_KEY, JSON.stringify({ miembroId: miembro.id }))
+    router.push('/turnos')
+  }
 
   const puesto = puestos.find(p => p.id === miembro.puesto_id)
   const reportaAPuesto = puesto?.reporta_a_puesto_id ? puestos.find(p => p.id === puesto.reporta_a_puesto_id) : undefined
@@ -170,6 +185,20 @@ export function MiembroCard({ miembro, puestos, miembros }: MiembroCardProps) {
             {modulosResto > 0 && <Chip label={`+${modulosResto}`} />}
             {modulosLabels.length === 0 && <span style={{ fontSize: 10, color: 'var(--text-3)', fontStyle: 'italic' }}>Sin módulos asignados</span>}
           </div>
+
+          {isAdmin && (
+            <button
+              onClick={editarAccesos}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                marginTop: 8, padding: '7px 10px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                background: 'var(--bg)', color: 'var(--accent)', fontSize: 10.5, fontWeight: 700, fontFamily: 'inherit',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>admin_panel_settings</span>
+              Editar accesos
+            </button>
+          )}
         </div>
       </div>
     </div>
