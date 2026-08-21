@@ -72,16 +72,19 @@ export function RutinaTurnoView({ embedded }: { embedded?: boolean } = {}) {
   // ── Qué ítems aplican a este turno y este día ───────────────────────────
   // Tres filtros, todos del papel original: la fase que se está mirando, los
   // ítems exclusivos de un turno ("cenizas" solo cierra la noche) y los que
-  // caen un día puntual ("campana (jueves)").
-  const visibles = useMemo(() => {
+  // caen un día puntual ("campana (jueves)"). Parametrizado por fase para
+  // poder pedir apertura y cierre juntos al exportar el PDF.
+  const filtrarPorFase = useCallback((f: RutinaTurnoFase) => {
     const dow = new Date(fecha + 'T12:00:00').getDay()
     const hoyIso = dow === 0 ? 7 : dow   // ISO 1=Lun..7=Dom
     return items
-      .filter(i => i.fase === fase)
+      .filter(i => i.fase === f)
       .filter(i => !i.turnos?.length || (turno != null && i.turnos.includes(turno)))
       .filter(i => !i.dias_semana?.length || i.dias_semana.includes(hoyIso))
       .sort((a, b) => a.orden - b.orden)
-  }, [items, fase, turno, fecha])
+  }, [items, turno, fecha])
+
+  const visibles = useMemo(() => filtrarPorFase(fase), [filtrarPorFase, fase])
 
   const regMap = useMemo(() => {
     const m: Record<string, typeof registros[number]> = {}
@@ -135,6 +138,31 @@ export function RutinaTurnoView({ embedded }: { embedded?: boolean } = {}) {
     marcar(item.id, fecha, turno, { responsable_id: miembroId }, perfil?.miembro_id ?? null)
     setAsignando(null)
   }, [turno, fecha, marcar, perfil])
+
+  // Hoja para colgar en la pared — apertura y cierre del día juntos en una
+  // sola cara, no solo la fase que se está mirando ahora.
+  const [exportando, setExportando] = useState(false)
+  const handleExportPDF = useCallback(async () => {
+    if (!turno || exportando) return
+    setExportando(true)
+    try {
+      const mapear = (list: RutinaTurnoItem[]) => list.map(i => ({
+        texto: i.texto,
+        hora: i.horas?.[turno] ?? null,
+        requiereResponsable: i.requiere_responsable,
+      }))
+      const turnoLabel = turnosActivos.find(t => t.id === turno)?.nombre ?? turno
+      const { exportRutinaTurnoPDF } = await import('@/lib/exportPDF')
+      await exportRutinaTurnoPDF({
+        apertura: mapear(filtrarPorFase('apertura')),
+        cierre: mapear(filtrarPorFase('cierre')),
+        turnoLabel,
+        fecha,
+      })
+    } finally {
+      setExportando(false)
+    }
+  }, [turno, exportando, filtrarPorFase, turnosActivos, fecha])
 
   // ── Reordenar en modo edición ───────────────────────────────────────────
   const mover = useCallback((idx: number, dir: -1 | 1) => {
@@ -190,6 +218,15 @@ export function RutinaTurnoView({ embedded }: { embedded?: boolean } = {}) {
           }}>
             {hechos}/{total}
           </span>
+          <button
+            onClick={handleExportPDF}
+            disabled={exportando || !turno}
+            style={{ ...btnReset, flexShrink: 0, opacity: exportando ? 0.5 : 1 }}
+            aria-label="Imprimir hoja de apertura y cierre"
+            title="Imprimir hoja para la pared"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 19, color: 'var(--text-3)' }}>print</span>
+          </button>
           <button
             onClick={() => setEditando(e => !e)}
             style={{ ...btnReset, flexShrink: 0 }}

@@ -421,3 +421,137 @@ export async function exportOrganigramaPDF(areas: AreaEstado[], puestos: Puesto[
 
   doc.save(`organigrama_${today.replace(/\//g, '-')}.pdf`)
 }
+
+// ══════════════════════════════════════════════════════════════
+// Rutina de turno — checklist de apertura y cierre para colgar en
+// la pared. Una sola hoja A4: mitad de arriba apertura, mitad de
+// abajo cierre, con casillero para tildar a mano.
+// ══════════════════════════════════════════════════════════════
+
+interface PDFRutinaItem {
+  texto: string
+  hora: string | null
+  requiereResponsable: boolean
+}
+
+export async function exportRutinaTurnoPDF(params: {
+  apertura: PDFRutinaItem[]
+  cierre: PDFRutinaItem[]
+  turnoLabel: string
+  fecha: string
+}) {
+  const { apertura, cierre, turnoLabel, fecha } = params
+  const { default: jsPDF } = await import('jspdf')
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const pageW = doc.internal.pageSize.getWidth()
+  const pageH = doc.internal.pageSize.getHeight()
+  const margin = 16
+
+  const navy: [number, number, number] = [15, 23, 42]
+  const accent: [number, number, number] = [79, 70, 229]
+  const gray: [number, number, number] = [100, 116, 139]
+  const lightGray: [number, number, number] = [226, 232, 240]
+  const textDark: [number, number, number] = [30, 41, 59]
+
+  const fechaLarga = new Date(fecha + 'T12:00:00').toLocaleDateString('es-AR', {
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+  })
+
+  // ── Header ──
+  doc.setFillColor(...navy)
+  doc.rect(0, 0, pageW, 26, 'F')
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(15)
+  doc.setTextColor(255, 255, 255)
+  doc.text('Rutina de turno', margin, 12)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(200, 200, 220)
+  doc.text(`${fechaLarga} · ${turnoLabel}`, margin, 19)
+
+  const footerY = pageH - 10
+  const topY = 36
+  const dividerY = topY + (footerY - 10 - topY) / 2
+
+  function drawSeccion(label: string, color: [number, number, number], items: PDFRutinaItem[], startY: number, endY: number) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(12)
+    doc.setTextColor(...color)
+    doc.text(label, margin, startY)
+    doc.setDrawColor(...lightGray)
+    doc.setLineWidth(0.4)
+    doc.line(margin, startY + 3, pageW - margin, startY + 3)
+
+    const rowsStartY = startY + 9
+    const availH = endY - rowsStartY
+
+    if (items.length === 0) {
+      doc.setFont('helvetica', 'italic')
+      doc.setFontSize(9)
+      doc.setTextColor(...gray)
+      doc.text('Sin pasos cargados', margin, rowsStartY + 4)
+      return
+    }
+
+    const rowH = Math.min(9.5, Math.max(5.5, availH / items.length))
+
+    items.forEach((item, idx) => {
+      const rowY = rowsStartY + idx * rowH
+      const boxSize = 3.6
+      const boxY = rowY + (rowH - boxSize) / 2 - 1
+      const midY = rowY + rowH / 2 + 1.2
+
+      doc.setDrawColor(...gray)
+      doc.setLineWidth(0.35)
+      doc.rect(margin, boxY, boxSize, boxSize)
+
+      let textX = margin + boxSize + 3
+      if (item.hora) {
+        doc.setFont('courier', 'bold')
+        doc.setFontSize(8)
+        doc.setTextColor(...accent)
+        doc.text(item.hora, textX, midY)
+        textX += 12
+      }
+
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9.5)
+      doc.setTextColor(...textDark)
+      doc.text(item.texto, textX, midY)
+
+      if (item.requiereResponsable) {
+        const respX = pageW - margin - 38
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(7)
+        doc.setTextColor(...gray)
+        doc.text('Resp:', respX, midY)
+        doc.setDrawColor(...lightGray)
+        doc.setLineWidth(0.3)
+        doc.line(respX + 8, midY + 0.5, pageW - margin, midY + 0.5)
+      }
+    })
+  }
+
+  drawSeccion('APERTURA', accent, apertura, topY, dividerY - 4)
+
+  doc.setDrawColor(...navy)
+  doc.setLineWidth(0.6)
+  doc.setLineDashPattern([2, 1.5], 0)
+  doc.line(margin, dividerY, pageW - margin, dividerY)
+  doc.setLineDashPattern([], 0)
+
+  drawSeccion('CIERRE', navy, cierre, dividerY + 8, footerY - 6)
+
+  // ── Footer ──
+  doc.setDrawColor(...lightGray)
+  doc.setLineWidth(0.3)
+  doc.line(margin, footerY - 4, pageW - margin, footerY - 4)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(7)
+  doc.setTextColor(...gray)
+  doc.text('Tildar con lapicera al completar cada paso — Generado por KitchenOS', margin, footerY)
+  doc.text(fecha, pageW - margin, footerY, { align: 'right' })
+
+  doc.save(`rutina-turno-${fecha}.pdf`)
+}
