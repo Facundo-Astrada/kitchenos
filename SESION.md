@@ -1,23 +1,17 @@
-# Sesión — 2026-08-19 (Organigrama)
+# Sesión — 2026-08-20 (PDF de rutina de turno)
 
 ## Qué se cerró
-- **Organigrama completo, 3 fases** (`/organigrama`, pedido directo de Facundo, no venía de `PENDIENTES.md`): Plantel (cartas de puesto con flip), Estructura (catálogo fijo de 12 áreas siempre visibles con explicación aunque estén inactivas, árbol de puestos, reasignar jerarquía), Cobertura (área × Definir/Preparar/Ejecutar/Controlar, alerta si falta responsable salvo en Ejecutar). Asistente de 3 preguntas, export PDF (organigrama + una carilla por puesto), Kitchen Coach integrado al nivel de OPS.
-- **Multi-responsable** — pivote sobre la marcha por feedback de Facundo ("puede haber más de 1 chef o dueño"): `areas`/`area_capas` pasaron de un responsable único a `responsables uuid[]`, con backfill de los datos reales que ya había cargados. `ResponsablesPicker` (multi-select con portal) nuevo en `components/organigrama/`.
-- **Acceso a permisos desde la carta** — atajo "Editar accesos" en el dorso de cada `MiembroCard` (admin) que deep-linkea a Turnos → Equipo con el editor de módulos ya abierto (la edición en sí ya existía, "Personalizar").
-- Bug real encontrado y arreglado: el puesto de prueba de Facundo en Bros no tenía el módulo `organigrama` en `permisos_app` (se creó antes de que el módulo existiera) — fix puntual por SQL + gotcha genérico documentado en `hooks.md`.
-- Limpieza de copyright en comentarios de código/migraciones que citaban textual el research de terceros (elBulli, Clase 11 CGG) — pedido explícito de Facundo.
-- 4 commits (`a8e6c18`, `544966b`, `8f83957` + fix directo por SQL en Bros), pusheados, deploy en Vercel. Build limpio en cada paso.
-- Cierra el pendiente 🟢 "Exportar legajo PDF" (con alcance más amplio: todo el organigrama de una, no por puesto individual desde Turnos).
+- **Botón "imprimir" en Turno** (`RutinaTurnoView`, pedido directo de Facundo — mitad apertura / mitad cierre en una sola carilla, no venía de `PENDIENTES.md`): exporta un PDF A4 con apertura arriba y cierre abajo, casillero cuadrado para tildar a mano, hora por paso y línea "Resp:" en los ítems que piden responsable. `exportRutinaTurnoPDF` nueva en `lib/exportPDF.ts`, mismo patrón visual (navy/accent/jsPDF dinámico) que `exportRecetaPDF`/`exportOrganigramaPDF`.
+- Se extrajo `filtrarPorFase` en `RutinaTurnoView.tsx` (antes inline solo para la fase activa) para poder pedir apertura y cierre juntos al exportar sin duplicar la lógica de filtros por turno/día.
+- Verificado end-to-end con Playwright headless contra el dev server: el click dispara la descarga (`rutina-turno-2026-08-20.pdf`, ~4.7KB) sin errores de consola nuevos (el único error de consola presente ya estaba en `/login` antes del cambio). `tsc --noEmit` limpio.
+- 1 commit (`1f99d5a`), pusheado, deploy en Vercel.
 
 ## Qué quedó a medias
-- **No verificado en browser real por mí** — Playwright headless no llegó a Supabase en el sandbox de esta sesión (curl sí; causa no diagnosticada, parece de red del entorno). Facundo confirmó manualmente que Cobertura funciona con datos reales de Bros.
-- Dos simplificaciones deliberadas, anotadas en 🟢 Bajo: reasignar `reporta_a_puesto_id` es `<select>`, no drag-and-drop; el árbol de un área no anida jerarquía cruzada entre áreas distintas.
-- `PENDIENTES.md` sigue pesado (~21KB, la mayoría no es de esta sesión) — no se podó a fondo, solo lo que tocó esta sesión.
+- Nada — feature chica, autocontenida, sin dependencias abiertas.
 
 ## Probar primero mañana
-- Organigrama con el equipo real de Bros: activar/desactivar áreas, asignar más de un responsable a la vez (multi-select), correr el asistente de configuración de punta a punta.
-- El botón "Editar accesos" desde una carta — confirma que abre la ficha correcta con el editor de módulos ya desplegado.
-- Exportar PDF con el dataset real de Bros (7 puestos) — mirar que no se corte texto largo en las carillas.
+- Imprimir la hoja real en papel con el dataset de Bros (28 pasos) y confirmar que el tamaño de fila no queda ilegible cuando hay muchos ítems en una fase (el layout comprime la altura de fila hasta 5.5mm si hace falta — con 28 pasos repartidos puede acercarse a ese piso).
 
 ## Próximo paso concreto
-Nada de Organigrama quedó bloqueante. Si se retoma el plan grande, seguir con `PLAN-4-CAPAS.md` — quedan **B6** (desempeño por persona) y **B7** (checklist de carta pre-servicio). Si en cambio Facundo prioriza Organigrama, candidatos naturales: plantilla base de puestos para cuentas nuevas (hoy solo Bros tiene rutina/puestos cargados), o resolver el drag-and-drop de jerarquía si el `<select>` empieza a molestar en uso real.
+- Sin pendiente puntual disparado por esta sesión. Retomar el backlog de `PENDIENTES.md` → sección "Rutina de turno — flecos" (validar el corte apertura/cierre con el equipo real, plantilla base para restaurantes nuevos sin los 28 pasos de Bros, Coach sin contexto de esta pantalla) o el resto de 🔴/🟠 según prioridad.
+- Nota aparte: `PENDIENTES.md` sigue en ~21KB (por encima del ~10KB de referencia), casi nada de esta sesión — vale una pasada de poda a fondo cuando haya lugar.
