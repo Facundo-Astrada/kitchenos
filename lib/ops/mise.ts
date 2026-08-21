@@ -14,9 +14,9 @@ export const PLAZAS_OPS = [
   { id: 'pase',       label: 'Pase',        color: '#8b5cf6' },
   { id: 'pasteleria', label: 'Pastelería',  color: '#ec4899' },
   { id: 'panaderia',  label: 'Panadería',   color: '#84cc16' },
-  // Mismo índigo que PLAZA_COLORS.menu — plaza de control de un menú
+  // Mismo ámbar que PLAZA_COLORS.menu — plaza de control de un menú
   // activado en el mise (ver menuMise.ts), NO una plaza física de cocina.
-  { id: 'menu',       label: 'Menú',        color: '#6366f1' },
+  { id: 'menu',       label: 'Menú',        color: '#f59e0b' },
 ]
 
 // Escala de prioridad del mise (checklist_items.prioridad: sp/p/ref/chk) vs. la

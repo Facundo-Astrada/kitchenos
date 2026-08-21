@@ -18,12 +18,14 @@ export const PLAZA_COLORS: Record<Plaza, string> = {
   general: '#2563eb', parrilla: '#ef4444', frios: '#0ea5e9', calientes: '#f97316',
   pase: '#8b5cf6', pasteleria: '#ec4899', panaderia: '#84cc16',
   // 'menu' tampoco es una plaza física: es la plaza de control de un menú
-  // activado en el mise (ver lib/ops/menuMise.ts). Índigo — distinto del
-  // violeta de Pase, para que no se confundan una al lado de la otra en el
-  // selector. Nunca entra a PLAZAS_FIJAS/todasLasPlazas: no es una columna
-  // real de Espacios/Mesa de Trabajo/Producción por plaza, solo aparece como
+  // activado en el mise (ver lib/ops/menuMise.ts). Ámbar — mismo color que
+  // "Todo" en OpsToggle (Carta+Menú+Evento combinado): es el mismo concepto
+  // de "agregado", no una plaza real, y ámbar no pisa a ninguna plaza física
+  // (Calientes es naranja, no ámbar — se leen distintos uno al lado del
+  // otro). Nunca entra a PLAZAS_FIJAS/todasLasPlazas: no es una columna real
+  // de Espacios/Mesa de Trabajo/Producción por plaza, solo aparece como
   // opción en el selector del mise cuando hay ítems ahí.
-  menu: '#6366f1',
+  menu: '#f59e0b',
 }
 // Plazas de cocina usadas para sembrar el espacio "Cocina" por defecto
 export const PLAZAS_COCINA: Plaza[] = ['parrilla', 'frios', 'calientes', 'pase', 'pasteleria', 'panaderia', 'general']

@@ -250,7 +250,8 @@ export function ProduccionBoard({
     if (vista === 'carta') return out
     const colMenu = columnasPorPaso(porModo('menu'), 'menu')
     if (colMenu.length > 0) {
-      out.push({ id: 'menu', titulo: 'Menú', icono: 'restaurant', color: '#8b5cf6', columnas: colMenu })
+      // Mismo ámbar que PLAZA_COLORS.menu (lib/constants.ts) — mantener en espejo.
+      out.push({ id: 'menu', titulo: 'Menú', icono: 'restaurant', color: '#b45309', columnas: colMenu })
     }
     const colEvento = columnasPorPaso(porModo('evento'), 'evento')
     if (colEvento.length > 0) {
