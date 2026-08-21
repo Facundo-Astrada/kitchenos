@@ -22,7 +22,7 @@ import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
 import { useCierresTurno } from '@/lib/hooks/useCierresTurno'
 import { useNotasPlaza } from '@/lib/hooks/useNotasPlaza'
 import { NotasPlaza } from '@/components/ops/NotasPlaza'
-import { todasLasPlazas, plazaLabel, plazaIcon } from '@/lib/constants'
+import { todasLasPlazas, plazaLabel, plazaIcon, plazaColor } from '@/lib/constants'
 import { hoyOperativo, sumarDias, turnoVigente, turnoAnterior, turnoSiguiente, encodeTurnoFase, cierreIncompleto, fechaEnTz } from '@/lib/ops/turnos'
 import { menuItemVisible } from '@/lib/ops/mise'
 import { setOpsChromeCompact } from '@/lib/ops/chromeBus'
@@ -172,9 +172,15 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // cada uno, no qué puede mirar: en el servicio real la gente cubre la plaza
   // de al lado, y el mise es lo primero que hay que poder abrir para hacerlo.
   // Mismo criterio que OPS, que nunca filtró tareas por plaza.
+  //
+  // 'menu' es una plaza virtual (ver lib/constants.ts) que NO vive en
+  // PLAZAS_FIJAS: solo aparece acá cuando hay un menú activado en el mise
+  // (checklist_items con plaza='menu'), para no ensuciar el selector en los
+  // restaurantes que nunca activaron un menú.
+  const hayMenuEnMise = useMemo(() => items.some(i => i.plaza === 'menu'), [items])
   const plazasForSelector: Plaza[] = useMemo(
-    () => todasLasPlazas(plazasCustom),
-    [plazasCustom],
+    () => hayMenuEnMise ? [...todasLasPlazas(plazasCustom), 'menu'] : todasLasPlazas(plazasCustom),
+    [plazasCustom, hayMenuEnMise],
   )
 
   const autoPlaza: Plaza | null = (() => {
@@ -656,11 +662,16 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         completos[i.plaza] = (completos[i.plaza] ?? 0) + 1
       }
     })
-    return todasLasPlazas(plazasCustom).reduce((acc, p) => {
+    // plazasForSelector, no todasLasPlazas: incluye 'menu' cuando hay un menú
+    // activado en el mise (ver más arriba) — si no, gridProgress['menu'] queda
+    // undefined y el primer selector de plaza (el de pantalla completa, sin el
+    // `?? { total: 0, done: 0 }` que sí tiene el bottom sheet) explota al leer
+    // `.total`.
+    return plazasForSelector.reduce((acc, p) => {
       acc[p] = { total: totals[p] ?? 0, done: completos[p] ?? 0 }
       return acc
     }, {} as Record<string, { total: number; done: number }>)
-  }, [items, registros, plazasCustom, tareasHoySet])
+  }, [items, registros, plazasForSelector, tareasHoySet])
 
   useEffect(() => {
     if (toast) { const t = setTimeout(() => setToast(null), 2500); return () => clearTimeout(t) }
@@ -920,6 +931,21 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     const origenItem = params.checklist_item_id ? items.find(it => it.id === params.checklist_item_id) : null
     const menuId = origenItem?.menu_id ?? null
 
+    // Guarda contra el doble despacho: dos cocineros (o un tap doble antes de
+    // que `creating` del card se propague) mandando el mismo déficit a
+    // Producción a segundos de diferencia insertaban dos tareas idénticas.
+    // `tareas` ya viaja por realtime entre clientes — si ya hay una viva para
+    // este ítem, esta categoría y este día, no hace falta otra.
+    if (params.checklist_item_id) {
+      const yaDespachada = tareas.some(t =>
+        t.checklist_item_id === params.checklist_item_id &&
+        t.turno_fecha === turnoFecha &&
+        t.categoria === categoria &&
+        t.estado !== 'listo'
+      )
+      if (yaDespachada) return
+    }
+
     await agregarTarea({
       titulo: params.titulo,
       descripcion,
@@ -928,7 +954,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       categoria,
       plaza: menuId ? null : params.plaza,
       receta_id: params.receta_id,
-      seccion: menuId ? 'general' : params.seccion,
+      seccion: menuId ? (origenItem?.menu_paso || 'general') : params.seccion,
       modo: menuId ? 'menu' : 'carta',
       menu_id: menuId,
       turno_fecha: turnoFecha,
@@ -961,7 +987,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         })
       }
     }
-  }, [agregarTarea, authPerfil, today, items])
+  }, [agregarTarea, authPerfil, today, items, tareas])
 
   // Handlers estables para la tarjeta memoizada. actualizarItem/eliminarItem
   // vienen del hook sin memoizar (una referencia nueva por render): pasarlos
@@ -1063,7 +1089,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
                   cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s',
                 }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 32, color: isCompleto ? '#22c55e' : '#4361a0' }}>{plazaIcon(p, plazasCustom)}</span>
+                  <span className="material-symbols-outlined" style={{ fontSize: 32, color: isCompleto ? '#22c55e' : plazaColor(p, plazasCustom) }}>{plazaIcon(p, plazasCustom)}</span>
                   <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{plazaLabel(p, plazasCustom)}</span>
                   {gp.total > 0 ? (
                     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -1071,7 +1097,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                         {gp.done}/{gp.total} completados
                       </span>
                       <div style={{ height: 3, background: 'var(--border)', borderRadius: 99, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${gpPct}%`, background: isCompleto ? '#22c55e' : '#4361a0', borderRadius: 99, transition: 'width .3s' }} />
+                        <div style={{ height: '100%', width: `${gpPct}%`, background: isCompleto ? '#22c55e' : plazaColor(p, plazasCustom), borderRadius: 99, transition: 'width .3s' }} />
                       </div>
                     </div>
                   ) : (
@@ -2028,7 +2054,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                       border: `1px solid ${activa ? 'var(--accent)' : 'var(--border)'}`,
                     }}
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: 20, flexShrink: 0, color: completo ? '#22c55e' : '#4361a0' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 20, flexShrink: 0, color: completo ? '#22c55e' : plazaColor(p, plazasCustom) }}>
                       {plazaIcon(p, plazasCustom)}
                     </span>
                     <span style={{ flex: 1, textAlign: 'left', fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>
@@ -2037,7 +2063,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                     {gp.total > 0 ? (
                       <>
                         <div style={{ width: 56, height: 3, background: 'var(--border)', borderRadius: 99, overflow: 'hidden', flexShrink: 0 }}>
-                          <div style={{ width: `${gpPct}%`, height: '100%', background: completo ? '#22c55e' : '#4361a0' }} />
+                          <div style={{ width: `${gpPct}%`, height: '100%', background: completo ? '#22c55e' : plazaColor(p, plazasCustom) }} />
                         </div>
                         <span style={{
                           fontSize: 11, fontFamily: "'DM Mono', monospace", flexShrink: 0,

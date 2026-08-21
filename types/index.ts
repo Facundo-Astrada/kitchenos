@@ -686,6 +686,10 @@ export interface MisePlaceItem {
   // useChecklist; el filtro de vigencia se aplica en JS, ver menuItemVisible.
   menu_id?: string | null
   menus?: { nombre: string; vigencia_desde: string | null; vigencia_hasta: string | null } | null
+  // Paso del menú (Apetizer/Proteína/Pasta/...) — solo cuando menu_id no es
+  // null. Usado al despachar el ítem a Producción para caer en la columna
+  // real del plan en vez de forzar 'general' (ver menuMise.ts).
+  menu_paso?: string | null
 }
 
 // ── Espacios físicos (mesa de trabajo) ───────────────────────

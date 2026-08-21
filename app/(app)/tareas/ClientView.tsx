@@ -65,9 +65,13 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
 
   // Modo — persiste en localStorage. 'todo' es una vista que combina
   // Carta+Menú+Evento; nunca se guarda como modo real de una tarea (ver modoStorage).
+  // Default 'todo', no 'carta': el badge de OPS (operaciones/page.tsx) cuenta
+  // TODAS las tareas pendientes del día sin filtrar por modo, así que arrancar
+  // en 'carta' mostraba una lista más corta de lo que el badge prometía —
+  // el filtro pasa a ser una elección explícita, no el punto de partida.
   const [modo, setModo] = useState<OpsToggleValue>(() => {
-    if (typeof window === 'undefined') return 'carta'
-    return (localStorage.getItem('ops_modo') as OpsToggleValue) ?? 'carta'
+    if (typeof window === 'undefined') return 'todo'
+    return (localStorage.getItem('ops_modo') as OpsToggleValue) ?? 'todo'
   })
   // modo concreto a usar al crear/mover tareas (una tarea no puede pertenecer a "todo")
   const modoStorage: OpsModo = modo === 'todo' ? 'carta' : modo

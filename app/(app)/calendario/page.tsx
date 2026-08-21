@@ -142,7 +142,12 @@ export default function CalendarioPage() {
     agregarNotaItem, eliminarNotaItem, asignarPlazaNotaItem,
   } = useCalendario()
   const { agregarTarea } = useTareas({ soloEscritura: true })
-  const { menus: catalogoMenus } = useMenus()
+  // Solo eventos: un menú fijo se activa por vigencia en el mise, no por
+  // fecha puntual (adenda 2026-08-20, "una sola puerta de activación" —
+  // ver PLAN-MENUS-MISE-2026-08.md). Este picker crea tareas directo a
+  // Producción para una fecha exacta, que es justo lo que un evento necesita.
+  const { menus: todosLosMenus } = useMenus()
+  const catalogoMenus = useMemo(() => todosLosMenus.filter(m => m.tipo === 'evento'), [todosLosMenus])
   const RESTAURANTE_ID = useRestauranteId()
   const isDesktop = useIsDesktop()
   useSheetOpenWhen(showForm)
@@ -684,11 +689,11 @@ export default function CalendarioPage() {
         )}
 
         <div>
-          <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>Menú</label>
+          <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>Evento</label>
           {catalogoMenus.length === 0 ? (
             <div style={{ ...cardStyle, padding: 20, textAlign: 'center' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 28, color: 'var(--text-3)' }}>menu_book</span>
-              <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '6px 0 0' }}>No hay menús en el catálogo. Armá uno en Carta → Menús.</p>
+              <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '6px 0 0' }}>No hay eventos en el catálogo. Armá uno en Carta → Menús.</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -770,8 +775,8 @@ export default function CalendarioPage() {
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             }}>
               <div>
-                <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>Planificar menú</h2>
-                <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>Activa un menú del catálogo para un rango de días</p>
+                <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>Planificar evento</h2>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>Activa un evento del catálogo para un rango de días</p>
               </div>
               <button onClick={() => setShowMenuPlan(false)} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', display: 'flex', padding: 4 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 22 }}>close</span>
@@ -792,8 +797,8 @@ export default function CalendarioPage() {
             <span className="material-symbols-outlined" style={{ fontSize: 24 }}>arrow_back</span>
           </button>
           <div>
-            <h1 style={{ color: '#fff', fontSize: 18, fontWeight: 700, margin: 0 }}>Planificar menú</h1>
-            <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12, margin: '2px 0 0' }}>Activa un menú para un rango de días</p>
+            <h1 style={{ color: '#fff', fontSize: 18, fontWeight: 700, margin: 0 }}>Planificar evento</h1>
+            <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12, margin: '2px 0 0' }}>Activa un evento para un rango de días</p>
           </div>
         </div>
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -811,9 +816,9 @@ export default function CalendarioPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <h1 style={{ color: '#fff', fontSize: 20, fontWeight: 700, margin: 0 }}>Calendario</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button onClick={openMenuPlan} title="Planificar menú" style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 10, padding: isDesktop ? '8px 14px' : '8px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>restaurant_menu</span>
-              {isDesktop && 'Planificar menú'}
+            <button onClick={openMenuPlan} title="Planificar evento" style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 10, padding: isDesktop ? '8px 14px' : '8px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>celebration</span>
+              {isDesktop && 'Planificar evento'}
             </button>
             <button onClick={openNewForm} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>

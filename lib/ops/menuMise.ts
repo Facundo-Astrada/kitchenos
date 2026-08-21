@@ -78,6 +78,11 @@ export async function sincronizarMiseDeMenu(params: {
       recipiente_nombre: recipienteNombre, recipiente_capacidad: recipCapacidad,
       peso_porcion: p.peso_porcion ?? null, peso_porcion_unidad: p.peso_porcion_unidad ?? null,
       receta_id: p.tipo === 'receta' ? p.ref_id : null,
+      // Paso del menú (Apetizer/Proteína/Pasta/...) — para que al despachar
+      // este ítem desde el mise a Producción (handleCrearTarea en
+      // checklist/ClientView.tsx) la tarea caiga en la columna real del plan
+      // en vez de forzar 'general' y duplicarla.
+      menu_paso: p.paso || null,
     }
     const existenteId = existenteIdPorClave.get(clave)
     if (existenteId) {

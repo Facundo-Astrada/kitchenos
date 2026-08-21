@@ -5,18 +5,25 @@ export const PLAZAS_FIJAS: Plaza[] = ['parrilla', 'frios', 'calientes', 'pase', 
 export const PLAZA_LABELS: Record<Plaza, string> = {
   parrilla: 'Parrilla', frios: 'Fríos', calientes: 'Calientes',
   pase: 'Pase', pasteleria: 'Pastelería', panaderia: 'Panadería',
-  general: 'General',
+  general: 'General', menu: 'Menú',
 }
 export const PLAZA_ICONS: Record<Plaza, string> = {
   parrilla: 'local_fire_department', frios: 'ac_unit', calientes: 'soup_kitchen',
   pase: 'room_service', pasteleria: 'cake', panaderia: 'bakery_dining',
-  general: 'groups',
+  general: 'groups', menu: 'restaurant_menu',
 }
 export const PLAZA_COLORS: Record<Plaza, string> = {
   // Azul a propósito, distinto del resto: "general" no es una plaza física
   // como las demás, así que se destaca para que se lea como especial.
   general: '#2563eb', parrilla: '#ef4444', frios: '#0ea5e9', calientes: '#f97316',
   pase: '#8b5cf6', pasteleria: '#ec4899', panaderia: '#84cc16',
+  // 'menu' tampoco es una plaza física: es la plaza de control de un menú
+  // activado en el mise (ver lib/ops/menuMise.ts). Índigo — distinto del
+  // violeta de Pase, para que no se confundan una al lado de la otra en el
+  // selector. Nunca entra a PLAZAS_FIJAS/todasLasPlazas: no es una columna
+  // real de Espacios/Mesa de Trabajo/Producción por plaza, solo aparece como
+  // opción en el selector del mise cuando hay ítems ahí.
+  menu: '#6366f1',
 }
 // Plazas de cocina usadas para sembrar el espacio "Cocina" por defecto
 export const PLAZAS_COCINA: Plaza[] = ['parrilla', 'frios', 'calientes', 'pase', 'pasteleria', 'panaderia', 'general']

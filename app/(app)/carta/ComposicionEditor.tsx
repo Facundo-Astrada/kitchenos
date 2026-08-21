@@ -574,10 +574,23 @@ export default function ComposicionEditor({
   // esa plaza al activar en el mise, sin importar la plaza que tenga cada
   // preparación (ver lib/ops/menuMise.ts). Una sola persona controla el
   // menú entero desde una plaza que puede no existir físicamente.
-  const [plazaControl, setPlazaControl] = useState(inicial?.plazaControl ?? '')
+  //
+  // Menú nuevo (sin `plazaControl` en el inicial — a diferencia de uno
+  // existente, que siempre lo trae desde menuToInicial aunque sea null):
+  // arranca en 'menu', la plaza dedicada. Antes no tenía default y varios
+  // menús terminaban en 'general', que se inyecta en TODAS las plazas del
+  // mise y duplicaba cada preparación cinco veces (ver adenda 2026-08-20).
+  const esMenuNuevo = inicial?.modo === 'menu' && inicial.plazaControl === undefined
+  const [plazaControl, setPlazaControl] = useState(inicial?.plazaControl ?? (esMenuNuevo ? 'menu' : ''))
   const { plazasCustom } = usePlazasCustom()
   const plazasControlDisponibles = useMemo(
-    () => [...PLAZAS_OPS, ...plazasCustom.map(c => ({ id: c.key, label: c.nombre, color: c.color }))],
+    () => [
+      // 'menu' primero — es la opción recomendada, y con 'general' afuera
+      // (ver comentario arriba) quedaría última si no se reordena a mano.
+      PLAZAS_OPS.find(p => p.id === 'menu')!,
+      ...PLAZAS_OPS.filter(p => p.id !== 'general' && p.id !== 'menu'),
+      ...plazasCustom.map(c => ({ id: c.key, label: c.nombre, color: c.color })),
+    ],
     [plazasCustom]
   )
   const [variantes, setVariantes] = useState<string[]>(inicial?.variantes ?? [])
@@ -957,8 +970,11 @@ export default function ComposicionEditor({
             </div>
           )}
           {/* Vigencia en el mise — cuándo entra y sale de la apertura/cierre.
-              Sin esto no se puede activar el menú en el mise (ver botón en MenusView). */}
-          {!esPlato && (
+              Sin esto no se puede activar el menú en el mise (ver botón en
+              MenusView). Solo modo menú: un evento no pasa por el mise —
+              se activa por fecha directo a Producción (ver adenda 2026-08-20,
+              "una sola puerta de activación": fijo → mise, evento → fechas). */}
+          {modo === 'menu' && (
             <div style={{ marginBottom: 10 }}>
               <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>
                 Vigencia en el mise <span style={{ textTransform: 'none', fontWeight: 500, color: 'var(--text-3)' }}>(cuándo aparece en la apertura/cierre)</span>
@@ -977,8 +993,9 @@ export default function ComposicionEditor({
           {/* Plaza de control (opcional) — si se elige, todo el menú se manda
               a esa plaza al activar en el mise, sin configurar OPS ítem por
               ítem. Pensada para una plaza custom que no existe físicamente
-              (ver Configuración → Plazas), controlada por una sola persona. */}
-          {!esPlato && (
+              (ver Configuración → Plazas), controlada por una sola persona.
+              Solo modo menú, mismo motivo que la vigencia de arriba. */}
+          {modo === 'menu' && (
             <div style={{ marginBottom: 10 }}>
               <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>
                 Plaza de control <span style={{ textTransform: 'none', fontWeight: 500, color: 'var(--text-3)' }}>(opcional — manda todo el menú a una sola plaza)</span>

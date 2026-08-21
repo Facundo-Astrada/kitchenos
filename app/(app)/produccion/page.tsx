@@ -74,6 +74,13 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
   const RESTAURANTE_ID = useRestauranteId()
   const { agregarTarea, tareas, eliminarTarea, refetch: refetchTareas } = useTareas()
   const { menus: catalogoMenus, activarEnMise, desactivarEnMise } = useMenus()
+  // Una sola puerta de activación por tipo (adenda 2026-08-20): un menú fijo
+  // se activa por vigencia en el mise — Producción recibe solo lo que se
+  // despacha desde ahí. Un evento se activa por fecha directo a Producción
+  // (fuerza toda la lista sin contar heladera, que es justo lo que un
+  // evento puntual necesita). El día/rango de arriba del picker solo aplica
+  // a eventos: si el catálogo no tiene ninguno, no tiene sentido mostrarlo.
+  const hayEventosEnCatalogo = useMemo(() => catalogoMenus.some(m => m.tipo === 'evento'), [catalogoMenus])
   const [miseSavingId, setMiseSavingId] = useState<string | null>(null)
   const { miembros } = useEquipo()
 
@@ -496,80 +503,87 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
             <div style={{ padding: '18px 16px 12px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)' }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>Cargar menú</div>
-                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{multiSelectMode && diasSeleccionados.size > 0 ? `En ${diasSeleccionados.size} ${diasSeleccionados.size === 1 ? 'día' : 'días'} seleccionados` : 'Crea las tareas en Producción'}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{multiSelectMode && diasSeleccionados.size > 0 ? `En ${diasSeleccionados.size} ${diasSeleccionados.size === 1 ? 'día' : 'días'} seleccionados` : 'Fijo → activalo en el mise · Evento → elegí fecha'}</div>
               </div>
               <button onClick={() => { setShowMenuPicker(false); setMultiSelectMode(false); setDiasSeleccionados(new Set()) }} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-3)' }}>close</span>
               </button>
             </div>
             <div style={{ overflowY: 'auto', flex: 1, padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}>
-              {/* Paso opcional: ¿un día o varios? */}
-              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
-                ¿Un día o varios?
-              </div>
-              <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-                <button
-                  onClick={() => { setMultiSelectMode(false); setDiasSeleccionados(new Set()) }}
-                  style={{
-                    flex: 1, padding: '8px 10px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
-                    border: `1.5px solid ${!multiSelectMode ? 'var(--navy)' : 'var(--border)'}`,
-                    background: !multiSelectMode ? 'rgba(28,45,74,.06)' : 'var(--bg)',
-                    color: !multiSelectMode ? 'var(--navy)' : 'var(--text-2)',
-                    fontSize: 12, fontWeight: 700,
-                  }}
-                >
-                  {fmtDateLabel(new Date(fecha + 'T12:00:00'))}
-                </button>
-                <button
-                  onClick={() => setMultiSelectMode(true)}
-                  style={{
-                    flex: 1, padding: '8px 10px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
-                    border: `1.5px solid ${multiSelectMode ? 'var(--navy)' : 'var(--border)'}`,
-                    background: multiSelectMode ? 'rgba(28,45,74,.06)' : 'var(--bg)',
-                    color: multiSelectMode ? 'var(--navy)' : 'var(--text-2)',
-                    fontSize: 12, fontWeight: 700,
-                  }}
-                >
-                  Varios días
-                </button>
-              </div>
+              {/* El día/rango solo aplica a eventos (activación directa a
+                  Producción) — un menú fijo se activa por vigencia en el
+                  mise, no por fecha puntual. Sin eventos en el catálogo, este
+                  paso no tiene a qué aplicarse. */}
+              {hayEventosEnCatalogo && (
+                <>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+                    ¿Un día o varios? <span style={{ textTransform: 'none', fontWeight: 500 }}>(para un evento)</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                    <button
+                      onClick={() => { setMultiSelectMode(false); setDiasSeleccionados(new Set()) }}
+                      style={{
+                        flex: 1, padding: '8px 10px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+                        border: `1.5px solid ${!multiSelectMode ? 'var(--navy)' : 'var(--border)'}`,
+                        background: !multiSelectMode ? 'rgba(28,45,74,.06)' : 'var(--bg)',
+                        color: !multiSelectMode ? 'var(--navy)' : 'var(--text-2)',
+                        fontSize: 12, fontWeight: 700,
+                      }}
+                    >
+                      {fmtDateLabel(new Date(fecha + 'T12:00:00'))}
+                    </button>
+                    <button
+                      onClick={() => setMultiSelectMode(true)}
+                      style={{
+                        flex: 1, padding: '8px 10px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+                        border: `1.5px solid ${multiSelectMode ? 'var(--navy)' : 'var(--border)'}`,
+                        background: multiSelectMode ? 'rgba(28,45,74,.06)' : 'var(--bg)',
+                        color: multiSelectMode ? 'var(--navy)' : 'var(--text-2)',
+                        fontSize: 12, fontWeight: 700,
+                      }}
+                    >
+                      Varios días
+                    </button>
+                  </div>
 
-              {multiSelectMode && (
-                <div style={{ background: 'var(--navy)', borderRadius: 12, padding: '10px 10px 4px', marginBottom: 14 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <button onClick={() => shiftMes(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                      <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 18 }}>chevron_left</span>
-                    </button>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.8)', textTransform: 'capitalize' }}>
-                      {fmtMesLabel(mesActual)}
-                    </span>
-                    <button onClick={() => shiftMes(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                      <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 18 }}>chevron_right</span>
-                    </button>
-                  </div>
-                  <MesCalendar
-                    mes={mesActual}
-                    fechaSeleccionada={fecha}
-                    fechasMes={fechasMes}
-                    multiSelectMode={true}
-                    diasSeleccionados={diasSeleccionados}
-                    onSelectFecha={() => {}}
-                    onToggleDia={(f) => setDiasSeleccionados(prev => {
-                      const next = new Set(prev)
-                      if (next.has(f)) next.delete(f)
-                      else next.add(f)
-                      return next
-                    })}
-                  />
-                  <div style={{
-                    padding: '8px 0 6px', textAlign: 'center', fontSize: 12, fontWeight: 700,
-                    color: diasSeleccionados.size > 0 ? '#22c55e' : 'rgba(255,255,255,.4)',
-                  }}>
-                    {diasSeleccionados.size > 0
-                      ? `${diasSeleccionados.size} ${diasSeleccionados.size === 1 ? 'día seleccionado' : 'días seleccionados'} — elegí un menú abajo`
-                      : 'Tocá los días para seleccionarlos'}
-                  </div>
-                </div>
+                  {multiSelectMode && (
+                    <div style={{ background: 'var(--navy)', borderRadius: 12, padding: '10px 10px 4px', marginBottom: 14 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <button onClick={() => shiftMes(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                          <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 18 }}>chevron_left</span>
+                        </button>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.8)', textTransform: 'capitalize' }}>
+                          {fmtMesLabel(mesActual)}
+                        </span>
+                        <button onClick={() => shiftMes(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                          <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.6)', fontSize: 18 }}>chevron_right</span>
+                        </button>
+                      </div>
+                      <MesCalendar
+                        mes={mesActual}
+                        fechaSeleccionada={fecha}
+                        fechasMes={fechasMes}
+                        multiSelectMode={true}
+                        diasSeleccionados={diasSeleccionados}
+                        onSelectFecha={() => {}}
+                        onToggleDia={(f) => setDiasSeleccionados(prev => {
+                          const next = new Set(prev)
+                          if (next.has(f)) next.delete(f)
+                          else next.add(f)
+                          return next
+                        })}
+                      />
+                      <div style={{
+                        padding: '8px 0 6px', textAlign: 'center', fontSize: 12, fontWeight: 700,
+                        color: diasSeleccionados.size > 0 ? '#22c55e' : 'rgba(255,255,255,.4)',
+                      }}>
+                        {diasSeleccionados.size > 0
+                          ? `${diasSeleccionados.size} ${diasSeleccionados.size === 1 ? 'día seleccionado' : 'días seleccionados'} — elegí un evento abajo`
+                          : 'Tocá los días para seleccionarlos'}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {catalogoMenus.length === 0 ? (
@@ -579,58 +593,76 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
                   <div style={{ fontSize: 11, marginTop: 4 }}>Armá uno en Carta → Menús</div>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, opacity: multiSelectMode && diasSeleccionados.size === 0 ? .45 : 1 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {catalogoMenus.map(menu => {
+                    const esEvento = menu.tipo === 'evento'
                     const disabled = cargandoMenu || (multiSelectMode && diasSeleccionados.size === 0)
                     // Estado del mise — mismo criterio que Carta → Menús (lib/ops/menuMise.ts).
                     const { sinVigencia, vigenciaVencida, vigenciaFutura, vigente } = estadoMiseMenu(menu, hoyOperativo())
                     const miseSaving = miseSavingId === menu.id
                     return (
-                    <div key={menu.id} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
-                      {/* Activa TAREAS del día/rango elegido arriba — no toca el mise */}
-                      <button onClick={() => !disabled && activarMenu(menu)} disabled={disabled}
-                        style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '12px 14px', cursor: disabled ? 'default' : 'pointer', fontFamily: 'inherit', opacity: cargandoMenu ? .6 : 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 99, textTransform: 'uppercase', letterSpacing: '.04em', background: menu.tipo === 'evento' ? 'rgba(139,92,246,.14)' : 'rgba(14,165,233,.14)', color: menu.tipo === 'evento' ? '#8b5cf6' : '#0ea5e9' }}>
-                            {menu.tipo === 'evento' ? 'Evento' : 'Fijo'}
-                          </span>
-                          <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{menu.nombre}</span>
-                          <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>{menu.preparaciones.length} prep.</span>
-                          <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--accent)' }}>add_circle</span>
-                        </div>
-                        {menu.descripcion && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>{menu.descripcion}</div>}
-                      </button>
-                      {/* Activa el MISE (checklist_items, apertura/cierre) — independiente de arriba */}
-                      <div style={{ borderTop: '1px solid var(--border)', padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {menu.enMise ? (
-                          <>
-                            {vigente ? (
-                              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'rgba(34,197,94,.13)', color: '#16a34a' }}>
-                                En el mise · hasta {new Date(menu.vigencia_hasta! + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+                    <div key={menu.id} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', opacity: esEvento && multiSelectMode && diasSeleccionados.size === 0 ? .45 : 1 }}>
+                      {esEvento ? (
+                        // Evento: activa TAREAS del día/rango elegido arriba, directo a
+                        // Producción — no pasa por el mise (ver hayEventosEnCatalogo).
+                        <button onClick={() => !disabled && activarMenu(menu)} disabled={disabled}
+                          style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '12px 14px', cursor: disabled ? 'default' : 'pointer', fontFamily: 'inherit', opacity: cargandoMenu ? .6 : 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 99, textTransform: 'uppercase', letterSpacing: '.04em', background: 'rgba(139,92,246,.14)', color: '#8b5cf6' }}>
+                              Evento
+                            </span>
+                            <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{menu.nombre}</span>
+                            <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>{menu.preparaciones.length} prep.</span>
+                            <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--accent)' }}>add_circle</span>
+                          </div>
+                          {menu.descripcion && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>{menu.descripcion}</div>}
+                        </button>
+                      ) : (
+                        <>
+                          {/* Fijo: no se activa por fecha — solo por vigencia en el mise
+                              (ver bloque de abajo, ahora la única acción de la card). */}
+                          <div style={{ padding: '12px 14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 99, textTransform: 'uppercase', letterSpacing: '.04em', background: 'rgba(14,165,233,.14)', color: '#0ea5e9' }}>
+                                Fijo
                               </span>
-                            ) : vigenciaFutura ? (
-                              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'var(--surface)', color: 'var(--text-3)', border: '1px solid var(--border)' }}>
-                                Entra el {new Date(menu.vigencia_desde! + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
-                              </span>
+                              <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{menu.nombre}</span>
+                              <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>{menu.preparaciones.length} prep.</span>
+                            </div>
+                            {menu.descripcion && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>{menu.descripcion}</div>}
+                          </div>
+                          <div style={{ borderTop: '1px solid var(--border)' }}>
+                            {menu.enMise ? (
+                              <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                {vigente ? (
+                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'rgba(34,197,94,.13)', color: '#16a34a' }}>
+                                    En el mise · hasta {new Date(menu.vigencia_hasta! + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+                                  </span>
+                                ) : vigenciaFutura ? (
+                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'var(--surface)', color: 'var(--text-3)', border: '1px solid var(--border)' }}>
+                                    Entra el {new Date(menu.vigencia_desde! + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'var(--surface)', color: 'var(--text-3)', border: '1px solid var(--border)' }}>
+                                    Venció el {new Date(menu.vigencia_hasta! + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
+                                  </span>
+                                )}
+                                <button onClick={e => handleSacarMise(e, menu)} disabled={miseSaving}
+                                  style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: miseSaving ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600, color: 'var(--text-3)', opacity: miseSaving ? .6 : 1 }}>
+                                  Sacar del mise
+                                </button>
+                              </div>
                             ) : (
-                              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'var(--surface)', color: 'var(--text-3)', border: '1px solid var(--border)' }}>
-                                Venció el {new Date(menu.vigencia_hasta! + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}
-                              </span>
+                              <button onClick={e => handleActivarEnMise(e, menu)} disabled={miseSaving || sinVigencia || vigenciaVencida}
+                                title={sinVigencia ? 'Cargá vigencia desde/hasta en Editar (Carta → Menús)' : vigenciaVencida ? 'La vigencia ya venció' : 'Activar en el mise'}
+                                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: (sinVigencia || vigenciaVencida) ? 'none' : 'rgba(99,102,241,.08)', border: 'none', padding: '10px 14px', cursor: (miseSaving || sinVigencia || vigenciaVencida) ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: (sinVigencia || vigenciaVencida) ? 'var(--text-3)' : '#6366f1', opacity: miseSaving ? .6 : 1 }}>
+                                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>playlist_add_check</span>
+                                Activar en el mise
+                              </button>
                             )}
-                            <button onClick={e => handleSacarMise(e, menu)} disabled={miseSaving}
-                              style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: miseSaving ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600, color: 'var(--text-3)', opacity: miseSaving ? .6 : 1 }}>
-                              Sacar del mise
-                            </button>
-                          </>
-                        ) : (
-                          <button onClick={e => handleActivarEnMise(e, menu)} disabled={miseSaving || sinVigencia || vigenciaVencida}
-                            title={sinVigencia ? 'Cargá vigencia desde/hasta en Editar (Carta → Menús)' : vigenciaVencida ? 'La vigencia ya venció' : 'Activar en el mise'}
-                            style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: (miseSaving || sinVigencia || vigenciaVencida) ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, color: (sinVigencia || vigenciaVencida) ? 'var(--text-3)' : 'var(--accent)', opacity: miseSaving ? .6 : 1 }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>playlist_add_check</span>
-                            Activar en el mise
-                          </button>
-                        )}
-                      </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                     )
                   })}

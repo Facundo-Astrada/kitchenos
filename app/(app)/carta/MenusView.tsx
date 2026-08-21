@@ -154,8 +154,10 @@ function MenuCard({ menu, onEdit, onDelete, onActivarMise, onSacarMise }: {
             ))}
           </div>
         )}
-        {/* Estado del mise — solo si ya se activó alguna vez (ver Fase 4) */}
-        {menu.enMise && (
+        {/* Estado del mise — solo fijo (un evento se activa por fecha directo a
+            Producción, no pasa por el mise: ver adenda 2026-08-20). Solo si
+            ya se activó alguna vez (ver Fase 4). */}
+        {menu.tipo !== 'evento' && menu.enMise && (
           <div style={{ marginTop: 8 }}>
             {vigente ? (
               <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'rgba(34,197,94,.13)', color: '#16a34a', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
@@ -178,7 +180,9 @@ function MenuCard({ menu, onEdit, onDelete, onActivarMise, onSacarMise }: {
         <button onClick={onEdit} style={{ flex: 1, padding: '8px', background: 'none', border: 'none', borderRight: '1px solid var(--border)', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--accent)', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span> Editar
         </button>
-        {menu.enMise ? (
+        {/* Evento: sin toggle de mise — se activa por fecha desde Planificación
+            (ver adenda 2026-08-20, "una sola puerta de activación"). */}
+        {menu.tipo === 'evento' ? null : menu.enMise ? (
           <button onClick={handleSacar} disabled={miseSaving} title="Sacar del mise"
             style={{ flex: 1, padding: '8px', background: 'none', border: 'none', borderRight: '1px solid var(--border)', cursor: miseSaving ? 'default' : 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--text-3)', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, opacity: miseSaving ? .6 : 1 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>playlist_remove</span> Sacar
