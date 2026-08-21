@@ -1,11 +1,22 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
+import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/auth/context'
 import { useRestauranteId } from './useRestauranteId'
+import { useRestauranteConfig } from './useRestauranteConfig'
 import { MODULOS_EMPRENDIMIENTO } from '@/lib/constants'
 import type { RolPermiso } from '@/types'
+
+const SWR_OPTS = {
+  revalidateOnFocus: false,
+  revalidateOnReconnect: true,
+  dedupingInterval: 300_000,
+  keepPreviousData: true,
+} as const
+
+const SIN_PERMISOS: RolPermiso[] = []
 
 interface PermisosState {
   permisos: RolPermiso | null
@@ -25,99 +36,83 @@ interface PermisosState {
   upsertPermisos: (rol: string, data: Partial<Omit<RolPermiso, 'id' | 'restaurante_id' | 'rol' | 'created_at' | 'updated_at'>>) => Promise<void>
 }
 
+interface PermisosData {
+  allPermisos: RolPermiso[]
+  /** null = sin puesto asignado, usar rol_permisos como fallback */
+  modulosEfectivos: string[] | null
+}
+
+interface MiembroPuestoRow {
+  puesto_id: string | null
+  modulos_extra: string[] | null
+  modulos_restringidos: string[] | null
+}
+
+function permisosKey(restauranteId: string, userId: string, dbRol: string) {
+  // '|' como separador: restauranteId/userId son UUIDs (contienen '-'), dbRol no contiene '|'
+  return `permisos|${restauranteId}|${userId}|${dbRol}`
+}
+
+function errMsg(e: unknown, fallback: string): string {
+  // Los errores de Supabase NO son Error — son {message, code, details} (hooks.md #2)
+  if (e instanceof Error) return e.message
+  if (e && typeof e === 'object' && 'message' in e) return String((e as { message: unknown }).message)
+  return fallback
+}
+
+async function fetchPermisosData(key: string): Promise<PermisosData> {
+  const [, restauranteId, userId, dbRol] = key.split('|')
+  const supabase = createClient()
+
+  const allPromise = supabase.from('rol_permisos').select('*').eq('restaurante_id', restauranteId).order('rol')
+  const miembroPromise = dbRol === 'admin'
+    ? null
+    : supabase.from('equipo_miembros').select('puesto_id, modulos_extra, modulos_restringidos')
+        .eq('restaurante_id', restauranteId).eq('auth_user_id', userId).eq('activo', true).maybeSingle()
+
+  const [allRes, miembroRes] = await Promise.all([allPromise, miembroPromise])
+  if (allRes.error) throw allRes.error
+
+  const allPermisos = (allRes.data ?? []) as RolPermiso[]
+
+  let modulosEfectivos: string[] | null = null
+  const miembro = miembroRes?.data as MiembroPuestoRow | null | undefined
+  if (miembro?.puesto_id) {
+    const { data: puesto } = await supabase.from('puestos').select('permisos_app').eq('id', miembro.puesto_id).maybeSingle()
+    if (puesto?.permisos_app) {
+      const extra = miembro.modulos_extra ?? []
+      const restringidos = miembro.modulos_restringidos ?? []
+      const base = puesto.permisos_app as string[]
+      modulosEfectivos = [...new Set([...base, ...extra])].filter(m => !restringidos.includes(m))
+    }
+  }
+
+  return { allPermisos, modulosEfectivos }
+}
+
 export function usePermisos(): PermisosState {
   const RESTAURANTE_ID = useRestauranteId()
   const { perfil, user } = useAuth()
-  const [supabase] = useState(() => createClient())
-  const [permisos, setPermisos] = useState<RolPermiso | null>(null)
-  const [allPermisos, setAllPermisos] = useState<RolPermiso[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  // Módulos efectivos del usuario logueado (puesto + overrides individuales)
-  const [modulosEfectivos, setModulosEfectivos] = useState<string[] | null>(null)
-
-  // Perfil del restaurante (ej. 'emprendimiento') — capa aparte de puedeVer/isAdmin
-  const [perfilRestaurante, setPerfilRestaurante] = useState<string | null>(null)
+  // restaurantes.configuracion — key SWR compartida con el resto de la app (nunca query propia, ver hooks.md § Peso de la pantalla)
+  const { configuracion, loading: configLoading } = useRestauranteConfig()
+  const perfilRestaurante = (configuracion?.perfil as string | undefined) ?? null
 
   const dbRol = perfil?.rol === 'admin' ? 'admin'
     : perfil?.rol === 'chef' ? 'sous_chef'
     : perfil?.rol === 'ayudante' ? 'bachero'
-    : ['parrilla','frios','calientes','pase','pasteleria','panaderia','linea'].includes(perfil?.rol ?? '') ? 'cocinero'
+    : ['parrilla', 'frios', 'calientes', 'pase', 'pasteleria', 'panaderia', 'linea'].includes(perfil?.rol ?? '') ? 'cocinero'
     : perfil?.rol ?? ''
 
-  const fetchPermisos = useCallback(async () => {
-    if (!RESTAURANTE_ID) {
-      setLoading(false)
-      return
-    }
-    setLoading(true)
-    setError(null)
+  const swrKey = RESTAURANTE_ID && user?.id ? permisosKey(RESTAURANTE_ID, user.id, dbRol) : null
+  const { data, error: swrError, isLoading, mutate } = useSWR(swrKey, fetchPermisosData, SWR_OPTS)
 
-    try {
-      // 1. Cargar todos los rol_permisos del restaurante
-      const { data: all, error: allErr } = await supabase
-        .from('rol_permisos')
-        .select('*')
-        .eq('restaurante_id', RESTAURANTE_ID)
-        .order('rol')
-      if (allErr) throw allErr
+  const allPermisos = data?.allPermisos ?? SIN_PERMISOS
+  const modulosEfectivos = data?.modulosEfectivos ?? null
+  const permisos = useMemo(() => allPermisos.find(p => p.rol === dbRol) ?? null, [allPermisos, dbRol])
+  const loading = isLoading || configLoading
+  const error = swrError ? errMsg(swrError, 'Error al cargar permisos') : null
 
-      setAllPermisos(all ?? [])
-
-      const mine = (all ?? []).find(p => p.rol === dbRol) ?? null
-      setPermisos(mine)
-
-      // 1b. Perfil del restaurante (modo emprendimiento vs. gestión completa)
-      const { data: rest } = await supabase
-        .from('restaurantes')
-        .select('configuracion')
-        .eq('id', RESTAURANTE_ID)
-        .maybeSingle()
-      const configuracion = (rest?.configuracion ?? null) as { perfil?: string } | null
-      setPerfilRestaurante(configuracion?.perfil ?? null)
-
-      // 2. Si hay un usuario logueado con auth_user_id, buscar su equipo_miembro + puesto
-      if (user?.id && dbRol !== 'admin') {
-        const { data: miembro } = await supabase
-          .from('equipo_miembros')
-          .select('puesto_id, modulos_extra, modulos_restringidos')
-          .eq('restaurante_id', RESTAURANTE_ID)
-          .eq('auth_user_id', user.id)
-          .eq('activo', true)
-          .maybeSingle()
-
-        if (miembro?.puesto_id) {
-          const { data: puesto } = await supabase
-            .from('puestos')
-            .select('permisos_app')
-            .eq('id', miembro.puesto_id)
-            .maybeSingle()
-
-          if (puesto?.permisos_app) {
-            const extra = miembro.modulos_extra ?? []
-            const restringidos = miembro.modulos_restringidos ?? []
-            const base = puesto.permisos_app as string[]
-            const efectivos = [...new Set([...base, ...extra])].filter(m => !restringidos.includes(m))
-            setModulosEfectivos(efectivos)
-            return
-          }
-        }
-      }
-      // Sin puesto asignado — usa rol_permisos como fallback
-      setModulosEfectivos(null)
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al cargar permisos'
-      console.error('[usePermisos] Error:', msg)
-      setError(msg)
-    } finally {
-      setLoading(false)
-    }
-  }, [RESTAURANTE_ID, dbRol, supabase, user?.id])
-
-  useEffect(() => {
-    fetchPermisos()
-  }, [fetchPermisos])
+  const fetchPermisos = useCallback(async () => { await mutate() }, [mutate])
 
   const puedeVer = useCallback((modulo: string): boolean => {
     if (dbRol === 'admin') return true
@@ -149,18 +144,17 @@ export function usePermisos(): PermisosState {
 
   const updatePermisos = useCallback(async (rolPermiso: Partial<RolPermiso> & { id: string }) => {
     try {
+      const supabase = createClient()
       const { error: err } = await supabase
         .from('rol_permisos')
         .update({ ...rolPermiso, updated_at: new Date().toISOString() })
         .eq('id', rolPermiso.id)
       if (err) throw err
-      await fetchPermisos()
+      await mutate()
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al actualizar permisos'
-      console.error('[usePermisos] updatePermisos Error:', msg)
-      throw new Error(msg)
+      throw new Error(errMsg(e, 'Error al actualizar permisos'))
     }
-  }, [supabase, fetchPermisos])
+  }, [mutate])
 
   const upsertPermisos = useCallback(async (
     rol: string,
@@ -168,6 +162,7 @@ export function usePermisos(): PermisosState {
   ) => {
     if (!RESTAURANTE_ID) return
     try {
+      const supabase = createClient()
       const { error: err } = await supabase
         .from('rol_permisos')
         .upsert({
@@ -177,13 +172,11 @@ export function usePermisos(): PermisosState {
           updated_at: new Date().toISOString(),
         }, { onConflict: 'restaurante_id,rol' })
       if (err) throw err
-      await fetchPermisos()
+      await mutate()
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al guardar permisos'
-      console.error('[usePermisos] upsertPermisos Error:', msg)
-      throw new Error(msg)
+      throw new Error(errMsg(e, 'Error al guardar permisos'))
     }
-  }, [supabase, RESTAURANTE_ID, fetchPermisos])
+  }, [RESTAURANTE_ID, mutate])
 
   return {
     permisos,
