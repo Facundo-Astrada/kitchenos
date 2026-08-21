@@ -19,11 +19,15 @@ const PLAZAS_OPS = ['parrilla', 'frios', 'calientes', 'pase', 'pasteleria', 'pan
 const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const TURNO_TIPOS = Object.keys(TURNO_CONFIG) as TurnoTipo[]
 
-// Módulos que el dueño puede asignar a un puesto
+// Módulos que el dueño puede asignar a un puesto.
+// Debe cubrir todo ModuloId gateado en SidebarNav (SECCIONES) — 'coach' queda
+// afuera a propósito: no está en RUTA_A_MODULO, el FAB/pantalla son siempre
+// accesibles sin importar permisos (ver lib/coach).
 const MODULOS_ASIGNABLES = [
-  'home', 'operaciones', 'recetario', 'stock', 'pedidos',
-  'haccp', 'reportes', 'calendario', 'carta', 'pase',
-  'facturas', 'produccion', 'merma', 'equipo', 'organigrama', 'ventas',
+  'home', 'operaciones', 'tareas', 'checklist', 'recetario', 'stock', 'pedidos',
+  'haccp', 'reportes', 'calendario', 'turnos', 'proveedores', 'carta', 'pase',
+  'facturas', 'produccion', 'merma', 'equipo', 'organigrama', 'configuracion',
+  'ventas', 'espacios', 'salon', 'kds', 'clientes', 'muro', 'bitacora',
 ] as const
 
 // ── Helpers ──
@@ -344,6 +348,7 @@ export default function TurnosPage() {
   const [invEmail, setInvEmail] = useState('')
   const [invRol, setInvRol] = useState('cocinero')
   const [invNombre, setInvNombre] = useState('')
+  const [invPuestoId, setInvPuestoId] = useState('')
   const [inviting, setInviting] = useState(false)
   const [toast, setToast] = useState('')
 
@@ -555,12 +560,12 @@ export default function TurnosPage() {
       const res = await fetch('/api/invitar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: invEmail.trim(), rol: invRol, nombre: invNombre.trim() }),
+        body: JSON.stringify({ email: invEmail.trim(), rol: invRol, nombre: invNombre.trim(), puesto_id: invPuestoId || null }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
       showToast(`Invitación enviada a ${invEmail}`)
-      setShowInvitar(false); setInvEmail(''); setInvNombre('')
+      setShowInvitar(false); setInvEmail(''); setInvNombre(''); setInvPuestoId('')
     } catch (e: any) { showToast('Error: ' + e.message) }
     finally { setInviting(false) }
   }
@@ -820,6 +825,16 @@ export default function TurnosPage() {
               <select value={invRol} onChange={e => setInvRol(e.target.value)} style={fieldStyle}>
                 {NIVELES_ACCESO.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
               </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Puesto (opcional)</label>
+              <select value={invPuestoId} onChange={e => setInvPuestoId(e.target.value)} style={fieldStyle}>
+                <option value="">Sin puesto — permisos por nivel de acceso</option>
+                {puestos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </select>
+              <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '4px 0 0' }}>
+                Si no elegís puesto, después hay que asignarlo a mano desde la ficha para que tenga los permisos correctos.
+              </p>
             </div>
             <button
               onClick={handleInvitar} disabled={inviting || !invEmail.trim()}

@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, rol, nombre, apellido } = await req.json()
+    const { email, rol, nombre, apellido, puesto_id } = await req.json()
     if (!email || !rol) {
       return NextResponse.json({ error: 'Email y rol son requeridos' }, { status: 400 })
     }
@@ -45,13 +45,16 @@ export async function POST(req: NextRequest) {
       { onConflict: 'user_id,restaurante_id', ignoreDuplicates: true }
     )
 
-    // Pre-crear equipo_miembros placeholder
+    // Pre-crear equipo_miembros placeholder (con puesto si se eligió, para que
+    // los permisos finos apliquen desde el primer login y no dependan de que
+    // el admin vuelva a editar la ficha después)
     await adminSupabase.from('equipo_miembros').upsert(
       {
         nombre: nombre || email.split('@')[0],
         apellido: apellido || '',
         email,
         rol,
+        puesto_id: puesto_id || null,
         activo: false,
         restaurante_id: restauranteId,
       },
