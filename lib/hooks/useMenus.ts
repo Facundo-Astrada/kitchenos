@@ -243,7 +243,7 @@ export function useMenus() {
             estado: 'pendiente',
             prioridad: p.prioridad,
             categoria: 'produccion',
-            modo: 'menu',
+            modo: data.tipo === 'evento' ? 'evento' : 'menu',
             seccion: p.paso || 'general',
             plaza: p.plaza,
             asignado_a: p.usuario_asignado,

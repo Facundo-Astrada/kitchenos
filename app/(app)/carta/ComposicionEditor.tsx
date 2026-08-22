@@ -575,12 +575,15 @@ export default function ComposicionEditor({
   // preparación (ver lib/ops/menuMise.ts). Una sola persona controla el
   // menú entero desde una plaza que puede no existir físicamente.
   //
-  // Menú nuevo (sin `plazaControl` en el inicial — a diferencia de uno
-  // existente, que siempre lo trae desde menuToInicial aunque sea null):
+  // Menú/evento nuevo (sin `plazaControl` en el inicial — a diferencia de
+  // uno existente, que siempre lo trae desde menuToInicial aunque sea null):
   // arranca en 'menu', la plaza dedicada. Antes no tenía default y varios
   // menús terminaban en 'general', que se inyecta en TODAS las plazas del
   // mise y duplicaba cada preparación cinco veces (ver adenda 2026-08-20).
-  const esMenuNuevo = inicial?.modo === 'menu' && inicial.plazaControl === undefined
+  // Eventos tenían el mismo bug hasta 2026-08-21: sin default, quedaban con
+  // plazaControl vacío y cada preparación caía en la plaza que hubiera
+  // elegido en OPS, mezclándose con el mise fijo de esa plaza real.
+  const esMenuNuevo = (inicial?.modo === 'menu' || inicial?.modo === 'evento') && inicial.plazaControl === undefined
   const [plazaControl, setPlazaControl] = useState(inicial?.plazaControl ?? (esMenuNuevo ? 'menu' : ''))
   const { plazasCustom } = usePlazasCustom()
   const plazasControlDisponibles = useMemo(
