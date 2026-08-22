@@ -84,6 +84,8 @@ jsPDF + jspdf-autotable | xlsx | Anthropic API (Haiku + Sonnet 4.6)
 Auth: proxy.ts (NO middleware.ts — breaking change Next 16)
 ```
 
+**Shell mobile:** `#shell` (en `app/globals.css`) es full-width en celular; la columna centrada de `max-width:420px` arranca recién en 600px (`sw600dp`) y se suelta en ≥1024px, donde manda `DesktopShell`. El cap no puede volver a un ancho de celular: hay Android que reporta 480-540 CSS px. Detalle en `.claude/docs/ui.md` § "Ancho del `#shell`".
+
 ```
 app/
   (app)/          ← rutas protegidas (dashboard + módulos)

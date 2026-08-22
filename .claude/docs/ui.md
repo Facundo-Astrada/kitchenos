@@ -217,9 +217,15 @@ if (loading) return <div>Cargando...</div>
 if (items.length === 0) return <div>No hay datos todavía</div>
 ```
 
+## Ancho del `#shell` — el cap de 420px no aplica en celular
+
+`#shell` es full-width por default; la columna centrada de `max-width:420px` vive dentro de `@media (min-width:600px)` y se suelta de nuevo en `≥1024px` (ahí manda `DesktopShell`). El corte de 600px es `sw600dp` de Android: todo celular en vertical queda debajo.
+
+No subir ese cap a un ancho de celular: hay Android que reporta **más de 420 CSS px** (Motorola 1080px @ DPR 2.25 → 480px; cualquier equipo con "Tamaño de pantalla" en chico → hasta 540px; iPhone Plus/Pro Max → 430px). Con el cap activo esos equipos mostraban bandas de `--navy` a los costados — la app se veía más angosta y estirada que la pantalla — y todo lo que es `position:fixed` (FABs, sheets) se anclaba al viewport real, o sea **fuera** de la columna. El iPhone 12/13/14 nunca lo mostró porque reporta 390px: probar solo ahí no alcanza para dar el layout por bueno.
+
 ## Vistas públicas (`app/(publico)/`) — escapar el `#shell` mobile
 
-`#shell` tiene `max-width:420px; height:100dvh; overflow:hidden` (pensado para la app logueada) — una vista pública con contenido más largo queda recortada si hereda ese overflow. Fix: layout del route group con `position:fixed; inset:0; overflowY:'auto'` (un `fixed` no es clippeado por `overflow:hidden` de un ancestro sin `transform`/`filter`/`contain`). Ver `app/(publico)/layout.tsx`; `app/(servicio)/layout.tsx` usa la misma técnica con `overflow:hidden` (scroll interno propio) en vez de `overflowY:auto`.
+`#shell` tiene `height:100dvh; overflow:hidden` y, desde 600px, `max-width:420px` (pensado para la app logueada) — una vista pública con contenido más largo queda recortada si hereda ese overflow. Fix: layout del route group con `position:fixed; inset:0; overflowY:'auto'` (un `fixed` no es clippeado por `overflow:hidden` de un ancestro sin `transform`/`filter`/`contain`). Ver `app/(publico)/layout.tsx`; `app/(servicio)/layout.tsx` usa la misma técnica con `overflow:hidden` (scroll interno propio) en vez de `overflowY:auto`.
 
 ## Vista de servicio (Salón / KDS / Muro) — reglas UI inamovibles
 
