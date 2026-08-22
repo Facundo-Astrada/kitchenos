@@ -279,4 +279,16 @@ Registro de decisiones tomadas con Facundo durante el diseño y construcción de
 **Cómo se aplica:**
 - Claude usa los tools de preview (`preview_start`, `preview_snapshot`, `preview_screenshot`) para verificar cambios antes de considerar el task cerrado.
 - Deploy directo a Vercel sin staging — ver §16.
+
+---
+
+## 21. Un evento SÍ puede tener presencia en el mise, siempre en la plaza dedicada "Menú"
+
+**Decisión:** El 20/08 se había resuelto "una sola puerta de activación por tipo de menú" — fijo se activa por vigencia en el mise, evento solo por fecha directa a Producción, sin pasar nunca por el mise. El 22/08 esa regla se matiza: un evento **puede** terminar con presencia en el mise (activado antes de esta convención, o porque al editarlo con `checklist_items` ya cargados `carta/page.tsx` los vuelve a sincronizar — ese re-sync no se cierra a propósito), pero **siempre** tiene que caer en la plaza dedicada `'menu'` (`plaza_control='menu'`), nunca repartido por plaza real ni en `'general'`.
+**Por qué:** Un evento real (Bros, "Menu estandar +1 -") quedó con `plaza_control='general'` desde antes del fix del 20/08 — como `'general'` se inyecta en TODAS las plazas del mise, sus 17 preparaciones aparecían mezcladas en Fríos y cualquier otra estación, con 9 registros reales de apertura/cierre ya tildados encima (no es dato descartable). Cerrar el loophole habría sacado el evento del mise del todo (usando `desactivarMiseDeMenu`, sin perder el historial); en cambio Facundo prefirió mantenerlo visible ahí, igual que un menú fijo, en vez de forzarlo a vivir solo en Producción.
+**Cómo se aplica:**
+- `ComposicionEditor.tsx` (`esMenuNuevo`): el default de `plazaControl='menu'` para un menú/evento nuevo sin `plazaControl` cargado aplica a `modo === 'menu'` **y** `modo === 'evento'` por igual.
+- `carta/page.tsx` (`handleComposicionSave`): si un menú/evento ya tiene `checklist_items`, editar lo vuelve a sincronizar vía `sincronizarMiseDeMenu` sin mirar `tipo` — es intencional, no un bug a cerrar.
+- `MenusView.tsx` sigue sin ofrecer el botón "Activar en el mise" para `tipo === 'evento'` (evita que dos cocineros lo dupliquen en Producción al dispachar desde el mise) — la presencia en mise de un evento es siempre heredada de una activación previa o del re-sync al editar, nunca de un alta nueva por ese botón.
+- Nunca usar `'general'` como `plaza_control` de nada — ver §"Menú/Evento en el mise" en `.claude/docs/hooks.md`.
 - Los mensajes de commit y de respuesta al usuario son en español, concisos, con bullets del tipo "1. Fix X. 2. Fix Y. 3. Deployado." porque es lo que Facundo lee en su celular.

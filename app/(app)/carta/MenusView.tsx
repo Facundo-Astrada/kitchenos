@@ -154,9 +154,11 @@ function MenuCard({ menu, onEdit, onDelete, onActivarMise, onSacarMise }: {
             ))}
           </div>
         )}
-        {/* Estado del mise — solo fijo (un evento se activa por fecha directo a
-            Producción, no pasa por el mise: ver adenda 2026-08-20). Solo si
-            ya se activó alguna vez (ver Fase 4). */}
+        {/* Estado del mise — un evento no tiene botón propio de activación acá
+            abajo (ver adenda 2026-08-20), pero si ya quedó con checklist_items
+            (activado antes de esa convención, o revivido por el re-sync al
+            editar en carta/page.tsx — intencional, ver DECISIONES.md §21)
+            igual puede tener presencia en el mise. */}
         {menu.tipo !== 'evento' && menu.enMise && (
           <div style={{ marginTop: 8 }}>
             {vigente ? (
@@ -180,8 +182,10 @@ function MenuCard({ menu, onEdit, onDelete, onActivarMise, onSacarMise }: {
         <button onClick={onEdit} style={{ flex: 1, padding: '8px', background: 'none', border: 'none', borderRight: '1px solid var(--border)', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--accent)', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span> Editar
         </button>
-        {/* Evento: sin toggle de mise — se activa por fecha desde Planificación
-            (ver adenda 2026-08-20, "una sola puerta de activación"). */}
+        {/* Evento: sin toggle de mise acá abajo — se activa por fecha desde
+            Planificación (adenda 2026-08-20, "una sola puerta de activación").
+            Si igual queda con presencia en el mise (ver DECISIONES.md §21),
+            se saca por SQL o editando el menú, no desde este botón. */}
         {menu.tipo === 'evento' ? null : menu.enMise ? (
           <button onClick={handleSacar} disabled={miseSaving} title="Sacar del mise"
             style={{ flex: 1, padding: '8px', background: 'none', border: 'none', borderRight: '1px solid var(--border)', cursor: miseSaving ? 'default' : 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--text-3)', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, opacity: miseSaving ? .6 : 1 }}>
