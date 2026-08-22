@@ -4,7 +4,7 @@ import PageTransition from '@/components/PageTransition'
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import {
   useEquipo, TURNO_CONFIG, NIVELES_ACCESO, PUESTO_TEMPLATES, idsDescendientes,
-  type Miembro, type Puesto, type TurnoTipo, type Turno,
+  type Miembro, type Puesto, type TurnoTipo, type Turno, type ObjetivosVenta,
 } from '@/lib/hooks/useEquipo'
 import { useFichaje, type FichajeDia } from '@/lib/hooks/useFichaje'
 import { useAuth } from '@/lib/auth/context'
@@ -106,11 +106,24 @@ interface PuestoForm {
   nombre: string; descripcion: string; nivel: string
   plaza_default: string; permisos_app: string[]; tareas_funciones: string
   area_key: string; reporta_a_puesto_id: string
+  obj_pct_postre: string; obj_pct_cafe: string; obj_ticket_promedio: string
 }
 const EMPTY_PUESTO_FORM: PuestoForm = {
   nombre: '', descripcion: '', nivel: 'cocinero',
   plaza_default: '', permisos_app: [], tareas_funciones: '',
   area_key: '', reporta_a_puesto_id: '',
+  obj_pct_postre: '', obj_pct_cafe: '', obj_ticket_promedio: '',
+}
+
+// Objetivos de venta (PLAN-4-CAPAS B6): inputs de texto en el form (como
+// costo_hora en MiembroForm), se parsean a número solo si se cargaron —
+// campo vacío = sin objetivo para esa métrica, no se fuerza un 0.
+function objetivosDeForm(f: PuestoForm): ObjetivosVenta {
+  const obj: ObjetivosVenta = {}
+  if (f.obj_pct_postre !== '') obj.pct_comandas_con_postre = parseFloat(f.obj_pct_postre)
+  if (f.obj_pct_cafe !== '') obj.pct_comandas_con_cafe = parseFloat(f.obj_pct_cafe)
+  if (f.obj_ticket_promedio !== '') obj.ticket_promedio = parseFloat(f.obj_ticket_promedio)
+  return obj
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -302,6 +315,29 @@ function PuestoFormBody({
         <textarea style={{ ...fieldStyle, minHeight: 80, resize: 'vertical' }} value={form.tareas_funciones}
           onChange={e => setForm(f => ({ ...f, tareas_funciones: e.target.value }))}
           placeholder={'Mise en place de parrilla\nControl de temperaturas\nLimpiar estación al cierre'} />
+      </div>
+      <div>
+        <label style={{ ...labelStyle, marginBottom: 4 }}>Objetivos de venta (opcional)</label>
+        <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 10px', lineHeight: 1.4 }}>
+          Solo tiene sentido en puestos de salón. Se muestran como referencia en Reportes → Personal, junto a la venta real — sin armar un ranking.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div>
+            <label style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 4, display: 'block' }}>% de comandas con postre</label>
+            <input type="number" min={0} max={100} style={fieldStyle} value={form.obj_pct_postre}
+              onChange={e => setForm(f => ({ ...f, obj_pct_postre: e.target.value }))} placeholder="Ej: 25" />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 4, display: 'block' }}>% de comandas con café</label>
+            <input type="number" min={0} max={100} style={fieldStyle} value={form.obj_pct_cafe}
+              onChange={e => setForm(f => ({ ...f, obj_pct_cafe: e.target.value }))} placeholder="Ej: 25" />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 4, display: 'block' }}>Ticket promedio ($)</label>
+            <input type="number" min={0} style={fieldStyle} value={form.obj_ticket_promedio}
+              onChange={e => setForm(f => ({ ...f, obj_ticket_promedio: e.target.value }))} placeholder="Ej: 12000" />
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -605,6 +641,9 @@ export default function TurnosPage() {
       tareas_funciones: (selectedPuesto.tareas_funciones ?? []).join('\n'),
       area_key: selectedPuesto.area_key ?? '',
       reporta_a_puesto_id: selectedPuesto.reporta_a_puesto_id ?? '',
+      obj_pct_postre: selectedPuesto.objetivos?.pct_comandas_con_postre?.toString() ?? '',
+      obj_pct_cafe: selectedPuesto.objetivos?.pct_comandas_con_cafe?.toString() ?? '',
+      obj_ticket_promedio: selectedPuesto.objetivos?.ticket_promedio?.toString() ?? '',
     })
     setEditingPuesto(true)
   }
@@ -622,6 +661,7 @@ export default function TurnosPage() {
         tareas_funciones: puestoForm.tareas_funciones.split('\n').map(s => s.trim()).filter(Boolean),
         area_key: puestoForm.area_key || null,
         reporta_a_puesto_id: puestoForm.reporta_a_puesto_id || null,
+        objetivos: objetivosDeForm(puestoForm),
       })
       setEditingPuesto(false); setPuestosView('list'); setSelectedPuesto(null)
     } catch (e: any) { alert(e.message) }
@@ -642,6 +682,7 @@ export default function TurnosPage() {
         area_key: puestoForm.area_key || null,
         reporta_a_puesto_id: puestoForm.reporta_a_puesto_id || null,
         orden: 0,
+        objetivos: objetivosDeForm(puestoForm),
       })
       setPuestosView('list')
       showToast(`Puesto "${puestoForm.nombre}" creado`)
@@ -659,6 +700,7 @@ export default function TurnosPage() {
       tareas_funciones: tpl.tareas_funciones.join('\n'),
       area_key: tpl.area_key,
       reporta_a_puesto_id: '',
+      obj_pct_postre: '', obj_pct_cafe: '', obj_ticket_promedio: '',
     })
     setPuestosView('nuevo')
   }
@@ -1823,6 +1865,33 @@ export default function TurnosPage() {
             })}
           </div>
         </div>
+
+        {/* Objetivos de venta (PLAN-4-CAPAS B6) */}
+        {(p.objetivos?.pct_comandas_con_postre != null || p.objetivos?.pct_comandas_con_cafe != null || p.objetivos?.ticket_promedio != null) && (
+          <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: 16, marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', marginBottom: 10 }}>Objetivos de venta</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+              {p.objetivos?.pct_comandas_con_postre != null && (
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Postre</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-1)' }}>{p.objetivos.pct_comandas_con_postre}%</div>
+                </div>
+              )}
+              {p.objetivos?.pct_comandas_con_cafe != null && (
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Café</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-1)' }}>{p.objetivos.pct_comandas_con_cafe}%</div>
+                </div>
+              )}
+              {p.objetivos?.ticket_promedio != null && (
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Ticket promedio</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-1)' }}>${p.objetivos.ticket_promedio.toLocaleString('es-AR')}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Miembros asignados */}
         {miembrosDelPuesto.length > 0 && (

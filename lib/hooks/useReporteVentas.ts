@@ -4,6 +4,7 @@ import { useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
 import type { Periodo } from './useReportes'
+import { agregarVentasPorPersona } from '@/lib/reportes/ventasPorPersona'
 
 // Reporte de VENTAS (analítica transaccional, estilo Fudo → Reportes → Ventas).
 // Fuente: `cuentas` cerradas (Salón) + pagos/comandas/comanda_items. NO usa la
@@ -13,7 +14,10 @@ import type { Periodo } from './useReportes'
 export interface SerieItem { label: string; value: number; cantidad?: number }
 export interface MedioItem { nombre: string; monto: number; pct: number }
 export interface OrigenItem { origen: string; monto: number; pct: number; cantidad: number }
-export interface MeseroItem { mozo_id: string; nombre: string; cantidad: number; ventas: number }
+export interface MeseroItem {
+  mozo_id: string; nombre: string; cantidad: number; ventas: number
+  ticket_promedio: number; pct_postre: number; pct_cafe: number
+}
 export interface PlatoVendido { carta_item_id: string; nombre: string; cantidad: number; ingreso: number }
 
 export interface ReporteVentas {
@@ -127,25 +131,16 @@ export function useReporteVentas() {
     const porHora: SerieItem[] = horaArr.map((value, h) => ({ label: `${String(h).padStart(2, '0')}:00`, value })).filter(x => x.value > 0)
     const porDiaSemana: SerieItem[] = dowArr.map((value, i) => ({ label: DIAS[i], value }))
 
-    // 3. Meseros
-    const mozoAgg = new Map<string, { cantidad: number; ventas: number }>()
-    for (const c of cuentas) {
-      const k = c.mozo_id ?? '—'
-      const g = mozoAgg.get(k) ?? { cantidad: 0, ventas: 0 }
-      g.cantidad++; g.ventas += c.total
-      mozoAgg.set(k, g)
-    }
-    const mozoIds = [...mozoAgg.keys()].filter(k => k !== '—')
+    // 3. Meseros — nombres (el desglose postre/café/ticket se arma en la sección 5,
+    // que ya recorre comanda_items → carta_items y necesita la categoría igual)
+    const mozoIdsCrudos = [...new Set(cuentas.map(c => c.mozo_id).filter((m): m is string => !!m))]
     const mozoNombres = new Map<string, string>()
-    if (mozoIds.length > 0) {
-      const { data: eq } = await supabase.from('equipo_miembros').select('id, nombre, apellido').in('id', mozoIds)
+    if (mozoIdsCrudos.length > 0) {
+      const { data: eq } = await supabase.from('equipo_miembros').select('id, nombre, apellido').in('id', mozoIdsCrudos)
       for (const m of (eq ?? []) as { id: string; nombre: string; apellido: string | null }[]) {
         mozoNombres.set(m.id, `${m.nombre}${m.apellido ? ' ' + m.apellido : ''}`)
       }
     }
-    const meseros: MeseroItem[] = [...mozoAgg.entries()]
-      .map(([mozo_id, g]) => ({ mozo_id, nombre: mozoNombres.get(mozo_id) ?? 'Sin asignar', ...g }))
-      .sort((a, b) => b.ventas - a.ventas)
 
     // 4. Medios de pago (pagos de estas cuentas — chunked por el cap de query-string)
     const medioAgg = new Map<string, number>()
@@ -166,17 +161,19 @@ export function useReporteVentas() {
       .map(([id, monto]) => ({ nombre: medioNombres.get(id) ?? '—', monto, pct: (monto / totalMedios) * 100 }))
       .sort((a, b) => b.monto - a.monto)
 
-    // 5. Origen + platos vendidos (vía comandas / comanda_items)
+    // 5. Origen + platos vendidos + categorías por cuenta (vía comandas / comanda_items)
     const origenPorCuenta = new Map<string, string>()
     const platoAgg = new Map<string, { nombre: string; cantidad: number; ingreso: number }>()
+    const categoriasPorCuenta = new Map<string, string[]>()
     for (let i = 0; i < ids.length; i += 200) {
       const chunk = ids.slice(i, i + 200)
       const { data: comandas } = await supabase
         .from('comandas')
-        .select('cuenta_id, origen, items:comanda_items(cantidad, carta_item:carta_items(id, nombre, precio_venta))')
+        .select('cuenta_id, origen, items:comanda_items(cantidad, carta_item:carta_items(id, nombre, precio_venta, categoria))')
         .in('cuenta_id', chunk)
-      for (const co of (comandas ?? []) as unknown as { cuenta_id: string; origen: string; items: { cantidad: number; carta_item: { id: string; nombre: string; precio_venta: number | null } | null }[] }[]) {
+      for (const co of (comandas ?? []) as unknown as { cuenta_id: string; origen: string; items: { cantidad: number; carta_item: { id: string; nombre: string; precio_venta: number | null; categoria: string | null } | null }[] }[]) {
         if (!origenPorCuenta.has(co.cuenta_id)) origenPorCuenta.set(co.cuenta_id, co.origen)
+        const cats = categoriasPorCuenta.get(co.cuenta_id) ?? []
         for (const it of co.items ?? []) {
           const ci = it.carta_item
           if (!ci) continue
@@ -184,9 +181,18 @@ export function useReporteVentas() {
           g.cantidad += it.cantidad
           g.ingreso += (ci.precio_venta ?? 0) * it.cantidad
           platoAgg.set(ci.id, g)
+          if (ci.categoria) cats.push(ci.categoria)
         }
+        categoriasPorCuenta.set(co.cuenta_id, cats)
       }
     }
+
+    // Meseros: cantidad/ventas/ticket + % postre/café, cruzando categoriasPorCuenta
+    const ventasPorMozo = agregarVentasPorPersona(cuentas, categoriasPorCuenta)
+    const meseros: MeseroItem[] = [...ventasPorMozo.entries()]
+      .map(([mozo_id, stats]) => ({ mozo_id, nombre: mozoNombres.get(mozo_id) ?? 'Sin asignar', ...stats }))
+      .sort((a, b) => b.ventas - a.ventas)
+
     const origenAgg = new Map<string, { monto: number; cantidad: number }>()
     for (const c of cuentas) {
       const o = origenPorCuenta.get(c.id) ?? 'salon'

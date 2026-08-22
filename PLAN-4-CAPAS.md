@@ -243,7 +243,7 @@ Nueva ruta `app/api/reportes/fuga/route.ts`. No calcular esto en el cliente.
 
 ## Bloque 6 — Desempeño y ventas por persona, con objetivo
 
-- [ ] **B6** · Media sesión · Migración chica · Sin dependencias
+- [x] **B6** · Media sesión · Migración chica · Sin dependencias
 
 **Lo que ya existe** (corregido respecto de la primera versión de la auditoría): `comandas.mozo_id` se llena en `useMesas.ts:75`, y Reportes → Ventas ya muestra ranking de meseros con cantidad y ventas (`useReporteVentas.ts:133-147`). El dato está.
 

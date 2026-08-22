@@ -5,6 +5,9 @@ import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
 import { AREA_CATALOGO, areaCatalogoItem, type AreaKey, type Capa } from '@/lib/constants'
+import { getObjetivosEfectivos, type ObjetivosVenta } from '@/lib/reportes/ventasPorPersona'
+
+export type { ObjetivosVenta }
 
 const SWR_OPTS = {
   revalidateOnFocus: false,
@@ -31,6 +34,7 @@ export interface Miembro {
   costo_hora: number | null
   modulos_extra: string[]
   modulos_restringidos: string[]
+  objetivos: ObjetivosVenta   // override puntual sobre los objetivos del puesto (PLAN-4-CAPAS B6)
   restaurante_id: string
   created_at: string
 }
@@ -58,6 +62,7 @@ export interface Puesto {
   reporta_a_puesto_id: string | null  // organigrama: puesto al que reporta. NULL = raíz
   area_key: string | null             // organigrama: clave de AREA_CATALOGO
   orden: number                        // organigrama: orden manual dentro del área
+  objetivos: ObjetivosVenta            // objetivos de venta base del puesto (PLAN-4-CAPAS B6)
   restaurante_id: string
   created_at: string
 }
@@ -304,6 +309,7 @@ async function fetchMiembrosData(key: string): Promise<Miembro[]> {
     ...m,
     modulos_extra: m.modulos_extra ?? [],
     modulos_restringidos: m.modulos_restringidos ?? [],
+    objetivos: m.objetivos ?? {},
   })) as Miembro[]
 }
 
@@ -325,6 +331,7 @@ async function fetchPuestosData(key: string): Promise<Puesto[]> {
     orden: p.orden ?? 0,
     tareas_funciones: p.tareas_funciones ?? [],
     permisos_app: p.permisos_app ?? [],
+    objetivos: p.objetivos ?? {},
   })) as Puesto[]
 }
 
@@ -476,7 +483,7 @@ export function useEquipo() {
   const fetchMiembros = useCallback(async () => { await mutateMiembros() }, [mutateMiembros])
 
   async function crearMiembro(
-    datos: Omit<Miembro, 'id' | 'restaurante_id' | 'created_at' | 'activo' | 'modulos_extra' | 'modulos_restringidos'>
+    datos: Omit<Miembro, 'id' | 'restaurante_id' | 'created_at' | 'activo' | 'modulos_extra' | 'modulos_restringidos' | 'objetivos'>
   ): Promise<string> {
     try {
       const { data, error } = await supabase.from('equipo_miembros').insert({
@@ -484,6 +491,7 @@ export function useEquipo() {
         activo: true,
         modulos_extra: [],
         modulos_restringidos: [],
+        objetivos: {},
         restaurante_id: RESTAURANTE_ID,
       }).select('id').single()
       if (error) throw error
@@ -669,6 +677,13 @@ export function useEquipo() {
     return conExtras.filter(m => !miembro.modulos_restringidos.includes(m))
   }
 
+  // Objetivos de venta efectivos de un miembro: los del puesto, pisados clave
+  // por clave por su override propio (PLAN-4-CAPAS B6).
+  function getObjetivosMiembro(miembro: Miembro): ObjetivosVenta {
+    const puesto = puestos.find(p => p.id === miembro.puesto_id)
+    return getObjetivosEfectivos(puesto?.objetivos, miembro.objetivos)
+  }
+
   // ── Realtime + init ──
 
   useEffect(() => {
@@ -703,6 +718,7 @@ export function useEquipo() {
     actualizarPuesto,
     eliminarPuesto,
     getModulosMiembro,
+    getObjetivosMiembro,
     areas,
     fetchAreas,
     toggleAreaActiva,

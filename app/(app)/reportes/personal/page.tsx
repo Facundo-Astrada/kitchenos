@@ -5,6 +5,11 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/auth/context'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
+import { formatCurrency } from '@/lib/utils'
+import {
+  agregarVentasPorPersona, getObjetivosEfectivos,
+  type VentaPersonaStats, type ObjetivosVenta,
+} from '@/lib/reportes/ventasPorPersona'
 
 // ── Tipos locales ──────────────────────────────────────────────
 
@@ -24,6 +29,8 @@ interface PersonaStats {
   score: number
   delta_producciones: number
   delta_completitud: number
+  ventas: VentaPersonaStats | null   // null = sin cuentas cerradas a su nombre este mes (no es mesero, o sin actividad)
+  objetivos: ObjetivosVenta          // objetivo del puesto + override propio (PLAN-4-CAPAS B6)
 }
 
 interface TurnoRow {
@@ -47,11 +54,25 @@ interface ProduccionRow {
 }
 
 interface EquipoMiembroRow {
+  id: string
   auth_user_id: string | null
   nombre: string
   apellido: string
   rol: string
   activo: boolean
+  puesto_id: string | null
+  objetivos: ObjetivosVenta | null
+}
+
+interface PuestoRow {
+  id: string
+  objetivos: ObjetivosVenta | null
+}
+
+interface CuentaRow {
+  id: string
+  mozo_id: string | null
+  total: number
 }
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -94,6 +115,8 @@ function calcStats(
   producciones: ProduccionRow[],
   tareasAnt: TareaRow[],
   turnosAnt: TurnoRow[],
+  puestos: PuestoRow[],
+  ventasPorMozo: Map<string, VentaPersonaStats>,
 ): PersonaStats[] {
   const results = equipo.map((miembro): PersonaStats | null => {
     const uid = miembro.auth_user_id
@@ -149,6 +172,12 @@ function calcStats(
     const _turnosAnt = turnosAnt // silenciar warning de no uso
     void _turnosAnt
 
+    // Ventas (PLAN-4-CAPAS B6): keyed por equipo_miembros.id (mozo_id de cuentas),
+    // no por auth_user_id — son dos claves distintas para la misma persona.
+    const ventas = ventasPorMozo.get(miembro.id) ?? null
+    const puesto = puestos.find(p => p.id === miembro.puesto_id)
+    const objetivos = getObjetivosEfectivos(puesto?.objetivos, miembro.objetivos)
+
     return {
       usuario_id: uid,
       nombre: `${miembro.nombre} ${miembro.apellido}`.trim(),
@@ -165,6 +194,8 @@ function calcStats(
       score,
       delta_producciones,
       delta_completitud,
+      ventas,
+      objetivos,
     } satisfies PersonaStats
   })
   return results.filter((s): s is PersonaStats => s !== null)
@@ -192,6 +223,20 @@ function Delta({ value, label }: { value: number; label: string }) {
     <span style={{ fontSize: 11, color }}>
       {label}: {sign}{value.toFixed(1)}
     </span>
+  )
+}
+
+// Venta real + objetivo, en texto neutro — a propósito sin color de semáforo:
+// el objetivo es una referencia, no un aprobado/desaprobado (PLAN-4-CAPAS B6).
+function VentaObjetivoRow({ label, valor, objetivo }: { label: string; valor: string; objetivo: string | null }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+      <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{label}</span>
+      <span style={{ fontSize: 13, color: 'var(--text-1)', fontWeight: 600, textAlign: 'right' }}>
+        {valor}
+        {objetivo && <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 400 }}> · objetivo {objetivo}</span>}
+      </span>
+    </div>
   )
 }
 
@@ -237,10 +282,12 @@ export default function PersonalReportePage() {
         produccionesRes,
         tareasAntRes,
         turnosAntRes,
+        puestosRes,
+        cuentasRes,
       ] = await Promise.all([
         supabase
           .from('equipo_miembros')
-          .select('auth_user_id, nombre, apellido, rol, activo')
+          .select('id, auth_user_id, nombre, apellido, rol, activo, puesto_id, objetivos')
           .eq('restaurante_id', restauranteId)
           .eq('activo', true),
         supabase
@@ -273,6 +320,18 @@ export default function PersonalReportePage() {
           .eq('restaurante_id', restauranteId)
           .gte('fecha', desdeAnt)
           .lte('fecha', hastaAnt),
+        supabase
+          .from('puestos')
+          .select('id, objetivos')
+          .eq('restaurante_id', restauranteId),
+        supabase
+          .from('cuentas')
+          .select('id, mozo_id, total')
+          .eq('restaurante_id', restauranteId)
+          .eq('estado', 'cerrada')
+          .gte('cerrada_at', `${desde}T00:00:00`)
+          .lte('cerrada_at', `${hasta}T23:59:59`)
+          .limit(1000),
       ])
 
       const equipo = (equipoRes.data ?? []) as EquipoMiembroRow[]
@@ -281,8 +340,30 @@ export default function PersonalReportePage() {
       const producciones = (produccionesRes.data ?? []) as ProduccionRow[]
       const tareasAnt = (tareasAntRes.data ?? []) as TareaRow[]
       const turnosAnt = (turnosAntRes.data ?? []) as TurnoRow[]
+      const puestos = (puestosRes.data ?? []) as PuestoRow[]
+      const cuentas = (cuentasRes.data ?? []) as CuentaRow[]
 
-      const computed = calcStats(equipo, turnos, tareas, producciones, tareasAnt, turnosAnt)
+      // Ventas del mes por persona (PLAN-4-CAPAS B6) — mismo cruce
+      // comanda_items → carta_items.categoria que Reportes → Ventas.
+      const categoriasPorCuenta = new Map<string, string[]>()
+      const cuentaIds = cuentas.map(c => c.id)
+      for (let i = 0; i < cuentaIds.length; i += 200) {
+        const chunk = cuentaIds.slice(i, i + 200)
+        const { data: comandas } = await supabase
+          .from('comandas')
+          .select('cuenta_id, items:comanda_items(carta_item:carta_items(categoria))')
+          .in('cuenta_id', chunk)
+        for (const co of (comandas ?? []) as unknown as { cuenta_id: string; items: { carta_item: { categoria: string | null } | null }[] }[]) {
+          const cats = categoriasPorCuenta.get(co.cuenta_id) ?? []
+          for (const it of co.items ?? []) {
+            if (it.carta_item?.categoria) cats.push(it.carta_item.categoria)
+          }
+          categoriasPorCuenta.set(co.cuenta_id, cats)
+        }
+      }
+      const ventasPorMozo = agregarVentasPorPersona(cuentas, categoriasPorCuenta)
+
+      const computed = calcStats(equipo, turnos, tareas, producciones, tareasAnt, turnosAnt, puestos, ventasPorMozo)
       setStats(computed.sort((a, b) => b.score - a.score))
     } catch (e) {
       console.error('[personal] fetchData error:', e)
@@ -493,16 +574,24 @@ export default function PersonalReportePage() {
                   {/* Nombre con avatar */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                     <Avatar initials={p.initials} color={p.color} size={28} />
-                    <span style={{
-                      fontSize: 13,
-                      fontWeight: 500,
-                      color: 'var(--text-1)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {p.nombre.split(' ')[0]}
-                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, gap: 1 }}>
+                      <span style={{
+                        fontSize: 13,
+                        fontWeight: 500,
+                        color: 'var(--text-1)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {p.nombre.split(' ')[0]}
+                      </span>
+                      {p.ventas && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 10, color: 'var(--text-3)' }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 11 }}>payments</span>
+                          {formatCurrency(p.ventas.ticket_promedio)} tkt
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <span style={{ textAlign: 'right', fontSize: 12, color: 'var(--text-2)' }}>
@@ -626,6 +715,35 @@ export default function PersonalReportePage() {
                   <Delta value={personaDetalle.delta_completitud} label="Completitud" />
                 </div>
               </div>
+
+              {/* Ventas del mes (PLAN-4-CAPAS B6) — solo si tiene cuentas cerradas a su nombre */}
+              {personaDetalle.ventas && (
+                <div style={{
+                  background: 'var(--bg)', borderRadius: 10, padding: '10px 14px',
+                  border: '1px solid var(--border)',
+                }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 8 }}>
+                    Ventas del mes · {personaDetalle.ventas.cantidad} cuenta{personaDetalle.ventas.cantidad !== 1 ? 's' : ''}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <VentaObjetivoRow
+                      label="Ticket promedio"
+                      valor={formatCurrency(personaDetalle.ventas.ticket_promedio)}
+                      objetivo={personaDetalle.objetivos.ticket_promedio != null ? formatCurrency(personaDetalle.objetivos.ticket_promedio) : null}
+                    />
+                    <VentaObjetivoRow
+                      label="Comandas con postre"
+                      valor={`${personaDetalle.ventas.pct_postre.toFixed(0)}%`}
+                      objetivo={personaDetalle.objetivos.pct_comandas_con_postre != null ? `${personaDetalle.objetivos.pct_comandas_con_postre}%` : null}
+                    />
+                    <VentaObjetivoRow
+                      label="Comandas con café"
+                      valor={`${personaDetalle.ventas.pct_cafe.toFixed(0)}%`}
+                      objetivo={personaDetalle.objetivos.pct_comandas_con_cafe != null ? `${personaDetalle.objetivos.pct_comandas_con_cafe}%` : null}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Alertas */}
               {personaDetalle.alertas.length > 0 && (

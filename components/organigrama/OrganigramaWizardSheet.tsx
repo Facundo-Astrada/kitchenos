@@ -104,6 +104,7 @@ export function OrganigramaWizardSheet({
           fecha_ingreso: null,
           foto_url: null,
           costo_hora: null,
+          objetivos: {},
         })
       }
 
@@ -121,6 +122,7 @@ export function OrganigramaWizardSheet({
           orden: 0,
           permisos_app: [],
           tareas_funciones: [],
+          objetivos: {},
         })
       }
 
