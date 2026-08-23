@@ -299,7 +299,7 @@ CREATE TABLE control_carta_registros (
 
 ## Bloque 8 — Reservas: el modelo y la pantalla
 
-- [ ] **B8** · Una sesión · Tabla nueva · Sin dependencias
+- [x] **B8** · Una sesión · Tabla nueva · Sin dependencias
 
 ```sql
 CREATE TABLE reservas (
