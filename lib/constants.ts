@@ -106,6 +106,7 @@ export type ModuloId =
   | 'coach'
   | 'muro'
   | 'bitacora'
+  | 'reservas'
 
 export const MODULO_CONFIG: Record<
   ModuloId,
@@ -139,6 +140,7 @@ export const MODULO_CONFIG: Record<
   coach: { label: 'Coach', icon: 'forum', href: '/coach' },
   muro: { label: 'Muro', icon: 'view_kanban', href: '/muro' },
   bitacora: { label: 'Bitácora', icon: 'history_edu', href: '/bitacora' },
+  reservas: { label: 'Reservas', icon: 'event_seat', href: '/reservas' },
 }
 
 // Módulos accesibles por rol (base hardcodeada — se sobrescribe con puestos/permisos del admin)
@@ -147,13 +149,13 @@ export const MODULOS_POR_ROL: Record<Rol, ModuloId[]> = {
     'home', 'operaciones', 'recetario', 'stock', 'pedidos',
     'haccp', 'reportes', 'calendario',
     'carta', 'pase', 'facturas', 'merma', 'equipo', 'organigrama', 'configuracion', 'ventas', 'espacios',
-    'salon', 'kds', 'clientes', 'muro', 'bitacora',
+    'salon', 'kds', 'clientes', 'muro', 'bitacora', 'reservas',
   ],
   chef: [
     'home', 'operaciones', 'recetario', 'stock', 'pedidos',
     'haccp', 'reportes', 'calendario',
     'carta', 'pase', 'facturas', 'merma', 'equipo', 'organigrama', 'ventas', 'espacios',
-    'salon', 'kds', 'clientes', 'muro', 'bitacora',
+    'salon', 'kds', 'clientes', 'muro', 'bitacora', 'reservas',
   ],
   parrilla:   ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta', 'merma', 'calendario', 'haccp'],
   frios:      ['home', 'operaciones', 'recetario', 'stock', 'pase', 'carta', 'merma', 'calendario', 'haccp'],
@@ -203,6 +205,7 @@ export const RUTA_A_MODULO: Record<string, string> = {
   '/clientes': 'clientes',
   '/muro': 'muro',
   '/bitacora': 'bitacora',
+  '/reservas': 'reservas',
   // /perfil — not listed: modulo = undefined → always accessible
   // /tareas, /checklist, /produccion — rutas viejas: redirigen a /operaciones (tab correspondiente).
   // La vista real vive embebida en OPS. Mapeadas a 'operaciones' por consistencia de permisos.
@@ -281,7 +284,7 @@ export const AREA_CATALOGO: AreaCatalogoItem[] = [
   {
     key: 'comercial_reservas', nombre: 'Comercial y reservas', icon: 'calendar_month', color: '#ec4899',
     explicacion: 'Reservas, eventos, no-shows, cartera de clientes.',
-    modulos: ['calendario', 'clientes'], activaPorDefecto: false,
+    modulos: ['calendario', 'clientes', 'reservas'], activaPorDefecto: false,
   },
   {
     key: 'rrhh', nombre: 'RRHH', icon: 'groups', color: '#1e3a6e',

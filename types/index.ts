@@ -1214,6 +1214,31 @@ export interface Cliente {
   created_at: string
 }
 
+// ── Reservas (PLAN-4-CAPAS B8) ──────────────────────────────
+// Tabla aislada: sin enganches a OPS/Salón/Calendario/Dashboard todavía (eso
+// es B9). `nombre`+`telefono` redundantes con Cliente a propósito — la
+// mayoría de las reservas no tiene un cliente cargado como entidad.
+export type EstadoReserva = 'pendiente' | 'confirmada' | 'sentada' | 'no_show' | 'cancelada'
+export type OrigenReserva = 'telefono' | 'whatsapp' | 'web' | 'walk_in'
+
+// DB: reservas (id, restaurante_id, fecha, hora, pax, cliente_id, nombre, telefono, mesa_id, estado, origen, nota, creado_por, created_at)
+export interface Reserva {
+  id: string
+  restaurante_id: string
+  fecha: string
+  hora: string
+  pax: number
+  cliente_id: string | null
+  nombre: string
+  telefono: string | null
+  mesa_id: string | null
+  estado: EstadoReserva
+  origen: OrigenReserva
+  nota: string | null
+  creado_por: string | null
+  created_at: string
+}
+
 // DB: cuenta_corriente_movimientos (id, restaurante_id, cliente_id, cuenta_id, tipo, monto, medio_pago_id, descripcion, creado_por, fecha_pago, created_at)
 export type TipoMovimientoCC = 'cargo' | 'pago'
 export interface CuentaCorrienteMovimiento {

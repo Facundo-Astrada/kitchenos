@@ -292,3 +292,14 @@ Registro de decisiones tomadas con Facundo durante el diseño y construcción de
 - `MenusView.tsx` sigue sin ofrecer el botón "Activar en el mise" para `tipo === 'evento'` (evita que dos cocineros lo dupliquen en Producción al dispachar desde el mise) — la presencia en mise de un evento es siempre heredada de una activación previa o del re-sync al editar, nunca de un alta nueva por ese botón.
 - Nunca usar `'general'` como `plaza_control` de nada — ver §"Menú/Evento en el mise" en `.claude/docs/hooks.md`.
 - Los mensajes de commit y de respuesta al usuario son en español, concisos, con bullets del tipo "1. Fix X. 2. Fix Y. 3. Deployado." porque es lo que Facundo lee en su celular.
+
+---
+
+## 22. B8 (Reservas) arranca sin el resultado del track de validación
+
+**Decisión:** `PLAN-4-CAPAS.md` marcaba B8 como "punto de decisión" — revisar el track de validación con Bros/Rescoldo (matriz de 3 preguntas por función) antes de arrancar Reservas, y reordenar o pausar B8-B10 si ninguno de los dos toma reservas formalmente. El 22/08 se llegó a B8 sin que ese track se haya corrido — no hay entrada de validación en este archivo. Facundo decidió arrancar B8 igual, sin esperar la validación formal.
+**Por qué:** Señal informal de que hace falta, sin necesidad de bloquear una sesión completa de trabajo esperando un instrumento que no se corrió. El costo de construir B8 (una sesión, tabla aislada, sin engancharse a nada más todavía) es bajo comparado con el de parar el plan a mitad de camino.
+**Cómo se aplica:**
+- B8 se construye tal como está especificado en el plan (tabla `reservas`, pantalla `/reservas` día/semana, aislado).
+- El track de validación sigue pendiente y puede correrse en cualquier momento — su resultado real ahora importa para B9/B10 (los enganches a OPS/Salón/Calendario/Dashboard y la previsión de compra), no para B8, que ya se construyó.
+- Si en algún momento Bros y Rescoldo confirman que ninguno toma reservas formalmente, evaluar si vale la pena seguir con B9-B10 o dejar B8 aislado y mover el foco a otro bloque.

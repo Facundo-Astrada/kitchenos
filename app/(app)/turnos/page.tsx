@@ -27,7 +27,7 @@ const MODULOS_ASIGNABLES = [
   'home', 'operaciones', 'tareas', 'checklist', 'recetario', 'stock', 'pedidos',
   'haccp', 'reportes', 'calendario', 'turnos', 'proveedores', 'carta', 'pase',
   'facturas', 'produccion', 'merma', 'equipo', 'organigrama', 'configuracion',
-  'ventas', 'espacios', 'salon', 'kds', 'clientes', 'muro', 'bitacora',
+  'ventas', 'espacios', 'salon', 'kds', 'clientes', 'muro', 'bitacora', 'reservas',
 ] as const
 
 // ── Helpers ──

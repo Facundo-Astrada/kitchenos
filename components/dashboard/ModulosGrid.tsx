@@ -12,7 +12,7 @@ import ImportadorUniversal from '@/components/importador/ImportadorUniversal'
 const GRID_MODULOS: ModuloId[] = [
   'operaciones', 'espacios', 'recetario', 'stock', 'pedidos', 'carta',
   'facturas', 'proveedores', 'calendario', 'reportes', 'haccp',
-  'pase', 'produccion', 'turnos', 'ventas', 'clientes', 'merma', 'equipo', 'configuracion',
+  'pase', 'produccion', 'turnos', 'ventas', 'clientes', 'merma', 'equipo', 'configuracion', 'reservas',
 ]
 
 
