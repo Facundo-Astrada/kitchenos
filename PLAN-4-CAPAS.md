@@ -265,7 +265,7 @@ Los dos primeros salen del material (Clase 7: *"25 % + postres por camarero, 25 
 
 ## Bloque 7 — Checklist de la carta pre-servicio
 
-- [ ] **B7** · Una sesión · Tabla nueva · Sin dependencias
+- [x] **B7** · Una sesión · Tabla nueva · Sin dependencias
 
 > *"Una hora antes de abrir, el responsable de cocina irá partida por partida con este checklist probando todas las elaboraciones."* — elBulli 10.1
 

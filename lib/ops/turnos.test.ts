@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   fechaEnTz, horaEnTz, hoyOperativo, sumarDias, TZ_DEFAULT,
   turnoActivo, turnoAnterior, turnoSiguiente, encodeTurnoFase, parseTurnoFase, cierreIncompleto,
-  turnoVigente, claveCierre,
+  turnoVigente, claveCierre, proximoTurnoEnVentana,
 } from './turnos'
 import type { TurnoServicio } from '@/types'
 
@@ -262,5 +262,32 @@ describe('cierreIncompleto — ausencia total de cierre, no "algunos ítems pend
 
   it('todos completados → NO es incompleto', () => {
     expect(cierreIncompleto([{ completado: true }, { completado: true }])).toBe(false)
+  })
+})
+
+describe('proximoTurnoEnVentana — CTA de Control de Carta, solo antes de abrir', () => {
+  it('90 min antes del almuerzo (09:00), ventana de 120 → devuelve almuerzo', () => {
+    const d = new Date('2026-07-29T10:30:00Z') // 07:30 ART
+    expect(proximoTurnoEnVentana(d, TURNOS, 120)?.id).toBe('almuerzo')
+  })
+
+  it('150 min antes del almuerzo, ventana de 120 → todavía no (null)', () => {
+    const d = new Date('2026-07-29T09:30:00Z') // 06:30 ART
+    expect(proximoTurnoEnVentana(d, TURNOS, 120)).toBeNull()
+  })
+
+  it('el almuerzo ya arrancó y la cena está lejos → null (no queda todo el día prendido)', () => {
+    const d = new Date('2026-07-29T12:01:00Z') // 09:01 ART
+    expect(proximoTurnoEnVentana(d, TURNOS, 120)).toBeNull()
+  })
+
+  it('90 min antes de la cena (17:00) → devuelve cena', () => {
+    const d = new Date('2026-07-29T18:30:00Z') // 15:30 ART
+    expect(proximoTurnoEnVentana(d, TURNOS, 120)?.id).toBe('cena')
+  })
+
+  it('sin turnos activos → null', () => {
+    const d = new Date('2026-07-29T10:30:00Z')
+    expect(proximoTurnoEnVentana(d, [{ ...TURNOS[0], activo: false }], 120)).toBeNull()
   })
 })

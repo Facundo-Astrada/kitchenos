@@ -257,3 +257,28 @@ export function parseTurnoFase(v: string): { turnoId: string | null; fase: 'aper
 export function cierreIncompleto(registrosCierrePrevio: { completado: boolean }[]): boolean {
   return !registrosCierrePrevio.some(r => r.completado)
 }
+
+// ── Ventana pre-apertura (PLAN-4-CAPAS B7) ───────────────────────────────
+// El CTA de Control de Carta ("una hora antes de abrir, el responsable de
+// cocina va plato por plato" — elBulli 10.1) no puede vivir todo el día en
+// OPS: solo tiene sentido en la ventana previa a que arranque un turno.
+
+/**
+ * Turno cuya apertura cae dentro de `[now, now+ventanaMin]`. Null si ya
+ * arrancó (o pasó) el turno más próximo, o si falta más de `ventanaMin`.
+ * No cruza medianoche a propósito: el turno de mañana no se anuncia a las
+ * 23:50 de hoy, evita la complejidad de comparar contra el día siguiente
+ * para un caso de uso que igual nadie va a mirar a esa hora.
+ */
+export function proximoTurnoEnVentana(
+  now: Date, turnos: TurnoServicio[], ventanaMin: number, tz: string = TZ_DEFAULT,
+): TurnoServicio | null {
+  const activos = turnos.filter(t => t.activo)
+  if (activos.length === 0) return null
+  const nowMin = minutosDelDiaEnTz(now, tz)
+  for (const t of ordenarPorHorario(activos)) {
+    const faltan = minutosDeHHMM(t.desde) - nowMin
+    if (faltan >= 0 && faltan <= ventanaMin) return t
+  }
+  return null
+}

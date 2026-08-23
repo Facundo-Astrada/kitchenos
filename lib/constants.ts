@@ -209,6 +209,9 @@ export const RUTA_A_MODULO: Record<string, string> = {
   '/tareas': 'operaciones',
   '/checklist': 'operaciones',
   '/produccion': 'operaciones',
+  // /control-carta (PLAN-4-CAPAS B7) — sin ítem de nav propio, se llega por el
+  // CTA de OPS en la ventana previa a la apertura. Mismo gate que OPS.
+  '/control-carta': 'operaciones',
 }
 
 // ── Catálogo de áreas (organigrama) ─────────────────────────

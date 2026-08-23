@@ -457,6 +457,26 @@ export interface CartaItem {
   estacion_default_id?: string | null
 }
 
+// ── Control de carta pre-servicio (PLAN-4-CAPAS B7) ────────────
+// Contesta "¿está bueno?" plato por plato antes de abrir — distinto del mise,
+// que contesta "¿está hecho?". `turno` es el id de TurnoServicio (almuerzo/cena),
+// no fase apertura/cierre: el control se hace una vez por servicio.
+export type ControlCartaEstado = 'ok' | 'ajustar' | 'no_sale'
+
+// DB: control_carta_registros (id, restaurante_id, carta_item_id, fecha, turno, estado, nota, usuario_id, created_at)
+// UNIQUE(carta_item_id, fecha, turno) → upsert con ese onConflict.
+export interface ControlCartaRegistro {
+  id: string
+  restaurante_id: string
+  carta_item_id: string
+  fecha: string
+  turno: string
+  estado: ControlCartaEstado
+  nota: string | null
+  usuario_id: string | null
+  created_at: string
+}
+
 // ── Tareas ──────────────────────────────────────────────────
 export type TareaPrioridad = 'critica' | 'alta' | 'media' | 'baja'
 export type TareaStatus = 'pendiente' | 'en_proceso' | 'completada'
