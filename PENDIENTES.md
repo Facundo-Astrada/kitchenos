@@ -13,7 +13,7 @@ Sin ítems abiertos ahora mismo.
 ## 🟠 Alto
 
 ### Cerrar el ciclo de las 4 capas — plan propio en `PLAN-4-CAPAS.md`
-10 bloques ejecutables (B1 a B10) que salen de `AUDITORIA-4-CAPAS.md`: corrección de ingeniería de menú, campos de la capa Definir en Stock, incidencias por proveedor, presupuesto por familias, detección de fuga, objetivos por persona, checklist de carta pre-servicio y Reservas con sugerencia de compra. **No duplicar los ítems acá** — el estado de avance vive en los checkboxes del plan. Lo único que se decide fuera: si Reservas (B8-B10) sigue en pie, contra el resultado de la validación con Bros y Rescoldo.
+10 bloques ejecutables (B1 a B10) que salen de `AUDITORIA-4-CAPAS.md`: corrección de ingeniería de menú, campos de la capa Definir en Stock, incidencias por proveedor, presupuesto por familias, detección de fuga, objetivos por persona, checklist de carta pre-servicio y Reservas con sugerencia de compra. **No duplicar los ítems acá** — el estado de avance vive en los checkboxes del plan. B1-B8 cerrados; quedan B9 (reservas dentro del día de trabajo: OPS/Salón/Calendario/Dashboard) y B10 (reservas alimentan previsión de producción y sugerencia de compra), ambos dependientes de B8. El track de validación con Bros/Rescoldo (¿reservas les duele?) sigue sin correrse — Facundo decidió arrancar B8 igual (ver `DECISIONES.md` #22); su resultado ahora pesa sobre si vale la pena seguir con B9-B10.
 
 ### Verificaciones en dispositivo real — la única deuda del bloque OPS de agosto
 Todo lo de abajo está deployado y funcionando en el código; lo que falta es verlo en la cocina. Son cuatro escenarios que **no se pueden probar desde el escritorio**, por eso siguen abiertos juntos.
