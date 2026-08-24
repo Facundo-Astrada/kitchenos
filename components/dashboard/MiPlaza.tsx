@@ -61,7 +61,7 @@ export default function MiPlaza({ rol, completados, total }: MiPlazaProps) {
       <Link
         href="/checklist"
         className="block rounded-[16px] p-4 cursor-pointer relative overflow-hidden transition-transform active:scale-[.98]"
-        style={{ background: 'var(--navy)' }}
+        style={{ background: 'var(--navy)', boxShadow: 'var(--shadow-3)' }}
       >
         {/* Decorativo */}
         <div

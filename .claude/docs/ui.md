@@ -173,6 +173,20 @@ Solo `Material Symbols Outlined`, nunca emoji ni SVG custom: `<span className="m
 
 `<30% verde (ok) · 30-35% amarillo (atención) · >35% rojo (crítico)`
 
+## Convención de color semántico (verificado en código, S2 ago 2026)
+
+Antes de "arreglar" un color por sospecha de superposición, verificar contra esto — auditar 167 usos de `#f59e0b`/`#f97316` en S2 confirmó que la convención real de la app **ya es consistente**, no había el conflicto que parecía a simple vista:
+
+- **`#f59e0b` (ámbar / `var(--yellow)`)** — el nivel medio de una escala de severidad de 3 (verde ok · ámbar atención · rojo crítico): food cost, stock bajo, prioridad "importante" del pase, warnings del Coach. También identidad fija de la plaza **Menú** (`PLAZA_COLORS.menu`, no física, ver `lib/constants.ts`) — ahí no es severidad, es color de plaza.
+- **`#f97316` (naranja / `var(--orange)`)** — marca/acción: FAB del Coach, botón "+ Nuevo" (`HeaderAction`), toggles activos. Nunca severidad.
+- **`#ef4444` (rojo / `var(--red)`)** — crítico/peligro, siempre.
+
+No mezclar niveles: un ítem "atención" no sube a rojo sin cruzar el umbral real, y un acento de marca no se recolorea a ámbar/rojo por analogía visual.
+
+## Elevación — halo de sombra, no borde de 1px (S2, ago 2026)
+
+`--shadow-1/2/3` en `globals.css` (con su versión para `[data-theme="dark"]`, un hairline claro + sombra negra en vez del halo azul que no se lee sobre casi-negro). Valor de light mode calibrado en `MiembroCard.tsx` (la carta de puesto). Uso: `style={{ boxShadow: 'var(--shadow-2)' }}` en vez de (o adicional a) `border: '1px solid var(--border)'` — nivel 1 para un tile chico repetido en grilla (`ModulosGrid`), nivel 2 para una tarjeta destacada, nivel 3 para el bloque principal de una pantalla (`AhoraCard`, `MiPlaza`). No es un reemplazo global de todos los bordes de la app — aplicar donde se toca la pantalla, no en una pasada masiva.
+
 ## Panel OPS / mise — fuente única `components/ops/OpsPanel.tsx`
 
 Único lugar para el flujo plaza → sección → recipiente → cantidad+unidad → peso por porción. Recibe `initial?: OpsInitial`, emite `onSave(result: OpsResult)`. Lo usan `RecetaOpsSheet`, `CartaBoardCard`, `PlatoRecetasEditor`, `ItemRowInline` — no duplicar (existen copias viejas sin migrar en `carta/page.tsx` y `espacios/components/ItemEditPanel.tsx`, deuda conocida, no tocar sin que lo pidan). Constantes `PLAZAS_OPS`/`SECCIONES_OPS` en `lib/ops/mise.ts`. Plazas custom se mezclan solas (`usePlazasCustom()` interno, no pasar por prop). Prop `recipienteSugerencias?: string[]` agrega datalist (usar `useId()` para el id, puede haber más de un panel en pantalla).

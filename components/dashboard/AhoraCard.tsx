@@ -57,7 +57,7 @@ export default function AhoraCard({ momento }: { momento: MomentoDia }) {
   const content = (
     <div
       className="rounded-[16px] p-4 relative overflow-hidden"
-      style={{ background: 'var(--navy)' }}
+      style={{ background: 'var(--navy)', boxShadow: 'var(--shadow-3)' }}
     >
       <div
         className="absolute rounded-full"

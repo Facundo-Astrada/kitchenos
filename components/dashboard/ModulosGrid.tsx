@@ -91,7 +91,7 @@ export default function ModulosGrid({ rol }: ModulosGridProps) {
           <div
             style={{
               width: 56, height: 56, borderRadius: 16,
-              background: 'var(--surface)', border: '1px solid var(--border)',
+              background: 'var(--surface)', boxShadow: 'var(--shadow-1)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               transition: 'transform 0.12s',
             }}
@@ -117,7 +117,7 @@ export default function ModulosGrid({ rol }: ModulosGridProps) {
                 style={{
                   width: 56, height: 56,
                   borderRadius: 16,
-                  background: 'var(--surface)', border: '1px solid var(--border)',
+                  background: 'var(--surface)', boxShadow: 'var(--shadow-1)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   transition: 'transform 0.12s',
                 }}

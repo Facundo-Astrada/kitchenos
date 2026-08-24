@@ -23,6 +23,16 @@
   --blue: #3b82f6;
   --yellow: #f59e0b;
   --green: #10b981;
+
+  /* ── Elevación (S2, ago 2026) — halo de sombra azul en vez de borde de 1px.
+     Valor calibrado en components/organigrama/MiembroCard.tsx (la carta de
+     puesto), promovido acá para no seguir copiándolo a mano. 3 niveles:
+     1 = tarjeta en una lista, 2 = tarjeta destacada, 3 = elemento flotante
+     (sheet, dropdown). No reemplaza --border en todos lados — se usa donde
+     el elemento necesita leerse por encima del fondo, no en cada card. ── */
+  --shadow-1: 0 1px 2px rgba(28, 45, 74, .06);
+  --shadow-2: 0 1px 2px rgba(28, 45, 74, .08), 0 6px 16px rgba(28, 45, 74, .10);
+  --shadow-3: 0 1px 2px rgba(28, 45, 74, .08), 0 10px 24px rgba(28, 45, 74, .14);
 }
 
 [data-theme="dark"] {
@@ -35,6 +45,11 @@
   --text-2: #94a3b8;
   --text-3: #64748b;
   --border: #222222;
+
+  /* Un halo azul no se lee sobre casi-negro — hairline claro + sombra negra. */
+  --shadow-1: 0 0 0 1px rgba(255, 255, 255, .04), 0 1px 3px rgba(0, 0, 0, .4);
+  --shadow-2: 0 0 0 1px rgba(255, 255, 255, .05), 0 4px 12px rgba(0, 0, 0, .5);
+  --shadow-3: 0 0 0 1px rgba(255, 255, 255, .06), 0 10px 24px rgba(0, 0, 0, .6);
 }
 
 @theme inline {
