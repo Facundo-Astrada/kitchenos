@@ -1,20 +1,13 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
 import ChecklistPage from '@/app/(app)/checklist/ClientView'
 import TareasPage from '@/app/(app)/tareas/ClientView'
 import { ProduccionView } from '@/app/(app)/produccion/page'
 import { RutinaTurnoView } from '@/components/rutina/RutinaTurnoView'
 import { useTareas } from '@/lib/hooks/useTareas'
-import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
-import { hoyOperativo, proximoTurnoEnVentana } from '@/lib/ops/turnos'
+import { hoyOperativo } from '@/lib/ops/turnos'
 import { onOpsChromeCompact } from '@/lib/ops/chromeBus'
-
-// PLAN-4-CAPAS B7 — el CTA de Control de Carta solo vive en esta ventana
-// previa a que arranque un turno ("una hora antes de abrir", elBulli 10.1).
-// Un poco más ancha que la hora literal para no exigir el tap justo a tiempo.
-const VENTANA_PRE_APERTURA_MIN = 120
 
 type Tab = 'produccion' | 'mise' | 'planificacion' | 'turno'
 
@@ -34,24 +27,10 @@ function esTab(v: string | null): v is Tab {
 // OPERACIONES PAGE (tab container principal)
 // ══════════════════════════════════════════════════════════════
 export default function OperacionesPage() {
-  const router = useRouter()
   const [tab, setTab] = useState<Tab>('produccion')
   // useTareas es SWR (cacheado) — comparte cache con el tab Producción, costo ~0.
   const { tareas } = useTareas()
-  const { turnosActivos } = useTurnosServicio()
 
-  // Reloj propio para el CTA de Control de Carta — sin esto la ventana previa
-  // a la apertura solo se evaluaría una vez, al montar OPS, y nunca aparecería
-  // ni desaparecería sola durante una sesión larga.
-  const [ahora, setAhora] = useState(() => new Date())
-  useEffect(() => {
-    const id = setInterval(() => setAhora(new Date()), 60_000)
-    return () => clearInterval(id)
-  }, [])
-  const turnoProximo = useMemo(
-    () => proximoTurnoEnVentana(ahora, turnosActivos, VENTANA_PRE_APERTURA_MIN),
-    [ahora, turnosActivos],
-  )
   // Tareas de hoy sin completar → badge en el tab Producción (ver el efecto sin cambiar de tab)
   const pendientesProduccion = useMemo(() => {
     const hoy = hoyOperativo()
@@ -169,25 +148,9 @@ export default function OperacionesPage() {
         </div>
       </div>
 
-      {/* CTA Control de Carta (PLAN-4-CAPAS B7) — solo en la ventana previa a
-          la apertura de un turno, no todo el día (ver proximoTurnoEnVentana). */}
-      {turnoProximo && (
-        <button
-          onClick={() => router.push(`/control-carta?turno=${turnoProximo.id}`)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-            padding: '10px 16px', border: 'none', borderBottom: '1px solid var(--border)',
-            background: 'rgba(245,158,11,.12)', cursor: 'pointer', fontFamily: 'inherit',
-            textAlign: 'left', flexShrink: 0,
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#f59e0b' }}>fact_check</span>
-          <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>
-            Control de carta antes de {turnoProximo.nombre.toLowerCase()}
-          </span>
-          <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)' }}>chevron_right</span>
-        </button>
-      )}
+      {/* El CTA de Control de Carta (PLAN-4-CAPAS B7) vive ahora en el bloque
+          "Ahora" del Dashboard (PLAN-SUPERFICIE S1) — antes vivía acá suelto,
+          compitiendo con el mismo botón que aparece primero al abrir la app. */}
 
       {/* Tab panels — cada uno se monta en su primera visita y se conserva */}
       {mounted.has('produccion') && (

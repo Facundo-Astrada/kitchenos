@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { usePedidos } from '@/lib/hooks/usePedidos'
 import type { Pedido } from '@/types'
@@ -22,6 +22,8 @@ function fmtDia(d: string | null): string {
 interface Props {
   /** En la propia pantalla de pedidos no navegamos, solo mostramos. */
   embedded?: boolean
+  /** Avisa cuántos pedidos entran en el banner — para un resumen plegado externo (ver Dashboard). */
+  onCount?: (n: number) => void
 }
 
 /**
@@ -29,7 +31,7 @@ interface Props {
  * entrega cae hoy (o ya está atrasada) y siguen sin recibirse.
  * Se usa en Inicio y en Pedidos.
  */
-export default function IngresosBanner({ embedded = false }: Props) {
+export default function IngresosBanner({ embedded = false, onCount }: Props) {
   const router = useRouter()
   const { pedidos } = usePedidos()
 
@@ -46,6 +48,8 @@ export default function IngresosBanner({ embedded = false }: Props) {
     }
     return { hoy, atrasados }
   }, [pedidos])
+
+  useEffect(() => { onCount?.(hoy.length + atrasados.length) }, [hoy.length, atrasados.length, onCount])
 
   if (hoy.length === 0 && atrasados.length === 0) return null
 

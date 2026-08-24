@@ -5,6 +5,7 @@ import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth/context'
 import DashboardHeader from '@/components/dashboard/DashboardHeader'
+import AhoraCard from '@/components/dashboard/AhoraCard'
 import IngresosBanner from '@/components/pedidos/IngresosBanner'
 import PasePreview from '@/components/dashboard/PasePreview'
 import MiPlaza from '@/components/dashboard/MiPlaza'
@@ -19,12 +20,34 @@ import { getEstadoStock, calcularVencimientoFactura } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useFichaje } from '@/lib/hooks/useFichaje'
 import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
+import { useMomentoDia } from '@/lib/dashboard/momento'
 import type { Perfil, Rol } from '@/types'
+
+// KPI "86 activos" del header — cuenta real, no el 0 fijo que mostraba antes.
+// Query liviana (count exact, head:true — no baja filas) sobre carta_items,
+// mismo criterio que toggleDisponible en useCarta.ts.
+function useEn86Count(restauranteId: string): number | null {
+  const [count, setCount] = useState<number | null>(null)
+  useEffect(() => {
+    if (!restauranteId) return
+    let cancel = false
+    ;(async () => {
+      const supabase = createClient()
+      const { count: n } = await supabase.from('carta_items')
+        .select('*', { count: 'exact', head: true })
+        .eq('restaurante_id', restauranteId)
+        .eq('disponible', false)
+      if (!cancel) setCount(n ?? 0)
+    })()
+    return () => { cancel = true }
+  }, [restauranteId])
+  return count
+}
 
 // KPI "Cuentas por pagar" — solo admin, oculto si no hay deuda. Query liviana propia.
 // Prioriza el mensaje por urgencia (vencidas > vencen esta semana > total), mismo
 // cálculo de vencimiento que la agenda de Facturas (lib/utils.ts) para que nunca diverjan.
-function CuentasPorPagarCard({ restauranteId }: { restauranteId: string }) {
+function CuentasPorPagarCard({ restauranteId, onCount }: { restauranteId: string; onCount?: (n: number) => void }) {
   const [data, setData] = useState<{ total: number; count: number; vencidas: number; vencidasTotal: number; estaSemana: number; estaSemanaTotal: number } | null>(null)
   useEffect(() => {
     if (!restauranteId) return
@@ -47,6 +70,7 @@ function CuentasPorPagarCard({ restauranteId }: { restauranteId: string }) {
     })()
     return () => { cancel = true }
   }, [restauranteId])
+  useEffect(() => { if (data) onCount?.(data.count) }, [data, onCount])
   if (!data || data.count === 0) return null
   const fmt = (n: number) => n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
 
@@ -77,6 +101,46 @@ function CuentasPorPagarCard({ restauranteId }: { restauranteId: string }) {
         {fmt(urgente ? montoUrgente : data.total)}
       </div>
     </Link>
+  )
+}
+
+// Fila plegada que agrupa los dos banners rojos (pedidos atrasados + facturas
+// a pagar) — antes competían por el pixel de arriba con el bloque de trabajo
+// (PLAN-SUPERFICIE S1.3). Los banners quedan siempre montados (necesitan
+// seguir vivos para reportar su conteo vía onCount); el plegado solo esconde
+// el detalle, no los desmonta — mismo criterio que un sheet oculto con CSS.
+function PendientesDelNegocio({ restauranteId }: { restauranteId: string }) {
+  const [open, setOpen] = useState(false)
+  const [nPedidos, setNPedidos] = useState(0)
+  const [nFacturas, setNFacturas] = useState(0)
+  const total = nPedidos + nFacturas
+
+  return (
+    <div style={{ margin: '8px 16px 0' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%', display: total > 0 ? 'flex' : 'none', alignItems: 'center', gap: 10,
+          padding: '10px 14px', borderRadius: 12, cursor: 'pointer',
+          background: '#fef2f2', border: '1px solid #fecaca', fontFamily: 'inherit',
+        }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#991b1b' }}>error</span>
+        <span style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 700, color: '#991b1b' }}>
+          Pendientes del negocio · {total}
+        </span>
+        <span
+          className="material-symbols-outlined"
+          style={{ fontSize: 18, color: '#991b1b', transform: open ? 'rotate(180deg)' : undefined, transition: 'transform .2s' }}
+        >
+          expand_more
+        </span>
+      </button>
+      <div style={{ display: open ? 'flex' : 'none', flexDirection: 'column', gap: 8, marginTop: total > 0 ? 8 : 0 }}>
+        <IngresosBanner embedded onCount={setNPedidos} />
+        <CuentasPorPagarCard restauranteId={restauranteId} onCount={setNFacturas} />
+      </div>
+    </div>
   )
 }
 
@@ -133,6 +197,7 @@ export default function DashboardPage() {
   const { productos, loading: loadingStock } = useStock()
   const { tareas, loading: loadingTareas } = useTareas()
   const { items: checklistItems, registros } = useChecklist()
+  const en86 = useEn86Count(authPerfil?.restaurante_id ?? '')
 
   // Build Perfil from auth context
   const perfil: Perfil = {
@@ -173,6 +238,8 @@ export default function DashboardPage() {
       tareasStats: { completadas: tareasCompletadas, total: tareasHoy.length },
     }
   }, [tareas, checklistItems, registros])
+
+  const momento = useMomentoDia({ miseCompletados: miseStats.completados, miseTotal: miseStats.total, rol })
 
   // Bienvenida global del Coach — solo la primera vez, con datos ya cargados.
   // Si el restaurante está vacío, lo cubre el wizard de onboarding, no el Coach.
@@ -223,6 +290,7 @@ export default function DashboardPage() {
         miseTotal={miseStats.total}
         tareasCompletadas={tareasStats.completadas}
         tareasTotal={tareasStats.total}
+        en86={en86}
       />
 
       {isEmpty ? (
@@ -233,8 +301,9 @@ export default function DashboardPage() {
         /* ── DESKTOP LAYOUT ─────────────────────────────── */
         <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
-          {/* Panel izquierdo: turno + pase + plaza */}
+          {/* Panel izquierdo: el día + turno + pase + plaza */}
           <div style={{ borderRight: '1px solid var(--border)', overflowY: 'auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <AhoraCard momento={momento} />
             {/* Turno */}
             <div data-coach-target="dashboard-turno">
               {!turnoActivo ? (
@@ -262,12 +331,10 @@ export default function DashboardPage() {
             <div data-coach-target="dashboard-plaza"><MiPlaza rol={rol} completados={plazaStats.completados} total={plazaStats.total} /></div>
           </div>
 
-          {/* Panel derecho: módulos + stock */}
+          {/* Panel derecho: pendientes del negocio + stock — la navegación
+              a módulos ya la resuelve el sidebar, no se duplica acá (S1.4). */}
           <div style={{ overflowY: 'auto', padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 28 }}>
             {rol === 'admin' && <IngresosBanner embedded />}
-            <div data-coach-target="dashboard-modulos">
-              <ModulosGrid rol={rol} desktop />
-            </div>
 
             {criticos.length > 0 && (
               <div data-coach-target="dashboard-stock">
@@ -298,9 +365,11 @@ export default function DashboardPage() {
           </div>
         </div>
       ) : (
-        /* ── MOBILE LAYOUT (sin cambios) ──────────────────── */
+        /* ── MOBILE LAYOUT ──────────────────── */
         <div className="scroll-body screen-enter" style={{ paddingTop: 0 }}>
-          {rol === 'admin' && <div style={{ padding: '8px 16px 0' }}><IngresosBanner embedded /></div>}
+          {/* El momento del día va primero — antes la pantalla abría con
+              alertas de negocio antes de decir qué hacer (S1.1). */}
+          <div style={{ padding: '8px 16px 0' }}><AhoraCard momento={momento} /></div>
           {/* Turno card */}
           <div data-coach-target="dashboard-turno" style={{ padding: '8px 16px 0' }}>
             {!turnoActivo ? (
@@ -353,11 +422,10 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {rol === 'admin' && (
-            <div style={{ padding: '8px 16px 0' }}><CuentasPorPagarCard restauranteId={perfil.restaurante_id} /></div>
-          )}
           <div data-coach-target="dashboard-pase"><PasePreview puedeEscribir={puedeEscribir} /></div>
           <div data-coach-target="dashboard-plaza"><MiPlaza rol={rol} completados={plazaStats.completados} total={plazaStats.total} /></div>
+          {/* Alertas de negocio plegadas, debajo del bloque de trabajo (S1.3) */}
+          {rol === 'admin' && <PendientesDelNegocio restauranteId={perfil.restaurante_id} />}
           <div data-coach-target="dashboard-stock"><StockCriticoSection productos={productos} /></div>
           <div data-coach-target="dashboard-modulos"><ModulosGrid rol={rol} /></div>
 

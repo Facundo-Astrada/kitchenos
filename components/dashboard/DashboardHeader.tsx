@@ -13,6 +13,7 @@ interface DashboardHeaderProps {
   miseTotal?: number
   tareasCompletadas?: number
   tareasTotal?: number
+  en86?: number | null
   desktop?: boolean
 }
 
@@ -24,6 +25,7 @@ export default function DashboardHeader({
   miseTotal = 0,
   tareasCompletadas = 0,
   tareasTotal = 0,
+  en86 = null,
   desktop = false,
 }: DashboardHeaderProps) {
   const { theme, toggle: toggleTheme } = useTheme()
@@ -122,6 +124,7 @@ export default function DashboardHeader({
         miseTotal={miseTotal}
         tareasCompletadas={tareasCompletadas}
         tareasTotal={tareasTotal}
+        en86={en86}
       />
     </div>
   )
@@ -132,11 +135,13 @@ function StatusBar({
   miseTotal,
   tareasCompletadas,
   tareasTotal,
+  en86,
 }: {
   miseCompletados: number
   miseTotal: number
   tareasCompletadas: number
   tareasTotal: number
+  en86: number | null
 }) {
   const misePct = miseTotal > 0 ? Math.round((miseCompletados / miseTotal) * 100) : 0
   const tareasPct = tareasTotal > 0 ? Math.round((tareasCompletadas / tareasTotal) * 100) : 0
@@ -157,7 +162,7 @@ function StatusBar({
         barWidth={tareasPct}
         barColor="#f59e0b"
       />
-      <EightySixCard />
+      <EightySixCard en86={en86} />
     </div>
   )
 }
@@ -204,7 +209,9 @@ function StatusCard({
   )
 }
 
-function EightySixCard() {
+function EightySixCard({ en86 }: { en86: number | null }) {
+  const cargando = en86 === null
+  const hay86 = !cargando && en86 > 0
   return (
     <a
       href="/carta"
@@ -220,9 +227,11 @@ function EightySixCard() {
       >
         86 activos
       </div>
-      <div className="text-[20px] font-bold" style={{ color: '#ef4444' }}>0</div>
+      <div className="text-[20px] font-bold" style={{ color: hay86 ? '#ef4444' : 'rgba(255,255,255,.85)' }}>
+        {cargando ? '—' : en86}
+      </div>
       <div className="text-[10px] mt-1" style={{ color: 'rgba(255,255,255,.5)' }}>
-        Sin 86s activos
+        {cargando ? 'Cargando…' : hay86 ? `${en86 === 1 ? 'plato sin' : 'platos sin'} vender` : 'Sin 86s activos'}
       </div>
     </a>
   )

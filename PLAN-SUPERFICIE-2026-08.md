@@ -61,7 +61,7 @@ El día de cocina es una secuencia (llegada → apertura del mise → control de
 
 ## S1 — Dashboard: de lanzador a cabina del día 🔴 Alta (el pedido central)
 
-- [ ] Completado — fecha:
+- [x] Completado — fecha: 2026-08-24
 
 No es una pantalla nueva: es reordenar `DashboardClientView.tsx` y sumar un bloque arriba.
 
@@ -160,8 +160,9 @@ Extender `MiembroCard` (gradiente + badge + stats + flip) a los objetos que la a
 
 1. **Orden.** Sugerido: **S0 → S1 → S2 → S4 → S3 → S5**. S1 es lo que pediste; S2 es el que más cambia la foto por hora invertida; S3 es el más vistoso pero el que menos mueve el trabajo diario.
 2. **Serif itálica (S2.3)**: ¿entra la segunda tipografía o la app se queda con DM Sans sola? Es el punto más "de marca" y el más discutible.
-3. **Grilla de módulos en mobile (S1.4)**: ¿6 más usados + "Ver todos", o se saca del dashboard entera y queda solo en "Más"?
-4. **Carta de plato (S3.2)**: mostrar el cuadrante de ingeniería (Estrella/Perro) en la carta del plato expone rentabilidad en una pantalla que ve todo el equipo — hoy precio y food cost son solo admin. ¿Se muestra solo a admin, o el cuadrante se queda en Rentabilidad?
+3. **Carta de plato (S3.2)**: mostrar el cuadrante de ingeniería (Estrella/Perro) en la carta del plato expone rentabilidad en una pantalla que ve todo el equipo — hoy precio y food cost son solo admin. ¿Se muestra solo a admin, o el cuadrante se queda en Rentabilidad?
+
+Resuelto al ejecutar S1: la grilla de módulos en mobile quedó en **6 más usados + "Ver todos"** (expande inline en la misma pantalla, sin depender del BottomNav → Más). Frecuencia por dispositivo en `localStorage` (`kc_modulo_freq`), sin historial cae al orden ya priorizado de `GRID_MODULOS`.
 
 ---
 
@@ -170,3 +171,4 @@ Extender `MiembroCard` (gradiente + badge + stats + flip) a los objetos que la a
 | Bloque | Fecha | Notas |
 |---|---|---|
 | S0 | 2026-08-24 | `lib/ui/motion.ts` (tokens + `useReducedMotion` + `tap()`). Transición de pantalla unificada en `app/(app)/layout.tsx`; `PageTransition` pasa a ser pass-through documentado (era no-op desde el commit inicial del repo). Se sacó `framer-motion` duplicado, todo consolidado en `motion/react` (7 archivos). Háptico `tap()` en tildar mise, despachar Modo Control y entregar plaza. Build + 135/135 tests verdes, verificado en dev server contra El Rescoldo (dashboard + selector de plaza + lista del mise). |
+| S1 | 2026-08-24 | Bloque "Ahora" (`lib/dashboard/momento.ts` + `components/dashboard/AhoraCard.tsx`) arriba del Dashboard mobile y desktop — apertura/control de carta/servicio/fuera de turno, calculado con lo que ya existía. KPI "86 activos" deja de estar hardcodeado en 0 (`useEn86Count`, cuenta real `carta_items.disponible=false`). Banners rojos (pedidos atrasados + facturas) plegados en "Pendientes del negocio · N" debajo del bloque de trabajo, en vez de arriba de todo. Grilla de módulos mobile: 6 más usados (frecuencia en `localStorage`) + "Ver todos" expande inline. Desktop: la grilla de módulos sale de la columna principal (el sidebar ya navega). El CTA de Control de Carta se sacó de OPS (vivía suelto, competía con el mismo botón) — ahora solo vive en el bloque Ahora. Simplificación deliberada documentada en el código: no hay estado "cierre" propio en `momento.ts` — el avance del mise que ve el Dashboard es agregado de todas las plazas, no hay señal fiable de "mi plaza entregó" sin una plaza asignada real por persona. Build + 135/135 tests verdes; verificado en dev server (bloque Ahora, fold expandido, módulos expandidos, OPS sin el banner viejo). |
