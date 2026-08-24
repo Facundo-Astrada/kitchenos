@@ -61,6 +61,17 @@ Para cada archivo leer el código y verificar:
 - [ ] ¿Hay precios o contadores alineados SIN `<Num>` (falta `font-variant-numeric: tabular-nums`)?
 - [ ] Si el archivo define un bottom sheet/modal/editor full-screen, ¿llama `useSheetOpen()` de `@/lib/ui/chrome`?
 
+#### Componentes canónicos (S0–S5, ago 2026) — movimiento, elevación y estado
+- [ ] ¿Hay un toast casero (`useState` + JSX propio con `position:fixed,bottom:...`) en vez de `<Toast>` de `@/components/ui`?
+- [ ] ¿Hay un skeleton casero (`<div>Cargando...</div>` o barras armadas a mano) en vez de `Skeleton`/`SkeletonHeader`/`SkeletonRow`/`SkeletonCard` de `@/components/ui`?
+- [ ] ¿Hay `navigator.vibrate(...)` llamado directo en vez de `tap()` de `@/lib/ui/motion`?
+- [ ] ¿Hay `box-shadow` armado a mano en vez de `var(--shadow-1/2/3)`?
+- [ ] ¿Hay una tarjeta con `border: '1px solid var(--border)'` que debería tener elevación (`--shadow-2`) en vez de borde, siguiendo el patrón de `AhoraCard`/`MiPlaza`/tiles de `ModulosGrid`?
+- [ ] ¿Hay una duración/easing de animación hardcodeada (`0.2s ease`, `transition: 'all .3s'`) en vez de `DURATION`/`EASE_OUT` de `@/lib/ui/motion`?
+- [ ] Si el componente anima algo con `motion/react` o CSS propio, ¿respeta `useReducedMotion()` / el guard `@media (prefers-reduced-motion: no-preference)`?
+- [ ] ¿Hay una carta con flip armada desde cero en vez de reusar `<FlipCard>` de `@/components/ui`?
+- [ ] ¿El color usado para "éxito"/confirmación es verde? (nunca ámbar — ámbar es "atención" en toda la app, ver `.claude/docs/ui.md` § Convención de color semántico)
+
 #### Accesibilidad básica
 - [ ] ¿Los botones tienen texto visible o `aria-label`?
 - [ ] ¿Los inputs tienen `placeholder` en español?
@@ -78,6 +89,8 @@ ARCHIVO: ruta/al/archivo.tsx
 ✓ Idioma: Español argentino OK
 ✗ Componentes canónicos: Línea 88 tiene tabs ad hoc → reemplazar con <SegmentedTabs> de @/components/ui
 ✗ Componentes canónicos: Línea 145 tiene empty state ad hoc → reemplazar con <EmptyState>
+✗ Componentes canónicos (S0-S5): Línea 210 tiene un toast casero → reemplazar con <Toast> de @/components/ui
+✗ Componentes canónicos (S0-S5): Línea 260 llama navigator.vibrate(30) directo → usar tap(30) de @/lib/ui/motion
 
 ISSUES CRÍTICOS: 2
 SUGERENCIAS: [lista de fixes exactos con número de línea]
