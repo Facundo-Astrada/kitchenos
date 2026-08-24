@@ -167,6 +167,33 @@ export const MODULOS_POR_ROL: Record<Rol, ModuloId[]> = {
   ayudante:   ['home', 'operaciones', 'pase', 'merma', 'calendario'],
 }
 
+// ── Seed de rol_permisos para un restaurante nuevo ──────────
+// Ojo con la taxonomía: las claves son los roles de DB (`rol_permisos.rol`,
+// `user_restaurantes.rol`), NO el tipo `Rol` de la app que usa MODULOS_POR_ROL
+// de arriba. `mapRol()` en lib/auth/context.tsx traduce de una a la otra.
+//
+// Vive acá y tipado como ModuloId[] por un bug real (ago 2026): el seed estaba
+// inline en `signUp` con strings sueltos y decía 'inicio' donde la ruta '/'
+// pide 'home' (ver RUTA_A_MODULO abajo). Resultado: todo cocinero/bachero/
+// compras que dependiera de este fallback no podía entrar al dashboard —
+// RouteGuard le mostraba "Sin acceso a home". Tipado, TypeScript lo agarra.
+export const TODOS_LOS_MODULOS: ModuloId[] = [
+  'home', 'operaciones', 'tareas', 'recetario', 'stock', 'carta', 'checklist', 'pase',
+  'pedidos', 'proveedores', 'facturas', 'reportes', 'turnos', 'calendario',
+  'haccp', 'equipo', 'configuracion', 'produccion', 'merma', 'ventas',
+]
+
+export const MODULOS_SEED_POR_ROL_DB: Record<string, ModuloId[]> = {
+  admin: TODOS_LOS_MODULOS,
+  sous_chef: TODOS_LOS_MODULOS.filter(m => m !== 'configuracion'),
+  // 'operaciones' es obligatorio para cualquiera que trabaje en cocina: las
+  // rutas /tareas, /checklist y /produccion mapean todas a ese módulo desde la
+  // consolidación de OPS. Sin él, el cocinero no entra a su pantalla principal.
+  cocinero: ['home', 'operaciones', 'tareas', 'recetario', 'stock', 'checklist', 'pase', 'produccion'],
+  bachero: ['home', 'operaciones', 'tareas', 'checklist', 'pase'],
+  compras: ['home', 'stock', 'pedidos', 'proveedores', 'facturas', 'calendario'],
+}
+
 // ── Modo Emprendimiento — subconjunto de módulos para productores ──
 // (VOGLIO Farina, caso piloto). Restaurantes con
 // `restaurantes.configuracion.perfil === 'emprendimiento'` ven SOLO estos

@@ -110,14 +110,27 @@ export default function RegistroInvitadoPage() {
       const { error: pwErr } = await supabase.auth.updateUser({ password })
       if (pwErr) throw pwErr
 
-      // 2. Marcar equipo_miembros como activo y actualizar nombre si viene de placeholder
+      // 2. Vincular el usuario de auth con su ficha de equipo_miembros.
+      // Va por el server (admin client): el update directo de acá no podía
+      // escribir `auth_user_id` de forma confiable, y sin ese vínculo
+      // `usePermisos` nunca encuentra el puesto del invitado — se quedaba con
+      // el fallback por rol y terminaba viendo "Sin acceso a home".
+      const vinculacion = await fetch('/api/invitar/vincular', { method: 'POST' })
+      if (!vinculacion.ok) {
+        const { error: vErr } = await vinculacion.json().catch(() => ({ error: null }))
+        throw new Error(vErr || 'No pudimos vincular tu cuenta con el equipo. Avisale al administrador.')
+      }
+
+      // 3. Nombre real encima del placeholder que dejó /api/invitar.
+      // Después de vincular, para poder filtrar por auth_user_id en vez de por email.
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        // Actualizar el miembro pre-creado por /api/invitar
         await supabase.from('equipo_miembros')
-          .update({ activo: true, nombre: nombre.trim().split(' ')[0], apellido: nombre.trim().split(' ').slice(1).join(' ') || '' })
-          .eq('email', user.email ?? '')
-          .eq('activo', false) // solo actualiza si estaba inactivo (pre-creado)
+          .update({
+            nombre: nombre.trim().split(' ')[0],
+            apellido: nombre.trim().split(' ').slice(1).join(' ') || '',
+          })
+          .eq('auth_user_id', user.id)
       }
 
       setStep('done')

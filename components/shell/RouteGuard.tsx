@@ -58,6 +58,13 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
 
     if (!modulo) { setModuloBloqueado(null); return }
 
+    // La home NUNCA se bloquea. Un candado en '/' es indistinguible de una app
+    // rota: el usuario no tiene a dónde ir, ni siquiera al botón "Volver al
+    // inicio" de abajo. Si sus permisos no incluyen 'home' el problema es la
+    // configuración, y el lugar para decírselo es el dashboard, no una pared.
+    // (Bug real, ago 2026: el seed escribía 'inicio' y la ruta pide 'home'.)
+    if (basePath === '/') { setModuloBloqueado(null); return }
+
     // El perfil del restaurante (ej. modo emprendimiento) bloquea incluso a admin.
     if (!moduloEnPerfil(modulo)) { setModuloBloqueado(modulo); return }
 

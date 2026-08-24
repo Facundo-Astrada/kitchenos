@@ -1,12 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { COACH_TOOL_REGISTRY } from '@/lib/coach/tools/registry'
+import { puedeVerModulo, resolverModulosEfectivos } from '@/lib/permisos/resolver'
 
 // Replica server-side, sin cambiar semántica, la cascada de dos pasos que hoy es client-only:
 // 1) lib/auth/context.tsx: mapRol(user_restaurantes.rol, equipo_miembros.plaza_asignada) -> Rol de la app.
 // 2) lib/hooks/usePermisos.ts: Rol de la app -> dbRol de rol_permisos (admin/sous_chef/cocinero/bachero),
 //    y desde ahí: módulos efectivos del puesto (permisos_app + modulos_extra - modulos_restringidos)
 //    o, si no hay puesto, fallback a rol_permisos.modulos_visibles / puede_editar_*.
-// Cualquier cambio en esas dos funciones debe reflejarse acá también.
+//
+// El paso (2) ya NO está duplicado: vive en lib/permisos/resolver.ts y lo importan
+// los dos lados. Mantener dos copias sincronizadas a mano no funcionó — en ago 2026
+// las dos tenían los mismos dos bugs (permisos_app vacío tratado como lista válida,
+// y el alias 'inicio'/'home' sin contemplar). El mapeo de roles de (1) sigue duplicado.
 
 type AppRol =
   | 'admin' | 'chef' | 'ayudante'
@@ -75,12 +80,11 @@ export async function getPermisosServer(
   if (miembro?.puesto_id) {
     const { data: puesto } = await supabase.from('puestos')
       .select('permisos_app').eq('id', miembro.puesto_id).maybeSingle()
-    if (puesto?.permisos_app) {
-      const base = puesto.permisos_app as string[]
-      const extra = (miembro.modulos_extra as string[] | null) ?? []
-      const restringidos = (miembro.modulos_restringidos as string[] | null) ?? []
-      modulosEfectivos = [...new Set([...base, ...extra])].filter(m => !restringidos.includes(m))
-    }
+    modulosEfectivos = resolverModulosEfectivos({
+      permisosApp: puesto?.permisos_app as string[] | null | undefined,
+      modulosExtra: miembro.modulos_extra as string[] | null,
+      modulosRestringidos: miembro.modulos_restringidos as string[] | null,
+    })
   }
 
   let permisos: { modulos_visibles: string[]; puede_editar_stock: boolean; puede_editar_carta: boolean } | null = null
@@ -93,9 +97,11 @@ export async function getPermisosServer(
 
   return {
     isAdmin: false,
-    puedeVer: modulo => modulosEfectivos !== null
-      ? modulosEfectivos.includes(modulo)
-      : (permisos?.modulos_visibles.includes(modulo) ?? false),
+    puedeVer: modulo => puedeVerModulo({
+      isAdmin: false,
+      modulosEfectivos,
+      modulosVisibles: permisos?.modulos_visibles,
+    }, modulo),
     // Nota: igual que en usePermisos.ts, puedeEditar solo se resuelve contra rol_permisos —
     // con puesto asignado (modulosEfectivos !== null) siempre da false salvo admin. Es un
     // comportamiento preexistente del cliente que se replica tal cual, no se corrige acá.

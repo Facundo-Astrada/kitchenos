@@ -1,9 +1,10 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import type { Rol } from '@/types'
+import { MODULOS_SEED_POR_ROL_DB } from '@/lib/constants'
 
 // ── Avatar color palette ──────────────────────────────────────
 const AVATAR_COLORS = [
@@ -114,6 +115,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [perfil, setPerfil] = useState<PerfilAuth | null>(null)
   const [loading, setLoading] = useState(true)
+  // Auto-reparación del vínculo auth ↔ equipo_miembros: se intenta UNA vez por
+  // sesión. Sin el ref, cada re-run del efecto de perfil volvería a pegarle al
+  // endpoint para el usuario que legítimamente no tiene ficha de equipo.
+  const vinculacionIntentada = useRef(false)
   // Fetch profile OUTSIDE of onAuthStateChange to avoid Supabase client deadlock
   useEffect(() => {
     if (!user) {
@@ -154,6 +159,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (cancelled) return
+
+        // Pertenece a un restaurante pero no tiene ficha de equipo vinculada.
+        // Casi siempre es el vínculo faltante que dejaban las invitaciones
+        // viejas (`auth_user_id` NULL en una fila que sí existe, matcheable por
+        // email). Se intenta reparar una vez y se recarga: sin la ficha no hay
+        // puesto, y sin puesto `usePermisos` cae al fallback por rol.
+        if (!miembro && !vinculacionIntentada.current) {
+          vinculacionIntentada.current = true
+          try {
+            const res = await fetch('/api/invitar/vincular', { method: 'POST' })
+            const body = await res.json().catch(() => null)
+            if (!cancelled && res.ok && body?.vinculado) return loadPerfil(u, attempt)
+          } catch {
+            // Sin red o endpoint caído: seguir con el perfil degradado, que es
+            // mejor que dejar al usuario en el spinner.
+          }
+          if (cancelled) return
+        }
 
         const nombre = miembro?.nombre ?? u.email?.split('@')[0] ?? 'User'
         const apellido = miembro?.apellido ?? ''
@@ -277,17 +300,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (miembroError) { console.error('[signUp] Step 4 FAIL — equipo_miembros:', miembroError.message, miembroError.details); return { error: miembroError.message } }
 
-      // 5) Seed default rol_permisos for the new restaurant
-      const TODOS_LOS_MODULOS = [
-        'home', 'operaciones', 'tareas', 'recetario', 'stock', 'carta', 'checklist', 'pase',
-        'pedidos', 'proveedores', 'facturas', 'reportes', 'turnos', 'calendario',
-        'haccp', 'equipo', 'configuracion', 'produccion', 'merma', 'ventas',
-      ]
+      // 5) Seed default rol_permisos for the new restaurant.
+      // Las listas de módulos viven en lib/constants.ts tipadas como ModuloId[]
+      // — estaban inline acá con strings sueltos y decían 'inicio' donde la
+      // ruta '/' pide 'home', así que ningún cocinero podía entrar al dashboard.
       const rolPermisos = [
         {
           restaurante_id: restauranteId,
           rol: 'admin',
-          modulos_visibles: TODOS_LOS_MODULOS,
+          modulos_visibles: MODULOS_SEED_POR_ROL_DB.admin,
           puede_editar_stock: true,
           puede_editar_recetas: true,
           puede_editar_carta: true,
@@ -297,7 +318,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         {
           restaurante_id: restauranteId,
           rol: 'sous_chef',
-          modulos_visibles: TODOS_LOS_MODULOS.filter((m) => m !== 'configuracion'),
+          modulos_visibles: MODULOS_SEED_POR_ROL_DB.sous_chef,
           puede_editar_stock: true,
           puede_editar_recetas: true,
           puede_editar_carta: true,
@@ -307,7 +328,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         {
           restaurante_id: restauranteId,
           rol: 'cocinero',
-          modulos_visibles: ['inicio', 'tareas', 'recetario', 'stock', 'checklist', 'pase', 'produccion'],
+          modulos_visibles: MODULOS_SEED_POR_ROL_DB.cocinero,
           puede_editar_stock: false,
           puede_editar_recetas: false,
           puede_editar_carta: false,
@@ -317,7 +338,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         {
           restaurante_id: restauranteId,
           rol: 'bachero',
-          modulos_visibles: ['inicio', 'tareas', 'checklist', 'pase'],
+          modulos_visibles: MODULOS_SEED_POR_ROL_DB.bachero,
           puede_editar_stock: false,
           puede_editar_recetas: false,
           puede_editar_carta: false,
@@ -327,7 +348,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         {
           restaurante_id: restauranteId,
           rol: 'compras',
-          modulos_visibles: ['inicio', 'stock', 'pedidos', 'proveedores', 'facturas', 'calendario'],
+          modulos_visibles: MODULOS_SEED_POR_ROL_DB.compras,
           puede_editar_stock: true,
           puede_editar_recetas: false,
           puede_editar_carta: false,

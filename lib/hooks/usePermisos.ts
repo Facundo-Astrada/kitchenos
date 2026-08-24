@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth/context'
 import { useRestauranteId } from './useRestauranteId'
 import { useRestauranteConfig } from './useRestauranteConfig'
 import { MODULOS_EMPRENDIMIENTO } from '@/lib/constants'
+import { puedeVerModulo, resolverModulosEfectivos } from '@/lib/permisos/resolver'
 import type { RolPermiso } from '@/types'
 
 const SWR_OPTS = {
@@ -79,12 +80,11 @@ async function fetchPermisosData(key: string): Promise<PermisosData> {
   const miembro = miembroRes?.data as MiembroPuestoRow | null | undefined
   if (miembro?.puesto_id) {
     const { data: puesto } = await supabase.from('puestos').select('permisos_app').eq('id', miembro.puesto_id).maybeSingle()
-    if (puesto?.permisos_app) {
-      const extra = miembro.modulos_extra ?? []
-      const restringidos = miembro.modulos_restringidos ?? []
-      const base = puesto.permisos_app as string[]
-      modulosEfectivos = [...new Set([...base, ...extra])].filter(m => !restringidos.includes(m))
-    }
+    modulosEfectivos = resolverModulosEfectivos({
+      permisosApp: puesto?.permisos_app as string[] | null | undefined,
+      modulosExtra: miembro.modulos_extra,
+      modulosRestringidos: miembro.modulos_restringidos,
+    })
   }
 
   return { allPermisos, modulosEfectivos }
@@ -114,13 +114,14 @@ export function usePermisos(): PermisosState {
 
   const fetchPermisos = useCallback(async () => { await mutate() }, [mutate])
 
-  const puedeVer = useCallback((modulo: string): boolean => {
-    if (dbRol === 'admin') return true
-    // Prioridad: módulos efectivos del puesto (si existen) → rol_permisos fallback
-    if (modulosEfectivos !== null) return modulosEfectivos.includes(modulo)
-    if (!permisos) return false
-    return permisos.modulos_visibles.includes(modulo)
-  }, [permisos, dbRol, modulosEfectivos])
+  // Prioridad: admin → módulos efectivos del puesto → rol_permisos fallback.
+  // La cascada vive en lib/permisos/resolver.ts, compartida con la réplica
+  // server-side que usa el Coach (lib/permisos/server.ts).
+  const puedeVer = useCallback((modulo: string): boolean => puedeVerModulo({
+    isAdmin: dbRol === 'admin',
+    modulosEfectivos,
+    modulosVisibles: permisos?.modulos_visibles,
+  }, modulo), [permisos, dbRol, modulosEfectivos])
 
   // null = sin restricción de perfil (comportamiento actual, no-regresión).
   const perfilModulos = perfilRestaurante === 'emprendimiento' ? MODULOS_EMPRENDIMIENTO : null
