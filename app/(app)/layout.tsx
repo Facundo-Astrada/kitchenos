@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'motion/react'
 import { useAuth } from '@/lib/auth/context'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
@@ -16,6 +16,7 @@ import { CoachPanelContent } from '@/components/coach/CoachPanelContent'
 import DemoBanner from '@/components/shell/DemoBanner'
 import { UiChromeProvider } from '@/lib/ui/chrome'
 import { hoyOperativo } from '@/lib/ops/turnos'
+import { DURATION, EASE_OUT, useReducedMotion } from '@/lib/ui/motion'
 
 type StockCriticoItem = { nombre: string; cantidad: number; minimo: number }
 type TareaPendienteItem = { titulo: string; prioridad: string; plaza?: string }
@@ -26,6 +27,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const restauranteId = useRestauranteId()
   const pathname = usePathname()
   const isDesktop = useIsDesktop()
+  const reducedMotion = useReducedMotion()
   const [stockCritico, setStockCritico] = useState<StockCriticoItem[]>([])
   const [tareasPendientes, setTareasPendientes] = useState<TareaPendienteItem[]>([])
 
@@ -90,14 +92,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     )
   }
 
+  // Única transición de pantalla de la app — cubre todas las rutas (ver
+  // components/PageTransition.tsx, que deliberadamente no anima de nuevo
+  // encima). Entra con fade + una leve subida; sale solo con fade.
   const pageContent = (
     <AnimatePresence mode="wait" initial={false}>
       <motion.div
         key={pathname}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
+        initial={{ opacity: 0, y: reducedMotion ? 0 : 6 }}
+        animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0.1, ease: 'easeOut' }}
+        transition={{ duration: reducedMotion ? 0 : DURATION.enter, ease: EASE_OUT }}
         style={{ height: '100%' }}
       >
         <RouteGuard>{children}</RouteGuard>

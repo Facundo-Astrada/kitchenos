@@ -27,6 +27,7 @@ import { hoyOperativo, sumarDias, turnoVigente, turnoAnterior, turnoSiguiente, e
 import { menuItemVisible } from '@/lib/ops/mise'
 import { setOpsChromeCompact } from '@/lib/ops/chromeBus'
 import { SheetChrome } from '@/lib/ui/chrome'
+import { tap } from '@/lib/ui/motion'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import SectionEditor from '@/components/checklist/SectionEditor'
 import type { Plaza, MisePlaceItem, MisePrioridad, ChecklistSeccionConfig, RutinaFrecuencia, ChecklistRutina, ChecklistRutinaRegistro, RutinaCondicion } from '@/types'
@@ -717,6 +718,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         cerradoPor: authPerfil?.miembro_id ?? null,
         itemsTotal: total, itemsCompletados: done,
       })
+      tap(20)
       setToast(`Plaza entregada — el turno pasa a ${nombreProximo}`)
     } catch (e: unknown) {
       setToast('Error al entregar: ' + (e instanceof Error ? e.message : 'desconocido'))
@@ -876,7 +878,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
 
   const startLongPress = useCallback((item: MisePlaceItem, y: number) => {
     longPressTimer.current = setTimeout(() => {
-      navigator.vibrate?.(30)
+      tap(30)
       setDragging({ item, y, overSecId: item.seccion_id ?? null, overItemId: null, insertAfter: false })
     }, 400)
   }, [])
@@ -904,6 +906,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     // en la(s) tarea(s) de producción originadas por este item.
     // No se encadena con await al upsert: las dos escrituras son independientes y
     // ambas son optimistas, así que salen juntas en vez de una después de la otra.
+    if (d.completado) tap()
     const matchingTareas = d.completado === undefined
       ? []
       : tareas.filter(t => t.turno_fecha === today && t.checklist_item_id === itemId)
@@ -1019,6 +1022,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // está cerrando el almuerzo; mañana solo si este era el último del día), y por
   // eso la jornada se calcula con turnoSiguiente en vez de sumar un día a ciegas.
   const handleCrearTareaControl = useCallback(async (item: MisePlaceItem) => {
+    tap()
     const plazasItem = item.receta_id ? (platoPlazoMap[item.receta_id] ?? SIN_PLAZAS) : SIN_PLAZAS
     const primaryPlaza = plazasItem.length > 0 ? plazasItem[0].plaza : item.plaza
     const esCierre = fase === 'cierre'

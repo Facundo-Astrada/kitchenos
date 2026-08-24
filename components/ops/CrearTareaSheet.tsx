@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from 'motion/react'
 import type { TareaPrioridad } from '@/types'
 
 export type CrearTareaDia = 'hoy' | 'manana'

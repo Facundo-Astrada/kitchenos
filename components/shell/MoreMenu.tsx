@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from 'motion/react'
 import { MODULO_CONFIG, MODULOS_POR_ROL, NAV_ITEMS } from '@/lib/constants'
 import type { ModuloId } from '@/lib/constants'
 import type { Rol } from '@/types'

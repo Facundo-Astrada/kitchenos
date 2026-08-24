@@ -1,7 +1,7 @@
 'use client'
 
 import { memo, useState, useRef, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence } from 'motion/react'
 import { useAuth } from '@/lib/auth/context'
 import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
 import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, supportsWebUSB, supportsWebBluetooth } from '@/lib/print/escpos'

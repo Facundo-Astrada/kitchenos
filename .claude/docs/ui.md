@@ -35,6 +35,19 @@ const itemVariants = { hidden: { opacity: 0 }, show: { opacity: 1, transition: {
 const containerVariants = { hidden: {}, show: { transition: { staggerChildren: 0 } } }
 ```
 
+## Movimiento (S0, ago 2026)
+
+Librería: **`motion/react`** (nombre nuevo del rebrand de Framer Motion — no instalar `framer-motion` aparte, es la misma librería duplicada). Tokens en `lib/ui/motion.ts`: `DURATION.instant` (120ms, feedback de tap), `DURATION.base` (200ms, cambio de estado), `DURATION.enter` (260ms, entrada de pantalla/sheet), `EASE_OUT`, `SPRING_SHEET` (el spring ya calibrado de `MoreMenu`), `useReducedMotion()`, `useDuration(base)` y `tap(ms?)` (háptico corto, `navigator.vibrate`, no-op si no hay soporte).
+
+**Tres reglas que no se rompen:**
+1. **Nada de rendimiento individual expuesto** — el "juego" es el turno y la plaza, nunca un ranking de personas ni un cronómetro comparativo entre cocineros (ver `MiembroCard.tsx`, doctrina del proyecto).
+2. **KDS y Muro no se tocan** — fondo oscuro fijo, cero animaciones de entrada (`ui.md` § Vista de servicio ya lo dice, se repite acá porque S0 es el punto donde alguien va a venir a buscar "cómo animo algo").
+3. **Nunca animar la posición de un target tappable** — ver "Animaciones de lista" arriba. `DURATION`/`EASE_OUT` son para chrome, entrada de pantalla y cambio de estado — no para mover una card bajo el dedo.
+
+**Transición de pantalla — un solo punto, no dos.** Vive en `app/(app)/layout.tsx` (`AnimatePresence` keyeada por `pathname`, cubre el 100% de las rutas). `components/PageTransition.tsx` es un **pass-through deliberado** — 16 pantallas lo importan pero no anima nada: si animara de nuevo ahí encima, quedarían dos fades encimados sobre la misma navegación. No darle animación propia; si hace falta tocar la transición de pantalla, se toca en el layout.
+
+**Reduced motion.** Todo lo que anima chrome/pantalla tiene que consultar `useReducedMotion()` y caer a duración 0 — no a "no aplicar el prop": el valor final se aplica igual, solo sin transición (ver el patrón en el layout). `tap()` (háptico) es independiente de reduced-motion — es táctil, no visual.
+
 ## Variables de color
 
 ```css
