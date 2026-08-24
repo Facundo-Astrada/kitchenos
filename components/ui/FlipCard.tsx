@@ -47,10 +47,17 @@ export function FlipCard({ front, back, height = 264, flipped: flippedProp, onFl
           transform: flipped ? 'rotateY(180deg)' : 'none',
         }}
       >
-        <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', borderRadius: 16, overflow: 'hidden' }}>
+        {/* pointerEvents explícito además de backfaceVisibility: un hijo con su
+            propio z-index (ej. un toggle que necesita quedar sobre un overlay)
+            crea su propio contexto de apilamiento y puede escapar del cono de
+            sombra de backface-visibility para eventos de puntero en Chromium
+            — sigue sin pintarse, pero queda clickeable "a través" de la carta
+            dada vuelta. Bloquearlo acá, en el nivel compartido, en vez de en
+            cada caller. */}
+        <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', borderRadius: 16, overflow: 'hidden', pointerEvents: flipped ? 'none' : 'auto' }}>
           {front}
         </div>
-        <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', borderRadius: 16, transform: 'rotateY(180deg)', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', inset: 0, backfaceVisibility: 'hidden', borderRadius: 16, transform: 'rotateY(180deg)', overflow: 'hidden', pointerEvents: flipped ? 'auto' : 'none' }}>
           {back}
         </div>
       </div>

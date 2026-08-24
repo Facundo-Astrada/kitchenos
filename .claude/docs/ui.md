@@ -54,6 +54,12 @@ Librería: **`motion/react`** (nombre nuevo del rebrand de Framer Motion — no 
 - **`.skeleton-pulse`** — pulso de opacidad para cualquier placeholder de carga, ver `Skeleton` más abajo.
 - **`.toast-enter`** — entra desde abajo (los toasts viven en `bottom: var(--toast-bottom)`), ver `Toast` más abajo.
 
+## Carta de jugador (`FlipCard`, S3/S6, ago 2026)
+
+`components/ui/FlipCard.tsx` — mecánica de flip 3D compartida (`front`/`back`, alto fijo). Tres usos hoy: `MiembroCard` (Organigrama), `PlazaFlipCard` (selector de plaza del Mise), `PlatoCard`/`PlatoCardBack` (Carta, solo desktop). El criterio para cuándo usarla: el **dorso es un resumen + como mucho una acción o dos** (toggle, un botón que navega) — nunca el editor denso en sí. Carta lo probó al revés en S3.2 (se descartó meter el editor completo de un plato en un dorso) y confirmó la regla en S6 (el dorso reemplaza al panel-resumen que existía antes, pero "editar recetas/packaging" sigue siendo la pantalla dedicada, a un tap del botón del dorso — no adentro de la carta).
+
+**Gotcha real, no solo de testing:** un hijo con `position:relative` + `z-index` propio (típicamente para quedar arriba de un overlay, ej. el badge "86" gris que cubre toda la carta) puede escapar del cono de sombra de `backfaceVisibility:hidden` en Chromium — sigue sin pintarse, pero queda clickeable "a través" de la carta dada vuelta. `FlipCard` ya lo bloquea a nivel compartido (`pointerEvents:'none'` explícito en la cara que no mira al usuario, no solo `backfaceVisibility`) — no hace falta pensarlo en cada caller, pero si agregás una cara nueva con algo interactivo, **probá el click real** (Playwright con `elementsFromPoint`, no solo captura visual) antes de asumir que backface-visibility alcanza.
+
 ## Skeletons de carga (S5.3, ago 2026)
 
 Dos momentos distintos, los dos necesitan skeleton — no son redundantes:
