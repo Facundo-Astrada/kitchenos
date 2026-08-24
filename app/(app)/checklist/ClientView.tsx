@@ -30,7 +30,8 @@ import { SheetChrome } from '@/lib/ui/chrome'
 import { tap } from '@/lib/ui/motion'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import SectionEditor from '@/components/checklist/SectionEditor'
-import type { Plaza, MisePlaceItem, MisePrioridad, ChecklistSeccionConfig, RutinaFrecuencia, ChecklistRutina, ChecklistRutinaRegistro, RutinaCondicion } from '@/types'
+import { FlipCard } from '@/components/ui'
+import type { Plaza, PlazaCustom, MisePlaceItem, MisePrioridad, ChecklistSeccionConfig, RutinaFrecuencia, ChecklistRutina, ChecklistRutinaRegistro, RutinaCondicion, CierreTurno } from '@/types'
 
 // ── Constants ──
 const PLAZAS: Plaza[] = ['parrilla', 'frios', 'calientes', 'pase', 'pasteleria', 'panaderia', 'general']
@@ -85,6 +86,90 @@ const btnReset: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer', padding: 0,
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   fontFamily: 'inherit',
+}
+
+// Carta de plaza (PLAN-SUPERFICIE S3.1) — vestir el selector de plaza del
+// Mise con el mismo patrón de MiembroCard, sin perder el gesto que ya tenía
+// dueño: tocar la carta sigue entrando a esa plaza (acción primaria, no se
+// toca). El flip es un gesto aparte, disparado por el ícono "i" — separado
+// con stopPropagation para que no compita con la selección.
+function PlazaFlipCard({ p, plazasCustom, gp, entrega, turnoNombre, onSelect }: {
+  p: Plaza
+  plazasCustom: PlazaCustom[]
+  gp: { total: number; done: number }
+  entrega: CierreTurno | undefined
+  turnoNombre: string | null
+  onSelect: () => void
+}) {
+  const [flipped, setFlipped] = useState(false)
+  const pct = gp.total > 0 ? Math.round((gp.done / gp.total) * 100) : 0
+  const isCompleto = gp.total > 0 && gp.done === gp.total
+  const color = isCompleto ? '#22c55e' : plazaColor(p, plazasCustom)
+
+  const frente = (
+    <div
+      onClick={e => { e.stopPropagation(); onSelect() }}
+      style={{
+        height: '100%', position: 'relative', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', gap: 6, padding: '16px 12px',
+        color: '#fff', boxShadow: 'var(--shadow-2)',
+        background: `radial-gradient(120% 90% at 50% -10%, rgba(255,255,255,.24), transparent 55%), linear-gradient(165deg, rgba(0,0,0,0), rgba(0,0,0,.32)), ${color}`,
+      }}
+    >
+      <button
+        onClick={e => { e.stopPropagation(); setFlipped(true) }}
+        title="Ver entrega"
+        style={{
+          ...btnReset, position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: 7,
+          background: 'rgba(0,0,0,.2)',
+        }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 13, color: 'rgba(255,255,255,.85)' }}>info</span>
+      </button>
+      <span className="material-symbols-outlined" style={{ fontSize: 30 }}>{plazaIcon(p, plazasCustom)}</span>
+      <span style={{ fontSize: 13, fontWeight: 800, textAlign: 'center' }}>{plazaLabel(p, plazasCustom)}</span>
+      {gp.total > 0 ? (
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, textAlign: 'center', color: 'rgba(255,255,255,.9)' }}>
+            {gp.done}/{gp.total} completados
+          </span>
+          <div style={{ height: 3, background: 'rgba(255,255,255,.25)', borderRadius: 99, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${pct}%`, background: '#fff', borderRadius: 99, transition: 'width .3s' }} />
+          </div>
+        </div>
+      ) : (
+        <span style={{ fontSize: 10, color: 'rgba(255,255,255,.7)' }}>Sin ítems</span>
+      )}
+    </div>
+  )
+
+  const dorso = (
+    <div style={{
+      height: '100%', background: 'var(--surface)', border: '1px solid var(--border)',
+      boxShadow: 'var(--shadow-2)', padding: '12px', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', gap: 6, textAlign: 'center',
+    }}>
+      {entrega ? (
+        <>
+          <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#22c55e' }}>task_alt</span>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>Entregada</div>
+          <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
+            {new Date(entrega.cerrado_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+            {entrega.items_total != null && ` · ${entrega.items_completados ?? 0}/${entrega.items_total}`}
+          </div>
+        </>
+      ) : (
+        <>
+          <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-3)' }}>schedule</span>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>Sin entregar</div>
+          {turnoNombre && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Turno vigente: {turnoNombre}</div>}
+        </>
+      )}
+      <div style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 2 }}>Tocá para volver</div>
+    </div>
+  )
+
+  return <FlipCard front={frente} back={dorso} flipped={flipped} onFlippedChange={setFlipped} height={148} />
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1082,34 +1167,17 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         {guia && <MiseGuiaSheet foco={guia.foco} onClose={() => setGuia(null)} />}
         <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {plazasForSelector.map(p => {
-              const gp = gridProgress[p]
-              const gpPct = gp.total > 0 ? Math.round((gp.done / gp.total) * 100) : 0
-              const isCompleto = gp.total > 0 && gp.done === gp.total
-              return (
-                <button key={p} onClick={() => setPlaza(p)} style={{
-                  background: 'var(--surface)', border: `1px solid ${isCompleto ? '#22c55e' : 'var(--border)'}`,
-                  borderRadius: 16, padding: '18px 14px',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-                  cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s',
-                }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 32, color: isCompleto ? '#22c55e' : plazaColor(p, plazasCustom) }}>{plazaIcon(p, plazasCustom)}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{plazaLabel(p, plazasCustom)}</span>
-                  {gp.total > 0 ? (
-                    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 3 }}>
-                      <span style={{ fontSize: 10, color: isCompleto ? '#22c55e' : 'var(--text-3)', fontWeight: 600 }}>
-                        {gp.done}/{gp.total} completados
-                      </span>
-                      <div style={{ height: 3, background: 'var(--border)', borderRadius: 99, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${gpPct}%`, background: isCompleto ? '#22c55e' : plazaColor(p, plazasCustom), borderRadius: 99, transition: 'width .3s' }} />
-                      </div>
-                    </div>
-                  ) : (
-                    <span style={{ fontSize: 10, color: 'var(--text-3)' }}>Sin ítems</span>
-                  )}
-                </button>
-              )
-            })}
+            {plazasForSelector.map(p => (
+              <PlazaFlipCard
+                key={p}
+                p={p}
+                plazasCustom={plazasCustom}
+                gp={gridProgress[p]}
+                entrega={turnoServicioId ? entregaDe(fecha, turnoServicioId, p) : undefined}
+                turnoNombre={turnoActual?.nombre ?? null}
+                onSelect={() => setPlaza(p)}
+              />
+            ))}
           </div>
         </div>
       </div>

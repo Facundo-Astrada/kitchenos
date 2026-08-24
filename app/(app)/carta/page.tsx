@@ -17,8 +17,7 @@ import { useChecklist } from '@/lib/hooks/useChecklist'
 import MenusView from './MenusView'
 import ComposicionEditor, { type CompPayload, type CompInicial } from './ComposicionEditor'
 import { upsertMiseChecklistItem, parseRecipienteNombre, TAREA_PRIO_TO_MISE } from '@/lib/ops/mise'
-import { clasificarIngenieriaMenu } from '@/lib/carta/ingenieriaMenu'
-import { normalizarNombrePlato, buildCartaItemLookup } from '@/lib/reportes/consumoTeorico'
+import { clasificarIngenieriaMenu, buildVentasMap, mapaCuadrantePorId, QUAD_META, type Quadrante } from '@/lib/carta/ingenieriaMenu'
 import { sincronizarMiseDeMenu } from '@/lib/ops/menuMise'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 // ── Helpers ─────────────────────────────────────────────
@@ -177,16 +176,20 @@ function PlatoCard({
   onClick,
   onToggle,
   isAdmin = false,
+  quadrante = null,
 }: {
   item: CartaItemEnriquecido
   onClick: () => void
   onToggle: () => void
   isAdmin?: boolean
+  /** Estrella/Caballo/Puzzle/Perro — solo admin, ver quadranteMap en CartaPage. */
+  quadrante?: Quadrante | null
 }) {
   const hasFc = item.food_cost_pct != null && item.food_cost_pct > 0
   const fc = fcBadge(item.food_cost_pct ?? 0)
   const hasMrg = item.margen_pct_computed != null
   const mrg = marginBadge(item.margen_pct_computed ?? 0)
+  const quadMeta = quadrante ? QUAD_META[quadrante] : null
 
   return (
     <div style={{
@@ -261,6 +264,17 @@ function PlatoCard({
           }}>
             {item.categoria}
           </span>
+          {quadMeta && (
+            <span title={quadMeta.rec} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 3,
+              fontSize: 11, fontWeight: 700,
+              background: `${quadMeta.color}18`, color: quadMeta.color,
+              padding: '2px 8px', borderRadius: 6,
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 12 }}>{quadMeta.icon}</span>
+              {quadMeta.label.slice(0, -1)}
+            </span>
+          )}
           {isAdmin && hasMrg && (
             <span style={{
               fontSize: 11, fontWeight: 700,
@@ -2293,16 +2307,7 @@ function RentabilidadView({
 
   // Popularidad por plato desde ventas — matching compartido con Ventas y con
   // la detección de fuga (lib/reportes/consumoTeorico.ts, PLAN-4-CAPAS B5).
-  const ventasMap = useMemo(() => {
-    const lookup = buildCartaItemLookup(items)
-    const m = new Map<string, number>() // carta_item id -> cantidad vendida
-    for (const v of ventas) for (const it of (v.items ?? [])) {
-      const id = lookup.get(normalizarNombrePlato(it.nombre_plato))
-      if (!id) continue
-      m.set(id, (m.get(id) ?? 0) + (it.cantidad ?? 0))
-    }
-    return m
-  }, [ventas, items])
+  const ventasMap = useMemo(() => buildVentasMap(items, ventas), [ventas, items])
 
   // ── Feature 1: Ingeniería de menú (método Kasavana-Smith) ──
   const ing = useMemo(() => {
@@ -2351,12 +2356,7 @@ function RentabilidadView({
     return { sinReceta, margenNeg, en86, sinCategoria, total: sinReceta.length + margenNeg.length + en86.length + sinCategoria.length }
   }, [items])
 
-  const QUAD = {
-    estrella: { label: 'Estrellas', color: '#16a34a', icon: 'star', rec: 'Populares y rentables — destacalas en la carta' },
-    caballo: { label: 'Caballos', color: '#f59e0b', icon: 'trending_up', rec: 'Se venden mucho pero rinden poco — subí precio o bajá costo' },
-    puzzle: { label: 'Puzzles', color: '#3b82f6', icon: 'extension', rec: 'Rentables pero poco vendidos — promocioná o reubicá' },
-    perro: { label: 'Perros', color: '#ef4444', icon: 'trending_down', rec: 'Ni populares ni rentables — considerá sacarlos' },
-  } as const
+  const QUAD = QUAD_META
 
   const TABS: { id: RentTab; label: string }[] = [
     { id: 'lista', label: 'Lista' },
@@ -3127,6 +3127,16 @@ export default function CartaPage() {
     return items.filter(i => i.categoria === filter)
   }, [items, filter])
 
+  // Cuadrante de ingeniería de menú por plato (PLAN-SUPERFICIE S3.2) — badge
+  // "rareza" en la carta. Mismo cálculo que Rentabilidad → Ingeniería, reusado
+  // acá vía lib/carta/ingenieriaMenu.ts para no duplicar el método. Solo admin
+  // ve el badge (Precio/FC ya es solo-admin en esta pantalla; el cuadrante
+  // deriva de esos mismos números).
+  const quadranteMap = useMemo(() => {
+    if (!isAdmin) return null
+    return mapaCuadrantePorId(items, buildVentasMap(items, ventas))
+  }, [items, ventas, isAdmin])
+
   const stats = useMemo(() => ({
     total: items.length,
     disponibles: items.filter(i => i.disponible).length,
@@ -3715,6 +3725,7 @@ export default function CartaPage() {
                   onClick={() => handleCardClick(item)}
                   onToggle={() => toggleDisponible(item.id, !item.disponible)}
                   isAdmin={isAdmin}
+                  quadrante={quadranteMap?.get(item.id) ?? null}
                 />
               </div>
             ))

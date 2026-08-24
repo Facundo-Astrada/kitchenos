@@ -102,18 +102,18 @@ Aplicar en el producto la identidad que ya está escrita para el deck.
 
 ## S3 — Cartas de jugador fuera del Organigrama 🟠 Media
 
-- [ ] Completado — fecha:
+- [x] Completado — fecha: 2026-08-24 (S3.2 recortado a badges, ver registro de sesiones)
 
 Extender `MiembroCard` (gradiente + badge + stats + flip) a los objetos que la app ya tiene. Ningún dato nuevo.
 
 **Qué hacer:**
 
 1. **Carta de plaza** — en la ventana de selección de plaza del Mise (que ya muestra el avance por plaza) y en el encabezado de columna del Muro: gradiente con `PLAZA_COLORS`/`plazaColor()` de `lib/constants.ts`, ícono de `PLAZA_ICONS`, avance del turno, quién la tiene, hora de entrega. Es la ventana que ya existe, vestida.
-2. **Carta de plato** — en Carta y en Recetario → Platos: foto + food cost con su color semántico (verde <30 / amarillo 30-35 / rojo >35, ya definido) + gramaje por porción + el cuadrante de ingeniería de menú (**Estrella / Caballo / Puzzle / Perro**, ya calculado en Rentabilidad) como la "rareza" de la carta. Es el cromo más natural del negocio y no inventa un solo dato.
-3. Flip al dorso con la ficha (componentes y procedimiento en el plato; ítems y notas en la plaza), mismo patrón 3D ya escrito.
-4. **Extraer el patrón** a `components/ui/` en vez de copiar `MiembroCard` por tercera vez.
+2. ~~Carta de plato con flip completo~~ — **decidido 24/08: sin flip.** Carta y Recetario→Platos son listas densas de edición (toggle 86, gramaje inline, procedimiento editable), no galerías, y el tap ya abre `DetailView`/el editor — que ya hace de "dorso". En vez de forzar el flip: badge de food cost (ya estaba, verificado correcto) + badge de rareza (Estrella/Caballo/Puzzle/Perro, admin-only) en el `PlatoCard` de Carta. Recetario → Platos no se tocó — el editor ahí es aún más denso.
+3. Flip al dorso con la ficha — aplica solo a la carta de plaza (ver arriba); no a la de plato (ver decisión).
+4. **Extraer el patrón** a `components/ui/` — hecho: `components/ui/FlipCard.tsx`, `MiembroCard` refactorizado para usarlo.
 
-**Criterio:** las tres cartas comparten componente; el flip no rompe el scroll en mobile; nada muestra rendimiento por persona.
+**Criterio:** las cartas comparten componente; el flip no rompe el scroll en mobile; nada muestra rendimiento por persona.
 
 ---
 
@@ -158,11 +158,13 @@ Extender `MiembroCard` (gradiente + badge + stats + flip) a los objetos que la a
 
 ## 5. Decisiones pendientes de Facundo
 
-1. **Orden.** Sugerido: **S0 → S1 → S2 → S4 → S3 → S5**. S1 es lo que pediste; S2 es el que más cambia la foto por hora invertida; S3 es el más vistoso pero el que menos mueve el trabajo diario.
-2. **Serif itálica (S2.3)**: ¿entra la segunda tipografía o la app se queda con DM Sans sola? Es el punto más "de marca" y el más discutible.
-3. **Carta de plato (S3.2)**: mostrar el cuadrante de ingeniería (Estrella/Perro) en la carta del plato expone rentabilidad en una pantalla que ve todo el equipo — hoy precio y food cost son solo admin. ¿Se muestra solo a admin, o el cuadrante se queda en Rentabilidad?
+Ya no quedan decisiones abiertas — S0 a S3 se ejecutaron en orden y cada punto discutible se resolvió al llegar (registro completo en la sección 6):
+- **Orden**: S0 → S1 → S2 → S3, sin objeción.
+- **Serif itálica (S2.3)**: no — DM Sans sola.
+- **Grilla de módulos (S1.4)**: 6 más usados + "Ver todos" (`localStorage`, expande inline).
+- **Carta de plato (S3.2)**: sin flip — badges (food cost + rareza admin-only) sobre el `PlatoCard` existente.
 
-Resuelto al ejecutar S1: la grilla de módulos en mobile quedó en **6 más usados + "Ver todos"** (expande inline en la misma pantalla, sin depender del BottomNav → Más). Frecuencia por dispositivo en `localStorage` (`kc_modulo_freq`), sin historial cae al orden ya priorizado de `GRID_MODULOS`.
+Quedan **S4** (flujo rápido) y **S5** (pulido de estados) del plan original, sin ejecutar todavía.
 
 ---
 
@@ -173,3 +175,4 @@ Resuelto al ejecutar S1: la grilla de módulos en mobile quedó en **6 más usad
 | S0 | 2026-08-24 | `lib/ui/motion.ts` (tokens + `useReducedMotion` + `tap()`). Transición de pantalla unificada en `app/(app)/layout.tsx`; `PageTransition` pasa a ser pass-through documentado (era no-op desde el commit inicial del repo). Se sacó `framer-motion` duplicado, todo consolidado en `motion/react` (7 archivos). Háptico `tap()` en tildar mise, despachar Modo Control y entregar plaza. Build + 135/135 tests verdes, verificado en dev server contra El Rescoldo (dashboard + selector de plaza + lista del mise). |
 | S1 | 2026-08-24 | Bloque "Ahora" (`lib/dashboard/momento.ts` + `components/dashboard/AhoraCard.tsx`) arriba del Dashboard mobile y desktop — apertura/control de carta/servicio/fuera de turno, calculado con lo que ya existía. KPI "86 activos" deja de estar hardcodeado en 0 (`useEn86Count`, cuenta real `carta_items.disponible=false`). Banners rojos (pedidos atrasados + facturas) plegados en "Pendientes del negocio · N" debajo del bloque de trabajo, en vez de arriba de todo. Grilla de módulos mobile: 6 más usados (frecuencia en `localStorage`) + "Ver todos" expande inline. Desktop: la grilla de módulos sale de la columna principal (el sidebar ya navega). El CTA de Control de Carta se sacó de OPS (vivía suelto, competía con el mismo botón) — ahora solo vive en el bloque Ahora. Simplificación deliberada documentada en el código: no hay estado "cierre" propio en `momento.ts` — el avance del mise que ve el Dashboard es agregado de todas las plazas, no hay señal fiable de "mi plaza entregó" sin una plaza asignada real por persona. Build + 135/135 tests verdes; verificado en dev server (bloque Ahora, fold expandido, módulos expandidos, OPS sin el banner viejo). |
 | S2 | 2026-08-24 | **Alcance recortado tras auditar el código, no solo capturas**: grepear los 167 usos de `#f59e0b`/`#f97316` mostró que el "ámbar overloaded" del diagnóstico original no era tan real — la app ya usa ámbar consistentemente como nivel medio de una escala de severidad (food cost, stock, prioridad del pase) en decenas de lugares legítimos y documentados; recolorear eso a ciegas rompía la escala, no la arreglaba. En vez de un barrido de 37+ archivos: documenté la convención real en `ui.md` § "Convención de color semántico" (ámbar=atención, naranja=marca/acción, rojo=crítico — ya coherente, no hacía falta tocar código) y **sí implementé lo demás de S2**: tokens `--shadow-1/2/3` en `globals.css` (light + dark, calibrados desde `MiembroCard`) aplicados a las superficies que ya tenía tocadas de S1 (`AhoraCard`, `MiPlaza`, tiles de `ModulosGrid`) en vez de un sweep global. Serif itálica: decidido que no (DM Sans sola). **Hallazgo sin tocar, anotado para otra sesión**: en dark mode `--navy` es un gris-azul claro (`#c8d6e5`, pre-existente, no de esta sesión) — todo texto blanco sobre fondo navy (header, MiPlaza, botón Iniciar turno, y ahora AhoraCard por el mismo patrón) tiene contraste pobre en dark mode. Es sistémico a todas las superficies navy, no algo que S2 haya introducido ni algo que se arregle tocando un componente — requiere su propia sesión. Build + 135/135 tests verdes; verificado en dev server en los dos temas; confirmado sin diff en `app/(servicio)/` (KDS/Muro/Salón intactos). |
+| S3 | 2026-08-24 | `components/ui/FlipCard.tsx` extraído de `MiembroCard.tsx` (mecánica de flip 3D + reduced-motion, contenido queda a cargo de cada caller); `MiembroCard` refactorizado para usarlo, sin cambio visual. **Carta de plaza**: el selector de plaza del Mise (`checklist/ClientView.tsx`, pantalla `!plaza`) pasó de botones planos a `PlazaFlipCard` — gradiente por `plazaColor()`, ícono, avance del turno en el frente; ícono "i" (con `stopPropagation`, no compite con el tap-a-seleccionar que sigue siendo la acción primaria) flip a `entregaDe()` de `useCierresTurno` en el dorso (hora de entrega + items completados, o "sin entregar" + turno vigente). El "Cambiar de plaza" (bottom sheet compacto) no se tocó — ahí una fila rápida de switch tiene más sentido que una carta. **Carta de plato recortada** (decisión del usuario tras encontrar que Carta/Recetario→Platos son editores densos, no galerías): sin flip, solo badge de rareza (Estrella/Caballo/Puzzle/Perro, admin-only) en `PlatoCard` de Carta. Refactor de paso: `lib/carta/ingenieriaMenu.ts` gana `buildVentasMap`/`mapaCuadrantePorId`/`QUAD_META` (extraídos de `RentabilidadView`, que ahora los importa en vez de tener su propia copia — cero duplicación nueva). Build + 135/135 tests verdes; verificado en dev server (Organigrama sin regresión visual, flip de plaza funcionando con datos reales de El Rescoldo, badge "Caballo" en Carta junto a los badges existentes). |
