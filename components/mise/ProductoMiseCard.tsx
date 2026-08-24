@@ -214,6 +214,22 @@ function ProductoMiseCardBase({
   const [showDelete, setShowDelete] = useState(false)
 
   const checked = reg?.completado ?? false
+
+  // Pop del tilde al marcar completado (S5) — .tilde-pop en globals.css.
+  // Mismo patrón que ItemOps.tsx: compara contra el checked anterior para no
+  // disparar en cada re-render ni al montar ya tildado.
+  const [justCompleted, setJustCompleted] = useState(false)
+  const prevCheckedRef = useRef(checked)
+  useEffect(() => {
+    const prev = prevCheckedRef.current
+    prevCheckedRef.current = checked
+    if (!prev && checked) {
+      setJustCompleted(true)
+      const t = setTimeout(() => setJustCompleted(false), 300)
+      return () => clearTimeout(t)
+    }
+  }, [checked])
+
   // Estado intermedio de apertura: todavía no está hecho, pero su producción ya
   // se despachó — el cocinero lo revisó y decidió. Se pinta distinto del verde
   // a propósito: verde = está en su lugar, ámbar = está en el horno. Cuando la
@@ -458,6 +474,7 @@ function ProductoMiseCardBase({
         <button
           data-coach-target="mise-item-check"
           onClick={handleToggleCheck}
+          className={justCompleted ? 'tilde-pop' : undefined}
           style={{ ...btnReset, flexShrink: 0 }}
         >
           <span className="material-symbols-outlined" style={{

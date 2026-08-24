@@ -189,11 +189,13 @@ input, textarea, [contenteditable] {
   animation: screenIn 0.3s ease forwards;
 }
 
-/* ── Toast spring animation ── */
+/* ── Toast spring animation (S5.4: entra desde abajo — los toasts de la app
+   viven todos en bottom:var(--toast-bottom), el signo original venía de
+   arriba y nunca se notó porque esta clase tenía 0 usos reales) ── */
 @keyframes toastIn {
   from {
     opacity: 0;
-    transform: translateY(-16px) scale(0.96);
+    transform: translateY(16px) scale(0.96);
   }
   to {
     opacity: 1;
@@ -202,7 +204,13 @@ input, textarea, [contenteditable] {
 }
 
 .toast-enter {
-  animation: toastIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .toast-enter {
+    animation: toastIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
 }
 
 /* ── Slide up (modales, coach panel) ── */
@@ -251,4 +259,53 @@ input, textarea, [contenteditable] {
 }
 .typing-dot:nth-child(3) {
   animation-delay: 0.3s;
+}
+
+/* ── Pop del tilde al completar (S5, ago 2026) — ItemOps.tsx (OPS/Muro) y
+   ProductoMiseCard.tsx (Mise). CSS puro a propósito: los dos son componentes
+   memoizados que renderizan en listas de 40+ filas — nada de motion/react
+   acá, es puro overhead para una lista densa. La media query es el gate de
+   reduced-motion (no hace falta useReducedMotion en JS para esto). ── */
+@keyframes tildePop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.32); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tilde-pop {
+    animation: tildePop 0.3s cubic-bezier(.34, 1.56, .64, 1);
+  }
+}
+
+/* ── Pulso al cerrar una plaza al 100% (S5, ago 2026) — PlazaFlipCard en
+   checklist/ClientView.tsx. Verde, no ámbar: es la corrección del plan
+   original (decía "pulso ámbar"), pero verde es la convención real de
+   "completo" en toda la app — el aviso persistente de "¡Terminaste la
+   apertura!" ya usa #22c55e/check_circle, esto solo hereda esa forma. ── */
+@keyframes plazaPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(34, 197, 94, .55), var(--shadow-2); }
+  100% { box-shadow: 0 0 0 14px rgba(34, 197, 94, 0), var(--shadow-2); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .plaza-pulse {
+    animation: plazaPulse 0.8s ease-out;
+  }
+}
+
+/* ── Skeleton de carga (S5, ago 2026) — components/ui/Skeleton.tsx.
+   Pulso de opacidad, no gradiente en movimiento: más barato de pintar en una
+   pantalla con 6-8 repeticiones (Carta/Recetario/Stock), mismo resultado
+   percibido. Sin reduced-motion, el bloque queda estático — sigue siendo un
+   placeholder legible, no necesita la animación para cumplir su función. ── */
+@keyframes skeletonPulse {
+  0%, 100% { opacity: .55; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .skeleton-pulse {
+    animation: skeletonPulse 1.4s ease-in-out infinite;
+  }
 }

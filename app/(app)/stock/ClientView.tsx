@@ -2,7 +2,7 @@
 
 import PageTransition from '@/components/PageTransition'
 import { SheetChrome } from '@/lib/ui/chrome'
-import { SegmentedTabs, SwitchRow } from '@/components/ui'
+import { SegmentedTabs, SwitchRow, Skeleton } from '@/components/ui'
 import type { SegmentedTab } from '@/components/ui'
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -1661,10 +1661,19 @@ export default function StockPage() {
             </tr>
           </thead>
           {loading ? (
-            <tbody><tr><td colSpan={colCount} style={{ padding: '48px 24px', textAlign: 'center' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 28, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>hourglass_empty</span>
-              <p style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>Cargando inventario…</p>
-            </td></tr></tbody>
+            <tbody>
+              {/* Filas silueta (S5.3) en vez del "Cargando…" centrado — ocupan
+                  el lugar real de la tabla, no replican cada columna por
+                  breakpoint (isDesktop/isAdmin/isNarrow), alcanza con la forma. */}
+              {Array.from({ length: 8 }, (_, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg)' }}>
+                  <td colSpan={colCount} style={{ padding: '11px 8px 11px 12px' }}>
+                    <Skeleton width={`${45 + (i % 3) * 10}%`} height={14} style={{ marginBottom: 6 }} />
+                    <Skeleton width="25%" height={11} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
           ) : error ? (
             <tbody><tr><td colSpan={colCount} style={{ padding: '48px 24px', textAlign: 'center' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 28, color: '#ef4444', display: 'block', marginBottom: 8 }}>error</span>

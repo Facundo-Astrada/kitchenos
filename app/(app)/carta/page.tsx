@@ -20,6 +20,7 @@ import { upsertMiseChecklistItem, parseRecipienteNombre, TAREA_PRIO_TO_MISE } fr
 import { clasificarIngenieriaMenu, buildVentasMap, mapaCuadrantePorId, QUAD_META, type Quadrante } from '@/lib/carta/ingenieriaMenu'
 import { sincronizarMiseDeMenu } from '@/lib/ops/menuMise'
 import PhotoPicker from '@/components/ui/PhotoPicker'
+import { Skeleton, Toast } from '@/components/ui'
 // ── Helpers ─────────────────────────────────────────────
 const fmtMoney = (n: number) =>
   n > 0 ? `$${n.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—'
@@ -156,20 +157,6 @@ async function exportRentabilidadPDF(items: CartaItemEnriquecido[], isAdmin = fa
 }
 
 // ── Toast ───────────────────────────────────────────────
-function Toast({ msg, onDone }: { msg: string; onDone: () => void }) {
-  useEffect(() => { const t = setTimeout(onDone, 3000); return () => clearTimeout(t) }, [onDone])
-  return (
-    <div style={{
-      position: 'fixed', bottom: 'var(--toast-bottom)', left: '50%', transform: 'translateX(-50%)',
-      background: '#1e293b', color: '#fff', padding: '10px 20px',
-      borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 100,
-      boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-    }}>
-      {msg}
-    </div>
-  )
-}
-
 // ── Plato Card ──────────────────────────────────────────
 function PlatoCard({
   item,
@@ -340,6 +327,29 @@ function PlatoCard({
           {item.disponible ? 'Disponible' : 'No disponible'}
         </button>
       </div>
+    </div>
+  )
+}
+
+// Forma de PlatoCard sin datos — ocupa el lugar real de la lista mientras
+// carga (S5.3), en vez de un "Cargando..." centrado que salta a la grilla
+// completa de golpe.
+function PlatoCardSkeleton() {
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '14px 14px 8px' }}>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Skeleton width={52} height={52} radius={8} />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 2 }}>
+          <Skeleton width="70%" height={14} />
+          <Skeleton width="45%" height={11} />
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+        <Skeleton width={48} height={18} radius={6} />
+        <Skeleton width={60} height={18} radius={6} />
+      </div>
+      <div style={{ height: 1, background: 'var(--border)', margin: '12px 0 8px' }} />
+      <Skeleton width={80} height={12} style={{ marginBottom: 8 }} />
     </div>
   )
 }
@@ -3704,9 +3714,7 @@ export default function CartaPage() {
         {/* Lista de platos */}
         <div data-coach-target="carta-lista" style={{ padding: 16, display: 'grid', gridTemplateColumns: isDesktop && !selectedItem ? 'repeat(2, 1fr)' : isDesktop ? '1fr' : '1fr', gap: 10 }}>
           {loading ? (
-            <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13, gridColumn: '1/-1' }}>
-              Cargando...
-            </div>
+            Array.from({ length: 6 }, (_, i) => <PlatoCardSkeleton key={i} />)
           ) : filtered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, gridColumn: '1/-1' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 40, color: 'var(--text-3)' }}>receipt_long</span>

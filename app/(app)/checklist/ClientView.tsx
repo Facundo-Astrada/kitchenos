@@ -106,9 +106,25 @@ function PlazaFlipCard({ p, plazasCustom, gp, entrega, turnoNombre, onSelect }: 
   const isCompleto = gp.total > 0 && gp.done === gp.total
   const color = isCompleto ? '#22c55e' : plazaColor(p, plazasCustom)
 
+  // Pulso + háptico al CRUZAR a 100% (S5) — no en cada render ya completo,
+  // ni al montar ya completo (ej. volver a esta pantalla más tarde).
+  const [justCompleted, setJustCompleted] = useState(false)
+  const prevCompletoRef = useRef(isCompleto)
+  useEffect(() => {
+    const prev = prevCompletoRef.current
+    prevCompletoRef.current = isCompleto
+    if (!prev && isCompleto) {
+      setJustCompleted(true)
+      tap(20)
+      const t = setTimeout(() => setJustCompleted(false), 900)
+      return () => clearTimeout(t)
+    }
+  }, [isCompleto])
+
   const frente = (
     <div
       onClick={e => { e.stopPropagation(); onSelect() }}
+      className={justCompleted ? 'plaza-pulse' : undefined}
       style={{
         height: '100%', position: 'relative', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', gap: 6, padding: '16px 12px',

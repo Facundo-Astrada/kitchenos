@@ -11,6 +11,7 @@ import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import PageHeader from '@/components/shell/PageHeader'
 import ActionButton from '@/components/shell/ActionButton'
 import IngresosBanner from '@/components/pedidos/IngresosBanner'
+import { Toast } from '@/components/ui'
 
 // ── Helpers ─────────────────────────────────────────────
 const fmtDate = (d: string | null) => {
@@ -1019,20 +1020,6 @@ function RecibirView({
 }
 
 // ── Toast ────────────────────────────────────────────────
-function Toast({ msg, onDone }: { msg: string; onDone: () => void }) {
-  useEffect(() => { const t = setTimeout(onDone, 3000); return () => clearTimeout(t) }, [onDone])
-  return (
-    <div style={{
-      position: 'fixed', bottom: 'var(--toast-bottom)', left: '50%', transform: 'translateX(-50%)',
-      background: '#1e293b', color: '#fff', padding: '10px 20px',
-      borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 100,
-      boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-    }}>
-      {msg}
-    </div>
-  )
-}
-
 // ── MAIN PAGE ───────────────────────────────────────────
 type View = 'list' | 'nuevo' | 'detail' | 'recibir'
 

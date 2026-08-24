@@ -107,6 +107,21 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
   const st = ESTADO_STYLE[estado]
   const isDuda = estado === 'duda'
   const isListo = estado === 'listo'
+
+  // Pop del tilde al llegar a "listo" (S5) — .tilde-pop en globals.css.
+  // Compara contra el estado anterior para no disparar en cada re-render
+  // (ej. el board reordena por prioridad) ni al montar ya completado.
+  const [justCompleted, setJustCompleted] = useState(false)
+  const prevEstadoRef = useRef(estado)
+  useEffect(() => {
+    const prev = prevEstadoRef.current
+    prevEstadoRef.current = estado
+    if (prev !== 'listo' && estado === 'listo') {
+      setJustCompleted(true)
+      const t = setTimeout(() => setJustCompleted(false), 300)
+      return () => clearTimeout(t)
+    }
+  }, [estado])
   // hoyOperativo() (no new Date().toISOString()): esta última usa fecha UTC,
   // que a la noche en Argentina (UTC-3) ya cae en el día siguiente — el badge
   // marcaba "turno ant." en tareas de HOY apenas pasada la medianoche UTC.
@@ -179,6 +194,7 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
         {/* Checkbox — cycles estado */}
         <button
           onClick={handleCheckboxClick}
+          className={justCompleted ? 'tilde-pop' : undefined}
           style={{
             flexShrink: 0, width: depth > 0 ? 20 : 24, height: depth > 0 ? 20 : 24,
             borderRadius: '50%', background: st.bg, border: `2px solid ${st.border}`,

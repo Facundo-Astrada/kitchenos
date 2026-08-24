@@ -16,7 +16,7 @@ import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
 import ImageCropModal from '@/components/ui/ImageCropModal'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import ImportadorFichasTecnicas from '@/components/importador/ImportadorFichasTecnicas'
-import { HeaderAction } from '@/components/ui'
+import { HeaderAction, Skeleton } from '@/components/ui'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import {
   CargaRapidaIngredientes, TotalesRapidosBar, nuevaFilaRapida, filasToIngredientesData,
@@ -563,7 +563,12 @@ export default function RecetarioPage() {
           </div>
         )}
         {loading ? (
-          <EmptyMsg icon="hourglass_empty" text="Cargando recetas…" />
+          <div style={isDesktop
+            ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }
+            : { display: 'flex', flexDirection: 'column', gap: 8 }
+          }>
+            {Array.from({ length: 6 }, (_, i) => <RecetaCardSkeleton key={i} />)}
+          </div>
         ) : error ? (
           <div style={{ textAlign: 'center', padding: '48px 24px' }}><p style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>{error}</p></div>
         ) : filtered.length === 0 ? (
@@ -3196,6 +3201,22 @@ function EmptyMsg({ icon, text }: { icon: string; text: string }) {
     <div style={{ textAlign: 'center', padding: '48px 24px' }}>
       <span className="material-symbols-outlined" style={{ fontSize: 28, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>{icon}</span>
       <p style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>{text}</p>
+    </div>
+  )
+}
+
+// Forma de RecetaCard sin datos (S5.3) — reemplaza el "Cargando recetas…"
+// centrado, que saltaba a la lista completa de golpe.
+function RecetaCardSkeleton() {
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 14 }}>
+      <Skeleton width="55%" height={14} style={{ marginBottom: 8 }} />
+      <Skeleton width="35%" height={11} style={{ marginBottom: 12 }} />
+      <div style={{ display: 'flex', gap: 12 }}>
+        <Skeleton width={50} height={11} />
+        <Skeleton width={50} height={11} />
+        <Skeleton width={50} height={11} />
+      </div>
     </div>
   )
 }

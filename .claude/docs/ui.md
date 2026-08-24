@@ -48,6 +48,36 @@ Librería: **`motion/react`** (nombre nuevo del rebrand de Framer Motion — no 
 
 **Reduced motion.** Todo lo que anima chrome/pantalla tiene que consultar `useReducedMotion()` y caer a duración 0 — no a "no aplicar el prop": el valor final se aplica igual, solo sin transición (ver el patrón en el layout). `tap()` (háptico) es independiente de reduced-motion — es táctil, no visual.
 
+**Micro-animaciones de estado (S5, ago 2026)** — CSS puro con clases en `globals.css`, no `motion/react`: los targets son componentes memoizados en listas de 40+ filas (`ItemOps.tsx`, `ProductoMiseCard.tsx`), el overhead de un componente `motion` por fila no vale la pena ahí. Cada clase se gatea sola con `@media (prefers-reduced-motion: no-preference)`, no hace falta `useReducedMotion()` en JS.
+- **`.tilde-pop`** — al completar un ítem (`ItemOps`/`ProductoMiseCard`): comparar el estado anterior contra el actual en un `useEffect` (no disparar en cada render ni al montar ya completo), agregar la clase ~300ms.
+- **`.plaza-pulse`** — al cruzar a 100% una plaza (`PlazaFlipCard`, `checklist/ClientView.tsx`): mismo patrón de comparación + `tap(20)`. Es **verde**, no ámbar — el aviso persistente "¡Terminaste la apertura!" ya usa `#22c55e`/`check_circle`, esto hereda esa forma.
+- **`.skeleton-pulse`** — pulso de opacidad para cualquier placeholder de carga, ver `Skeleton` más abajo.
+- **`.toast-enter`** — entra desde abajo (los toasts viven en `bottom: var(--toast-bottom)`), ver `Toast` más abajo.
+
+## Skeletons de carga (S5.3, ago 2026)
+
+Dos momentos distintos, los dos necesitan skeleton — no son redundantes:
+1. **Transición de ruta** (antes de que el componente cliente llegue a montarse) — convención nativa de Next.js, un `loading.tsx` junto al `page.tsx` de la ruta. La app ya tiene **15** de estos (layouts pensados a mano por pantalla), **11** importan `SkeletonHeader`/`SkeletonRow`/`SkeletonCard` de `@/components/ui/Skeleton`. Si vas a tocar el loading de una ruta, primero fijate si ya existe `app/(app)/<ruta>/loading.tsx` — probablemente sí. **Antes de escribir a `components/ui/Skeleton.tsx` (o cualquier archivo cuya existencia no verificaste): `Read` primero.** Un `Write` de esta sesión lo pisó sin leerlo — el archivo ya existía commiteado y funcionando desde antes — y el error de `tsc` que vino después no era un bug del repo, era la consecuencia de esa escritura.
+2. **Fetch del hook, ya montado** (`if (loading) return ...` dentro del `page.tsx`) — cubre la espera de `useCarta()`/`useRecetas()`/etc. después de que la ruta ya cargó. Acá va el `Skeleton` primitivo, armado a la forma de cada pantalla (ver `PlatoCardSkeleton` en `carta/page.tsx`, `RecetaCardSkeleton` en `recetario/page.tsx`, las filas de `stock/ClientView.tsx`) — no una única `SkeletonCard` genérica, las tres filas reales son distintas.
+
+```tsx
+import { Skeleton, SkeletonHeader, SkeletonRow } from '@/components/ui'
+
+<Skeleton width={52} height={52} radius={8} />          {/* bloque suelto */}
+<SkeletonHeader hasSearch />                              {/* header navy, con o sin barra de búsqueda */}
+<SkeletonRow />                                            {/* fila genérica: círculo + barra */}
+```
+
+## Toast (S5.4, ago 2026)
+
+`components/ui/Toast.tsx` — extraído de `carta/page.tsx` y `pedidos/page.tsx`, que tenían la misma función copiada verbatim (mismo estilo, mismo timeout de 3s). **No están migradas** las ~17 pantallas que arman su propio toast inline — varias tienen semántica propia (el verde del Mise es confirmación positiva, no solo estilo) que no vale forzar a lo neutro. Usar esta para pantalla nueva; las existentes migran solas la próxima vez que se las toque.
+
+```tsx
+import { Toast } from '@/components/ui'
+
+{toast && <Toast msg={toast} onDone={() => setToast('')} variant={esError ? 'error' : 'default'} />}
+```
+
 ## Variables de color
 
 ```css

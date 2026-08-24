@@ -23,6 +23,7 @@ import type { ModuloId } from '@/lib/constants'
 import { GRID_MODULOS } from '@/components/dashboard/ModulosGrid'
 import { useAuth } from '@/lib/auth/context'
 import MermaBottomSheet from '@/components/merma/MermaBottomSheet'
+import { Toast } from '@/components/ui'
 
 interface Accion {
   id: string
@@ -67,12 +68,6 @@ export default function CommandPalette() {
   useEffect(() => {
     if (open) { setQuery(''); setActiveIdx(0); requestAnimationFrame(() => inputRef.current?.focus()) }
   }, [open])
-
-  useEffect(() => {
-    if (!toast) return
-    const t = setTimeout(() => setToast(''), 2500)
-    return () => clearTimeout(t)
-  }, [toast])
 
   // GRID_MODULOS es la lista completa real (ver ModulosGrid.tsx); MODULOS_POR_ROL
   // es solo el fallback mientras usePermisos() todavía está cargando — usarlo
@@ -151,15 +146,7 @@ export default function CommandPalette() {
 
   return (
     <>
-      {toast && (
-        <div style={{
-          position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 2100,
-          background: 'var(--navy)', color: '#fff', padding: '10px 18px', borderRadius: 10,
-          fontSize: 13, fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,.3)',
-        }}>
-          {toast}
-        </div>
-      )}
+      {toast && <Toast msg={toast} onDone={() => setToast('')} />}
 
       {/* Con el sheet de merma abierto, el overlay de la paleta se saca del
           medio — MermaBottomSheet usa z-300/301 (fijo, compartido con otros
