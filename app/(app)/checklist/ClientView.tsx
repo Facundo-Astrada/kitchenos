@@ -25,6 +25,7 @@ import { NotasPlaza } from '@/components/ops/NotasPlaza'
 import { todasLasPlazas, plazaLabel, plazaIcon, plazaColor } from '@/lib/constants'
 import { hoyOperativo, sumarDias, turnoVigente, turnoAnterior, turnoSiguiente, encodeTurnoFase, cierreIncompleto, fechaEnTz } from '@/lib/ops/turnos'
 import { menuItemVisible } from '@/lib/ops/mise'
+import { tareasAfectadasPorTilde } from '@/lib/ops/syncMise'
 import { setOpsChromeCompact } from '@/lib/ops/chromeBus'
 import { SheetChrome } from '@/lib/ui/chrome'
 import { tap } from '@/lib/ui/motion'
@@ -686,13 +687,26 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // Acá se le descuentan los que vienen con producción despachada: ésos no
   // están "sin cerrar", están en curso. Va en un memo aparte y no dentro del
   // efecto para no re-consultar el cierre anterior cada vez que cambia una tarea.
+  //
+  // Los dos excluyen lo que ya está tildado en ESTE turno. Un ítem contado y
+  // resuelto no es algo que "te dejaron para hacer", por más que su tarea siga
+  // abierta: es exactamente el mismo criterio que ya usaba el contador
+  // `enProduccion` de acá arriba, que sí miraba `regMap`. Que el aviso no lo
+  // mirara es el bug de ago 2026 — el cocinero terminaba la vuelta del mise y
+  // el ámbar seguía listando todo lo que acababa de tildar.
+  //
+  // Es la red de contención de la vista. El sync que cierra la tarea vive en
+  // lib/ops/syncMise.ts (cerrarTareasDeItem); si alguna vez vuelve a fallar,
+  // acá no se nota.
   const pendientesSinResolver = useMemo(
-    () => pendientesTurnoAnterior.filter(i => !tareasPaseRecibidasSet.has(i.id)),
-    [pendientesTurnoAnterior, tareasPaseRecibidasSet],
+    () => pendientesTurnoAnterior.filter(i =>
+      !tareasPaseRecibidasSet.has(i.id) && !regMap[i.id]?.completado),
+    [pendientesTurnoAnterior, tareasPaseRecibidasSet, regMap],
   )
   const recibidosEnProduccion = useMemo(
-    () => plazaItems.filter(i => tareasPaseRecibidasSet.has(i.id)),
-    [plazaItems, tareasPaseRecibidasSet],
+    () => plazaItems.filter(i =>
+      tareasPaseRecibidasSet.has(i.id) && !regMap[i.id]?.completado),
+    [plazaItems, tareasPaseRecibidasSet, regMap],
   )
   // "Nadie registró el cierre" solo es cierto si tampoco dejaron producción: un
   // turno que cerró despachando todo hizo la vuelta completa, y acusarlo de no
@@ -1008,9 +1022,14 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     // No se encadena con await al upsert: las dos escrituras son independientes y
     // ambas son optimistas, así que salen juntas en vez de una después de la otra.
     if (d.completado) tap()
+    // El filtro vive en lib/ops/syncMise.ts (tareasAfectadasPorTilde): acá
+    // exigía `turno_fecha === today` y se perdía el pase_turno heredado del
+    // turno anterior, que puede venir con otra fecha. Resultado: el ítem
+    // quedaba tildado con su tarea abierta, y el mise lo seguía mostrando en
+    // "Te dejaron en producción".
     const matchingTareas = d.completado === undefined
       ? []
-      : tareas.filter(t => t.turno_fecha === today && t.checklist_item_id === itemId)
+      : tareasAfectadasPorTilde(tareas, itemId, today, d.completado)
     await Promise.all([
       upsertRegistro(itemId, fecha, turno, { ...d, usuario_id: authPerfil?.miembro_id ?? null }),
       ...matchingTareas.map(mt => cambiarEstadoTarea(mt.id, d.completado ? 'listo' : 'pendiente')),

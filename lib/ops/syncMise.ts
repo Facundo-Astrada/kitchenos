@@ -3,6 +3,50 @@ import type { TurnoServicio } from '@/types'
 import { turnoVigente, encodeTurnoFase, horaEnTz } from './turnos'
 import { emitMiseRegistroPatch } from './miseBus'
 
+/** Lo mínimo que necesita `tareasAfectadasPorTilde` — no la `Tarea` entera. */
+export interface TareaSincronizable {
+  id: string
+  checklist_item_id?: string | null
+  turno_fecha?: string | null
+  estado?: string | null
+}
+
+/**
+ * El camino inverso de `syncMiseDesdeTarea`: qué tareas hay que mover cuando se
+ * tilda (o destilda) un ítem en el mise.
+ *
+ * El filtro estaba inline en `checklist/ClientView.tsx` y exigía
+ * `turno_fecha === hoy`. Eso dejaba afuera justo el caso que importa: el
+ * `pase_turno` que hereda el turno anterior puede tener otra `turno_fecha` (o
+ * quedar viejo si nadie lo cerró), así que el cocinero tildaba el ítem, la
+ * tarea seguía abierta, y el mise lo seguía mostrando en "Te dejaron en
+ * producción". Caso real, Bros, 23 ago 2026: "aceite de ajo" con el registro
+ * en `completado=true` y la tarea en `pendiente`.
+ *
+ * Asimétrico a propósito:
+ *  - al TILDAR se cierra todo lo que ya vencía (sin fecha o `turno_fecha <= hoy`).
+ *    No se tocan las tareas futuras: una preparación agendada para mañana no la
+ *    cierra el tilde de hoy.
+ *  - al DESTILDAR se reabre solo lo de hoy. Reabrir tareas viejas ya cerradas
+ *    resucitaría historia que nadie pidió resucitar.
+ */
+export function tareasAfectadasPorTilde<T extends TareaSincronizable>(
+  tareas: readonly T[],
+  itemId: string,
+  hoy: string,
+  completado: boolean,
+): T[] {
+  return tareas.filter(t => {
+    if (t.checklist_item_id !== itemId) return false
+    if (completado) {
+      if (t.estado === 'listo') return false
+      return t.turno_fecha == null || t.turno_fecha <= hoy
+    }
+    // Destildar: solo lo de hoy que esté cerrado — el resto ya está como debe.
+    return t.estado === 'listo' && t.turno_fecha === hoy
+  })
+}
+
 // Refleja el estado de una tarea de producción en el registro del mise que la originó.
 // Vínculo por FK (tareas.checklist_item_id), no por título. Reemplaza el viejo
 // syncMiseCompletado que hacía ilike por nombre, marcaba siempre 'apertura' e ignoraba la plaza.
