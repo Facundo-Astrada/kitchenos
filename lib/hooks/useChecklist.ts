@@ -153,6 +153,36 @@ export function useChecklist() {
     }
   }, [RESTAURANTE_ID, supabase])
 
+  // Variante agregada del día — para vistas que quieren "cuánto se avanzó hoy
+  // en TODO el mise" (Dashboard: StatusCard "Checklist", MiPlaza, AhoraCard),
+  // no el mise de una plaza+turno puntual. Sin filtro de turno a propósito.
+  // No fija vistaRef ni participa del parche en vivo (aplicarRegistroLocal) —
+  // esa cañería es turno-específica (ver el comentario de vistaRef arriba) y
+  // generalizarla a "cualquier turno del día" es un cambio propio, no de acá.
+  // Alcanza con traer el número correcto al entrar a la pantalla.
+  const fetchRegistrosDelDia = useCallback(async (fecha: string) => {
+    if (!RESTAURANTE_ID) { setRegistros([]); return }
+    try {
+      let itemIds = itemIdsRef.current
+      if (itemIds.length === 0) {
+        const { data: itemsData, error: itemsErr } = await supabase.from('checklist_items').select('id')
+          .eq('restaurante_id', RESTAURANTE_ID)
+        if (itemsErr) throw itemsErr
+        itemIds = (itemsData ?? []).map((i: { id: string }) => i.id)
+      }
+      if (itemIds.length === 0) { setRegistros([]); return }
+      const { data, error: regErr } = await supabase.from('checklist_registros').select('*')
+        .eq('fecha', fecha)
+        .in('checklist_item_id', itemIds)
+      if (regErr) throw regErr
+      setRegistros((data ?? []) as MisePlaceRegistro[])
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al cargar el avance del día'
+      console.error('[useChecklist] fetchRegistrosDelDia Error:', msg)
+      setError(msg)
+    }
+  }, [RESTAURANTE_ID, supabase])
+
   const fetchRutinaRegistros = useCallback(async (fecha: string) => {
     if (!RESTAURANTE_ID) { setRutinaRegistros([]); return }
     try {
@@ -602,7 +632,7 @@ export function useChecklist() {
 
   return {
     secciones, items, registros, rutinas, rutinaRegistros, loading, error,
-    fetchAll, fetchRegistros, fetchRutinaRegistros,
+    fetchAll, fetchRegistros, fetchRegistrosDelDia, fetchRutinaRegistros,
     agregarSeccion, actualizarSeccion, eliminarSeccion, reordenarSecciones,
     agregarItem, actualizarItem, eliminarItem, upsertRegistro,
     agregarRutina, actualizarRutina, eliminarRutina, toggleRutina,

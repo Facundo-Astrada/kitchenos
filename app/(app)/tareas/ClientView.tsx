@@ -738,10 +738,15 @@ function NotaPedidosCard({
   onEliminar: (id: string) => void
   dragHandleProps?: DragHandleProps
 }) {
-  const [collapsed, setCollapsed] = useState(false)
+  // Colapsada por default cuando no hay pedidos anotados (PLAN-SUPERFICIE
+  // S4.4) — `null` = sin elección manual, sigue el conteo en vivo; una vez
+  // que el usuario toca el header, su elección manda (mismo patrón que
+  // NotaImportanteCard).
+  const [manualOverride, setManualOverride] = useState<boolean | null>(null)
+  const collapsed = manualOverride ?? notas.length === 0
   return (
     <div style={cardShellStyle}>
-      <button onClick={() => setCollapsed(v => !v)} {...dragHandleProps} style={cardHeaderStyle(!!dragHandleProps)}>
+      <button onClick={() => setManualOverride(!collapsed)} {...dragHandleProps} style={cardHeaderStyle(!!dragHandleProps)}>
         {dragHandleProps && (
           <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)', flexShrink: 0 }}>drag_indicator</span>
         )}
@@ -749,11 +754,13 @@ function NotaPedidosCard({
         <span style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 700, color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
           Pedidos
         </span>
-        <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', fontWeight: 700 }}>
-          {notas.length}
-        </span>
-        <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)', transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform .15s' }}>
-          expand_more
+        {notas.length > 0 && (
+          <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', fontWeight: 700 }}>
+            {notas.length}
+          </span>
+        )}
+        <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)', transform: collapsed && notas.length > 0 ? 'rotate(-90deg)' : 'none', transition: 'transform .15s' }}>
+          {collapsed && notas.length === 0 ? 'add' : 'expand_more'}
         </span>
       </button>
       <div style={{ height: 2, background: '#0ea5e9' }} />

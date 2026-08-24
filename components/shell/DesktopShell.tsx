@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation'
 import ImportadorUniversal from '@/components/importador/ImportadorUniversal'
 import ShortcutsHelp from '@/components/desktop/ShortcutsHelp'
+import CommandPalette from '@/components/desktop/CommandPalette'
 import DemoBanner from '@/components/shell/DemoBanner'
 import SidebarNav from '@/components/shell/SidebarNav'
 import { useDesktopShortcuts } from '@/lib/hooks/useDesktopShortcuts'
@@ -83,6 +84,7 @@ export default function DesktopShell({ children, sidePanel }: { children: React.
       )}
 
       <ShortcutsHelp />
+      <CommandPalette />
       </div>
     </div>
   )

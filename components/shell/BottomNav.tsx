@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { NAV_ITEMS, MODULO_CONFIG } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { usePermisos } from '@/lib/hooks/usePermisos'
+import { useAccionNav } from '@/lib/dashboard/momento'
 
 interface BottomNavProps {
   onMoreClick: () => void
@@ -13,10 +14,15 @@ interface BottomNavProps {
 export default function BottomNav({ onMoreClick }: BottomNavProps) {
   const pathname = usePathname()
   const { puedeVer, isAdmin, moduloEnPerfil } = usePermisos()
+  const accion = useAccionNav()
 
   const visibleItems = NAV_ITEMS.filter(id =>
     (id === 'home' || isAdmin || puedeVer(id)) && moduloEnPerfil(id)
   )
+  // La acción del momento apunta a sub-destinos de OPS (mise/control de
+  // carta) — mismo gate que ya usa el ícono "Ops" fijo, así nunca ofrece un
+  // atajo a algo que este puesto no puede abrir.
+  const puedeVerOps = isAdmin || (puedeVer('operaciones') && moduloEnPerfil('operaciones'))
 
   return (
     <nav
@@ -68,6 +74,22 @@ export default function BottomNav({ onMoreClick }: BottomNavProps) {
           </Link>
         )
       })}
+
+      {/* Acción del momento (PLAN-SUPERFICIE S4.1) — cambia sola durante el
+          día (Mise por default, Carta en su ventana pre-servicio). */}
+      {puedeVerOps && (
+        <Link
+          href={accion.href}
+          className={cn(
+            'flex-1 flex flex-col items-center gap-[2px] cursor-pointer px-0 py-1 border-none bg-transparent relative transition-colors duration-200',
+            pathname.startsWith(accion.href.split('?')[0]) ? 'text-[var(--navy)]' : 'text-[var(--text-3)]'
+          )}
+          style={{ WebkitTapHighlightColor: 'transparent' }}
+        >
+          <span className="material-symbols-outlined text-[22px]">{accion.icon}</span>
+          <p className="text-[9px] font-semibold uppercase tracking-[.04em]">{accion.label}</p>
+        </Link>
+      )}
 
       {/* Botón "Más" */}
       <button

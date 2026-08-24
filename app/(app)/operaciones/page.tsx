@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import ChecklistPage from '@/app/(app)/checklist/ClientView'
 import TareasPage from '@/app/(app)/tareas/ClientView'
 import { ProduccionView } from '@/app/(app)/produccion/page'
@@ -102,6 +102,29 @@ export default function OperacionesPage() {
     setTimeout(() => window.dispatchEvent(new CustomEvent('kc-welcome-ops')), 900)
   }, [])
 
+  // Swipe horizontal entre tabs (PLAN-SUPERFICIE S4.3) — antes solo se
+  // cambiaba de tab tocando una de las cuatro pills arriba del todo, lejos
+  // del pulgar en una mano. Todo por pointerup, nunca preventDefault: el
+  // scroll vertical y el long-press de reordenar del mise (checklist/
+  // ClientView.tsx, vertical) siguen exactamente iguales — un swipe que
+  // termina siendo mayormente vertical, lento, o corto no dispara nada.
+  const swipeStart = useRef<{ x: number; y: number; t: number } | null>(null)
+  function handleSwipeStart(e: React.PointerEvent) {
+    swipeStart.current = { x: e.clientX, y: e.clientY, t: Date.now() }
+  }
+  function handleSwipeEnd(e: React.PointerEvent) {
+    const start = swipeStart.current
+    swipeStart.current = null
+    if (!start) return
+    const dx = e.clientX - start.x
+    const dy = e.clientY - start.y
+    const dt = Date.now() - start.t
+    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.5 || dt > 600) return
+    const idx = TAB_IDS.indexOf(tab)
+    const next = dx < 0 ? idx + 1 : idx - 1
+    if (next >= 0 && next < TAB_IDS.length) setTab(TAB_IDS[next])
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       {/* Tab header — se pliega mientras se recorre la lista del mise (ver
@@ -152,27 +175,33 @@ export default function OperacionesPage() {
           "Ahora" del Dashboard (PLAN-SUPERFICIE S1) — antes vivía acá suelto,
           compitiendo con el mismo botón que aparece primero al abrir la app. */}
 
-      {/* Tab panels — cada uno se monta en su primera visita y se conserva */}
-      {mounted.has('produccion') && (
-        <div style={{ flex: 1, overflow: 'hidden', display: tab === 'produccion' ? 'flex' : 'none', flexDirection: 'column' }}>
-          <TareasPage embedded />
-        </div>
-      )}
-      {mounted.has('mise') && (
-        <div style={{ flex: 1, overflow: 'hidden', display: tab === 'mise' ? 'flex' : 'none', flexDirection: 'column' }}>
-          <ChecklistPage embedded />
-        </div>
-      )}
-      {mounted.has('planificacion') && (
-        <div style={{ flex: 1, overflow: tab === 'planificacion' ? 'auto' : 'hidden', display: tab === 'planificacion' ? 'block' : 'none' }}>
-          <ProduccionView embedded />
-        </div>
-      )}
-      {mounted.has('turno') && (
-        <div style={{ flex: 1, overflow: 'hidden', display: tab === 'turno' ? 'flex' : 'none', flexDirection: 'column' }}>
-          <RutinaTurnoView embedded />
-        </div>
-      )}
+      {/* Tab panels — cada uno se monta en su primera visita y se conserva.
+          El wrapper solo agrega el swipe (ver arriba); el layout/overflow de
+          cada panel sigue exactamente igual que antes. */}
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}
+        onPointerDown={handleSwipeStart} onPointerUp={handleSwipeEnd} onPointerCancel={() => { swipeStart.current = null }}
+      >
+        {mounted.has('produccion') && (
+          <div style={{ flex: 1, overflow: 'hidden', display: tab === 'produccion' ? 'flex' : 'none', flexDirection: 'column' }}>
+            <TareasPage embedded />
+          </div>
+        )}
+        {mounted.has('mise') && (
+          <div style={{ flex: 1, overflow: 'hidden', display: tab === 'mise' ? 'flex' : 'none', flexDirection: 'column' }}>
+            <ChecklistPage embedded />
+          </div>
+        )}
+        {mounted.has('planificacion') && (
+          <div style={{ flex: 1, overflow: tab === 'planificacion' ? 'auto' : 'hidden', display: tab === 'planificacion' ? 'block' : 'none' }}>
+            <ProduccionView embedded />
+          </div>
+        )}
+        {mounted.has('turno') && (
+          <div style={{ flex: 1, overflow: 'hidden', display: tab === 'turno' ? 'flex' : 'none', flexDirection: 'column' }}>
+            <RutinaTurnoView embedded />
+          </div>
+        )}
+      </div>
     </div>
   )
 }

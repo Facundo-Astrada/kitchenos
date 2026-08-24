@@ -196,8 +196,15 @@ export default function DashboardPage() {
   }
   const { productos, loading: loadingStock } = useStock()
   const { tareas, loading: loadingTareas } = useTareas()
-  const { items: checklistItems, registros } = useChecklist()
+  const { items: checklistItems, registros, fetchRegistrosDelDia } = useChecklist()
   const en86 = useEn86Count(authPerfil?.restaurante_id ?? '')
+
+  // Sin este fetch, `registros` se queda en [] toda la vida del componente
+  // (no es SWR, es un useState que solo se llena adentro de fetchRegistros/
+  // fetchAll — acá nadie los llamaba) y "Checklist X/Y" del header, MiPlaza y
+  // AhoraCard mostraban siempre 0/N sin importar el avance real del mise
+  // (encontrado ago 2026, PLAN-SUPERFICIE S4 — ver PENDIENTES.md).
+  useEffect(() => { fetchRegistrosDelDia(hoyOperativo()) }, [fetchRegistrosDelDia])
 
   // Build Perfil from auth context
   const perfil: Perfil = {

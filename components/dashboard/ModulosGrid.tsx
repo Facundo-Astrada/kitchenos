@@ -8,8 +8,11 @@ import type { Rol } from '@/types'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import ImportadorUniversal from '@/components/importador/ImportadorUniversal'
 
-// Todos los módulos que pueden aparecer en el grid
-const GRID_MODULOS: ModuloId[] = [
+// Todos los módulos que pueden aparecer en el grid — también la base de
+// CommandPalette (components/desktop/CommandPalette.tsx) para "ir a": es la
+// lista completa real, a diferencia de MODULOS_POR_ROL (solo fallback
+// mientras cargan los permisos, ver el filtro de abajo).
+export const GRID_MODULOS: ModuloId[] = [
   'operaciones', 'espacios', 'recetario', 'stock', 'pedidos', 'carta',
   'facturas', 'proveedores', 'calendario', 'reportes', 'haccp',
   'pase', 'produccion', 'turnos', 'ventas', 'clientes', 'merma', 'equipo', 'configuracion', 'reservas',

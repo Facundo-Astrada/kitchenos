@@ -48,11 +48,11 @@ export type MomentoDia =
   | { tipo: 'servicio'; turnoNombre: string; href: string; label: string }
   | { tipo: 'fueraDeTurno' }
 
-export function useMomentoDia(opts: {
-  miseCompletados: number
-  miseTotal: number
-  rol: Rol
-}): MomentoDia {
+// Turno en ventana pre-apertura / turno en curso — la parte barata del
+// momento del día (solo turnos de servicio, ya cacheados por
+// useTurnosServicio). Separado para que useAccionNav no arrastre el costo de
+// useMomentoDia completo (ver ahí abajo por qué).
+function useTurnoContext() {
   const { turnosActivos } = useTurnosServicio()
 
   const [ahora, setAhora] = useState(() => new Date())
@@ -66,6 +66,15 @@ export function useMomentoDia(opts: {
     [ahora, turnosActivos],
   )
   const turnoActual = useMemo(() => turnoEnCurso(ahora, turnosActivos), [ahora, turnosActivos])
+  return { turnoVentana, turnoActual }
+}
+
+export function useMomentoDia(opts: {
+  miseCompletados: number
+  miseTotal: number
+  rol: Rol
+}): MomentoDia {
+  const { turnoVentana, turnoActual } = useTurnoContext()
 
   return useMemo<MomentoDia>(() => {
     const misePendiente = opts.miseTotal > 0 && opts.miseCompletados < opts.miseTotal
@@ -83,4 +92,26 @@ export function useMomentoDia(opts: {
     }
     return { tipo: 'fueraDeTurno' }
   }, [opts.miseCompletados, opts.miseTotal, opts.rol, turnoVentana, turnoActual])
+}
+
+// ── Acción del momento en el BottomNav (PLAN-SUPERFICIE S4.1) ──────────────
+// Versión liviana de useMomentoDia para un componente GLOBAL (BottomNav vive
+// en app/(app)/layout.tsx, se monta en cada ruta de la app, no solo en el
+// Dashboard). A propósito NO pide miseCompletados/miseTotal: esos números
+// requieren fetchRegistrosDelDia() (checklist_registros del día), un costo
+// que hoy solo paga el Dashboard porque es la única pantalla que lo llama —
+// pedirlo acá lo agregaría a CADA navegación de la app (Stock, Facturas,
+// Configuración…) para alimentar un ícono. Por eso el nav no distingue
+// "mise pendiente" de "mise completo": ofrece Mise como acceso rápido por
+// default, y lo cambia a Control de Carta en su ventana — ambos gratis con
+// lo que useTurnosServicio ya tenía cacheado. La precisión completa
+// (X/Y, Salón en servicio) se queda en el bloque Ahora del Dashboard.
+export interface AccionNav { icon: string; label: string; href: string }
+
+export function useAccionNav(): AccionNav {
+  const { turnoVentana } = useTurnoContext()
+  if (turnoVentana) {
+    return { icon: 'fact_check', label: 'Carta', href: `/control-carta?turno=${turnoVentana.id}` }
+  }
+  return { icon: 'playlist_add_check', label: 'Mise', href: '/operaciones?tab=mise' }
 }

@@ -21,6 +21,14 @@ export function useDesktopShortcuts() {
         return
       }
 
+      // Ctrl/Cmd+K — paleta de comandos (también dentro de inputs, como Cmd+S:
+      // es el atajo que se usa DESDE cualquier lado, no solo en pantallas sin foco)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        document.dispatchEvent(new CustomEvent('kos:command-palette'))
+        return
+      }
+
       if (inInput) return
 
       // / — enfocar búsqueda

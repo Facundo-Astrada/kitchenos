@@ -25,7 +25,12 @@ export function NotaImportanteCard() {
   const { miembros } = useEquipo()
   const { perfil } = useAuth()
 
-  const [cerrada, setCerrada] = useState(false)
+  // Colapsada por default cuando no hay avisos (PLAN-SUPERFICIE S4.4) — el
+  // trabajo real de la banda Otros no tiene que competir con una tarjeta
+  // vacía. `null` = sin elección manual todavía, sigue al conteo en vivo (así
+  // no queda colapsada para siempre si el fetch todavía no trajo los avisos
+  // reales); una vez que el usuario toca el header, su elección manda.
+  const [manualOverride, setManualOverride] = useState<boolean | null>(null)
   const [texto, setTexto] = useState('')
   const [urgente, setUrgente] = useState(false)
   const [enviando, setEnviando] = useState(false)
@@ -57,6 +62,14 @@ export function NotaImportanteCard() {
       .slice()
       .reverse() // usePase devuelve ascendente; acá el más nuevo va arriba
   }, [mensajes])
+
+  const cerrada = manualOverride ?? avisos.length === 0
+  // No auto-focus del textarea al expandir: mounta recién en el render
+  // siguiente, fuera del gesto de touch síncrono — no abre el teclado en
+  // iOS/Android (ver ui.md § Input editable inline). Un tap más para escribir.
+  function toggle() {
+    setManualOverride(!cerrada)
+  }
 
   function handleInput(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const el = e.target
@@ -103,7 +116,7 @@ export function NotaImportanteCard() {
       borderRadius: 14, overflow: 'hidden', marginBottom: 8,
     }}>
       <button
-        onClick={() => setCerrada(v => !v)}
+        onClick={toggle}
         style={{
           width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
           background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
@@ -119,14 +132,16 @@ export function NotaImportanteCard() {
         }}>
           Importante
         </span>
-        <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', fontWeight: 700 }}>
-          {avisos.length}
-        </span>
+        {avisos.length > 0 && (
+          <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', fontWeight: 700 }}>
+            {avisos.length}
+          </span>
+        )}
         <span className="material-symbols-outlined" style={{
           fontSize: 18, color: 'var(--text-3)',
-          transform: cerrada ? 'rotate(-90deg)' : 'none', transition: 'transform .15s',
+          transform: cerrada && avisos.length > 0 ? 'rotate(-90deg)' : 'none', transition: 'transform .15s',
         }}>
-          expand_more
+          {cerrada && avisos.length === 0 ? 'add' : 'expand_more'}
         </span>
       </button>
       <div style={{ height: 2, background: COLOR }} />
