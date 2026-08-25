@@ -37,9 +37,11 @@ export default function OperacionesPage() {
     const hoy = hoyOperativo()
     return tareas.filter(t => t.turno_fecha === hoy && !t.parent_id && t.estado !== 'listo').length
   }, [tareas])
-  // Lazy-mount: cada tab se monta recién en su primera visita y de ahí en más
-  // se mantiene (display:none preserva el estado). Evita disparar los ~10 hooks
-  // de los 3 sub-módulos en paralelo al entrar a OPS.
+  // Lazy-mount: cada tab se monta recién en su primera visita (o cuando pasa
+  // a ser vecino inmediato del tab activo, ver el efecto de abajo) y de ahí en
+  // más se mantiene montado — el slot en la fila de scroll-snap sigue
+  // ocupando su lugar, pero vacío. Evita disparar los ~10 hooks de los 3
+  // sub-módulos en paralelo al entrar a OPS.
   const [mounted, setMounted] = useState<Set<Tab>>(() => new Set<Tab>(['produccion']))
 
   // Tab inicial desde la URL (?tab=) — permite deep-link y redirects desde las rutas viejas
@@ -48,9 +50,17 @@ export default function OperacionesPage() {
     if (esTab(t)) setTab(t)
   }, [])
 
-  // Marcar el tab activo como montado (se queda montado para preservar estado)
+  // Marcar el tab activo COMO el vecino inmediato como montados (se quedan
+  // montados para preservar estado) — el vecino se precarga para que la fila
+  // de scroll-snap ya tenga contenido real cuando el dedo lo arrastra a la
+  // vista, no un panel en blanco.
   useEffect(() => {
-    setMounted(prev => prev.has(tab) ? prev : new Set(prev).add(tab))
+    const idx = TAB_IDS.indexOf(tab)
+    const vecinos = [tab, TAB_IDS[idx - 1], TAB_IDS[idx + 1]].filter(Boolean) as Tab[]
+    setMounted(prev => {
+      if (vecinos.every(t => prev.has(t))) return prev
+      return new Set([...prev, ...vecinos])
+    })
   }, [tab])
 
   // Write screen context for KitchenCoach — OPS es el dueño del contexto
@@ -116,27 +126,67 @@ export default function OperacionesPage() {
   // con `kc_ops_welcomed` en localStorage — volvia a aparecer en cada
   // dispositivo y era uno de los dos unicos tours que arrancaban solos.
 
-  // Swipe horizontal entre tabs (PLAN-SUPERFICIE S4.3) — antes solo se
-  // cambiaba de tab tocando una de las cuatro pills arriba del todo, lejos
-  // del pulgar en una mano. Todo por pointerup, nunca preventDefault: el
-  // scroll vertical y el long-press de reordenar del mise (checklist/
-  // ClientView.tsx, vertical) siguen exactamente iguales — un swipe que
-  // termina siendo mayormente vertical, lento, o corto no dispara nada.
-  const swipeStart = useRef<{ x: number; y: number; t: number } | null>(null)
-  function handleSwipeStart(e: React.PointerEvent) {
-    swipeStart.current = { x: e.clientX, y: e.clientY, t: Date.now() }
-  }
-  function handleSwipeEnd(e: React.PointerEvent) {
-    const start = swipeStart.current
-    swipeStart.current = null
-    if (!start) return
-    const dx = e.clientX - start.x
-    const dy = e.clientY - start.y
-    const dt = Date.now() - start.t
-    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.5 || dt > 600) return
+  // Swipe horizontal entre tabs (PLAN-SUPERFICIE S4.3, refinado ago2026) —
+  // una fila con las 4 pantallas y scroll-snap NATIVO, no un cálculo manual
+  // de gestos. Antes era todo a mano por pointerup (dx/dy/dt) y Planificación
+  // tenía su propio overflow:auto horizontal que se lo comía: el dedo
+  // arrastraba el contenido pero el pointerup nunca cambiaba de tab (el bug
+  // que reportó Facu). El navegador resuelve solo el gesto diagonal —
+  // predominantemente vertical cae al scroll interno del panel (long-press
+  // de reordenar del mise incluido), predominantemente horizontal cae acá —
+  // y de paso la pantalla siguiente aparece en vivo mientras se arrastra el
+  // dedo en vez de recién cambiar al soltar.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const tabRef = useRef<Tab>(tab)
+  useEffect(() => { tabRef.current = tab }, [tab])
+  const scrollDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const didInitScroll = useRef(false)
+
+  // tab → scroll: cambios programáticos (click en una pill, evento
+  // kc-set-tab, ?tab= inicial) mueven el contenedor. Si ya está ahí (típico:
+  // el cambio vino de este mismo scroll, ver handleScroll) no hace nada —
+  // evita pelear con el gesto en curso del usuario.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
     const idx = TAB_IDS.indexOf(tab)
-    const next = dx < 0 ? idx + 1 : idx - 1
-    if (next >= 0 && next < TAB_IDS.length) setTab(TAB_IDS[next])
+    const target = idx * el.clientWidth
+    if (Math.abs(el.scrollLeft - target) < 2) { didInitScroll.current = true; return }
+    el.scrollTo({ left: target, behavior: didInitScroll.current ? 'smooth' : 'auto' })
+    didInitScroll.current = true
+  }, [tab])
+
+  // scroll → tab: al asentarse el scroll (nativo, con snap) se calcula qué
+  // pantalla quedó alineada y se sincroniza el estado. Debounced: onScroll
+  // dispara decenas de veces por segundo durante el momentum.
+  function handleScroll() {
+    const el = scrollRef.current
+    if (!el || el.clientWidth === 0) return
+    if (scrollDebounce.current) clearTimeout(scrollDebounce.current)
+    scrollDebounce.current = setTimeout(() => {
+      const idx = Math.round(el.scrollLeft / el.clientWidth)
+      const next = TAB_IDS[Math.min(TAB_IDS.length - 1, Math.max(0, idx))]
+      if (next !== tabRef.current) setTab(next)
+    }, 90)
+  }
+
+  // El contenedor cambia de ancho sin que la ventana cambie de tamaño (barra
+  // lateral plegable en desktop, PLAN-ACCESO-Y-USO B7) — un 'resize' de
+  // window no lo detecta.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      el.scrollTo({ left: TAB_IDS.indexOf(tabRef.current) * el.clientWidth, behavior: 'auto' })
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const slotStyle: React.CSSProperties = {
+    flex: '0 0 100%', minWidth: 0, height: '100%',
+    overflow: 'hidden', display: 'flex', flexDirection: 'column',
+    scrollSnapAlign: 'start',
   }
 
   return (
@@ -158,7 +208,7 @@ export default function OperacionesPage() {
               data-coach-target={`ops-tab-${t.id}`}
               onClick={() => setTab(t.id)}
               style={{
-                flex: 1,
+                flex: 1, minWidth: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
                 padding: '8px 4px', borderRadius: 99, border: 'none', cursor: 'pointer',
                 fontSize: 11, fontWeight: 700, fontFamily: 'inherit',
@@ -169,8 +219,8 @@ export default function OperacionesPage() {
                 position: 'relative',
               }}
             >
-              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>{t.icon}</span>
-              {t.label}
+              <span className="material-symbols-outlined" style={{ fontSize: 14, flexShrink: 0 }}>{t.icon}</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.label}</span>
               {t.id === 'produccion' && pendientesProduccion > 0 && (
                 <span style={{
                   minWidth: 16, height: 16, padding: '0 4px', borderRadius: 99,
@@ -184,21 +234,23 @@ export default function OperacionesPage() {
           ))}
           {/* Pantalla completa — solo en Produccion, que es el board que se
               sigue mientras se cocina (PLAN-ACCESO-Y-USO B7.2). Va acá y no en
-              un menu: en una tablet de cocina tiene que estar a un dedo. */}
+              un menu: en una tablet de cocina tiene que estar a un dedo.
+              Contraste más alto que las pills (fondo/borde/ícono más claros):
+              se reportó que quedaba medio invisible mezclado con la fila. */}
           {tab === 'produccion' && (
             <button
               onClick={() => togglePantallaCompleta(true)}
               title="Ver el tablero a pantalla completa"
               aria-label="Ver el tablero a pantalla completa"
               style={{
-                flexShrink: 0, width: 36,
+                flexShrink: 0, width: 38,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: 99, border: 'none', cursor: 'pointer',
-                background: 'rgba(255,255,255,.12)', color: 'rgba(255,255,255,.65)',
+                borderRadius: 99, border: '1px solid rgba(255,255,255,.3)', cursor: 'pointer',
+                background: 'rgba(255,255,255,.18)', color: '#fff',
                 WebkitTapHighlightColor: 'transparent',
               }}
             >
-              <span className="material-symbols-outlined" style={{ fontSize: 17 }}>open_in_full</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>open_in_full</span>
             </button>
           )}
         </div>
@@ -208,40 +260,44 @@ export default function OperacionesPage() {
           "Ahora" del Dashboard (PLAN-SUPERFICIE S1) — antes vivía acá suelto,
           compitiendo con el mismo botón que aparece primero al abrir la app. */}
 
-      {/* Tab panels — cada uno se monta en su primera visita y se conserva.
-          El wrapper solo agrega el swipe (ver arriba); el layout/overflow de
-          cada panel sigue exactamente igual que antes. */}
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}
-        onPointerDown={handleSwipeStart} onPointerUp={handleSwipeEnd} onPointerCancel={() => { swipeStart.current = null }}
+      {/* Modo pantalla completa de Producción — overlay fixed, fuera de la
+          fila con scroll-snap: si viviera adentro, un ancestro con scroll
+          nativo puede darle su propio containing block a los descendientes
+          fixed en algunos motores, y le rompería el inset:0. */}
+      {pantallaCompleta && tab === 'produccion' && mounted.has('produccion') && (
+        <PantallaCompleta titulo="Produccion" onSalir={() => togglePantallaCompleta(false)}>
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <TareasPage embedded />
+          </div>
+        </PantallaCompleta>
+      )}
+
+      {/* Tab panels — fila horizontal con scroll-snap nativo (ver el bloque de
+          arriba). Cada panel se monta en su primera visita, y también el
+          vecino inmediato del tab activo (para que ya esté listo al llegar
+          arrastrando el dedo) — de ahí en más se mantiene montado. */}
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="ops-swipe-track"
+        style={{
+          flex: 1, minHeight: 0, display: 'flex',
+          overflowX: 'auto', overflowY: 'hidden',
+          scrollSnapType: 'x mandatory', overscrollBehaviorX: 'contain',
+        }}
       >
-        {mounted.has('produccion') && (
-          pantallaCompleta && tab === 'produccion' ? (
-            <PantallaCompleta titulo="Produccion" onSalir={() => togglePantallaCompleta(false)}>
-              <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                <TareasPage embedded />
-              </div>
-            </PantallaCompleta>
-          ) : (
-            <div style={{ flex: 1, overflow: 'hidden', display: tab === 'produccion' ? 'flex' : 'none', flexDirection: 'column' }}>
-              <TareasPage embedded />
-            </div>
-          )
-        )}
-        {mounted.has('mise') && (
-          <div style={{ flex: 1, overflow: 'hidden', display: tab === 'mise' ? 'flex' : 'none', flexDirection: 'column' }}>
-            <ChecklistPage embedded />
-          </div>
-        )}
-        {mounted.has('planificacion') && (
-          <div style={{ flex: 1, overflow: tab === 'planificacion' ? 'auto' : 'hidden', display: tab === 'planificacion' ? 'block' : 'none' }}>
-            <ProduccionView embedded />
-          </div>
-        )}
-        {mounted.has('turno') && (
-          <div style={{ flex: 1, overflow: 'hidden', display: tab === 'turno' ? 'flex' : 'none', flexDirection: 'column' }}>
-            <RutinaTurnoView embedded />
-          </div>
-        )}
+        <div style={slotStyle}>
+          {mounted.has('produccion') && <TareasPage embedded />}
+        </div>
+        <div style={slotStyle}>
+          {mounted.has('mise') && <ChecklistPage embedded />}
+        </div>
+        <div style={slotStyle}>
+          {mounted.has('planificacion') && <ProduccionView embedded />}
+        </div>
+        <div style={slotStyle}>
+          {mounted.has('turno') && <RutinaTurnoView embedded />}
+        </div>
       </div>
     </div>
   )
