@@ -84,7 +84,7 @@ function ItemRow({
   item: ComandaItem
   onAvanzar: (id: string) => void
   onBump: (id: string) => void
-  on86: (cartaItemId: string) => void
+  on86: (cartaItemId: string, nombre: string) => void
 }) {
   function onTap() {
     if (item.estado === 'listo') onBump(item.id)
@@ -112,7 +112,7 @@ function ItemRow({
       </button>
       {cartaItemId && (
         <button
-          onClick={() => on86(cartaItemId)}
+          onClick={() => on86(cartaItemId, item.carta_item?.nombre ?? 'este ítem')}
           title="Marcar agotado (86)"
           style={{ minWidth: 48, borderRadius: 10, background: '#2a1a1a', color: '#e57373', fontWeight: 900, fontSize: 15, border: '1px solid #4a2a2a', flexShrink: 0 }}
         >
@@ -132,7 +132,7 @@ function ComandaCard({
   onBumpItem: (id: string) => void
   onBumpComanda: (id: string) => void
   onHold: (id: string) => void
-  on86: (cartaItemId: string) => void
+  on86: (cartaItemId: string, nombre: string) => void
 }) {
   const firedMs = tiempoFiredMasViejo(comanda.items ?? [])
   const segundos = firedMs ? Math.floor((ahora - firedMs) / 1000) : 0
@@ -292,6 +292,50 @@ function RecallPanel({
   )
 }
 
+// Sheet de confirmación de 86 — nivel módulo. Mismo lenguaje visual que los
+// paneles de arriba (fondo #1a1a1a, sube desde abajo), no el ConfirmSheet
+// claro del Mise: acá el fondo fijo oscuro es la regla de la vista de
+// servicio (DESIGN.md §2 — Registro Servicio), no algo que se pueda tomar
+// prestado de otro registro. Reemplaza el window.confirm() nativo que había
+// acá — mismo motivo que en Mise (DESIGN.md §10): nunca un diálogo del SO en
+// flujo de servicio. La confirmación en sí se mantiene (no es una acción de
+// las 40x/turno, y marcar agotado afecta lo que ve todo el salón).
+function Confirmar86Sheet({ nombre, onConfirmar, onCerrar }: { nombre: string; onConfirmar: () => void; onCerrar: () => void }) {
+  return (
+    <div
+      onClick={onCerrar}
+      style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ width: '100%', background: '#1a1a1a', borderRadius: '16px 16px 0 0', padding: '22px 20px max(20px, env(safe-area-inset-bottom, 20px))' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 26, color: '#e57373' }}>block</span>
+          <div>
+            <p style={{ fontSize: 17, fontWeight: 800, color: '#fff', margin: 0 }}>¿Marcar agotado?</p>
+            <p style={{ fontSize: 13, color: '#999', margin: '2px 0 0' }}>{nombre} no va a aparecer disponible en el salón.</p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={onCerrar}
+            style={{ flex: 1, minHeight: 56, borderRadius: 12, background: '#222', border: 'none', color: '#ccc', fontSize: 14, fontWeight: 700 }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirmar}
+            style={{ flex: 1.3, minHeight: 56, borderRadius: 12, background: '#a04343', border: 'none', color: '#fff', fontSize: 14, fontWeight: 700 }}
+          >
+            Marcar 86
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Panel Métricas — nivel módulo
 function MetricasPanel({ tarjetas, comandasRecientes, onCerrar }: { tarjetas: Comanda[]; comandasRecientes: Comanda[]; onCerrar: () => void }) {
   const stats = useMemo(() => {
@@ -343,6 +387,7 @@ export default function KdsPage() {
   const [allDayOpen, setAllDayOpen] = useState(false)
   const [recallOpen, setRecallOpen] = useState(false)
   const [metricasOpen, setMetricasOpen] = useState(false)
+  const [confirmar86, setConfirmar86] = useState<{ id: string; nombre: string } | null>(null)
 
   useEffect(() => {
     const saved = localStorage.getItem(KDS_ESTACION_STORAGE_KEY)
@@ -404,13 +449,19 @@ export default function KdsPage() {
     try { await restaurarComanda(id) } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error') }
   }
 
-  async function on86(cartaItemId: string) {
-    if (!confirm('¿Marcar este ítem como AGOTADO (86)? No aparecerá disponible en el salón.')) return
+  function on86(cartaItemId: string, nombre: string) {
+    setConfirmar86({ id: cartaItemId, nombre })
+  }
+
+  async function doMarcar86() {
+    if (!confirmar86) return
+    const { id } = confirmar86
+    setConfirmar86(null)
     try {
       await fetch('/api/carta/86', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ carta_item_id: cartaItemId, disponible: false }),
+        body: JSON.stringify({ carta_item_id: id, disponible: false }),
       })
     } catch { /* fire-and-forget */ }
   }
@@ -433,7 +484,7 @@ export default function KdsPage() {
         {/* Consolidado (ex All-day) */}
         <button
           onClick={() => setAllDayOpen(true)}
-          style={{ minHeight: 44, padding: '0 14px', borderRadius: 10, background: '#1a1a1a', color: '#fff', fontSize: 14, fontWeight: 600 }}
+          style={{ minHeight: 64, padding: '0 14px', borderRadius: 10, background: '#1a1a1a', color: '#fff', fontSize: 14, fontWeight: 600 }}
         >
           <span className="material-symbols-outlined" style={{ fontSize: 20, verticalAlign: 'middle', marginRight: 4 }}>table_rows</span>
           Consolidado
@@ -441,7 +492,7 @@ export default function KdsPage() {
         {/* Recuperar (ex Recall) */}
         <button
           onClick={() => setRecallOpen(true)}
-          style={{ minHeight: 44, padding: '0 14px', borderRadius: 10, background: '#1a1a1a', color: '#fff', fontSize: 14, fontWeight: 600 }}
+          style={{ minHeight: 64, padding: '0 14px', borderRadius: 10, background: '#1a1a1a', color: '#fff', fontSize: 14, fontWeight: 600 }}
         >
           <span className="material-symbols-outlined" style={{ fontSize: 20, verticalAlign: 'middle', marginRight: 4 }}>history</span>
           Recuperar
@@ -449,7 +500,7 @@ export default function KdsPage() {
         {/* Mute */}
         <button
           onClick={toggleSilencio}
-          style={{ minHeight: 44, width: 44, borderRadius: 10, background: silenciado ? '#3a1a1a' : '#1a1a1a', color: silenciado ? '#e57373' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          style={{ minHeight: 64, width: 64, borderRadius: 10, background: silenciado ? '#3a1a1a' : '#1a1a1a', color: silenciado ? '#e57373' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           title={silenciado ? 'Activar sonido' : 'Silenciar'}
         >
           <span className="material-symbols-outlined" style={{ fontSize: 22 }}>{silenciado ? 'volume_off' : 'volume_up'}</span>
@@ -457,13 +508,13 @@ export default function KdsPage() {
         {/* Métricas */}
         <button
           onClick={() => setMetricasOpen(true)}
-          style={{ minHeight: 44, width: 44, borderRadius: 10, background: '#1a1a1a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          style={{ minHeight: 64, width: 64, borderRadius: 10, background: '#1a1a1a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           title="Métricas"
         >
           <span className="material-symbols-outlined" style={{ fontSize: 22 }}>bar_chart</span>
         </button>
         {/* Cambiar estación */}
-        <button onClick={cambiarEstacion} style={{ minHeight: 44, padding: '0 12px', borderRadius: 10, background: '#1a1a1a', color: '#aaa', fontSize: 13 }}>
+        <button onClick={cambiarEstacion} style={{ minHeight: 64, padding: '0 12px', borderRadius: 10, background: '#1a1a1a', color: '#aaa', fontSize: 13 }}>
           Cambiar
         </button>
       </div>
@@ -504,6 +555,13 @@ export default function KdsPage() {
           tarjetas={tarjetas}
           comandasRecientes={comandasRecientes}
           onCerrar={() => setMetricasOpen(false)}
+        />
+      )}
+      {confirmar86 && (
+        <Confirmar86Sheet
+          nombre={confirmar86.nombre}
+          onConfirmar={doMarcar86}
+          onCerrar={() => setConfirmar86(null)}
         />
       )}
     </div>

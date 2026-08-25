@@ -518,7 +518,7 @@ function FilaMuro({
         display: 'flex', alignItems: 'center', gap: 10, width: '100%',
         padding: '9px 8px', borderRadius: 8, border: 'none', textAlign: 'left',
         background: estado === 'duda' ? 'rgba(245,158,11,.1)' : estado === 'en_curso' ? 'rgba(59,130,246,.08)' : 'none',
-        cursor: 'pointer', fontFamily: 'inherit', minHeight: 44,
+        cursor: 'pointer', fontFamily: 'inherit', minHeight: 64,
         WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
         opacity: estado === 'listo' ? .6 : 1,
       }}
