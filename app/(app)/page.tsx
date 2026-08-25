@@ -6,13 +6,17 @@ import DashboardClientView from './DashboardClientView'
 export default async function DashboardPage() {
   try {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return <DashboardClientView />
+    // getClaims() en vez de getUser(): verificación local del JWT (JWT signing
+    // keys asimétricas), sin round-trip extra a Supabase Auth — proxy.ts ya
+    // validó la sesión antes de dejar entrar a esta ruta.
+    const { data: claimsData } = await supabase.auth.getClaims()
+    const userId = claimsData?.claims.sub
+    if (!userId) return <DashboardClientView />
 
     const { data: ur } = await supabase
       .from('user_restaurantes')
       .select('restaurante_id')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single()
     const rid = ur?.restaurante_id
     if (!rid) return <DashboardClientView />

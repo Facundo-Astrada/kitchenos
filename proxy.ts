@@ -25,9 +25,12 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // getClaims() en vez de getUser(): con JWT signing keys asimétricas (ES256,
+  // confirmado via /auth/v1/.well-known/jwks.json) verifica la firma localmente,
+  // sin round-trip a Supabase Auth en cada navegación — getUser() sí pega contra
+  // el server siempre. Mismo nivel de seguridad (verificación criptográfica real).
+  const { data } = await supabase.auth.getClaims()
+  const user = data?.claims ?? null
 
   const pathname = request.nextUrl.pathname
 

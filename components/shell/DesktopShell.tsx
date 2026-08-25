@@ -1,7 +1,7 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import ImportadorUniversal from '@/components/importador/ImportadorUniversal'
+import dynamic from 'next/dynamic'
 import ShortcutsHelp from '@/components/desktop/ShortcutsHelp'
 import CommandPalette from '@/components/desktop/CommandPalette'
 import DemoBanner from '@/components/shell/DemoBanner'
@@ -12,6 +12,10 @@ import { useState, useEffect, useCallback } from 'react'
 // Rutas que necesitan ancho completo (tabla, mapa, gráficos)
 const FULL_WIDTH_ROUTES = ['/stock', '/espacios', '/reportes']
 const DOCK_WIDTH = 380
+
+// Dynamic import: ImportadorUniversal carga xlsx (~500kB) y solo se abre a demanda.
+// Estático acá lo metía en el chunk del shell, que se parsea en toda navegación desktop.
+const ImportadorUniversal = dynamic(() => import('@/components/importador/ImportadorUniversal'), { ssr: false })
 
 export default function DesktopShell({ children, sidePanel }: { children: React.ReactNode; sidePanel?: React.ReactNode }) {
   const pathname = usePathname()
