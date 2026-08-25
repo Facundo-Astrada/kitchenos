@@ -7,7 +7,7 @@ import CommandPalette from '@/components/desktop/CommandPalette'
 import DemoBanner from '@/components/shell/DemoBanner'
 import SidebarNav from '@/components/shell/SidebarNav'
 import { useDesktopShortcuts } from '@/lib/hooks/useDesktopShortcuts'
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 // Rutas que necesitan ancho completo (tabla, mapa, gráficos)
 const FULL_WIDTH_ROUTES = ['/stock', '/espacios', '/reportes']
@@ -20,6 +20,25 @@ export default function DesktopShell({ children, sidePanel }: { children: React.
     if (typeof window === 'undefined') return false
     return localStorage.getItem('kc_dock_collapsed') === '1'
   })
+  // Barra lateral izquierda (PLAN-ACCESO-Y-USO B7.1). Mismo patrón que el dock
+  // del Coach de la derecha, que ya se plegaba desde antes.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('kc_sidebar_collapsed') === '1'
+  })
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed(prev => {
+      const next = !prev
+      localStorage.setItem('kc_sidebar_collapsed', next ? '1' : '0')
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    document.addEventListener('kos:toggle-sidebar', toggleSidebar)
+    return () => document.removeEventListener('kos:toggle-sidebar', toggleSidebar)
+  }, [toggleSidebar])
 
   useDesktopShortcuts()
 
@@ -38,7 +57,26 @@ export default function DesktopShell({ children, sidePanel }: { children: React.
       <DemoBanner />
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
-      <SidebarNav onImportarClick={() => setShowImportador(true)} />
+      <div style={{ position: 'relative', flexShrink: 0 }}>
+        <SidebarNav onImportarClick={() => setShowImportador(true)} collapsed={sidebarCollapsed} />
+        {/* Pestaña sobre el borde: visible siempre, sin robarle ancho al nav. */}
+        <button
+          onClick={toggleSidebar}
+          title={`${sidebarCollapsed ? 'Mostrar' : 'Ocultar'} la barra lateral (Ctrl+B)`}
+          aria-label={sidebarCollapsed ? 'Mostrar la barra lateral' : 'Ocultar la barra lateral'}
+          style={{
+            position: 'absolute', top: 34, right: -11, zIndex: 30,
+            width: 22, height: 22, borderRadius: '50%', cursor: 'pointer',
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 1px 6px rgba(0,0,0,.18)', padding: 0,
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--text-2)' }}>
+            {sidebarCollapsed ? 'chevron_right' : 'chevron_left'}
+          </span>
+        </button>
+      </div>
 
       {/* ── Contenido principal ── */}
       <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>

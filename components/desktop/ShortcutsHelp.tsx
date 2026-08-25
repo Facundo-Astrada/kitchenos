@@ -4,6 +4,7 @@ import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 
 const SHORTCUTS = [
   { key: 'Ctrl+K', label: 'Paleta de comandos — ir a cualquier pantalla o acción' },
+  { key: 'Ctrl+B', label: 'Plegar la barra lateral — más ancho para el contenido' },
   { key: '/', label: 'Buscar en la pantalla actual' },
   { key: 'N', label: 'Nuevo ítem (producto, receta, tarea…)' },
   { key: 'Ctrl+S', label: 'Guardar formulario activo' },

@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import ChecklistPage from '@/app/(app)/checklist/ClientView'
+import PantallaCompleta from '@/components/ops/PantallaCompleta'
 import TareasPage from '@/app/(app)/tareas/ClientView'
 import { ProduccionView } from '@/app/(app)/produccion/page'
 import { RutinaTurnoView } from '@/components/rutina/RutinaTurnoView'
@@ -94,6 +95,22 @@ export default function OperacionesPage() {
     return () => window.removeEventListener('kc-set-tab', handleSetTab)
   }, [])
 
+  // Modo pantalla completa del board de Produccion (PLAN-ACCESO-Y-USO B7.2).
+  // Se persiste porque la tablet colgada en la cocina se recarga sola cada
+  // tanto y no puede pedir que alguien vuelva a entrar al modo cada vez.
+  const [pantallaCompleta, setPantallaCompleta] = useState(false)
+  useEffect(() => {
+    // Leerlo en el inicializador de useState (como hace DesktopShell con el
+    // dock) daria un HTML de servidor distinto al primer render del cliente.
+    // Acá el setState en efecto es lo correcto, no el atajo.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (localStorage.getItem('kc_ops_pantalla_completa') === '1') setPantallaCompleta(true)
+  }, [])
+  const togglePantallaCompleta = useCallback((valor: boolean) => {
+    setPantallaCompleta(valor)
+    localStorage.setItem('kc_ops_pantalla_completa', valor ? '1' : '0')
+  }, [])
+
   // El recorrido de la primera visita a OPS lo dispara useTourAutomatico desde
   // el layout (PLAN-ACCESO-Y-USO B4.2). Antes habia acá un disparador propio
   // con `kc_ops_welcomed` en localStorage — volvia a aparecer en cada
@@ -165,6 +182,25 @@ export default function OperacionesPage() {
               )}
             </button>
           ))}
+          {/* Pantalla completa — solo en Produccion, que es el board que se
+              sigue mientras se cocina (PLAN-ACCESO-Y-USO B7.2). Va acá y no en
+              un menu: en una tablet de cocina tiene que estar a un dedo. */}
+          {tab === 'produccion' && (
+            <button
+              onClick={() => togglePantallaCompleta(true)}
+              title="Ver el tablero a pantalla completa"
+              aria-label="Ver el tablero a pantalla completa"
+              style={{
+                flexShrink: 0, width: 36,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: 99, border: 'none', cursor: 'pointer',
+                background: 'rgba(255,255,255,.12)', color: 'rgba(255,255,255,.65)',
+                WebkitTapHighlightColor: 'transparent',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 17 }}>open_in_full</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -179,9 +215,17 @@ export default function OperacionesPage() {
         onPointerDown={handleSwipeStart} onPointerUp={handleSwipeEnd} onPointerCancel={() => { swipeStart.current = null }}
       >
         {mounted.has('produccion') && (
-          <div style={{ flex: 1, overflow: 'hidden', display: tab === 'produccion' ? 'flex' : 'none', flexDirection: 'column' }}>
-            <TareasPage embedded />
-          </div>
+          pantallaCompleta && tab === 'produccion' ? (
+            <PantallaCompleta titulo="Produccion" onSalir={() => togglePantallaCompleta(false)}>
+              <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <TareasPage embedded />
+              </div>
+            </PantallaCompleta>
+          ) : (
+            <div style={{ flex: 1, overflow: 'hidden', display: tab === 'produccion' ? 'flex' : 'none', flexDirection: 'column' }}>
+              <TareasPage embedded />
+            </div>
+          )
         )}
         {mounted.has('mise') && (
           <div style={{ flex: 1, overflow: 'hidden', display: tab === 'mise' ? 'flex' : 'none', flexDirection: 'column' }}>

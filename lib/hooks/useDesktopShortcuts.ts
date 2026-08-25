@@ -22,6 +22,14 @@ export function useDesktopShortcuts() {
       }
 
       // Ctrl/Cmd+K — paleta de comandos (también dentro de inputs, como Cmd+S:
+      // Ctrl/Cmd+B — plegar la barra lateral (PLAN-ACCESO-Y-USO B7.1).
+      // Convención de editores (VS Code y compañía) para lo mismo.
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')) {
+        e.preventDefault()
+        document.dispatchEvent(new CustomEvent('kos:toggle-sidebar'))
+        return
+      }
+
       // es el atajo que se usa DESDE cualquier lado, no solo en pantallas sin foco)
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault()
