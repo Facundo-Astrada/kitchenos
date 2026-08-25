@@ -16,14 +16,15 @@ B0/B1/B2 son bugs que hoy rompen el uso real. El resto es producto.
 | B0.3 error de IA legible + no inventar datos | ✅ deployado | `53f1c1a` |
 | B1 acceso al dashboard | ✅ deployado | `938587b` |
 | B2 mise: tildado ≠ "para producir" | ✅ deployado | `e3624b0` |
-| B3 food cost por puesto | ⬜ pendiente | — |
+| B3 food cost por puesto | ✅ deployado | `2bb0423` |
 | B4 primer ingreso | ⬜ pendiente | — |
 | B5 descubribilidad | ⬜ pendiente | — |
 | B6 etapas en el alta de receta | ⬜ pendiente | — |
 | B7 sidebar + fullscreen OPS | ⬜ pendiente | — |
 
 Migraciones aplicadas: `fix_rol_permisos_inicio_home_y_operaciones`,
-`backfill_equipo_miembros_auth_user_id`, `backfill_tareas_colgadas_con_mise_tildado`.
+`backfill_equipo_miembros_auth_user_id`, `backfill_tareas_colgadas_con_mise_tildado`,
+`add_ver_costos_permiso`.
 
 ---
 
