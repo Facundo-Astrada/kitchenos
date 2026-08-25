@@ -2367,7 +2367,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       {/* Aviso persistente — apertura 100% completa. Solo informa (el trabajo
           que sigue es producir, no tocar el mise), así que se puede cerrar. */}
       {mostrarAvisoApertura && (
-        <div style={{
+        <div className="toast-enter" style={{
           position: 'fixed', bottom: 'var(--toast-bottom)', left: 16, right: 16, zIndex: 299,
           background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14,
           padding: '10px 10px 10px 14px', boxShadow: '0 8px 24px rgba(0,0,0,.18)',
@@ -2401,7 +2401,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           de la persona, y el que no fichó entrada igual tiene que poder pasar
           el turno. El botón de salida (fichaje) queda detrás de la entrega. */}
       {tab === 'cierre' && plaza && total > 0 && done === total && (
-        <div style={{
+        <div className="toast-enter" style={{
           position: 'fixed', bottom: 'var(--toast-bottom)', left: 16, right: 16, zIndex: 299,
           background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14,
           padding: '10px 10px 10px 14px', boxShadow: '0 8px 24px rgba(0,0,0,.18)',
