@@ -37,7 +37,7 @@ Tres niveles del mismo número, de arriba hacia abajo:
 
 ---
 
-## 2. Bloque 0 — El fix que va primero y solo — ✅ HECHO (26/08)
+## 2. Bloque 0 — El fix que va primero y solo — ✅ HECHO (25/08)
 
 ### 2.1 Bug 1 — el filtro de status
 
@@ -72,7 +72,7 @@ Cae en el rango sano del material (28–35 %). `npx tsc --noEmit` limpio, `npx v
 
 ---
 
-## 3. Bloque 1 — Migración
+## 3. Bloque 1 — Migración — ✅ HECHO (25/08)
 
 ### 3.1 Por qué tablas nuevas y no columnas en `presupuestos`
 
@@ -140,7 +140,7 @@ notify pgrst, 'reload schema';
 
 ---
 
-## 4. Bloque 2 — El hook
+## 4. Bloque 2 — El hook — ✅ HECHO (25/08)
 
 `lib/hooks/usePresupuestoCMV.ts`. Patrón SWR con `useRestauranteId()`, saltando el fetch cuando devuelve `''`.
 
@@ -208,7 +208,7 @@ Los dos subtotales se muestran como filas de resumen sobre el total. **No** se c
 
 ---
 
-## 5. Bloque 3 — El módulo nuevo
+## 5. Bloque 3 — El módulo nuevo — ✅ HECHO (25/08)
 
 `ModuloId` nuevo: `'presupuesto'`. Ruta `/presupuesto`. Icono `account_balance_wallet`.
 
@@ -240,7 +240,7 @@ if (!verCostos) return <EmptyState icon="lock" title="Sin acceso a los costos" .
 
 ---
 
-## 6. Bloque 4 — La pantalla
+## 6. Bloque 4 — La pantalla — ✅ HECHO (25/08)
 
 Registro **Preparación** (dial 7). Componentes canónicos de `components/ui/` — `SegmentedTabs`, `EmptyState`, `Num`, `HeaderAction`. Cero tabs/chips/números propios.
 
@@ -284,7 +284,7 @@ Los 4 bloques se apilan. El bloque C usa el **scroll‑snap nativo** del patrón
 
 ---
 
-## 7. Bloque 5 — Seed de El Rescoldo
+## 7. Bloque 5 — Seed de El Rescoldo — ✅ HECHO (25/08)
 
 El Rescoldo tiene **0 filas en `categorias_gasto`**. La cuenta de demo y marketing vería la pantalla vacía.
 
@@ -295,7 +295,7 @@ El Rescoldo tiene **0 filas en `categorias_gasto`**. La cuenta de demo y marketi
 
 ---
 
-## 8. Bloque 6 — Coach y documentación
+## 8. Bloque 6 — Coach y documentación — ✅ HECHO (25/08)
 
 - **Coach:** `/coach-screen presupuesto` — screen context con insights (desvío del mes, sector que lo explica, ritmo de gasto vs. ritmo del mes), `data-coach-target` en los 4 bloques, tour, y las funciones explicadas. Ojo con la regla de `feedback_coach_context_owner`: un solo dueño del `kc_screen_context` por pantalla.
 - **Docs:** `columnas.md` (las 2 tablas nuevas + los 2 flags + la trampa de por qué NO se tocó `presupuestos`) · `ESTADO-ACTUAL.md` (módulo nuevo) · `AUDITORIA-4-CAPAS.md` §3 (marcar el hueco #5 como cerrado) · `ui.md` si aparece algún patrón nuevo.
@@ -303,22 +303,21 @@ El Rescoldo tiene **0 filas en `categorias_gasto`**. La cuenta de demo y marketi
 
 ---
 
-## 9. Orden de ejecución
+## 9. Orden de ejecución — ✅ TODO HECHO Y DEPLOYADO (25/08)
 
-| Paso | Qué | Verificación |
-|---|---|---|
-| 1 | Fix del status en `useReportes` | Reportes → CMV de Bros pasa de 0,7 % a ~28 % en junio. **Commit y deploy solo** |
-| 2 | Migración + `notify pgrst` | `select` desde el browser a `presupuesto_mes` no da 404 |
-| 3 | Hook `usePresupuestoCMV` | Los números de junio de Bros dan lo del mockup: 32,3 % / +2,3 pts / Bebidas con Alcohol +4,7 pts |
-| 4 | Módulo + los 5 puntos de cableado | Aparece en sidebar de escritorio Y en el menú MÁS de mobile |
-| 5 | Bloques A y B | Captura con Playwright contra dev server |
-| 6 | Bloques C y D | Ídem |
-| 7 | Mudanza del tab Familias | Reportes queda con 11 tabs y sin escrituras |
-| 8 | Seed de El Rescoldo + `reset_demo_restaurante()` | La pantalla se ve llena en la cuenta de demo |
-| 9 | Coach + docs + `/update-manual` | — |
-| 10 | `/update-status` | — |
+| Paso | Qué | Verificación | Commit |
+|---|---|---|---|
+| 1 | Fix del status en `useReportes` | Reportes → CMV de Bros pasa de 0,7 % a 28,2 % en junio (el bug real era mayor: 7 ocurrencias, no 3, y un segundo bug de categoría enmascarado por el primero — ver §2.2) | `e5d19cc` |
+| 2 | Migración + `notify pgrst` | Tablas `presupuesto_mes`/`presupuesto_sector` + flags aplicadas contra la DB real vía `apply_migration` | `16b9e97` |
+| 3 | Hook `usePresupuestoCMV` | ✅ checkpoint pasado — verificado con SQL que replica la lógica exacta: CMV 28,16 %, sectores y semanas coinciden | `e690647` |
+| 4 | Módulo + los 5 puntos de cableado | Verificado con Playwright real: aparece en sidebar de escritorio; backfill de `permisos_app`/`modulos_visibles` por `ver_costos=true` (no `nivel='admin'` — captura el caso real de "jefe de cocina" con `nivel='sous_chef'`) | `16b9e97`, `4ff7cde` |
+| 5-6 | Bloques A, B, C, D | Verificado con Playwright contra Bros y El Rescoldo (junio 2026, datos reales categorizados): CMV 6,2 %, desglose por sector, ritmo semanal, mobile responsive | `4ff7cde` |
+| 7 | Mudanza del tab Familias | Reportes quedó en 11 tabs, sin escrituras. Verificado visualmente, sin regresión | `4ff7cde` |
+| 8 | Seed de El Rescoldo + `reset_demo_restaurante()` | 12 categorías sembradas (7 mercadería + Lena y Carbón, diferenciador real de parrilla + Descartables con flag + Mantenimiento con `es_mejora`), 17 facturas reales categorizadas por proveedor, función de reset parcheada (categorías, presupuesto_mes/sector, y el gap preexistente de `facturas.categoria_gasto_id` nunca clonado) | migraciones directas vía MCP |
+| 9 | Coach + docs | Skill `coach-screen`: contexto, 6 targets, tour de 6 pasos, sugerencias, ejemplos de prompt. Docs: `columnas.md`, `ESTADO-ACTUAL.md`, `AUDITORIA-4-CAPAS.md` | `4c36b57`, `5f67ee8` |
+| 10 | `/update-manual` + `/update-status` | Pendiente — último paso de la sesión | — |
 
-**El paso 3 es el checkpoint real.** Si los números no reproducen el mockup contra Bros, hay un error de fórmula y no tiene sentido seguir con la UI.
+**Hallazgo del paso 1** que no estaba en el plan original: al verificar contra Bros con solo el fix de status, dio 149,2 % en vez de ~28 %. `fetchCMV` nunca filtró por categoría — sumaba TODAS las facturas del período (alquiler, marketing, todo), no solo mercadería. Corregido en el mismo commit.
 
 ---
 
