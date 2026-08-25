@@ -208,4 +208,14 @@ Cook Serve Delicious / Overcooked como referencia de *timers de cocción visuale
 
 ## Estado del plan
 
-P0 (`DESIGN.md`) y P1 (este §11) cerrados — commit `c8f6da9` + el presente. Siguiente: **P2, Mise vitrina**, con Sonnet.
+P0 (`DESIGN.md`) y P1 (este §11) cerrados — commit `c8f6da9` + el presente.
+
+**P2 — Mise vitrina — ejecutado en 4 bloques verificados (build + tsc + 164/164 tests c/u), con Sonnet:**
+- `fbd34b2` — targets táctiles (hit-slop), sin `window.confirm()` nativo (reemplazado por `ConfirmSheet` propio en "Entregar plaza"/"Marcar salida"), panel de compañeros en periferia (puntos de color por plaza, patrón Overwatch, dentro del selector de plaza/turno).
+- `8753bc4` — entrada suave grilla↔plaza (fade+scale, tokens de `motion.ts`, respeta reduced-motion).
+- `9337db9` — entrada animada en los avisos de cierre de plaza (reusa `.toast-enter`).
+- `7d31d1f` — quest del día colectiva (apertura + cierre, todos los turnos, todo el equipo), con celebración una vez por jornada. Alcance confirmado con Facundo vía pregunta directa (era ambigüedad de producto real, no llamada de ejecución).
+
+**Deferido explícitamente, no incumplido:** el *container transform* completo (la carta de plaza morfando literalmente hacia el header de la lista, con `layoutId` compartido) requiere fusionar los dos `return` de `ChecklistPage` en un único árbol con `AnimatePresence` — restructuración real de control de flujo en un componente de 2700 líneas. Documentado en el código (`app/(app)/checklist/ClientView.tsx`, comentario junto a `screenEnter`) como su propio bloque futuro, mismo criterio que S3 le dio a `FlipCard`.
+
+Siguiente: **P3 — entrega de turno como relevo SBAR** y **P4 — Registro Servicio en limpio** (KDS/Muro), o el container-transform diferido si se prioriza antes.
