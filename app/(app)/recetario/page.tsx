@@ -3,6 +3,7 @@
 import PageTransition from '@/components/PageTransition'
 import { motion } from 'motion/react'
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import PhotoPicker from '@/components/ui/PhotoPicker'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useRecetas, calcFoodCost, type RecetaConCosto } from '@/lib/hooks/useRecetas'
@@ -2021,6 +2022,13 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
   const [ings, setIngs] = useState<FormIng[]>(() => [{ id: uid(), cantidad: '', unidad: 'kg', nombre: '', costo_unitario: 0, grupo: '' }])
   // Etapa actual: se asigna a los ingredientes que se agreguen de acá en adelante
   // (mismo criterio de agrupación que la ficha del recetario, ver .claude/docs/columnas.md).
+  // Foto de la receta (PLAN-ACCESO-Y-USO B5.2). Estaba solo en la hoja de
+  // edicion del detalle: habia que crear la receta, entrar, y recien ahi
+  // podias sacarle la foto — asi que en la practica casi ninguna receta la
+  // tenia. El path se genera antes de guardar porque la receta todavia no
+  // tiene id; la URL viaja en el insert como una columna mas.
+  const [fotoUrl, setFotoUrl] = useState<string | null>(null)
+  const fotoPathRef = useRef(uid())
   const [grupoActual, setGrupoActual] = useState('')
   const [grupoActualNuevo, setGrupoActualNuevo] = useState(false)
   const [pasos, setPasos] = useState<FormPaso[]>(() => [{ id: uid(), texto: '' }])
@@ -2363,6 +2371,7 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
           activa: true,
           status,
           es_plato: esPlato,
+          ...(fotoUrl ? { foto_url: fotoUrl } : {}),
         })
         if (ingredientesData.length > 0) {
           await fetch('/api/recetas/save', {
@@ -2387,6 +2396,7 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
           activa: true,
           status,
           es_plato: esPlato,
+          ...(fotoUrl ? { foto_url: fotoUrl } : {}),
         }, ingredientesData)
       }
       await sincronizarIngredientesConStock(ingredientesData)
@@ -2592,6 +2602,32 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
           <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
           <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>o cargá manualmente</span>
           <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+        </div>
+
+        {/* ═══ 0. FOTO ═══ */}
+        {/* Al lado del nombre y no escondida en una hoja aparte: la foto es lo
+            que hace reconocible el plato en el pase, y si no esta acá nadie la
+            carga (PLAN-ACCESO-Y-USO B5.2). */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14,
+          padding: '10px 12px', background: 'var(--surface)',
+          border: '1px solid var(--border)', borderRadius: 12,
+        }}>
+          <PhotoPicker
+            currentUrl={fotoUrl}
+            path={`recetas/${fotoPathRef.current}`}
+            onUploaded={setFotoUrl}
+            onRemoved={() => setFotoUrl(null)}
+            size={64}
+          />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
+              {fotoUrl ? 'Foto cargada' : 'Sacale una foto al plato'}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2, lineHeight: 1.4 }}>
+              Opcional, pero es lo que hace que se reconozca de un vistazo en el pase.
+            </div>
+          </div>
         </div>
 
         {/* ═══ 1. INGREDIENTES ═══ */}

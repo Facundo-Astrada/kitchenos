@@ -18,7 +18,7 @@ B0/B1/B2 son bugs que hoy rompen el uso real. El resto es producto.
 | B2 mise: tildado ≠ "para producir" | ✅ deployado | `e3624b0` |
 | B3 food cost por puesto | ✅ deployado | `2bb0423` |
 | B4 primer ingreso | ⬜ pendiente | — |
-| B5 descubribilidad | ⬜ pendiente | — |
+| B5 descubribilidad | ✅ deployado | pendiente |
 | B6 etapas en el alta de receta | ⬜ pendiente | — |
 | B7 sidebar + fullscreen OPS | ⬜ pendiente | — |
 
@@ -355,10 +355,24 @@ ingredientes se recalculan a la vista.
 Hoy hay que crear la receta, entrar al detalle y abrir la hoja de edición para
 poder subir la foto. Sumar el `FotoUploader` al alta.
 
-### B5.3 — Barrido de lo mismo
-Mientras se toca esto, listar qué otras funciones caras de construir están
-enterradas y decidir cuáles suben. Candidato ya identificado: **El Muro**
-(`/muro`) — ver B7.2. Sale una lista, no se implementa toda en este bloque.
+### B5.3 — Barrido de lo mismo ✅ (lista, no implementación)
+Funciones ya construidas que hoy no se encuentran. **Es una lista para
+priorizar, no trabajo de este bloque** — cada una necesita su propia decisión.
+
+| Función | Dónde está hoy | Por qué no se encuentra |
+|---|---|---|
+| **El Muro** (`/muro`) | Ruta propia, sin link desde ninguna parte de OPS | La pantalla de tablet de cocina, invisible para quien no sabe que existe. Se resuelve en B7.2 |
+| **Modo Control del mise** | Ícono `fact_check` en el header del mise | Un ícono sin etiqueta. Es el recorrido rápido de plaza: la forma más veloz de hacer la vuelta |
+| **Escalar por ingrediente de referencia** | Doble tap sobre un ingrediente (`scaleRefIng`) | Gesto sin ninguna pista visual. Resuelve "cuánto sale si tengo 3 kg de esto", que es la pregunta real en cocina |
+| **Paleta de comandos** (`Ctrl/Cmd+K`) | Solo desktop, sin indicación | Nadie descubre un atajo de teclado que no se anuncia |
+| **Swipe entre tabs de OPS** | Gesto horizontal | Sin affordance; se descubre por accidente |
+| **Guía del Mise** | Ícono `?` dentro del menú de tres puntos | Dos niveles de profundidad para la ayuda de la pantalla más usada |
+| **Vincular ingredientes con stock** | Botón verde de link en el header del Recetario | Es lo que hace que el food cost sea real; el ícono no lo dice |
+| **Sugerir producción** | OPS → Planificación | Calcula qué producir según el histórico de ventas — la función con mejor relación valor/uso de toda la app |
+
+Criterio sugerido para priorizar: primero las que **ahorran tiempo en el
+turno** (Modo Control, escalar por referencia, Muro), después las de
+**calidad de dato** (vincular ingredientes), al final las de desktop.
 
 ---
 

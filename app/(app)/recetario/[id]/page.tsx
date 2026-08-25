@@ -743,7 +743,10 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
         {(receta.porciones ?? 0) > 0 && (
           <div style={{ margin: '10px 14px 0', padding: '10px 12px', borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'var(--accent)' }}>scale</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>Producir</span>
+            {/* Decía solo "Producir", que se leía como un dato de la ficha y no
+                como algo que se toca. El que cocina no sabía que existía —
+                PLAN-ACCESO-Y-USO B5.1. */}
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>Escalar a</span>
             <input
               type="text" inputMode="decimal"
               value={prodPorc}
@@ -753,14 +756,39 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)' }}>
               porciones {scaleFactor !== 1 && `· ×${scaleFactor.toFixed(2)}`}
             </span>
-            <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 'auto' }}>
-              receta base: {receta.porciones} porc.
-            </span>
             {scaleFactor !== 1 && (
-              <button onClick={resetScale} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px', fontSize: 10, fontWeight: 700, color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+              <button onClick={resetScale} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px', fontSize: 10, fontWeight: 700, color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', marginLeft: 'auto' }}>
                 Original
               </button>
             )}
+            {/* Multiplicadores de un tap: en la cocina se dobla o se hace media
+                receta mucho mas seguido que un numero exacto, y abrir el
+                teclado con las manos sucias es el peor camino posible. */}
+            <div style={{ display: 'flex', gap: 5, width: '100%', marginTop: 2 }}>
+              {([['½', 0.5], ['×2', 2], ['×3', 3]] as const).map(([label, mult]) => {
+                const base = receta.porciones ?? 0
+                const objetivo = Math.round(base * mult * 100) / 100
+                const activo = Math.abs(scaleFactor - mult) < 0.001
+                return (
+                  <button
+                    key={label}
+                    onClick={() => escalarAPorciones(String(objetivo))}
+                    style={{
+                      flex: 1, padding: '6px 4px', borderRadius: 8, cursor: 'pointer',
+                      fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+                      border: activo ? '1px solid var(--accent)' : '1px solid var(--border)',
+                      background: activo ? 'rgba(67,97,160,.10)' : 'var(--bg)',
+                      color: activo ? 'var(--accent)' : 'var(--text-2)',
+                    }}
+                  >
+                    {label} <span style={{ fontWeight: 500, opacity: .65 }}>· {objetivo} porc</span>
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--text-3)', width: '100%', lineHeight: 1.4 }}>
+              Los ingredientes de abajo se recalculan solos. Receta base: {receta.porciones} porc.
+            </div>
           </div>
         )}
 
