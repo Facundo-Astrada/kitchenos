@@ -248,15 +248,11 @@ export default function DashboardPage() {
 
   const momento = useMomentoDia({ miseCompletados: miseStats.completados, miseTotal: miseStats.total, rol })
 
-  // Bienvenida global del Coach — solo la primera vez, con datos ya cargados.
-  // Si el restaurante está vacío, lo cubre el wizard de onboarding, no el Coach.
-  useEffect(() => {
-    if (loadingStock || loadingTareas || isEmpty) return
-    if (localStorage.getItem('kc_app_welcomed')) return
-    localStorage.setItem('kc_app_welcomed', '1')
-    const t = setTimeout(() => window.dispatchEvent(new CustomEvent('kc-welcome-app')), 1200)
-    return () => clearTimeout(t)
-  }, [loadingStock, loadingTareas, isEmpty])
+  // La bienvenida del Coach la dispara ahora useTourAutomatico desde el layout
+  // (PLAN-ACCESO-Y-USO B4.2): un solo mecanismo para las ~20 pantallas, con el
+  // "ya lo vi" en DB y no en localStorage. Acá vivía un disparador propio con
+  // `kc_app_welcomed`, que se re-mostraba en cada dispositivo y solo cubria
+  // esta pantalla.
 
   useEffect(() => {
     const nCritico = productos.filter(p => p.estado === 'critico').length

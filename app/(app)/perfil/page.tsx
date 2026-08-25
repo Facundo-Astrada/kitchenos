@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth/context'
 import { createClient } from '@/lib/supabase/client'
+import { useOnboardingPersonal } from '@/lib/hooks/useOnboardingPersonal'
 
 const MAX_SIZE_MB = 2
 
@@ -15,6 +16,15 @@ export default function PerfilPage() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
+  const { resetTours } = useOnboardingPersonal()
+  const [reseteandoTours, setReseteandoTours] = useState(false)
+
+  async function handleResetTours() {
+    await resetTours()
+    // No vuelve a false: el boton queda diciendo que ya esta, que es la
+    // confirmacion. El recorrido arranca al entrar a la proxima pantalla.
+    setReseteandoTours(true)
+  }
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
 
   // Avatar
@@ -261,6 +271,24 @@ export default function PerfilPage() {
 
           {/* Divider */}
           <div className="w-full h-px my-2" style={{ background: 'var(--border)' }} />
+
+          {/* Recorridos (PLAN-ACCESO-Y-USO B4.3) — cada pantalla explica sola
+              la primera vez; esto los vuelve a habilitar todos. */}
+          <button
+            onClick={handleResetTours}
+            disabled={reseteandoTours}
+            className="w-full flex items-center justify-center gap-2 rounded-[14px] py-[12px] text-[14px] font-semibold"
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              color: 'var(--text-1)',
+              cursor: 'pointer',
+              opacity: reseteandoTours ? 0.5 : 1,
+            }}
+          >
+            <span className="material-symbols-outlined text-[18px]">replay</span>
+            {reseteandoTours ? 'Listo — entrá a una pantalla' : 'Ver de nuevo los recorridos'}
+          </button>
 
           {/* Sign out */}
           <button

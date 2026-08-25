@@ -14,6 +14,9 @@ import RouteGuard from '@/components/shell/RouteGuard'
 import KitchenCoachFAB from '@/components/coach/KitchenCoachFAB'
 import { CoachPanelContent } from '@/components/coach/CoachPanelContent'
 import DemoBanner from '@/components/shell/DemoBanner'
+import BienvenidaPuesto from '@/components/onboarding/BienvenidaPuesto'
+import { useOnboardingPersonal } from '@/lib/hooks/useOnboardingPersonal'
+import { useTourAutomatico } from '@/lib/hooks/useTourAutomatico'
 import { UiChromeProvider } from '@/lib/ui/chrome'
 import { hoyOperativo } from '@/lib/ops/turnos'
 import { DURATION, EASE_OUT, useReducedMotion } from '@/lib/ui/motion'
@@ -30,6 +33,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const reducedMotion = useReducedMotion()
   const [stockCritico, setStockCritico] = useState<StockCriticoItem[]>([])
   const [tareasPendientes, setTareasPendientes] = useState<TareaPendienteItem[]>([])
+
+  // Primer ingreso (PLAN-ACCESO-Y-USO B4): la carta de bienvenida va acá y no
+  // en el dashboard porque el invitado puede caer directo en cualquier ruta.
+  // El tour automatico espera a que la cierre — dos overlays a la vez es ruido.
+  const { bienvenidaPendiente, marcarBienvenidaVista } = useOnboardingPersonal()
+  useTourAutomatico(bienvenidaPendiente)
 
   const rol = perfil?.rol ?? 'ayudante'
 
@@ -110,6 +119,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     </AnimatePresence>
   )
 
+  const bienvenida = bienvenidaPendiente
+    ? <BienvenidaPuesto onCerrar={marcarBienvenidaVista} />
+    : null
+
   if (isDesktop) {
     return (
       <UiChromeProvider>
@@ -118,6 +131,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         >
           {pageContent}
         </DesktopShell>
+        {bienvenida}
       </UiChromeProvider>
     )
   }
@@ -145,6 +159,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           stockCritico={stockCritico}
           tareasPendientes={tareasPendientes}
         />
+
+        {bienvenida}
       </div>
     </UiChromeProvider>
   )

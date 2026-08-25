@@ -94,13 +94,10 @@ export default function OperacionesPage() {
     return () => window.removeEventListener('kc-set-tab', handleSetTab)
   }, [])
 
-  // Dispatch welcome event on first OPS visit
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    if (localStorage.getItem('kc_ops_welcomed')) return
-    localStorage.setItem('kc_ops_welcomed', '1')
-    setTimeout(() => window.dispatchEvent(new CustomEvent('kc-welcome-ops')), 900)
-  }, [])
+  // El recorrido de la primera visita a OPS lo dispara useTourAutomatico desde
+  // el layout (PLAN-ACCESO-Y-USO B4.2). Antes habia acá un disparador propio
+  // con `kc_ops_welcomed` en localStorage — volvia a aparecer en cada
+  // dispositivo y era uno de los dos unicos tours que arrancaban solos.
 
   // Swipe horizontal entre tabs (PLAN-SUPERFICIE S4.3) — antes solo se
   // cambiaba de tab tocando una de las cuatro pills arriba del todo, lejos

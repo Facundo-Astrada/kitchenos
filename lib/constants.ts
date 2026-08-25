@@ -383,3 +383,66 @@ export const PRIORIDAD_CONFIG = {
 // ── Alertas Food Cost ────────────────────────────────────────
 export const FC_ALERT_HIGH = 33 // % — rojo
 export const FC_ALERT_OK = 25   // % — verde
+
+// ── Primer ingreso (PLAN-ACCESO-Y-USO B4) ───────────────────
+// Una línea por módulo, para la carta de bienvenida: qué hace, en el idioma
+// de la cocina y no en el del software. Se muestran SOLO los módulos que la
+// persona efectivamente ve — enseñar lo que no puede tocar solo enseña a
+// pedir permisos.
+export const MODULO_DESCRIPCION: Record<ModuloId, string> = {
+  home: 'El resumen del día: qué falta, qué está por vencer y por dónde arrancar.',
+  operaciones: 'Tu turno: el mise de tu plaza, lo que hay que producir y la planificación.',
+  tareas: 'Las tareas del turno, por plaza y prioridad.',
+  recetario: 'Las fichas técnicas: ingredientes, pasos y porciones de cada preparación.',
+  stock: 'Qué hay en el depósito y en las heladeras, y qué está por faltar.',
+  pedidos: 'Los pedidos a proveedores: qué se pidió, qué llegó y qué falta recibir.',
+  haccp: 'Los controles de seguridad alimentaria: temperaturas, limpieza y vencimientos.',
+  reportes: 'Los números del negocio: ventas, costos y desvíos del período.',
+  calendario: 'La agenda: entregas, eventos y lo que viene esta semana.',
+  turnos: 'La grilla del personal y el fichaje de entrada y salida.',
+  proveedores: 'La libreta de proveedores: contacto, días de entrega y precios.',
+  carta: 'Los platos que se venden, con su precio y disponibilidad.',
+  checklist: 'El recorrido de tu plaza: contás lo que hay y mandás a producir lo que falta.',
+  pase: 'El canal entre cocina y salón: 86, avisos y novedades del servicio.',
+  facturas: 'Las facturas de proveedores, cargadas por foto o PDF.',
+  produccion: 'El tablero de lo que hay que cocinar hoy, columna por plaza.',
+  merma: 'El registro del desperdicio: qué se tiró, cuánto y por qué.',
+  equipo: 'Las fichas del equipo: puestos, permisos y datos de cada persona.',
+  organigrama: 'Quién es quién: las áreas del negocio y quién responde en cada una.',
+  configuracion: 'Los ajustes del restaurante: turnos, plazas, categorías y datos generales.',
+  ventas: 'Lo que se vendió: cubiertos, ticket promedio y platos más pedidos.',
+  espacios: 'La mesa de trabajo: espacios, plazas y producciones en curso.',
+  salon: 'El plano del salón: mesas, estado y ocupación en vivo.',
+  kds: 'La pantalla de cocina: las comandas que entran, en orden.',
+  clientes: 'Los clientes del restaurante y su historial.',
+  coach: 'El asistente: le preguntás cualquier cosa de la app o de tus datos.',
+  muro: 'La pantalla grande de la cocina: todo lo que hay que producir, a dos metros.',
+  bitacora: 'El registro del día a día: qué pasó en cada turno.',
+  reservas: 'Las reservas: quién viene, cuándo y a qué mesa.',
+}
+
+// Qué recorrido de `lib/coach/tours.ts` le corresponde a cada ruta. El permiso
+// se chequea aparte con RUTA_A_MODULO sobre la misma ruta — un tour nunca
+// arranca en una pantalla que la persona no puede ver.
+export const RUTA_A_TOUR: Record<string, string> = {
+  '/': 'dashboard',
+  '/operaciones': 'operaciones',
+  '/recetario': 'recetario',
+  '/stock': 'stock',
+  '/carta': 'carta',
+  '/pase': 'pase',
+  '/pedidos': 'pedidos',
+  '/proveedores': 'proveedores',
+  '/facturas': 'facturas',
+  '/reportes': 'reportes',
+  '/merma': 'merma',
+  '/haccp': 'haccp',
+  '/calendario': 'calendario',
+  '/turnos': 'turnos',
+  '/ventas': 'ventas',
+  '/salon': 'salon',
+  '/clientes': 'clientes',
+  '/espacios': 'espacios',
+  '/organigrama': 'organigrama',
+  '/tareas': 'tareas',
+}
