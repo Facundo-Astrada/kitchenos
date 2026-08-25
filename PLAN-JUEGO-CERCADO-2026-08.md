@@ -8,9 +8,11 @@
 
 ---
 
-## F1 — Lectura del servicio en el cierre de turno
+## F1 — Lectura del servicio en el cierre de turno ✅ 1 y 2 shippeados (2026-08-24)
 
-**Problema:** `cierres_turno` (`types/index.ts:471`, hook `lib/hooks/useCierresTurno.ts`) hoy solo guarda inventario y metadata de entrega: `restaurante_id, jornada, turno_id, plaza, cerrado_por, cerrado_at, items_total, items_completados`. No hay ningún campo sobre *cómo salió* el servicio. El documento marca esto como el mejor momento del día para capturar esa lectura (memoria fresca, atención de los dos turnos a la vez) — y que ninguna app del rubro lo modela.
+**Estado:** pasos 1 y 2 hechos como parte de PLAN-SUPERFICIE P3 (INVESTIGACION-DISENO-2026-08.md §8) — commit `0e3f99c`. Migración `percepcion`/`notas_servicio` en `cierres_turno` (aplicada en prod), `entregarPlaza()` los persiste, `EntregaPlazaSheet` los pide en 2-3 taps opcionales al entregar. **Paso 3 (mostrar la lectura junto a un dato duro en Reportes → Auditoría) sigue pendiente** — no se tocó Reportes en esta pasada.
+
+**Problema (contexto original):** `cierres_turno` (`types/index.ts:471`, hook `lib/hooks/useCierresTurno.ts`) hoy solo guarda inventario y metadata de entrega: `restaurante_id, jornada, turno_id, plaza, cerrado_por, cerrado_at, items_total, items_completados`. No hay ningún campo sobre *cómo salió* el servicio. El documento marca esto como el mejor momento del día para capturar esa lectura (memoria fresca, atención de los dos turnos a la vez) — y que ninguna app del rubro lo modela.
 
 **Propuesta:**
 1. Agregar a `cierres_turno`: `percepcion` (enum corto: `bien | regular | complicado`, o similar — definir con el usuario el set exacto) y `notas_servicio` (texto libre opcional, "qué se rompió / cómo se resolvió"). Migración + `CierreTurno` en `types/index.ts`.

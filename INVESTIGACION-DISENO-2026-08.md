@@ -218,4 +218,6 @@ P0 (`DESIGN.md`) y P1 (este §11) cerrados — commit `c8f6da9` + el presente.
 
 **Deferido explícitamente, no incumplido:** el *container transform* completo (la carta de plaza morfando literalmente hacia el header de la lista, con `layoutId` compartido) requiere fusionar los dos `return` de `ChecklistPage` en un único árbol con `AnimatePresence` — restructuración real de control de flujo en un componente de 2700 líneas. Documentado en el código (`app/(app)/checklist/ClientView.tsx`, comentario junto a `screenEnter`) como su propio bloque futuro, mismo criterio que S3 le dio a `FlipCard`.
 
-Siguiente: **P3 — entrega de turno como relevo SBAR** y **P4 — Registro Servicio en limpio** (KDS/Muro), o el container-transform diferido si se prioriza antes.
+**P3 — Entrega de turno como relevo SBAR — cerrado (`0e3f99c`):** migración `cierres_turno.percepcion`/`notas_servicio` (aplicada en prod vía MCP), `entregarPlaza()` los persiste, `EntregaPlazaSheet` los pide en 2-3 taps opcionales. Absorbe `PLAN-JUEGO-CERCADO-2026-08.md` F1 pasos 1-2 (el paso 3 — mostrar la lectura junto a un dato duro en Reportes → Auditoría — queda pendiente, no es parte de este plan de superficie).
+
+Siguiente: **P4 — Registro Servicio en limpio** (KDS/Muro), o el container-transform diferido si se prioriza antes.
