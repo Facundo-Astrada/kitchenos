@@ -7,7 +7,7 @@ otra cosa que lo reportado — está anotado en cada bloque.
 **Orden de ejecución: B0 → B1 → B2 → B3 → B4 → B5 → B6 → B7.**
 B0/B1/B2 son bugs que hoy rompen el uso real. El resto es producto.
 
-## Estado (24 ago 2026)
+## Estado (25 ago 2026) — plan cerrado salvo B0.1/B0.2
 
 | Bloque | Estado | Commit |
 |---|---|---|
@@ -20,7 +20,7 @@ B0/B1/B2 son bugs que hoy rompen el uso real. El resto es producto.
 | B4 primer ingreso | ⬜ pendiente | — |
 | B5 descubribilidad | ✅ deployado | `5dc6539` |
 | B6 etapas en el alta de receta | ✅ deployado | `2380c94` |
-| B7 sidebar + fullscreen OPS | ✅ deployado | pendiente |
+| B7 sidebar + fullscreen OPS | ✅ deployado | `4f654db` |
 
 Migraciones aplicadas: `fix_rol_permisos_inicio_home_y_operaciones`,
 `backfill_equipo_miembros_auth_user_id`, `backfill_tareas_colgadas_con_mise_tildado`,
