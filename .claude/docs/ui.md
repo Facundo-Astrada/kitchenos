@@ -54,6 +54,10 @@ Librería: **`motion/react`** (nombre nuevo del rebrand de Framer Motion — no 
 - **`.skeleton-pulse`** — pulso de opacidad para cualquier placeholder de carga, ver `Skeleton` más abajo.
 - **`.toast-enter`** — entra desde abajo (los toasts viven en `bottom: var(--toast-bottom)`), ver `Toast` más abajo.
 
+## Targets táctiles chicos — `.hit-slop` (`globals.css`, ago 2026)
+
+Un botón que necesita quedarse visualmente chico (no inflar una lista de 40+ filas) pero cumplir el piso táctil de `DESIGN.md` §7 (≥56px Preparación-servicio, ≥64px `app/(servicio)`) usa `className="hit-slop"` en vez de agrandar el glyph: agrega un `::before` invisible con `inset:-12px` que extiende el área que responde al tap sin cambiar el layout ni empujar vecinos (hit-testing es por pixel pintado, no por la caja del ancestro — el truco funciona). Requiere que el botón tenga espacio real alrededor (padding del contenedor, gap con el próximo elemento) para no comerse el target de al lado — no sirve como reemplazo genérico de agrandar el botón cuando ya hay elementos pegados. `scripts/design-lint.mjs` sabe reconocer la clase y no marca como hallazgo un botón que ya la usa.
+
 ## Carta de jugador (`FlipCard`, S3/S6, ago 2026)
 
 `components/ui/FlipCard.tsx` — mecánica de flip 3D compartida (`front`/`back`, alto fijo). Tres usos hoy: `MiembroCard` (Organigrama), `PlazaFlipCard` (selector de plaza del Mise), `PlatoCard`/`PlatoCardBack` (Carta, solo desktop). El criterio para cuándo usarla: el **dorso es un resumen + como mucho una acción o dos** (toggle, un botón que navega) — nunca el editor denso en sí. Carta lo probó al revés en S3.2 (se descartó meter el editor completo de un plato en un dorso) y confirmó la regla en S6 (el dorso reemplaza al panel-resumen que existía antes, pero "editar recetas/packaging" sigue siendo la pantalla dedicada, a un tap del botón del dorso — no adentro de la carta).

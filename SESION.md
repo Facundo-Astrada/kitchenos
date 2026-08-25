@@ -1,28 +1,36 @@
-# Sesión — 2026-08-25 (PLAN-ACCESO-Y-USO, bloques B0.3 a B7)
+# Sesión — 2026-08-24/25 (dos sesiones: Diseño de superficie P0-P5 + PLAN-ACCESO-Y-USO B0.3-B7)
+
+Dos sesiones distintas cerraron sobre el mismo día — esta nota las fusiona para que ninguna se pierda.
 
 ## Qué se cerró
-Lista de 9 observaciones de Facundo → auditadas contra código y base real → plan de 8 bloques (`PLAN-ACCESO-Y-USO-2026-08.md`), todos deployados. **Tres de los nueve puntos no eran lo reportado.**
 
-- **B0.3 — "no se reconocen las fotos" era la app mintiendo, no la IA leyendo mal.** La cuenta de Anthropic quedó sin crédito y `/api/recetas/import` devolvía una receta inventada ("Lomo al Malbec") tras un `setTimeout(1500)` puesto para simular el procesamiento. Peor: `/api/facturas` y `/api/listas-precios` devolvían una factura/lista completas y falsas ante un 429/403. Ningún endpoint fabrica datos ya; `lib/ia/errores.ts` clasifica el fallo y dice el motivo real.
-- **B1 — dos bugs apilados dejaban a todo no-admin fuera del dashboard.** (a) La invitación nunca escribía `equipo_miembros.auth_user_id`, así que `usePermisos` no encontraba el puesto (caso real: Valentino, Bros). (b) El seed de `rol_permisos` escribía `'inicio'` donde la ruta `/` pide `'home'`, y ninguna fila tenía `'operaciones'` → "Sin acceso a home". Migradas 38 filas en 9 restaurantes. De paso: la cascada de permisos estaba **duplicada** entre el hook cliente y la réplica del Coach, con los mismos dos bugs — extraída a `lib/permisos/resolver.ts`.
-- **B2 — mise: tildado y seguía en "Te dejaron en producción".** Confirmado con filas reales (Bros, 23/08). El sync tilde→tarea exigía `turno_fecha === hoy` y perdía justo el `pase_turno` heredado. 5 tareas colgadas cerradas.
-- **B3 — `ver_costos` configurable por puesto.** Al gatear aparecieron tres fugas: la ficha de receta mostraba todo el costeo **sin ningún gate**, el tab Ingeniería (ya en backlog), y las tools de **solo lectura** del Coach no pasaban por ningún gate — cualquiera podía preguntarle el gasto del mes o quién debe plata.
-- **B4** — carta de bienvenida por puesto + tours automáticos por pantalla, con el "ya lo vi" en DB. **B5** — escalado visible (½/×2/×3) y foto en el alta; las dos ya existían, el problema era encontrarlas. **B6** — etapas en bloques al cargar una receta. **B7** — sidebar plegable (Ctrl+B) y pantalla completa en Producción.
+**Diseño de superficie (24/08, `DESIGN.md`/`INVESTIGACION-DISENO-2026-08.md`, plan P0-P5 completo):**
+- **P0/P1** — `DESIGN.md` (constitución visual: dos registros Preparación/Servicio, targets ≥56/64px, presupuesto de movimiento por frecuencia, presupuestos medibles) + investigación cruzando ergonomía HMI, game feel, juegos cooperativos y el fundamento gastronómico propio.
+- **P2 — Mise vitrina**, 4 bloques: hit-slop en targets táctiles + sin `confirm()` nativo + panel de compañeros en periferia; transición suave grilla↔plaza; entrada animada en avisos de cierre; **quest del día colectiva** (apertura+cierre, todos los turnos, celebración una vez por jornada, sin ranking).
+- **P3** — entrega de plaza como relevo SBAR: `cierres_turno.percepcion`/`notas_servicio` (migración aplicada en prod) + `EntregaPlazaSheet`. Absorbe F1 pasos 1-2 de `PLAN-JUEGO-CERCADO-2026-08.md`.
+- **P4** — KDS/Muro contra su propia doctrina ya escrita (`ui.md` § Vista de servicio): sin `confirm()` nativo al marcar 86, targets de header/fila a 64px.
+- **P5** — `scripts/design-lint.mjs` (`npm run lint:design`), estático, calibrado contra una corrida real (se corrigieron dos falsos-positivos serios en el camino: confirm() de gestión tratado como bug de servicio, y regex de altura pescando divs decorativos).
 
-Build + `tsc` limpios en cada bloque, 173/173 tests (38 nuevos). 5 migraciones aplicadas. Lint comparado por archivo tocado: cero errores nuevos.
+Cada bloque: build+tsc+tests verificados, commit propio. Único pendiente de superficie: el container-transform completo de P2 (queda documentado, es su propio bloque de riesgo).
+
+**PLAN-ACCESO-Y-USO (25/08, B0.3-B7):** ver detalle completo en `HISTORIAL.md` — resumen: la app mintiendo cuando la IA fallaba (ya no fabrica datos falsos), dos bugs que dejaban a todo no-admin fuera del dashboard (Valentino/Bros), mise que no sincronizaba el pase heredado, `ver_costos` configurable por puesto con 3 fugas tapadas, tours automáticos + carta de bienvenida, escalado/foto/etapas en Recetario, sidebar plegable + pantalla completa en Producción. 173/173 tests, 5 migraciones.
 
 ## Qué quedó a medias
-- **Nada del plan** — los 8 bloques cerraron. Lo único abierto es **B0.1/B0.2, que Facundo se reservó**: cargar crédito en Anthropic (toda la IA sigue caída) y verificar que la key de Vercel sea la misma de `.env.local`.
-- **Los commits de B1 y B2 tienen `@` como línea de asunto** (usé sintaxis de heredoc de PowerShell en Bash). El cuerpo está intacto; limpiarlo requiere reescribir historia ya pusheada y redeployada — pendiente de que Facundo lo pida.
-- De paso se reparó `npm run lint` (era un `node_modules/tsconfig-paths` incompleto). **Fix de máquina, no de repo**: un clon nuevo puede volver a pegarle.
+
+- **🔴 Crítico, de la sesión de acceso**: la cuenta de Anthropic está sin crédito — **toda la IA de la app está caída** (importar receta/carta/factura, Kitchen Coach). Facundo se reservó cargarlo; de paso verificar que `ANTHROPIC_API_KEY` en Vercel sea la misma de `.env.local`.
+- Nada del plan de diseño quedó sin cerrar — los 5 bloques (P0-P5) completaron. El container-transform es diferido a propósito, no a medias.
+- `PENDIENTES.md` pasó los ~10KB recomendados por el propio skill de cierre — señal de que en algún momento conviene una poda más profunda del backlog completo, no solo de lo que cerró hoy.
 
 ## Probar primero mañana
-Cinco de los siete bloques son UI y **ninguno se probó corriendo la app**. En orden de riesgo:
-1. **Que Valentino entre** (`valentinocortesb@gmail.com`, Bros) — el caso que originó todo.
-2. **El toggle "Ve costos y food cost"** en Turnos → Puestos, y el override por persona.
-3. **La carta de bienvenida** — hace falta un usuario nuevo, solo aparece con `onboarding_visto_at` en null.
-4. **Pantalla completa de Producción en la tablet real** — usa `zoom`; si el navegador es viejo, es lo primero a mirar.
-5. **Alta de receta con 3 etapas**, de una sola pasada.
+
+1. **Cargar el crédito de Anthropic** — bloquea toda prueba de IA.
+2. Que Valentino entre (`valentinocortesb@gmail.com`, Bros) — el caso que originó `PLAN-ACCESO-Y-USO`.
+3. El toggle "Ve costos y food cost" (Turnos → Puestos) y el override por persona.
+4. En el Mise: la entrega de plaza con el nuevo `EntregaPlazaSheet` (percepción + nota) y la quest del día en la grilla de plazas.
+5. Pantalla completa de Producción en tablet real (usa `zoom`, no `transform`).
 
 ## Próximo paso concreto
-`PLAN-ACCESO-Y-USO-2026-08.md` queda cerrado. El 🔴 crítico del backlog es **cargar el crédito de Anthropic** — hasta entonces la IA no se puede probar. Después, el 🟠 más próximo sigue siendo `PLAN-4-CAPAS.md` B9/B10 (Reservas), que dependen de correr el track de validación con Bros/Rescoldo. Alternativa de bajo costo y alto retorno: la lista de **ocho funciones ya construidas que nadie encuentra** (`PLAN-ACCESO-Y-USO` § B5.3) — Modo Control del mise y "Sugerir producción" son las de mejor relación valor/esfuerzo.
+
+El 🔴 del backlog es cargar crédito en Anthropic — sin eso no se puede validar nada de IA. Después, dos frentes independientes y de bajo costo:
+- **Diseño**: el container-transform diferido del Mise, o arrancar el punch list del lint (`npm run lint:design` — 5 `confirm()` reales en `produccion/page.tsx` y `salon/config/page.tsx`, patrón ya probado tres veces).
+- **Producto**: `PLAN-4-CAPAS.md` B9/B10 (Reservas) sigue el 🟠 más próximo, o la lista de "ocho funciones ya construidas que nadie encuentra" (`PLAN-ACCESO-Y-USO` § B5.3) como alternativa de bajo costo y alto retorno.
