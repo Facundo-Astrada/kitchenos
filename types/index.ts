@@ -524,6 +524,11 @@ export interface CierreTurno {
   // Foto del momento de la entrega — no se recalcula después.
   items_total: number | null
   items_completados: number | null
+  // Relevo (ago 2026, PLAN-JUEGO-CERCADO F1 / protocolo SBAR) — ambos
+  // opcionales, no bloquean la entrega. Misma escala de 3 niveles que food
+  // cost/stock (ui.md), no una nueva.
+  percepcion: 'bien' | 'regular' | 'complicado' | null
+  notas_servicio: string | null
   created_at: string
 }
 

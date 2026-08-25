@@ -303,6 +303,130 @@ function QuestCelebracionSheet({ onClose }: { onClose: () => void }) {
   )
 }
 
+// Entrega de plaza como relevo, no solo checklist (P3, PLAN-JUEGO-CERCADO F1
+// / protocolo SBAR — INVESTIGACION-DISENO-2026-08.md §8). La Situación (cómo
+// quedó la plaza) ya está en `done`/`total`, no hace falta pedírsela a nadie
+// — el sheet solo pide las dos cosas que necesitan a una persona: la Lectura
+// (percepción, un tap) y la Recomendación (qué debe saber el que entra, texto
+// libre). Las dos opcionales: la entrega nunca queda bloqueada por esto
+// (DESIGN.md §10 / elBulli "querer controlarlo todo es no controlar nada").
+const PERCEPCION_CFG: Record<'bien' | 'regular' | 'complicado', { label: string; color: string; icon: string }> = {
+  bien: { label: 'Bien', color: '#22c55e', icon: 'sentiment_satisfied' },
+  regular: { label: 'Regular', color: '#f59e0b', icon: 'sentiment_neutral' },
+  complicado: { label: 'Complicado', color: '#ef4444', icon: 'sentiment_dissatisfied' },
+}
+function EntregaPlazaSheet({ plazaNombre, done, total, proximoTurnoNombre, onConfirm, onCancel }: {
+  plazaNombre: string
+  done: number
+  total: number
+  proximoTurnoNombre: string
+  onConfirm: (percepcion: 'bien' | 'regular' | 'complicado' | null, notas: string | null) => void
+  onCancel: () => void
+}) {
+  const [percepcion, setPercepcion] = useState<'bien' | 'regular' | 'complicado' | null>(null)
+  const [notas, setNotas] = useState('')
+  return createPortal(
+    <SheetChrome>
+      <div
+        onClick={onCancel}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 2000,
+          background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 0,
+        }}
+      >
+        <div
+          onClick={e => e.stopPropagation()}
+          className="toast-enter"
+          style={{
+            width: '100%', maxWidth: 420, background: 'var(--bg)', borderRadius: '20px 20px 0 0',
+            padding: '20px 20px max(18px, env(safe-area-inset-bottom, 18px))',
+            boxShadow: '0 -8px 30px rgba(0,0,0,.25)', display: 'flex', flexDirection: 'column', gap: 14,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 26, color: '#22c55e' }}>outbox</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>Entregar {plazaNombre}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+                {done}/{total} completados — pasa a {proximoTurnoNombre}
+              </div>
+            </div>
+          </div>
+
+          {/* Lectura — un tap, misma escala verde·ámbar·rojo que food cost/stock */}
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+              ¿Cómo salió? (opcional)
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {(Object.keys(PERCEPCION_CFG) as Array<keyof typeof PERCEPCION_CFG>).map(k => {
+                const cfg = PERCEPCION_CFG[k]
+                const sel = percepcion === k
+                return (
+                  <button
+                    key={k}
+                    onClick={() => setPercepcion(sel ? null : k)}
+                    style={{
+                      ...btnReset, flex: 1, flexDirection: 'column', gap: 4, padding: '10px 4px',
+                      borderRadius: 12, border: `1.5px solid ${sel ? cfg.color : 'var(--border)'}`,
+                      background: sel ? `${cfg.color}18` : 'var(--surface)',
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 22, color: sel ? cfg.color : 'var(--text-3)' }}>{cfg.icon}</span>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, color: sel ? cfg.color : 'var(--text-3)' }}>{cfg.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Recomendación — texto libre, opcional */}
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+              ¿Algo que el turno siguiente deba saber? (opcional)
+            </div>
+            <textarea
+              value={notas}
+              onChange={e => setNotas(e.target.value)}
+              placeholder="Ej: se rompió la salamandra, queda arreglado con la 2…"
+              rows={2}
+              style={{
+                width: '100%', boxSizing: 'border-box', padding: '9px 11px', borderRadius: 10,
+                border: '1px solid var(--border)', background: 'var(--surface)',
+                fontSize: 12.5, fontFamily: 'inherit', color: 'var(--text-1)', resize: 'none', outline: 'none',
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={onCancel}
+              style={{
+                ...btnReset, flex: 1, padding: '13px 0', borderRadius: 12,
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                fontSize: 13, fontWeight: 700, color: 'var(--text-2)',
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => onConfirm(percepcion, notas.trim() || null)}
+              style={{
+                ...btnReset, flex: 1.4, padding: '13px 0', borderRadius: 12, border: 'none',
+                background: '#22c55e', color: '#fff', fontSize: 13, fontWeight: 700,
+              }}
+            >
+              Entregar plaza
+            </button>
+          </div>
+        </div>
+      </div>
+    </SheetChrome>,
+    document.body,
+  )
+}
+
 // ══════════════════════════════════════════════════════════════
 export default function ChecklistPage({ embedded }: { embedded?: boolean } = {}) {
   const router = useRouter()
@@ -988,7 +1112,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     setConfirmAccion('entregar')
   }
 
-  async function doEntregarPlaza() {
+  async function doEntregarPlaza(percepcion: 'bien' | 'regular' | 'complicado' | null, notasServicio: string | null) {
     if (!plaza || !turnoServicioId) return
     const nombreProximo = proximoTurno?.nombre ?? 'el turno siguiente'
     setConfirmAccion(null)
@@ -1002,6 +1126,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         jornada: fecha, turnoId: turnoServicioId, plaza,
         cerradoPor: authPerfil?.miembro_id ?? null,
         itemsTotal: total, itemsCompletados: done,
+        percepcion, notasServicio,
       })
       tap(20)
       setToast(`Plaza entregada — el turno pasa a ${nombreProximo}`)
@@ -2587,12 +2712,11 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         </div>
       )}
 
-      {confirmAccion === 'entregar' && (
-        <ConfirmSheet
-          icon="outbox" iconColor="#22c55e"
-          title={`¿Entregar ${plaza ? plazaLabel(plaza, plazasCustom) : 'la plaza'}?`}
-          body={`El turno de la plaza pasa a ${proximoTurno?.nombre ?? 'el turno siguiente'} para todos.`}
-          confirmLabel="Entregar" confirmColor="#22c55e"
+      {confirmAccion === 'entregar' && plaza && (
+        <EntregaPlazaSheet
+          plazaNombre={plazaLabel(plaza, plazasCustom)}
+          done={done} total={total}
+          proximoTurnoNombre={proximoTurno?.nombre ?? 'el turno siguiente'}
           onConfirm={doEntregarPlaza}
           onCancel={() => setConfirmAccion(null)}
         />
