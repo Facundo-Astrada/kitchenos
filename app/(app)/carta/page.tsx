@@ -123,7 +123,7 @@ async function exportCartaPDF(items: CartaItemEnriquecido[]) {
 }
 
 // ── Rentabilidad PDF ────────────────────────────────────
-async function exportRentabilidadPDF(items: CartaItemEnriquecido[], isAdmin = false) {
+async function exportRentabilidadPDF(items: CartaItemEnriquecido[], verCostos = false) {
   const { default: jsPDF } = await import('jspdf')
   const { default: autoTable } = await import('jspdf-autotable')
   const doc = new jsPDF()
@@ -141,8 +141,8 @@ async function exportRentabilidadPDF(items: CartaItemEnriquecido[], isAdmin = fa
 
   autoTable(doc, {
     startY: 38,
-    head: [isAdmin ? ['Plato', 'Precio', 'Costo', 'FC%', 'Margen'] : ['Plato']],
-    body: conReceta.map(it => isAdmin
+    head: [verCostos ? ['Plato', 'Precio', 'Costo', 'FC%', 'Margen'] : ['Plato']],
+    body: conReceta.map(it => verCostos
       ? [it.nombre, fmtMoney(it.precio_venta), fmtMoney(it.costo_porcion ?? 0), `${(it.food_cost_pct ?? 0).toFixed(1)}%`, fmtMoney(it.margen_bruto ?? 0)]
       : [it.nombre]),
     styles: { fontSize: 9 },
@@ -162,13 +162,13 @@ function PlatoCard({
   item,
   onClick,
   onToggle,
-  isAdmin = false,
+  verCostos = false,
   quadrante = null,
 }: {
   item: CartaItemEnriquecido
   onClick: () => void
   onToggle: () => void
-  isAdmin?: boolean
+  verCostos?: boolean
   /** Estrella/Caballo/Puzzle/Perro — solo admin, ver quadranteMap en CartaPage. */
   quadrante?: Quadrante | null
 }) {
@@ -233,7 +233,7 @@ function PlatoCard({
               </div>
             )}
           </div>
-          {isAdmin && (
+          {verCostos && (
           <div style={{
             fontSize: 18, fontWeight: 700, color: 'var(--navy)',
             whiteSpace: 'nowrap', paddingTop: 1,
@@ -263,7 +263,7 @@ function PlatoCard({
               {quadMeta.label.slice(0, -1)}
             </span>
           )}
-          {isAdmin && hasMrg && (
+          {verCostos && hasMrg && (
             <span style={{
               fontSize: 11, fontWeight: 700,
               background: mrg.bg, color: mrg.text,
@@ -272,7 +272,7 @@ function PlatoCard({
               Mrg {(item.margen_pct_computed ?? 0).toFixed(1)}%
             </span>
           )}
-          {isAdmin && !hasMrg && hasFc && (
+          {verCostos && !hasMrg && hasFc && (
             <span style={{
               fontSize: 11, fontWeight: 700,
               background: fc.bg, color: fc.text,
@@ -340,10 +340,10 @@ function PlatoCard({
 // la pantalla completa — cabe un editor denso ahí, no en el dorso de una
 // tarjeta — a un solo tap con "Editar completo".
 function PlatoCardBack({
-  item, isAdmin, onToggleDisponible, onEditarCompleto,
+  item, verCostos, onToggleDisponible, onEditarCompleto,
 }: {
   item: CartaItemEnriquecido
-  isAdmin: boolean
+  verCostos: boolean
   onToggleDisponible: () => void
   onEditarCompleto: () => void
 }) {
@@ -360,7 +360,7 @@ function PlatoCardBack({
         {item.nombre}
       </div>
 
-      {isAdmin && (
+      {verCostos && (
         <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
           <div style={{ background: 'var(--bg)', borderRadius: 8, padding: '6px 10px', flex: 1 }}>
             <div style={{ fontSize: 9, color: 'var(--text-3)', textTransform: 'uppercase' }}>Precio</div>
@@ -2401,7 +2401,7 @@ function RentabilidadView({
   items,
   ventas,
   onBack,
-  isAdmin = false,
+  verCostos = false,
   actualizarItem,
   onOpenPlato,
   showToast,
@@ -2409,7 +2409,7 @@ function RentabilidadView({
   items: CartaItemEnriquecido[]
   ventas: { items?: { nombre_plato: string; cantidad: number }[] | null }[]
   onBack: () => void
-  isAdmin?: boolean
+  verCostos?: boolean
   actualizarItem: (id: string, datos: { precio_venta?: number }) => Promise<void>
   onOpenPlato: (id: string) => void
   showToast: (msg: string) => void
@@ -2489,8 +2489,8 @@ function RentabilidadView({
           </button>
           <span style={{ color: '#fff', fontWeight: 700, fontSize: 17 }}>Rentabilidad</span>
           <div style={{ flex: 1 }} />
-          {isAdmin && tab === 'lista' && (
-            <button onClick={() => exportRentabilidadPDF(items, isAdmin)} style={{
+          {verCostos && tab === 'lista' && (
+            <button onClick={() => exportRentabilidadPDF(items, verCostos)} style={{
               background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8,
               padding: '6px 12px', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 4,
@@ -3218,11 +3218,20 @@ export default function CartaPage() {
   }, [checklistItems])
 
   const RESTAURANTE_ID = useRestauranteId()
-  const { puedeEditar, isAdmin } = usePermisos()
+  const { puedeEditar, isAdmin, verCostos } = usePermisos()
+  // Editar la carta y ver su plata son permisos distintos: un sous chef puede
+  // necesitar uno sin el otro. Todo lo que muestra precio, margen, food cost o
+  // cuadrante de ingeniería va por `verCostos`; esto es solo edición.
   const canEdit = isAdmin || puedeEditar('carta')
   const isDesktop = useIsDesktop()
 
   const [view, setView] = useState<View>('list')
+  // Segundo cerrojo de Rentabilidad: ocultar el CTA no alcanza si el estado
+  // `view` puede llegar por otro lado (deep link, estado viejo, el tour del
+  // Coach). Sin permiso de costos, vuelve a la lista.
+  useEffect(() => {
+    if (view === 'rentabilidad' && !verCostos) setView('list')
+  }, [view, verCostos])
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [filter, setFilter] = useState<string>('Todas')
   const [toast, setToast] = useState('')
@@ -3248,9 +3257,9 @@ export default function CartaPage() {
   // ve el badge (Precio/FC ya es solo-admin en esta pantalla; el cuadrante
   // deriva de esos mismos números).
   const quadranteMap = useMemo(() => {
-    if (!isAdmin) return null
+    if (!verCostos) return null
     return mapaCuadrantePorId(items, buildVentasMap(items, ventas))
-  }, [items, ventas, isAdmin])
+  }, [items, ventas, verCostos])
 
   const stats = useMemo(() => ({
     total: items.length,
@@ -3535,14 +3544,14 @@ export default function CartaPage() {
   }
 
   // ── Rentabilidad ──
-  if (view === 'rentabilidad') {
+  if (view === 'rentabilidad' && verCostos) {
     return (
       <>
         <RentabilidadView
           items={items}
           ventas={ventas}
           onBack={() => setView('list')}
-          isAdmin={isAdmin}
+          verCostos={verCostos}
           actualizarItem={actualizarItem}
           onOpenPlato={(pid) => { setSelectedItemId(pid); setView('detail') }}
           showToast={setToast}
@@ -3793,8 +3802,10 @@ export default function CartaPage() {
         </div>
       </div>
 
-      {/* Rentabilidad shortcut */}
-      {items.some(i => i.food_cost_pct != null) && (
+      {/* Rentabilidad shortcut — toda la pantalla es plata (food cost,
+          ingenieria de menu, reprecio), asi que el gate va en la entrada y no
+          tab por tab. El de Ingenieria era el que faltaba (PENDIENTES). */}
+      {verCostos && items.some(i => i.food_cost_pct != null) && (
         <div style={{ padding: '12px 16px 0' }}>
           <button data-coach-target="carta-rentabilidad" onClick={() => setView('rentabilidad')} style={{
             width: '100%', padding: '10px 14px', borderRadius: 10,
@@ -3842,14 +3853,14 @@ export default function CartaPage() {
                   item={item}
                   onClick={() => {}}
                   onToggle={() => toggleDisponible(item.id, !item.disponible)}
-                  isAdmin={isAdmin}
+                  verCostos={verCostos}
                   quadrante={quadranteMap?.get(item.id) ?? null}
                 />
               }
               back={
                 <PlatoCardBack
                   item={item}
-                  isAdmin={isAdmin}
+                  verCostos={verCostos}
                   onToggleDisponible={() => toggleDisponible(item.id, !item.disponible)}
                   onEditarCompleto={() => { setSelectedItemId(item.id); setView('detail') }}
                 />
@@ -3863,7 +3874,7 @@ export default function CartaPage() {
               item={item}
               onClick={() => handleCardClick(item)}
               onToggle={() => toggleDisponible(item.id, !item.disponible)}
-              isAdmin={isAdmin}
+              verCostos={verCostos}
               quadrante={quadranteMap?.get(item.id) ?? null}
             />
           ))

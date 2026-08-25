@@ -882,6 +882,8 @@ export interface Puesto {
   permisos_app: string[]         // array de ModuloId reales
   nivel: string                  // admin | sous_chef | cocinero | bachero
   plaza_default: string | null   // plaza OPS por defecto
+  /** Ve precios, costos, food cost, margen y stock valorizado. Default false. */
+  ver_costos: boolean
   restaurante_id: string
   created_at: string
 }
@@ -898,6 +900,8 @@ export interface RolPermiso {
   puede_editar_recetas: boolean
   puede_editar_carta: boolean
   puede_eliminar: boolean
+  /** Ve precios, costos y food cost. Fallback para usuarios sin puesto asignado. */
+  puede_ver_costos: boolean
   created_at?: string | null
   updated_at?: string | null
 }

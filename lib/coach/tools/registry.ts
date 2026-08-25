@@ -314,3 +314,23 @@ export const COACH_TOOL_REGISTRY: Record<string, ToolRegistryEntry<any>> = {
 }
 
 export const COACH_MUTATING_TOOLS = Object.keys(COACH_TOOL_REGISTRY)
+
+/**
+ * Tools de SOLO LECTURA que devuelven plata.
+ *
+ * `COACH_MUTATING_TOOLS` cubre las que escriben, y esas ya pasan por
+ * `puedeEjecutarTool`. Las de lectura no pasaban por ningún gate: cualquiera
+ * con acceso al Coach podía preguntarle "¿cuánto gastamos este mes?" o "¿quién
+ * nos debe plata?" y recibir la respuesta, sin importar qué módulos viera en la
+ * app (PLAN-ACCESO-Y-USO B3.4, ago 2026).
+ *
+ * Se filtran por `verCostos`, el mismo permiso que oculta precios y food cost
+ * en las pantallas. `buscar_receta` no está en la lista porque su ficha técnica
+ * sigue siendo útil sin costos: se le quitan los campos de plata y ya.
+ */
+export const COACH_COST_TOOLS = [
+  'ultimo_precio',
+  'gasto_periodo',
+  'consultar_ventas',
+  'consultar_deudores',
+]

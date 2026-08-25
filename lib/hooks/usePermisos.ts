@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth/context'
 import { useRestauranteId } from './useRestauranteId'
 import { useRestauranteConfig } from './useRestauranteConfig'
 import { MODULOS_EMPRENDIMIENTO } from '@/lib/constants'
-import { puedeVerModulo, resolverModulosEfectivos } from '@/lib/permisos/resolver'
+import { puedeVerCostos, puedeVerModulo, resolverModulosEfectivos } from '@/lib/permisos/resolver'
 import type { RolPermiso } from '@/types'
 
 const SWR_OPTS = {
@@ -27,6 +27,8 @@ interface PermisosState {
   puedeVer: (modulo: string) => boolean
   puedeEditar: (recurso: 'stock' | 'equipo' | 'recetas' | 'carta') => boolean
   puedeEliminar: boolean
+  /** Ve precios, costos, food cost, margen y stock valorizado. Configurable por puesto. */
+  verCostos: boolean
   isAdmin: boolean
   /** 'emprendimiento' | null — perfil del restaurante (restaurantes.configuracion.perfil) */
   perfilRestaurante: string | null
@@ -41,12 +43,17 @@ interface PermisosData {
   allPermisos: RolPermiso[]
   /** null = sin puesto asignado, usar rol_permisos como fallback */
   modulosEfectivos: string[] | null
+  /** `puestos.ver_costos` del puesto asignado. null = sin puesto. */
+  verCostosPuesto: boolean | null
+  /** `equipo_miembros.ver_costos` — override por persona. null = sin override. */
+  verCostosMiembro: boolean | null
 }
 
 interface MiembroPuestoRow {
   puesto_id: string | null
   modulos_extra: string[] | null
   modulos_restringidos: string[] | null
+  ver_costos: boolean | null
 }
 
 function permisosKey(restauranteId: string, userId: string, dbRol: string) {
@@ -68,7 +75,7 @@ async function fetchPermisosData(key: string): Promise<PermisosData> {
   const allPromise = supabase.from('rol_permisos').select('*').eq('restaurante_id', restauranteId).order('rol')
   const miembroPromise = dbRol === 'admin'
     ? null
-    : supabase.from('equipo_miembros').select('puesto_id, modulos_extra, modulos_restringidos')
+    : supabase.from('equipo_miembros').select('puesto_id, modulos_extra, modulos_restringidos, ver_costos')
         .eq('restaurante_id', restauranteId).eq('auth_user_id', userId).eq('activo', true).maybeSingle()
 
   const [allRes, miembroRes] = await Promise.all([allPromise, miembroPromise])
@@ -77,17 +84,27 @@ async function fetchPermisosData(key: string): Promise<PermisosData> {
   const allPermisos = (allRes.data ?? []) as RolPermiso[]
 
   let modulosEfectivos: string[] | null = null
+  let verCostosPuesto: boolean | null = null
   const miembro = miembroRes?.data as MiembroPuestoRow | null | undefined
   if (miembro?.puesto_id) {
-    const { data: puesto } = await supabase.from('puestos').select('permisos_app').eq('id', miembro.puesto_id).maybeSingle()
+    const { data: puesto } = await supabase.from('puestos').select('permisos_app, ver_costos').eq('id', miembro.puesto_id).maybeSingle()
     modulosEfectivos = resolverModulosEfectivos({
       permisosApp: puesto?.permisos_app as string[] | null | undefined,
       modulosExtra: miembro.modulos_extra,
       modulosRestringidos: miembro.modulos_restringidos,
     })
+    // Independiente de modulosEfectivos a propósito: un puesto sin permisos_app
+    // cargados degrada al fallback por rol para los MÓDULOS, pero su ver_costos
+    // sigue siendo una decisión explícita del admin y vale igual.
+    verCostosPuesto = (puesto?.ver_costos as boolean | null | undefined) ?? null
   }
 
-  return { allPermisos, modulosEfectivos }
+  return {
+    allPermisos,
+    modulosEfectivos,
+    verCostosPuesto,
+    verCostosMiembro: miembro?.ver_costos ?? null,
+  }
 }
 
 export function usePermisos(): PermisosState {
@@ -108,6 +125,8 @@ export function usePermisos(): PermisosState {
 
   const allPermisos = data?.allPermisos ?? SIN_PERMISOS
   const modulosEfectivos = data?.modulosEfectivos ?? null
+  const verCostosPuesto = data?.verCostosPuesto ?? null
+  const verCostosMiembro = data?.verCostosMiembro ?? null
   const permisos = useMemo(() => allPermisos.find(p => p.rol === dbRol) ?? null, [allPermisos, dbRol])
   const loading = isLoading || configLoading
   const error = swrError ? errMsg(swrError, 'Error al cargar permisos') : null
@@ -130,6 +149,15 @@ export function usePermisos(): PermisosState {
     if (modulo === 'home') return true
     return (perfilModulos as string[]).includes(modulo)
   }, [perfilModulos])
+
+  // Ve plata: precios de compra, costo de receta, food cost, margen, stock
+  // valorizado. Era `isAdmin` cableado en cada pantalla — ver lib/permisos/resolver.ts.
+  const verCostos = useMemo(() => puedeVerCostos({
+    isAdmin: dbRol === 'admin',
+    overrideMiembro: verCostosMiembro,
+    verCostosPuesto,
+    fallbackRol: permisos?.puede_ver_costos,
+  }), [dbRol, verCostosMiembro, verCostosPuesto, permisos])
 
   const puedeEditar = useCallback((recurso: 'stock' | 'equipo' | 'recetas' | 'carta'): boolean => {
     if (dbRol === 'admin') return true
@@ -187,6 +215,7 @@ export function usePermisos(): PermisosState {
     puedeVer,
     puedeEditar,
     puedeEliminar: dbRol === 'admin' || (permisos?.puede_eliminar ?? false),
+    verCostos,
     isAdmin: dbRol === 'admin',
     perfilRestaurante,
     moduloEnPerfil,

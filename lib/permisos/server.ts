@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { COACH_TOOL_REGISTRY } from '@/lib/coach/tools/registry'
-import { puedeVerModulo, resolverModulosEfectivos } from '@/lib/permisos/resolver'
+import { puedeVerCostos, puedeVerModulo, resolverModulosEfectivos } from '@/lib/permisos/resolver'
 
 // Replica server-side, sin cambiar semántica, la cascada de dos pasos que hoy es client-only:
 // 1) lib/auth/context.tsx: mapRol(user_restaurantes.rol, equipo_miembros.plaza_asignada) -> Rol de la app.
@@ -49,6 +49,12 @@ export interface PermisosServer {
   isAdmin: boolean
   puedeVer: (modulo: string) => boolean
   puedeEditar: (recurso: 'stock' | 'carta') => boolean
+  /**
+   * Ve precios, costos y food cost. Se resuelve acá y no en el cliente porque
+   * el Coach devuelve estos numeros desde el server: esconder un chip en la UI
+   * no sirve de nada si el modelo igual los recibe y los dice.
+   */
+  verCostos: boolean
 }
 
 export async function getPermisosServer(
@@ -61,11 +67,11 @@ export async function getPermisosServer(
   const permisoRol = toPermisoRol(appRol)
 
   if (permisoRol === 'admin') {
-    return { isAdmin: true, puedeVer: () => true, puedeEditar: () => true }
+    return { isAdmin: true, puedeVer: () => true, puedeEditar: () => true, verCostos: true }
   }
 
   const { data: miembro } = await supabase.from('equipo_miembros')
-    .select('puesto_id, plaza_asignada, modulos_extra, modulos_restringidos')
+    .select('puesto_id, plaza_asignada, modulos_extra, modulos_restringidos, ver_costos')
     .eq('restaurante_id', restauranteId).eq('auth_user_id', userId).eq('activo', true)
     .maybeSingle()
 
@@ -73,13 +79,15 @@ export async function getPermisosServer(
   const appRolConPlaza = mapRol(ur?.rol ?? '', miembro?.plaza_asignada ?? null)
   const permisoRolFinal = toPermisoRol(appRolConPlaza)
   if (permisoRolFinal === 'admin') {
-    return { isAdmin: true, puedeVer: () => true, puedeEditar: () => true }
+    return { isAdmin: true, puedeVer: () => true, puedeEditar: () => true, verCostos: true }
   }
 
   let modulosEfectivos: string[] | null = null
+  let verCostosPuesto: boolean | null = null
   if (miembro?.puesto_id) {
     const { data: puesto } = await supabase.from('puestos')
-      .select('permisos_app').eq('id', miembro.puesto_id).maybeSingle()
+      .select('permisos_app, ver_costos').eq('id', miembro.puesto_id).maybeSingle()
+    verCostosPuesto = (puesto?.ver_costos as boolean | null | undefined) ?? null
     modulosEfectivos = resolverModulosEfectivos({
       permisosApp: puesto?.permisos_app as string[] | null | undefined,
       modulosExtra: miembro.modulos_extra as string[] | null,
@@ -87,10 +95,10 @@ export async function getPermisosServer(
     })
   }
 
-  let permisos: { modulos_visibles: string[]; puede_editar_stock: boolean; puede_editar_carta: boolean } | null = null
+  let permisos: { modulos_visibles: string[]; puede_editar_stock: boolean; puede_editar_carta: boolean; puede_ver_costos: boolean } | null = null
   if (modulosEfectivos === null) {
     const { data } = await supabase.from('rol_permisos')
-      .select('modulos_visibles, puede_editar_stock, puede_editar_carta')
+      .select('modulos_visibles, puede_editar_stock, puede_editar_carta, puede_ver_costos')
       .eq('restaurante_id', restauranteId).eq('rol', permisoRolFinal).maybeSingle()
     permisos = data
   }
@@ -108,6 +116,12 @@ export async function getPermisosServer(
     puedeEditar: recurso => recurso === 'stock' ? (permisos?.puede_editar_stock ?? false)
       : recurso === 'carta' ? (permisos?.puede_editar_carta ?? false)
       : false,
+    verCostos: puedeVerCostos({
+      isAdmin: false,
+      overrideMiembro: (miembro?.ver_costos as boolean | null | undefined) ?? null,
+      verCostosPuesto,
+      fallbackRol: permisos?.puede_ver_costos,
+    }),
   }
 }
 

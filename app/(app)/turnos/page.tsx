@@ -104,13 +104,13 @@ const EMPTY_MIEMBRO_FORM: MiembroForm = {
 
 interface PuestoForm {
   nombre: string; descripcion: string; nivel: string
-  plaza_default: string; permisos_app: string[]; tareas_funciones: string
+  plaza_default: string; permisos_app: string[]; ver_costos: boolean; tareas_funciones: string
   area_key: string; reporta_a_puesto_id: string
   obj_pct_postre: string; obj_pct_cafe: string; obj_ticket_promedio: string
 }
 const EMPTY_PUESTO_FORM: PuestoForm = {
   nombre: '', descripcion: '', nivel: 'cocinero',
-  plaza_default: '', permisos_app: [], tareas_funciones: '',
+  plaza_default: '', permisos_app: [], ver_costos: false, tareas_funciones: '',
   area_key: '', reporta_a_puesto_id: '',
   obj_pct_postre: '', obj_pct_cafe: '', obj_ticket_promedio: '',
 }
@@ -310,6 +310,46 @@ function PuestoFormBody({
           })}
         </div>
       </div>
+      {/* ── Ver costos ──────────────────────────────────────────────────
+          Bloque aparte y no un modulo mas de la grilla de arriba: no es una
+          pantalla que se muestra, es acceso a la plata del negocio (precios de
+          compra, food cost, margen, stock valorizado). El admin tiene que ver
+          que esta tomando la decision, no tildarlo de paso entre otros veinte. */}
+      <div>
+        <label style={{ ...labelStyle, marginBottom: 8 }}>Acceso a informacion economica</label>
+        <button type="button" onClick={() => setForm(f => ({ ...f, ver_costos: !f.ver_costos }))}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12,
+            border: form.ver_costos ? '1px solid rgba(245,158,11,.45)' : '1px solid var(--border)',
+            cursor: 'pointer', textAlign: 'left', width: '100%',
+            background: form.ver_costos ? 'rgba(245,158,11,.10)' : 'var(--surface)',
+          }}
+        >
+          <div style={{
+            width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+            background: form.ver_costos ? '#f59e0b' : 'var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 16, color: form.ver_costos ? '#fff' : 'var(--text-3)' }}>payments</span>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: form.ver_costos ? 600 : 400, color: 'var(--text-1)' }}>
+              Ve costos y food cost
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
+              Precios de compra, costo de recetas, margen y stock valorizado
+            </div>
+          </div>
+          <div style={{
+            width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+            background: form.ver_costos ? '#f59e0b' : 'transparent',
+            border: form.ver_costos ? 'none' : '2px solid var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {form.ver_costos && <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#fff' }}>check</span>}
+          </div>
+        </button>
+      </div>
       <div>
         <label style={labelStyle}>Tareas y funciones (una por línea)</label>
         <textarea style={{ ...fieldStyle, minHeight: 80, resize: 'vertical' }} value={form.tareas_funciones}
@@ -417,6 +457,8 @@ export default function TurnosPage() {
   const [overrideMode, setOverrideMode] = useState(false)
   const [localExtra, setLocalExtra] = useState<string[]>([])
   const [localRestringidos, setLocalRestringidos] = useState<string[]>([])
+  // null = hereda del puesto; true/false = override explicito para esta persona.
+  const [localVerCostos, setLocalVerCostos] = useState<boolean | null>(null)
   const [savingOverride, setSavingOverride] = useState(false)
 
   useEffect(() => { fetchTurnos(weekStart, weekEnd) }, [weekStart, weekEnd, fetchTurnos])
@@ -454,7 +496,7 @@ export default function TurnosPage() {
 
   function openFicha(m: Miembro) {
     setSelectedMiembro(m); setEditingMiembro(false); setEquipoView('ficha')
-    setLocalExtra(m.modulos_extra); setLocalRestringidos(m.modulos_restringidos)
+    setLocalExtra(m.modulos_extra); setLocalRestringidos(m.modulos_restringidos); setLocalVerCostos(m.ver_costos)
     setOverrideMode(false)
   }
 
@@ -553,7 +595,7 @@ export default function TurnosPage() {
     if (!selectedMiembro) return
     setSavingOverride(true)
     try {
-      await actualizarOverridesMiembro(selectedMiembro.id, localExtra, localRestringidos)
+      await actualizarOverridesMiembro(selectedMiembro.id, localExtra, localRestringidos, localVerCostos)
       setOverrideMode(false)
       showToast('Permisos actualizados')
     } catch (e: any) { alert(e.message) }
@@ -638,6 +680,7 @@ export default function TurnosPage() {
       nivel: selectedPuesto.nivel ?? 'cocinero',
       plaza_default: selectedPuesto.plaza_default ?? '',
       permisos_app: selectedPuesto.permisos_app ?? [],
+      ver_costos: selectedPuesto.ver_costos ?? false,
       tareas_funciones: (selectedPuesto.tareas_funciones ?? []).join('\n'),
       area_key: selectedPuesto.area_key ?? '',
       reporta_a_puesto_id: selectedPuesto.reporta_a_puesto_id ?? '',
@@ -658,6 +701,7 @@ export default function TurnosPage() {
         nivel: puestoForm.nivel,
         plaza_default: puestoForm.plaza_default || null,
         permisos_app: puestoForm.permisos_app,
+        ver_costos: puestoForm.ver_costos,
         tareas_funciones: puestoForm.tareas_funciones.split('\n').map(s => s.trim()).filter(Boolean),
         area_key: puestoForm.area_key || null,
         reporta_a_puesto_id: puestoForm.reporta_a_puesto_id || null,
@@ -678,6 +722,7 @@ export default function TurnosPage() {
         nivel: puestoForm.nivel,
         plaza_default: puestoForm.plaza_default || null,
         permisos_app: puestoForm.permisos_app,
+        ver_costos: puestoForm.ver_costos,
         tareas_funciones: puestoForm.tareas_funciones.split('\n').map(s => s.trim()).filter(Boolean),
         area_key: puestoForm.area_key || null,
         reporta_a_puesto_id: puestoForm.reporta_a_puesto_id || null,
@@ -697,6 +742,9 @@ export default function TurnosPage() {
       nivel: tpl.nivel,
       plaza_default: tpl.plaza_default ?? '',
       permisos_app: [...tpl.permisos_app],
+      // Las plantillas nunca otorgan costos: es una decision explicita del
+      // admin, no algo que se arrastre por elegir un preset de puesto.
+      ver_costos: false,
       tareas_funciones: tpl.tareas_funciones.join('\n'),
       area_key: tpl.area_key,
       reporta_a_puesto_id: '',
@@ -972,7 +1020,7 @@ export default function TurnosPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Acceso a módulos</div>
             <button
-              onClick={() => { setOverrideMode(v => !v); setLocalExtra(m.modulos_extra); setLocalRestringidos(m.modulos_restringidos) }}
+              onClick={() => { setOverrideMode(v => !v); setLocalExtra(m.modulos_extra); setLocalRestringidos(m.modulos_restringidos); setLocalVerCostos(m.ver_costos) }}
               style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}
             >
               {overrideMode ? 'Cancelar' : 'Personalizar'}
@@ -1021,6 +1069,34 @@ export default function TurnosPage() {
                   )
                 })}
               </div>
+              {/* Override de costos: cicla hereda -> si -> no. Aparte de la
+                  grilla de modulos porque no es una pantalla, es la plata. */}
+              {(() => {
+                const puestoDe = puestos.find(pu => pu.id === m.puesto_id)
+                const heredado = puestoDe?.ver_costos ?? false
+                const efectivo = localVerCostos ?? heredado
+                const etiqueta = localVerCostos === null
+                  ? `Hereda del puesto (${heredado ? 've costos' : 'no ve'})`
+                  : localVerCostos ? 'Ve costos (forzado)' : 'No ve costos (bloqueado)'
+                return (
+                  <button
+                    onClick={() => setLocalVerCostos(prev => prev === null ? true : prev ? false : null)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', marginTop: 12,
+                      borderRadius: 10, cursor: 'pointer', textAlign: 'left', width: '100%',
+                      border: localVerCostos === null ? '1px dashed var(--border)' : '1px solid rgba(245,158,11,.45)',
+                      background: efectivo ? 'rgba(245,158,11,.10)' : 'var(--bg)',
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 18, color: efectivo ? '#f59e0b' : 'var(--text-3)' }}>payments</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>Costos y food cost</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>{etiqueta}</div>
+                    </div>
+                    <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)' }}>swap_horiz</span>
+                  </button>
+                )
+              })()}
               <button
                 onClick={saveOverrides} disabled={savingOverride}
                 style={{ ...btnPrimary, marginTop: 14 }}

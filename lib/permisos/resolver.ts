@@ -74,3 +74,38 @@ export function puedeVerModulo(opts: {
   if (!opts.modulosVisibles) return false
   return listaIncluyeModulo(opts.modulosVisibles, modulo)
 }
+
+/**
+ * Si el usuario ve plata: precios de compra, costo de receta, food cost,
+ * margen y stock valorizado.
+ *
+ * Antes era `rol === 'admin'` cableado en cada pantalla, así que el sous chef
+ * —que decide porciones y sustituciones todos los días— no veía un solo número
+ * de costo. Ahora es un permiso propio, con la misma cascada de 3 capas que
+ * los módulos:
+ *
+ *   1. admin           → siempre, sin mirar nada
+ *   2. override persona→ equipo_miembros.ver_costos (null = no hay override)
+ *   3. puesto          → puestos.ver_costos
+ *   4. sin puesto      → rol_permisos.puede_ver_costos
+ *
+ * El default de todo es `false`: si nadie lo configuró, la plata no se muestra.
+ * Es lo contrario del default de los módulos, y a propósito — equivocarse para
+ * el lado de ocultar un costo es barato; para el otro lado, no.
+ */
+export function puedeVerCostos(opts: {
+  isAdmin: boolean
+  /** `equipo_miembros.ver_costos`. null/undefined = sin override, hereda. */
+  overrideMiembro?: boolean | null
+  /** `puestos.ver_costos` del puesto asignado. undefined = no tiene puesto. */
+  verCostosPuesto?: boolean | null
+  /** `rol_permisos.puede_ver_costos`, solo se usa si no hay puesto. */
+  fallbackRol?: boolean | null
+}): boolean {
+  if (opts.isAdmin) return true
+  // El override por persona gana incluso para negar: un puesto que ve costos
+  // con una persona puntual que no debe verlos es un caso legítimo.
+  if (opts.overrideMiembro != null) return opts.overrideMiembro
+  if (opts.verCostosPuesto != null) return opts.verCostosPuesto
+  return opts.fallbackRol ?? false
+}

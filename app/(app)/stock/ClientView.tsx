@@ -218,7 +218,7 @@ export default function StockPage() {
     if (!RESTAURANTE_ID) return
     fetchComparador().then(r => setComparadorPrecios(r.comparador))
   }, [RESTAURANTE_ID, fetchComparador])
-  const { puedeEditar, puedeEliminar, isAdmin } = usePermisos()
+  const { puedeEditar, puedeEliminar, isAdmin, verCostos } = usePermisos()
   const canEdit = isAdmin || puedeEditar('stock')
   const isDesktop = useIsDesktop()
   const [isNarrow, setIsNarrow] = useState(false)
@@ -940,7 +940,7 @@ export default function StockPage() {
   )
 
   // Cantidad de columnas visibles (para colSpan de estados vacíos)
-  const colCount = 3 + (isDesktop ? 2 : 0) + (isAdmin ? 2 : 0)
+  const colCount = 3 + (isDesktop ? 2 : 0) + (verCostos ? 2 : 0)
 
   const totalValor = useMemo(() =>
     filtered.reduce((acc, p) => acc + valorStock(p), 0),
@@ -1177,16 +1177,16 @@ export default function StockPage() {
     doc.setTextColor(0, 0, 0)
     autoTable(doc, {
       startY: 38,
-      head: [isAdmin
+      head: [verCostos
         ? ['#', 'Producto', 'Categoría', 'Unidad', 'Precio', 'Stock', 'Valor', 'Estado']
         : ['#', 'Producto', 'Categoría', 'Unidad', 'Stock', 'Estado']],
-      body: filtered.map((p, i) => isAdmin
+      body: filtered.map((p, i) => verCostos
         ? [i + 1, p.nombre, p.categoria, p.unidad, fmtPrecio(p.precio_unitario), p.stock_actual, valorStock(p) > 0 ? fmtValor(valorStock(p)) : '—', p.estado.toUpperCase()]
         : [i + 1, p.nombre, p.categoria, p.unidad, p.stock_actual, p.estado.toUpperCase()]),
       styles: { fontSize: 9 },
       headStyles: { fillColor: [30, 41, 59] },
     })
-    if (totalValor > 0 && isAdmin) {
+    if (totalValor > 0 && verCostos) {
       const finalY = (doc as InstanceType<typeof jsPDF> & { lastAutoTable: { finalY: number } }).lastAutoTable?.finalY ?? 200
       doc.setFontSize(9)
       doc.setTextColor(60, 60, 60)
@@ -1624,10 +1624,10 @@ export default function StockPage() {
             <col style={{ width: isDesktop ? '30%' : undefined }} />
             {isDesktop && <col style={{ width: '14%' }} />}
             {isDesktop && <col style={{ width: '16%' }} />}
-            {isAdmin && <col style={{ width: isDesktop ? '10%' : 64 }} />}
+            {verCostos && <col style={{ width: isDesktop ? '10%' : 64 }} />}
             <col style={{ width: isDesktop ? '14%' : isNarrow ? 64 : 84 }} />
             <col style={{ width: isDesktop ? '6%' : isNarrow ? 62 : 56 }} />
-            {isAdmin && <col style={{ width: isDesktop ? '10%' : 92 }} />}
+            {verCostos && <col style={{ width: isDesktop ? '10%' : 92 }} />}
           </colgroup>
           <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
             <tr>
@@ -1654,10 +1654,10 @@ export default function StockPage() {
                   </span>
                 </th>
               )}
-              {isAdmin && <th style={{ ...thStyle, background: 'var(--navy)', textAlign: 'right', paddingRight: 8 }}>Precio</th>}
+              {verCostos && <th style={{ ...thStyle, background: 'var(--navy)', textAlign: 'right', paddingRight: 8 }}>Precio</th>}
               <th style={{ ...thStyle, background: '#243a5e', color: 'rgba(255,255,255,.9)' }}>Stock</th>
               <th style={{ ...thStyle, background: 'var(--navy)' }}>Estado</th>
-              {isAdmin && <th style={{ ...thStyle, background: 'var(--navy)' }} aria-label="Acciones"></th>}
+              {verCostos && <th style={{ ...thStyle, background: 'var(--navy)' }} aria-label="Acciones"></th>}
             </tr>
           </thead>
           {loading ? (
@@ -1715,7 +1715,7 @@ export default function StockPage() {
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>
                           {!isDesktop && `${p.categoria} · `}{p.unidad_uso ?? p.unidad}
-                          {val > 0 && isAdmin && !isDesktop && <span style={{ color: 'var(--accent)', fontWeight: 700, marginLeft: 6, fontFamily: "'DM Mono', monospace" }}>{fmtValor(val)}</span>}
+                          {val > 0 && verCostos && !isDesktop && <span style={{ color: 'var(--accent)', fontWeight: 700, marginLeft: 6, fontFamily: "'DM Mono', monospace" }}>{fmtValor(val)}</span>}
                         </div>
                         {isNarrow && (
                           <div style={{ fontSize: 9.5, color: 'var(--text-3)', marginTop: 2, fontFamily: "'DM Mono', monospace", display: 'flex', gap: 8 }}>
@@ -1728,7 +1728,7 @@ export default function StockPage() {
                     {isDesktop && (
                       <td style={{ padding: '11px 8px' }}>
                         <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{p.categoria || '—'}</span>
-                        {val > 0 && isAdmin && (
+                        {val > 0 && verCostos && (
                           <div style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700, marginTop: 1, fontFamily: "'DM Mono', monospace" }}>{fmtValor(val)}</div>
                         )}
                       </td>
@@ -1750,7 +1750,7 @@ export default function StockPage() {
                       )
                     })()}
                     {/* Precio */}
-                    {isAdmin && (
+                    {verCostos && (
                     <td style={{ padding: '11px 8px 11px 4px', textAlign: 'right' }}>
                       <span style={{ fontSize: 12, fontWeight: 500, fontFamily: "'DM Mono', monospace", color: 'var(--text-2)' }}>
                         {fmtPrecio(p.precio_unitario)}
@@ -1889,7 +1889,7 @@ export default function StockPage() {
           <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{isDesktop ? 'Doble clic para editar · Ctrl+V para pegar Excel' : 'Doble tap para editar'}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {totalValor > 0 && isAdmin && (
+          {totalValor > 0 && verCostos && (
             <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-2)' }}>
               Stock: <span style={{ color: 'var(--accent)', fontFamily: "'DM Mono', monospace" }}>{fmtValor(totalValor)}</span>
             </span>

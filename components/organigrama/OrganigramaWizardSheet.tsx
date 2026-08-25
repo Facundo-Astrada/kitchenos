@@ -43,7 +43,7 @@ interface OrganigramaWizardSheetProps {
   puestos: Puesto[]
   onSetAreaActiva: (key: AreaKey, activa: boolean) => Promise<void>
   onToggleAreaResponsable: (key: AreaKey, miembroId: string) => Promise<void>
-  onCrearMiembro: (datos: Omit<Miembro, 'id' | 'restaurante_id' | 'created_at' | 'activo' | 'modulos_extra' | 'modulos_restringidos'>) => Promise<string>
+  onCrearMiembro: (datos: Omit<Miembro, 'id' | 'restaurante_id' | 'created_at' | 'activo' | 'modulos_extra' | 'modulos_restringidos' | 'ver_costos'>) => Promise<string>
   onActualizarMiembro: (id: string, datos: Partial<Omit<Miembro, 'id' | 'restaurante_id' | 'created_at'>>) => Promise<void>
   onCrearPuesto: (datos: Omit<Puesto, 'id' | 'restaurante_id' | 'created_at'>) => Promise<string>
 }
@@ -117,6 +117,9 @@ export function OrganigramaWizardSheet({
           descripcion: 'Dirección general del negocio',
           nivel: 'admin',
           plaza_default: null,
+          // Dirección es el único puesto que nace viendo la plata del negocio;
+          // el resto lo otorga el admin a mano (PLAN-ACCESO-Y-USO B3).
+          ver_costos: true,
           area_key: 'direccion',
           reporta_a_puesto_id: null,
           orden: 0,

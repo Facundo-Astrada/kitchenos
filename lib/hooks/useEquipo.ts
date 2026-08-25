@@ -34,6 +34,8 @@ export interface Miembro {
   costo_hora: number | null
   modulos_extra: string[]
   modulos_restringidos: string[]
+  /** Override de `puestos.ver_costos` para esta persona. null = hereda del puesto. */
+  ver_costos: boolean | null
   objetivos: ObjetivosVenta   // override puntual sobre los objetivos del puesto (PLAN-4-CAPAS B6)
   restaurante_id: string
   created_at: string
@@ -59,6 +61,8 @@ export interface Puesto {
   permisos_app: string[]        // ModuloId[]
   nivel: string                 // admin | sous_chef | cocinero | bachero
   plaza_default: string | null
+  /** Ve precios, costos, food cost, margen y stock valorizado (PLAN-ACCESO-Y-USO B3). Default false. */
+  ver_costos: boolean
   reporta_a_puesto_id: string | null  // organigrama: puesto al que reporta. NULL = raíz
   area_key: string | null             // organigrama: clave de AREA_CATALOGO
   orden: number                        // organigrama: orden manual dentro del área
@@ -309,6 +313,7 @@ async function fetchMiembrosData(key: string): Promise<Miembro[]> {
     ...m,
     modulos_extra: m.modulos_extra ?? [],
     modulos_restringidos: m.modulos_restringidos ?? [],
+    ver_costos: m.ver_costos ?? null,
     objetivos: m.objetivos ?? {},
   })) as Miembro[]
 }
@@ -483,7 +488,7 @@ export function useEquipo() {
   const fetchMiembros = useCallback(async () => { await mutateMiembros() }, [mutateMiembros])
 
   async function crearMiembro(
-    datos: Omit<Miembro, 'id' | 'restaurante_id' | 'created_at' | 'activo' | 'modulos_extra' | 'modulos_restringidos' | 'objetivos'>
+    datos: Omit<Miembro, 'id' | 'restaurante_id' | 'created_at' | 'activo' | 'modulos_extra' | 'modulos_restringidos' | 'ver_costos' | 'objetivos'>
   ): Promise<string> {
     try {
       const { data, error } = await supabase.from('equipo_miembros').insert({
@@ -519,14 +524,16 @@ export function useEquipo() {
     }
   }
 
-  async function actualizarOverridesMiembro(id: string, modulos_extra: string[], modulos_restringidos: string[]) {
+  // `ver_costos`: null = hereda del puesto. Viaja junto a los overrides de
+  // modulos porque se edita en la misma pantalla ("Personalizar" de la ficha).
+  async function actualizarOverridesMiembro(id: string, modulos_extra: string[], modulos_restringidos: string[], ver_costos: boolean | null = null) {
     try {
       const { error } = await supabase
         .from('equipo_miembros')
-        .update({ modulos_extra, modulos_restringidos })
+        .update({ modulos_extra, modulos_restringidos, ver_costos })
         .eq('id', id)
       if (error) throw error
-      mutateMiembros(prev => (prev ?? []).map(m => m.id === id ? { ...m, modulos_extra, modulos_restringidos } : m), { revalidate: false })
+      mutateMiembros(prev => (prev ?? []).map(m => m.id === id ? { ...m, modulos_extra, modulos_restringidos, ver_costos } : m), { revalidate: false })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al actualizar permisos del miembro'
       console.error('[useEquipo] actualizarOverridesMiembro Error:', msg)

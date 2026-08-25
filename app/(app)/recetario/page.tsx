@@ -220,7 +220,7 @@ export default function RecetarioPage() {
   const { productos: stockProductos, agregarProducto } = useStock()
   const { items: cartaItems, loading: cartaLoading, actualizarPlatoRecetaOps, actualizarItem: actualizarCartaItem, agregarPlatoReceta, eliminarPlatoReceta } = useCarta()
   const { categorias: catDB } = useCategoriasProducto()
-  const { puedeEditar, isAdmin } = usePermisos()
+  const { puedeEditar, isAdmin, verCostos } = usePermisos()
   const canEdit = isAdmin || puedeEditar('recetas')
   const isDesktop = useIsDesktop()
 
@@ -416,11 +416,12 @@ export default function RecetarioPage() {
             <button onClick={() => router.back()} style={btnClear}><span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>arrow_back</span></button>
             <div>
               <div style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>Recetario</div>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,.45)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Fichas técnicas{isAdmin && ' · Food cost'}</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,.45)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Fichas técnicas{verCostos && ' · Food cost'}</div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            {isAdmin && (
+            {/* El XLSX lleva precio, costo total, costo/porcion, FC% y margen. */}
+            {verCostos && (
               <button onClick={exportXLSX} title="Exportar Excel"
                 style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 8, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
               >
@@ -522,10 +523,11 @@ export default function RecetarioPage() {
       {/* Body */}
       <div data-coach-target="recetario-lista" style={{ flex: 1, overflowY: 'auto', padding: '12px 14px 24px' }}>
         {tab === 'platos' ? (
-          <PlatosView platos={platosCompuestos} recetas={recetasPublicadas} loading={cartaLoading} actualizarPlatoRecetaOps={actualizarPlatoRecetaOps} actualizarItem={actualizarCartaItem} agregarPlatoReceta={agregarPlatoReceta} eliminarPlatoReceta={eliminarPlatoReceta} agregarReceta={agregarReceta} stockProductos={stockProductos} search={search} catFilter={catFilter} isDesktop={isDesktop} isAdmin={isAdmin} canEdit={canEdit} onOpenReceta={(rid) => router.push(`/recetario/${rid}`)} />
+          <PlatosView platos={platosCompuestos} recetas={recetasPublicadas} loading={cartaLoading} actualizarPlatoRecetaOps={actualizarPlatoRecetaOps} actualizarItem={actualizarCartaItem} agregarPlatoReceta={agregarPlatoReceta} eliminarPlatoReceta={eliminarPlatoReceta} agregarReceta={agregarReceta} stockProductos={stockProductos} search={search} catFilter={catFilter} isDesktop={isDesktop} verCostos={verCostos} canEdit={canEdit} onOpenReceta={(rid) => router.push(`/recetario/${rid}`)} />
         ) : (<>
         {/* Salud del recetario */}
-        {tab === 'recetas' && isAdmin && !loading && salud.total > 0 && (
+        {/* Salud lista costeo incompleto y food cost critico: es plata. */}
+        {tab === 'recetas' && verCostos && !loading && salud.total > 0 && (
           <div style={{ marginBottom: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
             <button onClick={() => setSaludOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '11px 12px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#f59e0b' }}>health_and_safety</span>
@@ -682,7 +684,7 @@ interface EdicionGramaje {
   enMise: boolean
 }
 
-function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoRecetaOps, actualizarItem, agregarPlatoReceta, eliminarPlatoReceta, agregarReceta, stockProductos, search, catFilter, isDesktop, isAdmin, canEdit, onOpenReceta }: {
+function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoRecetaOps, actualizarItem, agregarPlatoReceta, eliminarPlatoReceta, agregarReceta, stockProductos, search, catFilter, isDesktop, verCostos, canEdit, onOpenReceta }: {
   platos: CartaItemEnriquecido[]
   recetas: RecetaConCosto[]
   loading: boolean
@@ -695,7 +697,7 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
   search: string
   catFilter: string
   isDesktop: boolean
-  isAdmin: boolean
+  verCostos: boolean
   canEdit: boolean
   onOpenReceta: (recetaId: string) => void
 }) {
@@ -852,8 +854,8 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
                 <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{p.nombre}</div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{p.categoria}</span>
-                  {isAdmin && (p.precio_venta ?? 0) > 0 && <span style={{ fontSize: 11, color: 'var(--text-2)', fontFamily: "'DM Mono', monospace" }}>{fmtMoneyP(p.precio_venta)}</span>}
-                  {isAdmin && fc != null && <span style={{ fontSize: 11, fontWeight: 800, color: fcColor, fontFamily: "'DM Mono', monospace" }}>{fc.toFixed(0)}% FC</span>}
+                  {verCostos && (p.precio_venta ?? 0) > 0 && <span style={{ fontSize: 11, color: 'var(--text-2)', fontFamily: "'DM Mono', monospace" }}>{fmtMoneyP(p.precio_venta)}</span>}
+                  {verCostos && fc != null && <span style={{ fontSize: 11, fontWeight: 800, color: fcColor, fontFamily: "'DM Mono', monospace" }}>{fc.toFixed(0)}% FC</span>}
                 </div>
               </div>
               {totalG > 0 && (

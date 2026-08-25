@@ -161,7 +161,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
   const { productos: stockProductos } = useStock()
   const { getHistorial } = useProduccionRegistros()
   const { items: cartaItems, crearItem, actualizarItem, eliminarItem, categorias: cartaCategorias } = useCarta()
-  const { isAdmin, puedeEditar } = usePermisos()
+  const { isAdmin, puedeEditar, verCostos } = usePermisos()
   const RESTAURANTE_ID = useRestauranteId()
   const canEdit = isAdmin || puedeEditar('recetas')
 
@@ -1017,6 +1017,12 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
         />
 
         {/* ═══ FOOD COST (colapsable) ═══ */}
+        {/* Gate de plata (PLAN-ACCESO-Y-USO B3): este bloque estaba SIN gatear.
+            El resto del Recetario ya ocultaba costos a los no-admin, pero abrir
+            una receta mostraba food cost, costo por porción, precio sugerido y
+            costo por kilo a cualquiera que tuviera el módulo. Era la fuga más
+            grande de las que había. */}
+        {verCostos && (
         <div style={{ padding: '18px 14px 0' }}>
           <button
             onClick={() => setFcOpen(!fcOpen)}
@@ -1225,7 +1231,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
               </div>
             </div>
           )}
-        </div>
+        </div>)}
       </div>
 
       {/* ── Ingrediente modal ── */}

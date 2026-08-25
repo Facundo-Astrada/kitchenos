@@ -6,6 +6,7 @@ import { fetchAllRows } from '@/lib/supabase/paginate'
 import { COACH_ERROR_MARK, COACH_PENDING_MARK } from '@/lib/coach/stream'
 import { getRestauranteId } from '@/lib/coach/restaurante'
 import { getPermisosServer, puedeEjecutarTool } from '@/lib/permisos/server'
+import { COACH_COST_TOOLS } from '@/lib/coach/tools/registry'
 import { proposeAction, COACH_MUTATING_TOOLS } from '@/lib/coach/tools/propose'
 import type { PendingAction } from '@/lib/coach/types'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -16,7 +17,10 @@ const fmtARS = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 const hits = new Map<string, number[]>()
 
 // ── M1: snapshot de datos reales del restaurante ──────────────
-async function buildSnapshot(supabase: SupabaseClient, screen?: string): Promise<string> {
+// `verCostos`: el snapshot va al system prompt, o sea que el modelo recibe
+// estos numeros ANTES de cualquier tool. Sin filtrarlo aca, gatear las tools no
+// sirve — el food cost del recetario ya estaria en su contexto.
+async function buildSnapshot(supabase: SupabaseClient, screen?: string, verCostos: boolean = true): Promise<string> {
   const hoy = new Date()
   const hoyStr = hoy.toISOString().split('T')[0]
   const en3dias = new Date(hoy.getTime() + 3 * 86_400_000).toISOString().split('T')[0]
@@ -96,7 +100,9 @@ async function buildSnapshot(supabase: SupabaseClient, screen?: string): Promise
         const motivos = new Map<string, number>()
         for (const r of m) { const k = r.motivo ?? 'otro'; motivos.set(k, (motivos.get(k) ?? 0) + 1) }
         const top = [...motivos.entries()].sort((a, b) => b[1] - a[1])[0]
-        lines.push(`Merma últimos 30 días: $${fmt(costo)} en ${m.length} registros${top ? ` (motivo más frecuente: ${top[0]})` : ''}.`)
+        lines.push(verCostos
+          ? `Merma últimos 30 días: $${fmt(costo)} en ${m.length} registros${top ? ` (motivo más frecuente: ${top[0]})` : ''}.`
+          : `Merma últimos 30 días: ${m.length} registros${top ? ` (motivo más frecuente: ${top[0]})` : ''}.`)
       }
     } catch { /* sin merma */ }
   }
@@ -116,7 +122,7 @@ async function buildSnapshot(supabase: SupabaseClient, screen?: string): Promise
         const fcAltas = conFC.filter(x => (x.food_cost ?? 0) > 33).map(x => `${x.nombre} (FC ${Math.round(x.food_cost!)}%)`)
         const drafts = r.filter(x => x.status === 'draft').length
         lines.push(`Recetario: ${total} recetas${drafts > 0 ? `, ${drafts} borradores` : ''}.`)
-        if (fcAltas.length) lines.push(`Recetas con FC alto (>33%): ${fcAltas.slice(0, 5).join('; ')}.`)
+        if (verCostos && fcAltas.length) lines.push(`Recetas con FC alto (>33%): ${fcAltas.slice(0, 5).join('; ')}.`)
       }
     } catch { /* sin recetas */ }
   }
@@ -470,11 +476,17 @@ const COACH_TOOLS = [
 
 type ToolInput = Record<string, unknown>
 
-async function executeTool(name: string, input: ToolInput, supabase: SupabaseClient, restauranteId: string | null): Promise<string> {
+async function executeTool(name: string, input: ToolInput, supabase: SupabaseClient, restauranteId: string | null, verCostos: boolean = true): Promise<string> {
   if (!restauranteId) return 'Error: no pude identificar tu restaurante. No ejecuté la acción.'
   const hoy = new Date().toISOString().split('T')[0]
 
   try {
+    // Punto 2 del gate de plata: aunque el modelo no deberia ver estas tools,
+    // no se ejecutan sin permiso. Es el boundary que importa.
+    if (COACH_COST_TOOLS.includes(name) && !verCostos) {
+      return 'Ese dato es de costos y tu puesto no los tiene habilitados. Pediselo al administrador.'
+    }
+
     if (name === 'buscar_receta') {
       const query = String(input.query ?? '').trim()
       if (!query) return 'Error: falta el nombre de la receta a buscar.'
@@ -509,8 +521,11 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
       if (r.categoria) result += `Categoría: ${r.categoria}\n`
       if (r.porciones) result += `Porciones: ${r.porciones}\n`
       if (r.tiempo_min) result += `Tiempo: ${r.tiempo_min} min\n`
-      if (precio > 0) result += `Precio venta: ${fmtARS(precio)}\n`
-      if (fc > 0) result += `Food cost: ${Math.round(fc)}%\n`
+      // Gate de plata (PLAN-ACCESO-Y-USO B3.4). El filtro va acá, en el server:
+      // el modelo no puede decir un número que nunca recibió. Esconder un chip
+      // en la UI no serviría de nada — la respuesta se arma de este lado.
+      if (verCostos && precio > 0) result += `Precio venta: ${fmtARS(precio)}\n`
+      if (verCostos && fc > 0) result += `Food cost: ${Math.round(fc)}%\n`
 
       if (ings && ings.length > 0) {
         result += `\nIngredientes:\n`
@@ -726,7 +741,7 @@ export async function POST(req: NextRequest) {
   const screen = (screenContext && typeof screenContext === 'object' && 'screen' in screenContext)
     ? String((screenContext as { screen?: unknown }).screen ?? '') : undefined
   try {
-    const snapshot = await buildSnapshot(supabase, screen || undefined)
+    const snapshot = await buildSnapshot(supabase, screen || undefined, permisos?.verCostos ?? false)
     if (snapshot) dynamicBlock += snapshot
   } catch { /* sin snapshot — seguimos */ }
 
@@ -779,9 +794,13 @@ Reglas:
 
   // Gate de permisos, punto 1 de 2: el modelo ni ve las tools mutantes que el usuario no
   // puede ejecutar. El punto 2 (el que realmente importa) es la revalidación en /api/coach/confirm.
-  const allowedTools = COACH_TOOLS.filter(t =>
-    !COACH_MUTATING_TOOLS.includes(t.name) || (permisos !== null && puedeEjecutarTool(permisos, t.name))
-  )
+  const allowedTools = COACH_TOOLS.filter(t => {
+    // Las de lectura que devuelven plata se filtran por verCostos: no estaban
+    // gateadas por nada, asi que cualquiera podia preguntarle al Coach el gasto
+    // del mes o quien debe. El punto 2 es la guarda dentro de executeTool.
+    if (COACH_COST_TOOLS.includes(t.name) && !(permisos?.verCostos ?? false)) return false
+    return !COACH_MUTATING_TOOLS.includes(t.name) || (permisos !== null && puedeEjecutarTool(permisos, t.name))
+  })
 
   const callAnthropic = (msgs: AnthropicMsg[]) => fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -909,7 +928,7 @@ Reglas:
                 toolResults.push({ type: 'tool_result', tool_use_id: toolUses[i].id, content: toolResultText })
                 if (pendingAction) pendingActionForResponse = pendingAction
               } else {
-                const result = await executeTool(name, parsedInputs[i], supabase, restauranteId)
+                const result = await executeTool(name, parsedInputs[i], supabase, restauranteId, permisos?.verCostos ?? false)
                 toolResults.push({ type: 'tool_result', tool_use_id: toolUses[i].id, content: result })
               }
             }

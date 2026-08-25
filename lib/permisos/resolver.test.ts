@@ -4,6 +4,7 @@ import {
   resolverModulosEfectivos,
   listaIncluyeModulo,
   puedeVerModulo,
+  puedeVerCostos,
 } from './resolver'
 
 describe('resolverModulosEfectivos', () => {
@@ -134,5 +135,57 @@ describe('regresión — cocinero recién invitado entra al dashboard', () => {
     expect(modulosEfectivos).toBeNull()
     expect(puedeVerModulo(permisos, 'home')).toBe(true)
     expect(puedeVerModulo(permisos, 'recetario')).toBe(true)
+  })
+})
+
+describe('puedeVerCostos — cascada admin → persona → puesto → rol', () => {
+  it('el admin ve costos sin mirar ninguna configuración', () => {
+    expect(puedeVerCostos({ isAdmin: true })).toBe(true)
+    expect(puedeVerCostos({ isAdmin: true, verCostosPuesto: false, fallbackRol: false })).toBe(true)
+  })
+
+  it('sin nada configurado, no ve costos — el default es ocultar', () => {
+    expect(puedeVerCostos({ isAdmin: false })).toBe(false)
+  })
+
+  it('el puesto lo habilita', () => {
+    expect(puedeVerCostos({ isAdmin: false, verCostosPuesto: true })).toBe(true)
+  })
+
+  it('el override de la persona gana sobre el puesto, para habilitar', () => {
+    expect(puedeVerCostos({
+      isAdmin: false, overrideMiembro: true, verCostosPuesto: false,
+    })).toBe(true)
+  })
+
+  // El caso que justifica que el override sea boolean|null y no boolean:
+  // un puesto que ve costos con una persona puntual que no debe verlos.
+  it('el override de la persona gana sobre el puesto, también para negar', () => {
+    expect(puedeVerCostos({
+      isAdmin: false, overrideMiembro: false, verCostosPuesto: true,
+    })).toBe(false)
+  })
+
+  it('override null = hereda, no niega', () => {
+    expect(puedeVerCostos({
+      isAdmin: false, overrideMiembro: null, verCostosPuesto: true,
+    })).toBe(true)
+  })
+
+  it('sin puesto, cae al fallback por rol', () => {
+    expect(puedeVerCostos({ isAdmin: false, fallbackRol: true })).toBe(true)
+    expect(puedeVerCostos({ isAdmin: false, fallbackRol: false })).toBe(false)
+  })
+
+  it('el fallback por rol NO se usa cuando el puesto ya decidió', () => {
+    expect(puedeVerCostos({
+      isAdmin: false, verCostosPuesto: false, fallbackRol: true,
+    })).toBe(false)
+  })
+
+  // Estado real tras la migración: Dirección en true, el resto en false.
+  it('el cocinero de Bros no ve costos; Dirección sí', () => {
+    expect(puedeVerCostos({ isAdmin: false, verCostosPuesto: false })).toBe(false)
+    expect(puedeVerCostos({ isAdmin: false, verCostosPuesto: true })).toBe(true)
   })
 })
