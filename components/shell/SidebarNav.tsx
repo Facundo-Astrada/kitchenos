@@ -101,7 +101,7 @@ export default function SidebarNav({ onImportarClick, dark = false, collapsed = 
           scrollee y no el <aside> entero (que se arrastraba el perfil de
           abajo con él): un flex item con overflow:auto pero sin minHeight:0
           no se achica, empuja al padre a desbordarse en vez de scrollear. */}
-      <nav style={{ flex: 1, minHeight: 0, padding: '0 12px', overflowY: 'auto' }}>
+      <nav className="hide-scrollbar" style={{ flex: 1, minHeight: 0, padding: '0 12px', overflowY: 'auto' }}>
         {SECCIONES.map(({ label, items }) => {
           const visibles = items.filter(
             id => MODULO_CONFIG[id] && (isAdmin || (modulosDelRol.includes(id) && canSee(id))) && moduloEnPerfil(id)

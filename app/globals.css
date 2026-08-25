@@ -182,6 +182,16 @@ input, textarea, [contenteditable] {
   display: none;
 }
 
+/* Oculta la scrollbar nativa del sistema (la gris con flechas de Windows)
+   sin tocar overflow/layout — para contenedores que ya definen el suyo
+   inline (nav de la sidebar, main de DesktopShell). */
+.hide-scrollbar {
+  scrollbar-width: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* ── Animación de entrada de pantallas ── */
 @keyframes screenIn {
   from {

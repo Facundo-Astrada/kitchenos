@@ -83,7 +83,7 @@ export default function DesktopShell({ children, sidePanel }: { children: React.
       </div>
 
       {/* ── Contenido principal ── */}
-      <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
+      <main className="hide-scrollbar" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
         {isFullWidth ? children : (
           <div style={{ maxWidth: 1040, margin: '0 auto', height: '100%' }}>
             {children}
