@@ -51,7 +51,7 @@ No se cargan solos: abrirlos cuando la tarea entra en su tema.
 | Vas a... | Leé |
 |---|---|
 | Escribir o tocar un hook, una query, patrón SWR/realtime, auth | `.claude/docs/hooks.md` |
-| Tocar UI/CSS: layout, componentes canónicos, tema, boards | `.claude/docs/ui.md` |
+| Tocar UI/CSS: layout, componentes canónicos, tema, boards | `.claude/docs/ui.md` + `DESIGN.md` (constitución: registros, presupuestos, prohibiciones) |
 | Escribir una query o migración contra una tabla existente | `.claude/docs/columnas.md` o `/supabase-check` |
 | Aplicar o revisar políticas RLS | `.claude/docs/rls.md` |
 | Tocar el flujo de importación (facturas, carta, stock) | `.claude/docs/importador.md` |
