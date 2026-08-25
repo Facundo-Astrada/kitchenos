@@ -54,6 +54,10 @@ Librería: **`motion/react`** (nombre nuevo del rebrand de Framer Motion — no 
 - **`.skeleton-pulse`** — pulso de opacidad para cualquier placeholder de carga, ver `Skeleton` más abajo.
 - **`.toast-enter`** — entra desde abajo (los toasts viven en `bottom: var(--toast-bottom)`), ver `Toast` más abajo.
 
+## Tabs con swipe — scroll-snap nativo, no gesto a mano
+
+`operaciones/page.tsx` (los 4 tabs de OPS) usa una fila `display:flex` con `scroll-snap-type:'x mandatory'` y cada panel `flex:'0 0 100%', scrollSnapAlign:'start'`, en vez de calcular el gesto a mano por `pointerdown`/`pointerup` (dx/dy/dt). El navegador resuelve solo el gesto diagonal — vertical cae al scroll interno del panel, horizontal cae al swipe — algo que la versión a mano rompía apenas un panel tenía su propio scroll horizontal (ver la sección de arriba sobre la cadena de altura: el contenedor de scroll también necesita `minHeight:0`). Piezas del patrón: `onScroll` debounced (~90ms) sincroniza `scrollLeft` → estado del tab activo; un efecto separado sincroniza estado → `scrollTo()` (con guard de "ya está ahí" para no pelear con el gesto en curso); mount de los paneles vecinos inmediatos por adelantado para que no aparezcan en blanco a mitad de gesto; clase `.hide-scrollbar` (`globals.css`) para que el scroll no se vea como scroll. Reusar este patrón antes de escribir un swipe a mano de nuevo.
+
 ## Targets táctiles chicos — `.hit-slop` (`globals.css`, ago 2026)
 
 Un botón que necesita quedarse visualmente chico (no inflar una lista de 40+ filas) pero cumplir el piso táctil de `DESIGN.md` §7 (≥56px Preparación-servicio, ≥64px `app/(servicio)`) usa `className="hit-slop"` en vez de agrandar el glyph: agrega un `::before` invisible con `inset:-12px` que extiende el área que responde al tap sin cambiar el layout ni empujar vecinos (hit-testing es por pixel pintado, no por la caja del ancestro — el truco funciona). Requiere que el botón tenga espacio real alrededor (padding del contenedor, gap con el próximo elemento) para no comerse el target de al lado — no sirve como reemplazo genérico de agrandar el botón cuando ya hay elementos pegados. `scripts/design-lint.mjs` sabe reconocer la clase y no marca como hallazgo un botón que ya la usa.
@@ -269,6 +273,16 @@ function onPointerMove(e) { const d = Math.hypot(dx,dy); if (d < 8) return /* th
 function onPointerUp() { dr.moved ? localStorage.setItem('fab_pos', ...) : toggle() }
 ```
 `touchAction:'none'` para evitar scroll accidental; `user-select:none` para evitar selección de texto.
+
+## Cadena de altura rota: un wrapper intermedio, o `minHeight:0` faltante
+
+Un contenedor que scrollea necesita altura **definida en cada eslabón** hasta la raíz, no solo en el suyo. Dos formas de romperlo (encontradas en `SidebarNav`/`DesktopShell` — la sidebar no scrolleaba y el perfil de abajo quedaba fuera de pantalla — y en el carrusel de tabs de OPS):
+1. Un wrapper intermedio en `display:block` (típico: envolver algo para posicionar un botón absoluto encima) que un ancestro flex sí estira vía `align-items:stretch`, pero no le pasa esa altura a SU hijo — un `<div>` en bloque no hereda la altura estirada de su padre solo porque el padre la tenga; hace falta `height:'100%'` explícito en el wrapper para que el hijo pueda apoyarse en él.
+2. El contenedor que finalmente scrollea (`overflow-y:auto`) tiene `flex:1` pero le falta `minHeight:0` — sin eso no se achica, empuja al padre a desbordarse en vez de scrollear (mismo gotcha de Boards Kanban, abajo, confirmado ahora en más lugares).
+
+## `SidebarNav` (desktop) no deriva su lista — hay que actualizarla a mano
+
+`components/shell/SidebarNav.tsx` agrupa los módulos en un array `SECCIONES` escrito a mano, a diferencia de `MoreMenu.tsx` (el "MÁS" de mobile) que arma su lista dinámico desde `MODULOS_POR_ROL`. Un `ModuloId` nuevo aparece solo en mobile — en desktop hay que sumarlo a mano a `SECCIONES` en la sección que corresponda, o queda con ruta/permiso/ícono completos pero invisible en la sidebar (pasó con `organigrama`). Al agregar un módulo, comparar `SECCIONES` aplanado contra `ModuloId` completo — deberían coincidir salvo `'coach'` (tiene su propio panel, no va en la sidebar).
 
 ## Boards Kanban desktop
 
