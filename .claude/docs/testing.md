@@ -14,6 +14,14 @@
 
 **Playwright** — 1 spec: `e2e/salon-kds.spec.ts`, camino feliz salón → KDS → bump → reflejo en salón, con login real contra `admin@elrescoldo.com`. Requiere `npx playwright install chromium` + `npm run dev` corriendo en `localhost:3000`.
 
+**Lint de diseño** (`scripts/design-lint.mjs`, P5 de `INVESTIGACION-DISENO-2026-08.md`) — estático, sin browser, sin LLM juez: verifica reglas puntuales de `DESIGN.md` contra el código fuente (grep estructurado, no un parser de JSX real). Precisión intencionalmente angosta — se calibró contra una corrida real que mostró que un chequeo amplio (hex/box-shadow fuera de token, cualquier `height:` chico) generaba casi puro ruido sobre deuda pre-existente nunca auditada, no sobre deriva nueva. Lo que sí chequea, con esa precisión:
+- `confirm()` nativo — **ERROR** (bloquea, exit 1) solo dentro de superficie de servicio (`app/(servicio)/**`, y `checklist`/`produccion`/`pase`/`operaciones` dentro de `app/(app)/`); **WARN** en el resto (gestión — Turnos, Clientes, HACCP, Carta: debate de estilo, no el mismo bug).
+- `alert()` — siempre WARN (reporte de error, no confirmación de una acción; P4 decidió no tocarlo, el lint no lo contradice).
+- Botones con `height:` menor al piso documentado (56px Preparación-servicio, 64px `app/(servicio)`) — WARN. Se salta si el botón ya tiene `className="hit-slop"` (la mitigación sancionada). Heurística de ventana de texto, no AST: puede pescar el `height` de un hijo decorativo en vez del propio botón — el mensaje lo dice explícito cuando pasa.
+- Duraciones de animación hardcodeadas (`duration: 0.N`) en archivos que usan `motion/react` sin importar `DURATION` de `lib/ui/motion` — WARN.
+
+**No** wireado a CI todavía: la primera corrida encontró 5 ERROR reales pre-existentes (confirm() en `produccion/page.tsx` y `salon/config/page.tsx`, ninguno tocado en esta sesión) — wirearlo hoy pondría el pipeline en rojo por deuda ajena al commit que lo dispare. Wirear una vez que esos 5 se resuelvan o se acepten explícitamente como baseline.
+
 **CI** (`.github/workflows/ci.yml`, push/PR a `main`): typecheck (`tsc --noEmit`) → Vitest (`npm test`) → `npm run build`. Playwright **no** corre en CI (necesita server levantado); es manual.
 
 ## Cuándo escribir qué
