@@ -73,6 +73,27 @@ export default function PresupuestoPage() {
   const { data, loading: sectorLoading, guardarVentasEstimadas, guardarPresupuestoSector, sembrarMes } = usePresupuestoCMV(mes)
   const [sembrando, setSembrando] = useState(false)
 
+  // Contexto para Kitchen Coach — insights accionables, no conteos. El
+  // desvío total no dice nada sin saber QUÉ sector lo explica.
+  useEffect(() => {
+    if (!data) return
+    const peorSector = [...data.sectores].sort((a, b) => b.desvioPuntos - a.desvioPuntos)[0]
+    localStorage.setItem('kc_screen_context', JSON.stringify({
+      screen: 'presupuesto',
+      tab,
+      mes: data.mes,
+      cmvPct: Math.round(data.cmvPct * 10) / 10,
+      objetivoPct: data.objetivoPct,
+      desvioPuntos: Math.round(data.desvioPuntos * 10) / 10,
+      desvioPlata: Math.round(data.desvioPlata),
+      peorSector: peorSector ? { nombre: peorSector.nombre, desvioPuntos: Math.round(peorSector.desvioPuntos * 10) / 10 } : null,
+      sinCategorizarMonto: Math.round(data.sinCategorizarMonto),
+      sinPresupuestoCargado: !!(data.sectores.every(s => s.presupuestoEsSugerido) && data.ventasEstimadasEsSugerido),
+      mermaSinCosto: data.merma.nSinCosto,
+    }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [data, tab])
+
   if (!verCostos) {
     return (
       <PageTransition>
@@ -102,7 +123,7 @@ export default function PresupuestoPage() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <h1 style={{ fontSize: 20, fontWeight: 700, color: '#fff', margin: 0 }}>Presupuesto</h1>
             {tab === 'sector' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div data-coach-target="presupuesto-mes" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <button onClick={() => setMes(m => mesConDelta(m, -1))}
                   style={{ background: 'rgba(255,255,255,.12)', border: 'none', borderRadius: 8, width: 28, height: 28, display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
                   <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#fff' }}>chevron_left</span>
@@ -115,14 +136,16 @@ export default function PresupuestoPage() {
               </div>
             )}
           </div>
-          <SegmentedTabs
-            tabs={[
-              { id: 'sector', label: 'CMV por sector', icon: 'savings' },
-              { id: 'familias', label: 'Familias', icon: 'account_balance_wallet' },
-            ]}
-            active={tab}
-            onChange={setTab}
-          />
+          <div data-coach-target="presupuesto-tabs">
+            <SegmentedTabs
+              tabs={[
+                { id: 'sector', label: 'CMV por sector', icon: 'savings' },
+                { id: 'familias', label: 'Familias', icon: 'account_balance_wallet' },
+              ]}
+              active={tab}
+              onChange={setTab}
+            />
+          </div>
         </div>
 
         <div style={{ padding: '14px 14px calc(var(--fab-bottom) + 14px)', maxWidth: 900, margin: '0 auto' }}>
@@ -195,7 +218,7 @@ function BloqueA({ data, isDesktop, sinPresupuestoTodavia, sembrando, onSembrar,
 }) {
   const col = colorDesvio(data.desvioPuntos)
   return (
-    <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)' }}>
+    <div data-coach-target="presupuesto-hero" style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)' }}>
       <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-3)', fontWeight: 600, marginBottom: 12 }}>
         {mesLabel(data.mes)} · {data.diasCorridos} de {data.diasDelMes} días
       </div>
@@ -301,7 +324,7 @@ function BloqueB({ sectores, isDesktop, mes, onGuardar, subtotalComida, subtotal
   const totalObj = sectores.reduce((s, r) => s + r.objSobreVentas, 0)
 
   return (
-    <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)' }}>
+    <div data-coach-target="presupuesto-sectores" style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)' }}>
       <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-3)', fontWeight: 600, marginBottom: 12 }}>
         Sectores — objetivo contra real
       </div>
@@ -434,7 +457,7 @@ function BloqueC({ semanas, diasDelMes }: { semanas: ReturnType<typeof usePresup
   const presuTotales = [0, 1, 2, 3, 4].map(w => semanas.reduce((s, r) => s + r.celdas[w].presupuesto, 0))
 
   return (
-    <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)' }}>
+    <div data-coach-target="presupuesto-semanas" style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)' }}>
       <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-3)', fontWeight: 600, marginBottom: 12 }}>
         Ritmo de compra — cuándo sale la plata
       </div>
@@ -501,7 +524,7 @@ function BloqueD({ merma, arreglos, ventasReales }: {
   ventasReales: number
 }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+    <div data-coach-target="presupuesto-fuera-cmv" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
       <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)' }}>
         <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-3)', fontWeight: 600, marginBottom: 10 }}>Desperdicio</div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>

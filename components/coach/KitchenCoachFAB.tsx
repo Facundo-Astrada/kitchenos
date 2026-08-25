@@ -103,6 +103,12 @@ const SUGGESTIONS_BY_SCREEN: Record<string, Suggestion[]> = {
     { label: '¿Qué número debería mejorar primero?', action: 'send' },
     { label: '¿Cuánto subió la inflación de mis compras?', action: 'send' },
   ],
+  presupuesto: [
+    { label: 'Ver recorrido de Presupuesto', action: 'tour' },
+    { label: '¿Por qué sector me fui del objetivo?', action: 'send' },
+    { label: '¿Cómo viene el mes proyectado a fin de mes?', action: 'send' },
+    { label: '¿Cuánto tengo sin categorizar este mes?', action: 'send' },
+  ],
   merma: [
     { label: 'Ver recorrido de Merma', action: 'tour' },
     { label: '¿Cuál es mi principal causa de merma?', action: 'send' },

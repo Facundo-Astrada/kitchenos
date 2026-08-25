@@ -364,7 +364,7 @@ export const TOURS: Record<string, TourStep[]> = {
     {
       targetId: 'reportes-tabs',
       title: 'Las 8 vistas de análisis',
-      description: 'Resumen (KPIs del período), CMV (costo de mercadería vendida), Presupuesto (vs real), Rendimiento (por plaza), Food Cost (por receta), Compras (por proveedor), Precios (inflación de compras), Producción (lo más producido).',
+      description: 'Resumen (KPIs del período), CMV (costo de mercadería vendida), Fuga (compras vs. consumo teórico por producto), Rendimiento (por plaza), Food Cost (por receta), Compras (por proveedor), Precios (inflación de compras), Producción (lo más producido). El presupuesto por familia y por sector se mudó a su propio módulo, Presupuesto.',
     },
     {
       targetId: 'reportes-periodo',
@@ -625,6 +625,44 @@ export const TOURS: Record<string, TourStep[]> = {
       targetId: null,
       title: '¡Ya conocés el Organigrama!',
       description: 'Preguntame qué áreas están sin responsable, si hay puestos vacantes, o pedime ayuda para decidir qué activar según el tamaño de tu equipo.',
+    },
+  ],
+
+  presupuesto: [
+    {
+      targetId: 'presupuesto-tabs',
+      title: 'Dos niveles del mismo número',
+      description: 'CMV por sector: el costo de mercadería (comida y bebida) desglosado por categoría, contra el objetivo de 30%. Familias: las 4 grandes familias de gasto del negocio (materia prima, personal, alquiler, gastos generales) contra la estructura estándar y el EBITDA del mes.',
+    },
+    {
+      targetId: 'presupuesto-mes',
+      title: 'Navegá mes a mes',
+      description: 'Las flechitas mueven el mes que estás mirando. Un mes ya cerrado muestra el 100% de avance; el mes en curso te muestra cuánto llevás gastado contra cuánto debería llevar según los días corridos.',
+    },
+    {
+      targetId: 'presupuesto-hero',
+      title: 'El desvío, no solo el gasto',
+      description: 'El número grande es el CMV real del mes. Lo que importa es la línea de abajo: cuántos puntos te fuiste del objetivo y cuánta plata es eso — no "cuánto gastaste" sino "¿está bien o mal?". Más abajo, la proyección te dice a dónde vas a llegar si seguís al mismo ritmo, y podés cargar las ventas estimadas del mes (o usar el sugerido, calculado solo con el promedio de los últimos 3 meses).',
+    },
+    {
+      targetId: 'presupuesto-sectores',
+      title: 'Quién explica el desvío',
+      description: 'Cada sector (carnes, verduras, bebidas...) tiene su propio objetivo expresado sobre las ventas, así se puede comparar directo contra el gasto real. El desvío en puntos de cada fila suma exacto el desvío total del mes — así encontrás rápido cuál sector es el responsable, en vez de mirar un solo número global. El presupuesto de cada sector es editable, tocá el campo para cambiarlo.',
+    },
+    {
+      targetId: 'presupuesto-semanas',
+      title: 'Cuándo sale la plata',
+      description: 'Esto compara el gasto de cada semana contra el presupuesto semanal, no contra las ventas — las compras entran a saltos (una compra grande de bodega puede ser toda una semana) y las ventas salen parejas todos los días. Sirve para ver el ritmo de compra, no para sacar un "CMV semanal".',
+    },
+    {
+      targetId: 'presupuesto-fuera-cmv',
+      title: 'Lo que no es costo de mercadería',
+      description: 'Desperdicio suma el costo de la merma del mes (si algún registro no tiene costo, te avisa — sin precio del producto no entra al cálculo). Arreglos y mejoras son gastos en mantenimiento o equipamiento para mejorar el proceso, el tiempo o el ambiente de trabajo — no son costo de mercadería, pero compiten por la misma plata del mes.',
+    },
+    {
+      targetId: null,
+      title: '¡Ya conocés Presupuesto!',
+      description: 'Preguntame por qué sector te fuiste del objetivo, cómo viene el mes proyectado, o pedime ayuda para decidir el presupuesto de un sector que todavía no cargaste.',
     },
   ],
 }

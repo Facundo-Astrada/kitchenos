@@ -439,6 +439,7 @@ export const RUTA_A_TOUR: Record<string, string> = {
   '/proveedores': 'proveedores',
   '/facturas': 'facturas',
   '/reportes': 'reportes',
+  '/presupuesto': 'presupuesto',
   '/merma': 'merma',
   '/haccp': 'haccp',
   '/calendario': 'calendario',

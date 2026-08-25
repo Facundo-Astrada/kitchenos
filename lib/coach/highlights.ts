@@ -17,6 +17,9 @@ export const COACH_HIGHLIGHT_IDS = [
   'facturas-tabs', 'facturas-filtros', 'facturas-lista', 'facturas-acciones', 'facturas-pos', 'facturas-lote',
   // Reportes
   'reportes-tabs', 'reportes-periodo', 'reportes-contenido',
+  // Presupuesto
+  'presupuesto-tabs', 'presupuesto-mes', 'presupuesto-hero',
+  'presupuesto-sectores', 'presupuesto-semanas', 'presupuesto-fuera-cmv',
   // Merma
   'merma-periodo', 'merma-stats', 'merma-fab',
   // HACCP

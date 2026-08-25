@@ -264,6 +264,12 @@ Ejemplo para facturas pendientes de pago:
 Ejemplo para inflación en reportes:
 {"text":"La inflación de cocina del mes fue 8,3%. Los productos que más subieron: Crema de leche (+22%), Manteca (+18%), Harina (+15%). Te recomiendo revisar el costo de las recetas que más los usan.","highlight":"reportes-contenido","overlay_text":"Variación de precios vs período anterior","options":["¿Qué recetas usan Crema?","¿Cómo ajusto los precios de la carta?"]}
 
+Ejemplo para desvío de presupuesto por sector:
+{"text":"El CMV del mes está en 32,3%, 2,3 puntos arriba del objetivo de 30%. El desvío entero está en Bebidas con alcohol, que se fue 4,7 puntos — el resto de los sectores está en línea o por debajo. Con eso corregido volvés al objetivo.","highlight":"presupuesto-sectores","overlay_text":"El desvío en puntos de cada fila suma el total","options":["¿Por qué se disparó bebidas?","¿Cómo cambio el presupuesto de ese sector?"]}
+
+Ejemplo para facturas sin categorizar en presupuesto:
+{"text":"Tenés $890.000 en facturas de este mes sin categoría de gasto asignada. Mientras eso siga así, el CMV que ves es un piso, no el número final — puede haber más mercadería ahí adentro. Conviene categorizarlas antes de sacar conclusiones del mes.","highlight":"presupuesto-hero","overlay_text":"Sin categorizar = el CMV puede estar subestimado","options":["¿Cómo categorizo por proveedor?","¿Cuáles son las facturas más grandes sin categoría?"]}
+
 Ejemplo para vencimientos próximos en HACCP:
 {"text":"Hay 3 productos que vencen en los próximos 3 días: Queso brie (mañana), Crema pastelera (pasado mañana) y Salmón ahumado (en 3 días). Conviene usarlos primero o descartarlos si ya no están aptos.","highlight":"haccp-vencimientos","overlay_text":"Alertas de vencimiento próximo","options":["¿Cómo registro el descarte?","¿Puedo agregar más productos?"]}
 
@@ -284,6 +290,18 @@ Ejemplo para huecos en la Vista Cobertura:
 
 Usá el contexto para dar consejos relevantes cuando el usuario lo necesite.`
 
+// TODO (coach-screen skill, presupuesto, ago 2026): todavía no hay tool de
+// servidor para esta pantalla — hoy el Coach solo ve lo que manda
+// kc_screen_context (client-side). Candidatos para M1/M5:
+//   - `consultar_presupuesto(mes?)`: mismo cálculo que usePresupuestoCMV
+//     (gasto por sector, desvío en puntos, ritmo semanal) pero con acceso a
+//     más de un mes a la vez — "¿cómo vengo comparado con el mes pasado?"
+//     hoy no se puede responder porque el cliente solo manda el mes activo.
+//   - `guardar_presupuesto_sector(categoriaGastoId, mes, monto)`: cargar o
+//     ajustar el presupuesto de un sector por chat ("subime el presupuesto
+//     de carnes a 4 millones").
+//   - `sembrar_presupuesto_mes(mes)`: aplicar el sugerido (mix histórico +
+//     ventas estimadas) por chat, mismo botón "Usar sugerido" de la UI.
 // ── M5: tool use agéntico ─────────────────────────────────────
 const COACH_TOOLS = [
   {
