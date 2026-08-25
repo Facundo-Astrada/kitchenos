@@ -328,9 +328,20 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
   }
 
   return (
-    <div style={{ background: 'var(--bg)', height: embedded ? '100%' : undefined, overflowY: embedded ? 'auto' : undefined }}>
+    <div style={{
+      background: 'var(--bg)',
+      height: embedded ? '100%' : undefined,
+      display: embedded ? 'flex' : undefined,
+      flexDirection: embedded ? 'column' : undefined,
+      // Un solo scroll (el de acá abajo), no dos anidados: cuando este panel
+      // vive dentro de la fila con scroll-snap de OPS (operaciones/page.tsx),
+      // un div en bloque con overflowY:auto directo (en vez de flex:1 dentro
+      // de una columna) tarda un frame en asentar su altura recortada — se
+      // veía un salto/desfase apenas se llegaba deslizando desde otro tab.
+      overflow: embedded ? 'hidden' : undefined,
+    }}>
       {/* Header */}
-      <div style={{ background: 'var(--navy)', padding: `${embedded ? 0 : 46}px 16px 14px` }}>
+      <div style={{ background: 'var(--navy)', padding: `${embedded ? 0 : 46}px 16px 14px`, flexShrink: embedded ? 0 : undefined }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {!embedded && (
@@ -415,7 +426,10 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
         )}
       </div>
 
-      {/* Content */}
+      {/* Content — flex:1+overflowY:auto solo cuando embedded (ver el porqué
+          en el comentario del div raíz); en la ruta standalone sigue
+          scrolleando la página entera, como siempre. */}
+      <div style={embedded ? { flex: 1, overflowY: 'auto', minHeight: 0 } : undefined}>
       {gruposDelDia.length > 0 ? (
         <div style={{ padding: '10px 12px 120px' }}>
           <ResumenDelDia
@@ -482,6 +496,7 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
           </button>
         </div>
       )}
+      </div>
 
       {/* ── E1: sugerencia de producción (motor de reglas sobre ventas históricas) ── */}
       {showSugerencia && typeof document !== 'undefined' && createPortal(
