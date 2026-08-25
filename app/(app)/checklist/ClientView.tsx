@@ -28,7 +28,8 @@ import { menuItemVisible } from '@/lib/ops/mise'
 import { tareasAfectadasPorTilde } from '@/lib/ops/syncMise'
 import { setOpsChromeCompact } from '@/lib/ops/chromeBus'
 import { SheetChrome } from '@/lib/ui/chrome'
-import { tap } from '@/lib/ui/motion'
+import { motion } from 'motion/react'
+import { tap, DURATION, EASE_OUT, useReducedMotion } from '@/lib/ui/motion'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import SectionEditor from '@/components/checklist/SectionEditor'
 import { FlipCard } from '@/components/ui'
@@ -1256,10 +1257,21 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     })
   }, [crearVencimiento])
 
+  // Entrada suave grilla↔plaza (DESIGN.md §6 "entrada de pantalla", 260ms) —
+  // no es el shared-element completo (grilla y vista de plaza son dos
+  // `return` distintos de este componente: fusionarlos en un AnimatePresence
+  // con layoutId real es una restructuración de control de flujo que merece
+  // su propio bloque, no algo para meter a ciegas en un componente de 2700
+  // líneas). Esto suaviza el corte instantáneo sin tocar esa estructura.
+  const reducedMotion = useReducedMotion()
+  const screenEnter = reducedMotion
+    ? {}
+    : { initial: { opacity: 0, scale: 0.98 }, animate: { opacity: 1, scale: 1 }, transition: { duration: DURATION.enter, ease: EASE_OUT } }
+
   // ── Plaza selector ──
   if (!plaza) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <motion.div {...screenEnter} style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         <div style={{ background: 'var(--navy)', padding: `${embedded ? 0 : 46}px 16px 20px`, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {!embedded && (
@@ -1296,13 +1308,13 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
             ))}
           </div>
         </div>
-      </div>
+      </motion.div>
     )
   }
 
   // ── Main checklist view ──
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <motion.div {...screenEnter} style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
       {/* Header */}
       <div style={{ background: 'var(--navy)', padding: `${embedded ? 0 : 46}px 16px 0`, flexShrink: 0 }}>
@@ -2465,7 +2477,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           onCancel={() => setConfirmAccion(null)}
         />
       )}
-    </div>
+    </motion.div>
   )
 }
 
