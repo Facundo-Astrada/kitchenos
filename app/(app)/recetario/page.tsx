@@ -2029,8 +2029,6 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
   // tiene id; la URL viaja en el insert como una columna mas.
   const [fotoUrl, setFotoUrl] = useState<string | null>(null)
   const fotoPathRef = useRef(uid())
-  const [grupoActual, setGrupoActual] = useState('')
-  const [grupoActualNuevo, setGrupoActualNuevo] = useState(false)
   const [pasos, setPasos] = useState<FormPaso[]>(() => [{ id: uid(), texto: '' }])
   const [nombre, setNombre] = useState(initialDraft?.nombre || '')
   const [categoria, setCategoria] = useState(initialDraft?.categoria || '')
@@ -2081,10 +2079,66 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
 
   // Food cost live
   const costoTotal = useMemo(() => ings.reduce((s, i) => s + (parseFloat(i.cantidad) || 0) * i.costo_unitario, 0), [ings])
-  const gruposExistentesCreacion = useMemo(
-    () => Array.from(new Set(ings.map(i => i.grupo?.trim()).filter((g): g is string => !!g))).sort(),
-    [ings]
-  )
+  // ── Etapas del alta (PLAN-ACCESO-Y-USO B6) ──────────────────────────────
+  // El modelo siempre soporto N etapas (`ingredientes.grupo` es por ingrediente),
+  // pero el alta tenia UN selector global arriba de una lista plana: se leia
+  // como "elegi LA etapa de esta receta", no se veia que ingrediente habia
+  // caido en cual, y si te equivocabas no lo podias corregir sin guardar y
+  // entrar al detalle. Ahora se renderiza en bloques, uno por etapa.
+  //
+  // `ings` sigue siendo un array plano — es la fuente de verdad y lo que se
+  // guarda. Las etapas se derivan de el, en orden de primera aparicion.
+  const etapasCreacion = useMemo(() => {
+    const orden: string[] = []
+    for (const i of ings) {
+      const g = i.grupo ?? ''
+      if (!orden.includes(g)) orden.push(g)
+    }
+    return orden.length ? orden : ['']
+  }, [ings])
+
+  // Una receta simple sigue siendo simple: con una sola etapa sin nombre no se
+  // dibuja ningun encabezado y la pantalla queda igual que antes.
+  const mostrarEtapas = etapasCreacion.length > 1 || etapasCreacion[0] !== ''
+
+  const renombrarEtapa = useCallback((anterior: string, nuevo: string) => {
+    setIngs(prev => prev.map(i => (i.grupo ?? '') === anterior ? { ...i, grupo: nuevo } : i))
+  }, [])
+
+  // Inserta al final de SU etapa, no al final de la lista: si no, agregar a la
+  // primera etapa mandaria la fila abajo de todo y se romperia el agrupamiento.
+  const agregarIngEnEtapa = useCallback((grupo: string) => {
+    const newId = uid()
+    setIngs(prev => {
+      const nueva: FormIng = { id: newId, cantidad: '', unidad: 'kg', nombre: '', costo_unitario: 0, grupo }
+      let ultimo = -1
+      prev.forEach((i, idx) => { if ((i.grupo ?? '') === grupo) ultimo = idx })
+      if (ultimo === -1) return [...prev, nueva]
+      const next = [...prev]
+      next.splice(ultimo + 1, 0, nueva)
+      return next
+    })
+    pendingFocusRef.current = { id: newId, type: 'ing' }
+  }, [])
+
+  const agregarEtapa = useCallback(() => {
+    const newId = uid()
+    setIngs(prev => {
+      const usados = new Set(prev.map(i => (i.grupo ?? '').trim()).filter(Boolean))
+      let n = usados.size + 1
+      let nombre = `Etapa ${n}`
+      while (usados.has(nombre)) { n++; nombre = `Etapa ${n}` }
+      return [...prev, { id: newId, cantidad: '', unidad: 'kg', nombre: '', costo_unitario: 0, grupo: nombre }]
+    })
+    pendingFocusRef.current = { id: newId, type: 'ing' }
+  }, [])
+
+  const eliminarEtapa = useCallback((grupo: string) => {
+    setIngs(prev => {
+      const next = prev.filter(i => (i.grupo ?? '') !== grupo)
+      return next.length ? next : [{ id: uid(), cantidad: '', unidad: 'kg', nombre: '', costo_unitario: 0, grupo: '' }]
+    })
+  }, [])
   const porcionesN = parseInt(porciones) || 1
   const precioVentaN = parseNum(precioVenta) || 0
   const costoPorcion = porcionesN > 0 ? costoTotal / porcionesN : 0
@@ -2120,13 +2174,16 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
           return [...prev]
         }
       }
-      const newRow: FormIng = { id: newId, cantidad: '', unidad: 'kg', nombre: '', costo_unitario: 0, grupo: grupoActual }
+      // Hereda la etapa de la fila actual: Enter dentro de "Marinada" agrega
+      // otro ingrediente de la marinada, no uno suelto en la etapa que
+      // estuviera seleccionada arriba (PLAN-ACCESO-Y-USO B6).
+      const newRow: FormIng = { id: newId, cantidad: '', unidad: 'kg', nombre: '', costo_unitario: 0, grupo: current.grupo ?? '' }
       const next = [...prev]
       next.splice(idx + 1, 0, newRow)
       pendingFocusRef.current = { id: newId, type: 'ing' }
       return next
     })
-  }, [grupoActual])
+  }, [])
 
   // ── Paso operations ──
   const updatePaso = useCallback((id: number, texto: string) => {
@@ -2632,61 +2689,79 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
 
         {/* ═══ 1. INGREDIENTES ═══ */}
         <Section icon="restaurant" title="Ingredientes" badge={ingCount > 0 ? `${ingCount}` : undefined} badgeColor="var(--navy)">
-          {/* Etapa actual — se asigna a los ingredientes que se agreguen de acá en adelante */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', flexShrink: 0 }}>Etapa</span>
-            {grupoActualNuevo ? (
-              <input
-                autoFocus
-                value={grupoActual}
-                onChange={e => setGrupoActual(e.target.value)}
-                onBlur={() => { if (!grupoActual.trim()) setGrupoActualNuevo(false) }}
-                placeholder="Ej: Etapa 1 — marinada"
-                style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '5px 8px', fontSize: 11, fontFamily: 'inherit', color: 'var(--text-1)', background: 'var(--surface)' }}
-              />
-            ) : (
-              <select
-                value={grupoActual}
-                onChange={e => {
-                  if (e.target.value === '__new__') { setGrupoActual(''); setGrupoActualNuevo(true) }
-                  else setGrupoActual(e.target.value)
-                }}
-                style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 8, padding: '5px 8px', fontSize: 11, fontFamily: 'inherit', color: 'var(--text-1)', background: 'var(--surface)', cursor: 'pointer' }}
-              >
-                <option value="">General (sin etapa)</option>
-                {gruposExistentesCreacion.map(g => <option key={g} value={g}>{g}</option>)}
-                <option value="__new__">+ Nueva etapa…</option>
-              </select>
-            )}
-          </div>
-          <div style={{ background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
-            {ings.map((ing, idx) => (
-              <IngRow
-                key={ing.id}
-                ing={ing}
-                idx={idx}
-                isActive={activeIngId === ing.id}
-                stockIndex={stockIndex}
-                cantidadRefs={cantidadRefs}
-                nombreRefs={nombreRefs}
-                onUpdate={updateIng}
-                onRemove={removeIng}
-                onConfirm={confirmAndNext}
-                onFocusRow={setActiveIngId}
-              />
-            ))}
-          </div>
+          {/* Un bloque por etapa. Cada uno con su nombre, sus ingredientes y su
+              propio "agregar" — asi se ve que ingrediente quedo en cual y se
+              puede corregir en el momento, sin guardar y volver a entrar. */}
+          {etapasCreacion.map((etapa, etapaIdx) => {
+            const filas = ings.filter(i => (i.grupo ?? '') === etapa)
+            return (
+              <div key={etapa || '__general__'} style={{ marginBottom: mostrarEtapas ? 14 : 0 }}>
+                {mostrarEtapas && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                    <span style={{
+                      fontSize: 9, fontWeight: 800, color: 'var(--text-3)',
+                      textTransform: 'uppercase', letterSpacing: '.06em',
+                      flexShrink: 0, minWidth: 16,
+                    }}>{etapaIdx + 1}</span>
+                    <input
+                      value={etapa}
+                      onChange={e => renombrarEtapa(etapa, e.target.value)}
+                      placeholder="General (sin etapa)"
+                      style={{
+                        flex: 1, border: 'none', borderBottom: '1px solid var(--border)',
+                        background: 'transparent', padding: '3px 2px', fontSize: 12,
+                        fontWeight: 700, fontFamily: 'inherit', color: 'var(--text-1)', outline: 'none',
+                      }}
+                    />
+                    {etapasCreacion.length > 1 && (
+                      <button
+                        onClick={() => eliminarEtapa(etapa)}
+                        title="Eliminar etapa y sus ingredientes"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, lineHeight: 0 }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--text-3)' }}>close</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+                <div style={{ background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
+                  {filas.map(ing => (
+                    <IngRow
+                      key={ing.id}
+                      ing={ing}
+                      idx={ings.indexOf(ing)}
+                      isActive={activeIngId === ing.id}
+                      stockIndex={stockIndex}
+                      cantidadRefs={cantidadRefs}
+                      nombreRefs={nombreRefs}
+                      onUpdate={updateIng}
+                      onRemove={removeIng}
+                      onConfirm={confirmAndNext}
+                      onFocusRow={setActiveIngId}
+                    />
+                  ))}
+                </div>
+                <button
+                  onClick={() => agregarIngEnEtapa(etapa)}
+                  style={{ marginTop: 6, width: '100%', background: 'transparent', border: '1px dashed var(--border)', borderRadius: 8, padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer' }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--text-3)' }}>add</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', fontFamily: 'inherit' }}>
+                    Agregar ingrediente{mostrarEtapas && etapa ? ` a ${etapa}` : ''}
+                  </span>
+                </button>
+              </div>
+            )
+          })}
 
           <button
-            onClick={() => {
-              const newId = uid()
-              setIngs(prev => [...prev, { id: newId, cantidad: '', unidad: 'kg', nombre: '', costo_unitario: 0, grupo: grupoActual }])
-              pendingFocusRef.current = { id: newId, type: 'ing' }
-            }}
-            style={{ marginTop: 6, width: '100%', background: 'transparent', border: '1px dashed var(--border)', borderRadius: 8, padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer' }}
+            onClick={agregarEtapa}
+            style={{ marginTop: 8, width: '100%', background: 'transparent', border: '1px dashed var(--accent)', borderRadius: 8, padding: '9px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer' }}
           >
-            <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--text-3)' }}>add</span>
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', fontFamily: 'inherit' }}>Agregar ingrediente</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--accent)' }}>library_add</span>
+            <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--accent)', fontFamily: 'inherit' }}>
+              Agregar etapa
+            </span>
           </button>
         </Section>
 

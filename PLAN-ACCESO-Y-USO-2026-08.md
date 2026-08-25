@@ -18,8 +18,8 @@ B0/B1/B2 son bugs que hoy rompen el uso real. El resto es producto.
 | B2 mise: tildado ≠ "para producir" | ✅ deployado | `e3624b0` |
 | B3 food cost por puesto | ✅ deployado | `2bb0423` |
 | B4 primer ingreso | ⬜ pendiente | — |
-| B5 descubribilidad | ✅ deployado | pendiente |
-| B6 etapas en el alta de receta | ⬜ pendiente | — |
+| B5 descubribilidad | ✅ deployado | `5dc6539` |
+| B6 etapas en el alta de receta | ✅ deployado | pendiente |
 | B7 sidebar + fullscreen OPS | ⬜ pendiente | — |
 
 Migraciones aplicadas: `fix_rol_permisos_inicio_home_y_operaciones`,
