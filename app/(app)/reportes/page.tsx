@@ -20,10 +20,8 @@ import {
   type PrecioEvolucion,
   type ProduccionData,
   type CMVData,
-  type PresupuestoFamiliasData,
   type RendimientoPlaza,
 } from '@/lib/hooks/useReportes'
-import { FAMILIA_GASTO_LABELS } from '@/lib/hooks/useCategoriasGasto'
 import type { FugaResultado } from '@/lib/reportes/fuga'
 import {
   usePreciosProveedores,
@@ -37,10 +35,10 @@ import { useReporteVentas, type ReporteVentas } from '@/lib/hooks/useReporteVent
 import { useCarta } from '@/lib/hooks/useCarta'
 import type { CajaTurno, ChecklistAuditoria } from '@/types'
 
-type Tab = 'resumen' | 'ventas' | 'cmv' | 'presupuesto' | 'rendimiento' | 'fuga' | 'foodcost' | 'compras' | 'precios' | 'produccion' | 'caja' | 'auditoria'
+type Tab = 'resumen' | 'ventas' | 'cmv' | 'rendimiento' | 'fuga' | 'foodcost' | 'compras' | 'precios' | 'produccion' | 'caja' | 'auditoria'
 
 // Tabs con export a Excel (Q3) — contextual al tab activo, mismos números que el render.
-const TABS_EXPORTABLES: Tab[] = ['cmv', 'compras', 'foodcost', 'presupuesto', 'rendimiento', 'fuga', 'caja', 'auditoria']
+const TABS_EXPORTABLES: Tab[] = ['cmv', 'compras', 'foodcost', 'rendimiento', 'fuga', 'caja', 'auditoria']
 
 // Rango de fechas simple para el histórico de auditorías — mismos períodos que el selector, sin comparación vs. anterior.
 function rangoAuditoria(periodo: Periodo): { from: string; to: string } {
@@ -68,7 +66,6 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'resumen', label: 'Resumen', icon: 'dashboard' },
   { key: 'ventas', label: 'Ventas', icon: 'point_of_sale' },
   { key: 'cmv', label: 'CMV', icon: 'savings' },
-  { key: 'presupuesto', label: 'Presupuesto', icon: 'account_balance_wallet' },
   { key: 'rendimiento', label: 'Rendimiento', icon: 'speed' },
   { key: 'fuga', label: 'Fuga', icon: 'inventory_2' },
   { key: 'foodcost', label: 'Food Cost', icon: 'restaurant' },
@@ -114,7 +111,7 @@ export default function ReportesPage() {
   const esAdmin = perfil?.rol === 'admin'
   const { puedeVer } = usePermisos()
   const RESTAURANTE_ID = useRestauranteId()
-  const { loading, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchPresupuestoFamilias, savePresupuestoFamilia, aplicarEstructuraEstandar, fetchRendimiento, fetchFuga } = useReportes()
+  const { loading, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchRendimiento, fetchFuga } = useReportes()
   const { fetchComparador } = usePreciosProveedores()
   const { fetchHistorial } = useCajaTurno()
   const { medios } = useMediosPago()
@@ -173,8 +170,6 @@ export default function ReportesPage() {
   const [comparadorData, setComparadorData] = useState<{ comparador: ComparadorPrecioProducto[]; topSobreprecio: TopSobreprecioItem[] }>({ comparador: [], topSobreprecio: [] })
   const [produccionData, setProduccionData] = useState<ProduccionData>({ recetasProducidas: [], ingredientesMasUsados: [], horasEstimadas: 0 })
   const [cmvData, setCmvData] = useState<CMVData | null>(null)
-  const [presuFamiliasData, setPresuFamiliasData] = useState<PresupuestoFamiliasData>({ rows: [], ventas: 0, ventasPeriodoAnterior: 0, ebitdaPct: 0 })
-  const [aplicandoEstandar, setAplicandoEstandar] = useState(false)
   const [rendData, setRendData] = useState<RendimientoPlaza[]>([])
   const [fugaData, setFugaData] = useState<FugaResultado>({ desde: '', hasta: '', productos: [], noCalculables: [] })
   const [cajaHistorial, setCajaHistorial] = useState<CajaTurno[]>([])
@@ -252,11 +247,6 @@ export default function ReportesPage() {
           setCmvData(c)
           break
         }
-        case 'presupuesto': {
-          const pr = await fetchPresupuestoFamilias()
-          setPresuFamiliasData(pr)
-          break
-        }
         case 'rendimiento': {
           const r = await fetchRendimiento(p)
           setRendData(r)
@@ -288,7 +278,7 @@ export default function ReportesPage() {
     } finally {
       setTabLoading(false)
     }
-  }, [fetchResumen, fetchReporteVentas, fetchFoodCost, fetchCompras, fetchPrecios, fetchComparador, fetchProduccion, fetchCMV, fetchPresupuestoFamilias, fetchRendimiento, fetchFuga, fetchHistorial, fetchAuditorias, fetchAuditoriaPaseTurno])
+  }, [fetchResumen, fetchReporteVentas, fetchFoodCost, fetchCompras, fetchPrecios, fetchComparador, fetchProduccion, fetchCMV, fetchRendimiento, fetchFuga, fetchHistorial, fetchAuditorias, fetchAuditoriaPaseTurno])
 
   useEffect(() => {
     loadTab(tab, periodo)
@@ -361,32 +351,6 @@ export default function ReportesPage() {
         'Food cost %': Math.round(f.food_cost_pct * 10) / 10,
         'Margen': Math.round(f.margen),
       })),
-    }]
-  }
-
-  function hojasPresupuesto(): HojaExcel[] {
-    return [{
-      nombre: 'Presupuesto por familia',
-      filas: [
-        ...presuFamiliasData.rows.map(row => ({
-          'Familia': FAMILIA_GASTO_LABELS[row.familia],
-          'Objetivo %': row.objetivoPct,
-          'Real %': Math.round(row.realPct * 10) / 10,
-          'Desvío (puntos)': Math.round(row.desvioPuntos * 10) / 10,
-          'Presupuesto': row.presupuesto,
-          'Real ($)': Math.round(row.real),
-          'Desvío ($)': Math.round(row.desvioPlata),
-        })),
-        {
-          'Familia': 'EBITDA',
-          'Objetivo %': 15,
-          'Real %': Math.round(presuFamiliasData.ebitdaPct * 10) / 10,
-          'Desvío (puntos)': Math.round((presuFamiliasData.ebitdaPct - 15) * 10) / 10,
-          'Presupuesto': '',
-          'Real ($)': '',
-          'Desvío ($)': '',
-        },
-      ],
     }]
   }
 
@@ -521,7 +485,6 @@ export default function ReportesPage() {
       case 'cmv': hojas = hojasCMV(); slug = 'cmv'; break
       case 'compras': hojas = hojasCompras(); slug = 'compras'; break
       case 'foodcost': hojas = hojasFoodCost(); slug = 'food_cost'; break
-      case 'presupuesto': hojas = hojasPresupuesto(); slug = 'presupuesto'; break
       case 'rendimiento': hojas = hojasRendimiento(); slug = 'rendimiento'; break
       case 'fuga': hojas = hojasFuga(); slug = 'fuga'; break
       case 'caja': hojas = hojasCaja(); slug = 'caja'; break
@@ -1049,104 +1012,6 @@ export default function ReportesPage() {
     )
   }
 
-  // ── Presupuesto por familia de gasto (PLAN-4-CAPAS B4) ──
-  function renderPresupuesto() {
-    const { rows, ventas, ventasPeriodoAnterior, ebitdaPct } = presuFamiliasData
-    const sinEstructura = rows.every(r => r.presupuesto === 0)
-    const ebitdaObjetivo = 15
-    const ebitdaColor = ebitdaPct >= ebitdaObjetivo ? '#16a34a' : ebitdaPct >= ebitdaObjetivo - 5 ? '#ca8a04' : '#dc2626'
-
-    async function handleEstructuraEstandar() {
-      const base = ventasPeriodoAnterior > 0 ? ventasPeriodoAnterior : ventas
-      if (base <= 0 || aplicandoEstandar) return
-      setAplicandoEstandar(true)
-      try {
-        await aplicarEstructuraEstandar(base)
-        const updated = await fetchPresupuestoFamilias()
-        setPresuFamiliasData(updated)
-      } finally { setAplicandoEstandar(false) }
-    }
-
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <p style={{ fontSize: 12, color: 'var(--text-2)', margin: 0, lineHeight: 1.5 }}>
-          Presupuesto mensual por familia de gasto, contra las facturas categorizadas del mes. Objetivo estándar: 30 % materia prima, 33 % personal, 5 % alquiler, 17 % gastos generales — 15 % de EBITDA.
-        </p>
-
-        {sinEstructura && (ventasPeriodoAnterior > 0 || ventas > 0) && (
-          <button onClick={handleEstructuraEstandar} disabled={aplicandoEstandar}
-            style={{ alignSelf: 'flex-start', padding: '9px 14px', borderRadius: 10, border: 'none', background: '#dc580c', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: aplicandoEstandar ? .6 : 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>auto_awesome</span>
-            {aplicandoEstandar ? 'Aplicando…' : 'Usar estructura estándar'}
-          </button>
-        )}
-
-        {rows.map(row => {
-          const over = row.presupuesto > 0 && row.real > row.presupuesto
-          const pctBarra = row.presupuesto > 0 ? Math.min((row.real / row.presupuesto) * 100, 100) : Math.min(row.realPct, 100)
-          const barCol = row.desvioPuntos <= 0 ? '#16a34a' : row.desvioPuntos <= 3 ? '#ca8a04' : '#dc2626'
-          return (
-            <div key={row.familia} style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{FAMILIA_GASTO_LABELS[row.familia]}</span>
-                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Objetivo {row.objetivoPct}%</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ fontSize: 11, color: 'var(--text-3)' }}>$</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    defaultValue={row.presupuesto || ''}
-                    placeholder="0"
-                    onBlur={async (e) => {
-                      const val = parseFloat(e.target.value) || 0
-                      if (val !== row.presupuesto) {
-                        await savePresupuestoFamilia(row.familia, val)
-                        const updated = await fetchPresupuestoFamilias()
-                        setPresuFamiliasData(updated)
-                      }
-                    }}
-                    style={{
-                      width: 110, textAlign: 'right', padding: '6px 10px', borderRadius: 8,
-                      border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)',
-                      fontSize: 14, fontWeight: 600, outline: 'none',
-                    }}
-                  />
-                </div>
-              </div>
-              <div style={{ background: 'var(--border)', borderRadius: 6, height: 20, overflow: 'hidden' }}>
-                <div style={{ width: `${pctBarra}%`, height: '100%', background: barCol, borderRadius: 6, transition: 'width 0.4s' }} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 12, flexWrap: 'wrap', gap: 4 }}>
-                <span style={{ color: 'var(--text-2)' }}>
-                  Real: <strong style={{ color: 'var(--text-1)' }}>{fmtPct(row.realPct)}</strong> · {fmtMoney(row.real)}
-                </span>
-                <span style={{ color: row.desvioPuntos <= 0 ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
-                  {row.desvioPuntos <= 0 ? '−' : '+'}{fmtPct(Math.abs(row.desvioPuntos))} vs. objetivo · {fmtMoney(Math.abs(row.desvioPlata))}
-                </span>
-              </div>
-              {row.presupuesto > 0 && (
-                <div style={{ fontSize: 11, color: over ? '#dc2626' : 'var(--text-3)', marginTop: 4 }}>
-                  {over ? `Excedido ${fmtMoney(row.real - row.presupuesto)} sobre el presupuesto cargado` : `Presupuesto: ${fmtMoney(row.presupuesto)}`}
-                </div>
-              )}
-            </div>
-          )
-        })}
-
-        <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: `1px solid ${ebitdaColor}55` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>EBITDA del mes</span>
-            <span style={{ fontSize: 20, fontWeight: 800, color: ebitdaColor }}>{fmtPct(ebitdaPct)}</span>
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
-            Objetivo {ebitdaObjetivo}% · Ventas del mes: {fmtMoney(ventas)}
-            {ventas === 0 && ' · Sin ventas cargadas todavía este mes'}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   // ── Rendimiento por plaza ──
   function renderRendimiento() {
     if (!rendData.length) return <EmptyState icon="speed" text="Sin actividad por plaza en el período" />
@@ -1522,7 +1387,6 @@ export default function ReportesPage() {
             {tab === 'resumen' && renderResumen()}
             {tab === 'ventas' && renderVentas()}
             {tab === 'cmv' && renderCMV()}
-            {tab === 'presupuesto' && renderPresupuesto()}
             {tab === 'rendimiento' && renderRendimiento()}
             {tab === 'fuga' && renderFuga()}
             {tab === 'foodcost' && renderFoodCost()}

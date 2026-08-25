@@ -12,7 +12,7 @@ const SECCIONES: { label: string; items: ModuloId[] }[] = [
   { label: 'Cocina', items: ['recetario', 'carta', 'produccion'] },
   { label: 'Servicio', items: ['salon', 'kds', 'muro', 'reservas'] },
   { label: 'Insumos', items: ['stock', 'facturas', 'pedidos', 'proveedores', 'merma'] },
-  { label: 'Gestión', items: ['reportes', 'ventas', 'clientes', 'haccp', 'calendario', 'turnos', 'bitacora'] },
+  { label: 'Gestión', items: ['reportes', 'presupuesto', 'ventas', 'clientes', 'haccp', 'calendario', 'turnos', 'bitacora'] },
   { label: 'Sistema', items: ['equipo', 'organigrama', 'configuracion'] },
 ]
 

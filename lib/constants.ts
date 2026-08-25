@@ -107,6 +107,7 @@ export type ModuloId =
   | 'muro'
   | 'bitacora'
   | 'reservas'
+  | 'presupuesto'
 
 export const MODULO_CONFIG: Record<
   ModuloId,
@@ -120,6 +121,7 @@ export const MODULO_CONFIG: Record<
   pedidos: { label: 'Pedidos', icon: 'shopping_cart', href: '/pedidos' },
   haccp: { label: 'Limpieza', icon: 'cleaning_services', href: '/haccp' },
   reportes: { label: 'Reportes', icon: 'bar_chart', href: '/reportes' },
+  presupuesto: { label: 'Presupuesto', icon: 'account_balance_wallet', href: '/presupuesto' },
   calendario: { label: 'Calendario', icon: 'calendar_month', href: '/calendario' },
   turnos: { label: 'Turnos', icon: 'schedule', href: '/turnos' },
   proveedores: { label: 'Proveedores', icon: 'local_shipping', href: '/proveedores' },
@@ -147,13 +149,13 @@ export const MODULO_CONFIG: Record<
 export const MODULOS_POR_ROL: Record<Rol, ModuloId[]> = {
   admin: [
     'home', 'operaciones', 'recetario', 'stock', 'pedidos',
-    'haccp', 'reportes', 'calendario',
+    'haccp', 'reportes', 'presupuesto', 'calendario',
     'carta', 'pase', 'facturas', 'merma', 'equipo', 'organigrama', 'configuracion', 'ventas', 'espacios',
     'salon', 'kds', 'clientes', 'muro', 'bitacora', 'reservas',
   ],
   chef: [
     'home', 'operaciones', 'recetario', 'stock', 'pedidos',
-    'haccp', 'reportes', 'calendario',
+    'haccp', 'reportes', 'presupuesto', 'calendario',
     'carta', 'pase', 'facturas', 'merma', 'equipo', 'organigrama', 'ventas', 'espacios',
     'salon', 'kds', 'clientes', 'muro', 'bitacora', 'reservas',
   ],
@@ -179,7 +181,7 @@ export const MODULOS_POR_ROL: Record<Rol, ModuloId[]> = {
 // RouteGuard le mostraba "Sin acceso a home". Tipado, TypeScript lo agarra.
 export const TODOS_LOS_MODULOS: ModuloId[] = [
   'home', 'operaciones', 'tareas', 'recetario', 'stock', 'carta', 'checklist', 'pase',
-  'pedidos', 'proveedores', 'facturas', 'reportes', 'turnos', 'calendario',
+  'pedidos', 'proveedores', 'facturas', 'reportes', 'presupuesto', 'turnos', 'calendario',
   'haccp', 'equipo', 'configuracion', 'produccion', 'merma', 'ventas',
 ]
 
@@ -200,7 +202,7 @@ export const MODULOS_SEED_POR_ROL_DB: Record<string, ModuloId[]> = {
 // módulos, incluso siendo admin. Ver lib/hooks/usePermisos.ts (moduloEnPerfil).
 export const MODULOS_EMPRENDIMIENTO: ModuloId[] = [
   'home', 'espacios', 'tareas', 'recetario', 'carta', 'produccion',
-  'stock', 'facturas', 'proveedores', 'pedidos', 'merma', 'reportes', 'ventas', 'clientes',
+  'stock', 'facturas', 'proveedores', 'pedidos', 'merma', 'reportes', 'presupuesto', 'ventas', 'clientes',
   'calendario', 'equipo', 'organigrama', 'configuracion', 'coach', 'pase', 'haccp',
 ]
 
@@ -216,6 +218,7 @@ export const RUTA_A_MODULO: Record<string, string> = {
   '/pedidos': 'pedidos',
   '/haccp': 'haccp',
   '/reportes': 'reportes',
+  '/presupuesto': 'presupuesto',
   '/calendario': 'calendario',
   '/turnos': 'equipo',
   '/organigrama': 'organigrama',
@@ -398,6 +401,7 @@ export const MODULO_DESCRIPCION: Record<ModuloId, string> = {
   pedidos: 'Los pedidos a proveedores: qué se pidió, qué llegó y qué falta recibir.',
   haccp: 'Los controles de seguridad alimentaria: temperaturas, limpieza y vencimientos.',
   reportes: 'Los números del negocio: ventas, costos y desvíos del período.',
+  presupuesto: 'El estándar declarado: cuánto tenés pensado gastar por sector, contra lo que gastaste de verdad.',
   calendario: 'La agenda: entregas, eventos y lo que viene esta semana.',
   turnos: 'La grilla del personal y el fichaje de entrada y salida.',
   proveedores: 'La libreta de proveedores: contacto, días de entrega y precios.',
