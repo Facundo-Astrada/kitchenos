@@ -155,7 +155,7 @@ Es un fix chico (dos fórmulas) con impacto directo en una recomendación que el
 
 | # | Qué | Por qué |
 |---|---|---|
-| 5 | **Presupuesto por familias de gasto** | Hoy `presupuestos` es un monto. Con las 4 familias y la estructura objetivo, Reportes pasa de decir "gastaste X" a decir "personal está 6 puntos arriba del objetivo". Es el salto de resultado a desvío. |
+| ~~5~~ | ~~**Presupuesto por familias de gasto**~~ — **cerrado ago 2026** (`/presupuesto`, PLAN-PRESUPUESTO-CMV-2026-08). Y va un anillo más adentro de lo que pedía este ítem: no solo las 4 familias, también el desglose de materia prima por sector (categoría de gasto) contra objetivo expresado sobre ventas, con desvío en puntos. | Hoy `presupuestos` es un monto. Con las 4 familias y la estructura objetivo, Reportes pasa de decir "gastaste X" a decir "personal está 6 puntos arriba del objetivo". Es el salto de resultado a desvío. |
 | 6 | **Incidencias por proveedor** | La diferencia al recibir ya se captura. Falta que acumule y ranque. Convierte una discusión de memoria en un dato al renegociar. |
 | 7 | **Cotejo de baja de inventario vs. facturación** | La detección de fuga. El material la trata como existencial y hoy no existe. |
 | 8 | **Estándar de calidad por producto** | Sin esto, la recepción no tiene contra qué verificar y el paso 2 del protocolo es decorativo. |
