@@ -146,7 +146,7 @@ export function useReportes() {
       const { data: facturas, error: facErr } = await supabase
         .from('facturas').select('id, total')
         .eq('restaurante_id', RESTAURANTE_ID)
-        .eq('status', 'confirmada')
+        .neq('status', 'observada')
         .gte('fecha_factura', from).lte('fecha_factura', to)
 
       if (facErr) throw facErr
@@ -158,7 +158,7 @@ export function useReportes() {
       const { data: prevFacturas, error: prevErr } = await supabase
         .from('facturas').select('id, total')
         .eq('restaurante_id', RESTAURANTE_ID)
-        .eq('status', 'confirmada')
+        .neq('status', 'observada')
         .gte('fecha_factura', prevFrom).lte('fecha_factura', prevTo)
 
       if (prevErr) throw prevErr
@@ -296,7 +296,7 @@ export function useReportes() {
       const { data: facturas, error: facErr } = await supabase
         .from('facturas').select('id, proveedor_nombre, fecha_factura, total, status')
         .eq('restaurante_id', RESTAURANTE_ID)
-        .eq('status', 'confirmada')
+        .neq('status', 'observada')
         .gte('fecha_factura', from).lte('fecha_factura', to)
         .order('fecha_factura', { ascending: false })
 
@@ -478,19 +478,27 @@ export function useReportes() {
     try {
       const { from, to, prevFrom, prevTo } = getDateRange(periodo)
 
+      // "compras" es específicamente Costo de Mercadería Vendida: solo facturas
+      // categorizadas como mercadería, no el total de gasto (alquiler, marketing,
+      // impuestos también pasan por facturas y no son CMV). El filtro va del lado
+      // del cliente sobre la tabla embebida — .eq('categorias_gasto.col', X) NO
+      // filtra la fila padre en PostgREST (ver feedback_postgrest_join).
       const [ventasRes, comprasRes, ventasPrevRes, comprasPrevRes, miembrosRes] = await Promise.all([
         supabase.from('ventas').select('total_ventas, cantidad_cubiertos').eq('restaurante_id', RESTAURANTE_ID).gte('fecha', from).lte('fecha', to),
-        supabase.from('facturas').select('total').eq('restaurante_id', RESTAURANTE_ID).eq('status', 'confirmada').gte('fecha_factura', from).lte('fecha_factura', to),
+        supabase.from('facturas').select('total, categorias_gasto(categoria_financiera)').eq('restaurante_id', RESTAURANTE_ID).neq('status', 'observada').gte('fecha_factura', from).lte('fecha_factura', to),
         supabase.from('ventas').select('total_ventas').eq('restaurante_id', RESTAURANTE_ID).gte('fecha', prevFrom).lte('fecha', prevTo),
-        supabase.from('facturas').select('total').eq('restaurante_id', RESTAURANTE_ID).eq('status', 'confirmada').gte('fecha_factura', prevFrom).lte('fecha_factura', prevTo),
+        supabase.from('facturas').select('total, categorias_gasto(categoria_financiera)').eq('restaurante_id', RESTAURANTE_ID).neq('status', 'observada').gte('fecha_factura', prevFrom).lte('fecha_factura', prevTo),
         supabase.from('equipo_miembros').select('auth_user_id, costo_hora').eq('restaurante_id', RESTAURANTE_ID).not('costo_hora', 'is', null),
       ])
 
+      const sumaMercaderia = (rows: { total: number; categorias_gasto: { categoria_financiera: CategoriaFinanciera } | null }[]) =>
+        rows.reduce((s, f) => s + (f.categorias_gasto?.categoria_financiera === 'mercaderia' ? (f.total || 0) : 0), 0)
+
       const ventas = (ventasRes.data ?? []).reduce((s, v) => s + (v.total_ventas || 0), 0)
       const cubiertos = (ventasRes.data ?? []).reduce((s, v) => s + (v.cantidad_cubiertos || 0), 0)
-      const compras = (comprasRes.data ?? []).reduce((s, f) => s + (f.total || 0), 0)
+      const compras = sumaMercaderia((comprasRes.data ?? []) as unknown as { total: number; categorias_gasto: { categoria_financiera: CategoriaFinanciera } | null }[])
       const ventasAnterior = (ventasPrevRes.data ?? []).reduce((s, v) => s + (v.total_ventas || 0), 0)
-      const comprasAnterior = (comprasPrevRes.data ?? []).reduce((s, f) => s + (f.total || 0), 0)
+      const comprasAnterior = sumaMercaderia((comprasPrevRes.data ?? []) as unknown as { total: number; categorias_gasto: { categoria_financiera: CategoriaFinanciera } | null }[])
 
       // Costo laboral: horas fichadas (turnos_personal) × costo_hora de cada persona.
       // null (no "$0") si nadie del equipo tiene costo_hora cargado — evita mostrar un CMV-laboral falso.
@@ -549,7 +557,7 @@ export function useReportes() {
         supabase.from('presupuestos').select('familia, monto')
           .eq('restaurante_id', RESTAURANTE_ID).eq('periodo', 'mensual').not('familia', 'is', null),
         supabase.from('facturas').select('total, categorias_gasto(categoria_financiera)')
-          .eq('restaurante_id', RESTAURANTE_ID).eq('status', 'confirmada')
+          .eq('restaurante_id', RESTAURANTE_ID).neq('status', 'observada')
           .not('categoria_gasto_id', 'is', null)
           .gte('fecha_factura', curFrom).lte('fecha_factura', hoy),
         supabase.from('ventas').select('total_ventas')

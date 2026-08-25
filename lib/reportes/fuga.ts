@@ -183,7 +183,7 @@ export async function calcularFugaInventario(opts: {
     .from('facturas')
     .select('id')
     .eq('restaurante_id', restauranteId)
-    .eq('status', 'confirmada')
+    .neq('status', 'observada')
     .gte('fecha_factura', desde)
     .lte('fecha_factura', hasta)
   const facturaIds = (facturasData ?? []).map(f => f.id as string)

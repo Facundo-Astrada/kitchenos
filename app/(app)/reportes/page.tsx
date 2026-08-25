@@ -1027,7 +1027,7 @@ export default function ReportesPage() {
             />
           </div>
           <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
-            El CMV se calcula como compras confirmadas ÷ ventas del período. Un CMV sano en gastronomía suele estar entre 28% y 35%.
+            El CMV se calcula como compras de mercadería ÷ ventas del período. Un CMV sano en gastronomía suele estar entre 28% y 35%.
           </p>
         </div>
         {/* Right: KPIs */}
