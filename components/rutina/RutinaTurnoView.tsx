@@ -20,6 +20,17 @@ const btnReset: React.CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit',
 }
 
+// Botón-ícono circular para las acciones primarias del header (imprimir,
+// editar) — antes eran glifos sueltos sin superficie propia (~19px de área
+// táctil real, se leían como texto, no como botón).
+function iconBtnStyle(active = false): React.CSSProperties {
+  return {
+    ...btnReset,
+    flexShrink: 0, width: 34, height: 34, borderRadius: 99,
+    background: active ? 'rgba(67,97,160,.14)' : 'rgba(28,45,74,.05)',
+  }
+}
+
 /** "17:00" → 1020. Para ordenar y para comparar contra la hora real de ejecución. */
 function aMinutos(hhmm: string): number {
   const [h, m] = hhmm.split(':').map(Number)
@@ -182,8 +193,12 @@ export function RutinaTurnoView({ embedded }: { embedded?: boolean } = {}) {
       {/* ── Cabecera: fase + turno + progreso ── */}
       <div style={{
         padding: embedded ? '10px 16px 12px' : 'var(--header-top) 16px 12px',
-        background: embedded ? 'var(--bg)' : 'var(--navy)',
-        flexShrink: 0, borderBottom: '1px solid var(--border)',
+        // Superficie propia + sombra en vez del borde de 1px: el header y el
+        // fondo de la lista eran el mismo --bg, sin ninguna separación real.
+        background: embedded ? 'var(--surface)' : 'var(--navy)',
+        flexShrink: 0,
+        boxShadow: embedded ? 'var(--shadow-2)' : undefined,
+        borderBottom: embedded ? undefined : '1px solid var(--border)',
       }}>
         <SegmentedTabs
           variant={embedded ? 'onLight' : 'onDark'}
@@ -221,19 +236,19 @@ export function RutinaTurnoView({ embedded }: { embedded?: boolean } = {}) {
           <button
             onClick={handleExportPDF}
             disabled={exportando || !turno}
-            style={{ ...btnReset, flexShrink: 0, opacity: exportando ? 0.5 : 1 }}
+            style={{ ...iconBtnStyle(), opacity: exportando ? 0.5 : 1 }}
             aria-label="Imprimir hoja de apertura y cierre"
             title="Imprimir hoja para la pared"
           >
-            <span className="material-symbols-outlined" style={{ fontSize: 19, color: 'var(--text-3)' }}>print</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)' }}>print</span>
           </button>
           <button
             onClick={() => setEditando(e => !e)}
-            style={{ ...btnReset, flexShrink: 0 }}
+            style={iconBtnStyle(editando)}
             aria-label={editando ? 'Terminar de editar' : 'Editar la rutina'}
           >
             <span className="material-symbols-outlined" style={{
-              fontSize: 19, color: editando ? 'var(--accent)' : 'var(--text-3)',
+              fontSize: 18, color: editando ? 'var(--accent)' : 'var(--text-3)',
             }}>{editando ? 'check_circle' : 'edit_note'}</span>
           </button>
         </div>
@@ -271,7 +286,7 @@ export function RutinaTurnoView({ embedded }: { embedded?: boolean } = {}) {
         )}
 
         {!loading && total > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {visibles.map((item, idx) => {
               const reg = regMap[item.id]
               const done = !!reg?.completado
@@ -286,8 +301,12 @@ export function RutinaTurnoView({ embedded }: { embedded?: boolean } = {}) {
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px',
                     background: done ? 'rgba(34,197,94,.05)' : 'var(--surface)',
-                    border: `1px solid ${done ? 'rgba(34,197,94,.22)' : 'var(--border)'}`,
-                    borderRadius: 12, transition: 'background .2s, border-color .2s',
+                    // Lo pendiente flota (shadow-1, tarjeta en lista); lo hecho se
+                    // asienta — sin sombra, solo el tinte verde diegético. La
+                    // elevación hace parte del trabajo que antes hacía el borde solo.
+                    border: done ? '1px solid rgba(34,197,94,.22)' : 'none',
+                    boxShadow: done ? 'none' : 'var(--shadow-1)',
+                    borderRadius: 12, transition: 'background .2s, border-color .2s, box-shadow .2s',
                   }}>
                     {editando ? (
                       <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
@@ -323,7 +342,13 @@ export function RutinaTurnoView({ embedded }: { embedded?: boolean } = {}) {
                             </span>
                           )}
                           {item.requiere_responsable && !resp && !editando && (
-                            <button onClick={() => setAsignando(asignando === item.id ? null : item.id)} style={{ ...btnReset, gap: 3 }}>
+                            <button
+                              onClick={() => setAsignando(asignando === item.id ? null : item.id)}
+                              style={{
+                                ...btnReset, gap: 3, padding: '3px 8px 3px 6px', borderRadius: 99,
+                                background: 'rgba(67,97,160,.1)',
+                              }}
+                            >
                               <span className="material-symbols-outlined" style={{ fontSize: 13, color: 'var(--accent)' }}>person_add</span>
                               <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--accent)' }}>Asignar</span>
                             </button>
