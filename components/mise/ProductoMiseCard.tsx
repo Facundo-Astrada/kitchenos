@@ -474,7 +474,7 @@ function ProductoMiseCardBase({
         <button
           data-coach-target="mise-item-check"
           onClick={handleToggleCheck}
-          className={justCompleted ? 'tilde-pop' : undefined}
+          className={`hit-slop${justCompleted ? ' tilde-pop' : ''}`}
           style={{ ...btnReset, flexShrink: 0 }}
         >
           <span className="material-symbols-outlined" style={{

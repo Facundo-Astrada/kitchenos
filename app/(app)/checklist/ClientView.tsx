@@ -136,6 +136,7 @@ function PlazaFlipCard({ p, plazasCustom, gp, entrega, turnoNombre, onSelect }: 
       <button
         onClick={e => { e.stopPropagation(); setFlipped(true) }}
         title="Ver entrega"
+        className="hit-slop"
         style={{
           ...btnReset, position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: 7,
           background: 'rgba(0,0,0,.2)',
@@ -187,6 +188,71 @@ function PlazaFlipCard({ p, plazasCustom, gp, entrega, turnoNombre, onSelect }: 
   )
 
   return <FlipCard front={frente} back={dorso} flipped={flipped} onFlippedChange={setFlipped} height={148} />
+}
+
+// Confirmación en marca de la casa — nunca window.confirm() nativo en flujo
+// de servicio (DESIGN.md §7/§10). Mismo patrón visual que el sheet de
+// "Cambiar de plaza" (portal a body + backdrop navy + tarjeta centrada), para
+// que entregar la plaza se sienta parte de la app y no un popup del sistema
+// operativo justo en el único momento del turno que se celebra (DESIGN.md §6).
+function ConfirmSheet({ icon, iconColor, title, body, confirmLabel, confirmColor, onConfirm, onCancel }: {
+  icon: string
+  iconColor: string
+  title: string
+  body: string
+  confirmLabel: string
+  confirmColor: string
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return createPortal(
+    <SheetChrome>
+      <div
+        onClick={onCancel}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 2000,
+          background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+        }}
+      >
+        <div
+          onClick={e => e.stopPropagation()}
+          className="toast-enter"
+          style={{
+            width: '100%', maxWidth: 340, background: 'var(--bg)', borderRadius: 18,
+            padding: '22px 20px 16px', boxShadow: '0 20px 50px rgba(0,0,0,.35)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6,
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 34, color: iconColor, marginBottom: 4 }}>{icon}</span>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>{title}</div>
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)', lineHeight: 1.4, marginBottom: 10 }}>{body}</div>
+          <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+            <button
+              onClick={onCancel}
+              style={{
+                ...btnReset, flex: 1, padding: '12px 0', borderRadius: 12,
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                fontSize: 13, fontWeight: 700, color: 'var(--text-2)',
+              }}
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={onConfirm}
+              style={{
+                ...btnReset, flex: 1.3, padding: '12px 0', borderRadius: 12, border: 'none',
+                background: confirmColor, color: '#fff', fontSize: 13, fontWeight: 700,
+              }}
+            >
+              {confirmLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    </SheetChrome>,
+    document.body,
+  )
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -342,6 +408,11 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const [notasAbiertas, setNotasAbiertas] = useState(false)
   const [cerrandoTurno, setCerrandoTurno] = useState(false)
   const [entregando, setEntregando] = useState(false)
+  // Confirmación de entregar plaza / marcar salida (DESIGN.md §7 — nunca
+  // window.confirm() nativo en flujo de servicio: rompe la identidad visual
+  // justo en el único momento por turno que el sistema de movimiento marca
+  // como celebración real, ver DESIGN.md §6). Sheet propio en vez de eso.
+  const [confirmAccion, setConfirmAccion] = useState<'entregar' | 'cerrar' | null>(null)
 
   useEffect(() => {
     setModoControl(localStorage.getItem('checklist_modo_control') === 'true')
@@ -818,10 +889,15 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     return turnosActivos.find(t => t.id === sig.turnoId) ?? null
   }, [fecha, turnoServicioId, turnosActivos])
 
-  async function handleEntregarPlaza() {
+  function handleEntregarPlaza() {
     if (!plaza || !turnoServicioId || entregando) return
+    setConfirmAccion('entregar')
+  }
+
+  async function doEntregarPlaza() {
+    if (!plaza || !turnoServicioId) return
     const nombreProximo = proximoTurno?.nombre ?? 'el turno siguiente'
-    if (!confirm(`¿Entregar ${plazaLabel(plaza, plazasCustom)}? El turno de la plaza pasa a ${nombreProximo} para todos.`)) return
+    setConfirmAccion(null)
     setEntregando(true)
     try {
       // Quedarse parado en el turno recién entregado: para el resto de la
@@ -842,9 +918,14 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     }
   }
 
-  async function handleCerrarTurno() {
+  function handleCerrarTurno() {
     if (!fichajeAbierto || cerrandoTurno) return
-    if (!confirm('¿Cerrar tu turno? Se registra tu hora de salida.')) return
+    setConfirmAccion('cerrar')
+  }
+
+  async function doCerrarTurno() {
+    if (!fichajeAbierto) return
+    setConfirmAccion(null)
     setCerrandoTurno(true)
     try {
       await marcarSalida(fichajeAbierto)
@@ -1262,6 +1343,25 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
               <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'rgba(255,255,255,.55)', flexShrink: 0 }}>
                 expand_more
               </span>
+              {/* Panel de compañeros, en periferia (DESIGN.md §9 / investigación
+                  P1 — patrón Overwatch: el estado del resto del equipo se ve de
+                  reojo mientras trabajás tu propia plaza, sin abrir nada y sin
+                  comparar a nadie — solo un punto de color por plaza, ninguna
+                  cifra). Vive DENTRO del mismo botón que ya abre el sheet
+                  completo, así no suma una fila nueva a un header que ya se
+                  pliega (chromeCompacto) para ganar espacio al scrollear. */}
+              {tab !== 'rutina' && (
+                <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                  {plazasForSelector.filter(p => p !== plaza).map(p => {
+                    const gp = gridProgress[p] ?? { total: 0, done: 0 }
+                    const completo = gp.total > 0 && gp.done === gp.total
+                    const dotColor = gp.total === 0 ? 'rgba(255,255,255,.2)'
+                      : completo ? '#22c55e'
+                      : gp.done > 0 ? plazaColor(p, plazasCustom) : 'rgba(255,255,255,.3)'
+                    return <div key={p} title={plazaLabel(p, plazasCustom)} style={{ width: 5, height: 5, borderRadius: '50%', background: dotColor }} />
+                  })}
+                </div>
+              )}
               {fecha !== fechaEnTz(new Date()) && (
                 <span style={{
                   fontSize: 10, fontWeight: 700, color: '#facc15', flexShrink: 0,
@@ -2343,6 +2443,27 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
             </button>
           ) : null}
         </div>
+      )}
+
+      {confirmAccion === 'entregar' && (
+        <ConfirmSheet
+          icon="outbox" iconColor="#22c55e"
+          title={`¿Entregar ${plaza ? plazaLabel(plaza, plazasCustom) : 'la plaza'}?`}
+          body={`El turno de la plaza pasa a ${proximoTurno?.nombre ?? 'el turno siguiente'} para todos.`}
+          confirmLabel="Entregar" confirmColor="#22c55e"
+          onConfirm={doEntregarPlaza}
+          onCancel={() => setConfirmAccion(null)}
+        />
+      )}
+      {confirmAccion === 'cerrar' && (
+        <ConfirmSheet
+          icon="stop_circle" iconColor="#ef4444"
+          title="¿Cerrar tu turno?"
+          body="Se registra tu hora de salida."
+          confirmLabel="Cerrar turno" confirmColor="#ef4444"
+          onConfirm={doCerrarTurno}
+          onCancel={() => setConfirmAccion(null)}
+        />
       )}
     </div>
   )

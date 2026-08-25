@@ -207,6 +207,24 @@ input, textarea, [contenteditable] {
   opacity: 1;
 }
 
+/* ── Hit-slop táctil (DESIGN.md §7 — targets ≥56px en superficie de servicio,
+   ISO/TS 9241-411 guante fino) ── El glyph visual se mantiene chico a
+   propósito (24px) para no inflar la densidad de listas de 40+ ítems del
+   Mise (tensión real con "evitar scroll largo", ver DESIGN.md §7) — el área
+   TOCABLE crece con un ::before invisible en vez de agrandar el layout.
+   Requiere position:relative en el elemento (ya lo trae .hit-slop). El
+   ::before pinta fuera de la caja del botón pero sigue registrando clicks
+   (hit-testing por pixel, no por caja del ancestro) — no empuja vecinos ni
+   cambia el alto de la fila. */
+.hit-slop {
+  position: relative;
+}
+.hit-slop::before {
+  content: '';
+  position: absolute;
+  inset: -12px;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .toast-enter {
     animation: toastIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
