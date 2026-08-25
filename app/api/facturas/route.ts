@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { clasificarErrorIA, errorSinApiKey, respuestaErrorIA, statusErrorIA } from '@/lib/ia/errores'
 
 function buildSystemPrompt(nombresInternos: string[]): string {
   const listaInternos = nombresInternos.length > 0
@@ -62,26 +63,6 @@ function normNombre(s: string): string {
     .trim()
 }
 
-const DEMO_RESULT = {
-  proveedor_nombre: 'Distribuidora Norte SRL',
-  proveedor_cuit: '30-71234567-8',
-  fecha_factura: new Date().toISOString().slice(0, 10),
-  tipo_factura: 'A',
-  numero_factura: '0001-00042851',
-  condicion_pago: 'cuenta_corriente',
-  items: [
-    { producto_nombre: 'Lomo vetado', cantidad: 10, unidad: 'kg', precio_unitario: 8500, alicuota_iva: 21, subtotal: 85000 },
-    { producto_nombre: 'Entraña', cantidad: 5, unidad: 'kg', precio_unitario: 6200, alicuota_iva: 21, subtotal: 31000 },
-    { producto_nombre: 'Sal entrefina', cantidad: 2, unidad: 'kg', precio_unitario: 1800, alicuota_iva: 21, subtotal: 3600 },
-    { producto_nombre: 'Aceite de oliva', cantidad: 5, unidad: 'l', precio_unitario: 4500, alicuota_iva: 21, subtotal: 22500 },
-  ],
-  subtotal: 142100,
-  iva_total: 29841,
-  total: 171941,
-  notas: null,
-  _demo: true,
-}
-
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -105,8 +86,11 @@ export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY
 
   if (!apiKey) {
-    // Return demo data when no API key
-    return NextResponse.json(DEMO_RESULT)
+    // Devolvía DEMO_RESULT. En prod la key está seteada, así que esto era un
+    // atajo de desarrollo — pero si alguna vez faltaba, el restaurante recibía
+    // una factura inventada con pinta de real en lugar de un aviso.
+    const err = errorSinApiKey()
+    return NextResponse.json(respuestaErrorIA(err), { status: statusErrorIA(err) })
   }
 
   let userContent: Array<Record<string, unknown>> = []
@@ -162,12 +146,13 @@ export async function POST(req: NextRequest) {
     })
 
     if (!response.ok) {
-      const error = await response.text()
-      // If credit issue, return demo
-      if (response.status === 429 || response.status === 403) {
-        return NextResponse.json(DEMO_RESULT)
-      }
-      return NextResponse.json({ error }, { status: response.status })
+      // Antes, un 429/403 devolvía DEMO_RESULT: una factura inventada
+      // (proveedor, CUIT, montos) con un discreto "DEMO —" en la UI. Una
+      // factura fabricada que entra a la contabilidad de un restaurante es
+      // peor que un error. Ahora el fallo se dice.
+      const err = clasificarErrorIA(response.status, await response.text())
+      console.error('[/api/facturas] IA:', err.tipo, err.requestId ?? '')
+      return NextResponse.json(respuestaErrorIA(err), { status: statusErrorIA(err) })
     }
 
     const data = await response.json()
@@ -184,8 +169,11 @@ export async function POST(req: NextRequest) {
       }
       return NextResponse.json({ error: 'No se pudo parsear respuesta', raw: text }, { status: 500 })
     }
-  } catch (e) {
-    return NextResponse.json(DEMO_RESULT)
+  } catch (e: unknown) {
+    // Un fallo de red tampoco puede terminar en una factura fabricada.
+    console.error('[/api/facturas] fetch:', e instanceof Error ? e.message : e)
+    const err = clasificarErrorIA(0, '')
+    return NextResponse.json(respuestaErrorIA(err), { status: statusErrorIA(err) })
   }
 }
 

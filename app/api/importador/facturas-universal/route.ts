@@ -4,6 +4,7 @@ import { requireRestauranteId } from '@/lib/api/tenant'
 import * as XLSX from 'xlsx'
 import { randomUUID } from 'crypto'
 import { calcularDesfasadosDeItemsNuevos, aplicarDesfasados } from '@/lib/stock/syncPrecios'
+import { clasificarErrorIA } from '@/lib/ia/errores'
 
 export const maxDuration = 60
 
@@ -319,7 +320,14 @@ Respondé SOLO un JSON con el mapping de NOMBRE EXACTO de header → campo Kitch
         messages: [{ role: 'user', content: prompt }],
       }),
     })
-    if (!res.ok) return {}
+    if (!res.ok) {
+      // Degrada a "sin enriquecer" a propósito (el import sigue con lo que
+      // parseó solo), pero el motivo tiene que quedar en el log: si no, una
+      // caída de la IA se ve igual que una factura que no tenía nada que sumar.
+      const err = clasificarErrorIA(res.status, await res.text())
+      console.error('[importador/facturas-universal] IA:', err.tipo, err.requestId ?? '')
+      return {}
+    }
     const data = await res.json()
     const text: string = data.content?.[0]?.text ?? '{}'
     const match = text.match(/\{[\s\S]*\}/)

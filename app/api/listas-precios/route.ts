@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { clasificarErrorIA, errorSinApiKey, respuestaErrorIA, statusErrorIA } from '@/lib/ia/errores'
 
 const SYSTEM_PROMPT = `Sos un asistente de cocina profesional. Extraé TODOS los productos y precios de esta lista de precios de un proveedor.
 
@@ -29,23 +30,6 @@ Reglas:
 - Si no podés leer un precio, poné 0 y agregá observación "precio ilegible"
 - Los precios son en pesos argentinos (ARS) a menos que se indique lo contrario`
 
-const DEMO_RESULT = {
-  items: [
-    { producto_nombre: 'Lomo vetado', precio_unitario: 8500, unidad: 'kg', cantidad_envase: 1, observaciones: null },
-    { producto_nombre: 'Entraña limpia', precio_unitario: 6200, unidad: 'kg', cantidad_envase: 1, observaciones: null },
-    { producto_nombre: 'Aceite de oliva extra virgen', precio_unitario: 4500, unidad: 'l', cantidad_envase: 1, observaciones: 'Botella 500ml' },
-    { producto_nombre: 'Sal entrefina', precio_unitario: 850, unidad: 'kg', cantidad_envase: 1, observaciones: null },
-    { producto_nombre: 'Huevos', precio_unitario: 4200, unidad: 'docena', cantidad_envase: 12, observaciones: 'Maple x30' },
-    { producto_nombre: 'Harina 000', precio_unitario: 1200, unidad: 'kg', cantidad_envase: 1, observaciones: 'Bolsa x25kg' },
-    { producto_nombre: 'Crema de leche', precio_unitario: 2800, unidad: 'l', cantidad_envase: 1, observaciones: null },
-    { producto_nombre: 'Manteca', precio_unitario: 3600, unidad: 'kg', cantidad_envase: 1, observaciones: 'Pan x200g' },
-  ],
-  moneda: 'ARS',
-  fecha_detectada: new Date().toISOString().slice(0, 10),
-  notas: 'Lista demo — configurá tu API key de Anthropic para usar IA real',
-  _demo: true,
-}
-
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -58,7 +42,9 @@ export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY
 
   if (!apiKey) {
-    return NextResponse.json(DEMO_RESULT)
+    // Ver /api/facturas: sin key, un aviso — no una lista de precios inventada.
+    const err = errorSinApiKey()
+    return NextResponse.json(respuestaErrorIA(err), { status: statusErrorIA(err) })
   }
 
   let userContent: Array<Record<string, unknown>> = []
@@ -149,11 +135,11 @@ export async function POST(req: NextRequest) {
     })
 
     if (!response.ok) {
-      const error = await response.text()
-      if (response.status === 429 || response.status === 403) {
-        return NextResponse.json(DEMO_RESULT)
-      }
-      return NextResponse.json({ error }, { status: response.status })
+      // Ver /api/facturas: devolver DEMO_RESULT ante un fallo de la API le
+      // metía al usuario una lista de precios inventada como si fuera la suya.
+      const err = clasificarErrorIA(response.status, await response.text())
+      console.error('[/api/listas-precios] IA:', err.tipo, err.requestId ?? '')
+      return NextResponse.json(respuestaErrorIA(err), { status: statusErrorIA(err) })
     }
 
     const data = await response.json()
@@ -169,7 +155,10 @@ export async function POST(req: NextRequest) {
       }
       return NextResponse.json({ error: 'No se pudo parsear respuesta', raw: text }, { status: 500 })
     }
-  } catch {
-    return NextResponse.json(DEMO_RESULT)
+  } catch (e: unknown) {
+    // Un fallo de red tampoco puede terminar en una lista de precios inventada.
+    console.error('[/api/listas-precios] fetch:', e instanceof Error ? e.message : e)
+    const err = clasificarErrorIA(0, '')
+    return NextResponse.json(respuestaErrorIA(err), { status: statusErrorIA(err) })
   }
 }

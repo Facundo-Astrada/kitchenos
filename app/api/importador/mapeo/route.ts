@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { clasificarErrorIA } from '@/lib/ia/errores'
 
 const SCHEMA_KITCHENOS = `
 ## KitchenOS — Schema de módulos para restaurantes
@@ -108,7 +109,17 @@ Respondé SOLO con JSON válido, sin texto extra:
         messages: [{ role: 'user', content: prompt }],
       }),
     })
-    if (!res.ok) return NextResponse.json({ tipo_detectado: tipo ?? 'desconocido', confianza: 'baja', mapeo: {}, advertencias: [] })
+    if (!res.ok) {
+      // Degradar a "confianza baja" es razonable acá (el usuario mapea a mano),
+      // pero el motivo va al log y a las advertencias para que no parezca que
+      // el archivo era ilegible.
+      const err = clasificarErrorIA(res.status, await res.text())
+      console.error('[importador/mapeo] IA:', err.tipo, err.requestId ?? '')
+      return NextResponse.json({
+        tipo_detectado: tipo ?? 'desconocido', confianza: 'baja', mapeo: {},
+        advertencias: [err.mensaje],
+      })
+    }
 
     const data = await res.json()
     const text: string = data.content?.[0]?.text ?? '{}'

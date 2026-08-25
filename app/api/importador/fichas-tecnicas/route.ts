@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import * as XLSX from 'xlsx'
 import mammoth from 'mammoth'
+import { clasificarErrorIA } from '@/lib/ia/errores'
 
 export const maxDuration = 120
 
@@ -179,7 +180,14 @@ async function callClaude(apiKey: string, content: AnthropicContent[]): Promise<
       messages: [{ role: 'user', content }],
     }),
   })
-  if (!res.ok) return []
+  if (!res.ok) {
+    // Devolver [] es indistinguible de "el PDF no tenía fichas" para quien lo
+    // subió. Al menos que el log diga por qué, hasta que el flujo sepa
+    // propagar el error a la pantalla.
+    const err = clasificarErrorIA(res.status, await res.text())
+    console.error('[importador/fichas-tecnicas] IA:', err.tipo, err.requestId ?? '')
+    return []
+  }
   const data = await res.json() as { content: { type: string; text?: string }[] }
   const text = data.content?.[0]?.type === 'text' ? (data.content[0].text ?? '') : ''
   const start = text.indexOf('[')

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import { createClient } from '@/lib/supabase/server'
+import { clasificarErrorIA, statusErrorIA } from '@/lib/ia/errores'
 
 const SYSTEM_PROMPT = `Sos un asistente de cocina profesional que analiza recetas.
 Analizá la información proporcionada (puede ser una imagen de receta, texto copiado, o una transcripción de audio) y extraé los datos estructurados.
@@ -68,63 +69,6 @@ Reglas:
 - Si los datos están en múltiples hojas/secciones, revisá TODAS
 - Devolvé al menos 1 receta. Si no encontrás ninguna, devolvé un array vacío`
 
-// ── Demo data para cuando no hay créditos ──
-function getDemoResult(inputHint?: string): Record<string, unknown> {
-  const hint = (inputHint || '').toLowerCase()
-  if (hint.includes('pizza') || hint.includes('masa')) {
-    return {
-      nombre_sugerido: 'Pizza Napolitana',
-      categoria_sugerida: 'Principales',
-      porciones: 8,
-      tiempo_minutos: 35,
-      ingredientes: [
-        { nombre: 'Harina 000', cantidad: '0,5', unidad: 'kg' },
-        { nombre: 'Agua tibia', cantidad: '0,3', unidad: 'l' },
-        { nombre: 'Levadura fresca', cantidad: '25', unidad: 'g' },
-        { nombre: 'Sal', cantidad: '10', unidad: 'g' },
-        { nombre: 'Aceite de oliva', cantidad: '30', unidad: 'ml' },
-        { nombre: 'Salsa de tomate', cantidad: '0,2', unidad: 'l' },
-        { nombre: 'Mozzarella', cantidad: '0,3', unidad: 'kg' },
-        { nombre: 'Albahaca fresca', cantidad: '6', unidad: 'u' },
-      ],
-      procedimiento: [
-        'Mezclar harina con sal, hacer un volcán y agregar agua tibia con levadura disuelta',
-        'Amasar 10 minutos hasta obtener masa elástica, agregar aceite',
-        'Dejar levar 1 hora tapada en lugar cálido',
-        'Estirar la masa en molde aceitado',
-        'Cubrir con salsa de tomate y mozzarella',
-        'Hornear a 250°C por 12-15 minutos',
-        'Retirar y agregar albahaca fresca',
-      ],
-    }
-  }
-  return {
-    nombre_sugerido: 'Lomo al Malbec',
-    categoria_sugerida: 'Principales',
-    porciones: 4,
-    tiempo_minutos: 45,
-    ingredientes: [
-      { nombre: 'Lomo vetado', cantidad: '1,2', unidad: 'kg' },
-      { nombre: 'Vino Malbec', cantidad: '0,5', unidad: 'l' },
-      { nombre: 'Manteca', cantidad: '80', unidad: 'g' },
-      { nombre: 'Cebolla', cantidad: '2', unidad: 'u' },
-      { nombre: 'Ajo', cantidad: '4', unidad: 'u' },
-      { nombre: 'Sal', cantidad: '15', unidad: 'g' },
-      { nombre: 'Pimienta negra', cantidad: '5', unidad: 'g' },
-      { nombre: 'Romero fresco', cantidad: '3', unidad: 'u' },
-    ],
-    procedimiento: [
-      'Salpimentar el lomo y sellar en sartén con manteca a fuego fuerte',
-      'Retirar el lomo y en la misma sartén dorar la cebolla y el ajo picados',
-      'Desglazar con el vino Malbec y reducir a la mitad',
-      'Agregar el romero y volver el lomo a la sartén',
-      'Llevar al horno precalentado a 180°C por 25 minutos',
-      'Dejar reposar 10 minutos antes de cortar',
-      'Servir con la salsa reducida por encima',
-    ],
-  }
-}
-
 async function callClaude(
   apiKey: string,
   system: string,
@@ -151,16 +95,12 @@ async function callClaude(
   })
 
   if (!response.ok) {
-    const errText = await response.text()
-    console.error('[recetas/import] Claude API error:', response.status, errText)
-    let errorDetail = `Error de Claude API (${response.status})`
-    try {
-      const errJson = JSON.parse(errText)
-      errorDetail = errJson.error?.message || errJson.message || errorDetail
-    } catch {
-      errorDetail = errText.substring(0, 500) || errorDetail
-    }
-    return { ok: false, error: errorDetail, status: response.status }
+    // Devolvía el mensaje crudo de Anthropic ("Your credit balance is too
+    // low…", en inglés y hablando de facturación) o el status pelado. El
+    // cocinero leía eso como "la foto no sirve" y reintentaba con otra.
+    const err = clasificarErrorIA(response.status, await response.text())
+    console.error('[recetas/import] IA:', err.tipo, err.requestId ?? '')
+    return { ok: false, error: err.mensaje, status: statusErrorIA(err) }
   }
 
   const data = await response.json()
@@ -201,9 +141,8 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Helper: build content array from mode+data (reused by import & import_multi) ──
-    async function buildContent(): Promise<{ content: Array<{ type: string; source?: any; text?: string }>; inputHint: string; error?: string; errorStatus?: number }> {
+    async function buildContent(): Promise<{ content: Array<{ type: string; source?: any; text?: string }>; error?: string; errorStatus?: number }> {
       const content: Array<{ type: string; source?: any; text?: string }> = []
-      let inputHint = ''
 
       if (mode === 'image' && image_base64) {
         content.push({ type: 'image', source: { type: 'base64', media_type: media_type || 'image/jpeg', data: image_base64 } })
@@ -219,13 +158,11 @@ export async function POST(req: NextRequest) {
           const lines = csv.split('\n').filter((l: string) => l.trim())
           if (lines.length > 0) sheetTexts.push(`\n══ HOJA: "${name}" (${lines.length} filas) ══\n${lines.join('\n')}`)
         }
-        if (sheetTexts.length === 0) return { content: [], inputHint: '', error: 'El archivo no contiene datos.', errorStatus: 400 }
+        if (sheetTexts.length === 0) return { content: [], error: 'El archivo no contiene datos.', errorStatus: 400 }
         const xlsText = sheetTexts.join('\n\n')
-        inputHint = xlsText
         const maxChars = 14000
         content.push({ type: 'text', text: `Analizá este archivo Excel/planilla con recetas de cocina. Puede tener múltiples hojas.\n\nCONTENIDO:\n${xlsText.substring(0, maxChars)}${xlsText.length > maxChars ? '\n[...truncado...]' : ''}` })
       } else if (mode === 'text' && text) {
-        inputHint = text
         content.push({ type: 'text', text: `Analizá este texto. Puede contener una o múltiples recetas:\n\n${text}` })
       } else if (mode === 'google_url' && google_url) {
         const url = google_url.trim()
@@ -234,9 +171,9 @@ export async function POST(req: NextRequest) {
         if (sheetsMatch) {
           const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetsMatch[1]}/export?format=xlsx`
           const gRes = await fetch(exportUrl, { redirect: 'follow' })
-          if (!gRes.ok) return { content: [], inputHint: '', error: `No se pudo descargar (${gRes.status}). Verificá que esté compartido.`, errorStatus: 400 }
+          if (!gRes.ok) return { content: [], error: `No se pudo descargar (${gRes.status}). Verificá que esté compartido.`, errorStatus: 400 }
           const buf = Buffer.from(await gRes.arrayBuffer())
-          if (buf.byteLength < 100) return { content: [], inputHint: '', error: 'Archivo vacío o inválido.', errorStatus: 400 }
+          if (buf.byteLength < 100) return { content: [], error: 'Archivo vacío o inválido.', errorStatus: 400 }
           const wb = XLSX.read(buf, { type: 'buffer' })
           const sheetTexts: string[] = []
           for (const name of wb.SheetNames) {
@@ -245,43 +182,37 @@ export async function POST(req: NextRequest) {
             const lines = csv.split('\n').filter((l: string) => l.trim())
             if (lines.length > 0) sheetTexts.push(`\n══ HOJA: "${name}" (${lines.length} filas) ══\n${lines.join('\n')}`)
           }
-          if (sheetTexts.length === 0) return { content: [], inputHint: '', error: 'Todas las hojas están vacías.', errorStatus: 400 }
+          if (sheetTexts.length === 0) return { content: [], error: 'Todas las hojas están vacías.', errorStatus: 400 }
           const xlsText = sheetTexts.join('\n\n')
-          inputHint = xlsText
           const maxChars = 14000
           content.push({ type: 'text', text: `Analizá este Google Sheets con recetas de cocina. Tiene múltiples hojas.\n\nCONTENIDO:\n${xlsText.substring(0, maxChars)}${xlsText.length > maxChars ? '\n[...truncado...]' : ''}` })
         } else if (docsMatch) {
           const exportUrl = `https://docs.google.com/document/d/${docsMatch[1]}/export?format=txt`
           const gRes = await fetch(exportUrl, { redirect: 'follow' })
-          if (!gRes.ok) return { content: [], inputHint: '', error: `No se pudo descargar (${gRes.status}). Verificá permisos.`, errorStatus: 400 }
+          if (!gRes.ok) return { content: [], error: `No se pudo descargar (${gRes.status}). Verificá permisos.`, errorStatus: 400 }
           const googleText = await gRes.text()
-          if (!googleText.trim()) return { content: [], inputHint: '', error: 'Documento vacío.', errorStatus: 400 }
-          inputHint = googleText
+          if (!googleText.trim()) return { content: [], error: 'Documento vacío.', errorStatus: 400 }
           content.push({ type: 'text', text: `Analizá este Google Doc con recetas:\n\n${googleText.substring(0, 14000)}` })
         } else {
-          return { content: [], inputHint: '', error: 'URL no reconocida.', errorStatus: 400 }
+          return { content: [], error: 'URL no reconocida.', errorStatus: 400 }
         }
       } else {
-        return { content: [], inputHint: '', error: 'Datos insuficientes.', errorStatus: 400 }
+        return { content: [], error: 'Datos insuficientes.', errorStatus: 400 }
       }
-      return { content, inputHint }
+      return { content }
     }
 
     // ── IMPORT_MULTI: múltiples recetas ──
     if (action === 'import_multi') {
-      const { content, inputHint, error: buildErr, errorStatus } = await buildContent()
+      const { content, error: buildErr, errorStatus } = await buildContent()
       if (buildErr) return NextResponse.json({ error: buildErr }, { status: errorStatus || 400 })
 
       console.log('[recetas/import_multi] Calling Claude for multi-recipe extraction...')
       const result = await callClaude(apiKey, MULTI_SYSTEM_PROMPT, content, 4096, 'claude-sonnet-4-6')
       if (!result.ok) {
-        if (result.error.includes('credit balance')) {
-          console.warn('[recetas/import_multi] No credits — returning demo')
-          return NextResponse.json({
-            recetas: [getDemoResult(inputHint), getDemoResult('pizza')],
-            _demo: true,
-          })
-        }
+        // Sin crédito devolvía dos recetas inventadas. El usuario subía un
+        // archivo con sus recetas y recibía "Lomo al Malbec" y "Pizza
+        // Napolitana" — ver el bloque de import simple más abajo.
         return NextResponse.json({ error: result.error }, { status: result.status })
       }
 
@@ -305,11 +236,10 @@ export async function POST(req: NextRequest) {
 
       const result = await callClaude(apiKey, ADJUST_SYSTEM, content, 2048, 'claude-haiku-4-5-20251001')
       if (!result.ok) {
-        // Si falla por créditos, devolver la misma receta como demo
-        if (result.error.includes('credit balance')) {
-          console.warn('[recetas/import] No credits, returning demo adjust')
-          return NextResponse.json({ ...currentRecipe, _demo: true, _note: 'Sin créditos — ajuste simulado' })
-        }
+        // Sin crédito devolvía la receta SIN el ajuste pedido, marcada como
+        // "ajuste simulado". El usuario pedía un cambio, no pasaba nada, y no
+        // había forma de distinguirlo de que la IA hubiera decidido no cambiar
+        // nada. Mejor decir que falló.
         return NextResponse.json({ error: result.error }, { status: result.status })
       }
 
@@ -323,7 +253,6 @@ export async function POST(req: NextRequest) {
 
     // ── IMPORT: análisis inicial ──
     const content: Array<{ type: string; source?: any; text?: string }> = []
-    let inputHint = ''
 
     if (mode === 'image' && image_base64) {
       content.push({
@@ -357,7 +286,6 @@ export async function POST(req: NextRequest) {
         }
 
         const xlsText = sheetTexts.join('\n\n')
-        inputHint = xlsText
         const maxChars = 12000
         const textForClaude = xlsText.length > maxChars
           ? xlsText.substring(0, maxChars) + '\n\n[... contenido truncado ...]'
@@ -377,7 +305,6 @@ ${textForClaude}`,
         return NextResponse.json({ error: 'No se pudo leer el archivo. Verificá que sea un Excel válido.' }, { status: 400 })
       }
     } else if (mode === 'text' && text) {
-      inputHint = text
       content.push({
         type: 'text',
         text: `Analizá esta receta y extraé la información estructurada:\n\n${text}`,
@@ -458,7 +385,6 @@ ${textForClaude}`,
           return NextResponse.json({ error: 'El documento está vacío.' }, { status: 400 })
         }
 
-        inputHint = googleText
         // Truncate to fit Claude's context but keep as much as possible
         const maxChars = 12000
         const textForClaude = googleText.length > maxChars
@@ -491,12 +417,13 @@ ${textForClaude}`,
     const result = await callClaude(apiKey, SYSTEM_PROMPT, content, 2048, singleModel)
 
     if (!result.ok) {
-      // Si es problema de créditos → devolver demo
-      if (result.error.includes('credit balance')) {
-        console.warn('[recetas/import] No credits — returning demo data')
-        await new Promise(r => setTimeout(r, 1500)) // simulate delay
-        return NextResponse.json({ ...getDemoResult(inputHint), _demo: true })
-      }
+      // Acá estaba el bug que se reportó como "no se reconocen las fotos"
+      // (ago 2026). Sin crédito, esto devolvía getDemoResult(): una receta
+      // inventada — "Lomo al Malbec", o "Pizza Napolitana" si el nombre del
+      // archivo decía pizza — después de un setTimeout de 1500ms puesto a
+      // propósito para simular el procesamiento. El cocinero fotografiaba su
+      // receta, esperaba, y recibía otra receta con un cartelito "DEMO".
+      // Indistinguible de "la IA leyó mal la foto".
       return NextResponse.json({ error: result.error }, { status: result.status })
     }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import * as XLSX from 'xlsx'
+import { clasificarErrorIA } from '@/lib/ia/errores'
 
 export const maxDuration = 60
 
@@ -168,8 +169,11 @@ Instrucciones importantes:
   })
 
   if (!response.ok) {
-    const err = await response.text()
-    throw new Error(`Claude error: ${err}`)
+    // El `Claude error: {json crudo}` que se tiraba acá terminaba en pantalla
+    // tal cual, en inglés y sin decir qué hacer.
+    const err = clasificarErrorIA(response.status, await response.text())
+    console.error('[carta/import] IA:', err.tipo, err.requestId ?? '')
+    throw new Error(err.mensaje)
   }
 
   const data = await response.json()
