@@ -4,6 +4,12 @@ Dos sesiones distintas cerraron sobre el mismo día — esta nota las fusiona pa
 
 ## Qué se cerró
 
+**Carta: tarjeta de plato con flip en desktop + checklist de `ui-auditor` (24/08, previo a P0-P5, sin commit `docs:` propio hasta ahora):**
+- El click a un plato en Carta abría un panel lateral de 380px con resumen + botón "Ver y gestionar completo" — dos saltos para llegar a la pantalla real, panel visualmente desconectado de la grilla. Ahora la tarjeta se da vuelta ahí mismo (`FlipCard`, mismo mecanismo que Organigrama y la carta de plaza del Mise): dorso con precio/margen, tags, disponible y recetas de un vistazo, "Editar completo" como único salto a la pantalla dedicada (esa sigue siendo el único lugar con editor denso — el mismo motivo por el que S3.2 había descartado el flip ahí). Mobile no cambia, ya era un tap directo.
+- **Bug real encontrado al probar el click en el dorso** (no solo de Playwright): un hijo con `z-index` propio (el toggle "Disponible", que necesita quedar sobre el overlay gris del 86) escapaba del cono de sombra de `backface-visibility` en Chromium y quedaba clickeable "a través" de la carta dada vuelta. Fix a nivel compartido en `FlipCard.tsx` (`pointer-events` explícito por cara) — beneficia también a Organigrama y a la carta de plaza.
+- Checklist de `ui-auditor` (agente) sumado con los patrones de S0-S5: Toast/Skeleton compartidos, `tap()` en vez de `navigator.vibrate` directo, sombra en vez de borde, tokens de movimiento, `FlipCard` reusado, verde-no-ámbar para éxito.
+- Verificado con clicks reales (Playwright, no solo capturas) en desktop y mobile. Build+tsc+135/135 tests limpios. Commits `61236f6`, `7ecb13c`.
+
 **Diseño de superficie (24/08, `DESIGN.md`/`INVESTIGACION-DISENO-2026-08.md`, plan P0-P5 completo):**
 - **P0/P1** — `DESIGN.md` (constitución visual: dos registros Preparación/Servicio, targets ≥56/64px, presupuesto de movimiento por frecuencia, presupuestos medibles) + investigación cruzando ergonomía HMI, game feel, juegos cooperativos y el fundamento gastronómico propio.
 - **P2 — Mise vitrina**, 4 bloques: hit-slop en targets táctiles + sin `confirm()` nativo + panel de compañeros en periferia; transición suave grilla↔plaza; entrada animada en avisos de cierre; **quest del día colectiva** (apertura+cierre, todos los turnos, celebración una vez por jornada, sin ranking).
