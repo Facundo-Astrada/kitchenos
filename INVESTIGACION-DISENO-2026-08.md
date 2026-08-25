@@ -172,8 +172,40 @@ Orden interno de cada bloque = jerarquía de Swink: **respuesta → espacio → 
 
 ---
 
+## 11. P1 ejecutado — patrones de Game UI Database / Interface In Game, traducidos
+
+**Nota de método:** ambos sitios bloquean el fetch directo (403, protección anti-bot — son bases de datos de imágenes, esperable). En vez de navegar la galería, reconstruí el mismo terreno con juegos concretos y documentados por fuera — mismo tipo de evidencia que citaría el propio inspector de GUIDB (juego, mecánica, por qué funciona), verificable en cada caso. Sale más sólido que un moodboard: son 6 patrones con mecánica explicada, no capturas sueltas.
+
+**1. Overwatch — el panel de compañeros, patrón de referencia.** Salud + carga de definitiva + ícono de héroe de los 3 compañeros, en fila fija a un costado de pantalla — nunca al centro. Es exactamente el "panel de escuadra" que pedía §5 de la v1, ya con años de iteración de un estudio que vive de esto.
+→ **Traducción:** en el Mise, un riel lateral/inferior discreto con las otras plazas — avatar + anillo de progreso, navy sobre crema, sin números de tiempo ni comparación. Se mira de reojo, no ocupa el centro.
+
+**2. Valorant — el medidor de definitiva, de barra a ícono circular.** La serie iteró 5 años: pasó de puntitos que nadie entendía a un ícono circular limpio, integrado al HUD del jugador. La lección no es la forma final sino el criterio: **cuando un indicador es ambiguo, se reemplaza por una forma reconocible, no por una etiqueta de texto.**
+→ **Traducción:** el estado de una tarea del Mise (pendiente/en curso/lista) es forma y color, nunca la palabra "pendiente" escrita.
+
+**3. Deep Rock Galactic — diales diegéticos en la maquinaria del mundo.** Los objetivos de misión tienen diales y barras físicas *en la maquinaria del juego*, que progresan con el objetivo — no HUD flotante.
+→ **Confirma y concreta** lo que v1 tomó de Dead Space: el progreso de una plaza va *en* la carta que se llena (ya diseñado como dirección en `FlipCard`), nunca en una barra de chrome aparte.
+
+**4. Monster Hunter World — rareza de equipo por progresión de color/material, sin texto.** El material y el color de una pieza *avanzan visualmente* con la rareza (rango bajo → alto); se lee de un vistazo antes de leer el número.
+→ Confirma la regla ya escrita en `DESIGN.md` §5 (tier por gradiente/material, no por texto) — con un ejemplo de 8 niveles que muestra que la progresión escala sin volverse ilegible.
+
+**5. Hearthstone — vocabulario mínimo de rareza: una gema de color + un tratamiento especial para el techo.** 4 colores de gema (blanco/azul/violeta/dorado) para 4 tiers, más un tratamiento *categóricamente distinto* (marco dorado + ilustración animada) reservado solo para el nivel más alto — nunca un quinto color más, un salto de tipo.
+→ **Aporte concreto y accionable:** el badge de rareza de Carta (Estrella/Caballo/Puzzle/Perro) puede tomar esta regla tal cual — 3 niveles por color/forma normales, y el nivel tope (si existe) no es "un color más", es un tratamiento distinto (animación breve al entrar, borde con textura). Barato de implementar, con precedente de 10+ años en el juego de cartas más pulido que existe.
+
+**6. Persona 5 — el límite de advertencia, no un modelo a seguir.** Es el caso más citado de personalidad al extremo: tipografía que se mueve, contraste altísimo, quiebra deliberadamente la neutralidad de un menú. Reconocible a un metro de distancia — pero la propia crítica especializada señala que la tipografía con ejes dinámicos y líneas de base variables **compromete la legibilidad** en nombre del estilo.
+→ **Es la prueba viva de qué pasa pasado el dial 7-8.** Sirve como ancla del límite superior: KitchenOS quiere carácter reconocible sin pagar el precio de legibilidad que paga Persona 5 — útil precisamente como el punto que *no* se toca.
+
+### Sin evidencia sólida (se descarta, no se fuerza)
+
+Cook Serve Delicious / Overcooked como referencia de *timers de cocción visuales* — la búsqueda no devolvió mecánica documentada de forma verificable (solo resultados genéricos de "cómo saber si algo está cocido"). No se incluye como patrón: mejor no forzar una referencia sin poder mostrar cómo funciona de verdad. Overcooked ya está bien cubierto en v1 §5 por su mecánica de cooperación, que sí tiene fuente sólida.
+
+---
+
 ## Fuentes
 
-**Externas:** Laws of UX (Doherty) · web.dev (INP) · ISO/TS 9241-411, ISA 101, IEC 61131 · Viget + paper 2018 skeleton screens · Rauno Freiberg (rauno.me) · Emil Kowalski (animations.dev) · Material Design Motion · Steve Swink, *Game Feel* · Jonasson & Purho, *Juice It or Lose It* (2012) · Nijman, *The Art of Screenshake* (2013) · Dead Space RIG (Visceral) · Ghost Town Games, *Overcooked* (deep dive en Game Developer) · *Deep Rock Galactic* / *Left 4 Dead* (paneles de equipo) · Duolingo Friends Quests · FUT card design (evolución FIFA 09→FC 24) · Weiser & Brown (PARC 1995) / Amber Case, *Calm Technology* · SBAR (scoping reviews de handover clínico) · HFES (cambio de contexto) · Smashing Magazine (thumb zone).
+**Externas:** Laws of UX (Doherty) · web.dev (INP) · ISO/TS 9241-411, ISA 101, IEC 61131 · Viget + paper 2018 skeleton screens · Rauno Freiberg (rauno.me) · Emil Kowalski (animations.dev) · Material Design Motion · Steve Swink, *Game Feel* · Jonasson & Purho, *Juice It or Lose It* (2012) · Nijman, *The Art of Screenshake* (2013) · Dead Space RIG (Visceral) · Ghost Town Games, *Overcooked* (deep dive en Game Developer) · *Deep Rock Galactic* / *Left 4 Dead* (paneles de equipo) · Duolingo Friends Quests · FUT card design (evolución FIFA 09→FC 24) · Weiser & Brown (PARC 1995) / Amber Case, *Calm Technology* · SBAR (scoping reviews de handover clínico) · HFES (cambio de contexto) · Smashing Magazine (thumb zone) · Overwatch / Valorant HUD (evolución documentada) · Monster Hunter World (rareza de equipo) · Hearthstone (rareza de cartas, Fandom/wiki.gg) · Persona 5 UI (múltiples análisis de diseño, incluido Game UI Database).
 
 **Propias:** `FUNDAMENTO-EL-JUEGO-CERCADO.md` (club de fútbol, 3 escalas, 2 juegos, culpa/bronca, acta) · `SINTESIS-ORGANIZACION-GASTRONOMICA.md` (dos tiempos elBulli 7.2, día tipo 10.4, 5 criterios 7.4, checklist de carta 10.1) · `AUDITORIA-4-CAPAS.md` · memorias `project_organigrama`, `project_cuadro_cuatro_capas`, `project_fundamento_juego_cercado`.
+
+## Estado del plan
+
+P0 (`DESIGN.md`) y P1 (este §11) cerrados — commit `c8f6da9` + el presente. Siguiente: **P2, Mise vitrina**, con Sonnet.
