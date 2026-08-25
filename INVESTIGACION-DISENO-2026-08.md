@@ -220,4 +220,6 @@ P0 (`DESIGN.md`) y P1 (este §11) cerrados — commit `c8f6da9` + el presente.
 
 **P3 — Entrega de turno como relevo SBAR — cerrado (`0e3f99c`):** migración `cierres_turno.percepcion`/`notas_servicio` (aplicada en prod vía MCP), `entregarPlaza()` los persiste, `EntregaPlazaSheet` los pide en 2-3 taps opcionales. Absorbe `PLAN-JUEGO-CERCADO-2026-08.md` F1 pasos 1-2 (el paso 3 — mostrar la lectura junto a un dato duro en Reportes → Auditoría — queda pendiente, no es parte de este plan de superficie).
 
-Siguiente: **P4 — Registro Servicio en limpio** (KDS/Muro), o el container-transform diferido si se prioriza antes.
+**P4 — Registro Servicio en limpio — cerrado (`2367043`):** auditoría de KDS/Muro contra su propia doctrina ya escrita (`.claude/docs/ui.md` § Vista de servicio, "botones masivos ≥64px", regla inamovible) — no reglas nuevas. Encontrado y corregido: `window.confirm()` nativo al marcar 86 en KDS (misma familia que el de Mise en P2.1, reemplazado por sheet oscuro propio del registro), y dos targets por debajo del mínimo documentado (header de KDS 44→64px, `FilaMuro` — la interacción de mayor frecuencia del Muro — 44→64px). Cero animaciones nuevas: el objetivo era quitar/formalizar, no agregar.
+
+Quedan: el container-transform diferido de P2 (§ arriba), y P5 (lint de diseño en Playwright) — que ahora tiene sentido escribir, con 4 bloques de código real para verificar contra el `DESIGN.md`.
