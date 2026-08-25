@@ -132,7 +132,7 @@ Fudo anota sueldos, adelantos y pagos a socios como si fueran "gastos", mezclado
 | **Stock** | Cada producto se crea o se actualiza: si ya existe, le refresca el precio; si no, lo crea con precio, unidad y categoría. |
 | **Precios / Inflación** | Guarda el precio por unidad. En Reportes ves la evolución mes a mes de cada producto. |
 | **Proveedores** | Si el proveedor no existía, se crea solo. |
-| **Reportes (CMV, Compras, Presupuesto)** | Las compras entran al costo de mercadería y a los rankings de gasto. |
+| **Reportes y Presupuesto (CMV, Compras)** | Las compras entran al costo de mercadería y a los rankings de gasto. |
 | **Pedidos** | Cuando le pedís a un proveedor, te sugiere lo que más le comprás. |
 | **Food cost de recetas** | Si sube el precio de un insumo, el costo de toda receta que lo use se recalcula solo. |
 
@@ -389,7 +389,7 @@ Botón **"Cargar cierre del día"** en Resumen: fecha + total + cubiertos en un 
 | Módulo | Qué pasa |
 |---|---|
 | **Reportes → CMV** | Ventas × compras del período → costo de mercadería y food cost real. |
-| **Reportes → Presupuesto vs Real** | Ventas reales contra el objetivo. |
+| **Presupuesto** | Ventas reales contra el objetivo, por sector y por familia de gasto. |
 | **Carta → Ingeniería de menú** | Los platos vendidos dan la popularidad que clasifica cada plato. |
 | **Reportes → Rendimiento** | Ticket promedio, cubiertos y evolución. |
 
@@ -433,7 +433,7 @@ Cruza tus compras (de las facturas) contra tus ventas del período y calcula cu�
 Evolución del precio de cada producto mes a mes. Ves al instante qué insumos subieron más y cuándo conviene ajustar la carta o buscar alternativa de proveedor. Se alimenta de: facturas.
 
 **Presupuesto vs Real**
-Definís un objetivo de gasto o de ventas por período (semanal/mensual/trimestral) y la app lo contrasta contra los números reales. Se configura directamente en la pantalla de Reportes. Se alimenta de: facturas + ventas.
+Tiene su propia pantalla (**Presupuesto**, al lado de Reportes en el menú). Dos vistas: por sector de mercadería (carnes, verduras, bebidas...) contra el objetivo de 30% de costo, con el desvío de cada sector y el ritmo de compra semana a semana; y por familia de gasto (materia prima, personal, alquiler, gastos generales) contra la estructura estándar del negocio, con el EBITDA del mes. El presupuesto de cada sector se sugiere solo con el promedio de los últimos 3 meses — no hace falta cargarlo a mano para que la pantalla funcione. Se alimenta de: facturas + ventas.
 
 **Valorización del stock**
 Cuánta plata tenés parada en la heladera y el depósito ahora mismo, calculada con los precios de la última factura de cada producto. Se alimenta de: stock + facturas.
