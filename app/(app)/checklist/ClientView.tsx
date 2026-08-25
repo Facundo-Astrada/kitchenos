@@ -256,6 +256,53 @@ function ConfirmSheet({ icon, iconColor, title, body, confirmLabel, confirmColor
   )
 }
 
+// Quest del día completa — el único momento con presupuesto de "momento
+// real" del sistema de movimiento (DESIGN.md §6: 1×/día, no 1×/turno como el
+// pulse de plaza). Celebración colectiva, nunca individual — sin nombres,
+// sin ranking (DESIGN.md §9 / juego cercado cap. III: un juego sin oponente
+// produce culpa, no bronca; acá no hay ni oponente ni comparación).
+function QuestCelebracionSheet({ onClose }: { onClose: () => void }) {
+  useEffect(() => { tap(30) }, [])
+  return createPortal(
+    <SheetChrome>
+      <div
+        onClick={onClose}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 2000,
+          background: 'rgba(28,45,74,.55)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+        }}
+      >
+        <div
+          onClick={e => e.stopPropagation()}
+          className="toast-enter"
+          style={{
+            width: '100%', maxWidth: 340, borderRadius: 20, padding: '28px 22px 18px',
+            textAlign: 'center', boxShadow: '0 24px 60px rgba(0,0,0,.4)',
+            background: 'linear-gradient(165deg, var(--navy), var(--navy-light))',
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 44, color: '#facc15' }}>military_tech</span>
+          <div style={{ fontSize: 17, fontWeight: 800, color: '#fff', marginTop: 8 }}>Día completo</div>
+          <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,.65)', lineHeight: 1.5, margin: '4px 0 18px' }}>
+            Apertura y cierre, todas las plazas, todo el equipo.
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              ...btnReset, width: '100%', padding: '12px 0', borderRadius: 12,
+              background: 'rgba(255,255,255,.12)', color: '#fff', fontSize: 13, fontWeight: 700,
+            }}
+          >
+            Buen turno
+          </button>
+        </div>
+      </div>
+    </SheetChrome>,
+    document.body,
+  )
+}
+
 // ══════════════════════════════════════════════════════════════
 export default function ChecklistPage({ embedded }: { embedded?: boolean } = {}) {
   const router = useRouter()
@@ -861,6 +908,52 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     }, {} as Record<string, { total: number; done: number }>)
   }, [items, registros, plazasForSelector, tareasHoySet])
 
+  // ── Quest del día — objetivo colectivo (apertura + cierre, TODOS los turnos
+  // activos de la jornada, no solo el que estás mirando) ─────────────────────
+  // Consulta propia y liviana, deliberadamente FUERA del estado de
+  // useChecklist(): esa hook ya trae dos canales realtime atados a
+  // RESTAURANTE_ID (checklist-rt-*, checklist-reg-rt-*, ver useChecklist.ts) —
+  // llamarla de nuevo acá adentro duplicaría el nombre de canal y podría
+  // pisar la suscripción real de la que depende toda la pantalla interactiva.
+  // Por eso: best-effort, no realtime cruzado entre plazas — se recalcula
+  // cuando cambian `registros` (señal barata de "algo se tildó en ESTE
+  // turno") o `turnosActivos`/`fecha`. Es aceptable: es un indicador de una
+  // vez por día, no una acción de las 40x/turno (DESIGN.md §6).
+  //
+  // Restaurantes sin turnos de servicio configurados (turnosActivos vacío,
+  // formato de `turno` "pelado" sin encodeTurnoFase — ver el comentario de
+  // `esCierre` en ProductoMiseCard) no muestran la quest: se degrada a
+  // invisible, no a un cálculo incorrecto.
+  const [questDia, setQuestDia] = useState<{ done: number; total: number } | null>(null)
+  useEffect(() => {
+    if (!RESTAURANTE_ID || turnosActivos.length === 0) { setQuestDia(null); return }
+    let cancelled = false
+    ;(async () => {
+      const supabase = createClient()
+      const { data: itemsData } = await supabase.from('checklist_items').select('id')
+        .eq('restaurante_id', RESTAURANTE_ID)
+      const itemIds = (itemsData ?? []).map((i: { id: string }) => i.id)
+      if (itemIds.length === 0) { if (!cancelled) setQuestDia(null); return }
+      const { data: regsData } = await supabase.from('checklist_registros').select('checklist_item_id, turno')
+        .eq('fecha', fecha).eq('completado', true).in('checklist_item_id', itemIds)
+      if (cancelled) return
+      // El "día completo" pide apertura Y cierre en cada turno activo — el
+      // total no es itemIds.length, es esa cantidad × 2 fases × N turnos.
+      const combos = turnosActivos.flatMap(t => [encodeTurnoFase(t.id, 'apertura'), encodeTurnoFase(t.id, 'cierre')])
+      const doneSet = new Set((regsData ?? []).map((r: { checklist_item_id: string; turno: string }) => `${r.checklist_item_id}:${r.turno}`))
+      let done = 0
+      for (const combo of combos) for (const id of itemIds) if (doneSet.has(`${id}:${combo}`)) done++
+      setQuestDia({ done, total: itemIds.length * combos.length })
+    })()
+    return () => { cancelled = true }
+  }, [RESTAURANTE_ID, fecha, turnosActivos, registros])
+
+  // Se celebra UNA vez por jornada, no cada vez que se vuelve a esta pantalla
+  // ya completa — mismo patrón de "visto" por clave que avisoAperturaOculto.
+  const [questCelebradaOculta, setQuestCelebradaOculta] = useState<string | null>(null)
+  const questCompleta = !!questDia && questDia.total > 0 && questDia.done === questDia.total
+  const mostrarQuestCelebracion = questCompleta && questCelebradaOculta !== fecha
+
   useEffect(() => {
     if (toast) { const t = setTimeout(() => setToast(null), 2500); return () => clearTimeout(t) }
   }, [toast])
@@ -1271,6 +1364,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // ── Plaza selector ──
   if (!plaza) {
     return (
+      <>
       <motion.div {...screenEnter} style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         <div style={{ background: 'var(--navy)', padding: `${embedded ? 0 : 46}px 16px 20px`, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1294,6 +1388,39 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         </div>
         {guia && <MiseGuiaSheet foco={guia.foco} onClose={() => setGuia(null)} />}
         <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
+          {/* Quest del día — objetivo colectivo (todas las plazas, apertura +
+              cierre, todos los turnos activos). Vive en la pantalla-lobby, no
+              en el header de trabajo de una plaza: es la que ya funciona como
+              "así viene el equipo hoy" (Overwatch/Duolingo, INVESTIGACION §5) —
+              sumar la barra acá no le agrega chrome a la pantalla donde se
+              trabaja, que ya está ajustada al límite de espacio vertical. */}
+          {questDia && questDia.total > 0 && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
+              padding: '10px 14px', borderRadius: 14, background: 'var(--surface)',
+              border: `1px solid ${questCompleta ? 'rgba(34,197,94,.3)' : 'var(--border)'}`,
+              boxShadow: 'var(--shadow-1)',
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: questCompleta ? '#22c55e' : 'var(--text-3)', flexShrink: 0 }}>
+                {questCompleta ? 'military_tech' : 'groups'}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-1)' }}>
+                  {questCompleta ? 'Día completo — todo el equipo' : 'Quest del día'}
+                </div>
+                <div style={{ height: 4, background: 'var(--border)', borderRadius: 99, overflow: 'hidden', marginTop: 4 }}>
+                  <div style={{
+                    height: '100%', borderRadius: 99, transition: 'width .3s',
+                    width: `${Math.round((questDia.done / questDia.total) * 100)}%`,
+                    background: questCompleta ? '#22c55e' : 'var(--accent)',
+                  }} />
+                </div>
+              </div>
+              <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
+                {questDia.done}/{questDia.total}
+              </span>
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             {plazasForSelector.map(p => (
               <PlazaFlipCard
@@ -1309,11 +1436,14 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           </div>
         </div>
       </motion.div>
+      {mostrarQuestCelebracion && <QuestCelebracionSheet onClose={() => setQuestCelebradaOculta(fecha)} />}
+      </>
     )
   }
 
   // ── Main checklist view ──
   return (
+    <>
     <motion.div {...screenEnter} style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
       {/* Header */}
@@ -2478,6 +2608,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         />
       )}
     </motion.div>
+    {mostrarQuestCelebracion && <QuestCelebracionSheet onClose={() => setQuestCelebradaOculta(fecha)} />}
+    </>
   )
 }
 
