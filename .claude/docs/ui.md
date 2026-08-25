@@ -23,6 +23,10 @@ import type { SegmentedTab, FilterChip } from '@/components/ui'
 
 Header y body en tablas distintas se desalinean si el body tiene scrollbar (~15px de desfase con anchos en %). Usar una `<table tableLayout: fixed>` con `<thead style={{position:'sticky', top:0, zIndex:5}}>`, fondo (`background: var(--navy)`) en cada `<th>` (no en un div padre), un solo `<colgroup>` compartido, y loading/error/vacío como filas `<tbody><tr><td colSpan={N}>`.
 
+## Grilla panorámica: matriz con columnas agrupadas (Presupuesto → CMV por sector, ago 2026)
+
+Cuando el pedido es "ver todo de un vistazo" (una entidad × varios períodos, ej. sector × semana), una sola `<table>` con `<thead>` de **dos filas** — banda de grupo con `colSpan` arriba (ej. el mes) + columna individual abajo (ej. cada semana) — lee mejor que bloques apilados por separado, y es más fiel a cómo la gente ya piensa una planilla. Separadores verticales (`borderRight` más grueso) entre grupos, no dentro de un grupo. La misma tabla sirve para desktop y mobile con `overflow-x:auto` propio — no vale la pena una variante de cards en mobile si el punto es justamente poder barrer la fila completa.
+
 ## Overlay full-screen debe superar el z-index del BottomNav
 
 `BottomNav` es `z-[100]`. Un overlay `position:fixed;inset:0` con `zIndex:100` queda tapado por el nav — usar `zIndex:1000+` para overlays que deben cubrir toda la pantalla, nav incluido.
