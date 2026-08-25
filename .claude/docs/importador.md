@@ -35,3 +35,10 @@ Al cargar una factura, `useFacturas.crearFactura` matchea cada ítem contra `pro
 ## Para cargar datos por scripts
 
 Patrón: `scripts/load-recetas-2026.mjs` usa `createClient` de `@supabase/supabase-js` con `SUPABASE_SERVICE_ROLE_KEY`.
+
+
+## Un fallo de IA nunca devuelve datos inventados
+
+Cuando la API de Anthropic falla, la route devuelve un **error**, no un resultado plausible. Hasta ago 2026 varias hacían lo contrario: `/api/recetas/import` respondía con una receta de ejemplo ("Lomo al Malbec") tras un `setTimeout(1500)` puesto para simular el procesamiento, y `/api/facturas` y `/api/listas-precios` devolvían una factura o una lista completas e inventadas ante un 429/403, con un discreto `_demo` en la UI. Se reportó como "no se reconocen las fotos cargadas" — el sistema no fallaba al leer, mentía sobre el resultado.
+
+`lib/ia/errores.ts` clasifica la respuesta (`clasificarErrorIA`) y devuelve un mensaje accionable en castellano: sin crédito / sin configurar / saturado / archivo inválido. El de crédito aclara que no es problema de la foto, porque ése es el reintento que el usuario hace solo. Las routes que degradan a un resultado vacío a propósito (enriquecimiento de `facturas-universal`, `fichas-tecnicas`, `mapeo`) igual loguean la causa clasificada: sin eso, una caída de la IA se ve igual que un archivo sin datos.

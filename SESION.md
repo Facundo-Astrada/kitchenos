@@ -1,25 +1,28 @@
-# Sesión — 2026-08-24 (PLAN-SUPERFICIE, bloques S0 a S5)
+# Sesión — 2026-08-25 (PLAN-ACCESO-Y-USO, bloques B0.3 a B7)
 
 ## Qué se cerró
-Auditoría de diseño completa + plan de 6 bloques (`PLAN-SUPERFICIE-2026-08.md`), todos deployados:
-- **S0** — sistema de movimiento único (`lib/ui/motion.ts`): duraciones/easing consistentes, transición de pantalla unificada, `useReducedMotion()`, haptics (`tap()`). Se sacó el paquete `framer-motion` duplicado (quedó solo `motion/react`).
-- **S1** — Dashboard: bloque **«Ahora»** arriba de todo (lee momento del día, un CTA), contador real de 86 (antes hardcodeado en 0), fold de ingresos/cuentas por pagar, `ModulosGrid` por frecuencia de uso. De paso: **bug de datos** — el Dashboard nunca pedía `registros` a `useChecklist`, así que el progreso de mise mostraba 0/N siempre; fix en `useChecklist.ts` (`fetchRegistrosDelDia`).
-- **S2** — Elevación (sombra en vez de borde) + tokens `--shadow-1/2/3`. La hipótesis inicial de "ámbar sobrecargado" no se sostuvo al auditar el código (167 usos consistentes como severidad "atención") — se documentó la convención en vez de romperla.
-- **S3** — `FlipCard` compartido (extraído de `MiembroCard`), reusado en la carta de plaza del Mise (frente progreso, dorso info de entrega). Carta de plato: **sin flip** (decisión de Facundo, AskUserQuestion) — solo badge de rareza (Estrella/Caballo/Puzzle/Perro).
-- **S4** — nav contextual en `BottomNav` (Carta/Mise según momento), swipe horizontal entre los 4 tabs de OPS, secciones colapsadas (Nota importante / Nota de pedidos), paleta de comandos `Ctrl/Cmd+K` en desktop (ir a módulo, registrar merma, crear tarea).
-- **S5** — micro-animaciones de confirmación (`tilde-pop`, `plaza-pulse` en verde — no ámbar, por la convención de S2), skeletons por-pantalla (Carta/Recetario/Stock), toast compartido (`components/ui/Toast.tsx`) migrado en Carta/Pedidos/CommandPalette.
+Lista de 9 observaciones de Facundo → auditadas contra código y base real → plan de 8 bloques (`PLAN-ACCESO-Y-USO-2026-08.md`), todos deployados. **Tres de los nueve puntos no eran lo reportado.**
 
-Typografía: se evaluó una segunda tipografía serif para acentos — Facundo eligió **solo DM Sans** (AskUserQuestion).
+- **B0.3 — "no se reconocen las fotos" era la app mintiendo, no la IA leyendo mal.** La cuenta de Anthropic quedó sin crédito y `/api/recetas/import` devolvía una receta inventada ("Lomo al Malbec") tras un `setTimeout(1500)` puesto para simular el procesamiento. Peor: `/api/facturas` y `/api/listas-precios` devolvían una factura/lista completas y falsas ante un 429/403. Ningún endpoint fabrica datos ya; `lib/ia/errores.ts` clasifica el fallo y dice el motivo real.
+- **B1 — dos bugs apilados dejaban a todo no-admin fuera del dashboard.** (a) La invitación nunca escribía `equipo_miembros.auth_user_id`, así que `usePermisos` no encontraba el puesto (caso real: Valentino, Bros). (b) El seed de `rol_permisos` escribía `'inicio'` donde la ruta `/` pide `'home'`, y ninguna fila tenía `'operaciones'` → "Sin acceso a home". Migradas 38 filas en 9 restaurantes. De paso: la cascada de permisos estaba **duplicada** entre el hook cliente y la réplica del Coach, con los mismos dos bugs — extraída a `lib/permisos/resolver.ts`.
+- **B2 — mise: tildado y seguía en "Te dejaron en producción".** Confirmado con filas reales (Bros, 23/08). El sync tilde→tarea exigía `turno_fecha === hoy` y perdía justo el `pase_turno` heredado. 5 tareas colgadas cerradas.
+- **B3 — `ver_costos` configurable por puesto.** Al gatear aparecieron tres fugas: la ficha de receta mostraba todo el costeo **sin ningún gate**, el tab Ingeniería (ya en backlog), y las tools de **solo lectura** del Coach no pasaban por ningún gate — cualquiera podía preguntarle el gasto del mes o quién debe plata.
+- **B4** — carta de bienvenida por puesto + tours automáticos por pantalla, con el "ya lo vi" en DB. **B5** — escalado visible (½/×2/×3) y foto en el alta; las dos ya existían, el problema era encontrarlas. **B6** — etapas en bloques al cargar una receta. **B7** — sidebar plegable (Ctrl+B) y pantalla completa en Producción.
 
-Build + `tsc --noEmit` + 135/135 tests Vitest limpios en cada bloque. 6 commits pusheados (`e9626aa`..`709fd26`).
+Build + `tsc` limpios en cada bloque, 173/173 tests (38 nuevos). 5 migraciones aplicadas. Lint comparado por archivo tocado: cero errores nuevos.
 
 ## Qué quedó a medias
-- Nada del plan — los 6 bloques cerraron. Un error de proceso propio (no de producto): en S5.3 pisé `components/ui/Skeleton.tsx` (ya commiteado y en uso desde `a3bf3e7`) con un `Write` sin leerlo primero; el error de build resultante delató el problema, se reconstruyó con la misma forma y se restauró el export que se había perdido (`SkeletonCard`). Sin impacto funcional real, documentado en `.claude/docs/ui.md` como lección de proceso.
+- **Nada del plan** — los 8 bloques cerraron. Lo único abierto es **B0.1/B0.2, que Facundo se reservó**: cargar crédito en Anthropic (toda la IA sigue caída) y verificar que la key de Vercel sea la misma de `.env.local`.
+- **Los commits de B1 y B2 tienen `@` como línea de asunto** (usé sintaxis de heredoc de PowerShell en Bash). El cuerpo está intacto; limpiarlo requiere reescribir historia ya pusheada y redeployada — pendiente de que Facundo lo pida.
+- De paso se reparó `npm run lint` (era un `node_modules/tsconfig-paths` incompleto). **Fix de máquina, no de repo**: un clon nuevo puede volver a pegarle.
 
 ## Probar primero mañana
-- Bloque «Ahora» y la carta de plaza (flip) en el celular real — es la superficie que más cambia visualmente el uso diario.
-- Swipe entre tabs de OPS: no debe interferir con el scroll vertical ni con el drag-to-reorder del mise (se validó con eventos sintéticos, falta el dedo real).
-- Paleta de comandos (`Ctrl+K`) en desktop.
+Cinco de los siete bloques son UI y **ninguno se probó corriendo la app**. En orden de riesgo:
+1. **Que Valentino entre** (`valentinocortesb@gmail.com`, Bros) — el caso que originó todo.
+2. **El toggle "Ve costos y food cost"** en Turnos → Puestos, y el override por persona.
+3. **La carta de bienvenida** — hace falta un usuario nuevo, solo aparece con `onboarding_visto_at` en null.
+4. **Pantalla completa de Producción en la tablet real** — usa `zoom`; si el navegador es viejo, es lo primero a mirar.
+5. **Alta de receta con 3 etapas**, de una sola pasada.
 
 ## Próximo paso concreto
-`PLAN-SUPERFICIE-2026-08.md` queda cerrado — no hay bloque siguiente ahí. Backlog abierto sigue en `PENDIENTES.md`: 🟠 más próximo es terminar `PLAN-4-CAPAS.md` (quedan B9/B10 de Reservas, dependientes de correr el track de validación con Bros/Rescoldo). Dos hallazgos nuevos de esta sesión ya quedaron anotados en `PENDIENTES.md` 🟢 (no bloquean nada): contraste de `--navy` en dark mode, y el tab Ingeniería de Carta sin el gate admin que sí tiene el resto de Carta.
+`PLAN-ACCESO-Y-USO-2026-08.md` queda cerrado. El 🔴 crítico del backlog es **cargar el crédito de Anthropic** — hasta entonces la IA no se puede probar. Después, el 🟠 más próximo sigue siendo `PLAN-4-CAPAS.md` B9/B10 (Reservas), que dependen de correr el track de validación con Bros/Rescoldo. Alternativa de bajo costo y alto retorno: la lista de **ocho funciones ya construidas que nadie encuentra** (`PLAN-ACCESO-Y-USO` § B5.3) — Modo Control del mise y "Sugerir producción" son las de mejor relación valor/esfuerzo.

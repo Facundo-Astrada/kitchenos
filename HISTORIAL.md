@@ -975,3 +975,13 @@ Reporte de Facundo: la app se sentía lenta al cambiar de pantalla, y algunos bo
 1. **RLS audit completo** via agente `rls-enforcer`: 0 políticas con `USING(true)` ilegítimas encontradas (ya estaban bien). Se detectaron 34 políticas UPDATE sin `WITH CHECK` — vector de modificación cross-tenant.
 2. **44 políticas UPDATE corregidas** con `WITH CHECK (restaurante_id = mi_restaurante_id())` explícito en todas las tablas. Aplicado via Management API sin errores.
 3. **GitHub MCP** agregado a `.mcp.json` (`@modelcontextprotocol/server-github`). Disponible desde la próxima sesión.
+
+
+---
+
+## Pendientes resueltos — 25/08/2026 (PLAN-ACCESO-Y-USO)
+
+- **Carta → Rentabilidad → Ingeniería no respetaba "Precio/FC solo admin"** (abierto desde PLAN-SUPERFICIE S3.2). Resuelto en B3 gateando la pantalla de Rentabilidad **entera** en vez de tab por tab: Lista, Ingeniería, Reprecio y Salud son todas plata, así que el gate va en la entrada (el CTA "Ver rentabilidad") más un segundo cerrojo por si el estado `view` llega por otro camino. Ahora responde a `verCostos`, no a `isAdmin`.
+- **`npm run lint` roto** (ESLint 9 no resolvía `tsconfig-paths/lib/tsconfig-loader`). Era una instalación incompleta, como decía el ítem: el paquete estaba en `node_modules` pero le faltaban archivos internos. `npm install` normal no lo reparaba porque el directorio existía; se resolvió con `rm -rf node_modules/tsconfig-paths && npm install tsconfig-paths@3.15.0 --no-save`. **Es un fix de máquina, no de repo** — `node_modules` no se commitea, así que un clon nuevo puede volver a pegarle; `package.json` y el lock quedaron intactos a propósito.
+
+Al reparar el lint quedó a la vista la deuda real que tapaba: ~10.000 problemas en el repo (1021 errores, casi todos `no-explicit-any` en `scripts/`). Todo el trabajo de esta sesión se validó comparando el conteo de errores antes y después por archivo tocado — cero errores nuevos en los siete bloques.
