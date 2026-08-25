@@ -168,6 +168,10 @@ export interface CategoriaGasto {
   activa: boolean
   orden: number
   created_at: string
+  /** Entra al Costo de Mercadería Vendida (PLAN-PRESUPUESTO-CMV-2026-08). Default: mercaderia=true, resto=false. */
+  cuenta_en_cmv: boolean
+  /** Arreglo estructural / mejora de proceso-tiempo-producción-ambiente laboral — NO es devolución de proveedor. */
+  es_mejora: boolean
 }
 
 // DB: precio_historial (id, producto_id, precio_anterior, precio_nuevo, variacion_porcentaje, factura_id, fecha, restaurante_id)
