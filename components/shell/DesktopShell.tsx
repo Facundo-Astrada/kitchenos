@@ -57,7 +57,11 @@ export default function DesktopShell({ children, sidePanel }: { children: React.
       <DemoBanner />
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
-      <div style={{ position: 'relative', flexShrink: 0 }}>
+      {/* height:100% — sin esto el wrapper (block, no flex) no le pasaba su
+          propia altura estirada al <aside> hijo, que crecía a su altura de
+          contenido natural y se salía de pantalla por abajo sin nada de qué
+          scrollear (el perfil de usuario del fondo quedaba inalcanzable). */}
+      <div style={{ position: 'relative', flexShrink: 0, height: '100%' }}>
         <SidebarNav onImportarClick={() => setShowImportador(true)} collapsed={sidebarCollapsed} />
         {/* Pestaña sobre el borde: visible siempre, sin robarle ancho al nav. */}
         <button

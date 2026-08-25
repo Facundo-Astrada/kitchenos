@@ -47,14 +47,14 @@ export default function SidebarNav({ onImportarClick, dark = false, collapsed = 
   return (
     <aside style={{
       width: collapsed ? SIDEBAR_ANCHO_COLAPSADO : SIDEBAR_ANCHO,
+      height: '100%',
       transition: 'width .18s ease',
       flexShrink: 0,
       background: dark ? '#161616' : 'var(--navy)',
       borderRight: dark ? '1px solid #2a2a2a' : 'none',
       display: 'flex',
       flexDirection: 'column',
-      overflowY: 'auto',
-      overflowX: 'hidden',
+      overflow: 'hidden',
     }}>
 
       {/* Logo */}
@@ -97,8 +97,11 @@ export default function SidebarNav({ onImportarClick, dark = false, collapsed = 
       {/* Divisor */}
       <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '0 16px 16px', flexShrink: 0 }} />
 
-      {/* Módulos por sección */}
-      <nav style={{ flex: 1, padding: '0 12px', overflowY: 'auto' }}>
+      {/* Módulos por sección — minHeight:0 es lo que hace que ESTE nav
+          scrollee y no el <aside> entero (que se arrastraba el perfil de
+          abajo con él): un flex item con overflow:auto pero sin minHeight:0
+          no se achica, empuja al padre a desbordarse en vez de scrollear. */}
+      <nav style={{ flex: 1, minHeight: 0, padding: '0 12px', overflowY: 'auto' }}>
         {SECCIONES.map(({ label, items }) => {
           const visibles = items.filter(
             id => MODULO_CONFIG[id] && (isAdmin || (modulosDelRol.includes(id) && canSee(id))) && moduloEnPerfil(id)
