@@ -13,7 +13,7 @@ const SECCIONES: { label: string; items: ModuloId[] }[] = [
   { label: 'Servicio', items: ['salon', 'kds', 'muro', 'reservas'] },
   { label: 'Insumos', items: ['stock', 'facturas', 'pedidos', 'proveedores', 'merma'] },
   { label: 'Gestión', items: ['reportes', 'ventas', 'clientes', 'haccp', 'calendario', 'turnos', 'bitacora'] },
-  { label: 'Sistema', items: ['equipo', 'configuracion'] },
+  { label: 'Sistema', items: ['equipo', 'organigrama', 'configuracion'] },
 ]
 
 interface Props {
