@@ -1,7 +1,7 @@
 'use client'
 
 import PageTransition from '@/components/PageTransition'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, type CSSProperties } from 'react'
 import { useRouter } from 'next/navigation'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { usePermisos } from '@/lib/hooks/usePermisos'
@@ -148,7 +148,7 @@ export default function PresupuestoPage() {
           </div>
         </div>
 
-        <div style={{ padding: '14px 14px calc(var(--fab-bottom) + 14px)', maxWidth: 900, margin: '0 auto' }}>
+        <div style={{ padding: '14px 14px calc(var(--fab-bottom) + 14px)', maxWidth: 1160, margin: '0 auto' }}>
           {tab === 'familias' ? (
             familiasLoading && !presuFamiliasData.rows.length ? (
               <EmptyState icon="hourglass_top" title="Cargando..." />
@@ -191,11 +191,11 @@ export default function PresupuestoPage() {
                   </div>
                 )}
 
-                <BloqueB sectores={data.sectores} isDesktop={isDesktop} mes={mes}
+                <BloqueSectoresSemanas
+                  sectores={data.sectores} semanas={data.semanas}
+                  mesLabelStr={mesLabel(data.mes)} diasDelMes={data.diasDelMes} mes={mes}
                   onGuardar={guardarPresupuestoSector}
                   subtotalComida={data.subtotalComidaReal} subtotalBebidas={data.subtotalBebidasReal} />
-
-                <BloqueC semanas={data.semanas} diasDelMes={data.diasDelMes} />
 
                 <BloqueD merma={data.merma} arreglos={data.arreglos} ventasReales={data.ventasReales} />
               </div>
@@ -310,69 +310,11 @@ function Stat({ label, value, sub, accent, color }: { label: string; value: stri
   )
 }
 
-// ── Bloque B · Sectores ──
-function BloqueB({ sectores, isDesktop, mes, onGuardar, subtotalComida, subtotalBebidas }: {
-  sectores: SectorRow[]
-  isDesktop: boolean
-  mes: string
-  onGuardar: (mes: string, categoriaGastoId: string, monto: number) => Promise<void>
-  subtotalComida: number
-  subtotalBebidas: number
-}) {
-  const totalPresupuesto = sectores.reduce((s, r) => s + r.presupuesto, 0)
-  const totalReal = sectores.reduce((s, r) => s + r.gastoReal, 0)
-  const totalObj = sectores.reduce((s, r) => s + r.objSobreVentas, 0)
-
-  return (
-    <div data-coach-target="presupuesto-sectores" style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)' }}>
-      <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-3)', fontWeight: 600, marginBottom: 12 }}>
-        Sectores — objetivo contra real
-      </div>
-
-      {isDesktop ? (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13, minWidth: 640 }}>
-            <thead>
-              <tr>
-                {['Sector', 'Presupuesto', 'Obj. s/ventas', 'Gasto real', '% s/ventas', 'Desvío', 'Ejecutado'].map((h, i) => (
-                  <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-3)', fontWeight: 500, padding: '0 8px 8px', whiteSpace: 'nowrap' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {sectores.map(s => <FilaSector key={s.categoriaGastoId} row={s} mes={mes} onGuardar={onGuardar} />)}
-              <tr>
-                <td style={{ padding: '10px 8px 0', borderTop: '2px solid var(--text-3)', fontWeight: 700 }}>Total mercadería</td>
-                <td style={{ padding: '10px 8px 0', borderTop: '2px solid var(--text-3)', textAlign: 'right', fontWeight: 700 }}><Num>{fmtMoney(totalPresupuesto)}</Num></td>
-                <td style={{ padding: '10px 8px 0', borderTop: '2px solid var(--text-3)', textAlign: 'right', color: 'var(--text-3)' }}><Num>{fmtPct(totalObj)}</Num></td>
-                <td style={{ padding: '10px 8px 0', borderTop: '2px solid var(--text-3)', textAlign: 'right', fontWeight: 700 }}><Num>{fmtMoney(totalReal)}</Num></td>
-                <td style={{ padding: '10px 8px 0', borderTop: '2px solid var(--text-3)', textAlign: 'right', fontWeight: 700 }}><Num>{fmtPct(totalObj + (sectores.reduce((s, r) => s + r.desvioPuntos, 0)))}</Num></td>
-                <td style={{ padding: '10px 8px 0', borderTop: '2px solid var(--text-3)', textAlign: 'right' }}>
-                  <DesvioPill puntos={sectores.reduce((s, r) => s + r.desvioPuntos, 0)} />
-                </td>
-                <td style={{ padding: '10px 8px 0', borderTop: '2px solid var(--text-3)', textAlign: 'right', fontWeight: 700 }}>
-                  <Num>{fmtPct(totalPresupuesto > 0 ? (totalReal / totalPresupuesto) * 100 : 0)}</Num>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {sectores.map(s => <CardSectorMobile key={s.categoriaGastoId} row={s} mes={mes} onGuardar={onGuardar} />)}
-        </div>
-      )}
-
-      <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 12, color: 'var(--text-2)' }}>
-        <span>Comida: <strong style={{ color: 'var(--text-1)' }}><Num>{fmtMoney(subtotalComida)}</Num></strong></span>
-        <span>Bebidas: <strong style={{ color: 'var(--text-1)' }}><Num>{fmtMoney(subtotalBebidas)}</Num></strong></span>
-      </div>
-      <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '10px 0 0', lineHeight: 1.5 }}>
-        El presupuesto por sector se siembra con el mix real de los últimos 3 meses y queda editable. Guardarraíl del material: bodega ~40 % de la venta de bebida, comida ~25 % de la venta de comida.
-      </p>
-    </div>
-  )
-}
+// ── Bloque B+C fusionado · Sectores × Mes × Semanas ──
+// Una sola grilla panorámica (pedido de Facundo, ago 2026): sector = fila,
+// MES + cada semana = grupos de columna, fiel al diseño de la planilla
+// original en vez de dos tablas apiladas.
+type SemanaRow = ReturnType<typeof usePresupuestoCMV>['data'] extends infer D ? D extends { semanas: infer S } ? S : never : never
 
 function DesvioPill({ puntos }: { puntos: number }) {
   const col = colorDesvio(puntos)
@@ -384,122 +326,104 @@ function DesvioPill({ puntos }: { puntos: number }) {
   )
 }
 
-function FilaSector({ row, mes, onGuardar }: { row: SectorRow; mes: string; onGuardar: (mes: string, id: string, monto: number) => Promise<void> }) {
-  const ejecCol = row.ejecutadoPct <= 70 ? '#16a34a' : row.ejecutadoPct <= 100 ? '#ca8a04' : '#dc2626'
-  return (
-    <tr>
-      <td style={{ padding: '8px', borderTop: '1px solid var(--border)', fontWeight: 500 }}>{row.nombre}</td>
-      <td style={{ padding: '8px', borderTop: '1px solid var(--border)', textAlign: 'right' }}>
-        <input
-          type="number"
-          inputMode="numeric"
-          defaultValue={Math.round(row.presupuesto) || ''}
-          onBlur={async (e) => {
-            const val = parseFloat(e.target.value) || 0
-            if (Math.round(val) !== Math.round(row.presupuesto)) await onGuardar(mes, row.categoriaGastoId, val)
-          }}
-          style={{ width: 100, textAlign: 'right', padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border)', background: row.presupuestoEsSugerido ? 'var(--bg)' : 'transparent', color: 'var(--text-2)', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
-        />
-      </td>
-      <td style={{ padding: '8px', borderTop: '1px solid var(--border)', textAlign: 'right', color: 'var(--text-3)' }}><Num>{fmtPct(row.objSobreVentas)}</Num></td>
-      <td style={{ padding: '8px', borderTop: '1px solid var(--border)', textAlign: 'right' }}><Num>{fmtMoney(row.gastoReal)}</Num></td>
-      <td style={{ padding: '8px', borderTop: '1px solid var(--border)', textAlign: 'right' }}><Num>{fmtPct(row.pctSobreVentas)}</Num></td>
-      <td style={{ padding: '8px', borderTop: '1px solid var(--border)', textAlign: 'right' }}><DesvioPill puntos={row.desvioPuntos} /></td>
-      <td style={{ padding: '8px', borderTop: '1px solid var(--border)', textAlign: 'right' }}>
-        <span style={{ display: 'inline-block', width: 44, height: 5, borderRadius: 99, background: 'var(--border)', overflow: 'hidden', verticalAlign: 'middle', marginRight: 6 }}>
-          <span style={{ display: 'block', height: '100%', width: `${Math.min(row.ejecutadoPct, 100)}%`, background: ejecCol, borderRadius: 99 }} />
-        </span>
-        <Num>{fmtPct(row.ejecutadoPct)}</Num>
-      </td>
-    </tr>
-  )
-}
+const THG: CSSProperties = { textAlign: 'center', fontSize: 10, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-3)', fontWeight: 700, padding: '8px 8px 6px', whiteSpace: 'nowrap', borderBottom: '1px solid var(--border)' }
+const TH: CSSProperties = { textAlign: 'right', fontSize: 10, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--text-3)', fontWeight: 500, padding: '0 8px 8px', whiteSpace: 'nowrap' }
+const TD: CSSProperties = { padding: '7px 8px', borderTop: '1px solid var(--border)', textAlign: 'right', whiteSpace: 'nowrap' }
 
-function CardSectorMobile({ row, mes, onGuardar }: { row: SectorRow; mes: string; onGuardar: (mes: string, id: string, monto: number) => Promise<void> }) {
-  const ejecCol = row.ejecutadoPct <= 70 ? '#16a34a' : row.ejecutadoPct <= 100 ? '#ca8a04' : '#dc2626'
-  return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{row.nombre}</span>
-        <DesvioPill puntos={row.desvioPuntos} />
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-2)', marginBottom: 8 }}>
-        <span>Real: <Num>{fmtMoney(row.gastoReal)}</Num> ({fmtPct(row.pctSobreVentas)})</span>
-        <span>Obj: {fmtPct(row.objSobreVentas)}</span>
-      </div>
-      <div style={{ background: 'var(--border)', borderRadius: 99, height: 6, overflow: 'hidden', marginBottom: 8 }}>
-        <div style={{ width: `${Math.min(row.ejecutadoPct, 100)}%`, height: '100%', background: ejecCol, borderRadius: 99 }} />
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-2)' }}>
-        <span>Presupuesto:</span>
-        <input
-          type="number"
-          inputMode="numeric"
-          defaultValue={Math.round(row.presupuesto) || ''}
-          onBlur={async (e) => {
-            const val = parseFloat(e.target.value) || 0
-            if (Math.round(val) !== Math.round(row.presupuesto)) await onGuardar(mes, row.categoriaGastoId, val)
-          }}
-          style={{ width: 100, textAlign: 'right', padding: '4px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
-        />
-      </div>
-    </div>
-  )
-}
-
-// ── Bloque C · Ritmo de compra ──
-function BloqueC({ semanas, diasDelMes }: { semanas: ReturnType<typeof usePresupuestoCMV>['data'] extends infer D ? D extends { semanas: infer S } ? S : never : never; diasDelMes: number }) {
-  const labels = [
+function BloqueSectoresSemanas({ sectores, semanas, mesLabelStr, diasDelMes, mes, onGuardar, subtotalComida, subtotalBebidas }: {
+  sectores: SectorRow[]
+  semanas: SemanaRow
+  mesLabelStr: string
+  diasDelMes: number
+  mes: string
+  onGuardar: (mes: string, categoriaGastoId: string, monto: number) => Promise<void>
+  subtotalComida: number
+  subtotalBebidas: number
+}) {
+  const semanaLabels = [
     ['Sem 1', '1–7'], ['Sem 2', '8–14'], ['Sem 3', '15–21'],
     ['Sem 4', '22–28'], ['Sem 5', `29–${diasDelMes}`],
   ]
-  const totales = [0, 1, 2, 3, 4].map(w => semanas.reduce((s, r) => s + r.celdas[w].gasto, 0))
-  const presuTotales = [0, 1, 2, 3, 4].map(w => semanas.reduce((s, r) => s + r.celdas[w].presupuesto, 0))
+  const semanasPorSector = new Map(semanas.map(s => [s.categoriaGastoId, s.celdas]))
+
+  const totalPresupuesto = sectores.reduce((s, r) => s + r.presupuesto, 0)
+  const totalReal = sectores.reduce((s, r) => s + r.gastoReal, 0)
+  const totalDesvio = sectores.reduce((s, r) => s + r.desvioPuntos, 0)
+  const totalesSemana = [0, 1, 2, 3, 4].map(w => semanas.reduce((s, r) => s + r.celdas[w].gasto, 0))
+  const presuTotalesSemana = [0, 1, 2, 3, 4].map(w => semanas.reduce((s, r) => s + r.celdas[w].presupuesto, 0))
 
   return (
-    <div data-coach-target="presupuesto-semanas" style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)' }}>
+    <div data-coach-target="presupuesto-sectores" style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)' }}>
       <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-3)', fontWeight: 600, marginBottom: 12 }}>
-        Ritmo de compra — cuándo sale la plata
+        Sectores — el mes y semana a semana
       </div>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12.5, minWidth: 720 }}>
+
+      <div data-coach-target="presupuesto-semanas" style={{ overflowX: 'auto' }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13, minWidth: 900 }}>
           <thead>
             <tr>
-              <th style={{ textAlign: 'left', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-3)', fontWeight: 500, padding: '0 6px 8px' }}>Sector</th>
-              {labels.map(([l, r]) => (
-                <th key={l} style={{ textAlign: 'right', fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-3)', fontWeight: 500, padding: '0 6px 8px', whiteSpace: 'nowrap' }}>
-                  {l} <span style={{ opacity: .6 }}>{r}</span>
-                </th>
+              <th rowSpan={2} style={{ ...THG, textAlign: 'left', verticalAlign: 'bottom', borderRight: '2px solid var(--border)' }}>Sector</th>
+              <th colSpan={3} style={{ ...THG, background: 'var(--bg)', borderRight: '2px solid var(--border)' }}>{mesLabelStr}</th>
+              {semanaLabels.map(([l]) => (
+                <th key={l} style={THG}>{l}</th>
+              ))}
+            </tr>
+            <tr>
+              <th style={{ ...TH, textAlign: 'right' }}>Presupuesto</th>
+              <th style={TH}>Real</th>
+              <th style={{ ...TH, borderRight: '2px solid var(--border)' }}>Desvío</th>
+              {semanaLabels.map(([l, r]) => (
+                <th key={l} style={TH}>{r}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {semanas.map(row => (
-              <tr key={row.categoriaGastoId}>
-                <td style={{ padding: '6px', borderTop: '1px solid var(--border)', fontWeight: 500, whiteSpace: 'nowrap' }}>{row.nombre}</td>
-                {row.celdas.map((c, i) => (
-                  <td key={i} style={{ padding: '6px', borderTop: '1px solid var(--border)', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {c.future ? (
-                      <span style={{ color: 'var(--text-3)' }}>—</span>
-                    ) : (
-                      <>
-                        <Num>{fmtMoney(c.gasto)}</Num>
-                        {c.desvioPct != null && (
-                          <span style={{ display: 'block', fontSize: 10.5, fontWeight: 500, color: c.desvioPct <= 0 ? '#16a34a' : '#dc2626' }}>
-                            {c.desvioPct >= 0 ? '+' : ''}{Math.round(c.desvioPct * 100)}%
-                          </span>
-                        )}
-                      </>
-                    )}
+            {sectores.map(row => {
+              const celdas = semanasPorSector.get(row.categoriaGastoId) ?? []
+              return (
+                <tr key={row.categoriaGastoId}>
+                  <td style={{ ...TD, textAlign: 'left', fontWeight: 500, borderRight: '2px solid var(--border)' }}>{row.nombre}</td>
+                  <td style={TD}>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      defaultValue={Math.round(row.presupuesto) || ''}
+                      onBlur={async (e) => {
+                        const val = parseFloat(e.target.value) || 0
+                        if (Math.round(val) !== Math.round(row.presupuesto)) await onGuardar(mes, row.categoriaGastoId, val)
+                      }}
+                      style={{ width: 96, textAlign: 'right', padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border)', background: row.presupuestoEsSugerido ? 'var(--bg)' : 'transparent', color: 'var(--text-2)', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
+                    />
                   </td>
-                ))}
-              </tr>
-            ))}
+                  <td style={TD}><Num>{fmtMoney(row.gastoReal)}</Num></td>
+                  <td style={{ ...TD, borderRight: '2px solid var(--border)' }}><DesvioPill puntos={row.desvioPuntos} /></td>
+                  {celdas.map((c, i) => (
+                    <td key={i} style={TD}>
+                      {c.future ? (
+                        <span style={{ color: 'var(--text-3)' }}>—</span>
+                      ) : (
+                        <>
+                          <Num>{fmtMoney(c.gasto)}</Num>
+                          {c.desvioPct != null && (
+                            <span style={{ display: 'block', fontSize: 10.5, fontWeight: 500, color: c.desvioPct <= 0 ? '#16a34a' : '#dc2626' }}>
+                              {c.desvioPct >= 0 ? '+' : ''}{Math.round(c.desvioPct * 100)}%
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              )
+            })}
             <tr>
-              <td style={{ padding: '9px 6px 0', borderTop: '2px solid var(--text-3)', fontWeight: 700 }}>Total</td>
-              {totales.map((t, i) => (
-                <td key={i} style={{ padding: '9px 6px 0', borderTop: '2px solid var(--text-3)', textAlign: 'right', fontWeight: 700 }}>
-                  {labels[i][0] && presuTotales[i] === 0 && t === 0 ? (
+              <td style={{ ...TD, textAlign: 'left', fontWeight: 700, borderTop: '2px solid var(--text-3)', borderRight: '2px solid var(--border)' }}>Total mercadería</td>
+              <td style={{ ...TD, fontWeight: 700, borderTop: '2px solid var(--text-3)' }}><Num>{fmtMoney(totalPresupuesto)}</Num></td>
+              <td style={{ ...TD, fontWeight: 700, borderTop: '2px solid var(--text-3)' }}><Num>{fmtMoney(totalReal)}</Num></td>
+              <td style={{ ...TD, borderTop: '2px solid var(--text-3)', borderRight: '2px solid var(--border)' }}><DesvioPill puntos={totalDesvio} /></td>
+              {totalesSemana.map((t, i) => (
+                <td key={i} style={{ ...TD, fontWeight: 700, borderTop: '2px solid var(--text-3)' }}>
+                  {presuTotalesSemana[i] === 0 && t === 0 ? (
                     <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>—</span>
                   ) : (
                     <Num>{fmtMoney(t)}</Num>
@@ -510,8 +434,13 @@ function BloqueC({ semanas, diasDelMes }: { semanas: ReturnType<typeof usePresup
           </tbody>
         </table>
       </div>
+
+      <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 12, color: 'var(--text-2)' }}>
+        <span>Comida: <strong style={{ color: 'var(--text-1)' }}><Num>{fmtMoney(subtotalComida)}</Num></strong></span>
+        <span>Bebidas: <strong style={{ color: 'var(--text-1)' }}><Num>{fmtMoney(subtotalBebidas)}</Num></strong></span>
+      </div>
       <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '10px 0 0', lineHeight: 1.5 }}>
-        La semana compara gasto contra presupuesto semanal, no contra ventas: las compras entran a saltos y las ventas salen parejas.
+        El presupuesto por sector se siembra con el mix real de los últimos 3 meses y queda editable. La semana compara gasto contra presupuesto semanal, no contra ventas — las compras entran a saltos y las ventas salen parejas.
       </p>
     </div>
   )
