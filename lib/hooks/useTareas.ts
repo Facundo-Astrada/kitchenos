@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Tarea, ChecklistItemTarea, OpsEstado } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
 import { useAuth } from '@/lib/auth/context'
+import { claveTarea, tareaExistentePara, esProduccionDelDia } from '@/lib/ops/dedupeTareas'
 
 function parseTarea(t: Record<string, unknown>): Tarea {
   return {
@@ -32,6 +33,31 @@ function desdeISO(dias: number): string {
   const d = new Date()
   d.setDate(d.getDate() - dias)
   return d.toISOString().slice(0, 10)
+}
+
+// ── Una preparación, un día, una tarea ──────────────────────────────────────
+// La regla vive en lib/ops/dedupeTareas.ts; acá se aplica en el único lugar por
+// el que pasan todas las pantallas que crean producción (Mise, board, Pase,
+// Control de Carta). Antes cada una tenía —o no— su propio guard, así que la
+// misma preparación entraba por una puerta que no veía a las otras.
+//
+// El mapa es de MÓDULO y no un ref por componente a propósito: el Mise, el
+// board y el Pase son tres componentes distintos que pueden estar mandando el
+// mismo trabajo al mismo tiempo, y un ref por componente no los ve. Guarda la
+// promesa en curso, no un booleano: el segundo tap se cuelga del primero y
+// recibe la misma tarea en vez de crear otra o quedarse sin id.
+const despachosEnVuelo = new Map<string, Promise<string>>()
+
+// Las tareas del día directo de la base. Solo se usa cuando la cache de SWR no
+// puede responder — el Pase y el Calendario abren `useTareas` en modo
+// soloEscritura y no bajan la lista, así que sin esto crearían a ciegas.
+async function tareasDelDiaEnDB(
+  supabase: ReturnType<typeof createClient>, rid: string, fecha: string,
+): Promise<Tarea[]> {
+  const { data } = await supabase.from('tareas')
+    .select('id, titulo, categoria, modo, plaza, seccion, menu_id, checklist_item_id, estado, turno_fecha, created_at, parent_id')
+    .eq('restaurante_id', rid).eq('turno_fecha', fecha).is('parent_id', null)
+  return (data ?? []) as Tarea[]
 }
 
 async function fetchTareasData(key: string): Promise<Tarea[]> {
@@ -63,7 +89,7 @@ export function useTareas(opts?: { soloEscritura?: boolean }) {
   const swrKey = RESTAURANTE_ID && !opts?.soloEscritura ? `tareas-${RESTAURANTE_ID}` : null
   // Con soloEscritura el `mutate` local no apunta a ninguna key: para que las
   // pantallas que sí muestran la lista se enteren, se invalida por la key real.
-  const { mutate: mutateGlobal } = useSWRConfig()
+  const { mutate: mutateGlobal, cache } = useSWRConfig()
   const invalidarLista = useCallback(() => {
     if (RESTAURANTE_ID) mutateGlobal(`tareas-${RESTAURANTE_ID}`)
   }, [mutateGlobal, RESTAURANTE_ID])
@@ -129,7 +155,7 @@ export function useTareas(opts?: { soloEscritura?: boolean }) {
   // Todas las funciones CRUD van en useCallback: bajan como props hasta ItemOps,
   // que está memoizado — una referencia nueva por render lo re-renderizaría igual
   // (ver .claude/docs/hooks.md #10).
-  const agregarTarea = useCallback(async (datos: Omit<Tarea, 'id' | 'restaurante_id' | 'created_at' | 'completed_at'>) => {
+  const insertarTarea = useCallback(async (datos: Omit<Tarea, 'id' | 'restaurante_id' | 'created_at' | 'completed_at'>) => {
     try {
       const { data, error } = await supabase.from('tareas').insert({
         ...datos,
@@ -147,6 +173,33 @@ export function useTareas(opts?: { soloEscritura?: boolean }) {
       throw new Error(msg)
     }
   }, [supabase, RESTAURANTE_ID, mutate, marcarEscrituraPropia, swrKey, invalidarLista])
+
+  const agregarTarea = useCallback(async (datos: Omit<Tarea, 'id' | 'restaurante_id' | 'created_at' | 'completed_at'>) => {
+    // Lo que no es producción del día entra derecho: la regla no le aplica.
+    if (!RESTAURANTE_ID || !esProduccionDelDia(datos)) return insertarTarea(datos)
+
+    const clave = `${RESTAURANTE_ID}::${claveTarea(datos)}`
+    // Un despacho igual todavía en vuelo: el segundo tap se cuelga del primero.
+    const enVuelo = despachosEnVuelo.get(clave)
+    if (enVuelo) return enVuelo
+
+    const trabajo = (async () => {
+      // La cache de SWR es la lista que las pantallas ya tienen bajada — se lee
+      // del objeto vivo y no de un snapshot de render, así que ya trae lo que
+      // insertó el tap anterior (agregarTarea espera al mutate antes de volver).
+      const cacheada = (cache.get(`tareas-${RESTAURANTE_ID}`) as { data?: Tarea[] } | undefined)?.data
+      const lista = cacheada ?? await tareasDelDiaEnDB(supabase, RESTAURANTE_ID, datos.turno_fecha!)
+      const existente = tareaExistentePara(lista, datos)
+      // Ya hay una fila para este trabajo: se devuelve esa. No la reabre ni la
+      // reescribe — eso es decisión de quien despacha (ver el Mise, que sí
+      // reabre lo tildado porque re-despachar ahí significa "hay que rehacerlo").
+      if (existente) return existente.id
+      return insertarTarea(datos)
+    })()
+
+    despachosEnVuelo.set(clave, trabajo)
+    try { return await trabajo } finally { despachosEnVuelo.delete(clave) }
+  }, [RESTAURANTE_ID, insertarTarea, cache, supabase])
 
   const actualizarTarea = useCallback(async (id: string, datos: Partial<Omit<Tarea, 'id' | 'restaurante_id'>>) => {
     const optimistic = (prev: Tarea[] | undefined) =>

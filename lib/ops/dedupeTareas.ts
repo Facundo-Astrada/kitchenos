@@ -63,6 +63,20 @@ export function claveTarea(t: TareaIdentificable): string {
 }
 
 /**
+ * ¿Esta tarea participa de la identidad "una preparación, una fila"?
+ *
+ * Solo la producción con jornada asignada. Quedan afuera las notas de pedido,
+ * las tareas sueltas sin fecha, las subtareas y las anotaciones libres
+ * (`categoria: 'general'`, lo que se escribe a mano en el Pase o el
+ * Calendario): dos anotaciones con el mismo texto son dos anotaciones, y
+ * juntarlas sería borrarle una al que la escribió.
+ */
+export function esProduccionDelDia(t: Partial<Tarea>): boolean {
+  return t.parent_id == null && t.turno_fecha != null
+    && (t.categoria === 'produccion' || t.categoria === 'pase_turno')
+}
+
+/**
  * Cuál de dos gemelas se muestra. Gana la que está vinculada al mise
  * (`checklist_item_id`): es la única por la que tildar en Producción vuelve
  * al mise, y perderla rompe el ida y vuelta. Entre iguales, la más reciente

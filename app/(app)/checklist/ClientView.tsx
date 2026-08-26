@@ -26,7 +26,7 @@ import { todasLasPlazas, plazaLabel, plazaIcon, plazaColor } from '@/lib/constan
 import { hoyOperativo, sumarDias, turnoVigente, turnoAnterior, turnoSiguiente, encodeTurnoFase, cierreIncompleto, fechaEnTz } from '@/lib/ops/turnos'
 import { menuItemVisible } from '@/lib/ops/mise'
 import { tareasAfectadasPorTilde } from '@/lib/ops/syncMise'
-import { claveTarea, tareaExistentePara } from '@/lib/ops/dedupeTareas'
+import { tareaExistentePara } from '@/lib/ops/dedupeTareas'
 import { setOpsChromeCompact } from '@/lib/ops/chromeBus'
 import { SheetChrome } from '@/lib/ui/chrome'
 import { motion } from 'motion/react'
@@ -1342,15 +1342,6 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     ])
   }, [upsertRegistro, tareas, cambiarEstadoTarea, today, authPerfil])
 
-  // Despachos que ya salieron y todavía no volvieron en la lista. `tareas`
-  // viene de SWR y se actualiza recién en el render siguiente: dos taps a
-  // milisegundos (o el segundo dedo de otro cocinero sobre la misma tablet)
-  // entran los dos leyendo la lista vieja y cada uno inserta su tarea. Es
-  // literalmente lo que pasó en Bros el 26/8 — "Coco en escamas tostado" ×3
-  // con un segundo de diferencia, "Trucha curada" ×10 en el día. La llave se
-  // suelta con un respiro justamente para cubrir ese render.
-  const despachosEnVuelo = useRef<Set<string>>(new Set())
-
   const handleCrearTarea = useCallback(async (params: CrearTareaParams) => {
     let turnoFecha = today
     if (params.dia === 'manana') {
@@ -1384,14 +1375,10 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     }
 
     // ── Una preparación, un día, una tarea (ver lib/ops/dedupeTareas.ts) ──
-    const claveVuelo = claveTarea(identidad)
-    if (despachosEnVuelo.current.has(claveVuelo)) return
-    despachosEnVuelo.current.add(claveVuelo)
-    // Se suelta con retraso y no en un `finally`: agregarTarea ya refrescó SWR
-    // al volver, pero `tareas` recién llega actualizada en el próximo render.
-    const soltar = () => setTimeout(() => despachosEnVuelo.current.delete(claveVuelo), 1500)
-
-    try {
+    // El candado contra el doble tap vive en useTareas.agregarTarea, que es por
+    // donde pasan TODAS las pantallas que crean producción. Acá sólo queda lo
+    // que es propio del mise: reabrir lo tildado y adoptar la fila del lote.
+    {
       // ¿Ya hay una fila para este trabajo? El guard viejo pedía además misma
       // categoría y estado distinto de 'listo', y por eso dejaba pasar los dos
       // duplicados que más se veían en servicio:
@@ -1417,7 +1404,6 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           ...(existente.estado === 'listo'
             ? { estado: 'pendiente' as const, status: 'pendiente', completed_at: null, completado_por: null } : {}),
         })
-        soltar()
         return
       }
 
@@ -1471,12 +1457,6 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           })
         }
       }
-      soltar()
-    } catch (e) {
-      // Si la escritura falló no hay nada que proteger: se suelta ya, para que
-      // el cocinero pueda volver a tocar sin esperar.
-      despachosEnVuelo.current.delete(claveVuelo)
-      throw e
     }
   }, [agregarTarea, actualizarTarea, authPerfil, today, items])
 

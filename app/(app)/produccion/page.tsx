@@ -15,6 +15,7 @@ import SugerenciaProduccionSheet from '@/components/produccion/SugerenciaProducc
 import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
 import { activarMenuParaFechas } from '@/lib/menus/activarMenu'
 import { estadoMiseMenu } from '@/lib/ops/menuMise'
+import { tareaExistentePara } from '@/lib/ops/dedupeTareas'
 
 // ── Helpers ─────────────────────────────────────────────────
 // fmtDate formatea un Date arbitrario de navegación de calendario (siempre
@@ -202,6 +203,16 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
     if (!RESTAURANTE_ID || items.length === 0) { setShowSugerencia(false); return }
     try {
       const supabase = createClient()
+      // Lo que ya está cargado para esa fecha — la sugerencia insertaba en lote
+      // sin preguntar, así que confirmarla dos veces (o confirmarla sobre un día
+      // que ya tenía la producción despachada desde el mise) plantaba la misma
+      // preparación de nuevo. Una preparación, un día, una fila: ver
+      // lib/ops/dedupeTareas.ts.
+      const { data: yaCargadas } = await supabase.from('tareas')
+        .select('id, titulo, categoria, modo, plaza, seccion, menu_id, checklist_item_id, estado, turno_fecha, created_at, parent_id')
+        .eq('restaurante_id', RESTAURANTE_ID).eq('turno_fecha', fechaSugerida).is('parent_id', null)
+      const existentes = (yaCargadas ?? []) as Tarea[]
+
       const rows = items.map((it, i) => ({
         titulo: it.nombre,
         descripcion: `Sugerido por ventas históricas de los ${diaLabel}`,
@@ -218,12 +229,18 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
         turno_fecha: fechaSugerida,
         orden: i,
         restaurante_id: RESTAURANTE_ID,
-      }))
-      const { error } = await supabase.from('tareas').insert(rows)
-      if (error) throw error
+      })).filter(r => !tareaExistentePara(existentes, r))
+
+      if (rows.length > 0) {
+        const { error } = await supabase.from('tareas').insert(rows)
+        if (error) throw error
+      }
       refetchTareas()
       setShowSugerencia(false)
-      showToast(`${rows.length} ${rows.length === 1 ? 'tarea creada' : 'tareas creadas'} para ${diaLabel}`)
+      const omitidas = items.length - rows.length
+      showToast(rows.length === 0
+        ? `Todo eso ya estaba cargado para ${diaLabel}`
+        : `${rows.length} ${rows.length === 1 ? 'tarea creada' : 'tareas creadas'} para ${diaLabel}${omitidas > 0 ? ` · ${omitidas} ya estaban` : ''}`)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message
         : (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message)

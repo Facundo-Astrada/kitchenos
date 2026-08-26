@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizarTitulo, claveTarea, fusionarDuplicados, tareaExistentePara } from './dedupeTareas'
+import { normalizarTitulo, claveTarea, fusionarDuplicados, tareaExistentePara, esProduccionDelDia } from './dedupeTareas'
 import type { Tarea } from '@/types'
 
 const HOY = '2026-08-26'
@@ -139,5 +139,36 @@ describe('tareaExistentePara', () => {
     const sub = tarea({ id: 's', parent_id: 'padre', checklist_item_id: 'ci-1' })
     const hallada = tareaExistentePara([sub], { titulo: 'Trucha curada', turno_fecha: HOY, modo: 'carta', plaza: 'parrilla', checklist_item_id: 'ci-1' })
     expect(hallada).toBeNull()
+  })
+})
+
+// La regla se aplica ahora dentro de useTareas.agregarTarea, por donde pasan
+// todas las pantallas que crean producción. Este es el borde: qué entra a la
+// regla y qué no.
+describe('esProduccionDelDia — qué queda dentro de la regla', () => {
+  it('la producción del día entra', () => {
+    expect(esProduccionDelDia(tarea())).toBe(true)
+  })
+
+  it('el pase de turno entra — es el mismo trabajo pedido de otra forma', () => {
+    expect(esProduccionDelDia(tarea({ categoria: 'pase_turno' }))).toBe(true)
+  })
+
+  it('una nota de pedido NO entra: no tiene jornada ni es producción', () => {
+    expect(esProduccionDelDia(tarea({ categoria: 'pedido_nota', turno_fecha: null }))).toBe(false)
+  })
+
+  // Lo que se escribe a mano en el Pase o el Calendario. Dos anotaciones con el
+  // mismo texto son dos anotaciones: juntarlas sería borrarle una al que la puso.
+  it('una anotación libre NO entra', () => {
+    expect(esProduccionDelDia(tarea({ categoria: 'general' }))).toBe(false)
+  })
+
+  it('una subtarea NO entra: cuelga de su padre, no ocupa fila propia', () => {
+    expect(esProduccionDelDia(tarea({ parent_id: 'padre' }))).toBe(false)
+  })
+
+  it('una tarea suelta sin jornada NO entra', () => {
+    expect(esProduccionDelDia(tarea({ turno_fecha: null }))).toBe(false)
   })
 })
