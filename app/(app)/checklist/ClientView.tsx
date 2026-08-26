@@ -26,6 +26,7 @@ import { todasLasPlazas, plazaLabel, plazaIcon, plazaColor } from '@/lib/constan
 import { hoyOperativo, sumarDias, turnoVigente, turnoAnterior, turnoSiguiente, encodeTurnoFase, cierreIncompleto, fechaEnTz } from '@/lib/ops/turnos'
 import { menuItemVisible } from '@/lib/ops/mise'
 import { tareasAfectadasPorTilde } from '@/lib/ops/syncMise'
+import { claveTarea, tareaExistentePara } from '@/lib/ops/dedupeTareas'
 import { setOpsChromeCompact } from '@/lib/ops/chromeBus'
 import { SheetChrome } from '@/lib/ui/chrome'
 import { motion } from 'motion/react'
@@ -440,7 +441,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     registrarAuditoriaRutina, guardarAuditoriaPasada,
   } = useChecklist()
   const { recetas } = useRecetasLite()
-  const { tareas, agregarTarea, cambiarEstado: cambiarEstadoTarea } = useTareas()
+  const { tareas, agregarTarea, actualizarTarea, cambiarEstado: cambiarEstadoTarea } = useTareas()
   const { rendimientoMap } = useProduccionRegistros()
   // Solo se usa para crear el vencimiento desde la etiqueta — sin descargar HACCP.
   const { crearVencimiento } = useHaccp({ soloEscritura: true })
@@ -448,6 +449,11 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const { turnosActivos } = useTurnosServicio()
   const { entregados, entregaDe, entregarPlaza } = useCierresTurno()
   const { notasDe, agregar: agregarNota, eliminar: eliminarNota } = useNotasPlaza()
+
+  // La lista de tareas por ref — el guard de despacho (handleCrearTarea) tiene
+  // que leer lo último que llegó, no lo que había cuando se creó el callback.
+  const tareasRef = useRef(tareas)
+  useEffect(() => { tareasRef.current = tareas }, [tareas])
 
   // Build receta info map (id → { porciones, pesoPorcion, vidaUtilDias }) for MiseCard display
   const recetaInfoMap = useMemo(() => {
@@ -1336,6 +1342,15 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     ])
   }, [upsertRegistro, tareas, cambiarEstadoTarea, today, authPerfil])
 
+  // Despachos que ya salieron y todavía no volvieron en la lista. `tareas`
+  // viene de SWR y se actualiza recién en el render siguiente: dos taps a
+  // milisegundos (o el segundo dedo de otro cocinero sobre la misma tablet)
+  // entran los dos leyendo la lista vieja y cada uno inserta su tarea. Es
+  // literalmente lo que pasó en Bros el 26/8 — "Coco en escamas tostado" ×3
+  // con un segundo de diferencia, "Trucha curada" ×10 en el día. La llave se
+  // suelta con un respiro justamente para cubrir ese render.
+  const despachosEnVuelo = useRef<Set<string>>(new Set())
+
   const handleCrearTarea = useCallback(async (params: CrearTareaParams) => {
     let turnoFecha = today
     if (params.dia === 'manana') {
@@ -1347,70 +1362,123 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
 
     // Si el ítem que origina la tarea viene de un menú activado (checklist_item
     // con menu_id — ver sincronizarMiseDeMenu), la tarea pertenece a la banda
-    // MENÚ del board de Producción, no a una plaza de Carta: si no, un menú con
-    // plaza_control='general' hacía aparecer la misma preparación dos veces —
-    // una vez en MENÚ (activada desde Planificación) y otra como columna
-    // "General" en Carta (despachada acá, desde el déficit del mise).
+    // MENÚ (o EVENTO) del board de Producción, no a una plaza de Carta: si no,
+    // un menú con plaza_control='general' hacía aparecer la misma preparación
+    // dos veces — una vez en MENÚ (activada desde Planificación) y otra como
+    // columna "General" en Carta (despachada acá, desde el déficit del mise).
+    // El modo sale del tipo del menú y ya no se fuerza a 'menu': un evento
+    // despachado desde el mise caía en la banda MENÚ mientras su gemela del
+    // lote vivía en EVENTO — el mismo trabajo dibujado en dos bandas.
     const origenItem = params.checklist_item_id ? items.find(it => it.id === params.checklist_item_id) : null
     const menuId = origenItem?.menu_id ?? null
+    const modo = menuId ? (origenItem?.menus?.tipo === 'evento' ? 'evento' : 'menu') : 'carta'
 
-    // Guarda contra el doble despacho: dos cocineros (o un tap doble antes de
-    // que `creating` del card se propague) mandando el mismo déficit a
-    // Producción a segundos de diferencia insertaban dos tareas idénticas.
-    // `tareas` ya viaja por realtime entre clientes — si ya hay una viva para
-    // este ítem, esta categoría y este día, no hace falta otra.
-    if (params.checklist_item_id) {
-      const yaDespachada = tareas.some(t =>
-        t.checklist_item_id === params.checklist_item_id &&
-        t.turno_fecha === turnoFecha &&
-        t.categoria === categoria &&
-        t.estado !== 'listo'
-      )
-      if (yaDespachada) return
-    }
-
-    await agregarTarea({
+    const identidad = {
       titulo: params.titulo,
-      descripcion,
-      status: 'pendiente',
-      prioridad: params.prioridad,
-      categoria,
-      plaza: menuId ? null : params.plaza,
-      receta_id: params.receta_id,
-      seccion: menuId ? (origenItem?.menu_paso || 'general') : params.seccion,
-      modo: menuId ? 'menu' : 'carta',
-      menu_id: menuId,
       turno_fecha: turnoFecha,
-      estado: 'pendiente',
-      cantidad: params.cantidad,
+      modo,
+      plaza: menuId ? null : params.plaza,
+      seccion: menuId ? (origenItem?.menu_paso || 'general') : params.seccion,
+      menu_id: menuId,
       checklist_item_id: params.checklist_item_id,
-      asignado_a: null, creado_por: authPerfil?.miembro_id ?? null,
-      fecha_limite: null, tiempo_estimado_min: null, checklist: [],
-    })
-    // Sub-tasks for each extra plaza — solo aplica a Carta (multi-plaza real
-    // de plato_plazas). Los ítems de menú no se reparten por plaza.
-    if (!menuId && params.plazas.length > 1) {
-      for (const pp of params.plazas.slice(1)) {
-        await agregarTarea({
-          titulo: `[${pp.plaza}] ${params.titulo}`,
-          descripcion: pp.instruccion ?? null,
-          status: 'pendiente',
-          prioridad: 'baja',
-          categoria,
-          plaza: pp.plaza,
-          receta_id: params.receta_id,
-          seccion: params.seccion,
-          modo: 'carta',
-          turno_fecha: turnoFecha,
-          estado: 'pendiente',
-          cantidad: null,
-          checklist_item_id: params.checklist_item_id,
-          asignado_a: null, creado_por: authPerfil?.miembro_id ?? null,
-          fecha_limite: null, tiempo_estimado_min: null, checklist: [],
-        })
-      }
     }
-  }, [agregarTarea, authPerfil, today, items, tareas])
+
+    // ── Una preparación, un día, una tarea (ver lib/ops/dedupeTareas.ts) ──
+    const claveVuelo = claveTarea(identidad)
+    if (despachosEnVuelo.current.has(claveVuelo)) return
+    despachosEnVuelo.current.add(claveVuelo)
+    // Se suelta con retraso y no en un `finally`: agregarTarea ya refrescó SWR
+    // al volver, pero `tareas` recién llega actualizada en el próximo render.
+    const soltar = () => setTimeout(() => despachosEnVuelo.current.delete(claveVuelo), 1500)
+
+    try {
+      // ¿Ya hay una fila para este trabajo? El guard viejo pedía además misma
+      // categoría y estado distinto de 'listo', y por eso dejaba pasar los dos
+      // duplicados que más se veían en servicio:
+      //  · el cierre despachando al turno siguiente sobre una jornada que YA
+      //    tenía la tarea de 'produccion' de la mañana (con dos turnos por día
+      //    "el turno siguiente" es hoy mismo) — lo que queda de un turno al
+      //    lado de lo que marca el que ingresa;
+      //  · el re-despacho de algo ya tildado, que plantaba una segunda fila
+      //    en vez de reabrir la que ya estaba.
+      const existente = tareaExistentePara(tareasRef.current, identidad)
+      if (existente) {
+        await actualizarTarea(existente.id, {
+          categoria,
+          prioridad: params.prioridad,
+          // Adopta el vínculo con el mise si la fila la había dejado la
+          // activación por fecha de un menú (esas se insertan sin FK).
+          ...(params.checklist_item_id && !existente.checklist_item_id
+            ? { checklist_item_id: params.checklist_item_id } : {}),
+          ...(descripcion ? { descripcion } : {}),
+          ...(params.cantidad != null ? { cantidad: params.cantidad } : {}),
+          // Re-despachar algo cerrado es pedir que se rehaga: se reabre esa
+          // misma fila en vez de duplicarla.
+          ...(existente.estado === 'listo'
+            ? { estado: 'pendiente' as const, status: 'pendiente', completed_at: null, completado_por: null } : {}),
+        })
+        soltar()
+        return
+      }
+
+      await agregarTarea({
+        titulo: params.titulo,
+        descripcion,
+        status: 'pendiente',
+        prioridad: params.prioridad,
+        categoria,
+        plaza: identidad.plaza,
+        receta_id: params.receta_id,
+        seccion: identidad.seccion,
+        modo,
+        menu_id: menuId,
+        turno_fecha: turnoFecha,
+        estado: 'pendiente',
+        cantidad: params.cantidad,
+        checklist_item_id: params.checklist_item_id,
+        asignado_a: null, creado_por: authPerfil?.miembro_id ?? null,
+        fecha_limite: null, tiempo_estimado_min: null, checklist: [],
+      })
+      // Sub-tasks for each extra plaza — solo aplica a Carta (multi-plaza real
+      // de plato_plazas). Los ítems de menú no se reparten por plaza. El
+      // título lleva la plaza adelante, así que tienen identidad propia, pero
+      // re-despachar tampoco tiene que duplicarlas.
+      if (!menuId && params.plazas.length > 1) {
+        for (const pp of params.plazas.slice(1)) {
+          const sub = {
+            titulo: `[${pp.plaza}] ${params.titulo}`,
+            turno_fecha: turnoFecha, modo: 'carta',
+            plaza: pp.plaza, seccion: params.seccion, menu_id: null,
+            checklist_item_id: params.checklist_item_id,
+          }
+          if (tareaExistentePara(tareasRef.current, sub)) continue
+          await agregarTarea({
+            titulo: sub.titulo,
+            descripcion: pp.instruccion ?? null,
+            status: 'pendiente',
+            prioridad: 'baja',
+            categoria,
+            plaza: pp.plaza,
+            receta_id: params.receta_id,
+            seccion: params.seccion,
+            modo: 'carta',
+            turno_fecha: turnoFecha,
+            estado: 'pendiente',
+            cantidad: null,
+            checklist_item_id: params.checklist_item_id,
+            asignado_a: null, creado_por: authPerfil?.miembro_id ?? null,
+            fecha_limite: null, tiempo_estimado_min: null, checklist: [],
+          })
+        }
+      }
+      soltar()
+    } catch (e) {
+      // Si la escritura falló no hay nada que proteger: se suelta ya, para que
+      // el cocinero pueda volver a tocar sin esperar.
+      despachosEnVuelo.current.delete(claveVuelo)
+      throw e
+    }
+  }, [agregarTarea, actualizarTarea, authPerfil, today, items])
 
   // Handlers estables para la tarjeta memoizada. actualizarItem/eliminarItem
   // vienen del hook sin memoizar (una referencia nueva por render): pasarlos

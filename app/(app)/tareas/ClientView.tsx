@@ -18,6 +18,7 @@ import { NotaImportanteCard } from '@/components/ops/NotaImportanteCard'
 import { useHaccp, type HaccpLimpieza } from '@/lib/hooks/useHaccp'
 import { limpiezaTocaFecha } from '@/lib/haccp/recurrencia'
 import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
+import { fusionarDuplicados } from '@/lib/ops/dedupeTareas'
 import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
 import { useCierresTurno } from '@/lib/hooks/useCierresTurno'
 import type { Tarea, OpsModo, OpsEstado, TareaPrioridad } from '@/types'
@@ -169,7 +170,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     return () => localStorage.removeItem('kc_screen_context')
   }, [tareas, modo, today, embedded])
 
-  const { topLevel, subtareasByParent, statsHoy, ayerDuplicadosIds } = useMemo(() => {
+  const { topLevel, subtareasByParent, statsHoy, ayerDuplicadosIds, gemelosPorId } = useMemo(() => {
     // Ayer = carryover de un solo día: una tarea no completada se arrastra al día
     // siguiente y nada más. Evita que las pendientes se apilen indefinidamente.
     const ayer = sumarDias(today, -1)
@@ -203,15 +204,30 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
       if (!subMap[pid]) subMap[pid] = []
       subMap[pid].push(s)
     }
-    const totalHoy = tareas.filter((t) => t.turno_fecha === today && !t.parent_id)
+    // Una preparación, una fila (ver lib/ops/dedupeTareas.ts). El mise, el
+    // pase de turno, la activación de un menú por fecha y el QuickAdd pueden
+    // haber dejado varias tareas para el mismo trabajo del mismo día: acá se
+    // colapsan en la fila que las representa a todas, y los ids de las que
+    // quedaron atrás viajan en `gemelosPorId` para que tildar la fila visible
+    // las tilde también (si no, revivirían en el próximo fetch).
+    const fusion = fusionarDuplicados(hoyCandidates)
+    // El contador del día cuenta filas, no inserts: si no, un doble tap subía
+    // el total y el avance nunca llegaba a 100%.
+    const totalHoy = fusionarDuplicados(tareas.filter((t) => t.turno_fecha === today && !t.parent_id)).filas
     const listosHoy = totalHoy.filter((t) => t.estado === 'listo').length
     return {
-      topLevel: hoyCandidates,
+      topLevel: fusion.filas,
+      gemelosPorId: fusion.gemelosPorId,
       subtareasByParent: subMap,
       statsHoy: { listos: listosHoy, total: totalHoy.length },
       ayerDuplicadosIds: ayerDuplicados.map((t) => t.id),
     }
   }, [tareas, modo, today])
+
+  // Las gemelas de cada fila visible — por ref y no en las deps: los handlers
+  // bajan hasta ItemOps (memoizado) y este mapa cambia en cada tilde.
+  const gemelosRef = useRef(gemelosPorId)
+  useEffect(() => { gemelosRef.current = gemelosPorId }, [gemelosPorId])
 
   // Red de seguridad: si quedó un duplicado de ayer (mismo título+modo que uno de
   // hoy) que activarMenu no haya limpiado, lo borramos acá — fire-and-forget vía
@@ -307,21 +323,38 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   // salen juntas: encadenarlas ponía el registro del mise a esperar el
   // round-trip de la tarea (ver hooks.md, "Escrituras del camino crítico").
   const handleEstadoChange = useCallback(async (id: string, estado: OpsEstado) => {
-    const tarea = tareasRef.current.find(t => t.id === id)
+    // La fila que se toca puede representar a varias tareas gemelas (ver
+    // lib/ops/dedupeTareas.ts): mueven todas juntas. Dejar una atrás la haría
+    // reaparecer pendiente en el próximo fetch — justo el duplicado que la
+    // fusión está tapando.
+    const ids = gemelosRef.current.get(id) ?? [id]
+    const delGrupo = ids
+      .map(i => tareasRef.current.find(t => t.id === i))
+      .filter((t): t is Tarea => t != null)
+    // Un solo sync por ítem del mise, aunque el grupo traiga tres tareas
+    // apuntando al mismo: son tres inserts del mismo trabajo, no tres ítems.
+    const porItemMise = new Map<string, Tarea>()
+    for (const t of delGrupo) if (t.checklist_item_id) porItemMise.set(t.checklist_item_id, t)
     await Promise.all([
       cambiarEstado(id, estado),
-      tarea?.checklist_item_id
-        ? syncMiseDesdeTarea(
-            createClient(), tarea.checklist_item_id, today, estado === 'listo', turnosActivosRef.current,
-            { plaza: tarea.plaza, entregados: entregadosRef.current, usuarioId: perfil?.miembro_id ?? null },
-          )
-        : Promise.resolve(),
+      ...[...porItemMise].map(([itemId, t]) => syncMiseDesdeTarea(
+        createClient(), itemId, today, estado === 'listo', turnosActivosRef.current,
+        { plaza: t.plaza, entregados: entregadosRef.current, usuarioId: perfil?.miembro_id ?? null },
+      )),
     ])
+    // Las gemelas van detrás y de a una: `cambiarEstado` escribe la cache de
+    // SWR por optimistic mutation, y dispararlas todas juntas sobre la misma
+    // key hace que la última pise a las anteriores. La fila que se tocó ya se
+    // pintó arriba, así que esto no se siente.
+    for (const i of ids) if (i !== id) await cambiarEstado(i, estado)
   }, [cambiarEstado, today, perfil])
 
   // ── Cambiar prioridad directo desde la card de OPS (Menú/Evento) ──────
   const handlePrioridadChange = useCallback((id: string, prioridad: TareaPrioridad) => {
-    actualizarTarea(id, { prioridad })
+    const ids = gemelosRef.current.get(id) ?? [id]
+    // De a una, como en handleEstadoChange: son optimistic mutations sobre la
+    // misma key de SWR y en paralelo la última pisa a las anteriores.
+    void (async () => { for (const i of ids) await actualizarTarea(i, { prioridad }) })()
   }, [actualizarTarea])
 
   // ── Crear tarea desde un componente de OPS — hoy (duplicado ad hoc) o

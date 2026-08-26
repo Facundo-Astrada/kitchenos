@@ -8,6 +8,7 @@ import { ProduccionView } from '@/app/(app)/produccion/page'
 import { RutinaTurnoView } from '@/components/rutina/RutinaTurnoView'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { hoyOperativo } from '@/lib/ops/turnos'
+import { fusionarDuplicados } from '@/lib/ops/dedupeTareas'
 import { onOpsChromeCompact } from '@/lib/ops/chromeBus'
 
 type Tab = 'produccion' | 'mise' | 'planificacion' | 'turno'
@@ -33,9 +34,13 @@ export default function OperacionesPage() {
   const { tareas } = useTareas()
 
   // Tareas de hoy sin completar → badge en el tab Producción (ver el efecto sin cambiar de tab)
+  // Cuenta FILAS del board, no inserts: la misma preparación puede tener
+  // varias tareas del día (mise + pase de turno + lote de un menú) y el badge
+  // decía 40 donde el cocinero veía 28. Ver lib/ops/dedupeTareas.ts.
   const pendientesProduccion = useMemo(() => {
     const hoy = hoyOperativo()
-    return tareas.filter(t => t.turno_fecha === hoy && !t.parent_id && t.estado !== 'listo').length
+    const delDia = tareas.filter(t => t.turno_fecha === hoy && !t.parent_id)
+    return fusionarDuplicados(delDia).filas.filter(t => t.estado !== 'listo').length
   }, [tareas])
   // Lazy-mount: cada tab se monta recién en su primera visita (o cuando pasa
   // a ser vecino inmediato del tab activo, ver el efecto de abajo) y de ahí en
@@ -69,7 +74,7 @@ export default function OperacionesPage() {
   useEffect(() => {
     try {
       const hoy = hoyOperativo()
-      const delDia = tareas.filter(t => t.turno_fecha === hoy && !t.parent_id)
+      const delDia = fusionarDuplicados(tareas.filter(t => t.turno_fecha === hoy && !t.parent_id)).filas
       const total = delDia.length
       const listos = delDia.filter(t => t.estado === 'listo').length
       const topCriticas = tareas

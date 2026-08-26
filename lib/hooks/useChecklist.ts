@@ -51,7 +51,7 @@ async function fetchChecklistConfig(key: string): Promise<ChecklistConfig> {
     // menus(...) embebido para saber vigencia — el filtro NUNCA va acá con
     // .eq('menus.vigencia_hasta', …): sobre tabla embebida no filtra la fila
     // padre (bug conocido de PostgREST). Se filtra en JS, ver menuItemVisible.
-    supabase.from('checklist_items').select('*, menus(nombre, vigencia_desde, vigencia_hasta)').eq('restaurante_id', rid).order('orden', { ascending: true }),
+    supabase.from('checklist_items').select('*, menus(nombre, tipo, vigencia_desde, vigencia_hasta)').eq('restaurante_id', rid).order('orden', { ascending: true }),
     supabase.from('checklist_rutina').select('*').eq('restaurante_id', rid).order('orden', { ascending: true }),
   ])
   if (secRes.error) throw secRes.error

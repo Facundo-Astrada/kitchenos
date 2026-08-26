@@ -714,7 +714,9 @@ export interface MisePlaceItem {
   // para el mise fijo de siempre. `menus` viene embebido por el select de
   // useChecklist; el filtro de vigencia se aplica en JS, ver menuItemVisible.
   menu_id?: string | null
-  menus?: { nombre: string; vigencia_desde: string | null; vigencia_hasta: string | null } | null
+  // `tipo` decide en qué banda del board de Producción cae lo despachado
+  // desde el mise (MENÚ o EVENTO) — sin él, un evento caía en las dos.
+  menus?: { nombre: string; tipo?: string | null; vigencia_desde: string | null; vigencia_hasta: string | null } | null
   // Paso del menú (Apetizer/Proteína/Pasta/...) — solo cuando menu_id no es
   // null. Usado al despachar el ítem a Producción para caer en la columna
   // real del plan en vez de forzar 'general' (ver menuMise.ts).
