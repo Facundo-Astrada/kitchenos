@@ -438,7 +438,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     agregarSeccion, actualizarSeccion, eliminarSeccion, reordenarSecciones,
     agregarItem, actualizarItem, eliminarItem, upsertRegistro,
     agregarRutina, actualizarRutina, eliminarRutina, toggleRutina,
-    registrarAuditoriaRutina, guardarAuditoriaPasada,
+    registrarAuditoriaRutina, guardarAuditoriaPasada, resetDemandaViva,
   } = useChecklist()
   const { recetas } = useRecetasLite()
   const { tareas, agregarTarea, actualizarTarea, cambiarEstado: cambiarEstadoTarea } = useTareas()
@@ -1100,6 +1100,19 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const mostrarAvisoApertura =
     tab === 'apertura' && !!avisoAperturaKey && total > 0 && done === total &&
     avisoAperturaOculto !== avisoAperturaKey
+
+  // ── Reset de demanda_viva al completar la apertura ──────────────────────
+  // "Pedidas hoy" (ProductoMiseCard) tiene que arrancar en 0 en cada apertura,
+  // no arrastrar lo que pidió el salón en turnos anteriores. Dispara una vez
+  // por plaza+fecha+turno (Set, no un ref de un solo valor: si el cocinero
+  // navega entre dos plazas ya completas no tiene que re-disparar al volver).
+  const demandaResetFiradoRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (tab !== 'apertura' || !avisoAperturaKey || !plaza || total === 0 || done !== total) return
+    if (demandaResetFiradoRef.current.has(avisoAperturaKey)) return
+    demandaResetFiradoRef.current.add(avisoAperturaKey)
+    resetDemandaViva(plaza)
+  }, [tab, avisoAperturaKey, plaza, total, done, resetDemandaViva])
 
   // ── Entrega de la plaza — el pase de turno como acto explícito ──────────
   // Cerrar la plaza y marcar la salida propia son dos cosas distintas: el

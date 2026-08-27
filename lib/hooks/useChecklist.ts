@@ -413,6 +413,25 @@ export function useChecklist() {
     }
   }
 
+  /** Vuelve a 0 la demanda viva (pedidas desde salón) de una plaza al completar su apertura. */
+  async function resetDemandaViva(plaza: Plaza) {
+    mutateConfig(
+      (prev) => prev ? { ...prev, items: prev.items.map(i => i.plaza === plaza ? { ...i, demanda_viva: 0 } : i) } : prev,
+      { revalidate: false }
+    )
+    try {
+      const { error } = await supabase.from('checklist_items')
+        .update({ demanda_viva: 0 })
+        .eq('restaurante_id', RESTAURANTE_ID)
+        .eq('plaza', plaza)
+        .gt('demanda_viva', 0)
+      if (error) throw error
+    } catch (e: unknown) {
+      await mutateConfig() // rollback via re-fetch
+      console.error('[useChecklist] resetDemandaViva Error:', e instanceof Error ? e.message : e)
+    }
+  }
+
   // ── Registros ──
   // Optimista: el tilde se pinta en el mismo frame del tap y la escritura viaja
   // después. Antes eran tres round-trips en serie antes de que el círculo se
@@ -634,7 +653,7 @@ export function useChecklist() {
     secciones, items, registros, rutinas, rutinaRegistros, loading, error,
     fetchAll, fetchRegistros, fetchRegistrosDelDia, fetchRutinaRegistros,
     agregarSeccion, actualizarSeccion, eliminarSeccion, reordenarSecciones,
-    agregarItem, actualizarItem, eliminarItem, upsertRegistro,
+    agregarItem, actualizarItem, eliminarItem, upsertRegistro, resetDemandaViva,
     agregarRutina, actualizarRutina, eliminarRutina, toggleRutina,
     registrarAuditoriaRutina, guardarAuditoriaPasada, fetchAuditorias, fetchAuditoriaPaseTurno,
     // Refresco explícito tras una escritura externa a secciones/items (ej.
