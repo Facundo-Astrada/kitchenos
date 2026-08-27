@@ -12,6 +12,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Tarea } from '@/types'
 import { PLAZA_TO_SECCION } from '@/components/mise/ProductoMiseCard'
 import SugerenciaProduccionSheet from '@/components/produccion/SugerenciaProduccionSheet'
+import { ConfirmSheet } from '@/components/ui'
 import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
 import { activarMenuParaFechas } from '@/lib/menus/activarMenu'
 import { estadoMiseMenu } from '@/lib/ops/menuMise'
@@ -89,6 +90,8 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
   useSheetOpenWhen(showMenuPicker)
   const [showSugerencia, setShowSugerencia] = useState(false)
   useSheetOpenWhen(showSugerencia)
+  const [confirmVaciar, setConfirmVaciar] = useState<GrupoMenu | null>(null)
+  useSheetOpenWhen(!!confirmVaciar)
   const [cargandoMenu, setCargandoMenu] = useState(false)
   const [fecha, setFecha] = useState(() => hoyOperativo())
   const [toast, setToast] = useState('')
@@ -319,11 +322,16 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
 
   // Vacía un menú/evento puntual del día — no todo lo cargado. Con varios menús
   // activos, "vaciar todo" borraba también el que no se quería tocar.
-  async function vaciarGrupo(grupo: GrupoMenu) {
+  function vaciarGrupo(grupo: GrupoMenu) {
+    if (grupo.tareas.length === 0) return
+    setConfirmVaciar(grupo)
+  }
+
+  async function confirmarVaciarGrupo() {
+    const grupo = confirmVaciar
+    if (!grupo) return
+    setConfirmVaciar(null)
     const ids = grupo.tareas.map(t => t.id)
-    if (ids.length === 0) return
-    const que = grupo.tipo === 'evento' ? 'el evento' : 'el menú'
-    if (!confirm(`¿Vaciar ${que} "${grupo.nombre}" de este día? Se eliminan ${ids.length} tareas.`)) return
     try { for (const id of ids) await eliminarTarea(id); showToast(`"${grupo.nombre}" vaciado`) }
     catch (e: unknown) { showToast('Error: ' + (e instanceof Error ? e.message : 'desconocido')) }
   }
@@ -523,6 +531,19 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
           onClose={() => setShowSugerencia(false)}
         />,
         document.body,
+      )}
+
+      {confirmVaciar && (
+        <ConfirmSheet
+          icon="delete_sweep"
+          iconColor="#ef4444"
+          title={`¿Vaciar ${confirmVaciar.tipo === 'evento' ? 'el evento' : 'el menú'} "${confirmVaciar.nombre}"?`}
+          body={`Se eliminan ${confirmVaciar.tareas.length} tareas de este día.`}
+          confirmLabel="Vaciar"
+          confirmColor="#ef4444"
+          onConfirm={confirmarVaciarGrupo}
+          onCancel={() => setConfirmVaciar(null)}
+        />
       )}
 
       {/* ── Selector de menú del catálogo (portal para escapar de overflow/transform/BottomNav) ── */}

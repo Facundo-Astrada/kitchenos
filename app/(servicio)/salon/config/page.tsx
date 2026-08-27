@@ -9,7 +9,7 @@ import { useSalonElementos } from '@/lib/hooks/useSalonElementos'
 import { Sillas } from '@/components/salon/Sillas'
 import { PanZoomCanvas } from '@/components/salon/PanZoomCanvas'
 import { ELEMENTO_TIPOS, elementoCfg } from '@/lib/salon/elementos'
-import { SegmentedTabs, AVATAR_PALETTE } from '@/components/ui'
+import { SegmentedTabs, AVATAR_PALETTE, ConfirmSheet } from '@/components/ui'
 import type { SegmentedTab } from '@/components/ui'
 import type { Mesa, MesaForma, SalonElemento, ElementoTipo } from '@/types'
 
@@ -498,6 +498,7 @@ function EditorSalon() {
   const { elementos, loading: loadingElementos, crearElemento, actualizarElemento, eliminarElemento } = useSalonElementos()
   const [seleccion, setSeleccion] = useState<{ kind: 'mesa' | 'elemento'; id: string } | null>(null)
   const [creando, setCreando] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<{ kind: 'mesa' | 'elemento'; id: string } | null>(null)
 
   // Refs para leer el estado más reciente sin recrear los callbacks memoizados
   const mesasRef = useRef(mesas); mesasRef.current = mesas
@@ -607,24 +608,27 @@ function EditorSalon() {
     apiRef.current.actualizarElemento(id, datos).catch((e: unknown) => alert(e instanceof Error ? e.message : 'Error al guardar'))
   }
 
-  async function onDeleteMesa(id: string) {
-    if (!confirm('¿Eliminar esta mesa?')) return
-    const prev = mesasRef.current.find(m => m.id === id)
-    setSeleccion(null)
-    try {
-      await apiRef.current.eliminarMesa(id)
-      if (prev) pushUndo(() => { apiRef.current.crearMesa({ numero: prev.numero, sector: prev.sector ?? null, capacidad: prev.capacidad ?? null, forma: prev.forma, ancho: prev.ancho, alto: prev.alto, rotacion: prev.rotacion, pos_x: prev.pos_x, pos_y: prev.pos_y, color: prev.color ?? null }) })
-    } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error al eliminar') }
-  }
+  function onDeleteMesa(id: string) { setConfirmDelete({ kind: 'mesa', id }) }
+  function onDeleteElemento(id: string) { setConfirmDelete({ kind: 'elemento', id }) }
 
-  async function onDeleteElemento(id: string) {
-    if (!confirm('¿Eliminar este elemento?')) return
-    const prev = elementosRef.current.find(el => el.id === id)
+  async function confirmarEliminar() {
+    if (!confirmDelete) return
+    const { kind, id } = confirmDelete
+    setConfirmDelete(null)
     setSeleccion(null)
-    try {
-      await apiRef.current.eliminarElemento(id)
-      if (prev) pushUndo(() => { apiRef.current.crearElemento({ tipo: prev.tipo, label: prev.label ?? null, ancho: prev.ancho, alto: prev.alto, rotacion: prev.rotacion, pos_x: prev.pos_x, pos_y: prev.pos_y, color: prev.color ?? null }) })
-    } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error al eliminar') }
+    if (kind === 'mesa') {
+      const prev = mesasRef.current.find(m => m.id === id)
+      try {
+        await apiRef.current.eliminarMesa(id)
+        if (prev) pushUndo(() => { apiRef.current.crearMesa({ numero: prev.numero, sector: prev.sector ?? null, capacidad: prev.capacidad ?? null, forma: prev.forma, ancho: prev.ancho, alto: prev.alto, rotacion: prev.rotacion, pos_x: prev.pos_x, pos_y: prev.pos_y, color: prev.color ?? null }) })
+      } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error al eliminar') }
+    } else {
+      const prev = elementosRef.current.find(el => el.id === id)
+      try {
+        await apiRef.current.eliminarElemento(id)
+        if (prev) pushUndo(() => { apiRef.current.crearElemento({ tipo: prev.tipo, label: prev.label ?? null, ancho: prev.ancho, alto: prev.alto, rotacion: prev.rotacion, pos_x: prev.pos_x, pos_y: prev.pos_y, color: prev.color ?? null }) })
+      } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error al eliminar') }
+    }
   }
 
   if (loadingMesas || loadingElementos) return <p style={{ color: 'var(--text-3)', textAlign: 'center', padding: 32 }}>Cargando plano...</p>
@@ -704,6 +708,19 @@ function EditorSalon() {
           <ElementoPanel elemento={elementoSeleccionado} onChange={onChangeElemento} onDelete={onDeleteElemento} onCerrar={() => setSeleccion(null)} />
         </div>
       )}
+
+      {confirmDelete && (
+        <ConfirmSheet
+          icon="delete"
+          iconColor="#ef4444"
+          title={confirmDelete.kind === 'mesa' ? '¿Eliminar esta mesa?' : '¿Eliminar este elemento?'}
+          body="Se puede deshacer con el botón de abajo (o Ctrl+Z)."
+          confirmLabel="Eliminar"
+          confirmColor="#ef4444"
+          onConfirm={confirmarEliminar}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
     </div>
   )
 }
@@ -731,6 +748,8 @@ export default function SalonConfigPage() {
   const [estaciones,    setEstaciones]    = useState<Estacion[]>([])
   const [nuevaEstacion, setNuevaEstacion] = useState('')
   const [guardandoEst,  setGuardandoEst]  = useState(false)
+
+  const [confirmEliminar, setConfirmEliminar] = useState<{ tipo: 'medio' | 'estacion'; id: string } | null>(null)
 
   const fetchMedios = useCallback(async () => {
     if (!RID) return
@@ -763,11 +782,7 @@ export default function SalonConfigPage() {
     await fetchMedios()
   }
 
-  async function eliminarMedio(id: string) {
-    if (!confirm('¿Eliminar este medio de pago?')) return
-    await supabase.from('medios_pago').delete().eq('id', id)
-    await fetchMedios()
-  }
+  function eliminarMedio(id: string) { setConfirmEliminar({ tipo: 'medio', id }) }
 
   // ── Estaciones KDS ───────────────────────────────────────────────────────────
 
@@ -781,10 +796,19 @@ export default function SalonConfigPage() {
     } finally { setGuardandoEst(false) }
   }
 
-  async function eliminarEstacion(id: string) {
-    if (!confirm('¿Eliminar esta estación?')) return
-    await supabase.from('estaciones').delete().eq('id', id)
-    await fetchEstaciones()
+  function eliminarEstacion(id: string) { setConfirmEliminar({ tipo: 'estacion', id }) }
+
+  async function confirmarEliminacion() {
+    if (!confirmEliminar) return
+    const { tipo, id } = confirmEliminar
+    setConfirmEliminar(null)
+    if (tipo === 'medio') {
+      await supabase.from('medios_pago').delete().eq('id', id)
+      await fetchMedios()
+    } else {
+      await supabase.from('estaciones').delete().eq('id', id)
+      await fetchEstaciones()
+    }
   }
 
   // ── UI ───────────────────────────────────────────────────────────────────────
@@ -880,6 +904,19 @@ export default function SalonConfigPage() {
           </>
         )}
       </div>
+
+      {confirmEliminar && (
+        <ConfirmSheet
+          icon="delete"
+          iconColor="#ef4444"
+          title={confirmEliminar.tipo === 'medio' ? '¿Eliminar este medio de pago?' : '¿Eliminar esta estación?'}
+          body="Esta acción no se puede deshacer."
+          confirmLabel="Eliminar"
+          confirmColor="#ef4444"
+          onConfirm={confirmarEliminacion}
+          onCancel={() => setConfirmEliminar(null)}
+        />
+      )}
     </div>
   )
 }

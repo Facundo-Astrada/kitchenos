@@ -33,7 +33,7 @@ import { motion } from 'motion/react'
 import { tap, DURATION, EASE_OUT, useReducedMotion } from '@/lib/ui/motion'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import SectionEditor from '@/components/checklist/SectionEditor'
-import { FlipCard } from '@/components/ui'
+import { FlipCard, ConfirmSheet } from '@/components/ui'
 import type { Plaza, PlazaCustom, MisePlaceItem, MisePrioridad, ChecklistSeccionConfig, RutinaFrecuencia, ChecklistRutina, ChecklistRutinaRegistro, RutinaCondicion, CierreTurno } from '@/types'
 
 // ── Constants ──
@@ -190,71 +190,6 @@ function PlazaFlipCard({ p, plazasCustom, gp, entrega, turnoNombre, onSelect }: 
   )
 
   return <FlipCard front={frente} back={dorso} flipped={flipped} onFlippedChange={setFlipped} height={148} />
-}
-
-// Confirmación en marca de la casa — nunca window.confirm() nativo en flujo
-// de servicio (DESIGN.md §7/§10). Mismo patrón visual que el sheet de
-// "Cambiar de plaza" (portal a body + backdrop navy + tarjeta centrada), para
-// que entregar la plaza se sienta parte de la app y no un popup del sistema
-// operativo justo en el único momento del turno que se celebra (DESIGN.md §6).
-function ConfirmSheet({ icon, iconColor, title, body, confirmLabel, confirmColor, onConfirm, onCancel }: {
-  icon: string
-  iconColor: string
-  title: string
-  body: string
-  confirmLabel: string
-  confirmColor: string
-  onConfirm: () => void
-  onCancel: () => void
-}) {
-  return createPortal(
-    <SheetChrome>
-      <div
-        onClick={onCancel}
-        style={{
-          position: 'fixed', inset: 0, zIndex: 2000,
-          background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
-        }}
-      >
-        <div
-          onClick={e => e.stopPropagation()}
-          className="toast-enter"
-          style={{
-            width: '100%', maxWidth: 340, background: 'var(--bg)', borderRadius: 18,
-            padding: '22px 20px 16px', boxShadow: '0 20px 50px rgba(0,0,0,.35)',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 6,
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 34, color: iconColor, marginBottom: 4 }}>{icon}</span>
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>{title}</div>
-          <div style={{ fontSize: 12.5, color: 'var(--text-3)', lineHeight: 1.4, marginBottom: 10 }}>{body}</div>
-          <div style={{ display: 'flex', gap: 8, width: '100%' }}>
-            <button
-              onClick={onCancel}
-              style={{
-                ...btnReset, flex: 1, padding: '12px 0', borderRadius: 12,
-                background: 'var(--surface)', border: '1px solid var(--border)',
-                fontSize: 13, fontWeight: 700, color: 'var(--text-2)',
-              }}
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={onConfirm}
-              style={{
-                ...btnReset, flex: 1.3, padding: '12px 0', borderRadius: 12, border: 'none',
-                background: confirmColor, color: '#fff', fontSize: 13, fontWeight: 700,
-              }}
-            >
-              {confirmLabel}
-            </button>
-          </div>
-        </div>
-      </div>
-    </SheetChrome>,
-    document.body,
-  )
 }
 
 // Quest del día completa — el único momento con presupuesto de "momento
