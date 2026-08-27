@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/auth/context'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { MODULO_CONFIG, AREA_CATALOGO } from '@/lib/constants'
 import { DEEPLINK_EDITAR_ACCESOS_KEY } from '@/components/organigrama/MiembroCard'
+import PhotoPicker from '@/components/ui/PhotoPicker'
 
 // ── Constantes ──
 
@@ -94,12 +95,12 @@ type PuestosView = 'list' | 'detalle' | 'nuevo' | 'template'
 interface MiembroForm {
   nombre: string; apellido: string; rol: string; puesto_id: string
   plaza_asignada: string; telefono: string; email: string; fecha_ingreso: string
-  costo_hora: string
+  costo_hora: string; foto_url: string | null
 }
 const EMPTY_MIEMBRO_FORM: MiembroForm = {
   nombre: '', apellido: '', rol: '', puesto_id: '',
   plaza_asignada: '', telefono: '', email: '', fecha_ingreso: '',
-  costo_hora: '',
+  costo_hora: '', foto_url: null,
 }
 
 interface PuestoForm {
@@ -133,14 +134,24 @@ function objetivosDeForm(f: PuestoForm): ObjetivosVenta {
 // ══════════════════════════════════════════════════════════════
 
 function MiembroFormDatos({
-  form, setForm, isAdmin,
+  form, setForm, isAdmin, fotoPath,
 }: {
   form: MiembroForm
   setForm: React.Dispatch<React.SetStateAction<MiembroForm>>
   isAdmin: boolean
+  fotoPath: string
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <PhotoPicker
+          currentUrl={form.foto_url}
+          path={fotoPath}
+          size={90}
+          onUploaded={url => setForm(f => ({ ...f, foto_url: url }))}
+          onRemoved={() => setForm(f => ({ ...f, foto_url: null }))}
+        />
+      </div>
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1 }}>
           <label style={labelStyle}>Nombre *</label>
@@ -531,6 +542,7 @@ export default function TurnosPage() {
       telefono: selectedMiembro.telefono ?? '', email: selectedMiembro.email ?? '',
       fecha_ingreso: selectedMiembro.fecha_ingreso ?? '',
       costo_hora: selectedMiembro.costo_hora != null ? String(selectedMiembro.costo_hora) : '',
+      foto_url: selectedMiembro.foto_url ?? null,
     })
     setEditingMiembro(true)
   }
@@ -551,6 +563,7 @@ export default function TurnosPage() {
         email: miembroForm.email || null,
         fecha_ingreso: miembroForm.fecha_ingreso || null,
         costo_hora: miembroForm.costo_hora !== '' ? parseFloat(miembroForm.costo_hora) : null,
+        foto_url: miembroForm.foto_url,
       })
       setEditingMiembro(false); setEquipoView('list'); setSelectedMiembro(null)
     } catch (e: any) { alert(e.message) }
@@ -602,7 +615,11 @@ export default function TurnosPage() {
     setSavingOverride(false)
   }
 
+  // Path estable para PhotoPicker mientras el miembro todavía no tiene id —
+  // recalcularlo en cada render generaría un archivo de storage distinto por tecla tipeada.
+  const nuevoMiembroFotoPath = useRef(`equipo/new-${Date.now()}`)
   function openNuevoMiembro() {
+    nuevoMiembroFotoPath.current = `equipo/new-${Date.now()}`
     setMiembroForm(EMPTY_MIEMBRO_FORM); setFormStep('datos'); setEquipoView('nuevo')
   }
 
@@ -622,7 +639,7 @@ export default function TurnosPage() {
         puesto_id: miembroForm.puesto_id || null,
         plaza_asignada: plaza, telefono: miembroForm.telefono || null,
         email: miembroForm.email || null,
-        fecha_ingreso: miembroForm.fecha_ingreso || null, foto_url: null,
+        fecha_ingreso: miembroForm.fecha_ingreso || null, foto_url: miembroForm.foto_url,
         costo_hora: miembroForm.costo_hora !== '' ? parseFloat(miembroForm.costo_hora) : null,
       })
       setEquipoView('list')
@@ -959,7 +976,7 @@ export default function TurnosPage() {
             </button>
             <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>Editar miembro</h2>
           </div>
-          <MiembroFormDatos form={miembroForm} setForm={setMiembroForm} isAdmin={isAdmin} />
+          <MiembroFormDatos form={miembroForm} setForm={setMiembroForm} isAdmin={isAdmin} fotoPath={`equipo/${m.id}`} />
           <div style={{ marginTop: 12 }}>
             {MiembroFormPuesto()}
           </div>
@@ -984,12 +1001,15 @@ export default function TurnosPage() {
         {/* Avatar */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 20, gap: 8 }}>
           <div style={{
-            width: 72, height: 72, borderRadius: '50%',
+            width: 72, height: 72, borderRadius: '50%', overflow: 'hidden',
             background: nivelColor(puesto?.nivel ?? 'cocinero'),
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: '#fff', fontSize: 24, fontWeight: 700,
           }}>
-            {getInitials(m.nombre, m.apellido)}
+            {m.foto_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={m.foto_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : getInitials(m.nombre, m.apellido)}
           </div>
           <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-1)' }}>{m.nombre} {m.apellido}</div>
           {puesto && (
@@ -1159,7 +1179,7 @@ export default function TurnosPage() {
 
         {formStep === 'datos' && (
           <>
-            <MiembroFormDatos form={miembroForm} setForm={setMiembroForm} isAdmin={isAdmin} />
+            <MiembroFormDatos form={miembroForm} setForm={setMiembroForm} isAdmin={isAdmin} fotoPath={nuevoMiembroFotoPath.current} />
             <button
               onClick={() => {
                 if (!miembroForm.nombre.trim() || !miembroForm.apellido.trim()) { alert('Nombre y apellido son obligatorios'); return }
