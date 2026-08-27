@@ -303,3 +303,14 @@ Registro de decisiones tomadas con Facundo durante el diseño y construcción de
 - B8 se construye tal como está especificado en el plan (tabla `reservas`, pantalla `/reservas` día/semana, aislado).
 - El track de validación sigue pendiente y puede correrse en cualquier momento — su resultado real ahora importa para B9/B10 (los enganches a OPS/Salón/Calendario/Dashboard y la previsión de compra), no para B8, que ya se construyó.
 - Si en algún momento Bros y Rescoldo confirman que ninguno toma reservas formalmente, evaluar si vale la pena seguir con B9-B10 o dejar B8 aislado y mover el foco a otro bloque.
+
+---
+
+## 23. B9-B10 (Reservas) siguen adelante — K-OS se vende a diversos sectores, no solo parrilla
+
+**Decisión:** Al revisar el backlog completo (27/08), Facundo confirmó seguir con B9-B10 sin esperar el track de validación de #22, aclarando que K-OS va a venderse a diversos sectores de la industria gastronómica — no solo al perfil parrilla de Bros/El Rescoldo.
+**Por qué:** La pregunta "¿esto le duele a Bros/Rescoldo?" deja de ser suficiente criterio de priorización en soledad: una función puede no dolerle a una parrilla y ser crítica para otro tipo de local (salón con reservas pesadas, delivery, etc.). Esperar una señal de esos dos locales específicos para decidir si Reservas vale la pena ya no tiene el mismo peso.
+**Cómo se aplica:**
+- B9-B10 se diseñan genéricos — sin asumir los supuestos de una parrilla (turnos de comensales, no de asado).
+- La misma cautela aplica a la estructura de planes $60/$99 (`PENDIENTES.md` 🟡) cuando se replantee: el feature-gating no puede asumir un solo perfil de restaurante.
+- No descarta seguir usando Bros/Rescoldo como bancos de prueba operativos — solo deja de ser el único criterio de "vale la pena construir esto".
