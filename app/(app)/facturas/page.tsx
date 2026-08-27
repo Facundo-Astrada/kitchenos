@@ -2827,7 +2827,7 @@ export default function FacturasPage() {
       ))
     )
 
-    exportarExcel(`facturas_${fechaArchivo()}.xlsx`, [
+    await exportarExcel(`facturas_${fechaArchivo()}.xlsx`, [
       { nombre: 'Facturas', filas: facturasRows },
       { nombre: 'Líneas', filas: allItems.flat() },
     ])

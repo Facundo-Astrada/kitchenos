@@ -1,13 +1,12 @@
 'use client'
 
-import * as XLSX from 'xlsx'
-
 export interface HojaExcel {
   nombre: string
   filas: Record<string, unknown>[]
 }
 
-export function exportarExcel(archivo: string, hojas: HojaExcel[]): void {
+export async function exportarExcel(archivo: string, hojas: HojaExcel[]): Promise<void> {
+  const XLSX = await import('xlsx')
   const wb = XLSX.utils.book_new()
   for (const hoja of hojas) {
     const ws = XLSX.utils.json_to_sheet(hoja.filas.length > 0 ? hoja.filas : [{}])

@@ -3301,8 +3301,8 @@ export default function CartaPage() {
     return () => localStorage.removeItem('kc_screen_context')
   }, [items, stats])
 
-  function exportXLSX() {
-    exportarExcel(`carta_${fechaArchivo()}.xlsx`, [{
+  async function exportXLSX() {
+    await exportarExcel(`carta_${fechaArchivo()}.xlsx`, [{
       nombre: 'Carta',
       filas: items.map(i => ({
         'Nombre': i.nombre,

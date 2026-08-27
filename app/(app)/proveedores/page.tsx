@@ -251,8 +251,8 @@ export default function ProveedoresPage({ embedded = false }: { embedded?: boole
     } finally { setSaving(false) }
   }
 
-  function exportXLSX() {
-    exportarExcel(`proveedores_${fechaArchivo()}.xlsx`, [{
+  async function exportXLSX() {
+    await exportarExcel(`proveedores_${fechaArchivo()}.xlsx`, [{
       nombre: 'Proveedores',
       filas: proveedores.map(p => ({
         'Nombre': p.nombre,

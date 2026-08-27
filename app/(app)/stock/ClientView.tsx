@@ -1217,8 +1217,8 @@ export default function StockPage() {
     )
   }
 
-  function exportXLSX() {
-    exportarExcel(`stock_${fechaArchivo()}.xlsx`, [{
+  async function exportXLSX() {
+    await exportarExcel(`stock_${fechaArchivo()}.xlsx`, [{
       nombre: 'Productos',
       filas: productos.map(p => ({
         'Nombre': p.nombre,

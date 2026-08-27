@@ -478,7 +478,7 @@ export default function ReportesPage() {
     doc.save(`auditoria_${fechaArchivo()}.pdf`)
   }
 
-  function handleExportar() {
+  async function handleExportar() {
     let hojas: HojaExcel[] = []
     let slug = ''
     switch (tab) {
@@ -492,7 +492,7 @@ export default function ReportesPage() {
       default: return
     }
     if (!hojas.length) return
-    exportarExcel(`reportes_${slug}_${fechaArchivo()}.xlsx`, [buildMetaHoja(), ...hojas])
+    await exportarExcel(`reportes_${slug}_${fechaArchivo()}.xlsx`, [buildMetaHoja(), ...hojas])
   }
 
   // ---------------------------------------------------------------------------

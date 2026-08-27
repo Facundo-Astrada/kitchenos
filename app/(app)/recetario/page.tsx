@@ -250,7 +250,7 @@ export default function RecetarioPage() {
   const recetasPublicadas = useMemo(() => recetas.filter(r => r.status !== 'draft'), [recetas])
   const recetasDraft = useMemo(() => recetas.filter(r => r.status === 'draft'), [recetas])
 
-  function exportXLSX() {
+  async function exportXLSX() {
     const recetasRows = recetas.map(r => ({
       'Nombre': r.nombre,
       'Categoría': r.categoria,
@@ -273,7 +273,7 @@ export default function RecetarioPage() {
         'Merma %': i.merma_pct ?? 0,
       }))
     )
-    exportarExcel(`recetario_${fechaArchivo()}.xlsx`, [
+    await exportarExcel(`recetario_${fechaArchivo()}.xlsx`, [
       { nombre: 'Recetas', filas: recetasRows },
       { nombre: 'Ingredientes', filas: ingRows },
     ])
