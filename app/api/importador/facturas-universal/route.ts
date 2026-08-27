@@ -4,6 +4,7 @@ import { requireRestauranteId } from '@/lib/api/tenant'
 import * as XLSX from 'xlsx'
 import { randomUUID } from 'crypto'
 import { calcularDesfasadosDeItemsNuevos, aplicarDesfasados } from '@/lib/stock/syncPrecios'
+import { matchesWholeWord, sinTildes } from '@/lib/stock/precios'
 import { clasificarErrorIA } from '@/lib/ia/errores'
 
 export const maxDuration = 60
@@ -99,6 +100,7 @@ type ItemPayload = {
   precio_unitario: number
   alicuota_iva: number
   subtotal: number
+  producto_id?: string | null
 }
 
 function parseFudo(wb: XLSX.WorkBook, restauranteId: string): {
@@ -691,6 +693,30 @@ async function insertBatch(
   for (let i = 0; i < facturasFinal.length; i += BATCH) {
     const { error } = await admin.from('facturas').insert(facturasFinal.slice(i, i + BATCH))
     if (error) return NextResponse.json({ error: `Error insertando facturas: ${error.message}` }, { status: 500 })
+  }
+
+  // Resolver producto_id contra lo que ya existe en stock — mismo criterio de
+  // matching que useFacturas.crearFactura (match exacto sin tildes, y si no,
+  // parcial de palabra completa). Un import masivo/histórico NO crea productos
+  // por cada ítem sin match (eso sí lo hace el alta manual de una factura).
+  if (itemsFinal.length > 0) {
+    const restId = facturasFinal[0]?.restaurante_id
+    const { data: productosData } = restId
+      ? await admin.from('productos').select('id, nombre').eq('restaurante_id', restId)
+      : { data: null }
+    const productos = (productosData ?? []) as { id: string; nombre: string }[]
+    if (productos.length > 0) {
+      for (const item of itemsFinal) {
+        const nombreLowerSinTildes = sinTildes(item.producto_nombre.toLowerCase())
+        const match =
+          productos.find(p => sinTildes(p.nombre.toLowerCase()) === nombreLowerSinTildes) ??
+          productos.find(p => {
+            const pn = sinTildes(p.nombre.toLowerCase())
+            return pn.length >= 4 && matchesWholeWord(nombreLowerSinTildes, pn)
+          })
+        item.producto_id = match?.id ?? null
+      }
+    }
   }
 
   for (let i = 0; i < itemsFinal.length; i += BATCH) {
