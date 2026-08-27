@@ -1,28 +1,27 @@
-# Sesión — 2026-08-25 (Presupuesto CMV por sector, planeada, ejecutada e iterada)
+# Sesión — 2026-08-26 (Duplicados en OPS Producción)
 
 ## Qué se cerró
 
-Módulo nuevo **`/presupuesto`** de punta a punta, deployado en 9 commits — desde la propuesta visual sobre datos reales de Bros hasta el rediseño final pedido por Facundo tras verlo:
+Bug reportado por Facundo, no venía del backlog: "algunos ítems que marco en MISE me salen dobles en producción" y "lo que queda de un turno se duplica con lo que marca el que ingresa". Medido antes de tocar nada: **74 filas de más en Bros** entre el 20 y el 27/08, sobre 60 preparaciones. El 26/08 el board dibujaba 99 filas donde había 66 trabajos.
 
-1. **Bug real arreglado de paso**: filtro de status roto en 7 lugares (`useReportes.ts`/`fuga.ts`) + un segundo bug tapado por el primero (`fetchCMV` sumaba todas las categorías, no solo mercadería). Reportes le mostraba a Bros $411K de compras en vez de $15,9M reales.
-2. Tablas `presupuesto_mes`/`presupuesto_sector` + flags `categorias_gasto.cuenta_en_cmv`/`es_mejora`, hook `usePresupuestoCMV` verificado con SQL antes de tocar UI.
-3. Módulo cableado (permisos por `ver_costos`, no `nivel='admin'` — backfill correcto), tab Familias movido tal cual desde Reportes (que queda en 11 tabs sin escrituras).
-4. Seed de El Rescoldo (17 facturas categorizadas, `reset_demo_restaurante()` parcheada — cerró de paso un gap real: `categoria_gasto_id` nunca se clonaba a la demo).
-5. Coach integrado completo (contexto, tour de 6 pasos, sugerencias) — encontré y documenté el gotcha de `RUTA_A_TOUR` (mapa separado de `RUTA_A_MODULO`, sin el cual el tour nunca arranca solo).
-6. **Iteración post-feedback**: Facundo pidió acercar el diseño a la planilla original — fusioné la tabla de sectores y la de ritmo semanal (que estaban apiladas) en **una sola grilla panorámica**: sector por fila, columnas agrupadas en MES + una por cada semana, header de dos niveles. Misma tabla en desktop y mobile, scroll horizontal propio.
-
-Todo verificado con Playwright contra datos reales (Bros y El Rescoldo, junio 2026) antes de cada commit — incluido leer el texto crudo de las celdas cuando una captura tenía un elemento flotante preexistente (el toggle del dock de Coach) tapando visualmente una celda, para confirmar que el dato de abajo estaba bien.
+- **Causa**: cuatro caminos que no se veían entre sí (tilde del mise, cierre → `pase_turno`, activación de menú por fecha sin `checklist_item_id`, QuickAdd). El guard viejo comparaba además categoría y estado, así que con dos turnos por día el pase caía en la MISMA fecha que la producción de la mañana y quedaba al lado.
+- **Fix** (`5936573` + `e7fbc0e`): `lib/ops/dedupeTareas.ts` define la identidad de una tarea — `turno_fecha + columna del board + menu_id + título normalizado` —, dejando fuera a propósito la categoría y el `checklist_item_id`. Al leer, el board colapsa gemelas y las acciones mueven a todo el grupo. Al escribir, la regla vive en `useTareas.agregarTarea` (único lugar; cubre Mise, board, Pase, Control de Carta, Calendario) con candado de módulo `Map<clave, Promise>`.
+- **De paso**: un evento despachado desde el mise caía en la banda MENÚ y no EVENTO (`menus.tipo` agregado al select de `useChecklist`); la sugerencia de producción insertaba el lote sin mirar qué ya estaba cargado.
+- **Base limpia**: 76 filas borradas, respaldadas en `tareas_duplicados_backup_20260826`. Bros hoy: 0 duplicados, 144 ítems de mise sin duplicar.
+- Verificado replayeando los 99 despachos reales de Bros del 26/08 en orden: 66 creadas, 33 frenadas, cero claves repetidas. 196 tests, build y lint OK (mismo conteo de errores por archivo tocado).
 
 ## Qué quedó a medias
 
-Nada — los 10 pasos del plan original más la iteración de diseño cerraron y se verificaron.
+Nada a medias, pero **una rendija abierta a propósito**: dos dispositivos despachando el mismo ítem en el mismo segundo todavía crean una fila gemela. No se ve (el board fusiona) pero queda en la base. El plan completo para cerrarla —restricción en Postgres, con los 4 inserts en lote a endurecer primero— está en `PENDIENTES.md` → "Mise / pase de turno — flecos". **Hacerlo fuera de servicio**: toma un lock exclusivo sobre `tareas`.
 
 ## Probar primero mañana
 
-1. Abrir `/presupuesto` en el celu real y confirmar que la grilla nueva se lee bien de un vistazo (el pedido explícito era "seguimiento visual rápido").
-2. Cargar las facturas pendientes desde Fudo (Facundo lo va a hacer) y confirmar que "Asignar por proveedor" categoriza bien — avisado de que el matcheo es por nombre exacto de proveedor.
+1. **La apertura real en Bros.** Es la única prueba que falta: la lógica está verificada contra datos reales, pero no con el dedo en la tablet. Mirar que cada preparación aparezca una sola vez en Producción y que tildar desde ahí siga volviendo al mise.
+2. Hacer un cierre en Modo Control y confirmar que lo que se deja al turno siguiente **no** se duplica con lo que marca el que entra — era el caso que originó el reporte.
 3. Confirmar que el crédito de Anthropic sigue siendo el 🔴 bloqueante (no tocado hoy).
 
 ## Próximo paso concreto
 
-Sin bug nuevo abierto. Backlog de Fase 2 de Presupuesto anotado en `PENDIENTES.md` 🟢 (bajo, no urgente). Volver al 🔴 de siempre (crédito de Anthropic) o a `PLAN-4-CAPAS.md` B9 (reservas), que sigue siendo la alternativa de mayor retorno del backlog general.
+Si la apertura sale limpia, el tema está cerrado. Volver al 🔴 (crédito de Anthropic) o a `PLAN-4-CAPAS.md` B9 (reservas), que sigue siendo lo de mayor retorno del backlog. La restricción en Postgres es 🟢: no urgente, y conviene agendarla fuera de servicio.
+
+**Ojo con `PENDIENTES.md`**: está en 34 KB, muy por encima del umbral de ~10 KB. Merece una poda propia — hay bloques de agosto que ya se cerraron y siguen ahí en detalle.
