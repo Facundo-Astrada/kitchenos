@@ -44,10 +44,11 @@ function useDatosClave(): DatosClave | null {
     const en3 = new Date(Date.now() + 3 * 86_400_000).toISOString().split('T')[0]
 
     ;(async () => {
-      const [prodRes, vencRes, factRes] = await Promise.all([
-        supabase.from('productos')
-          .select('stock_actual, stock_critico')
-          .eq('restaurante_id', RESTAURANTE_ID).eq('activo', true).limit(1000),
+      const [criticosRes, vencRes, factRes] = await Promise.all([
+        // Count server-side (RPC): stock_actual <= stock_critico compara dos
+        // columnas, PostgREST no lo soporta como filtro — antes bajaba hasta
+        // 1000 filas de productos solo para contar en el cliente.
+        supabase.rpc('productos_criticos_count', { p_restaurante_id: RESTAURANTE_ID }),
         supabase.from('haccp_vencimientos')
           .select('id', { count: 'exact', head: true })
           .eq('restaurante_id', RESTAURANTE_ID)
@@ -59,11 +60,9 @@ function useDatosClave(): DatosClave | null {
           .eq('fecha_factura', hoy),
       ])
       if (cancel) return
-      const prods = (prodRes.data ?? []) as Array<{ stock_actual: number; stock_critico: number | null }>
-      const criticos = prods.filter(p => p.stock_actual <= (p.stock_critico ?? 0)).length
       const gastoHoy = ((factRes.data ?? []) as Array<{ total: number | null }>)
         .reduce((s, f) => s + (Number(f.total) || 0), 0)
-      setDatos({ criticos, vencen: vencRes.count ?? 0, gastoHoy })
+      setDatos({ criticos: (criticosRes.data as number | null) ?? 0, vencen: vencRes.count ?? 0, gastoHoy })
     })()
     return () => { cancel = true }
   }, [RESTAURANTE_ID])
