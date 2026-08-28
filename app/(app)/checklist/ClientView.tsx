@@ -1656,13 +1656,16 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
               onClick={toggleModoControl}
               title={modoControl ? 'Modo Control activo — tap para volver a OPS' : 'Activar Modo Control'}
               style={{
-                ...btnReset,
+                ...btnReset, gap: 4,
                 background: modoControl ? 'rgba(255,255,255,.9)' : 'rgba(255,255,255,.1)',
-                borderRadius: 8, padding: 6, flexShrink: 0,
+                borderRadius: 8, padding: '6px 8px', flexShrink: 0,
               }}
             >
               <span className="material-symbols-outlined" style={{ fontSize: 18, color: modoControl ? 'var(--navy)' : 'rgba(255,255,255,.7)' }}>
                 fact_check
+              </span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: modoControl ? 'var(--navy)' : 'rgba(255,255,255,.7)', whiteSpace: 'nowrap' }}>
+                Control
               </span>
             </button>
             {/* Guía y editar secciones: se usan una vez y no durante el servicio.

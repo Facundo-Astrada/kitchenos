@@ -836,6 +836,15 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
             </button>
           </div>
 
+          {/* Pista de doble tap — arriba de la lista para que se vea antes de
+              tocar, no después de bajar por todos los ingredientes. */}
+          {ings.length > 0 && scaleFactor === 1 && (
+            <p style={{ fontSize: 10.5, color: 'var(--text-3)', textAlign: 'center', margin: '0 0 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>touch_app</span>
+              Doble tap en un peso para recalcular toda la receta en proporción
+            </p>
+          )}
+
           {ings.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--text-3)' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 24, marginBottom: 6 }}>restaurant</span>
@@ -988,13 +997,6 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
             <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--text-3)' }}>add</span>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', fontFamily: 'inherit' }}>Agregar ingrediente</span>
           </button>
-
-          {/* Hint double-tap */}
-          {ings.length > 0 && scaleFactor === 1 && (
-            <p style={{ fontSize: 9, color: 'var(--text-3)', textAlign: 'center', marginTop: 6, opacity: .6 }}>
-              Doble tap en un peso para recalcular proporcionalmente
-            </p>
-          )}
         </div>
 
         {/* ═══ PROCEDIMIENTO ═══ */}

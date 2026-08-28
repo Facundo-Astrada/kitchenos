@@ -377,10 +377,14 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
             <h1 style={{ fontSize: 17, fontWeight: 700, color: '#fff', margin: 0 }}>Planificación</h1>
           </div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {/* Prioridad visual sobre "Cargar menú": es la función con mejor
+                relación valor/uso de OPS (PLAN-ACCESO-Y-USO B5.3) y antes
+                se perdía con un fondo translúcido igual al resto del header —
+                mismo naranja que el resto de lo asistido por IA en la app. */}
             <button
               data-coach-target="produccion-sugerencia"
               onClick={() => setShowSugerencia(true)}
-              style={{ background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}
+              style={{ background: '#f97316', border: 'none', borderRadius: 8, padding: '6px 12px', fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap', boxShadow: '0 2px 8px rgba(249,115,22,.4)' }}
             >
               <span className="material-symbols-outlined" style={{ fontSize: 15 }}>auto_awesome</span>
               Sugerir producción
