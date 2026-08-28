@@ -1397,3 +1397,17 @@ export interface CoachAccion {
   resuelto_en: string | null
   expira_en: string
 }
+
+// DB: notificaciones (id, restaurante_id, usuario_id, tipo, titulo, cuerpo, link, leida, created_at)
+// Solo in-app — usuario_id es auth.users.id (no equipo_miembros), ver la migración.
+export interface Notificacion {
+  id: string
+  restaurante_id: string
+  usuario_id: string
+  tipo: string
+  titulo: string
+  cuerpo: string | null
+  link: string | null
+  leida: boolean
+  created_at: string
+}

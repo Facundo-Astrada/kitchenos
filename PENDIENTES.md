@@ -56,7 +56,7 @@ Prompt caching y tool use agéntico ya resueltos. Falta tabla `coach_conversacio
 `PhotoPicker` (bucket `fotos`) integrado en recetario, carta y equipo (`turnos/page.tsx`, resuelto 27/08). Falta facturas, si se decide.
 
 ### Notificaciones
-In-app vía Supabase realtime (tabla `notificaciones`), push web (PWA + service worker + VAPID), email/WhatsApp para alertas críticas (stock crítico, vencimientos).
+**In-app resuelto (27/08)**: tabla `notificaciones` (RLS por `usuario_id = auth.uid()`, `INSERT` abierto al tenant para poder notificar a otra persona), `useNotificaciones` con realtime, campanita+feed (`NotificacionesBell`, sidebar desktop + flotante mobile), `crearNotificacion()` reusable. Primer trigger real: `useEquipo.asignarTurno` avisa a la persona asignada (salvo autoasignación o cuenta sin vincular). Falta wireear más triggers si se necesitan (stock crítico, vencimientos, etc. — cada uno es una decisión de producto aparte, no asumir). Sigue pendiente, sin decisión tomada: push web (PWA + service worker + VAPID) y email/WhatsApp para alertas críticas — explícitamente fuera de esta sesión.
 
 ### PWA offline — completar fuera de Salón/KDS
 La vista de servicio (Salón/KDS) ya tiene offline completo (SW cachea GETs, bumps en cola IndexedDB, banner sin-conexión). El resto de la app (stock, facturas, etc.) queda pendiente.

@@ -12,6 +12,7 @@ import MoreMenu from '@/components/shell/MoreMenu'
 import DesktopShell from '@/components/shell/DesktopShell'
 import RouteGuard from '@/components/shell/RouteGuard'
 import KitchenCoachFAB from '@/components/coach/KitchenCoachFAB'
+import { NotificacionesBell } from '@/components/notificaciones/NotificacionesBell'
 import { CoachPanelContent } from '@/components/coach/CoachPanelContent'
 import DemoBanner from '@/components/shell/DemoBanner'
 import BienvenidaPuesto from '@/components/onboarding/BienvenidaPuesto'
@@ -140,6 +141,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <UiChromeProvider>
       <div className="relative flex flex-col h-full">
         <DemoBanner />
+        <NotificacionesBell variant="floating" />
         <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
           {pageContent}
         </main>

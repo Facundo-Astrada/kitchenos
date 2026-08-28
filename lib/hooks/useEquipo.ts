@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
 import { AREA_CATALOGO, areaCatalogoItem, type AreaKey, type Capa } from '@/lib/constants'
 import { getObjetivosEfectivos, type ObjetivosVenta } from '@/lib/reportes/ventasPorPersona'
+import { useAuth } from '@/lib/auth/context'
+import { crearNotificacion } from '@/lib/notificaciones/crear'
 
 export type { ObjetivosVenta }
 
@@ -365,6 +367,7 @@ async function fetchAreaCapasData(key: string): Promise<AreaCapaRow[]> {
 export function useEquipo() {
   const RESTAURANTE_ID = useRestauranteId()
   const supabase = useMemo(() => createClient(), [])
+  const { user } = useAuth()
   const [turnos, setTurnos] = useState<Turno[]>([])
   const [error, setError] = useState<string | null>(null)
 
@@ -603,6 +606,22 @@ export function useEquipo() {
           { onConflict: 'miembro_id,fecha' }
         )
       if (error) throw error
+
+      // Avisar a la persona asignada — no a quien se asigna a sí mismo, y
+      // solo si su cuenta ya está vinculada (auth_user_id null = invitación
+      // sin aceptar todavía). Best-effort, no bloquea el flujo de arriba.
+      const destino = miembros.find(m => m.id === miembro_id)
+      if (RESTAURANTE_ID && destino?.auth_user_id && destino.auth_user_id !== user?.id) {
+        const fechaLabel = new Date(fecha + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'short' })
+        crearNotificacion(supabase, {
+          restauranteId: RESTAURANTE_ID,
+          usuarioId: destino.auth_user_id,
+          tipo: 'turno_asignado',
+          titulo: `Turno ${TURNO_CONFIG[turno_tipo].fullLabel.toLowerCase()} asignado`,
+          cuerpo: `Para el ${fechaLabel}`,
+          link: '/turnos',
+        })
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al asignar turno'
       console.error('[useEquipo] asignarTurno Error:', msg)
