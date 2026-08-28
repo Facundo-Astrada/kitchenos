@@ -1,27 +1,37 @@
-# Sesión — 2026-08-26 (Duplicados en OPS Producción)
+# Sesión — 2026-08-27 (cont.) — 12 ítems del backlog sin decisión pendiente
 
 ## Qué se cerró
 
-Bug reportado por Facundo, no venía del backlog: "algunos ítems que marco en MISE me salen dobles en producción" y "lo que queda de un turno se duplica con lo que marca el que ingresa". Medido antes de tocar nada: **74 filas de más en Bros** entre el 20 y el 27/08, sobre 60 preparaciones. El 26/08 el board dibujaba 99 filas donde había 66 trabajos.
+Facundo pidió atacar en una sola sesión todo lo que no dependía de su decisión, del más chico al más grande. 12 commits, build+test+lint verde después de cada uno:
 
-- **Causa**: cuatro caminos que no se veían entre sí (tilde del mise, cierre → `pase_turno`, activación de menú por fecha sin `checklist_item_id`, QuickAdd). El guard viejo comparaba además categoría y estado, así que con dos turnos por día el pase caía en la MISMA fecha que la producción de la mañana y quedaba al lado.
-- **Fix** (`5936573` + `e7fbc0e`): `lib/ops/dedupeTareas.ts` define la identidad de una tarea — `turno_fecha + columna del board + menu_id + título normalizado` —, dejando fuera a propósito la categoría y el `checklist_item_id`. Al leer, el board colapsa gemelas y las acciones mueven a todo el grupo. Al escribir, la regla vive en `useTareas.agregarTarea` (único lugar; cubre Mise, board, Pase, Control de Carta, Calendario) con candado de módulo `Map<clave, Promise>`.
-- **De paso**: un evento despachado desde el mise caía en la banda MENÚ y no EVENTO (`menus.tipo` agregado al select de `useChecklist`); la sugerencia de producción insertaba el lote sin mirar qué ya estaba cargado.
-- **Base limpia**: 76 filas borradas, respaldadas en `tareas_duplicados_backup_20260826`. Bros hoy: 0 duplicados, 144 ítems de mise sin duplicar.
-- Verificado replayeando los 99 despachos reales de Bros del 26/08 en orden: 66 creadas, 33 frenadas, cero claves repetidas. 196 tests, build y lint OK (mismo conteo de errores por archivo tocado).
+1. `demanda_viva` se resetea al completar la apertura (`useChecklist.resetDemandaViva`).
+2. `confirm()` nativo de servicio eliminado — `ConfirmSheet` extraído a `components/ui/`, reusado en Producción y Salón/Config.
+3. Foto de perfil del equipo (`PhotoPicker` en `turnos/page.tsx`).
+4. `facturas-universal` resuelve `producto_id` al importar (mismo matching que `useFacturas.ts`).
+5. Investigado "Ventas en 0 vs Ingeniería con datos": filtro de fecha distinto, no dos fuentes — cartel aclaratorio agregado.
+6. Notificaciones in-app completas (tabla, realtime, campanita+feed, primer trigger en `asignarTurno`).
+7. Clonar permisos entre puestos (Turnos → Puestos).
+8. 3/5 tours de capacitación (`configuracion`, `coach`, `bitacora`) — faltaba que esas pantallas escribieran `kc_screen_context`.
+9. Deshacer entrega (botón, hook ya existía) + Reportes → Auditoría ahora dice quién entregó y cuándo.
+10. Coach: productos en crítico vía RPC server-side (antes bajaba 1000 filas).
+11. 3 pistas visuales de `PLAN-ACCESO-Y-USO` § B5.3 (Modo Control, escalar por referencia, Sugerir producción).
+12. Primeros tests de hooks: Testing Library + mock de Supabase (`useTareas`, `usePermisos`).
+
+Detalle completo de cada uno en `HISTORIAL.md`. `PENDIENTES.md` podado en paralelo — lo resuelto se sacó, lo parcial quedó recortado a lo que falta.
 
 ## Qué quedó a medias
 
-Nada a medias, pero **una rendija abierta a propósito**: dos dispositivos despachando el mismo ítem en el mismo segundo todavía crean una fila gemela. No se ve (el board fusiona) pero queda en la base. El plan completo para cerrarla —restricción en Postgres, con los 4 inserts en lote a endurecer primero— está en `PENDIENTES.md` → "Mise / pase de turno — flecos". **Hacerlo fuera de servicio**: toma un lock exclusivo sobre `tareas`.
+- **KDS/Muro sin tour**: contenido escrito (`TOURS.kds`/`TOURS.muro`), pero esas pantallas viven en un layout que a propósito no monta el FAB del Coach (doctrina "Registro Servicio"). Necesita que Facundo elija entre sumar el FAB ahí, un trigger mínimo propio, o dejarlas sin tour.
+- **Notificaciones**: solo el trigger de `asignarTurno`. Cualquier otro (stock crítico, vencimientos) es una decisión de producto aparte, no wireado.
+- **Ingeniería de menú**: el cartel aclara el filtro de fecha, pero si conviene que scopee a un período en vez de todo el historial sigue sin decidirse.
+- **`tareas` 594 kB** (peso en mobile) — riesgo real de romper Planificación si se aprieta la ventana de 60 días; queda para sesión propia.
 
 ## Probar primero mañana
 
-1. **La apertura real en Bros.** Es la única prueba que falta: la lógica está verificada contra datos reales, pero no con el dedo en la tablet. Mirar que cada preparación aparezca una sola vez en Producción y que tildar desde ahí siga volviendo al mise.
-2. Hacer un cierre en Modo Control y confirmar que lo que se deja al turno siguiente **no** se duplica con lo que marca el que entra — era el caso que originó el reporte.
-3. Confirmar que el crédito de Anthropic sigue siendo el 🔴 bloqueante (no tocado hoy).
+1. Notificaciones: asignar un turno real a alguien con cuenta vinculada y confirmar que le llega la campanita (se probó con una fila insertada por SQL, no con el flujo real de punta a punta).
+2. Deshacer entrega en un dispositivo real — el demo no tenía items de mise cargados para probar el flujo completo (entregar → deshacer).
+3. `/reportes` → Auditoría: confirmar que "Pases entregados" aparece bien apenas haya `cierres_turno` reales de esta semana (Bros, no El Rescoldo demo).
 
 ## Próximo paso concreto
 
-Si la apertura sale limpia, el tema está cerrado. Volver al 🔴 (crédito de Anthropic) o a `PLAN-4-CAPAS.md` B9 (reservas), que sigue siendo lo de mayor retorno del backlog. La restricción en Postgres es 🟢: no urgente, y conviene agendarla fuera de servicio.
-
-**Ojo con `PENDIENTES.md`**: está en 34 KB, muy por encima del umbral de ~10 KB. Merece una poda propia — hay bloques de agosto que ya se cerraron y siguen ahí en detalle.
+Backlog libre de nuevo — quedan los 🔴/🟠 de siempre (RLS de `tareas_duplicados_backup_20260826`, B9/B10 de reservas, SMTP propio) y las features grandes (Muro F4, Calendario F2-F5, Bitácora F2-F3, Coach en Carta, container-transform del Mise) para cuando haya una sesión dedicada a alguna. **`PENDIENTES.md` sigue en ~30 KB** pese a la poda de hoy — la mayoría es contenido de sesiones previas que no tocamos; merece su propia pasada de re-priorización con Facundo si sigue creciendo.
