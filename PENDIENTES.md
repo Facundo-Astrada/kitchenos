@@ -89,7 +89,7 @@ Los 5 ERROR de superficie de servicio (`produccion/page.tsx:326`, `salon/config/
 `RUTA_A_MODULO` (`lib/constants.ts`) sigue mapeando las tres rutas al permiso `'operaciones'`, pero ahora `/tareas`, `/checklist` y `/produccion` son directamente stubs que redirigen a `/operaciones?tab=...` (consolidación de OPS) — el código ya trae un comentario explicando que es deliberado ("Mapeadas a 'operaciones' por consistencia de permisos"), no algo que se coló. Sigue siendo cierto que sacarle `checklist` a un puesto solo oculta el link, no la pestaña dentro de OPS. Bajar prioridad: parece una decisión ya tomada, no un bug pendiente — confirmar con Facundo si los tres checkboxes de sidebar deberían directamente desaparecer del editor de puesto en vez de seguir prometiendo un filtro que no aplica.
 
 ### Tests — Testing Library para hooks
-Vitest + CI (typecheck+vitest+build por push/PR) + Playwright e2e (`e2e/salon-kds.spec.ts`) ya están. Falta Testing Library con mock del cliente Supabase para tests de hooks.
+**Arrancado 27/08**: `@testing-library/react` + `jsdom` instalados, mock reusable en `lib/test-utils/mockSupabase.ts` (ver `.claude/docs/testing.md`), primeros dos hooks cubiertos: `useTareas` (fetch, `soloEscritura`, dedup de `agregarTarea`) y `usePermisos` (cascada admin → puesto → rol). El resto de los hooks (`useEquipo`, `useChecklist`, `useCarta`, `useStock`, etc.) sigue sin tests — agregar el que se toque, no perseguir cobertura total de una sola vez.
 
 ### OPS — seguir bajando el peso en celular (ago 2026)
 Entrar a Mise en mobile bajó de 2582 kB / 64 requests a 899 kB / 46. Lo que queda:

@@ -8,7 +8,10 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['lib/**/*.ts'],
-      exclude: ['lib/**/*.test.ts', 'lib/supabase/**', 'lib/hooks/**'],
+      // lib/hooks/** ya no está en bloque: los que tienen test.ts (empezando
+      // por useTareas/usePermisos) suman a coverage real, el resto sigue en 0%
+      // hasta que se les escriba el suyo — señal honesta, no hay que ocultarla.
+      exclude: ['lib/**/*.test.ts', 'lib/supabase/**', 'lib/test-utils/**'],
     },
   },
   resolve: {
