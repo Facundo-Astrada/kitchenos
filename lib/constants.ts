@@ -450,4 +450,9 @@ export const RUTA_A_TOUR: Record<string, string> = {
   '/espacios': 'espacios',
   '/organigrama': 'organigrama',
   '/tareas': 'tareas',
+  '/kds': 'kds',
+  '/coach': 'coach',
+  '/muro': 'muro',
+  '/bitacora': 'bitacora',
+  '/configuracion': 'configuracion',
 }

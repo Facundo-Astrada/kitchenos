@@ -97,6 +97,11 @@ export default function MuroPage() {
   const today = useMemo(() => hoyOperativo(ahora), [ahora])
   const turnoHoy = useMemo(() => turnoActivo(ahora, turnosActivos), [ahora, turnosActivos])
 
+  useEffect(() => {
+    localStorage.setItem('kc_screen_context', JSON.stringify({ screen: 'muro' }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [])
+
   // ── Wake lock + refetch al volver de suspensión. El navegador suelta el
   // wake lock solo cuando la pestaña deja de estar visible (no hay forma de
   // evitarlo), así que hay que volver a pedirlo — y aprovechar el mismo

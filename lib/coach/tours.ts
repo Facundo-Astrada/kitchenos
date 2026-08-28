@@ -665,4 +665,69 @@ export const TOURS: Record<string, TourStep[]> = {
       description: 'Preguntame por qué sector te fuiste del objetivo, cómo viene el mes proyectado, o pedime ayuda para decidir el presupuesto de un sector que todavía no cargaste.',
     },
   ],
+
+  kds: [
+    {
+      targetId: null,
+      title: 'El KDS de cocina',
+      description: 'Las comandas que salen del salón aparecen acá en el momento, organizadas por estación. Cada tarjeta muestra los ítems pendientes de esa mesa — tocá un ítem para pasarlo de pendiente a en preparación y a listo.',
+    },
+    {
+      targetId: null,
+      title: '86 y métricas',
+      description: 'Si un ítem se agota, marcalo 86 desde acá: deja de aparecer disponible en el salón al instante. El panel de métricas te muestra el tiempo promedio de bump y cuánto hay pendiente o en preparación en este momento.',
+    },
+  ],
+
+  coach: [
+    {
+      targetId: null,
+      title: 'El Kitchen Coach',
+      description: 'Preguntale lo que necesites de tu cocina en lenguaje natural: gastos, precios, ventas, stock crítico, o qué te conviene producir hoy. Consulta tus datos reales y puede ejecutar acciones (crear una tarea, registrar una merma) si se lo pedís.',
+    },
+    {
+      targetId: null,
+      title: 'Historial de conversaciones',
+      description: 'El ícono de reloj arriba a la derecha guarda tus charlas anteriores para retomarlas cuando quieras — no se pierden al cerrar la pantalla.',
+    },
+  ],
+
+  muro: [
+    {
+      targetId: null,
+      title: 'El Muro',
+      description: 'La tablet colgada en la cocina, para todo el equipo a la vez — no una plaza sola. Una columna por plaza, con lo pendiente de producir; tocá un ítem para pasarlo de pendiente a en curso, listo o duda.',
+    },
+    {
+      targetId: null,
+      title: 'Pensado para leerse de lejos',
+      description: 'Tipografía grande, sin scroll: si no entra todo, los ítems listos se colapsan a un contador en vez de agregar scroll. También muestra las notas que dejó el turno anterior para cada plaza.',
+    },
+  ],
+
+  bitacora: [
+    {
+      targetId: null,
+      title: 'La Bitácora',
+      description: 'El registro del día a día del equipo: reuniones, notas, listas e ideas. Cada entrada se edita como un documento — Enter parte una línea nueva, Tab la indenta, y podés pegar texto de varias líneas de una vez.',
+    },
+    {
+      targetId: null,
+      title: 'Participantes y filtros',
+      description: 'Cada reunión lleva sus participantes desde que se crea. Filtrá por tipo de entrada arriba, o buscá por título — las archivadas quedan aparte, no se mezclan con lo activo.',
+    },
+  ],
+
+  configuracion: [
+    {
+      targetId: null,
+      title: 'Configuración',
+      description: 'Los ajustes generales del restaurante. Equipo y Permisos por rol son la versión anterior de lo que hoy vive en Turnos → Equipo/Puestos — quedan acá de referencia, el link "Equipo →" te lleva a la versión actual.',
+    },
+    {
+      targetId: null,
+      title: 'Restaurante',
+      description: 'El nombre del local y la carta pública: activá el link para que cualquiera vea tu carta sin loguearse, en la URL con tu slug propio.',
+    },
+  ],
 }

@@ -399,6 +399,11 @@ export default function KdsPage() {
     return () => clearInterval(tick)
   }, [])
 
+  useEffect(() => {
+    localStorage.setItem('kc_screen_context', JSON.stringify({ screen: 'kds' }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [])
+
   const { comandas, loading: loadingComandas, avanzarItem, bumpearItem, bumpearComanda, restaurarComanda, comandasRecientes, holdComanda, fireComanda } = useComandas(estacionId ?? undefined)
 
   const tarjetas = useMemo(() => {

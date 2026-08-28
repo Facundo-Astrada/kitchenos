@@ -30,6 +30,11 @@ export default function ConfiguracionPage() {
     router.push('/onboarding')
   }
 
+  useEffect(() => {
+    localStorage.setItem('kc_screen_context', JSON.stringify({ screen: 'configuracion' }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [])
+
   const [tab, setTab] = useState<Tab>('equipo')
   const [miembros, setMiembros] = useState<EquipoMiembro[]>([])
   const [loading, setLoading] = useState(true)

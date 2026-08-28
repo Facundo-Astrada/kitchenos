@@ -67,6 +67,11 @@ export default function BitacoraPage() {
     if (isDesktop && !selectedId && visibles.length > 0) setSelectedId(visibles[0].id)
   }, [isDesktop, selectedId, visibles])
 
+  useEffect(() => {
+    localStorage.setItem('kc_screen_context', JSON.stringify({ screen: 'bitacora' }))
+    return () => localStorage.removeItem('kc_screen_context')
+  }, [])
+
   async function handleCrear(datos: Parameters<typeof crearEntrada>[0]) {
     const id = await crearEntrada(datos)
     setNuevaOpen(false)
