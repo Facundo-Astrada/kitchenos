@@ -2550,6 +2550,13 @@ function RentabilidadView({
             </div>
           ) : (
             <>
+              {/* La popularidad usa TODO el historial de ventas cargado, sin importar
+                  el período que esté seleccionado en la pantalla Ventas — por eso un
+                  período corto ahí puede mostrar "0" mientras acá ya hay platos
+                  clasificados por popularidad. */}
+              <div style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.4 }}>
+                Popularidad calculada sobre todo el historial de ventas cargado (no el período de Ventas).
+              </div>
               {!ing.conVentas && (
                 <div style={{ background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.3)', borderRadius: 10, padding: '10px 12px', fontSize: 11.5, color: '#92400e', lineHeight: 1.5 }}>
                   Sin ventas cargadas: la clasificación es solo por rentabilidad. Cargá ventas para cruzar con popularidad.
