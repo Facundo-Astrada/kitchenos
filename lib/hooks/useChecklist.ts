@@ -32,6 +32,16 @@ export interface PaseTurnoIncumplido {
   usuarioId: string | null
 }
 
+// Pase entregado (Fase 4, ago 2026): hecho real con autor y hora, desde
+// cierres_turno — reemplaza la adivinanza de checklist_registros cuando existe.
+export interface PaseTurnoEntregado {
+  fecha: string
+  turnoId: string
+  plaza: string
+  cerradoPor: string | null   // equipo_miembros.id
+  cerradoAt: string
+}
+
 interface ChecklistConfig {
   secciones: ChecklistSeccionConfig[]
   items: MisePlaceItem[]
@@ -599,16 +609,33 @@ export function useChecklist() {
 
   // useCallback: igual que fetchAuditorias, se usa en el loadTab de Reportes —
   // sin memoizar, generaría un loop de renders (ver hooks.md #10).
-  const fetchAuditoriaPaseTurno = useCallback(async (desde: string, hasta?: string): Promise<PaseTurnoIncumplido[]> => {
-    if (!RESTAURANTE_ID) return []
+  const fetchAuditoriaPaseTurno = useCallback(async (desde: string, hasta?: string): Promise<{ entregados: PaseTurnoEntregado[]; incumplidos: PaseTurnoIncumplido[] }> => {
+    if (!RESTAURANTE_ID) return { entregados: [], incumplidos: [] }
     try {
+      // Pases entregados de verdad (Fase 4) — hecho con autor y hora, no una
+      // deducción. Se pide primero: si un grupo tiene entrega explícita, no
+      // importa que el checklist haya quedado incompleto (ej. Modo Control,
+      // que no siempre llega al 100% de cantidad_actual) — ya no es incumplido.
+      let qCierres = supabase.from('cierres_turno')
+        .select('jornada, turno_id, plaza, cerrado_por, cerrado_at')
+        .eq('restaurante_id', RESTAURANTE_ID)
+        .gte('jornada', desde)
+      if (hasta) qCierres = qCierres.lte('jornada', hasta)
+      const { data: cierresData, error: cierresErr } = await qCierres
+      if (cierresErr) throw cierresErr
+
+      const entregados: PaseTurnoEntregado[] = (cierresData ?? []).map(c => ({
+        fecha: c.jornada, turnoId: c.turno_id, plaza: c.plaza,
+        cerradoPor: c.cerrado_por, cerradoAt: c.cerrado_at,
+      }))
+      const entregadosKeys = new Set(entregados.map(e => `${e.fecha}|${e.turnoId}|${e.plaza}`))
       const { data: itemsData, error: itemsErr } = await supabase.from('checklist_items').select('id, plaza')
         .eq('restaurante_id', RESTAURANTE_ID)
       if (itemsErr) throw itemsErr
       const itemPlaza = new Map<string, string>()
       for (const i of (itemsData ?? []) as { id: string; plaza: string }[]) itemPlaza.set(i.id, i.plaza)
       const itemIds = Array.from(itemPlaza.keys())
-      if (itemIds.length === 0) return []
+      if (itemIds.length === 0) return { entregados, incumplidos: [] }
 
       let q = supabase.from('checklist_registros')
         .select('checklist_item_id, fecha, turno, completado, usuario_id')
@@ -636,12 +663,17 @@ export function useChecklist() {
 
       const incumplidos: PaseTurnoIncumplido[] = []
       for (const [key, g] of grupos) {
-        // Solo cuenta si hubo apertura (el turno se usó) y ningún cierre completado.
-        if (!g.hasApertura || g.hasCierreCompletado) continue
+        // Solo cuenta si hubo apertura (el turno se usó), ningún cierre
+        // completado en el checklist, Y tampoco una entrega explícita —
+        // esta última manda: si existe, el pase sí se hizo.
+        if (!g.hasApertura || g.hasCierreCompletado || entregadosKeys.has(key)) continue
         const [fecha, turnoId, plaza] = key.split('|')
         incumplidos.push({ fecha, turnoId: turnoId === 'legacy' ? null : turnoId, plaza, usuarioId: g.ultimoUsuarioId })
       }
-      return incumplidos.sort((a, b) => b.fecha.localeCompare(a.fecha))
+      return {
+        entregados: entregados.sort((a, b) => b.cerradoAt.localeCompare(a.cerradoAt)),
+        incumplidos: incumplidos.sort((a, b) => b.fecha.localeCompare(a.fecha)),
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al cargar el pase de turno'
       console.error('[useChecklist] fetchAuditoriaPaseTurno Error:', msg)

@@ -30,7 +30,8 @@ import {
 } from '@/lib/hooks/usePreciosProveedores'
 import { useCajaTurno } from '@/lib/hooks/useCajaTurno'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
-import { useChecklist, type PaseTurnoIncumplido } from '@/lib/hooks/useChecklist'
+import { useChecklist, type PaseTurnoIncumplido, type PaseTurnoEntregado } from '@/lib/hooks/useChecklist'
+import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
 import { useReporteVentas, type ReporteVentas } from '@/lib/hooks/useReporteVentas'
 import { useCarta } from '@/lib/hooks/useCarta'
 import type { CajaTurno, ChecklistAuditoria } from '@/types'
@@ -116,6 +117,7 @@ export default function ReportesPage() {
   const { fetchHistorial } = useCajaTurno()
   const { medios } = useMediosPago()
   const { fetchAuditorias, fetchAuditoriaPaseTurno } = useChecklist()
+  const { turnosActivos } = useTurnosServicio()
   const { fetchReporte: fetchReporteVentas } = useReporteVentas()
   const { items: cartaItemsRep } = useCarta()
   const isDesktop = useIsDesktop()
@@ -175,6 +177,7 @@ export default function ReportesPage() {
   const [cajaHistorial, setCajaHistorial] = useState<CajaTurno[]>([])
   const [auditoriaHistorial, setAuditoriaHistorial] = useState<ChecklistAuditoria[]>([])
   const [paseTurnoIncumplidos, setPaseTurnoIncumplidos] = useState<PaseTurnoIncumplido[]>([])
+  const [paseTurnoEntregados, setPaseTurnoEntregados] = useState<PaseTurnoEntregado[]>([])
   const [ventasRep, setVentasRep] = useState<ReporteVentas | null>(null)
 
   const [tabLoading, setTabLoading] = useState(false)
@@ -269,7 +272,8 @@ export default function ReportesPage() {
             fetchAuditoriaPaseTurno(from, to),
           ])
           setAuditoriaHistorial(a)
-          setPaseTurnoIncumplidos(pt)
+          setPaseTurnoEntregados(pt.entregados)
+          setPaseTurnoIncumplidos(pt.incumplidos)
           break
         }
       }
@@ -1161,9 +1165,42 @@ export default function ReportesPage() {
     return '#dc2626'
   }
 
+  // Pases entregados (Fase 4): hecho real con autor y hora desde cierres_turno
+  // — ya no una deducción. Se muestra primero, antes del listado de incumplidos.
+  function renderPaseTurnoEntregados() {
+    if (!paseTurnoEntregados.length) return null
+    const turnoNombre = (turnoId: string) => turnosActivos.find(t => t.id === turnoId)?.nombre ?? turnoId
+    return (
+      <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 16, border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#22c55e' }}>outbox</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Pases entregados</span>
+          <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#22c55e' }}>{paseTurnoEntregados.length}</span>
+        </div>
+        <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0 }}>Quién entregó cada plaza y a qué hora — hecho real, no una deducción.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
+          {paseTurnoEntregados.slice(0, 20).map((e, i) => (
+            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12.5 }}>
+              <span style={{ color: 'var(--text-2)' }}>
+                {PLAZA_LABELS[e.plaza] ?? e.plaza} · {turnoNombre(e.turnoId)}
+              </span>
+              <span style={{ color: 'var(--text-1)', fontWeight: 600, textAlign: 'right', flexShrink: 0 }}>
+                {e.cerradoPor ? (nombresEquipo[e.cerradoPor] ?? 'Ex-miembro del equipo') : 'Sin asignar'}
+                {' · '}
+                {new Date(e.cerradoAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   // Pase de turno incumplido (Fase 3): turnos con apertura pero sin ningún
   // cierre completado — se deduce de checklist_registros, sin storage propio.
   // "Sin asignar" cuando nadie llegó a tocar el cierre (usuario_id null).
+  // Ya no cuenta lo que igual tiene una entrega explícita registrada (Fase 4) —
+  // ver renderPaseTurnoEntregados arriba.
   function renderPaseTurnoIncumplido() {
     if (!paseTurnoIncumplidos.length) return null
     const porPlaza = new Map<string, number>()
@@ -1210,10 +1247,12 @@ export default function ReportesPage() {
   }
 
   function renderAuditoria() {
+    const paseTurnoEntregadosCard = renderPaseTurnoEntregados()
     const paseTurnoCard = renderPaseTurnoIncumplido()
     if (!auditoriaHistorial.length) {
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {paseTurnoEntregadosCard}
           {paseTurnoCard}
           <EmptyState icon="fact_check" text="Todavía no hay pasadas de auditoría cerradas en este período. Se registran desde Checklist → Rutina, configurando puntaje en un ítem." />
         </div>
@@ -1222,6 +1261,7 @@ export default function ReportesPage() {
     const porFecha = [...auditoriaHistorial].sort((a, b) => a.fecha.localeCompare(b.fecha))
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {paseTurnoEntregadosCard}
         {paseTurnoCard}
         <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 16, border: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>

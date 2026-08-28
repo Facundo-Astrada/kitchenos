@@ -382,7 +382,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const { crearVencimiento } = useHaccp({ soloEscritura: true })
   const { fichajeAbierto, marcarSalida } = useFichaje()
   const { turnosActivos } = useTurnosServicio()
-  const { entregados, entregaDe, entregarPlaza } = useCierresTurno()
+  const { entregados, entregaDe, entregarPlaza, deshacerEntrega } = useCierresTurno()
   const { notasDe, agregar: agregarNota, eliminar: eliminarNota } = useNotasPlaza()
 
   // La lista de tareas por ref — el guard de despacho (handleCrearTarea) tiene
@@ -521,6 +521,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const [notasAbiertas, setNotasAbiertas] = useState(false)
   const [cerrandoTurno, setCerrandoTurno] = useState(false)
   const [entregando, setEntregando] = useState(false)
+  const [deshaciendo, setDeshaciendo] = useState(false)
   // Confirmación de entregar plaza / marcar salida (DESIGN.md §7 — nunca
   // window.confirm() nativo en flujo de servicio: rompe la identidad visual
   // justo en el único momento por turno que el sistema de movimiento marca
@@ -1088,6 +1089,19 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       setToast('Error al entregar: ' + (e instanceof Error ? e.message : 'desconocido'))
     } finally {
       setEntregando(false)
+    }
+  }
+
+  async function handleDeshacerEntrega() {
+    if (!plaza || !turnoServicioId || deshaciendo) return
+    setDeshaciendo(true)
+    try {
+      await deshacerEntrega({ jornada: fecha, turnoId: turnoServicioId, plaza })
+      setToast('Entrega deshecha')
+    } catch (e: unknown) {
+      setToast('Error al deshacer: ' + (e instanceof Error ? e.message : 'desconocido'))
+    } finally {
+      setDeshaciendo(false)
     }
   }
 
@@ -2671,8 +2685,9 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                 : proximoTurno ? `Entregala para pasar a ${proximoTurno.nombre}` : 'Entregala para pasar el turno'}
             </div>
           </div>
-          {/* Entregar primero; una vez entregada, la barra ofrece la salida
-              personal (solo si hay fichaje abierto que cerrar). */}
+          {/* Entregar primero; una vez entregada, la barra ofrece deshacer (por si
+              fue un error de tap) y la salida personal (solo si hay fichaje
+              abierto que cerrar). */}
           {!entregaActual ? (
             <button
               onClick={handleEntregarPlaza}
@@ -2689,22 +2704,41 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>outbox</span>
               {entregando ? 'Entregando…' : 'Entregar plaza'}
             </button>
-          ) : fichajeAbierto ? (
-            <button
-              onClick={handleCerrarTurno}
-              disabled={cerrandoTurno}
-              style={{
-                flexShrink: 0, padding: '10px 14px', borderRadius: 10, border: 'none',
-                background: '#ef4444', color: '#fff', fontSize: 12.5, fontWeight: 700,
-                cursor: cerrandoTurno ? 'default' : 'pointer', fontFamily: 'inherit',
-                opacity: cerrandoTurno ? 0.6 : 1,
-                display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>stop_circle</span>
-              {cerrandoTurno ? 'Cerrando…' : 'Marcar salida'}
-            </button>
-          ) : null}
+          ) : (
+            <>
+              <button
+                onClick={handleDeshacerEntrega}
+                disabled={deshaciendo}
+                title="Deshacer la entrega"
+                aria-label="Deshacer la entrega"
+                style={{
+                  flexShrink: 0, width: 36, height: 36, borderRadius: 10,
+                  border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)',
+                  cursor: deshaciendo ? 'default' : 'pointer', fontFamily: 'inherit',
+                  opacity: deshaciendo ? 0.6 : 1,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>undo</span>
+              </button>
+              {fichajeAbierto && (
+                <button
+                  onClick={handleCerrarTurno}
+                  disabled={cerrandoTurno}
+                  style={{
+                    flexShrink: 0, padding: '10px 14px', borderRadius: 10, border: 'none',
+                    background: '#ef4444', color: '#fff', fontSize: 12.5, fontWeight: 700,
+                    cursor: cerrandoTurno ? 'default' : 'pointer', fontFamily: 'inherit',
+                    opacity: cerrandoTurno ? 0.6 : 1,
+                    display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>stop_circle</span>
+                  {cerrandoTurno ? 'Cerrando…' : 'Marcar salida'}
+                </button>
+              )}
+            </>
+          )}
         </div>
       )}
 
