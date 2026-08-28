@@ -281,6 +281,28 @@ function PuestoFormBody({
           {PLAZAS_OPS.map(p => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
         </select>
       </div>
+      {puestos.some(p => p.id !== selfId) && (
+        <div>
+          <label style={labelStyle}>Clonar permisos de otro puesto</label>
+          <select
+            style={fieldStyle}
+            value=""
+            onChange={e => {
+              const origen = puestos.find(p => p.id === e.target.value)
+              if (!origen) return
+              setForm(f => ({ ...f, permisos_app: [...origen.permisos_app], ver_costos: origen.ver_costos }))
+            }}
+          >
+            <option value="">— Elegir puesto —</option>
+            {puestos.filter(p => p.id !== selfId).map(p => (
+              <option key={p.id} value={p.id}>{p.nombre}</option>
+            ))}
+          </select>
+          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '4px 0 0' }}>
+            Copia sus módulos visibles y acceso a información económica — podés ajustarlos después de clonar.
+          </p>
+        </div>
+      )}
       <div>
         <label style={{ ...labelStyle, marginBottom: 8 }}>Módulos visibles en la app</label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
