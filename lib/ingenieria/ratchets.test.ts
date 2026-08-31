@@ -17,7 +17,7 @@ const ROOT = process.cwd()
 // ─────────────────────────────────────────────────────────────────────────
 
 const TECHOS_LINEAS: Record<string, number> = {
-  'app/(app)/carta/page.tsx': 3710, // día 6 plan-consolidado: -300 líneas muertas (view='nuevo', isCreate, CAT_ICONS)
+  'app/(app)/carta/page.tsx': 2060, // día 7 plan-consolidado: moves puros a cards.tsx/exportar.ts/PackagingGruposDrawer.tsx/ImportCartaModal.tsx/EditarPlato.tsx
   'app/(app)/recetario/page.tsx': 3810,
   'app/(app)/facturas/page.tsx': 3640,
   'app/(app)/stock/ClientView.tsx': 3410,
