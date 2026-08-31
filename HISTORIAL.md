@@ -6,6 +6,15 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-08-31 (noche, cont. 7) — Día 8 del plan consolidado: `crearFactura` al servidor.** 1 commit (`df0dc09`), pusheado. Ejecutado siguiendo `.claude/docs/ingenieria/plan-consolidado.md` §2 y `dominio-kos.md` §4.1 (el alcance afinado de arquitectura-kos.md §3.1 🟠-3).
+
+- **`crear_factura_con_items`** (migración `20260831e`, rpc `SECURITY INVOKER` + `SET search_path = public` desde el vamos — sin necesitar el fix aparte que sí hizo falta para `reemplazar_menu_preparaciones`): el núcleo transaccional cubre **solo** factura+items — antes eran ~235 líneas en el browser sin transacción ([arquitectura-kos.md §3.1](.claude/docs/ingenieria/arquitectura-kos.md)); ahora ese par entra entero o no entra nada.
+- **`lib/facturas/matching.ts` nuevo**: `matchProducto()` puro (match exacto sin tildes → parcial de palabra completa, con guard de longitud) + `resolverProductosDeItems()` (matchea/crea productos ANTES de la rpc — no depende de que la factura exista) + `aplicarEfectosDeFactura()` (stock, precio, `precio_historial`, `ingredientes.costo_unitario`, auto-registro de proveedor — DESPUÉS de la rpc, porque `precio_historial.factura_id` tiene FK real a `facturas`). 16 tests sobre `matchProducto`/`normalizeNombreProducto`/`inferCategoria`.
+- **`facturas-universal`** (import masivo) dejó de reimplementar el matching: ahora llama al mismo `matchProducto()` compartido.
+- **Verificado end-to-end contra dev, no solo build**: dos altas reales vía la UI de carga manual — producto nuevo (creado con stock/precio/categoría inferida correctos, `precio_historial` con `precio_anterior=0`) y producto ya existente (stock sumado 3+3=6, precio actualizado 1000→1500, `precio_historial` con `variacion_porcentaje=50` correcto, proveedor auto-registrado). Datos de prueba (`ZZTEST*`) limpiados de El Rescoldo al terminar.
+- Typecheck, build, 241 tests (225 + 16 nuevos) y `get_advisors` sin hallazgos nuevos.
+- Día 9 (la cirugía del panel OPS de `DetailView` en Carta) queda para otra sesión — decisión explícita de Facundo, no falta de tiempo.
+
 **Sesión 2026-08-31 (noche, cont. 6) — Día 7 del plan consolidado: Carta, pasos 2+4.** 1 commit (`8392e87`). Ejecutado siguiendo `.claude/docs/ingenieria/plan-consolidado.md` §2 y `refactor-kos.md` §2 (pasos 2 y 4).
 
 - **Cinco moves puros, sin cambiar comportamiento** — `carta/page.tsx` (3.703 líneas) se repartió a: `cards.tsx` (`PlatoCard`+`PlatoCardBack`+`PlatoCardSkeleton`+`fmtMoney`+`fcBadge`+`marginBadge`), `exportar.ts` (`exportCartaPDF`+`exportRentabilidadPDF`), `PackagingGruposDrawer.tsx`, `ImportCartaModal.tsx` (con sus tipos `ItemImportado`/`ComponenteImportado` y `autoMatch`), y `EditarPlato.tsx` — el renombre de `FormView` que viajó gratis con el move (ya era editor-only desde el día 6, el nombre nuevo dice lo que quedó, no lo que fue). `page.tsx` bajó a 2.054 líneas: queda `DetailView` + `RentabilidadView` + el shell de `CartaPage`.

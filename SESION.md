@@ -1,22 +1,25 @@
-# Sesión — 2026-08-31 (noche, cont. 6) — Día 7 del plan consolidado: Carta, pasos 2+4
+# Sesión — 2026-08-31 (noche, cont. 7) — Día 8 del plan consolidado: `crearFactura` al servidor
 
 ## Qué se cerró
 
-Día 7 completo de `.claude/docs/ingenieria/plan-consolidado.md` §2 (`refactor-kos.md` §2, pasos 2+4). 1 commit (`8392e87`), pusheado.
+Día 8 completo de `.claude/docs/ingenieria/plan-consolidado.md` §2 (alcance
+afinado por `dominio-kos.md` §4.1). 1 commit (`df0dc09`), pusheado.
 
-- **Cinco moves puros** desde `carta/page.tsx` (3.703 líneas): `cards.tsx`
-  (`PlatoCard`+`PlatoCardBack`+`PlatoCardSkeleton`+`fmtMoney`+`fcBadge`+`marginBadge`),
-  `exportar.ts` (`exportCartaPDF`+`exportRentabilidadPDF`),
-  `PackagingGruposDrawer.tsx`, `ImportCartaModal.tsx` (con sus tipos y
-  `autoMatch`), y `EditarPlato.tsx` — renombre de `FormView` (ya editor-only
-  desde el día 6). `page.tsx` bajó a 2.054 líneas: solo quedan `DetailView` +
-  `RentabilidadView` + el shell de `CartaPage`.
-- Techo del ratchet bajado a 2060.
-- Red validada en la práctica: smoke e2e pasó 2 veces seguidas sin tocarse +
-  verificación manual (script Playwright ad-hoc, descartado) de que
-  `EditarPlato` e `ImportCartaModal` renderizan sin errores tras el move.
-- Typecheck, 225 tests, build y lint (mismos ~10.000 problemas pre-existentes)
-  en verde. Docs actualizados: `PENDIENTES.md`, `HISTORIAL.md`.
+- **`crear_factura_con_items`** (rpc, migración `20260831e`): el núcleo
+  transaccional cubre solo factura+items — antes eran ~235 líneas en el
+  browser sin transacción. `SECURITY INVOKER` + `SET search_path = public`
+  desde el vamos (sin necesitar el fix aparte que sí hizo falta para
+  `reemplazar_menu_preparaciones` el día 2).
+- **`lib/facturas/matching.ts` nuevo**: `matchProducto()` puro (16 tests) +
+  `resolverProductosDeItems()` (antes de la rpc) + `aplicarEfectosDeFactura()`
+  (después — `precio_historial.factura_id` tiene FK real, necesita que la
+  factura ya exista). `facturas-universal` dejó de reimplementar el matching.
+- Verificado end-to-end contra dev vía la UI real (no solo build): producto
+  nuevo y producto existente (stock sumado, precio actualizado, historial con
+  la variación correcta, proveedor auto-registrado). Datos de prueba
+  limpiados de El Rescoldo.
+- Typecheck, build, 241 tests (225+16) y `get_advisors` en verde. Docs:
+  `PENDIENTES.md`, `HISTORIAL.md`.
 
 ## Qué quedó a medias
 
@@ -28,21 +31,17 @@ Día 7 completo de `.claude/docs/ingenieria/plan-consolidado.md` §2 (`refactor-
 
 ## Probar primero mañana
 
-- Nada específico de UI — son moves puros, sin cambio de comportamiento.
+- Nada específico — el comportamiento de cargar una factura (manual, texto o
+  foto) es idéntico desde la UI; lo que cambió es solo cómo se escribe.
 
 ## Próximo paso concreto
 
-**Día 9 del plan consolidado** (`plan-consolidado.md` §2, `refactor-kos.md`
-§2 paso 5a): la única cirugía real del plan de Carta. Migrar
+**Día 9 del plan consolidado** (`refactor-kos.md` §2 paso 5a) — decisión
+explícita de Facundo de dejarlo para otra sesión, no falta de tiempo: migrar
 `handleGuardarOPS` de `DetailView` ([carta/page.tsx:147-253](app/(app)/carta/page.tsx#L147-L253))
 a los helpers de `lib/ops/mise.ts` (`sumPlatoRecetaCantidad`,
 `upsertMiseChecklistItem`, `shrinkOrPruneMise` — hoy no se llama, es el bug
-latente que la migración arregla gratis), copiando el flujo de
-`CartaBoard.tsx` como referencia viva. Antes de tocar: `/impacto
-upsertMiseChecklistItem` y `/impacto shrinkOrPruneMise` para los callers que
-deben quedar idénticos. Extraer `porcionesDesdeCapacidad` a `lib/ops/mise.ts`
-con test (está duplicada 2 veces dentro del mismo componente). Verificación:
-matriz manual en dev contra la base (no solo la UI) — asignar OPS desde
-DetailView vs. desde ComposicionEditor y comparar filas de
-`checklist_items`; mover de plaza y ver que la plaza vieja se achica; Quitar
-y ver el prune. 1 día entero — no empezarlo sin eso.
+latente que la migración arregla gratis). Antes de tocar: `/impacto
+upsertMiseChecklistItem` y `/impacto shrinkOrPruneMise`. Verificación: matriz
+manual en dev contra la base (no solo la UI). 1 día entero — no arrancarlo
+sin eso.

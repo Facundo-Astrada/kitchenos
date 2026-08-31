@@ -27,9 +27,6 @@ Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/
 ### Refactor de Carta — día 9 del plan; el paso a paso completo en `refactor-kos.md` §2
 **Días 6+7 resueltos (31/08):** smoke e2e + código muerto (día 6) y los moves puros — `cards.tsx`, `exportar.ts`, `PackagingGruposDrawer.tsx`, `ImportCartaModal.tsx`, `EditarPlato.tsx` (día 7) — dejaron `carta/page.tsx` en 2.054 líneas (desde 3.906), techo del ratchet en 2.060. Queda el panel OPS de `DetailView` (`handleGuardarOPS`, [carta/page.tsx:147-253](app/(app)/carta/page.tsx#L147-L253), día 9) que **duplica inline los helpers de `lib/ops/mise.ts`** con su 3ª copia de `PLAZAS_OPS` y sin `shrinkOrPruneMise` — mover una receta de plaza deja el `checklist_item` viejo sin achicar (bug latente de datos). Es el único paso con riesgo real del plan (`/impacto` + matriz de verificación contra la base antes de tocarlo). Punto de parada explícito tras el día 9: el shell de ~700 líneas queda y está bien.
 
-### `useFacturas.crearFactura` al servidor — día 8 del plan (alcance afinado por `dominio-kos.md` §4.1)
-~235 líneas multi-tabla en el browser sin transacción. La transacción cubre **factura+items solamente**; matching de productos y precios son efectos sobre otros agregados → paso idempotente aparte, extraído a `lib/facturas/matching.ts` con test (así `facturas-universal` deja de reimplementarlo). `useFacturas.crearFactura` queda como fetch + `mutate()`. **1 día — no arrancar sin el día entero.**
-
 ---
 
 ## 🟡 Medio — Roadmap: Planes y Stripe
