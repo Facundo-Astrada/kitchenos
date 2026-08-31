@@ -3,12 +3,14 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
+import { tieneCarga } from '@/lib/reservas/helpers'
 
 /* ─── Types ─── */
 
 export type TipoEvento =
   | 'entrega_proveedor'
   | 'reserva_especial'
+  | 'reservas_dia'
   | 'evento_equipo'
   | 'mantenimiento'
   | 'capacitacion'
@@ -35,6 +37,8 @@ export interface EventoCalendario {
   _fromPedido?: boolean
   /* flag for auto-generated menú-activado events */
   _fromMenu?: boolean
+  /* flag for auto-generated reservas-del-día events (PLAN-4-CAPAS B9) */
+  _fromReserva?: boolean
 }
 
 export interface Proveedor {
@@ -65,6 +69,7 @@ interface PedidoRow {
 export const TIPO_CONFIG: Record<TipoEvento, { label: string; icon: string; color: string }> = {
   entrega_proveedor:   { label: 'Entrega',           icon: 'local_shipping',    color: '#f97316' },
   reserva_especial:    { label: 'Reserva especial',  icon: 'restaurant',        color: '#8b5cf6' },
+  reservas_dia:        { label: 'Reservas',          icon: 'event_seat',       color: '#14b8a6' },
   evento_equipo:       { label: 'Evento equipo',     icon: 'groups',            color: '#3b82f6' },
   mantenimiento:       { label: 'Mantenimiento',     icon: 'build',             color: '#ef4444' },
   capacitacion:        { label: 'Capacitación',      icon: 'school',            color: '#10b981' },
@@ -221,7 +226,44 @@ export function useCalendario() {
         }
       }
 
-      setEventos([...eventosDb, ...pedidoEventos, ...prodEventos, ...menuEventos])
+      // 5. Auto-generate from reservas (PLAN-4-CAPAS B9) — reflejo de solo
+      // lectura, un evento por día con el resumen (no uno por reserva, para
+      // no saturar la grilla del mes).
+      const { data: reservasMes } = await supabase
+        .from('reservas')
+        .select('fecha, pax, estado')
+        .eq('restaurante_id', restIdRef.current)
+        .gte('fecha', primerDia)
+        .lte('fecha', ultimoDia)
+
+      const porFechaReservas = new Map<string, { count: number; pax: number }>()
+      for (const row of (reservasMes ?? [])) {
+        if (!tieneCarga(row.estado)) continue
+        const acc = porFechaReservas.get(row.fecha) ?? { count: 0, pax: 0 }
+        acc.count += 1
+        acc.pax += row.pax as number
+        porFechaReservas.set(row.fecha, acc)
+      }
+      const reservaEventos: EventoCalendario[] = [...porFechaReservas.entries()].map(([fecha, { count, pax }]) => ({
+        id: `reservas-${fecha}`,
+        titulo: `${count} reserva${count > 1 ? 's' : ''} · ${pax} cubiertos`,
+        descripcion: 'Reflejo de solo lectura desde /reservas',
+        tipo: 'reservas_dia' as TipoEvento,
+        fecha_inicio: fecha,
+        fecha_fin: null,
+        hora_inicio: '00:00:00',
+        hora_fin: '23:59:00',
+        recurrente: false,
+        frecuencia: null,
+        color: TIPO_CONFIG.reservas_dia.color,
+        proveedor_id: null,
+        usuario_id: null,
+        restaurante_id: restIdRef.current,
+        created_at: '',
+        _fromReserva: true,
+      }))
+
+      setEventos([...eventosDb, ...pedidoEventos, ...prodEventos, ...menuEventos, ...reservaEventos])
 
       // 5. Ítems de nota del mes (vinculados a la fecha, uno por línea escrita)
       const { data: itemsData, error: itemsErr } = await supabase

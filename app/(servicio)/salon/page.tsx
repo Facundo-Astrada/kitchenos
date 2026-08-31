@@ -17,11 +17,28 @@ import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
 import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, supportsWebUSB, supportsWebBluetooth } from '@/lib/print/escpos'
 import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
+import { useReservas } from '@/lib/hooks/useReservas'
+import { fechaEnTz } from '@/lib/ops/turnos'
 import VistaCaja from '@/components/salon/VistaCaja'
 import { Sillas } from '@/components/salon/Sillas'
 import { PanZoomCanvas } from '@/components/salon/PanZoomCanvas'
 import KitchenCoachFAB from '@/components/coach/KitchenCoachFAB'
-import type { Mesa, CartaItem, EstadoMesa, TipoModificador, Comanda, EstadoComandaItem, SalonElemento } from '@/types'
+import type { Mesa, CartaItem, EstadoMesa, TipoModificador, Comanda, EstadoComandaItem, SalonElemento, Reserva } from '@/types'
+
+// Reservas candidatas a ofrecer al abrir esta mesa (PLAN-4-CAPAS B9): primero
+// las que ya tienen esta mesa asignada; si no hay ninguna, cualquier reserva
+// sin mesa dentro de ±90 min de ahora (franja horaria, no hora exacta).
+function reservasCandidatasParaMesa(mesa: Mesa, reservas: Reserva[]): Reserva[] {
+  const activas = reservas.filter(r => r.estado === 'pendiente' || r.estado === 'confirmada')
+  const paraEstaMesa = activas.filter(r => r.mesa_id === mesa.id)
+  if (paraEstaMesa.length > 0) return paraEstaMesa
+  const ahoraMin = new Date().getHours() * 60 + new Date().getMinutes()
+  return activas.filter(r => {
+    if (r.mesa_id) return false
+    const [h, m] = r.hora.split(':').map(Number)
+    return Math.abs((h * 60 + m) - ahoraMin) <= 90
+  })
+}
 
 // ─── helpers visuales ─────────────────────────────────────────────────────────
 
@@ -302,6 +319,101 @@ function MesaInfoSheet({
             </>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+// Se ofrece al abrir una mesa libre si hay reservas de esa franja (PLAN-4-CAPAS
+// B9). Elegir una la marca 'sentada' con esta mesa; descartar abre la mesa
+// como nueva, sin tocar ninguna reserva.
+function ReservaMatchSheet({
+  mesa, candidatas, onElegir, onDescartar,
+}: {
+  mesa: Mesa
+  candidatas: Reserva[]
+  onElegir: (reserva: Reserva, mesa: Mesa) => void
+  onDescartar: () => void
+}) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 65, display: 'flex', alignItems: 'flex-end' }} onClick={onDescartar}>
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ background: 'var(--surface)', width: '100%', borderRadius: '20px 20px 0 0', display: 'flex', flexDirection: 'column', gap: 14, padding: '20px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 20px)' }}
+      >
+        <div>
+          <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)' }}>¿Es una reserva?</p>
+          <p style={{ fontSize: 13, color: 'var(--text-2)' }}>
+            Mesa {mesa.numero} · {candidatas.length === 1 ? 'hay una reserva para esta franja' : `hay ${candidatas.length} reservas para esta franja`}
+          </p>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {candidatas.map(r => (
+            <button
+              key={r.id}
+              onClick={() => onElegir(r, mesa)}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 14px', borderRadius: 12, background: 'var(--bg)', border: '1px solid var(--border)', textAlign: 'left' }}
+            >
+              <div>
+                <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>{r.nombre}</p>
+                <p style={{ fontSize: 13, color: 'var(--text-2)' }}>{r.hora.slice(0, 5)} · {r.pax} personas</p>
+              </div>
+              <span className="material-symbols-outlined" style={{ color: '#4361a0' }}>chevron_right</span>
+            </button>
+          ))}
+        </div>
+        <button onClick={onDescartar} style={{ minHeight: 52, borderRadius: 12, background: 'var(--border)', color: 'var(--text-1)', fontSize: 15, fontWeight: 600 }}>
+          No es ninguna, mesa nueva
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Botón "Cerrar servicio" del topbar (PLAN-4-CAPAS B9): las reservas
+// confirmadas/pendientes de hoy que nunca se sentaron se ofrecen acá para
+// marcar no_show. Si no se hace en el momento, no se hace nunca — es la
+// única ventana en la que la estadística sirve.
+function CerrarServicioSheet({
+  reservas, onNoShow, onCerrar,
+}: {
+  reservas: Reserva[]
+  onNoShow: (reserva: Reserva) => void
+  onCerrar: () => void
+}) {
+  const ordenadas = useMemo(() => [...reservas].sort((a, b) => a.hora.localeCompare(b.hora)), [reservas])
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 65, display: 'flex', alignItems: 'flex-end' }} onClick={onCerrar}>
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ background: 'var(--surface)', width: '100%', maxHeight: '80vh', overflowY: 'auto', borderRadius: '20px 20px 0 0', display: 'flex', flexDirection: 'column', gap: 14, padding: '20px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 20px)' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)' }}>Cerrar servicio</p>
+            <p style={{ fontSize: 13, color: 'var(--text-2)' }}>Reservas de hoy sin sentar</p>
+          </div>
+          <button onClick={onCerrar} style={{ minWidth: 40, minHeight: 40, background: 'transparent', border: 'none', color: 'var(--text-2)' }}>
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        {ordenadas.length === 0 ? (
+          <p style={{ fontSize: 14, color: 'var(--text-3)', textAlign: 'center', padding: '16px 0' }}>No quedan reservas sin sentar hoy.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {ordenadas.map(r => (
+              <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 14px', borderRadius: 12, background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                <div>
+                  <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>{r.nombre}</p>
+                  <p style={{ fontSize: 13, color: 'var(--text-2)' }}>{r.hora.slice(0, 5)} · {r.pax} personas{r.telefono ? ` · ${r.telefono}` : ''}</p>
+                </div>
+                <button onClick={() => onNoShow(r)} style={{ minHeight: 40, padding: '0 14px', borderRadius: 10, background: '#ef4444', color: '#fff', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
+                  No vino
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -1089,8 +1201,17 @@ export default function SalonPage() {
   const { pedirCuenta } = useCuenta()
   const online = useOnlineStatus()
 
+  const hoy = useMemo(() => fechaEnTz(new Date()), [])
+  const { reservas, actualizarReserva, cambiarEstado: cambiarEstadoReserva } = useReservas(hoy, hoy)
+  const reservasActivasHoy = useMemo(
+    () => reservas.filter(r => r.estado === 'pendiente' || r.estado === 'confirmada'),
+    [reservas]
+  )
+
   const [vista, setVista] = useState<Vista>('mapa')
   const [mesaInfo, setMesaInfo] = useState<Mesa | null>(null)
+  const [reservaMatch, setReservaMatch] = useState<{ mesa: Mesa; candidatas: Reserva[] } | null>(null)
+  const [cerrandoServicio, setCerrandoServicio] = useState(false)
   const [mesaActiva, setMesaActiva] = useState<Mesa | null>(null)
   const [cuentaId, setCuentaId] = useState<string | null>(null)
   const [busqueda, setBusqueda] = useState('')
@@ -1162,6 +1283,34 @@ export default function SalonPage() {
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : 'Error al abrir la mesa')
     }
+  }
+
+  // Antes de abrir una mesa libre, ofrecer las reservas de esa franja
+  // (PLAN-4-CAPAS B9). Una mesa ya ocupada ("ver comanda") no pasa por acá.
+  function handleAbrirPedido(mesa: Mesa) {
+    if (mesa.estado === 'libre') {
+      const candidatas = reservasCandidatasParaMesa(mesa, reservasActivasHoy)
+      if (candidatas.length > 0) {
+        setReservaMatch({ mesa, candidatas })
+        return
+      }
+    }
+    abrirYEntrarMesa(mesa, false)
+  }
+
+  async function confirmarSentarReserva(reserva: Reserva, mesa: Mesa) {
+    setReservaMatch(null)
+    try {
+      await actualizarReserva(reserva.id, { estado: 'sentada', mesa_id: mesa.id })
+    } catch { /* la mesa se abre igual — la reserva no bloquea el flujo real */ }
+    await abrirYEntrarMesa(mesa, false)
+  }
+
+  function descartarMatchReserva() {
+    if (!reservaMatch) return
+    const { mesa } = reservaMatch
+    setReservaMatch(null)
+    abrirYEntrarMesa(mesa, false)
   }
 
   function volverAlMapa() {
@@ -1248,6 +1397,15 @@ export default function SalonPage() {
             )}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
+            {reservasActivasHoy.length > 0 && (
+              <button onClick={() => setCerrandoServicio(true)} title="Cerrar servicio" aria-label="Cerrar servicio"
+                style={{ minWidth: 44, minHeight: 44, background: 'var(--surface)', borderRadius: 12, border: 'none', color: 'var(--text-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 24 }}>event_busy</span>
+                <span style={{ position: 'absolute', top: 2, right: 2, minWidth: 16, height: 16, padding: '0 4px', borderRadius: 99, background: '#f59e0b', color: '#fff', fontSize: 9, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {reservasActivasHoy.length}
+                </span>
+              </button>
+            )}
             <button onClick={() => router.push('/kds')} title="Ir a KDS" aria-label="Ir a KDS"
               style={{ minWidth: 44, minHeight: 44, background: 'var(--surface)', borderRadius: 12, border: 'none', color: 'var(--text-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 24 }}>kitchen</span>
@@ -1291,8 +1449,23 @@ export default function SalonPage() {
             mesa={mesaInfo}
             comandas={comandas}
             onCerrar={() => setMesaInfo(null)}
-            onAbrirPedido={m => abrirYEntrarMesa(m, false)}
+            onAbrirPedido={handleAbrirPedido}
             onCobrar={m => abrirYEntrarMesa(m, true)}
+          />
+        )}
+        {reservaMatch && (
+          <ReservaMatchSheet
+            mesa={reservaMatch.mesa}
+            candidatas={reservaMatch.candidatas}
+            onElegir={confirmarSentarReserva}
+            onDescartar={descartarMatchReserva}
+          />
+        )}
+        {cerrandoServicio && (
+          <CerrarServicioSheet
+            reservas={reservasActivasHoy}
+            onNoShow={r => cambiarEstadoReserva(r.id, 'no_show')}
+            onCerrar={() => setCerrandoServicio(false)}
           />
         )}
         <KitchenCoachFAB />

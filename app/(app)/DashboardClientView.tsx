@@ -19,7 +19,9 @@ import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { getEstadoStock, calcularVencimientoFactura } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useFichaje } from '@/lib/hooks/useFichaje'
-import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
+import { hoyOperativo, sumarDias, fechaEnTz } from '@/lib/ops/turnos'
+import { useReservas } from '@/lib/hooks/useReservas'
+import { cubiertosVivos, tieneCarga } from '@/lib/reservas/helpers'
 import { useMomentoDia } from '@/lib/dashboard/momento'
 import type { Perfil, Rol } from '@/types'
 
@@ -198,6 +200,11 @@ export default function DashboardPage() {
   const { tareas, loading: loadingTareas } = useTareas()
   const { items: checklistItems, registros, fetchRegistrosDelDia } = useChecklist()
   const en86 = useEn86Count(authPerfil?.restaurante_id ?? '')
+  // Reservas de hoy (PLAN-4-CAPAS B9) — tile del status bar, oculto si no hay carga.
+  const hoyReservas = useMemo(() => fechaEnTz(new Date()), [])
+  const { reservas: reservasHoy } = useReservas(hoyReservas, hoyReservas)
+  const reservasConCarga = useMemo(() => reservasHoy.filter(r => tieneCarga(r.estado)), [reservasHoy])
+  const cubiertosReservados = useMemo(() => cubiertosVivos(reservasHoy), [reservasHoy])
 
   // Sin este fetch, `registros` se queda en [] toda la vida del componente
   // (no es SWR, es un useState que solo se llena adentro de fetchRegistros/
@@ -294,6 +301,8 @@ export default function DashboardPage() {
         tareasCompletadas={tareasStats.completadas}
         tareasTotal={tareasStats.total}
         en86={en86}
+        cantidadReservas={reservasConCarga.length}
+        cubiertosReservados={cubiertosReservados}
       />
 
       {isEmpty ? (

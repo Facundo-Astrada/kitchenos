@@ -7,7 +7,9 @@ import TareasPage from '@/app/(app)/tareas/ClientView'
 import { ProduccionView } from '@/app/(app)/produccion/page'
 import { RutinaTurnoView } from '@/components/rutina/RutinaTurnoView'
 import { useTareas } from '@/lib/hooks/useTareas'
-import { hoyOperativo } from '@/lib/ops/turnos'
+import { useReservas } from '@/lib/hooks/useReservas'
+import { cubiertosVivos } from '@/lib/reservas/helpers'
+import { hoyOperativo, fechaEnTz } from '@/lib/ops/turnos'
 import { fusionarDuplicados } from '@/lib/ops/dedupeTareas'
 import { onOpsChromeCompact } from '@/lib/ops/chromeBus'
 
@@ -42,6 +44,13 @@ export default function OperacionesPage() {
     const delDia = tareas.filter(t => t.turno_fecha === hoy && !t.parent_id)
     return fusionarDuplicados(delDia).filas.filter(t => t.estado !== 'listo').length
   }, [tareas])
+
+  // Cubiertos reservados de hoy (PLAN-4-CAPAS B9) — el número que informa
+  // cuánto producir. Se oculta entero si no hay reservas cargadas: la mayoría
+  // de las cuentas no toma reservas y no debe ver un "0" sin sentido acá.
+  const hoyReservas = useMemo(() => fechaEnTz(new Date()), [])
+  const { reservas } = useReservas(hoyReservas, hoyReservas)
+  const cubiertosReservados = useMemo(() => cubiertosVivos(reservas), [reservas])
   // Lazy-mount: cada tab se monta recién en su primera visita (o cuando pasa
   // a ser vecino inmediato del tab activo, ver el efecto de abajo) y de ahí en
   // más se mantiene montado — el slot en la fila de scroll-snap sigue
@@ -201,6 +210,14 @@ export default function OperacionesPage() {
           tercio de la pantalla, que son ocho ítems que no se ven. Vuelve entero
           al primer scroll hacia arriba. */}
       <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 0', flexShrink: 0 }}>
+        {cubiertosReservados > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingBottom: 8 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'rgba(255,255,255,.7)' }}>event_seat</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,.85)' }}>
+              {cubiertosReservados} cubiertos reservados hoy
+            </span>
+          </div>
+        )}
         <div style={{
           display: 'flex', gap: 6,
           maxHeight: chromeCompacto ? 0 : 44, paddingBottom: chromeCompacto ? 0 : 10,

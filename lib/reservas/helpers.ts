@@ -20,3 +20,8 @@ export function semanaDeFecha(fecha: string): string[] {
 export function cubiertosVivos(reservas: Pick<Reserva, 'pax' | 'estado'>[]): number {
   return reservas.reduce((s, r) => s + (ESTADOS_SIN_CARGA.has(r.estado) ? 0 : r.pax), 0)
 }
+
+/** Si una reserva en este estado sigue representando carga real (no cancelada/no-show). */
+export function tieneCarga(estado: Reserva['estado']): boolean {
+  return !ESTADOS_SIN_CARGA.has(estado)
+}

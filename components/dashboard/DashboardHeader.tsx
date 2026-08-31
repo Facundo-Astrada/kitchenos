@@ -14,6 +14,8 @@ interface DashboardHeaderProps {
   tareasCompletadas?: number
   tareasTotal?: number
   en86?: number | null
+  cantidadReservas?: number
+  cubiertosReservados?: number
   desktop?: boolean
 }
 
@@ -26,6 +28,8 @@ export default function DashboardHeader({
   tareasCompletadas = 0,
   tareasTotal = 0,
   en86 = null,
+  cantidadReservas = 0,
+  cubiertosReservados = 0,
   desktop = false,
 }: DashboardHeaderProps) {
   const { theme, toggle: toggleTheme } = useTheme()
@@ -125,6 +129,8 @@ export default function DashboardHeader({
         tareasCompletadas={tareasCompletadas}
         tareasTotal={tareasTotal}
         en86={en86}
+        cantidadReservas={cantidadReservas}
+        cubiertosReservados={cubiertosReservados}
       />
     </div>
   )
@@ -136,18 +142,25 @@ function StatusBar({
   tareasCompletadas,
   tareasTotal,
   en86,
+  cantidadReservas,
+  cubiertosReservados,
 }: {
   miseCompletados: number
   miseTotal: number
   tareasCompletadas: number
   tareasTotal: number
   en86: number | null
+  cantidadReservas: number
+  cubiertosReservados: number
 }) {
   const misePct = miseTotal > 0 ? Math.round((miseCompletados / miseTotal) * 100) : 0
   const tareasPct = tareasTotal > 0 ? Math.round((tareasCompletadas / tareasTotal) * 100) : 0
+  // Se agrega una 4ta columna solo si hay reservas hoy (PLAN-4-CAPAS B9) — la
+  // mayoría de las cuentas no toma reservas y no debe ver un tile en 0.
+  const hayReservas = cantidadReservas > 0
 
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className={hayReservas ? 'grid grid-cols-4 gap-2' : 'grid grid-cols-3 gap-2'}>
       <StatusCard
         label="Checklist"
         href="/checklist"
@@ -163,7 +176,32 @@ function StatusBar({
         barColor="#f59e0b"
       />
       <EightySixCard en86={en86} />
+      {hayReservas && <ReservasCard cantidad={cantidadReservas} cubiertos={cubiertosReservados} />}
     </div>
+  )
+}
+
+function ReservasCard({ cantidad, cubiertos }: { cantidad: number; cubiertos: number }) {
+  return (
+    <a
+      href="/reservas"
+      className="block rounded-[12px] p-[10px_12px] cursor-pointer transition-transform active:scale-[.97]"
+      style={{
+        background: 'rgba(255,255,255,.1)',
+        border: '1px solid rgba(255,255,255,.15)',
+      }}
+    >
+      <div
+        className="text-[10px] font-bold uppercase tracking-[.06em] mb-1"
+        style={{ color: 'rgba(255,255,255,.6)' }}
+      >
+        Reservas hoy
+      </div>
+      <div className="text-[20px] font-bold text-white">{cubiertos}</div>
+      <div className="text-[10px] mt-1" style={{ color: 'rgba(255,255,255,.5)' }}>
+        {cantidad} reserva{cantidad !== 1 ? 's' : ''}
+      </div>
+    </a>
   )
 }
 

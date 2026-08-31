@@ -357,6 +357,7 @@ export default function CalendarioPage() {
   const openEditForm = (ev: EventoCalendario) => {
     if (ev._fromPedido) return
     if (ev._fromMenu) { router.push('/operaciones?tab=planificacion'); return }
+    if (ev._fromReserva) { router.push('/reservas'); return }
     setEditEvento(ev)
     setFormData({
       titulo: ev.titulo,
@@ -431,7 +432,7 @@ export default function CalendarioPage() {
           <div>
             <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>Tipo</label>
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
-              {(Object.keys(TIPO_CONFIG) as TipoEvento[]).map(t => {
+              {(Object.keys(TIPO_CONFIG) as TipoEvento[]).filter(t => t !== 'reservas_dia').map(t => {
                 const cfg = TIPO_CONFIG[t]
                 const sel = formData.tipo === t
                 return (
