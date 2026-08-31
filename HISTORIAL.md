@@ -6,6 +6,14 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-08-31 (noche, cont. 6) — Día 7 del plan consolidado: Carta, pasos 2+4.** 1 commit (`8392e87`). Ejecutado siguiendo `.claude/docs/ingenieria/plan-consolidado.md` §2 y `refactor-kos.md` §2 (pasos 2 y 4).
+
+- **Cinco moves puros, sin cambiar comportamiento** — `carta/page.tsx` (3.703 líneas) se repartió a: `cards.tsx` (`PlatoCard`+`PlatoCardBack`+`PlatoCardSkeleton`+`fmtMoney`+`fcBadge`+`marginBadge`), `exportar.ts` (`exportCartaPDF`+`exportRentabilidadPDF`), `PackagingGruposDrawer.tsx`, `ImportCartaModal.tsx` (con sus tipos `ItemImportado`/`ComponenteImportado` y `autoMatch`), y `EditarPlato.tsx` — el renombre de `FormView` que viajó gratis con el move (ya era editor-only desde el día 6, el nombre nuevo dice lo que quedó, no lo que fue). `page.tsx` bajó a 2.054 líneas: queda `DetailView` + `RentabilidadView` + el shell de `CartaPage`.
+- **Techo del ratchet bajado**: `carta/page.tsx` de 3710 a 2060 en `lib/ingenieria/ratchets.test.ts`.
+- **Red del paso 0 (día 6) validada en la práctica**: el smoke `e2e/carta-smoke.spec.ts` pasó 2 veces seguidas después del move sin tocarse — la razón de ser de escribirlo antes de mover. Verificación manual adicional (script Playwright ad-hoc, descartado) de que `EditarPlato` e `ImportCartaModal` renderizan sin errores de consola tras el move.
+- Typecheck, 225 tests, build y lint (mismos ~10.000 problemas pre-existentes) en verde.
+- Queda el día 9: el panel OPS de `DetailView` migra a los helpers de `lib/ops/mise.ts` — el único paso del plan con riesgo real (duplica inline una costura que ya existe, con un bug latente de datos que la migración arregla gratis).
+
 **Sesión 2026-08-31 (noche, cont. 5) — Día 6 del plan consolidado: Carta, pasos 0+1.** 1 commit (`8cddfaa`). Ejecutado siguiendo `.claude/docs/ingenieria/plan-consolidado.md` §2 y `refactor-kos.md` §2 (pasos 0 y 1).
 
 - **`e2e/carta-smoke.spec.ts` nuevo** (Paso 0, la red antes de mover código en los días 7 y 9): login → `/carta` → lista con ≥1 plato → toggle 86 desde la tarjeta (overlay en la lista) → abrir el plato → el badge 86 se refleja en detail → volver a la lista → Rentabilidad → las 4 tabs (Lista/Ingeniería/Reprecio/Salud) renderizan. El toggle se revierte siempre (`try`/`finally`) para no dejar la cuenta demo El Rescoldo marcada 86 si el test falla a mitad de camino. Corre en mobile viewport (390×844) porque en desktop la lista usa `FlipCard` en vez de navegar directo a detail. Pasa 2 veces seguidas contra el dev server.
