@@ -1,51 +1,59 @@
-# Sesión — 2026-08-31 (noche, cont. 2) — Día 3 del plan consolidado (invariantes 2/2) + bonus
+# Sesión — 2026-08-31 (noche, cont. 3) — Día 4 del plan consolidado: ratchets de ingeniería
 
 ## Qué se cerró
 
-Los 2 ítems de hoy en `.claude/docs/ingenieria/plan-consolidado.md` §2 (día 3
-completo + el "si sobra"). 2 commits (`2b13107`, `78a39e7`), pusheados.
+Día 4 completo de `.claude/docs/ingenieria/plan-consolidado.md` §2. 1 commit
+(`d46fe88`), pusheado.
 
-- **La comanda ya no queda colgada en `en_prep` con dos tablets bumpeando a
-  la vez.** Trigger `trg_comanda_items_bump_actualiza_comanda` decide "todos
-  los ítems bumpeados ⇒ comanda lista" en Postgres (contra el estado real,
-  con `SELECT ... FOR UPDATE` que serializa transacciones concurrentes) en
-  vez de en la copia local (SWR) del cliente. `useComandas.ts` se simplificó:
-  ya no recalcula ni escribe `comandas.estado` tras un bump online; el
-  camino offline-optimista sigue igual (no hay nada que el trigger pueda ver
-  hasta reconectar).
-- **Chequeo de huérfanos de refs polimórficas.** `scripts/chequear-huerfanos-refs.mjs`
-  corre un `LEFT JOIN ... IS NULL` contra prod por cada una de las 3 refs sin
-  FK (`menu_preparaciones.ref_id`, `calendario_nota_items.tarea_id`,
-  `proveedor_incidencias.pedido_id`). Corrida: 0 huérfanos hoy.
-- Verificado con una simulación de dos bumps concurrentes en una transacción
-  con rollback contra prod + 4 tests nuevos de `useComandas` (primer archivo
-  de test para ese hook). `get_advisors` sin hallazgos nuevos. Build +
-  typecheck + 210 tests OK.
-- Docs actualizados: gotcha #28 en `hooks.md` (el patrón general: invariante
-  agregado recalculado en cache local → trigger de DB), fila nueva en
-  `testing.md`.
+- **`lib/ingenieria/ratchets.test.ts` nuevo** (corre con `npm test`, ya en
+  CI): techos de líneas de las 5 pantallas grandes (solo bajan) + 4 reglas
+  de `hooks.md`/`arquitectura-marco.md` que antes vivían solo en prosa,
+  pasadas a chequeo automático.
+- **Gotcha #20** (`createClient()` sin `useMemo`): arreglados los 3 hooks
+  que lo violaban — `useFacturas`, `usePase`, `useReportes`.
+- **Gotcha #18** (canal realtime sin `filter` por tenant): se sabía de
+  `useCarta.ts`; auditar el resto encontró **7 hooks más** con el mismo
+  problema — `useCalendario` (eventos), `useEquipo` (equipo_miembros),
+  `useEspacios` (espacios+espacio_plazas), `useFacturas` (facturas),
+  `usePedidos` (pedidos), `useProveedores` (proveedores). Todos arreglados,
+  1 línea cada uno.
+- **Ley "dominio nunca en `use client`"**: 0 violaciones reales — los 7
+  archivos que sí lo tienen fuera de `lib/hooks/` son infraestructura de
+  browser legítima (Context, animación, IndexedDB, Audio API, descarga de
+  archivo), documentados en un allowlist.
+- **`createAdminClient` sin `requireRestauranteId`**: 8 endpoints (no 2
+  como estimaba el plan) no usan el helper pero verifican sesión a mano de
+  forma equivalente — revisados uno por uno, allowlist. La excepción real:
+  **`stock/import-planilla`** tenía un UPDATE de "apply" que solo filtraba
+  por `id` de producto (dato del cliente) sin `restaurante_id` — con el
+  admin client, un id forjado podía pisar el stock de otro restaurante.
+  Corregido.
+- Build, typecheck y 219 tests OK.
 
 ## Qué quedó a medias
 
 - Nada de hoy.
 - `.claude/settings.json` sigue modificado sin commitear (arrastrado desde
   jul 2026, sigue en `PENDIENTES.md` 🟢).
+- Hallazgo al margen, sin tocar: hay un git worktree viejo en
+  `.claude/worktrees/sleepy-jepsen` (rama `claude/sleepy-jepsen`) que
+  `npm run lint` recorre y duplica warnings — no se tocó por las dudas de
+  que sea trabajo en curso de otra sesión; revisar con Facundo si se puede
+  borrar (`git worktree remove`).
 
 ## Probar primero mañana
 
-- En producción: bump normal de ítems en KDS (un solo dispositivo) — debe
-  verse exactamente igual que antes. Si hay chance, dos pestañas/tablets
-  bumpeando ítems distintos de la misma comanda casi a la vez: la comanda
-  tiene que pasar a "lista" sola (realtime ya refresca ambas pantallas).
+- Nada específico de UI — los cambios de hoy son de referencia estable de
+  hooks y filtros de realtime, invisibles en uso normal. Si se quiere
+  verificar el fix de seguridad: en `/stock`, importar una planilla y
+  confirmar que el "apply" sigue actualizando bien los productos propios
+  (comportamiento idéntico al de antes, solo se cerró el agujero cross-tenant).
 
 ## Próximo paso concreto
 
-**Día 4 del plan consolidado** (`plan-consolidado.md` §2): Ratchets de
-ingeniería. Crear `lib/ingenieria/ratchets.test.ts` (corre con `npm test` →
-ya queda en CI): techos de líneas por pantalla grande que solo bajan +
-patrones prohibidos por grep — gotcha #20 (`createClient()` sin `useMemo` en
-`useFacturas.ts`, `usePase.ts`, `useReportes.ts`, 1 línea de fix c/u),
-gotcha #18 (canal realtime sin `filter` por tenant en
-`useCarta.ts:579-588`), `createAdminClient` sin `requireRestauranteId` en
-`app/api/**`, `'use client'` en `lib/<dominio>/` fuera de hooks. Arreglar lo
-marcado en la misma sesión. 3-4 h.
+**Día 5 del plan consolidado** (`plan-consolidado.md` §2): Puerto de IA.
+`lib/ia/claude.ts` (`pedirAClaude`) usando `clasificarErrorIA` (ya existe en
+`lib/ia/errores.ts`, usado por 7 de 12 rutas) + reintentos sobre el campo
+`reintentable` (existe, nadie lo consume hoy) + log de tokens. Migrar las 12
+rutas que llaman a la IA directo (mecánico), empezando por las 5 que no
+usan `errores.ts` todavía. 3-4 h.

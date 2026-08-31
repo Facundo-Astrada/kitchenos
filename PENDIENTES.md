@@ -24,9 +24,6 @@ Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/
 ### OPS Consolidación — diferido
 "Copiar a otro día" e "Ingredientes consolidados" (se sacaron con la planilla legacy) — reimplementar sobre `tareas` si el usuario los pide.
 
-### Ratchets de ingeniería — día 4 del plan (fusiona "gotchas a CI" + techos de refactor + hallazgo nuevo, `refactor-kos.md` §4)
-Un solo `lib/ingenieria/ratchets.test.ts` (corre con `npm test` → ya queda en CI): techos de líneas por pantalla grande que **solo bajan**, + patrones prohibidos por grep — gotcha #20 (`createClient()` sin `useMemo`: 3 hooks lo violan hoy — `useFacturas:48`, `usePase:18`, `useReportes:136`, 1 línea de fix c/u), gotcha #18 (canal realtime sin `filter` por tenant: [useCarta.ts:579-588](lib/hooks/useCarta.ts#L579-L588) suscribe 4 tablas sin filtro, hallazgo 31/08), `createAdminClient` sin `requireRestauranteId` en `app/api/**` (allowlist para `cron/reset-demo` e `invitar`), `'use client'` en `lib/<dominio>/` fuera de hooks. Arreglar lo marcado en la misma sesión. **3-4 h.**
-
 ### Completar el puerto de IA (`lib/ia/claude.ts`) — día 5 del plan (`arquitectura-kos.md` §7.2)
 La mitad ya existe (`lib/ia/errores.ts`, usado por 7 de 12 rutas); falta la función única de fetch con modelo + reintentos (el campo `reintentable` ya existe y nadie lo consume) + log de tokens. 15 hardcodes de modelo hoy. Empezar por las 5 rutas que no usan `errores.ts`. **3-4 h.**
 
