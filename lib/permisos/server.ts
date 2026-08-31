@@ -1,43 +1,23 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Rol } from '@/types'
 import { COACH_TOOL_REGISTRY } from '@/lib/coach/tools/registry'
 import { puedeVerCostos, puedeVerModulo, resolverModulosEfectivos } from '@/lib/permisos/resolver'
+import { mapRol } from '@/lib/permisos/roles'
 
 // Replica server-side, sin cambiar semántica, la cascada de dos pasos que hoy es client-only:
-// 1) lib/auth/context.tsx: mapRol(user_restaurantes.rol, equipo_miembros.plaza_asignada) -> Rol de la app.
+// 1) lib/permisos/roles.ts: mapRol(user_restaurantes.rol, equipo_miembros.plaza_asignada) -> Rol de la app.
 // 2) lib/hooks/usePermisos.ts: Rol de la app -> dbRol de rol_permisos (admin/sous_chef/cocinero/bachero),
 //    y desde ahí: módulos efectivos del puesto (permisos_app + modulos_extra - modulos_restringidos)
 //    o, si no hay puesto, fallback a rol_permisos.modulos_visibles / puede_editar_*.
 //
-// El paso (2) ya NO está duplicado: vive en lib/permisos/resolver.ts y lo importan
-// los dos lados. Mantener dos copias sincronizadas a mano no funcionó — en ago 2026
-// las dos tenían los mismos dos bugs (permisos_app vacío tratado como lista válida,
-// y el alias 'inicio'/'home' sin contemplar). El mapeo de roles de (1) sigue duplicado.
+// Ni (1) ni (2) están duplicados: (2) vive en lib/permisos/resolver.ts, (1) en
+// lib/permisos/roles.ts, y lo importan los dos lados (cliente y este archivo).
+// Mantener copias sincronizadas a mano no funcionó — en ago 2026 las dos tenían
+// los mismos dos bugs (permisos_app vacío tratado como lista válida, y el alias
+// 'inicio'/'home' sin contemplar); el mapeo de roles se unificó en Día 10 del
+// plan consolidado por el mismo motivo.
 
-type AppRol =
-  | 'admin' | 'chef' | 'ayudante'
-  | 'parrilla' | 'frios' | 'calientes' | 'pase' | 'pasteleria' | 'panaderia' | 'linea'
-  | string
-
-function mapRol(dbRol: string, plaza?: string | null): AppRol {
-  const plazaMap: Record<string, AppRol> = {
-    parrilla: 'parrilla', frios: 'frios', calientes: 'calientes', pase: 'pase',
-    pasteleria: 'pasteleria', panaderia: 'panaderia', linea: 'linea',
-  }
-  const primaryPlaza = plaza?.split(',')[0]?.trim()
-  switch (dbRol) {
-    case 'admin': return 'admin'
-    case 'owner': return 'admin'
-    case 'compras': return 'admin'
-    case 'sous_chef': return 'chef'
-    case 'chef': return 'chef'
-    case 'cocinero': return (primaryPlaza && plazaMap[primaryPlaza]) || 'linea'
-    case 'staff': return (primaryPlaza && plazaMap[primaryPlaza]) || 'ayudante'
-    case 'bachero': return 'ayudante'
-    default: return dbRol || 'ayudante'
-  }
-}
-
-function toPermisoRol(appRol: AppRol): string {
+function toPermisoRol(appRol: Rol): string {
   if (appRol === 'admin') return 'admin'
   if (appRol === 'chef') return 'sous_chef'
   if (appRol === 'ayudante') return 'bachero'

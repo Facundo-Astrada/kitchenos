@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import type { Rol } from '@/types'
 import { MODULOS_SEED_POR_ROL_DB } from '@/lib/constants'
+import { mapRol } from '@/lib/permisos/roles'
 
 // ── Avatar color palette ──────────────────────────────────────
 const AVATAR_COLORS = [
@@ -38,51 +39,9 @@ const PERFIL_RETRY_MS = 400
 const PERFIL_SAFETY_MS = 10000
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 
-// ── Map DB roles to app Rol type ──────────────────────────────
-function mapRol(dbRol: string, plaza?: string | null): Rol {
-  switch (dbRol) {
-    case 'admin':
-      return 'admin'
-    case 'sous_chef':
-      return 'chef'
-    case 'cocinero': {
-      const primaryPlaza = plaza?.split(',')[0]?.trim()
-      const plazaMap: Record<string, Rol> = {
-        parrilla: 'parrilla',
-        frios: 'frios',
-        calientes: 'calientes',
-        pase: 'pase',
-        pasteleria: 'pasteleria',
-        panaderia: 'panaderia',
-        linea: 'linea',
-      }
-      return (primaryPlaza && plazaMap[primaryPlaza]) || 'linea'
-    }
-    case 'owner':
-      return 'admin'
-    case 'chef':
-      return 'chef'
-    case 'staff': {
-      const primaryPlaza = plaza?.split(',')[0]?.trim()
-      const plazaMap: Record<string, Rol> = {
-        parrilla: 'parrilla',
-        frios: 'frios',
-        calientes: 'calientes',
-        pase: 'pase',
-        pasteleria: 'pasteleria',
-        panaderia: 'panaderia',
-        linea: 'linea',
-      }
-      return (primaryPlaza && plazaMap[primaryPlaza]) || 'ayudante'
-    }
-    case 'bachero':
-      return 'ayudante'
-    case 'compras':
-      return 'admin'
-    default:
-      return (dbRol as Rol) ?? 'ayudante'
-  }
-}
+// mapRol vive en lib/permisos/roles.ts — antes duplicado acá y en
+// lib/permisos/server.ts (réplica server-side para el Coach); día 10 de
+// plan-consolidado.md §2.
 
 // ── Types ─────────────────────────────────────────────────────
 export interface PerfilAuth {

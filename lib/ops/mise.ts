@@ -1,23 +1,23 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { MisePlaceItem } from '@/types'
+import { PLAZAS_FIJAS, PLAZA_LABELS, PLAZA_COLORS } from '@/lib/constants'
 
 // ── Constantes OPS / mise (fuente única) ────────────────────
 // Plazas de producción y secciones del mise. Antes vivían en
 // ComposicionEditor; se centralizan acá para reusarlas desde el
 // recetario (botón OPS) y el helper de upsert sin import circular.
-export const PLAZAS_OPS = [
-  // Mismo azul que PLAZA_COLORS.general en lib/constants.ts — mantener en espejo.
-  { id: 'general',    label: 'General',     color: '#2563eb' },
-  { id: 'parrilla',   label: 'Parrilla',    color: '#ef4444' },
-  { id: 'frios',      label: 'Fríos',       color: '#0ea5e9' },
-  { id: 'calientes',  label: 'Calientes',   color: '#f97316' },
-  { id: 'pase',       label: 'Pase',        color: '#8b5cf6' },
-  { id: 'pasteleria', label: 'Pastelería',  color: '#ec4899' },
-  { id: 'panaderia',  label: 'Panadería',   color: '#84cc16' },
-  // Mismo ámbar que PLAZA_COLORS.menu — plaza de control de un menú
-  // activado en el mise (ver menuMise.ts), NO una plaza física de cocina.
-  { id: 'menu',       label: 'Menú',        color: '#f59e0b' },
-]
+//
+// PLAZAS_OPS deriva de PLAZAS_FIJAS/PLAZA_LABELS/PLAZA_COLORS
+// (lib/constants.ts) en vez de mantener sus propios label/color en espejo
+// (día 10 de plan-consolidado.md §2 — el comentario "mantener en espejo" ya
+// había desincronizado una tercera copia en espacios/ItemEditPanel.tsx).
+// 'general' va primero (encabeza el selector) y 'menu' al final — no es una
+// plaza física, es la plaza de control de un menú (ver menuMise.ts), por eso
+// vive fuera de PLAZAS_FIJAS y se agrega acá a mano.
+const ORDEN_PLAZAS_OPS = ['general', ...PLAZAS_FIJAS.filter(p => p !== 'general'), 'menu']
+export const PLAZAS_OPS = ORDEN_PLAZAS_OPS.map(id => ({
+  id, label: PLAZA_LABELS[id], color: PLAZA_COLORS[id],
+}))
 
 // Escala de prioridad del mise (checklist_items.prioridad: sp/p/ref/chk) vs. la
 // escala de tareas/composición (critica/alta/media/baja, ver CompPrioridad en

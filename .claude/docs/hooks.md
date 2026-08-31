@@ -89,6 +89,49 @@ export default function Page() {
 
 ---
 
+## Convención — dónde va una operación compartida
+
+Día 10 de `plan-consolidado.md` §2 (arquitectura-kos.md acción 🟡-6): la
+firma ya es la convención de facto del proyecto — se escribe acá para que la
+próxima extracción no se invente otra forma.
+
+**Una operación (lectura o escritura) que la necesitan ≥2 pantallas, o
+cliente Y servidor, va como función a nivel de módulo en `lib/<dominio>/`
+con esta firma:**
+
+```ts
+function operacion(
+  supabase: SupabaseClient,     // el caller decide qué cliente (browser/server/admin)
+  restauranteId: string,        // el tenant viaja explícito, nunca implícito
+  input: {...}                  // datos de la operación
+): Promise<Resultado>
+```
+
+Modelo: `upsertMiseChecklistItem` (`lib/ops/mise.ts`). Misma firma en
+`activarMenuParaFechas` (`lib/menus/activarMenu.ts`), `sincronizarMiseDeMenu`
+(`lib/ops/menuMise.ts`) y cada `execute` del registry del Coach. Al recibir
+el cliente por parámetro, la misma función corre desde un hook del browser
+(RLS por sesión), desde un endpoint (server client) o desde una tool del
+Coach — sin copias, sin `'use client'`, testeable pasando un mock. Detalle y
+motivación completa: `.claude/docs/ingenieria/arquitectura-marco.md` §2.2.
+
+**Tabla de decisión — ¿dónde va el código que estás por escribir?**
+
+| El código… | Va en | Por qué |
+|---|---|---|
+| Cálculo puro (costos, conversiones, clasificación, máquina de estados) | `lib/<dominio>/` sin `'use client'`, **con test** | Es el único lugar desde donde lo importan cliente Y servidor |
+| Query de lectura para una pantalla | Fetcher a nivel de módulo dentro del hook (patrón SWR de arriba) | Ya está fuera del cuerpo del hook; si mañana lo necesita el server, se muda a `lib/` sin reescribirse |
+| Escritura simple (1 tabla, sin invariantes) | Función CRUD del hook | El costo de indirection no se justifica |
+| Escritura que comparten ≥2 pantallas o cliente+servidor | Función con la firma de arriba en `lib/<dominio>/` | Es esta convención |
+| Escritura de ≥2 tablas que tiene que salir todo-o-nada | Función de Postgres (`supabase.rpc(...)`) o endpoint | El browser no puede abrir transacciones |
+| Operación con secreto (API key, certificado) | Endpoint, siempre | `NEXT_PUBLIC_*` va al bundle; lo demás solo existe en el server |
+| Operación que necesita saltear RLS | Endpoint con `requireRestauranteId()` primero y `createAdminClient()` después | El admin client sin identidad verificada es la llave maestra tirada en la puerta |
+| Llamada a servicio externo (IA, AFIP, impresora) | A través de su puerto en `lib/<servicio>/` | Mismo criterio que `lib/ia/errores.ts` |
+
+**Cuándo NO separar:** un hook CRUD chico (fetcher de 10 líneas + insert/
+update/delete de 10 líneas cada uno) no gana nada con la extracción — se paga
+cuando la lógica se comparte o se testea, no antes.
+
 ## Estructura estándar
 
 ```ts

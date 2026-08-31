@@ -2,16 +2,14 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import type { MisePlaceItem, ChecklistSeccionConfig, Plaza, PlazaCustom, MisePrioridad } from '@/types'
+import { PLAZAS_OPS as PLAZAS_OPS_TODAS } from '@/lib/ops/mise'
 
-const PLAZAS_OPS = [
-  { id: 'general',    label: 'General',    color: '#6b7280' },
-  { id: 'parrilla',   label: 'Parrilla',   color: '#ef4444' },
-  { id: 'frios',      label: 'Fríos',      color: '#0ea5e9' },
-  { id: 'calientes',  label: 'Calientes',  color: '#f97316' },
-  { id: 'pase',       label: 'Pase',       color: '#8b5cf6' },
-  { id: 'pasteleria', label: 'Pastelería', color: '#ec4899' },
-  { id: 'panaderia',  label: 'Panadería',  color: '#84cc16' },
-]
+// Sin 'menu' — este panel edita ítems físicos de un espacio, no preparaciones
+// de un menú activado en el mise (mismo criterio que carta/page.tsx
+// PLAZAS_OPS_PLATO). Antes tenía su propia copia de label/color, ya
+// desincronizada (general gris acá vs. azul en todos lados) — día 10 de
+// plan-consolidado.md §2.
+const PLAZAS_OPS = PLAZAS_OPS_TODAS.filter(p => p.id !== 'menu')
 const UNIDADES_MISE   = ['u', 'kg', 'g', 'l', 'ml', 'pax', 'porc', 'bandeja', 'gastro', 'tupper']
 const UNIDADES_PORCION = ['g', 'kg', 'ml', 'l', 'u', 'porc']
 const PRIO_OPTS: { value: MisePrioridad; label: string; color: string; bg: string }[] = [

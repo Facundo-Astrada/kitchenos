@@ -6,39 +6,11 @@
 // nivel de producto que usa lib/reportes/fuga.ts.
 //
 // Sin 'use client' a propósito: lib/reportes/fuga.ts lo importa desde una API
-// route (server-only). canonUnit/unitConversionFactor están duplicadas de
-// lib/hooks/useRecetas.ts (mismo criterio) para no arrastrar ese archivo
-// 'use client' al bundle del servidor.
+// route (server-only). canonUnit/unitConversionFactor viven en lib/unidades.ts
+// (día 10 de plan-consolidado.md §2 — antes triplicadas acá y en useRecetas.ts).
 
 export function normalizarNombrePlato(s: string): string {
   return s.toLowerCase().trim().replace(/\s+/g, ' ')
-}
-
-export function canonUnit(unit: string): string {
-  const x = (unit || '').toLowerCase().trim()
-  if (x === 'g' || x === 'gr' || x === 'grs' || x === 'gramo' || x === 'gramos') return 'g'
-  if (x === 'kg' || x === 'kgs' || x === 'kilo' || x === 'kilos' || x === 'k') return 'kg'
-  if (x === 'ml' || x === 'cc' || x === 'mililitro' || x === 'mililitros') return 'ml'
-  if (x === 'l' || x === 'lt' || x === 'lts' || x === 'litro' || x === 'litros') return 'l'
-  if (x === 'u' || x === 'un' || x === 'unidad' || x === 'unidades') return 'u'
-  return x
-}
-
-// Ver comentario gemelo en lib/hooks/useRecetas.ts — misma lógica.
-export function unitConversionFactor(fromUnit: string, toUnit: string): number {
-  const u = canonUnit(fromUnit)
-  const c = canonUnit(toUnit)
-  if (!u || !c || u === c) return 1
-  const small = (x: string) => x === 'g' || x === 'ml'
-  const big = (x: string) => x === 'kg' || x === 'l'
-  if (small(u) && big(c)) return 0.001
-  if (big(u) && small(c)) return 1000
-  if ((u === 'g' && c === 'ml') || (u === 'ml' && c === 'g')) return 1
-  if ((u === 'kg' && c === 'l') || (u === 'l' && c === 'kg')) return 1
-  const isCount = (x: string) => x === 'u'
-  const isMeasure = (x: string) => x === 'g' || x === 'kg' || x === 'ml' || x === 'l'
-  if ((isCount(u) && isMeasure(c)) || (isMeasure(u) && isCount(c))) return 0
-  return 1
 }
 
 export interface VentaItemLike { nombre_plato: string; cantidad: number }

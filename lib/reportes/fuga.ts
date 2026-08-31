@@ -1,8 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
-  matchVentasPorCartaItem, gramajePorUnidad, unitConversionFactor, normalizarNombrePlato,
+  matchVentasPorCartaItem, gramajePorUnidad, normalizarNombrePlato,
   type IngredienteLike, type RecetaLike, type PlatoRecetaLike,
 } from './consumoTeorico'
+import { unitConversionFactor } from '@/lib/unidades'
 
 export interface FugaProductoRow {
   productoId: string
