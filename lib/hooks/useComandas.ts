@@ -176,28 +176,24 @@ export function useComandas(estacionId?: string) {
     }
   }
 
-  async function bumpItemsYRevisarComanda(comandaId: string, itemIds: string[]) {
-    const comanda = comandasRaw.find(c => c.id === comandaId)
-    if (!comanda) return
-    const items = (comanda.items ?? []).map(i => itemIds.includes(i.id) ? { ...i, estado: 'bumpeado' as EstadoComandaItem } : i)
-    if (todosListos(items) && puedeTranicionarComanda(comanda.estado, 'lista')) {
-      const { error } = await supabase.from('comandas').update({ estado: 'lista' }).eq('id', comandaId)
-      if (error) throw error
-    }
-  }
-
-  /** Sin catch — usado tanto por el bump online directo como por el reenvío de la cola offline. */
+  /**
+   * Sin catch — usado tanto por el bump online directo como por el reenvío de la
+   * cola offline. No recalcula "¿está todo bumpeado?": el trigger
+   * `trg_comanda_items_bump_actualiza_comanda` (Día 3 del plan consolidado) hace
+   * ese chequeo en la misma transacción del UPDATE, contra el estado real en DB
+   * en vez de la copia local de `comandasRaw` — evita que dos tablets bumpeando
+   * ítems distintos de la misma comanda casi a la vez calculen "todosListos"
+   * sobre un cache stale y ninguna dispare la transición a 'lista'.
+   */
   async function bumpearItemEnDB(itemId: string) {
-    const actual = comandasRaw.flatMap(c => c.items ?? []).find(i => i.id === itemId)
     const ts = new Date().toISOString()
     const { error } = await supabase.from('comanda_items').update({ estado: 'bumpeado', bumped_at: ts }).eq('id', itemId)
     if (error) throw error
     const { error: eventoError } = await supabase.from('eventos_cocina').insert({ comanda_item_id: itemId, evento: 'bumped' })
     if (eventoError) throw eventoError
-    if (actual) await bumpItemsYRevisarComanda(actual.comanda_id, [itemId])
   }
 
-  async function bumpearComandaEnDB(comandaId: string, itemIds: string[]) {
+  async function bumpearComandaEnDB(itemIds: string[]) {
     const ts = new Date().toISOString()
     const { error } = await supabase.from('comanda_items').update({ estado: 'bumpeado', bumped_at: ts }).in('id', itemIds)
     if (error) throw error
@@ -205,7 +201,6 @@ export function useComandas(estacionId?: string) {
       itemIds.map(id => ({ comanda_item_id: id, evento: 'bumped' as const }))
     )
     if (eventoError) throw eventoError
-    await bumpItemsYRevisarComanda(comandaId, itemIds)
   }
 
   /** Marca local-optimista (sin red) — se confirma/reintenta al reconectar via la cola IndexedDB. */
@@ -247,7 +242,7 @@ export function useComandas(estacionId?: string) {
     if (bumpeables.length === 0) return
     const ids = bumpeables.map(i => i.id)
     try {
-      await bumpearComandaEnDB(comandaId, ids)
+      await bumpearComandaEnDB(ids)
       await mutate()
     } catch (e: unknown) {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -272,7 +267,7 @@ export function useComandas(estacionId?: string) {
         if (entry.tipo === 'item') {
           await bumpearItemEnDB(entry.targetId)
         } else if (entry.itemIds?.length) {
-          await bumpearComandaEnDB(entry.targetId, entry.itemIds)
+          await bumpearComandaEnDB(entry.itemIds)
         }
         await quitarDeCola(entry.id)
       } catch {
