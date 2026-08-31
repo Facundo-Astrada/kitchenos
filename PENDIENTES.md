@@ -38,6 +38,10 @@ Tres ítems de la misma sesión de auditoría, ordenados por valor:
 - **`useFacturas.crearFactura` al servidor.** ~235 líneas multi-tabla corriendo en el browser sin transacción (factura + proveedor auto-creado + productos + precios); un corte a mitad deja datos rotos, y el matching de productos es inaccesible para `facturas-universal` (ya lo reimplementó una vez). Primer paso chico: extraer solo el matching a `lib/facturas/matching.ts` con test (2-3 h); el flujo completo, **1 día**.
 - **Gotchas verificables a CI.** 3 hooks violan hoy el gotcha #20 del propio `hooks.md` (`useFacturas:48`, `usePase:18`, `useReportes:136` — `createClient()` sin `useMemo`, 1 línea de fix c/u) y nada impide el cuarto, ni un endpoint nuevo con admin client sin `requireRestauranteId`. Test de Vitest que grepee ambos patrones (allowlist para `cron/reset-demo` e `invitar`). **2-3 h.**
 
+### Dominio — dos agregados sin custodia (auditoría de dominio 31/08, evidencia en `.claude/docs/ingenieria/dominio-kos.md` §4/§8)
+- **`actualizarMenu` pierde datos ante un corte.** [useMenus.ts:190-215](lib/hooks/useMenus.ts#L190-L215) borra todas las `menu_preparaciones` y recién después inserta las nuevas, desde el browser — un corte entre ambas deja el menú vacío (pérdida total, no estado a medias). Fix: rpc `reemplazar_menu_preparaciones(menu_id, jsonb)` con delete+insert en una transacción; la propagación a `tareas` queda fuera a propósito (otro agregado). **2-3 h.**
+- **La invariante de la comanda vive en la cache local.** "Todos los ítems bumpeados ⇒ comanda lista" se decide contra el snapshot del cliente ([useComandas.ts:179-187](lib/hooks/useComandas.ts#L179-L187)); cero triggers sobre `comandas`/`comanda_items` (verificado). Dos tablets KDS a la vez pueden dejar la comanda sin pasar a `lista`. Fix: trigger AFTER UPDATE sobre `comanda_items` que recalcule el estado (compatible con la cola offline). **2-3 h.**
+
 ---
 
 ## 🟡 Medio — Roadmap: Planes y Stripe
@@ -57,9 +61,21 @@ Sin cambios respecto del informe GRASP: `lib/permisos/roles.ts` y `lib/unidades.
 ### Declarar la convención del repositorio en `hooks.md` — auditoría 31/08, `arquitectura-kos.md` §7.6
 La firma `(supabase, restauranteId, input)` ya es la convención de facto (`mise.ts`, `activarMenu.ts`, registry del Coach) pero no está escrita — la próxima extracción puede inventar otra forma. Una sección corta + la tabla de decisión del marco. **30 min.**
 
+### Candado "una cuenta abierta por mesa" en la base — auditoría de dominio 31/08, `dominio-kos.md` §8.3
+No existe índice único parcial sobre `cuentas` (verificado): dos mozos abriendo la misma mesa crean dos cuentas abiertas, y la coherencia mesa↔cuenta la sostienen dos hooks distintos. El candado gemelo ya existe para cajas (`idx_cajas_turnos_una_abierta`) — es copiar un patrón propio. `CREATE UNIQUE INDEX ... ON cuentas(mesa_id) WHERE estado='abierta' AND mesa_id IS NOT NULL` + atrapar 23505 en `abrirMesa`; antes, query de duplicados históricos. **1-2 h.**
+
+### Congelar el glosario ubicuo y legislar los bautismos — auditoría de dominio 31/08, `dominio-kos.md` §3/§8.4
+"Turno" significa 7 cosas, el mise tiene 3 nombres (mise/checklist/Plazas), "sección" 4 — y la ambigüedad ya cobró un bug real (`turnos.ts:96`). No renombrar lo existente: volcar el glosario de `dominio-kos.md` §3 a un doc condicional + tres reglas para lo nuevo (`estado` no `status`; `jornada` para fecha operativa; "turno" solo para `TurnoServicio`, el resto con prefijo). Unificar `PLAZAS_OPS` con `PLAZAS_FIJAS` (importar, no espejar) entra acá. **1-2 h.**
+
 ---
 
 ## 🟢 Bajo — Roadmap abierto
+
+### Chequeo de huérfanos en las refs polimórficas — auditoría de dominio 31/08, `dominio-kos.md` §5/§8.5
+`menu_preparaciones.ref_id`, `calendario_nota_items.tarea_id`, `proveedor_incidencias.pedido_id` sin FK pueden quedar colgando al borrar el destino, y nadie lo mira. La decisión de no-FK es correcta (documentada y razonada) — el costo aceptado era "refs colgantes posibles", no "invisibles". Una query de huérfanos en el tab Salud o script de mantenimiento; NO agregar FKs. **1-2 h.**
+
+### Actualizar el censo de tablas en ARQUITECTURA.md — auditoría de dominio 31/08
+`ARQUITECTURA.md` §5 dice 78 tablas; son 91 (verificado contra `pg_tables` el 31/08): faltan las 13 de agosto (`reservas`, `bitacora_*`, `control_carta_registros`, `rutina_turno_*`, `proveedor_incidencias`, `notificaciones`, `areas`, `area_capas`, `presupuesto_mes`, `presupuesto_sector`) más el backup. Actualizar conteo y tabla de dominios. **30 min.**
 
 ### Presupuesto — fuera de alcance de la Fase 1 (`/presupuesto`, ago 2026)
 Detalle completo en `PLAN-PRESUPUESTO-CMV-2026-08.md` §11: partir venta comida/bebida (requiere mapear `ventas_items` contra `carta_items`, hoy solo matchea 13 de 272 nombres), merma con costo real (registros en $0 por falta de precio de producto), comparación mes contra mes, cubiertos/Q real (El Rescoldo y Bros no cargan `cantidad_cubiertos`), presupuesto de personal/alquiler/gastos generales desglosado por sub-categoría (mismo patrón que materia prima). Coach: sin tool de servidor propia todavía — candidatos anotados como TODO en `app/api/coach/route.ts`.

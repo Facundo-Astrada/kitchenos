@@ -58,6 +58,7 @@ No se cargan solos: abrirlos cuando la tarea entra en su tema.
 | Escribir o tocar un test (Vitest/Playwright) | `.claude/docs/testing.md` |
 | Diseñar una feature nueva o discutir una idea de producto | `SINTESIS-ORGANIZACION-GASTRONOMICA.md` (base de conocimiento gastronómico, fuera del repo por copyright: `~/Desktop/START UP KOS/06-contexto-gastronomia/`) + `AUDITORIA-4-CAPAS.md` (qué cubre K-OS hoy contra ese material) |
 | Decidir dónde va código nuevo (¿hook, lib/, endpoint, función de Postgres?), evaluar acoplamiento/duplicación, refactorizar un hook o endpoint, discutir arquitectura | `.claude/docs/ingenieria/arquitectura-marco.md` (el marco: puertos, patrones PoEAA, connascence, tablas de decisión) + `arquitectura-kos.md` (KitchenOS medido contra él, con acciones) |
+| Modelar una feature nueva (¿qué contexto? ¿qué agregado? ¿qué transacción?), nombrar una tabla/columna nueva, decidir cómo se integran dos módulos, evaluar si algo se puede vender/apagar por separado | `.claude/docs/ingenieria/dominio-marco.md` (el marco DDD: contextos, lenguaje, agregados, cuándo es exceso) + `dominio-kos.md` (mapa de contextos, glosario ubicuo, agregados e invariantes de KitchenOS) |
 
 Endpoints clave de importación: `/api/importador/facturas-universal` · `/api/stock/rebuild` · `/api/recetas/auto-link-ingredientes`
 
