@@ -4,6 +4,7 @@ import { useCallback, useMemo } from 'react'
 import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
+import { invalidarPresupuesto } from './invalidarPresupuesto'
 import type { Venta, OrigenVenta } from '@/types'
 
 export interface NuevaVenta {
@@ -99,6 +100,7 @@ export function useVentas() {
     }
 
     await mutate()
+    invalidarPresupuesto()
     return ventaId
   }, [RESTAURANTE_ID, supabase, mutate])
 
@@ -106,6 +108,7 @@ export function useVentas() {
     const { error: err } = await supabase.from('ventas').delete().eq('id', id)
     if (err) throw err
     mutate(prev => prev?.filter(v => v.id !== id), { revalidate: false })
+    invalidarPresupuesto()
   }, [supabase, mutate])
 
   return { ventas, loading, error, agregarVenta, eliminarVenta, fetchVentas }

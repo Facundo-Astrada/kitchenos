@@ -22,6 +22,7 @@ type AIResult = {
   subtotal: number
   iva_total: number
   total: number
+  categoria_gasto_id?: string | null
 }
 
 type Status = 'pending' | 'processing' | 'parsed' | 'error' | 'saved'
@@ -123,6 +124,7 @@ export default function BulkUploadDrawer({ open, onClose, onSaved }: BulkUploadD
           iva_total: e.result.iva_total || 0,
           total: e.result.total || 0,
           condicion_pago: e.result.condicion_pago || 'contado',
+          categoria_gasto_id: e.result.categoria_gasto_id ?? null,
           items: e.result.items.map(it => ({
             producto_nombre: it.producto_nombre,
             producto_id: null,

@@ -8,6 +8,7 @@ import type {
 } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
 import { resolverProductosDeItems, aplicarEfectosDeFactura, type ItemFacturaInput } from '@/lib/facturas/matching'
+import { invalidarPresupuesto } from './invalidarPresupuesto'
 
 const PAGE_SIZE = 20
 
@@ -139,6 +140,7 @@ export function useFacturas() {
       })
 
       await fetchFacturas(true)
+      invalidarPresupuesto()
       return { facturaId, preciosActualizados, productosCreados }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al crear factura'
@@ -175,6 +177,7 @@ export function useFacturas() {
         }
       }
       await fetchFacturas(true)
+      invalidarPresupuesto()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al actualizar factura'
       console.error('[useFacturas] actualizarFactura Error:', msg)
@@ -187,6 +190,7 @@ export function useFacturas() {
       const { error } = await supabase.from('facturas').update({ status }).eq('id', id)
       if (error) throw error
       await fetchFacturas(true)
+      invalidarPresupuesto()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al actualizar estado de factura'
       console.error('[useFacturas] actualizarStatus Error:', msg)
@@ -199,6 +203,7 @@ export function useFacturas() {
       const { error } = await supabase.from('facturas').delete().eq('id', id)
       if (error) throw error
       await fetchFacturas(true)
+      invalidarPresupuesto()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al eliminar factura'
       console.error('[useFacturas] eliminarFactura Error:', msg)

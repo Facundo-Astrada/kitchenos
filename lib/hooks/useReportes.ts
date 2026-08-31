@@ -3,7 +3,8 @@
 import { useState, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
-import { FAMILIA_GASTO_OBJETIVO_PCT, FAMILIA_DE_CATEGORIA_FINANCIERA, type FamiliaGasto } from './useCategoriasGasto'
+import { FAMILIA_DE_CATEGORIA_FINANCIERA, fetchObjetivosFamilia, guardarObjetivoFamilia as persistirObjetivoFamilia, type FamiliaGasto } from './useCategoriasGasto'
+import { invalidarPresupuesto } from './invalidarPresupuesto'
 import type { CategoriaFinanciera } from '@/types'
 import type { FugaResultado } from '@/lib/reportes/fuga'
 
@@ -553,7 +554,7 @@ export function useReportes() {
       const prevFrom = new Date(y, m - 1, 1).toISOString().slice(0, 10)
       const prevTo = new Date(new Date(y, m, 1).getTime() - 86400000).toISOString().slice(0, 10)
 
-      const [presuRes, facturasRes, ventasRes, ventasPrevRes] = await Promise.all([
+      const [presuRes, facturasRes, ventasRes, ventasPrevRes, objetivos] = await Promise.all([
         supabase.from('presupuestos').select('familia, monto')
           .eq('restaurante_id', RESTAURANTE_ID).eq('periodo', 'mensual').not('familia', 'is', null),
         supabase.from('facturas').select('total, categorias_gasto(categoria_financiera)')
@@ -564,6 +565,7 @@ export function useReportes() {
           .eq('restaurante_id', RESTAURANTE_ID).gte('fecha', curFrom).lte('fecha', hoy),
         supabase.from('ventas').select('total_ventas')
           .eq('restaurante_id', RESTAURANTE_ID).gte('fecha', prevFrom).lte('fecha', prevTo),
+        fetchObjetivosFamilia(supabase, RESTAURANTE_ID),
       ])
 
       const presuMap = new Map<FamiliaGasto, number>()
@@ -583,7 +585,7 @@ export function useReportes() {
       const ventasPeriodoAnterior = (ventasPrevRes.data ?? []).reduce((s, v) => s + (v.total_ventas || 0), 0)
 
       const rows: PresupuestoFamiliaRow[] = FAMILIAS.map(familia => {
-        const objetivoPct = FAMILIA_GASTO_OBJETIVO_PCT[familia]
+        const objetivoPct = objetivos[familia]
         const real = realMap.get(familia) ?? 0
         const realPct = ventas > 0 ? (real / ventas) * 100 : 0
         return {
@@ -612,13 +614,24 @@ export function useReportes() {
     if (error) throw error
   }, [RESTAURANTE_ID, supabase])
 
-  // Reparte una facturación prevista en la estructura estándar 30/33/5/17 (R4).
+  // Objetivo % editable por familia — pisa la estructura estándar 30/33/5/17
+  // por restaurante. También afecta al tab "CMV por sector" (usePresupuestoCMV
+  // lee el mismo objetivo de materia_prima), por eso invalida su cache.
+  const guardarObjetivoFamilia = useCallback(async (familia: FamiliaGasto, pct: number) => {
+    if (!RESTAURANTE_ID) return
+    await persistirObjetivoFamilia(supabase, RESTAURANTE_ID, familia, pct)
+    invalidarPresupuesto()
+  }, [RESTAURANTE_ID, supabase])
+
+  // Reparte una facturación prevista según el objetivo % vigente de cada
+  // familia (el estándar 30/33/5/17, o el que el restaurante haya editado).
   const aplicarEstructuraEstandar = useCallback(async (facturacionPrevista: number) => {
     if (!RESTAURANTE_ID) return
+    const objetivos = await fetchObjetivosFamilia(supabase, RESTAURANTE_ID)
     await Promise.all(FAMILIAS.map(familia =>
-      savePresupuestoFamilia(familia, Math.round(facturacionPrevista * FAMILIA_GASTO_OBJETIVO_PCT[familia] / 100))
+      savePresupuestoFamilia(familia, Math.round(facturacionPrevista * objetivos[familia] / 100))
     ))
-  }, [RESTAURANTE_ID, savePresupuestoFamilia])
+  }, [RESTAURANTE_ID, supabase, savePresupuestoFamilia])
 
   // ── Rendimiento por plaza ──
   const fetchRendimiento = useCallback(async (periodo: Periodo): Promise<RendimientoPlaza[]> => {
@@ -675,5 +688,5 @@ export function useReportes() {
     } finally { setLoading(false) }
   }, [RESTAURANTE_ID])
 
-  return { loading, error, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchPresupuestoFamilias, savePresupuestoFamilia, aplicarEstructuraEstandar, fetchRendimiento, fetchFuga }
+  return { loading, error, fetchResumen, fetchFoodCost, fetchCompras, fetchPrecios, fetchProduccion, fetchCMV, fetchPresupuestoFamilias, savePresupuestoFamilia, guardarObjetivoFamilia, aplicarEstructuraEstandar, fetchRendimiento, fetchFuga }
 }

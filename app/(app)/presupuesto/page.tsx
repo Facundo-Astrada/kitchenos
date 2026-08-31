@@ -54,7 +54,7 @@ export default function PresupuestoPage() {
   const [mes, setMes] = useState(mesActualISO)
 
   // ── Familias (movido de Reportes → Presupuesto) ──
-  const { fetchPresupuestoFamilias, savePresupuestoFamilia, aplicarEstructuraEstandar } = useReportes()
+  const { fetchPresupuestoFamilias, savePresupuestoFamilia, guardarObjetivoFamilia, aplicarEstructuraEstandar } = useReportes()
   const [presuFamiliasData, setPresuFamiliasData] = useState<PresupuestoFamiliasData>({ rows: [], ventas: 0, ventasPeriodoAnterior: 0, ebitdaPct: 0 })
   const [familiasLoading, setFamiliasLoading] = useState(false)
   const [aplicandoEstandar, setAplicandoEstandar] = useState(false)
@@ -163,6 +163,7 @@ export default function PresupuestoPage() {
                   try { await aplicarEstructuraEstandar(base); await loadFamilias() } finally { setAplicandoEstandar(false) }
                 }}
                 onGuardarFamilia={async (familia, val) => { await savePresupuestoFamilia(familia, val); await loadFamilias() }}
+                onGuardarObjetivo={async (familia, pct) => { await guardarObjetivoFamilia(familia, pct); await loadFamilias() }}
               />
             )
           ) : (
@@ -492,11 +493,12 @@ function BloqueD({ merma, arreglos, ventasReales }: {
 }
 
 // ── Tab Familias (movido de Reportes) ──
-function TabFamilias({ data, aplicandoEstandar, onAplicarEstandar, onGuardarFamilia }: {
+function TabFamilias({ data, aplicandoEstandar, onAplicarEstandar, onGuardarFamilia, onGuardarObjetivo }: {
   data: PresupuestoFamiliasData
   aplicandoEstandar: boolean
   onAplicarEstandar: () => Promise<void>
   onGuardarFamilia: (familia: PresupuestoFamiliasData['rows'][number]['familia'], val: number) => Promise<void>
+  onGuardarObjetivo: (familia: PresupuestoFamiliasData['rows'][number]['familia'], pct: number) => Promise<void>
 }) {
   const { rows, ventas, ventasPeriodoAnterior, ebitdaPct } = data
   const sinEstructura = rows.every(r => r.presupuesto === 0)
@@ -525,7 +527,24 @@ function TabFamilias({ data, aplicandoEstandar, onAplicarEstandar, onGuardarFami
           <div key={row.familia} style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{FAMILIA_GASTO_LABELS[row.familia]}</span>
-              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Objetivo {row.objetivoPct}%</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Objetivo</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  defaultValue={row.objetivoPct}
+                  onBlur={async (e) => {
+                    const val = parseFloat(e.target.value)
+                    if (Number.isFinite(val) && val > 0 && val !== row.objetivoPct) await onGuardarObjetivo(row.familia, val)
+                  }}
+                  style={{
+                    width: 52, textAlign: 'right', padding: '4px 6px', borderRadius: 6,
+                    border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-2)',
+                    fontSize: 12, fontWeight: 600, outline: 'none',
+                  }}
+                />
+                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>%</span>
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span style={{ fontSize: 11, color: 'var(--text-3)' }}>$</span>
                 <input

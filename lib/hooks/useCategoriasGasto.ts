@@ -5,6 +5,7 @@ import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import type { CategoriaGasto, CategoriaFinanciera } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
+import { invalidarPresupuesto } from './invalidarPresupuesto'
 
 export const CATEGORIA_FINANCIERA_LABELS: Record<CategoriaFinanciera, string> = {
   mercaderia: 'Compra de mercadería',
@@ -26,11 +27,54 @@ export const FAMILIA_GASTO_LABELS: Record<FamiliaGasto, string> = {
   gastos_generales: 'Gastos generales',
 }
 
+// Estructura estándar 30/33/5/17 — punto de partida para todo restaurante
+// nuevo. Cada restaurante puede pisar estos % (ver objetivos_familia abajo);
+// esto queda como el fallback cuando todavía no cargó nada.
 export const FAMILIA_GASTO_OBJETIVO_PCT: Record<FamiliaGasto, number> = {
   materia_prima: 30,
   personal: 33,
   alquiler: 5,
   gastos_generales: 17,
+}
+
+export type ObjetivosFamilia = Record<FamiliaGasto, number>
+
+function mergeObjetivosFamilia(overrides: Partial<ObjetivosFamilia> | null | undefined): ObjetivosFamilia {
+  return {
+    materia_prima: overrides?.materia_prima ?? FAMILIA_GASTO_OBJETIVO_PCT.materia_prima,
+    personal: overrides?.personal ?? FAMILIA_GASTO_OBJETIVO_PCT.personal,
+    alquiler: overrides?.alquiler ?? FAMILIA_GASTO_OBJETIVO_PCT.alquiler,
+    gastos_generales: overrides?.gastos_generales ?? FAMILIA_GASTO_OBJETIVO_PCT.gastos_generales,
+  }
+}
+
+// Objetivo % por familia, editable por restaurante — vive en
+// restaurantes.configuracion (JSONB), mismo patrón que las plazas custom:
+// sin tabla ni migración nueva. Función standalone (no hook) porque la
+// consumen fetchers de SWR (usePresupuestoCMV, fetchPresupuestoFamilias) que
+// no pueden llamar hooks entre sí.
+export async function fetchObjetivosFamilia(
+  supabase: ReturnType<typeof createClient>,
+  restauranteId: string
+): Promise<ObjetivosFamilia> {
+  const { data } = await supabase.from('restaurantes').select('configuracion').eq('id', restauranteId).single()
+  const cfg = data?.configuracion as { objetivos_familia?: Partial<ObjetivosFamilia> } | null
+  return mergeObjetivosFamilia(cfg?.objetivos_familia)
+}
+
+export async function guardarObjetivoFamilia(
+  supabase: ReturnType<typeof createClient>,
+  restauranteId: string,
+  familia: FamiliaGasto,
+  pct: number
+): Promise<void> {
+  const { data } = await supabase.from('restaurantes').select('configuracion').eq('id', restauranteId).single()
+  const cfg = (data?.configuracion as Record<string, unknown> | null) ?? {}
+  const actuales = mergeObjetivosFamilia(cfg.objetivos_familia as Partial<ObjetivosFamilia> | undefined)
+  const { error } = await supabase.from('restaurantes')
+    .update({ configuracion: { ...cfg, objetivos_familia: { ...actuales, [familia]: pct } } })
+    .eq('id', restauranteId)
+  if (error) throw error
 }
 
 export const FAMILIA_DE_CATEGORIA_FINANCIERA: Record<CategoriaFinanciera, FamiliaGasto> = {
@@ -122,7 +166,10 @@ export function useCategoriasGasto() {
     await actualizarCategoria(id, { activa: false })
   }, [actualizarCategoria])
 
-  // Asigna una categoría a TODAS las facturas sin categorizar de un proveedor (bulk).
+  // Asigna una categoría a TODAS las facturas sin categorizar de un proveedor
+  // (bulk, retroactivo) Y la deja guardada en proveedores.categoria_gasto_id —
+  // sin esto, la próxima tanda importada del mismo proveedor volvía a entrar
+  // sin categoría (ver .claude/docs/importador.md, gotcha de categorización).
   const asignarCategoriaAProveedor = useCallback(async (proveedorNombre: string, categoriaId: string) => {
     if (!RESTAURANTE_ID) throw new Error('Sesión no cargada')
     const { error } = await supabase.from('facturas')
@@ -131,7 +178,21 @@ export function useCategoriasGasto() {
       .eq('proveedor_nombre', proveedorNombre)
       .is('categoria_gasto_id', null)
     if (error) throw error
+
+    const nombre = proveedorNombre.trim()
+    if (nombre) {
+      const { data: existente } = await supabase.from('proveedores').select('id')
+        .eq('restaurante_id', RESTAURANTE_ID).ilike('nombre', nombre).maybeSingle()
+      if (existente) {
+        await supabase.from('proveedores').update({ categoria_gasto_id: categoriaId }).eq('id', existente.id)
+      } else {
+        await supabase.from('proveedores').insert({
+          nombre, restaurante_id: RESTAURANTE_ID, activo: true, categoria_gasto_id: categoriaId,
+        })
+      }
+    }
     await mutateSinCat()
+    invalidarPresupuesto()
   }, [RESTAURANTE_ID, supabase, mutateSinCat])
 
   return {

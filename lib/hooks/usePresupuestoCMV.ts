@@ -4,13 +4,8 @@ import { useCallback, useMemo } from 'react'
 import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
-import { FAMILIA_GASTO_OBJETIVO_PCT } from './useCategoriasGasto'
+import { fetchObjetivosFamilia } from './useCategoriasGasto'
 import type { CategoriaGasto } from '@/types'
-
-// Objetivo de materia prima de la estructura 30/33/5/17 (elBullifoundation 6.1,
-// vía SINTESIS-ORGANIZACION-GASTRONOMICA.md §5.1) — mismo número que usa el
-// tab Familias de Reportes.
-const OBJETIVO_PCT = FAMILIA_GASTO_OBJETIVO_PCT.materia_prima
 
 const REGEX_BEBIDA = /bebida|vino|bodega|cerveza|licor|cafeter/i
 
@@ -161,6 +156,7 @@ async function fetchPresupuestoCMV(key: string): Promise<PresupuestoCMVData> {
     ventasMesRes,
     ventasHistRes,
     mermaRes,
+    objetivos,
   ] = await Promise.all([
     supabase.from('categorias_gasto').select('id, nombre, cuenta_en_cmv, es_mejora')
       .eq('restaurante_id', rid).eq('activa', true).order('orden').order('nombre'),
@@ -176,7 +172,13 @@ async function fetchPresupuestoCMV(key: string): Promise<PresupuestoCMVData> {
       .gte('fecha', fmtISO(histFrom)).lte('fecha', fmtISO(histTo)),
     supabase.from('merma').select('costo_estimado').eq('restaurante_id', rid)
       .gte('fecha', fmtISO(mesInicio)).lte('fecha', fmtISO(corte)),
+    fetchObjetivosFamilia(supabase, rid),
   ])
+
+  // Objetivo de materia prima — editable por restaurante desde el tab
+  // Familias (elBullifoundation 6.1 / SINTESIS-ORGANIZACION-GASTRONOMICA.md
+  // §5.1 es el default 30%, pero cada restaurante puede pisarlo).
+  const OBJETIVO_PCT = objetivos.materia_prima
 
   const categorias = (categoriasRes.data ?? []) as Pick<CategoriaGasto, 'id' | 'nombre' | 'cuenta_en_cmv' | 'es_mejora'>[]
   const categoriasCmv = categorias.filter(c => c.cuenta_en_cmv)
@@ -393,7 +395,7 @@ export function usePresupuestoCMV(mes: string) {
   const sembrarMes = useCallback(async (mesStr: string) => {
     if (!RESTAURANTE_ID || !data) return
     await guardarVentasEstimadas(mesStr, data.ventasEstimadasSugerido)
-    const presupuestoTotalSugerido = data.ventasEstimadasSugerido * OBJETIVO_PCT / 100
+    const presupuestoTotalSugerido = data.ventasEstimadasSugerido * data.objetivoPct / 100
     await Promise.all(data.sectores.map(s =>
       guardarPresupuestoSector(mesStr, s.categoriaGastoId, Math.round(presupuestoTotalSugerido * s.mixHistorico))
     ))

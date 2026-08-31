@@ -350,7 +350,7 @@ export interface RegistroSanidad {
 }
 
 // ── Proveedores ─────────────────────────────────────────────
-// DB: proveedores (id, nombre, telefono, rubro, dias_entrega text[], horario_entrega, activo, restaurante_id, created_at, updated_at)
+// DB: proveedores (id, nombre, telefono, rubro, dias_entrega text[], horario_entrega, categoria_gasto_id, activo, restaurante_id, created_at, updated_at)
 export interface Proveedor {
   id: string
   nombre: string
@@ -358,6 +358,7 @@ export interface Proveedor {
   rubro?: string | null
   dias_entrega?: string[] | null
   horario_entrega?: string | null
+  categoria_gasto_id?: string | null
   activo: boolean
   restaurante_id: string
   created_at: string

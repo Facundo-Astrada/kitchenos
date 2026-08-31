@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
+import { invalidarPresupuesto } from '@/lib/hooks/invalidarPresupuesto'
 import { useSheetOpenWhen } from '@/lib/ui/chrome'
 
 type HojaInfo = {
@@ -41,6 +42,7 @@ export default function ExcelPOSImportModal({ open, onClose, onImported, initial
   const [applying, setApplying] = useState(false)
   const [result, setResult] = useState<{ importadas: number; items: number; omitidas: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [hojaSeleccionada, setHojaSeleccionada] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const autoStarted = useRef(false)
 
@@ -55,10 +57,10 @@ export default function ExcelPOSImportModal({ open, onClose, onImported, initial
   if (!open) return null
 
   function reset() {
-    setFile(null); setDetected(null); setApplying(false); setResult(null); setError(null)
+    setFile(null); setDetected(null); setApplying(false); setResult(null); setError(null); setHojaSeleccionada(null)
   }
 
-  async function handleFile(f: File) {
+  async function handleFile(f: File, hoja?: string) {
     setFile(f)
     setDetecting(true)
     setError(null)
@@ -67,14 +69,23 @@ export default function ExcelPOSImportModal({ open, onClose, onImported, initial
       fd.append('file', f)
       fd.append('restauranteId', RESTAURANTE_ID)
       fd.append('mode', 'detect')
+      if (hoja) fd.append('hoja', hoja)
       const res = await fetch('/api/importador/facturas-universal', { method: 'POST', body: fd })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error analizando archivo')
       setDetected(data)
+      setHojaSeleccionada(hoja ?? data.hoja_seleccionada ?? null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error')
     }
     setDetecting(false)
+  }
+
+  // Re-analiza el mismo archivo forzando otra hoja — para cuando el score
+  // automático no eligió la que el usuario quería.
+  function elegirHoja(nombre: string) {
+    if (!file || detecting || nombre === hojaSeleccionada) return
+    void handleFile(file, nombre)
   }
 
   async function aplicar() {
@@ -86,6 +97,7 @@ export default function ExcelPOSImportModal({ open, onClose, onImported, initial
       fd.append('file', file)
       fd.append('restauranteId', RESTAURANTE_ID)
       fd.append('mode', 'apply')
+      if (hojaSeleccionada) fd.append('hoja', hojaSeleccionada)
       if (detected?.formato === 'generico' && detected.mapeo) {
         fd.append('mapeo', JSON.stringify(detected.mapeo))
       }
@@ -93,6 +105,7 @@ export default function ExcelPOSImportModal({ open, onClose, onImported, initial
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error importando')
       setResult(data)
+      invalidarPresupuesto()
       if (onImported) onImported(data.importadas)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error')
@@ -192,33 +205,50 @@ export default function ExcelPOSImportModal({ open, onClose, onImported, initial
                   <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 8 }}>
                     Hojas del archivo ({detected.hojas_analizadas.length})
                   </summary>
+                  {detected.formato === 'generico' && detected.hojas_analizadas.length > 1 && (
+                    <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 8px' }}>
+                      Elegimos la hoja automáticamente — si no es la correcta, tocá otra para usarla.
+                    </p>
+                  )}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                    {detected.hojas_analizadas.map((h, i) => (
-                      <div key={i} style={{
-                        padding: '10px 12px',
-                        background: h.usada ? 'rgba(22,101,52,.06)' : 'var(--bg)',
-                        border: `1px solid ${h.usada ? 'rgba(22,101,52,.2)' : 'var(--border)'}`,
-                        borderRadius: 8, fontSize: 12,
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                          <div style={{ fontWeight: 700, color: 'var(--text-1)' }}>
-                            {h.usada ? '✓ ' : '✗ '}{h.name}
+                    {detected.hojas_analizadas.map((h, i) => {
+                      const elegible = detected.formato === 'generico' && h.filas > 0 && !h.usada
+                      const Tag = elegible ? 'button' : 'div'
+                      return (
+                        <Tag key={i}
+                          {...(elegible ? { onClick: () => elegirHoja(h.name), disabled: detecting } : {})}
+                          style={{
+                            padding: '10px 12px', textAlign: 'left', width: '100%',
+                            background: h.usada ? 'rgba(22,101,52,.06)' : 'var(--bg)',
+                            border: `1px solid ${h.usada ? 'rgba(22,101,52,.2)' : 'var(--border)'}`,
+                            borderRadius: 8, fontSize: 12, fontFamily: 'inherit',
+                            cursor: elegible ? 'pointer' : 'default',
+                          }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                            <div style={{ fontWeight: 700, color: 'var(--text-1)' }}>
+                              {h.usada ? '✓ ' : '✗ '}{h.name}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+                              {h.filas.toLocaleString('es-AR')} filas
+                            </div>
                           </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-                            {h.filas.toLocaleString('es-AR')} filas
+                          <div style={{ fontSize: 11, color: h.usada ? '#166534' : 'var(--text-3)', marginTop: 2 }}>
+                            {h.rol}
                           </div>
-                        </div>
-                        <div style={{ fontSize: 11, color: h.usada ? '#166534' : 'var(--text-3)', marginTop: 2 }}>
-                          {h.rol}
-                        </div>
-                        {h.columnas.length > 0 && (
-                          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4, fontFamily: "'DM Mono', monospace" }}>
-                            {h.columnas.join(' · ')}
-                            {h.columnas.length === 8 && '…'}
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                          {h.columnas.length > 0 && (
+                            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4, fontFamily: "'DM Mono', monospace" }}>
+                              {h.columnas.join(' · ')}
+                              {h.columnas.length === 8 && '…'}
+                            </div>
+                          )}
+                          {elegible && (
+                            <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 4, fontWeight: 700 }}>
+                              Usar esta hoja
+                            </div>
+                          )}
+                        </Tag>
+                      )
+                    })}
                   </div>
                 </details>
               )}

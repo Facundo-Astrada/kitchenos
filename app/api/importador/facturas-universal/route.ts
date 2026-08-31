@@ -90,6 +90,7 @@ type FacturaPayload = {
   status: string
   notas: string | null
   restaurante_id: string
+  categoria_gasto_id?: string | null
 }
 
 type ItemPayload = {
@@ -460,6 +461,11 @@ export async function POST(req: NextRequest) {
 
   if (!file) return NextResponse.json({ error: 'Faltan parámetros' }, { status: 400 })
 
+  // Si el usuario ya vio el detect y corrigió la hoja auto-elegida, esta
+  // llega tanto en el detect re-disparado como en el apply final — sin esto,
+  // apply recalculaba el score desde cero e ignoraba la corrección.
+  const hojaForzada = (formData.get('hoja') as string | null) || null
+
   const buffer = await file.arrayBuffer()
   let wb: XLSX.WorkBook
   try {
@@ -586,9 +592,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No se detectaron hojas con datos válidos' }, { status: 400 })
   }
 
-  // Elegir la mejor candidata
+  // Elegir la mejor candidata — o la que el usuario forzó manualmente
   candidates.sort((a, b) => b.score - a.score)
-  const best = candidates[0]
+  const best = hojaForzada ? candidates.find(c => c.name === hojaForzada) : candidates[0]
+  if (!best) {
+    return NextResponse.json({
+      error: hojaForzada
+        ? `La hoja "${hojaForzada}" no tiene columnas ni filas de datos reconocibles.`
+        : 'No se detectaron hojas con datos válidos',
+    }, { status: 400 })
+  }
   const headers = best.headers
   const dataRows = best.dataRows
 
@@ -673,6 +686,32 @@ async function insertBatch(
 
   if (facturasFinal.length === 0) {
     return NextResponse.json({ importadas: 0, items: 0, omitidas, excluidas_privacidad: excluidasPorNombre })
+  }
+
+  // Categoría por defecto del proveedor (asignada antes, individual o por
+  // lote en Categorías de Gasto) — sin esto, cada import nuevo entraba
+  // sin categorizar aunque el proveedor ya se hubiera categorizado una vez.
+  try {
+    const restId = facturasFinal[0]?.restaurante_id
+    if (restId) {
+      const { data: provsData } = await admin.from('proveedores')
+        .select('nombre, categoria_gasto_id')
+        .eq('restaurante_id', restId)
+        .not('categoria_gasto_id', 'is', null)
+      const categoriaPorProveedor = new Map(
+        ((provsData ?? []) as { nombre: string; categoria_gasto_id: string }[])
+          .map(p => [normNombre(p.nombre), p.categoria_gasto_id])
+      )
+      if (categoriaPorProveedor.size > 0) {
+        for (const f of facturasFinal) {
+          if (f.categoria_gasto_id) continue
+          const cat = categoriaPorProveedor.get(normNombre(f.proveedor_nombre))
+          if (cat) f.categoria_gasto_id = cat
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[facturas-universal] lookup de categoría por proveedor falló (no bloqueante):', e)
   }
 
   for (let i = 0; i < facturasFinal.length; i += BATCH) {

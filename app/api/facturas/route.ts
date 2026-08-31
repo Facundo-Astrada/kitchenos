@@ -73,9 +73,11 @@ export async function POST(req: NextRequest) {
 
   // Leer nombres internos (empleados/socios) a excluir, desde la config del restaurante
   let nombresInternos: string[] = []
+  let restauranteId: string | null = null
   try {
     const { data: ur } = await supabase.from('user_restaurantes').select('restaurante_id').eq('user_id', user.id).single()
     if (ur?.restaurante_id) {
+      restauranteId = ur.restaurante_id
       const { data: rest } = await supabase.from('restaurantes').select('configuracion').eq('id', ur.restaurante_id).single()
       const cfg = rest?.configuracion as { nombres_excluidos?: string[] } | null
       if (Array.isArray(cfg?.nombres_excluidos)) nombresInternos = cfg.nombres_excluidos.filter(Boolean)
@@ -149,15 +151,47 @@ export async function POST(req: NextRequest) {
 
   try {
     const parsed = JSON.parse(text)
-    return NextResponse.json(filtrarPersonas(parsed, nombresInternos))
+    return NextResponse.json(await finalizarResultado(parsed, nombresInternos, supabase, restauranteId))
   } catch {
     // Try extracting JSON from response
     const match = text.match(/\{[\s\S]*\}/)
     if (match) {
-      return NextResponse.json(filtrarPersonas(JSON.parse(match[0]), nombresInternos))
+      return NextResponse.json(await finalizarResultado(JSON.parse(match[0]), nombresInternos, supabase, restauranteId))
     }
     return NextResponse.json({ error: 'No se pudo parsear respuesta', raw: text }, { status: 500 })
   }
+}
+
+// Categoría por defecto del proveedor (asignada antes, individual o por lote
+// en Categorías de Gasto) — precarga la categoría en la pantalla de revisión
+// en vez de que la factura vuelva a entrar sin categorizar.
+async function sugerirCategoriaProveedor(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  restauranteId: string | null,
+  proveedorNombre: string | undefined,
+): Promise<string | null> {
+  if (!restauranteId || !proveedorNombre?.trim()) return null
+  try {
+    const { data } = await supabase.from('proveedores').select('categoria_gasto_id')
+      .eq('restaurante_id', restauranteId)
+      .ilike('nombre', proveedorNombre.trim())
+      .not('categoria_gasto_id', 'is', null)
+      .maybeSingle()
+    return (data?.categoria_gasto_id as string | undefined) ?? null
+  } catch {
+    return null
+  }
+}
+
+async function finalizarResultado(
+  parsed: OcrResult,
+  nombresInternos: string[],
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  restauranteId: string | null,
+): Promise<OcrResult> {
+  const filtrado = filtrarPersonas(parsed, nombresInternos)
+  const categoria_gasto_id = await sugerirCategoriaProveedor(supabase, restauranteId, filtrado.proveedor_nombre)
+  return categoria_gasto_id ? { ...filtrado, categoria_gasto_id } : filtrado
 }
 
 // Filtro de seguridad: aunque la IA falle, removemos items que matcheen nombres internos

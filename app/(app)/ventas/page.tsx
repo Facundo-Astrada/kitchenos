@@ -627,6 +627,16 @@ export default function VentasPage() {
     setImportWarnings([])
   }
 
+  // Desde el selector de hoja: si el archivo era el equivocado, ir directo a
+  // elegir otro sin pasar por la pantalla de "¿Cómo querés importar?" ni
+  // perder que ya estábamos en modo Excel.
+  function handleElegirOtroArchivo() {
+    setParsedWorkbook(null)
+    setPendingFileName('')
+    setImportWarnings([])
+    fileInputRef.current?.click()
+  }
+
   // ── Render ───────────────────────────────────────────────
   return (
     <div style={{ minHeight: '100dvh', background: 'var(--bg)', paddingBottom: 100 }}>
@@ -969,7 +979,7 @@ export default function VentasPage() {
                 setParsedVentas(result.ventas!)
                 setParsedWorkbook(null)
               }}
-              onCancel={resetImport}
+              onCancel={handleElegirOtroArchivo}
             />
           ) : (
             <>
@@ -1277,6 +1287,7 @@ function SheetPicker({
       <div className="flex items-center gap-2">
         <button
           onClick={onCancel}
+          title="Elegir otro archivo"
           className="flex items-center justify-center rounded-lg"
           style={{ width: 32, height: 32, background: 'var(--surface)', border: '1px solid var(--border)' }}
         >
@@ -1289,6 +1300,13 @@ function SheetPicker({
         <p className="text-[13px]" style={{ color: 'var(--text-2)' }}>
           <b>{fileName}</b> tiene {sheetNames.length} hojas. ¿Cuál contiene las ventas?
         </p>
+        <button
+          onClick={onCancel}
+          className="text-[12px] font-semibold mt-1.5"
+          style={{ color: 'var(--accent)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit' }}
+        >
+          ¿Es el archivo equivocado? Elegir otro
+        </button>
       </div>
 
       <div className="flex flex-col gap-2">
