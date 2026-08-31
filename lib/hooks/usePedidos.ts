@@ -259,7 +259,7 @@ export function usePedidos() {
   useEffect(() => {
     if (!RESTAURANTE_ID) return
     const ch = supabase.channel(`pedidos-rt-${RESTAURANTE_ID}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => mutate())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `restaurante_id=eq.${RESTAURANTE_ID}` }, () => mutate())
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [RESTAURANTE_ID, supabase, mutate])

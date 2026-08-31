@@ -56,8 +56,8 @@ export function useEspacios() {
   useEffect(() => {
     if (!RESTAURANTE_ID) return
     const ch = supabase.channel(`espacios-rt-${RESTAURANTE_ID}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'espacios' }, () => mutate())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'espacio_plazas' }, () => mutate())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'espacios', filter: `restaurante_id=eq.${RESTAURANTE_ID}` }, () => mutate())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'espacio_plazas', filter: `restaurante_id=eq.${RESTAURANTE_ID}` }, () => mutate())
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [RESTAURANTE_ID, supabase, mutate])

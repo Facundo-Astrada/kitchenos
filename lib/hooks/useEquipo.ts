@@ -716,7 +716,7 @@ export function useEquipo() {
     if (!RESTAURANTE_ID) return
     const chMiembros = supabase
       .channel(`equipo-miembros-rt-${RESTAURANTE_ID}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'equipo_miembros' }, () => mutateMiembros())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'equipo_miembros', filter: `restaurante_id=eq.${RESTAURANTE_ID}` }, () => mutateMiembros())
       .subscribe()
 
     return () => {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
 import { FAMILIA_GASTO_OBJETIVO_PCT, FAMILIA_DE_CATEGORIA_FINANCIERA, type FamiliaGasto } from './useCategoriasGasto'
@@ -133,7 +133,7 @@ export function useReportes() {
   const RESTAURANTE_ID = useRestauranteId()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const fetchResumen = useCallback(async (periodo: Periodo): Promise<ReporteResumen> => {
     if (!RESTAURANTE_ID) return {} as ReporteResumen

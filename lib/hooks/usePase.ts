@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { PaseMensaje, PrioridadPase, Plaza } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
@@ -15,7 +15,7 @@ export function usePase() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(true)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   // Fetch latest messages
   const fetchMensajes = useCallback(async () => {

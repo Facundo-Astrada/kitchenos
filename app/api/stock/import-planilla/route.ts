@@ -177,8 +177,16 @@ export async function POST(req: NextRequest) {
           if (item.stock_critico !== null) updates.stock_critico = item.stock_critico
 
           if (Object.keys(updates).length > 0) {
-            const { error } = await admin.from('productos').update(updates).eq('id', item.producto_id)
+            // .eq('restaurante_id', rid) además de 'id': item.producto_id lo manda el
+            // cliente en el body del "apply" — sin este filtro, el admin client (bypasea
+            // RLS) dejaría pisar el stock de un producto de OTRO restaurante con un id
+            // forjado. El preview ya matchea solo contra productos de rid (línea de abajo),
+            // pero eso no evita que el apply reciba un id distinto.
+            const { data: actualizado, error } = await admin.from('productos').update(updates)
+              .eq('id', item.producto_id).eq('restaurante_id', rid)
+              .select('id')
             if (error) throw error
+            if (!actualizado?.length) throw new Error('producto no pertenece a este restaurante')
             updated++
           }
         } else {

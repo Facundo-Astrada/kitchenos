@@ -579,10 +579,13 @@ export function useCarta() {
   useEffect(() => {
     if (!RESTAURANTE_ID) return
     const ch = supabase.channel(`carta-rt-${RESTAURANTE_ID}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'carta_items' }, () => mutateItems())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'carta_items', filter: `restaurante_id=eq.${RESTAURANTE_ID}` }, () => mutateItems())
+      // plato_recetas/plato_packaging no tienen restaurante_id propio (child de carta_items,
+      // igual que comanda_items de comandas) — el filter de Postgres realtime solo puede
+      // comparar una columna propia de la tabla, así que quedan sin filtrar a propósito.
       .on('postgres_changes', { event: '*', schema: 'public', table: 'plato_recetas' }, () => mutateItems())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'plato_packaging' }, () => mutateItems())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'carta_categorias' }, () => mutateCategorias())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'carta_categorias', filter: `restaurante_id=eq.${RESTAURANTE_ID}` }, () => mutateCategorias())
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [RESTAURANTE_ID, supabase, mutateItems, mutateCategorias])

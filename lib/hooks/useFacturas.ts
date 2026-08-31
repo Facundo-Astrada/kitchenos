@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type {
   Factura, FacturaItem, FacturaStatus, TipoFactura,
@@ -45,7 +45,7 @@ export function useFacturas() {
   const pageRef = useRef(0)
   const [hasMore, setHasMore] = useState(true)
   const [totalCount, setTotalCount] = useState(0)
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const fetchFacturas = useCallback(async (reset = true, showLoading = true) => {
     if (!RESTAURANTE_ID) { setLoading(false); return }
@@ -445,10 +445,10 @@ export function useFacturas() {
   useEffect(() => {
     fetchFacturas(true)
     const ch = supabase.channel('facturas-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'facturas' }, () => fetchFacturas(true, false))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'facturas', filter: `restaurante_id=eq.${RESTAURANTE_ID}` }, () => fetchFacturas(true, false))
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [fetchFacturas])
+  }, [fetchFacturas, RESTAURANTE_ID])
 
   return {
     facturas, loading, error,

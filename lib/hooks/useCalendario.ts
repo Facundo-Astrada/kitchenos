@@ -375,7 +375,7 @@ export function useCalendario() {
 
     const ch = supabase
       .channel('eventos-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'eventos' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'eventos', filter: `restaurante_id=eq.${RESTAURANTE_ID}` }, () => {
         const actual = mesActualRef.current ?? { mes: now.getMonth() + 1, anio: now.getFullYear() }
         fetchEventos(actual.mes, actual.anio)
       })
