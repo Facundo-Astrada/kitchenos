@@ -2,6 +2,8 @@
 
 Lista priorizada de lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL.md`. Lo resuelto y el detalle de sesiones pasadas viven en `HISTORIAL.md` (no acumular acá).
 
+**Ítems de ingeniería (31/08):** el orden de ejecución, las dependencias y las fusiones viven en `.claude/docs/ingenieria/plan-consolidado.md` (los 10 días). Si este archivo y el plan difieren, manda el plan.
+
 ---
 
 ## 🔴 Crítico
@@ -32,15 +34,22 @@ Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/
 ### OPS Consolidación — diferido
 "Copiar a otro día" e "Ingredientes consolidados" (se sacaron con la planilla legacy) — reimplementar sobre `tareas` si el usuario los pide.
 
-### Ingeniería — deuda de arquitectura con bug real detrás (auditoría 31/08, detalle y evidencia en `arquitectura-kos.md` §7.2-7.4)
-Tres ítems de la misma sesión de auditoría, ordenados por valor:
-- **Completar el puerto de IA (`lib/ia/claude.ts`).** La mitad ya existe (`lib/ia/errores.ts`, usado por 7 de 12 rutas); falta la función única de fetch con modelo + reintentos (el campo `reintentable` ya existe y nadie lo consume) + log de tokens. 15 hardcodes de modelo hoy. **3-4 h.**
-- **`useFacturas.crearFactura` al servidor.** ~235 líneas multi-tabla corriendo en el browser sin transacción (factura + proveedor auto-creado + productos + precios); un corte a mitad deja datos rotos, y el matching de productos es inaccesible para `facturas-universal` (ya lo reimplementó una vez). Primer paso chico: extraer solo el matching a `lib/facturas/matching.ts` con test (2-3 h); el flujo completo, **1 día**.
-- **Gotchas verificables a CI.** 3 hooks violan hoy el gotcha #20 del propio `hooks.md` (`useFacturas:48`, `usePase:18`, `useReportes:136` — `createClient()` sin `useMemo`, 1 línea de fix c/u) y nada impide el cuarto, ni un endpoint nuevo con admin client sin `requireRestauranteId`. Test de Vitest que grepee ambos patrones (allowlist para `cron/reset-demo` e `invitar`). **2-3 h.**
-
-### Dominio — dos agregados sin custodia (auditoría de dominio 31/08, evidencia en `.claude/docs/ingenieria/dominio-kos.md` §4/§8)
+### Invariantes a la base — días 2-3 del plan consolidado (auditorías 31/08, evidencia en `dominio-kos.md` §4/§8)
 - **`actualizarMenu` pierde datos ante un corte.** [useMenus.ts:190-215](lib/hooks/useMenus.ts#L190-L215) borra todas las `menu_preparaciones` y recién después inserta las nuevas, desde el browser — un corte entre ambas deja el menú vacío (pérdida total, no estado a medias). Fix: rpc `reemplazar_menu_preparaciones(menu_id, jsonb)` con delete+insert en una transacción; la propagación a `tareas` queda fuera a propósito (otro agregado). **2-3 h.**
-- **La invariante de la comanda vive en la cache local.** "Todos los ítems bumpeados ⇒ comanda lista" se decide contra el snapshot del cliente ([useComandas.ts:179-187](lib/hooks/useComandas.ts#L179-L187)); cero triggers sobre `comandas`/`comanda_items` (verificado). Dos tablets KDS a la vez pueden dejar la comanda sin pasar a `lista`. Fix: trigger AFTER UPDATE sobre `comanda_items` que recalcule el estado (compatible con la cola offline). **2-3 h.**
+- **Candado "una cuenta abierta por mesa"** (subido de 🟡: mismo tema, mismo día). No existe índice único parcial sobre `cuentas` (verificado) — dos mozos abriendo la misma mesa crean dos cuentas abiertas. El candado gemelo ya existe para cajas (`idx_cajas_turnos_una_abierta`). `CREATE UNIQUE INDEX ... ON cuentas(mesa_id) WHERE estado='abierta' AND mesa_id IS NOT NULL` + atrapar 23505 en `abrirMesa`; antes, query de duplicados históricos. **1-2 h.**
+- **La invariante de la comanda vive en la cache local.** "Todos los ítems bumpeados ⇒ comanda lista" se decide contra el snapshot del cliente ([useComandas.ts:179-187](lib/hooks/useComandas.ts#L179-L187)); cero triggers sobre `comandas`/`comanda_items` (verificado). Dos tablets KDS a la vez pueden dejar la comanda sin pasar a `lista`. Fix: trigger AFTER UPDATE sobre `comanda_items` que recalcule el estado (compatible con la cola offline). **2-3 h + test multi-cliente.**
+
+### Ratchets de ingeniería — día 4 del plan (fusiona "gotchas a CI" + techos de refactor + hallazgo nuevo, `refactor-kos.md` §4)
+Un solo `lib/ingenieria/ratchets.test.ts` (corre con `npm test` → ya queda en CI): techos de líneas por pantalla grande que **solo bajan**, + patrones prohibidos por grep — gotcha #20 (`createClient()` sin `useMemo`: 3 hooks lo violan hoy — `useFacturas:48`, `usePase:18`, `useReportes:136`, 1 línea de fix c/u), gotcha #18 (canal realtime sin `filter` por tenant: [useCarta.ts:579-588](lib/hooks/useCarta.ts#L579-L588) suscribe 4 tablas sin filtro, hallazgo 31/08), `createAdminClient` sin `requireRestauranteId` en `app/api/**` (allowlist para `cron/reset-demo` e `invitar`), `'use client'` en `lib/<dominio>/` fuera de hooks. Arreglar lo marcado en la misma sesión. **3-4 h.**
+
+### Completar el puerto de IA (`lib/ia/claude.ts`) — día 5 del plan (`arquitectura-kos.md` §7.2)
+La mitad ya existe (`lib/ia/errores.ts`, usado por 7 de 12 rutas); falta la función única de fetch con modelo + reintentos (el campo `reintentable` ya existe y nadie lo consume) + log de tokens. 15 hardcodes de modelo hoy. Empezar por las 5 rutas que no usan `errores.ts`. **3-4 h.**
+
+### Refactor de Carta — días 6, 7 y 9 del plan; el paso a paso completo en `refactor-kos.md` §2
+Hallazgos 31/08 tras leer las 3.906 líneas completas: los 9 componentes **ya están separados a nivel de módulo** (el trabajo es mover archivos, no partir un monolito — máximo real 24 estados en un componente, no 59); **~300 líneas de código muerto** (la rama `view='nuevo'` + `isCreate` de FormView es inalcanzable, nada la setea); y el panel OPS de `DetailView` ([carta/page.tsx:1435-1544](app/(app)/carta/page.tsx#L1435-L1544)) **duplica inline los helpers de `lib/ops/mise.ts`** con su 3ª copia de `PLAZAS_OPS` y sin `shrinkOrPruneMise` — mover una receta de plaza deja el `checklist_item` viejo sin achicar (bug latente de datos). Pasos, cada uno reversible y ≤1 día: smoke e2e + borrar muerto → moves puros (cards, exportadores, drawer, modal, form) → migrar el panel OPS a los helpers (el único paso con riesgo, con `/impacto` + matriz de verificación contra la base). Punto de parada explícito: el shell de ~700 líneas queda y está bien.
+
+### `useFacturas.crearFactura` al servidor — día 8 del plan (alcance afinado por `dominio-kos.md` §4.1)
+~235 líneas multi-tabla en el browser sin transacción. La transacción cubre **factura+items solamente**; matching de productos y precios son efectos sobre otros agregados → paso idempotente aparte, extraído a `lib/facturas/matching.ts` con test (así `facturas-universal` deja de reimplementarlo). `useFacturas.crearFactura` queda como fetch + `mutate()`. **1 día — no arrancar sin el día entero.**
 
 ---
 
@@ -55,17 +64,12 @@ Tres ítems de la misma sesión de auditoría, ordenados por valor:
 ### Feature gating
 Coach, multi-usuario, export PDF, HACCP solo en plan Pro — `puedeUsar('coach')` derivado de `usePlan`. Depende de Stripe.
 
-### Unificar `mapRol` (×2) y conversión de unidades (×3) — auditoría 31/08, `arquitectura-kos.md` §7.5
-Sin cambios respecto del informe GRASP: `lib/permisos/roles.ts` y `lib/unidades.ts`, ambos sin `'use client'` (la duplicación existe *porque* las originales viven en archivos client — el fix es de localidad). Los tests de `consumoTeorico.test.ts` se mudan y cubren a todos. Precedente documentado en `resolver.ts:1-12`. **2-3 h.**
+### Matar las copias CoA — día 10 del plan (fusiona `arquitectura-kos.md` §7.5 + el espejo de plazas de `dominio-kos.md` §8.4)
+Branch by abstraction sobre las tres duplicaciones restantes (la 4ª — la copia de `PLAZAS_OPS` en `DetailView` de Carta — muere antes, adentro del refactor de Carta): `lib/permisos/roles.ts` (`mapRol` ×2), `lib/unidades.ts` (conversión ×3 — los tests de `consumoTeorico.test.ts` se mudan y cubren a todos), y `PLAZAS_OPS` espejo mise↔constants (importar, no espejar). Ambos módulos nuevos sin `'use client'` — la duplicación existe *porque* las originales viven en archivos client; el fix es de localidad. Precedente documentado en `resolver.ts:1-12`. **3-4 h.**
 
-### Declarar la convención del repositorio en `hooks.md` — auditoría 31/08, `arquitectura-kos.md` §7.6
-La firma `(supabase, restauranteId, input)` ya es la convención de facto (`mise.ts`, `activarMenu.ts`, registry del Coach) pero no está escrita — la próxima extracción puede inventar otra forma. Una sección corta + la tabla de decisión del marco. **30 min.**
-
-### Candado "una cuenta abierta por mesa" en la base — auditoría de dominio 31/08, `dominio-kos.md` §8.3
-No existe índice único parcial sobre `cuentas` (verificado): dos mozos abriendo la misma mesa crean dos cuentas abiertas, y la coherencia mesa↔cuenta la sostienen dos hooks distintos. El candado gemelo ya existe para cajas (`idx_cajas_turnos_una_abierta`) — es copiar un patrón propio. `CREATE UNIQUE INDEX ... ON cuentas(mesa_id) WHERE estado='abierta' AND mesa_id IS NOT NULL` + atrapar 23505 en `abrirMesa`; antes, query de duplicados históricos. **1-2 h.**
-
-### Congelar el glosario ubicuo y legislar los bautismos — auditoría de dominio 31/08, `dominio-kos.md` §3/§8.4
-"Turno" significa 7 cosas, el mise tiene 3 nombres (mise/checklist/Plazas), "sección" 4 — y la ambigüedad ya cobró un bug real (`turnos.ts:96`). No renombrar lo existente: volcar el glosario de `dominio-kos.md` §3 a un doc condicional + tres reglas para lo nuevo (`estado` no `status`; `jornada` para fecha operativa; "turno" solo para `TurnoServicio`, el resto con prefijo). Unificar `PLAZAS_OPS` con `PLAZAS_FIJAS` (importar, no espejar) entra acá. **1-2 h.**
+### Legislar los nombres — día 10 del plan (cola de la sesión de copias)
+- **Congelar el glosario ubicuo** (`dominio-kos.md` §3/§8.4): "turno" significa 7 cosas, el mise tiene 3 nombres, "sección" 4 — y ya cobró un bug real (`turnos.ts:96`). No renombrar lo existente: volcar el glosario a un doc condicional + tres reglas para lo nuevo (`estado` no `status`; `jornada` para fecha operativa; "turno" solo para `TurnoServicio`, el resto con prefijo). Regla nueva de la sesión 3: los renombres van **colgados de extracciones** — el archivo/función nueva nace con el nombre del glosario (`refactor-kos.md` §6). **1-2 h.**
+- **Declarar la convención del repositorio en `hooks.md`** (`arquitectura-kos.md` §7.6): la firma `(supabase, restauranteId, input)` ya es la convención de facto pero no está escrita. Una sección corta + la tabla de decisión del marco. **30 min.**
 
 ---
 
