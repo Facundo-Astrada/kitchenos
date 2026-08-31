@@ -40,13 +40,6 @@ Días 6-9 del plan consolidado resueltos (31/08): smoke e2e + código muerto, lo
 ### Feature gating
 Coach, multi-usuario, export PDF, HACCP solo en plan Pro — `puedeUsar('coach')` derivado de `usePlan`. Depende de Stripe.
 
-### Matar las copias CoA — día 10 del plan (fusiona `arquitectura-kos.md` §7.5 + el espejo de plazas de `dominio-kos.md` §8.4)
-Branch by abstraction sobre las tres duplicaciones restantes (la 4ª — la copia de `PLAZAS_OPS` en `DetailView` de Carta — ya murió el 31/08, día 9 del refactor de Carta): `lib/permisos/roles.ts` (`mapRol` ×2), `lib/unidades.ts` (conversión ×3 — los tests de `consumoTeorico.test.ts` se mudan y cubren a todos), y `PLAZAS_OPS` espejo mise↔constants (importar, no espejar). Ambos módulos nuevos sin `'use client'` — la duplicación existe *porque* las originales viven en archivos client; el fix es de localidad. Precedente documentado en `resolver.ts:1-12`. **3-4 h.**
-
-### Legislar los nombres — día 10 del plan (cola de la sesión de copias)
-- **Congelar el glosario ubicuo** (`dominio-kos.md` §3/§8.4): "turno" significa 7 cosas, el mise tiene 3 nombres, "sección" 4 — y ya cobró un bug real (`turnos.ts:96`). No renombrar lo existente: volcar el glosario a un doc condicional + tres reglas para lo nuevo (`estado` no `status`; `jornada` para fecha operativa; "turno" solo para `TurnoServicio`, el resto con prefijo). Regla nueva de la sesión 3: los renombres van **colgados de extracciones** — el archivo/función nueva nace con el nombre del glosario (`refactor-kos.md` §6). **1-2 h.**
-- **Declarar la convención del repositorio en `hooks.md`** (`arquitectura-kos.md` §7.6): la firma `(supabase, restauranteId, input)` ya es la convención de facto pero no está escrita. Una sección corta + la tabla de decisión del marco. **30 min.**
-
 ---
 
 ## 🟢 Bajo — Roadmap abierto

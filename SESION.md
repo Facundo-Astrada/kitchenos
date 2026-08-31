@@ -1,28 +1,32 @@
-# Sesión — 2026-08-31 (noche, cont. 8) — Día 9 del plan: panel OPS de `DetailView` → helpers de `lib/ops/mise.ts`
+# Sesión — 2026-08-31 (noche, cont. 9) — Día 10 del plan: matar copias CoA + legislar glosario
 
 ## Qué se cerró
 
-Día 9 completo de `.claude/docs/ingenieria/plan-consolidado.md` §2 (paso 5a de
-`refactor-kos.md` §2 — el único paso del refactor de Carta con riesgo real).
-1 commit (`264d3d5`), pusheado.
+Día 10 completo de `.claude/docs/ingenieria/plan-consolidado.md` §2 —
+**último día del plan de diez.** 1 commit de código (`f0053b4`), pusheado.
 
-- **`handleGuardarOPS`** dejó de reimplementar inline el flujo del mise: ahora
-  llama `sumPlatoRecetaCantidad` + `upsertMiseChecklistItem` +
-  `shrinkOrPruneMise`, mismo patrón que `CartaBoard.handleGuardarOps`.
-- **Dos fixes de datos reales**, verificados contra la base en dev (no solo
-  la UI): el shrink que faltaba al mover de plaza / al "Quitar" (probado en
-  vivo: 36→26 al salir de una plaza, prune a 0 al volver, delete completo en
-  Quitar) y `handleCrearTarea` insertaba con una columna `nombre` inexistente
-  (fallaba en silencio) — ahora pasa por `useTareas.agregarTarea`.
-- **`porcionesDesdeCapacidad` nuevo** en `mise.ts` (con test) — estaba
-  duplicada. Muere la 3ª copia de `PLAZAS_OPS`/`SECCIONES_OPS`.
-- **No se agregó** el test de componente con `mockSupabase` que el plan
-  pedía: `vitest.config.ts` solo incluye `lib/**/*.test.ts`, cero
-  infraestructura de render en el repo — decisión tomada en la sesión, no
-  falta. Verificación real hecha con Playwright ad-hoc contra dev + El
-  Rescoldo (datos restaurados sin diffs al terminar).
-- Typecheck, build, 246 tests (241+5) y `get_advisors` en verde. Docs:
-  `PENDIENTES.md`, `HISTORIAL.md`.
+- **Tres copias CoA muertas** (branch by abstraction, sin cambiar
+  comportamiento): `lib/permisos/roles.ts` (`mapRol` ×2 → 1), `lib/unidades.ts`
+  (`canonUnit`/`unitConversionFactor` ×3 → 1, con re-export desde
+  `useRecetas.ts` para no tocar consumidores) y `PLAZAS_OPS` de
+  `lib/ops/mise.ts` (ahora deriva de `PLAZAS_FIJAS`/`PLAZA_LABELS`/
+  `PLAZA_COLORS` en vez de espejo a mano).
+- **Bonus no planeado**: al unificar `PLAZAS_OPS` apareció una **4ª copia**
+  no documentada en `espacios/ItemEditPanel.tsx`, ya desincronizada (plaza
+  `general` gris ahí vs. azul en todos lados — bug de color real). Se mató
+  con el mismo fix.
+- **Dos docs de legislación**: `.claude/docs/glosario.md` nuevo (7
+  significados de "turno", 3 nombres de "mise", + 3 reglas para lo nuevo:
+  `estado` no `status`, `jornada` no `turno_fecha`, "turno" reservado para
+  `TurnoServicio`) y sección nueva en `hooks.md` ("Convención — dónde va una
+  operación compartida", firma `(supabase, restauranteId, input)` + tabla de
+  decisión).
+- Typecheck, build y 254 tests (246 + 8 nuevos de `roles.test.ts`) en verde.
+  Lint: mismos ~10.000 problemas pre-existentes, cero nuevos en los archivos
+  tocados.
+- Docs: `PENDIENTES.md` (podadas las dos entradas de día 10), `HISTORIAL.md`,
+  `CLAUDE.md` (fila nueva en la tabla de docs condicionales apuntando a
+  `glosario.md`).
 
 ## Qué quedó a medias
 
@@ -31,24 +35,30 @@ Día 9 completo de `.claude/docs/ingenieria/plan-consolidado.md` §2 (paso 5a de
   jul 2026, sigue en `PENDIENTES.md` 🟢).
 - El git worktree viejo en `.claude/worktrees/sleepy-jepsen` (rama
   `claude/sleepy-jepsen`) sigue sin revisar con Facundo.
+- Paso 5b de Carta (mover `DetailView` a su propio archivo — move puro, ½
+  día) sigue como cola disponible para cualquier sesión que sobre tiempo.
 
 ## Probar primero mañana
 
-- Nada específico — el flujo de asignar OPS desde un plato (Carta → detalle
-  → plaza/sección/recipiente/cantidad) es idéntico desde la UI; lo que
-  cambió es solo cómo se escribe y que ahora sí achica la plaza vieja al
-  mover.
+- Nada específico — son extracciones puras (mismo output, distinto archivo
+  fuente) verificadas con typecheck + build + suite completa. Si algo se
+  quiere confirmar a ojo: el selector de plaza en Espacios → editar ítem
+  (antes tenía "General" en gris, ahora en azul como en todos lados).
 
 ## Próximo paso concreto
 
-**Paso 5b** (`refactor-kos.md` §2, cola de cualquier sesión que sobre
-tiempo): mover `DetailView` de `carta/page.tsx` a su propio archivo
-(`DetailView.tsx`) — move puro, ya no cambia comportamiento (eso lo hizo
-5a), solo compilador + smoke. ½ día. Tras 5b, `page.tsx` queda en ~700
-líneas (el shell) y ahí se para el refactor de Carta — no seguir
-"mejorando" después de eso (`refactor-kos.md` §2 paso 6).
+**El plan de ingeniería de diez días está completo.** Registro de riesgos
+cerrado: cero endpoints sin auth (día 1), cero writes que pierdan datos
+(días 2-3), red de ratchets en CI (día 4), puerto de IA completo (día 5),
+Carta a mitad de mudanza en estado estable (días 6-9, queda 5b como cola sin
+apuro), `crearFactura` transaccional (día 8), copias CoA muertas y glosario
+legislado (día 10, hoy).
 
-Si no se retoma Carta, el próximo ítem del plan consolidado es el **día 10**
-(`plan-consolidado.md` §2): matar las copias CoA restantes (`mapRol` ×2,
-conversión de unidades ×3, espejo `PLAZAS_OPS` mise↔constants) + legislar
-glosario y convención de repositorio en `hooks.md`.
+Según `plan-consolidado.md` §2: **"Después del día 10: se vuelve a
+producto."** El próximo tema no sale de una lista de ingeniería — es **B9
+(Reservas dentro del día de trabajo: OPS/Salón/Calendario/Dashboard)**, el
+bloque pendiente de `PLAN-4-CAPAS.md` (ver `PENDIENTES.md` 🟠, primera
+entrada). Si Facundo prefiere no arrancar Reservas todavía, las colas
+disponibles sin abrir tema nuevo son: paso 5b de Carta (½ día), censo de
+tablas en `ARQUITECTURA.md` (30 min), o Carta paso 3 (Rentabilidad:
+`lib/carta/reprecio.ts` + `saludCarta.ts`).
