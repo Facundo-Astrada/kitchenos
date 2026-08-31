@@ -29,16 +29,6 @@ const CATEGORIAS: CategoriaCartaItem[] = [
   'Entradas', 'Principales', 'Postres', 'Bebidas', 'Guarniciones', 'Brunch', 'Cafetería',
 ]
 
-const CAT_ICONS: Record<CategoriaCartaItem, string> = {
-  Entradas: 'tapas',
-  Principales: 'restaurant',
-  Postres: 'cake',
-  Bebidas: 'local_bar',
-  Guarniciones: 'dining',
-  Brunch: 'brunch_dining',
-  Cafetería: 'coffee',
-}
-
 function fcBadge(pct: number): { bg: string; text: string } {
   if (pct < 30) return { bg: '#d1fae5', text: '#065f46' }
   if (pct <= 35) return { bg: '#fef3c7', text: '#92400e' }
@@ -467,14 +457,6 @@ interface FormPlato {
   categoria: CategoriaCartaItem
   receta_id: string
   foto_url: string
-  pendingRecetas: Array<{ recetaId: string; porciones: number }>
-}
-
-const FORM_EMPTY: FormPlato = {
-  nombre: '', descripcion: '', precio_venta: '',
-  categoria: 'Principales', receta_id: '',
-  foto_url: '',
-  pendingRecetas: [],
 }
 
 function FormView({
@@ -485,29 +467,23 @@ function FormView({
   onDelete,
   onCancel,
 }: {
-  initialData?: CartaItemEnriquecido | null
+  initialData: CartaItemEnriquecido
   recetas: RecetaConCosto[]
   categorias: CartaCategoria[]
   onSave: (data: FormPlato) => Promise<void>
   onDelete?: () => Promise<void>
   onCancel: () => void
 }) {
-  const [form, setForm] = useState<FormPlato>(() => {
-    if (initialData) return {
-      nombre: initialData.nombre,
-      descripcion: initialData.descripcion || '',
-      precio_venta: String(initialData.precio_venta),
-      categoria: initialData.categoria,
-      receta_id: initialData.receta_id || '',
-      foto_url: initialData.foto_url || '',
-      pendingRecetas: [],
-    }
-    return { ...FORM_EMPTY }
-  })
-  const isCreate = !initialData
-  const [recetasAgregadas, setRecetasAgregadas] = useState<Array<{ receta: RecetaConCosto; porciones: string }>>([])
+  const [form, setForm] = useState<FormPlato>(() => ({
+    nombre: initialData.nombre,
+    descripcion: initialData.descripcion || '',
+    precio_venta: String(initialData.precio_venta),
+    categoria: initialData.categoria,
+    receta_id: initialData.receta_id || '',
+    foto_url: initialData.foto_url || '',
+  }))
   const [recetaSearch, setRecetaSearch] = useState(
-    initialData?.receta ? initialData.receta.nombre : ''
+    initialData.receta ? initialData.receta.nombre : ''
   )
   const [showRecetas, setShowRecetas] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -515,56 +491,24 @@ function FormView({
   const precioVenta = parseFloat(form.precio_venta) || 0
 
   const recetasFiltradas = useMemo(() => {
-    if (isCreate) {
-      const linkedIds = new Set(recetasAgregadas.map(ra => ra.receta.id))
-      const base = recetas.filter(r => !linkedIds.has(r.id))
-      if (!recetaSearch.trim()) return base.slice(0, 20)
-      const q = recetaSearch.toLowerCase()
-      return base.filter(r => r.nombre.toLowerCase().includes(q)).slice(0, 20)
-    }
     if (!recetaSearch.trim()) return recetas.slice(0, 20)
     const q = recetaSearch.toLowerCase()
     return recetas.filter(r => r.nombre.toLowerCase().includes(q)).slice(0, 20)
-  }, [recetas, recetaSearch, recetasAgregadas, isCreate])
+  }, [recetas, recetaSearch])
 
   const selectedReceta = useMemo(() =>
     form.receta_id ? recetas.find(r => r.id === form.receta_id) : null
   , [recetas, form.receta_id])
 
-  const fcMultiPreview = useMemo(() => {
-    if (!isCreate || recetasAgregadas.length === 0 || precioVenta <= 0) return null
-    const costo = recetasAgregadas.reduce((sum, ra) =>
-      sum + ra.receta.food_cost.costo_porcion * (parseFloat(ra.porciones) || 1), 0)
-    const pct = (costo / precioVenta) * 100
-    return { costo, pct, margen: precioVenta - costo }
-  }, [recetasAgregadas, precioVenta, isCreate])
-
   const fcPreview = useMemo(() => {
-    if (isCreate || !selectedReceta || precioVenta <= 0) return null
+    if (!selectedReceta || precioVenta <= 0) return null
     const { food_cost } = selectedReceta
     const costo = food_cost.costo_porcion
     const pct = precioVenta > 0 ? (costo / precioVenta) * 100 : 0
     return { costo, pct, margen: precioVenta - costo }
-  }, [selectedReceta, precioVenta, isCreate])
-
-  const addReceta = (r: RecetaConCosto) => {
-    setRecetasAgregadas(prev => [...prev, { receta: r, porciones: '1' }])
-    setRecetaSearch('')
-    setShowRecetas(false)
-  }
-
-  const removeReceta = (recetaId: string) => {
-    setRecetasAgregadas(prev => prev.filter(ra => ra.receta.id !== recetaId))
-  }
-
-  const updatePorciones = (recetaId: string, porciones: string) => {
-    setRecetasAgregadas(prev => prev.map(ra =>
-      ra.receta.id === recetaId ? { ...ra, porciones } : ra
-    ))
-  }
+  }, [selectedReceta, precioVenta])
 
   const selectReceta = (r: RecetaConCosto) => {
-    if (isCreate) { addReceta(r); return }
     setForm(prev => {
       const updated = { ...prev, receta_id: r.id }
       if (!prev.nombre.trim()) updated.nombre = r.nombre
@@ -589,13 +533,7 @@ function FormView({
     if (!canSave) return
     setSaving(true)
     try {
-      await onSave({
-        ...form,
-        pendingRecetas: isCreate ? recetasAgregadas.map(ra => ({
-          recetaId: ra.receta.id,
-          porciones: parseFloat(ra.porciones) || 1,
-        })) : [],
-      })
+      await onSave(form)
     } finally { setSaving(false) }
   }
 
@@ -606,7 +544,7 @@ function FormView({
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
         <span style={{ color: '#fff', fontWeight: 700, fontSize: 17 }}>
-          {initialData ? 'Editar plato' : 'Nuevo plato'}
+          Editar plato
         </span>
       </div>
 
@@ -615,7 +553,7 @@ function FormView({
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <PhotoPicker
             currentUrl={form.foto_url || null}
-            path={`carta/${initialData?.id ?? 'new-' + Date.now()}`}
+            path={`carta/${initialData.id}`}
             size={90}
             onUploaded={url => setForm(prev => ({ ...prev, foto_url: url }))}
             onRemoved={() => setForm(prev => ({ ...prev, foto_url: '' }))}
@@ -710,224 +648,114 @@ function FormView({
           </div>
         </div>
 
-        {/* Vincular receta(s) */}
-        {isCreate ? (
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 4, display: 'block' }}>
-              Recetas del plato (opcional)
-            </label>
-
-            {recetasAgregadas.length > 0 && (
-              <div style={{
-                background: 'var(--surface)', border: '1px solid var(--border)',
-                borderRadius: 10, overflow: 'hidden', marginBottom: 8,
-              }}>
-                {recetasAgregadas.map((ra, idx) => (
-                  <div key={ra.receta.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
-                    borderBottom: idx < recetasAgregadas.length - 1 ? '1px solid var(--border)' : 'none',
-                  }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--accent)', flexShrink: 0 }}>menu_book</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {ra.receta.nombre}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                        <label style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0 }}>Porc.:</label>
-                        <input
-                          type="number" min="0.1" step="0.5"
-                          value={ra.porciones}
-                          onChange={e => updatePorciones(ra.receta.id, e.target.value)}
-                          style={{ width: 52, padding: '2px 6px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-1)', background: 'var(--bg)' }}
-                        />
-                      </div>
-                    </div>
-                    <button onClick={() => removeReceta(ra.receta.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-3)' }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
-                    </button>
-                  </div>
-                ))}
+        {/* Vincular receta */}
+        <div>
+          <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 4, display: 'block' }}>
+            Vincular receta (opcional)
+          </label>
+          {form.receta_id && selectedReceta ? (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 12px', borderRadius: 10,
+              border: '1px solid var(--accent)', background: '#eef2ff',
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--accent)' }}>menu_book</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#4338ca' }}>{selectedReceta.nombre}</div>
+                <div style={{ fontSize: 11, color: 'var(--accent)' }}>{selectedReceta.categoria}</div>
               </div>
-            )}
-
-            <input
-              value={recetaSearch}
-              onChange={e => { setRecetaSearch(e.target.value); setShowRecetas(true) }}
-              onFocus={() => setShowRecetas(true)}
-              onBlur={() => setTimeout(() => setShowRecetas(false), 150)}
-              placeholder="Buscar y agregar receta..."
-              style={{
-                width: '100%', padding: '10px 12px', borderRadius: 10,
-                border: '1px solid var(--border)', background: 'var(--surface)',
-                fontSize: 13, color: 'var(--text-1)',
-              }}
-            />
-            {showRecetas && recetasFiltradas.length > 0 && (
-              <div style={{
-                background: 'var(--surface)', border: '1px solid var(--border)',
-                borderRadius: 10, marginTop: 4, maxHeight: 200, overflowY: 'auto',
-              }}>
-                {recetasFiltradas.map(r => (
-                  <button key={r.id} onMouseDown={e => { e.preventDefault(); selectReceta(r) }} style={{
-                    display: 'block', width: '100%', padding: '10px 12px',
-                    textAlign: 'left', border: 'none', background: 'none',
-                    fontSize: 13, color: 'var(--text-1)', cursor: 'pointer',
-                    borderBottom: '1px solid var(--border)', fontFamily: 'inherit',
-                  }}>
-                    <div style={{ fontWeight: 600 }}>{r.nombre}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', gap: 8 }}>
-                      <span>{r.categoria}</span>
-                      <span>FC: {r.food_cost.food_cost_pct.toFixed(1)}%</span>
-                      <span>Costo: {fmtMoney(r.food_cost.costo_porcion)}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {fcMultiPreview && (() => {
-              const badge = fcBadge(fcMultiPreview.pct)
-              return (
-                <div style={{
-                  background: 'var(--surface)', border: `2px solid ${badge.text}33`,
-                  borderRadius: 14, padding: 0, overflow: 'hidden', marginTop: 8,
-                }}>
-                  <div style={{ background: badge.bg, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 18, color: badge.text }}>monitoring</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: badge.text }}>Análisis de rentabilidad</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, background: badge.text, color: '#fff', padding: '2px 10px', borderRadius: 20 }}>
-                      {fcMultiPreview.pct < 30 ? 'Excelente' : fcMultiPreview.pct <= 35 ? 'Aceptable' : 'Alto'}
-                    </span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 0 }}>
-                    <div style={{ padding: '14px 12px', textAlign: 'center', borderRight: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Costo porción</div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-1)' }}>{fmtMoney(fcMultiPreview.costo)}</div>
-                    </div>
-                    <div style={{ padding: '14px 12px', textAlign: 'center', borderRight: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Food Cost %</div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: badge.text }}>{fcMultiPreview.pct.toFixed(1)}%</div>
-                    </div>
-                    <div style={{ padding: '14px 12px', textAlign: 'center' }}>
-                      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Margen</div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: '#059669' }}>{fmtMoney(fcMultiPreview.margen)}</div>
-                    </div>
-                  </div>
-                </div>
-              )
-            })()}
-          </div>
-        ) : (
-          <>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 4, display: 'block' }}>
-                Vincular receta (opcional)
-              </label>
-              {form.receta_id && selectedReceta ? (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '10px 12px', borderRadius: 10,
-                  border: '1px solid var(--accent)', background: '#eef2ff',
-                }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--accent)' }}>menu_book</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#4338ca' }}>{selectedReceta.nombre}</div>
-                    <div style={{ fontSize: 11, color: 'var(--accent)' }}>{selectedReceta.categoria}</div>
-                  </div>
-                  <button onClick={clearReceta} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--accent)' }}>close</span>
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <input
-                    value={recetaSearch}
-                    onChange={e => { setRecetaSearch(e.target.value); setShowRecetas(true) }}
-                    onFocus={() => setShowRecetas(true)}
-                    placeholder="Buscar receta..."
-                    style={{
-                      width: '100%', padding: '10px 12px', borderRadius: 10,
-                      border: '1px solid var(--border)', background: 'var(--surface)',
-                      fontSize: 13, color: 'var(--text-1)',
-                    }}
-                  />
-                  {showRecetas && recetasFiltradas.length > 0 && (
-                    <div style={{
-                      background: 'var(--surface)', border: '1px solid var(--border)',
-                      borderRadius: 10, marginTop: 4, maxHeight: 200, overflowY: 'auto',
-                    }}>
-                      {recetasFiltradas.map(r => (
-                        <button key={r.id} onClick={() => selectReceta(r)} style={{
-                          display: 'block', width: '100%', padding: '10px 12px',
-                          textAlign: 'left', border: 'none', background: 'none',
-                          fontSize: 13, color: 'var(--text-1)', cursor: 'pointer',
-                          borderBottom: '1px solid var(--border)',
-                        }}>
-                          <div style={{ fontWeight: 600 }}>{r.nombre}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', gap: 8 }}>
-                            <span>{r.categoria}</span>
-                            <span>FC: {r.food_cost.food_cost_pct.toFixed(1)}%</span>
-                            <span>Costo: {fmtMoney(r.food_cost.costo_porcion)}</span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
+              <button onClick={clearReceta} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--accent)' }}>close</span>
+              </button>
             </div>
-
-            {fcPreview && (() => {
-              const badge = fcBadge(fcPreview.pct)
-              return (
+          ) : (
+            <>
+              <input
+                value={recetaSearch}
+                onChange={e => { setRecetaSearch(e.target.value); setShowRecetas(true) }}
+                onFocus={() => setShowRecetas(true)}
+                placeholder="Buscar receta..."
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 10,
+                  border: '1px solid var(--border)', background: 'var(--surface)',
+                  fontSize: 13, color: 'var(--text-1)',
+                }}
+              />
+              {showRecetas && recetasFiltradas.length > 0 && (
                 <div style={{
-                  background: 'var(--surface)',
-                  border: `2px solid ${badge.text}33`,
-                  borderRadius: 14, padding: 0, overflow: 'hidden',
+                  background: 'var(--surface)', border: '1px solid var(--border)',
+                  borderRadius: 10, marginTop: 4, maxHeight: 200, overflowY: 'auto',
                 }}>
-                  <div style={{
-                    background: badge.bg, padding: '10px 14px',
-                    display: 'flex', alignItems: 'center', gap: 8,
-                  }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 18, color: badge.text }}>monitoring</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: badge.text }}>
-                      Análisis de rentabilidad
-                    </span>
-                    <span style={{
-                      marginLeft: 'auto', fontSize: 11, fontWeight: 700,
-                      background: badge.text, color: '#fff',
-                      padding: '2px 10px', borderRadius: 20,
+                  {recetasFiltradas.map(r => (
+                    <button key={r.id} onClick={() => selectReceta(r)} style={{
+                      display: 'block', width: '100%', padding: '10px 12px',
+                      textAlign: 'left', border: 'none', background: 'none',
+                      fontSize: 13, color: 'var(--text-1)', cursor: 'pointer',
+                      borderBottom: '1px solid var(--border)',
                     }}>
-                      {fcPreview.pct < 30 ? 'Excelente' : fcPreview.pct <= 35 ? 'Aceptable' : 'Alto'}
-                    </span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 0 }}>
-                    <div style={{ padding: '14px 12px', textAlign: 'center', borderRight: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Costo porcion</div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-1)' }}>{fmtMoney(fcPreview.costo)}</div>
-                    </div>
-                    <div style={{ padding: '14px 12px', textAlign: 'center', borderRight: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Food Cost %</div>
-                      <div style={{
-                        fontSize: 20, fontWeight: 800, color: badge.text,
-                        display: 'inline-flex', alignItems: 'center', gap: 4,
-                      }}>
-                        {fcPreview.pct.toFixed(1)}%
+                      <div style={{ fontWeight: 600 }}>{r.nombre}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-3)', display: 'flex', gap: 8 }}>
+                        <span>{r.categoria}</span>
+                        <span>FC: {r.food_cost.food_cost_pct.toFixed(1)}%</span>
+                        <span>Costo: {fmtMoney(r.food_cost.costo_porcion)}</span>
                       </div>
-                    </div>
-                    <div style={{ padding: '14px 12px', textAlign: 'center' }}>
-                      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Margen</div>
-                      <div style={{ fontSize: 20, fontWeight: 800, color: '#059669' }}>{fmtMoney(fcPreview.margen)}</div>
-                    </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {fcPreview && (() => {
+          const badge = fcBadge(fcPreview.pct)
+          return (
+            <div style={{
+              background: 'var(--surface)',
+              border: `2px solid ${badge.text}33`,
+              borderRadius: 14, padding: 0, overflow: 'hidden',
+            }}>
+              <div style={{
+                background: badge.bg, padding: '10px 14px',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 18, color: badge.text }}>monitoring</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: badge.text }}>
+                  Análisis de rentabilidad
+                </span>
+                <span style={{
+                  marginLeft: 'auto', fontSize: 11, fontWeight: 700,
+                  background: badge.text, color: '#fff',
+                  padding: '2px 10px', borderRadius: 20,
+                }}>
+                  {fcPreview.pct < 30 ? 'Excelente' : fcPreview.pct <= 35 ? 'Aceptable' : 'Alto'}
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 0 }}>
+                <div style={{ padding: '14px 12px', textAlign: 'center', borderRight: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Costo porcion</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-1)' }}>{fmtMoney(fcPreview.costo)}</div>
+                </div>
+                <div style={{ padding: '14px 12px', textAlign: 'center', borderRight: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Food Cost %</div>
+                  <div style={{
+                    fontSize: 20, fontWeight: 800, color: badge.text,
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                  }}>
+                    {fcPreview.pct.toFixed(1)}%
                   </div>
                 </div>
-              )
-            })()}
-          </>
-        )}
+                <div style={{ padding: '14px 12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 4 }}>Margen</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: '#059669' }}>{fmtMoney(fcPreview.margen)}</div>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
 
-        {/* Delete button for edit mode */}
-        {initialData && onDelete && (
+        {/* Delete button */}
+        {onDelete && (
           <button onClick={onDelete} style={{
             padding: '10px', borderRadius: 10, marginTop: 8,
             background: 'none', color: '#ef4444',
@@ -981,7 +809,7 @@ function FormView({
               fontSize: 14, cursor: canSave ? 'pointer' : 'default',
             }}
           >
-            {initialData ? 'Guardar cambios' : 'Crear plato'}
+            Guardar cambios
           </button>
         )}
       </div>
@@ -3204,7 +3032,7 @@ function ImportCartaModal({
 }
 
 // ── MAIN PAGE ───────────────────────────────────────────
-type View = 'list' | 'nuevo' | 'detail' | 'edit' | 'rentabilidad' | 'menus'
+type View = 'list' | 'detail' | 'edit' | 'rentabilidad' | 'menus'
 
 export default function CartaPage() {
   const { items, loading, fetchItems, crearItem, actualizarItem, actualizarTags, toggleDisponible, eliminarItem, duplicarItem, agregarPlatoReceta, actualizarPlatoReceta, eliminarPlatoReceta, agregarPlatoPackaging, eliminarPlatoPackaging, categorias } = useCarta()
@@ -3469,22 +3297,6 @@ export default function CartaPage() {
     }
   }
 
-  const handleCrear = async (form: FormPlato) => {
-    const newId = await crearItem({
-      nombre: form.nombre.trim(),
-      descripcion: form.descripcion || null,
-      precio_venta: parseFloat(form.precio_venta),
-      categoria: form.categoria,
-      receta_id: null,
-      foto_url: form.foto_url || null,
-    })
-    for (const pr of form.pendingRecetas) {
-      await agregarPlatoReceta(newId, pr.recetaId, pr.porciones)
-    }
-    setToast('Plato creado')
-    setView('list')
-  }
-
   const handleEditar = async (form: FormPlato) => {
     if (!selectedItemId) return
     await actualizarItem(selectedItemId, {
@@ -3666,21 +3478,6 @@ export default function CartaPage() {
           onSave={handleEditar}
           onDelete={handleEliminar}
           onCancel={() => setView('detail')}
-        />
-        {toast && <Toast msg={toast} onDone={() => setToast('')} />}
-      </>
-    )
-  }
-
-  // ── Nuevo ──
-  if (view === 'nuevo') {
-    return (
-      <>
-        <FormView
-          recetas={recetas}
-          categorias={categorias}
-          onSave={handleCrear}
-          onCancel={() => setView('list')}
         />
         {toast && <Toast msg={toast} onDone={() => setToast('')} />}
       </>
