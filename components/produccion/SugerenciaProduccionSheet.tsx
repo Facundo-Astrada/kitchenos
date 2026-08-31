@@ -108,6 +108,16 @@ export default function SugerenciaProduccionSheet({ tareasExistentes, onConfirm,
           </button>
         </div>
 
+        {data?.narracionFactor && (
+          <div style={{
+            margin: '10px 16px 0', padding: '10px 12px', borderRadius: 10,
+            background: 'rgba(20,184,166,.1)', display: 'flex', alignItems: 'flex-start', gap: 8,
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#0d9488', flexShrink: 0, marginTop: 1 }}>event_seat</span>
+            <span style={{ fontSize: 12, color: '#0d9488', fontWeight: 600, lineHeight: 1.4 }}>{data.narracionFactor}</span>
+          </div>
+        )}
+
         <div style={{ overflowY: 'auto', flex: 1, padding: '12px 16px' }}>
           {loading && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40, gap: 8 }}>

@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { cubiertosVivos, tieneCarga } from '@/lib/reservas/helpers'
+import type { EstadoReserva } from '@/types'
 
 export interface SugerenciaItem {
   recetaId: string
@@ -16,6 +18,15 @@ export interface SugerenciaResultado {
   diaSemanaLabel: string
   semanasAnalizadas: number
   itemsVendidosSinMatch: number
+  /** PLAN-4-CAPAS B10 — 1 si no hay reservas de hoy o no hay suficiente
+   * historial de reservas para estimar el walk-in con confianza (no adivina
+   * en el vacío: mismo criterio de "muestra insuficiente" que ya usa este
+   * motor para las recetas). */
+  factorDemanda: number
+  cubiertosReservados: number
+  cubiertosPromedio: number | null
+  /** Texto ya armado ("Sábado con 62 cubiertos... sugiero 38% más"), null si factorDemanda === 1. */
+  narracionFactor: string | null
   sugerencias: SugerenciaItem[]
 }
 
@@ -64,6 +75,69 @@ export async function calcularSugerenciaProduccion(opts: {
     const v = Array.isArray(r.ventas) ? r.ventas[0] : r.ventas
     return v && new Date(v.fecha + 'T12:00:00').getDay() === diaSemana
   })
+
+  // PLAN-4-CAPAS B10 — factor de demanda: escala el promedio histórico de
+  // cada receta según cuánta más (o menos) gente hay reservada hoy contra lo
+  // habitual. Necesita DOS series históricas confiables (cubiertos totales
+  // por `ventas.cantidad_cubiertos` y reservas por fecha) para decomponer
+  // "cuánto de lo vendido era walk-in" — si falta cualquiera de las dos,
+  // factor_demanda queda en 1 y el motor se comporta igual que antes de B10.
+  const { data: ventasHist, error: vhErr } = await supabase
+    .from('ventas')
+    .select('fecha, cantidad_cubiertos')
+    .eq('restaurante_id', restauranteId)
+    .gte('fecha', desdeStr)
+    .lt('fecha', fechaObjetivo)
+  if (vhErr) throw vhErr
+  const cubiertosPorFecha = new Map<string, number>()
+  for (const v of (ventasHist ?? []) as { fecha: string; cantidad_cubiertos: number | null }[]) {
+    if (new Date(v.fecha + 'T12:00:00').getDay() !== diaSemana) continue
+    if (v.cantidad_cubiertos == null) continue
+    cubiertosPorFecha.set(v.fecha, Number(v.cantidad_cubiertos))
+  }
+
+  const { data: reservasHist, error: rhErr } = await supabase
+    .from('reservas')
+    .select('fecha, pax, estado')
+    .eq('restaurante_id', restauranteId)
+    .gte('fecha', desdeStr)
+    .lt('fecha', fechaObjetivo)
+  if (rhErr) throw rhErr
+  const reservadosPorFecha = new Map<string, number>()
+  for (const r of (reservasHist ?? []) as { fecha: string; pax: number; estado: string }[]) {
+    if (!cubiertosPorFecha.has(r.fecha)) continue // solo sirve para decomponer fechas con dato real de cubiertos
+    if (!tieneCarga(r.estado as EstadoReserva)) continue
+    reservadosPorFecha.set(r.fecha, (reservadosPorFecha.get(r.fecha) ?? 0) + Number(r.pax))
+  }
+  const walkInsHistoricos: number[] = []
+  for (const [fecha, cubiertos] of cubiertosPorFecha) {
+    const reservado = reservadosPorFecha.get(fecha)
+    if (reservado === undefined) continue // sin reservas cargadas ese día pasado: no hay con qué decomponer
+    walkInsHistoricos.push(Math.max(0, cubiertos - reservado))
+  }
+  const cubiertosPromedio = cubiertosPorFecha.size > 0
+    ? [...cubiertosPorFecha.values()].reduce((a, b) => a + b, 0) / cubiertosPorFecha.size
+    : null
+
+  const { data: reservasHoy, error: rErr } = await supabase
+    .from('reservas')
+    .select('pax, estado')
+    .eq('restaurante_id', restauranteId)
+    .eq('fecha', fechaObjetivo)
+  if (rErr) throw rErr
+  const cubiertosReservados = cubiertosVivos((reservasHoy ?? []) as { pax: number; estado: EstadoReserva }[])
+
+  let factorDemanda = 1
+  let narracionFactor: string | null = null
+  if (cubiertosReservados > 0 && cubiertosPromedio !== null && cubiertosPromedio > 0 && walkInsHistoricos.length >= 2) {
+    const walkInEsperado = walkInsHistoricos.reduce((a, b) => a + b, 0) / walkInsHistoricos.length
+    factorDemanda = (cubiertosReservados + walkInEsperado) / cubiertosPromedio
+    const pct = Math.round((factorDemanda - 1) * 100)
+    if (pct !== 0) {
+      const diaCap = DIAS_ES[diaSemana].charAt(0).toUpperCase() + DIAS_ES[diaSemana].slice(1)
+      narracionFactor = `${diaCap} con ${cubiertosReservados} cubiertos reservados contra un promedio de ${Math.round(cubiertosPromedio)} — sugiero un ${Math.abs(pct)}% ${pct > 0 ? 'más' : 'menos'} de lo habitual`
+    }
+  }
 
   const { data: recetas, error: recErr } = await supabase
     .from('recetas')
@@ -126,7 +200,7 @@ export async function calcularSugerenciaProduccion(opts: {
     const promedio = g.total / g.fechas.size
     const mise = miseByReceta.get(recetaId)
     const stockActual = mise ? (stockByItem.get(mise.itemId) ?? 0) : 0
-    const sugerido = Math.max(0, Math.round(promedio - stockActual))
+    const sugerido = Math.max(0, Math.round(promedio * factorDemanda - stockActual))
     sugerencias.push({
       recetaId,
       nombre: g.nombre,
@@ -145,6 +219,10 @@ export async function calcularSugerenciaProduccion(opts: {
     diaSemanaLabel: DIAS_ES[diaSemana],
     semanasAnalizadas: semanas,
     itemsVendidosSinMatch: sinMatch,
+    factorDemanda: Math.round(factorDemanda * 100) / 100,
+    cubiertosReservados,
+    cubiertosPromedio: cubiertosPromedio !== null ? Math.round(cubiertosPromedio) : null,
+    narracionFactor,
     sugerencias,
   }
 }
