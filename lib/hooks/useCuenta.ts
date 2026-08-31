@@ -108,11 +108,12 @@ export function useCuenta() {
       if (mesaError) throw mesaError
 
       // 4. Merma automática (fire-and-forget — no bloquea)
+      // El endpoint resuelve el restaurante desde la sesión, no del body.
       if (RESTAURANTE_ID) {
         fetch('/api/salon/merma-auto', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ cuenta_id: cuentaId, restaurante_id: RESTAURANTE_ID }),
+          body:    JSON.stringify({ cuenta_id: cuentaId }),
         }).catch(() => {})
       }
 

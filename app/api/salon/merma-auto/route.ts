@@ -1,18 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requireRestauranteId } from '@/lib/api/tenant'
 
 /**
  * POST /api/salon/merma-auto
- * Body: { cuenta_id: string, restaurante_id: string }
+ * Body: { cuenta_id: string }
  *
  * Descuenta del stock los ingredientes consumidos en la cuenta:
  * comanda_items → carta_items → plato_recetas → recetas → ingredientes → productos.stock_actual
  */
 export async function POST(req: NextRequest) {
-  const supabase = createAdminClient()
   try {
-    const { cuenta_id, restaurante_id } = await req.json()
-    if (!cuenta_id || !restaurante_id) return NextResponse.json({ error: 'cuenta_id y restaurante_id requeridos' }, { status: 400 })
+    const tenant = await requireRestauranteId()
+    if (!tenant.ok) return NextResponse.json({ error: tenant.error }, { status: tenant.status })
+    const restaurante_id = tenant.restauranteId
+
+    const supabase = createAdminClient()
+
+    const { cuenta_id } = await req.json()
+    if (!cuenta_id) return NextResponse.json({ error: 'cuenta_id requerido' }, { status: 400 })
+
+    // Verificar que la cuenta pertenece al tenant
+    const { data: cuenta } = await supabase
+      .from('cuentas')
+      .select('id')
+      .eq('id', cuenta_id)
+      .eq('restaurante_id', restaurante_id)
+      .maybeSingle()
+    if (!cuenta) return NextResponse.json({ error: 'Cuenta no encontrada' }, { status: 404 })
 
     // 1. Obtener todos los comanda_items de la cuenta (vía comandas)
     const { data: comandas } = await supabase

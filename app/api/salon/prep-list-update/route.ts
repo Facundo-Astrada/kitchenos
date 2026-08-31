@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { requireRestauranteId } from '@/lib/api/tenant'
 
 /**
  * POST /api/salon/prep-list-update
@@ -12,19 +13,25 @@ import { createAdminClient } from '@/lib/supabase/admin'
  * Si la columna no existe, falla silenciosamente (no bloquea el flujo de salón).
  */
 export async function POST(req: NextRequest) {
-  const supabase = createAdminClient()
   try {
+    const tenant = await requireRestauranteId()
+    if (!tenant.ok) return NextResponse.json({ error: tenant.error }, { status: tenant.status })
+    const { restauranteId } = tenant
+
+    const supabase = createAdminClient()
+
     const { items } = await req.json() as { items: { carta_item_id: string; cantidad: number }[] }
     if (!items?.length) return NextResponse.json({ ok: true, actualizado: 0 })
 
     const cartaItemIds = items.map(i => i.carta_item_id).filter(Boolean)
     if (!cartaItemIds.length) return NextResponse.json({ ok: true, actualizado: 0 })
 
-    // carta_items → receta_id
+    // carta_items → receta_id (solo ítems del tenant)
     const { data: cartaItems } = await supabase
       .from('carta_items')
       .select('id, receta_id')
       .in('id', cartaItemIds)
+      .eq('restaurante_id', restauranteId)
       .not('receta_id', 'is', null)
 
     if (!cartaItems?.length) return NextResponse.json({ ok: true, actualizado: 0 })
@@ -50,6 +57,7 @@ export async function POST(req: NextRequest) {
         .from('checklist_items')
         .select('id, demanda_viva')
         .eq('receta_id', recetaId)
+        .eq('restaurante_id', restauranteId)
         // Intentamos filtrar por fecha pero el checklist_items puede no tener fecha
         .limit(10)
 
