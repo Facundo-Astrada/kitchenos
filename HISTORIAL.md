@@ -6,6 +6,12 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-08-31 — Día 1 del plan consolidado: cierre de los 2 ítems 🔴 Crítico de seguridad.** 1 commit (`f0dfb4e`). Ejecutado siguiendo `.claude/docs/ingenieria/plan-consolidado.md`.
+
+- **3 endpoints admin sin auth, cerrados.** `carta/86`, `salon/merma-auto` y `salon/prep-list-update` usaban `createAdminClient()` sin verificar quién llama (alcanzables sin sesión, ya que `/api/*` es público en `proxy.ts`) — anulaban el RLS de las tablas que tocan. Los tres reciben ahora `requireRestauranteId()` + verificación de que el recurso (carta_item, cuenta, carta_items de la demanda) pertenece al tenant, copiando el patrón de `stock/sync-precio`. Confirmado antes de exigir sesión en `carta/86`: el KDS que lo llama corre bajo `/kds`, que ya requiere sesión (no está en las rutas públicas de `proxy.ts`) — no rompe nada. `merma-auto` además aceptaba `restaurante_id` del body (con `useCuenta.cobrarCuenta` mandándoselo) — se corrigió en el mismo commit: el endpoint resuelve el tenant de la sesión, el caller dejó de mandarlo.
+- **`tareas_duplicados_backup_20260826` borrada.** Era el respaldo de las 76 filas de duplicados de Producción limpiadas el 26/08 (RLS deshabilitado, única alerta ERROR de Supabase). Facundo decidió borrar directo (fix confirmado hace 5 días, sin reclamos) en vez de activarle RLS. Confirmado el conteo (76 filas) antes de tirar el `DROP TABLE`; el advisor de seguridad ya no la lista.
+- Build, typecheck y 203 tests OK antes de commitear. Push falló por token vencido en el Credential Manager de Windows — resuelto reautenticando `gh auth login` + `gh auth setup-git`, así los próximos push no vuelven a pedir un PAT pegado a mano.
+
 **Sesión 2026-08-27 (cont.) — 12 ítems del backlog sin decisión pendiente, en orden de tamaño.** Facundo pidió atacar en una sola sesión todo lo que no dependía de su decisión, del más chico al más grande, pausando y documentando en vez de forzar lo que resultara más grande de lo esperado. Build+test+lint después de cada ítem, commit propio, push sin preguntar.
 
 - **`demanda_viva` se resetea al completar la apertura.** `useChecklist.resetDemandaViva()`, disparado por plaza+fecha+turno cuando la apertura cruza a 100% (`checklist/ClientView.tsx`) — antes acumulaba sin límite, nunca se reseteaba.

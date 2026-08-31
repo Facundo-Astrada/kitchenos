@@ -1,43 +1,43 @@
-# Sesión — 2026-08-31 (tarde) — Investigación de ingeniería, núcleo 3/3: refactorización — CIERRE de la investigación
+# Sesión — 2026-08-31 (noche) — Día 1 del plan consolidado: seguridad
 
 ## Qué se cerró
 
-Sesión de investigación (sin código de producción). Tercer y último núcleo, tres docs:
+Los 2 ítems 🔴 Crítico de `PENDIENTES.md`, siguiendo el Día 1 de
+`.claude/docs/ingenieria/plan-consolidado.md`. 1 commit (`f0dfb4e`), pusheado.
 
-- `.claude/docs/ingenieria/refactor-marco.md` — Fowler filtrado a React (la distinción
-  mover-vs-extraer como eje), estrangulamiento/branch-by-abstraction/parallel-run por
-  tipo de artefacto, postura sobre caracterización (el compilador cubre el move; el
-  test se escribe en el commit de la extracción), trofeo sobre pirámide, cuadrantes de
-  deuda con regla de pago.
-- `.claude/docs/ingenieria/refactor-kos.md` — la auditoría: radiografía completa de
-  `carta/page.tsx` (leídas las 3.906 líneas) + **plan ejecutable de 6 pasos, cada uno
-  ≤1 día y reversible** + veredictos por pantalla + métricas (ratchets + graphify).
-- `.claude/docs/ingenieria/plan-consolidado.md` — las tres sesiones cruzadas:
-  fusiones/cancelaciones y **los 10 días ordenados con dependencias**.
-- `CLAUDE.md`: 2 filas nuevas en Docs condicionales. `PENDIENTES.md`: reordenado según
-  el plan (candado de cuentas subió a 🟠; gotchas-CI fusionado en "Ratchets"; ítems de
-  ingeniería apuntan al plan).
-
-Hallazgos no esperados: la premisa de GRASP sobre Carta era falsa (los 9 componentes
-YA están a nivel de módulo — es mudanza, no cirugía; máximo real 24 estados, no 59);
-~300 líneas de código muerto (`view='nuevo'` inalcanzable); el panel OPS de
-`DetailView` duplica inline los helpers de `lib/ops/mise.ts` sin `shrinkOrPruneMise`
-(bug latente: mover de plaza deja el mise viejo) con una 3ª copia de `PLAZAS_OPS`; y
-el canal realtime de `useCarta` viola el gotcha #18 (sin filter por tenant, 4 tablas).
+- **3 endpoints admin sin auth cerrados**: `carta/86`, `salon/merma-auto`,
+  `salon/prep-list-update` — ahora exigen `requireRestauranteId()` + verifican
+  pertenencia del recurso al tenant (patrón de `stock/sync-precio`). Confirmado que
+  el KDS que llama a `carta/86` corre logueado (`/kds` no es ruta pública en
+  `proxy.ts`), así que exigir sesión no rompió nada. `merma-auto` dejó de aceptar
+  `restaurante_id` del body — `useCuenta.cobrarCuenta` se corrigió en el mismo
+  commit para no mandarlo más.
+- **`tareas_duplicados_backup_20260826` borrada** (decisión de Facundo: DROP directo,
+  no RLS — el respaldo ya cumplió su función). Confirmado 76 filas antes de borrar;
+  la alerta ERROR de Supabase ya no aparece.
+- Build + typecheck + 203 tests OK antes de commitear.
+- **Credenciales de git arregladas de raíz**: el push falló por token vencido en
+  Credential Manager; se resolvió con `gh auth login` + `gh auth setup-git` (ya no
+  hace falta pegar un PAT a mano en los próximos push).
 
 ## Qué quedó a medias
 
-- Nada de esta sesión. La investigación de ingeniería queda CERRADA (3/3).
-- `.claude/settings.json` sigue modificado sin commitear (decisión de Facundo, en PENDIENTES).
+- Nada de Día 1 — quedó completo, sin cabos sueltos.
+- `.claude/settings.json` sigue modificado sin commitear (decisión de Facundo
+  arrastrada desde jul 2026, sigue en `PENDIENTES.md` 🟢).
+- El PAT que Facundo pegó en el chat para el primer push (`ghp_CXSA...`) sigue sin
+  revocar — recordarle rotarlo en GitHub → Settings → Developer settings → Tokens.
 
 ## Probar primero mañana
 
-- Nada que probar (no hubo código).
+- En producción (post-deploy): cobrar una cuenta en Salón (que la merma automática
+  siga descontando stock) y marcar/sacar un 86 desde el KDS — los dos flujos que
+  tocan los endpoints recién cerrados.
 
 ## Próximo paso concreto
 
-**Día 1 del plan consolidado** (`plan-consolidado.md` §2): cerrar los 3 endpoints sin
-auth + sacar `restaurante_id` del body en `useCuenta.cobrarCuenta` en el mismo commit
-(2-3 h, patrón en `/api/stock/sync-precio`) + decidir qué hacer con
-`tareas_duplicados_backup_20260826`. Después, días 2-3: invariantes a la base (rpc de
-`actualizarMenu`, candado de cuentas, trigger de comanda).
+**Día 2 del plan consolidado** (`plan-consolidado.md` §2): invariantes a la base
+(1/2) — rpc `reemplazar_menu_preparaciones` para que `actualizarMenu` deje de perder
+datos ante un corte a mitad de camino, + candado `UNIQUE ... WHERE estado='abierta'`
+en `cuentas` con captura del 23505. 2-3 h + 1-2 h, no depende de nada (podría
+adelantarse el día 3 si conviene).

@@ -6,16 +6,6 @@ Lista priorizada de lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL.md`.
 
 ---
 
-## 🔴 Crítico
-
-### 3 endpoints con admin client sin verificar quién llama (auditoría de arquitectura 31/08 — detalle en `.claude/docs/ingenieria/arquitectura-kos.md` §7.1)
-`/api/carta/86`, `/api/salon/merma-auto` y `/api/salon/prep-list-update` usan `createAdminClient()` sin auth alguna; merma-auto además acepta `restaurante_id` desde el body — y `useCuenta.cobrarCuenta` se lo manda, así que **endpoint y caller se arreglan en el mismo commit** o se rompe el cobro. Los tres alcanzables sin sesión (todo `/api/*` es público en `proxy.ts`). Anulan el RLS de las 78 tablas. Fix mecánico: `requireRestauranteId()` + verificación de pertenencia, patrón textual en `/api/stock/sync-precio`. Antes de exigir sesión en carta/86, verificar desde dónde llama el KDS. **2-3 h.**
-
-### `tareas_duplicados_backup_20260826` expuesta sin RLS (encontrado 27/08 vía `get_advisors`)
-La tabla de respaldo creada al limpiar los duplicados de Producción (76 filas, ver `HISTORIAL.md` 26/08) tiene RLS **deshabilitado** — cualquiera con la publishable key puede leer o escribir esas filas vía REST directo. Supabase la marca ERROR (la única de nivel ERROR hoy). Dos salidas: activar RLS con policy por `restaurante_id` (si todavía se necesita de referencia), o borrar la tabla directamente si el respaldo ya cumplió su función. **Facundo decide** — no autoaplicar sin su ok (activar RLS sin policy bloquea todo acceso a la tabla).
-
----
-
 ## 🟠 Alto
 
 ### Cerrar el ciclo de las 4 capas — plan propio en `PLAN-4-CAPAS.md`
