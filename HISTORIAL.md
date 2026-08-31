@@ -6,6 +6,14 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-08-31 (noche, cont. 5) — Día 6 del plan consolidado: Carta, pasos 0+1.** 1 commit (`8cddfaa`). Ejecutado siguiendo `.claude/docs/ingenieria/plan-consolidado.md` §2 y `refactor-kos.md` §2 (pasos 0 y 1).
+
+- **`e2e/carta-smoke.spec.ts` nuevo** (Paso 0, la red antes de mover código en los días 7 y 9): login → `/carta` → lista con ≥1 plato → toggle 86 desde la tarjeta (overlay en la lista) → abrir el plato → el badge 86 se refleja en detail → volver a la lista → Rentabilidad → las 4 tabs (Lista/Ingeniería/Reprecio/Salud) renderizan. El toggle se revierte siempre (`try`/`finally`) para no dejar la cuenta demo El Rescoldo marcada 86 si el test falla a mitad de camino. Corre en mobile viewport (390×844) porque en desktop la lista usa `FlipCard` en vez de navegar directo a detail. Pasa 2 veces seguidas contra el dev server.
+- **~200 líneas muertas borradas** (Paso 1) de `carta/page.tsx`: la rama `view==='nuevo'` + `handleCrear` (nada la dispara — el botón "Nuevo" pasa por `ComposicionEditor` desde hace tiempo), toda la rama `isCreate` de `FormView` (ahora editor puro, `initialData` pasa a ser prop obligatoria en vez de opcional) y `CAT_ICONS` (sin callers). 3.906 → 3.703 líneas.
+- **Techo del ratchet de líneas bajado**: `carta/page.tsx` de 3910 a 3710 en `lib/ingenieria/ratchets.test.ts` — el techo solo baja, y este paso lo permitía.
+- Typecheck, 225 tests, build y ratchets en verde. Lint: mismos ~10.000 problemas pre-existentes de siempre (verificado con `git stash`, no los introduce esta sesión).
+- Quedan días 7 (moves puros: cards, exportadores, drawer, modal, form → sus archivos) y 9 (el panel OPS de `DetailView` migra a los helpers de `lib/ops/mise.ts` — el único paso con riesgo real).
+
 **Sesión 2026-08-31 (noche, cont. 3) — Día 4 del plan consolidado: ratchets de ingeniería.** 1 commit (`d46fe88`). Ejecutado siguiendo `.claude/docs/ingenieria/plan-consolidado.md` §2 y `refactor-kos.md` §4.
 
 - **`lib/ingenieria/ratchets.test.ts` nuevo** (corre con `npm test`, ya en CI): pasa 4 reglas de `hooks.md`/`arquitectura-marco.md` de prosa a chequeo automático, más los techos de líneas de las 5 pantallas grandes (`carta/page.tsx` 3910, `recetario/page.tsx` 3810, `facturas/page.tsx` 3640, `stock/ClientView.tsx` 3410, `checklist/ClientView.tsx` 3160 — solo bajan).
