@@ -24,9 +24,6 @@ Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/
 ### OPS Consolidación — diferido
 "Copiar a otro día" e "Ingredientes consolidados" (se sacaron con la planilla legacy) — reimplementar sobre `tareas` si el usuario los pide.
 
-### Invariante de la comanda vive en la cache local — día 3 del plan consolidado (auditoría 31/08, evidencia en `dominio-kos.md` §4/§8)
-"Todos los ítems bumpeados ⇒ comanda lista" se decide contra el snapshot del cliente ([useComandas.ts:179-187](lib/hooks/useComandas.ts#L179-L187)); cero triggers sobre `comandas`/`comanda_items` (verificado). Dos tablets KDS a la vez pueden dejar la comanda sin pasar a `lista`. Fix: trigger AFTER UPDATE sobre `comanda_items` que recalcule el estado (compatible con la cola offline). **2-3 h + test multi-cliente.** (Los otros dos invariantes de este ítem —`actualizarMenu` perdiendo datos y el candado de cuentas duplicadas— se resolvieron el 31/08, día 2: ver `HISTORIAL.md`.)
-
 ### Ratchets de ingeniería — día 4 del plan (fusiona "gotchas a CI" + techos de refactor + hallazgo nuevo, `refactor-kos.md` §4)
 Un solo `lib/ingenieria/ratchets.test.ts` (corre con `npm test` → ya queda en CI): techos de líneas por pantalla grande que **solo bajan**, + patrones prohibidos por grep — gotcha #20 (`createClient()` sin `useMemo`: 3 hooks lo violan hoy — `useFacturas:48`, `usePase:18`, `useReportes:136`, 1 línea de fix c/u), gotcha #18 (canal realtime sin `filter` por tenant: [useCarta.ts:579-588](lib/hooks/useCarta.ts#L579-L588) suscribe 4 tablas sin filtro, hallazgo 31/08), `createAdminClient` sin `requireRestauranteId` en `app/api/**` (allowlist para `cron/reset-demo` e `invitar`), `'use client'` en `lib/<dominio>/` fuera de hooks. Arreglar lo marcado en la misma sesión. **3-4 h.**
 
@@ -62,9 +59,6 @@ Branch by abstraction sobre las tres duplicaciones restantes (la 4ª — la copi
 ---
 
 ## 🟢 Bajo — Roadmap abierto
-
-### Chequeo de huérfanos en las refs polimórficas — auditoría de dominio 31/08, `dominio-kos.md` §5/§8.5
-`menu_preparaciones.ref_id`, `calendario_nota_items.tarea_id`, `proveedor_incidencias.pedido_id` sin FK pueden quedar colgando al borrar el destino, y nadie lo mira. La decisión de no-FK es correcta (documentada y razonada) — el costo aceptado era "refs colgantes posibles", no "invisibles". Una query de huérfanos en el tab Salud o script de mantenimiento; NO agregar FKs. **1-2 h.**
 
 ### Actualizar el censo de tablas en ARQUITECTURA.md — auditoría de dominio 31/08
 `ARQUITECTURA.md` §5 dice 78 tablas; son 91 (verificado contra `pg_tables` el 31/08): faltan las 13 de agosto (`reservas`, `bitacora_*`, `control_carta_registros`, `rutina_turno_*`, `proveedor_incidencias`, `notificaciones`, `areas`, `area_capas`, `presupuesto_mes`, `presupuesto_sector`) más el backup. Actualizar conteo y tabla de dominios. **30 min.**
