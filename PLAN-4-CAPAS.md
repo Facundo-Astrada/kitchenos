@@ -333,7 +333,7 @@ CREATE INDEX ON reservas (restaurante_id, fecha);
 
 ## Bloque 9 — Reservas dentro del día de trabajo
 
-- [ ] **B9** · Una sesión · Sin migración · Depende de B8
+- [x] **B9** · Una sesión · Sin migración · Depende de B8 — cerrado 31/08
 
 Una reserva que vive sola en su pantalla no sirve. Los cuatro enganches:
 

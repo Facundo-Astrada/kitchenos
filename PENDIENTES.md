@@ -9,7 +9,7 @@ Lista priorizada de lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL.md`.
 ## 🟠 Alto
 
 ### Cerrar el ciclo de las 4 capas — plan propio en `PLAN-4-CAPAS.md`
-10 bloques ejecutables (B1 a B10) que salen de `AUDITORIA-4-CAPAS.md`: corrección de ingeniería de menú, campos de la capa Definir en Stock, incidencias por proveedor, presupuesto por familias, detección de fuga, objetivos por persona, checklist de carta pre-servicio y Reservas con sugerencia de compra. **No duplicar los ítems acá** — el estado de avance vive en los checkboxes del plan. B1-B8 cerrados; quedan B9 (reservas dentro del día de trabajo: OPS/Salón/Calendario/Dashboard) y B10 (reservas alimentan previsión de producción y sugerencia de compra), ambos dependientes de B8.
+10 bloques ejecutables (B1 a B10) que salen de `AUDITORIA-4-CAPAS.md`: corrección de ingeniería de menú, campos de la capa Definir en Stock, incidencias por proveedor, presupuesto por familias, detección de fuga, objetivos por persona, checklist de carta pre-servicio y Reservas con sugerencia de compra. **No duplicar los ítems acá** — el estado de avance vive en los checkboxes del plan. B1-B9 cerrados (B9 el 31/08: cubiertos reservados en OPS, oferta de sentar reserva + "Cerrar servicio"/no-show en Salón, reflejo de solo lectura en Calendario, tile en Dashboard). Queda B10 (reservas alimentan previsión de producción y sugerencia de compra), dependiente de B2, B3, B8, B9.
 
 **Decisión 27/08:** se sigue con B9-B10 sin esperar el track de validación Bros/Rescoldo — K-OS va a venderse a diversos sectores de gastronomía, no solo parrilla, así que Reservas conviene diseñarla genérica desde ahora (ver `project_kitchenos_expansion` / memoria). Tabla `reservas` ya existe en DB (0 filas, sin usar todavía).
 
