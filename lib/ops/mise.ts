@@ -149,6 +149,23 @@ export async function resolverSeccionMise(
   return resolverSeccionPorNombre(supabase, restauranteId, plaza, secRow.nombre, 'inventory_2')
 }
 
+// ── Capacidad de un recipiente → porciones ──────────────────────────────
+// Convierte "cuánto entra en el recipiente" + "cuánto pesa una porción" a
+// cantidad de porciones, pasando ambos a gramos. `null` si alguna de las dos
+// unidades no es convertible a peso (u/pax/porc/ml/l no tienen conversión
+// fija a g acá) o si el peso por porción es 0 — el caller decide el fallback
+// (mostrar el valor crudo en vez de la conversión). Estaba escrito dos veces
+// en DetailView (el cálculo real al guardar y el preview mientras se tipea)
+// con el riesgo de que una copia se actualizara y la otra no.
+export function porcionesDesdeCapacidad(
+  capacidad: number, capUnidad: string, pesoPorcion: number, pesoPorcionUnidad: string
+): number | null {
+  const toG = (v: number, u: string) => u === 'kg' ? v * 1000 : u === 'g' ? v : null
+  const capG = toG(capacidad, capUnidad)
+  const porG = toG(pesoPorcion, pesoPorcionUnidad)
+  return capG !== null && porG !== null && porG > 0 ? Math.round(capG / porG) : null
+}
+
 // ── Upsert de un ítem del mise keyed por (restaurante, receta, plaza) ──
 // Extraído de handleComposicionSave (carta/page.tsx). Busca o crea la
 // checklist_seccion de la plaza y hace upsert del checklist_item, incluyendo

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tieneRecipienteMise, targetStockMise, deficitMise } from './mise'
+import { tieneRecipienteMise, targetStockMise, deficitMise, porcionesDesdeCapacidad } from './mise'
 
 // "pomelo a vivo" del mise de Bros: recipiente de 8 porciones, sin demanda.
 const CON_RECIPIENTE = { cantidad: 8, recipiente_nombre: '0.5', recipiente_capacidad: 8, demanda_viva: 0 }
@@ -59,5 +59,29 @@ describe('deficitMise — cuánto falta producir', () => {
 
   it('con demanda del salón el déficit la incluye', () => {
     expect(deficitMise({ ...CON_RECIPIENTE, demanda_viva: 3 }, 2)).toBe(9)
+  })
+})
+
+describe('porcionesDesdeCapacidad — recipiente → porciones', () => {
+  it('kg de recipiente / g de porción: convierte a la misma unidad antes de dividir', () => {
+    expect(porcionesDesdeCapacidad(2, 'kg', 110, 'g')).toBe(18) // 2000/110 = 18.18 → 18
+  })
+
+  it('g y g: división directa', () => {
+    expect(porcionesDesdeCapacidad(1000, 'g', 250, 'g')).toBe(4)
+  })
+
+  it('redondea al entero más cercano', () => {
+    expect(porcionesDesdeCapacidad(1000, 'g', 300, 'g')).toBe(3) // 3.33 → 3
+  })
+
+  it('peso por porción en 0 → null (no hay por qué dividir)', () => {
+    expect(porcionesDesdeCapacidad(1000, 'g', 0, 'g')).toBeNull()
+  })
+
+  it('unidad no convertible a peso (porc, u, pax, ml, l) → null', () => {
+    expect(porcionesDesdeCapacidad(10, 'porc', 110, 'g')).toBeNull()
+    expect(porcionesDesdeCapacidad(2, 'kg', 5, 'u')).toBeNull()
+    expect(porcionesDesdeCapacidad(2, 'l', 200, 'ml')).toBeNull()
   })
 })

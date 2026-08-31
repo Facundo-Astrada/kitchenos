@@ -16,7 +16,11 @@ import { useMenus, type MenuConPreparaciones } from '@/lib/hooks/useMenus'
 import { useChecklist } from '@/lib/hooks/useChecklist'
 import MenusView from './MenusView'
 import ComposicionEditor, { type CompPayload, type CompInicial } from './ComposicionEditor'
-import { upsertMiseChecklistItem, parseRecipienteNombre, TAREA_PRIO_TO_MISE } from '@/lib/ops/mise'
+import {
+  upsertMiseChecklistItem, parseRecipienteNombre, TAREA_PRIO_TO_MISE,
+  PLAZAS_OPS, SECCIONES_OPS, sumPlatoRecetaCantidad, shrinkOrPruneMise, porcionesDesdeCapacidad,
+} from '@/lib/ops/mise'
+import { useTareas } from '@/lib/hooks/useTareas'
 import { clasificarIngenieriaMenu, buildVentasMap, mapaCuadrantePorId, QUAD_META } from '@/lib/carta/ingenieriaMenu'
 import { sincronizarMiseDeMenu } from '@/lib/ops/menuMise'
 import { Toast, FlipCard } from '@/components/ui'
@@ -40,7 +44,7 @@ const TAG_DEFS = [
   { key: 'sin lactosa', label: 'Sin lactosa',   bg: '#e0f2fe', color: '#075985' },
 ]
 
-function DetailView({
+export function DetailView({
   item,
   recetas,
   productos,
@@ -55,6 +59,7 @@ function DetailView({
   onEliminarPackaging,
   onShowGrupos,
   onActualizarTags,
+  onActualizarPlatoRecetaOpsCompleta,
   restauranteId,
 }: {
   item: CartaItemEnriquecido
@@ -71,6 +76,7 @@ function DetailView({
   onEliminarPackaging: (packagingId: string) => Promise<void>
   onShowGrupos: () => void
   onActualizarTags: (tags: string[]) => Promise<void>
+  onActualizarPlatoRecetaOpsCompleta: (platoRecetaId: string, datos: { plaza: string | null; cantidad_ops: number | null; unidad_ops: string | null }) => Promise<void>
   restauranteId: string
 }) {
   const [search, setSearch] = useState('')
@@ -96,24 +102,15 @@ function DetailView({
   const [creatingDraft, setCreatingDraft] = useState(false)
   const [creatingTarea, setCreatingTarea] = useState(false)
 
-  const PLAZAS_OPS = [
-    { id: 'general',    label: 'General',     color: '#6b7280' },
-    { id: 'parrilla',   label: 'Parrilla',    color: '#ef4444' },
-    { id: 'frios',      label: 'Fríos',       color: '#0ea5e9' },
-    { id: 'calientes',  label: 'Calientes',   color: '#f97316' },
-    { id: 'pase',       label: 'Pase',        color: '#8b5cf6' },
-    { id: 'pasteleria', label: 'Pastelería',  color: '#ec4899' },
-    { id: 'panaderia',  label: 'Panadería',   color: '#84cc16' },
-  ]
-  const SECCIONES_OPS = [
-    { id: 'heladera',   label: 'Heladera',        icono: 'kitchen' },
-    { id: 'secos',      label: 'Secos / Tuppers',  icono: 'inventory_2' },
-    { id: 'congelados', label: 'Congelados',       icono: 'severe_cold' },
-    { id: 'estacion',   label: 'Estación',         icono: 'countertops' },
-  ]
+  // 'menu' es la plaza de control de un menú activado en el mise (ver
+  // lib/ops/menuMise.ts) — no es una plaza física de cocina, así que no
+  // corresponde como destino de un componente de plato (mismo criterio que
+  // PLAZAS_FIJAS/todasLasPlazas en lib/constants.ts, que tampoco la incluye).
+  const PLAZAS_OPS_PLATO = PLAZAS_OPS.filter(p => p.id !== 'menu')
   const UNIDADES_OPS = ['u', 'kg', 'g', 'l', 'ml', 'pax', 'porc', 'bandeja']
 
   const supabaseDV = useMemo(() => createClient(), [])
+  const { agregarTarea } = useTareas({ soloEscritura: true })
 
   const handleCrearBorrador = async () => {
     if (!search.trim() || creatingDraft) return
@@ -134,119 +131,52 @@ function DetailView({
     if (!search.trim() || creatingTarea) return
     setCreatingTarea(true)
     try {
-      await supabaseDV.from('tareas').insert({
-        nombre: `Crear receta: ${search.trim()}`,
+      await agregarTarea({
+        titulo: `Crear receta: ${search.trim()}`,
         descripcion: `Receta pendiente para el plato "${item.nombre}"`,
         status: 'pendiente',
-        restaurante_id: restauranteId,
+        prioridad: 'media',
       })
       setSearch('')
     } finally { setCreatingTarea(false) }
   }
 
-  const handleGuardarOPS = async (pr: { id: string; receta_id: string; receta?: { nombre: string } }) => {
+  const handleGuardarOPS = async (pr: { id: string; receta_id: string; plaza?: string | null; receta?: { nombre: string } }) => {
     if (!opsPlaza || !opsSeccion || opsSaving) return
     setOpsSaving(true)
     setOpsError('')
     try {
+      const oldPlaza = pr.plaza ?? null
       const capVal = parseFloat(opsCantidad) || 0
 
       // Calcular porciones finales (si capacidad está en peso → dividir por tamaño porción)
       const porVal = parseFloat(opsPesoPorcion) || 0
-      const toG = (v: number, u: string) => u === 'kg' ? v * 1000 : u === 'g' ? v : null
-      const capG = toG(capVal, opsUnidad)
-      const porG = toG(porVal, opsPesoPorcionUnidad)
-      const porcionesCalculadas = capG !== null && porG !== null && porG > 0 ? Math.round(capG / porG) : null
+      const porcionesCalculadas = porcionesDesdeCapacidad(capVal, opsUnidad, porVal, opsPesoPorcionUnidad)
       const miCantidad = (['porc', 'u', 'pax'].includes(opsUnidad)) ? capVal : (porcionesCalculadas ?? capVal)
 
       const recipienteNombre = opsRecipienteNombre.trim() || null
       const pesoPorcion = recipienteNombre && opsPesoPorcion ? parseFloat(opsPesoPorcion) || null : null
       const pesoPorcionUnidad = pesoPorcion ? opsPesoPorcionUnidad : null
-      const recipienteCapacidad = recipienteNombre ? miCantidad : null
 
       // 1. Guardar plaza + contribución de ESTE plato en plato_recetas
-      const { error: errPlatoReceta } = await supabaseDV.from('plato_recetas')
-        .update({ plaza: opsPlaza, cantidad_ops: miCantidad, unidad_ops: opsUnidad })
-        .eq('id', pr.id)
-      if (errPlatoReceta) throw errPlatoReceta
+      await onActualizarPlatoRecetaOpsCompleta(pr.id, { plaza: opsPlaza, cantidad_ops: miCantidad, unidad_ops: opsUnidad })
 
-      // 2. Sumar TODAS las contribuciones de esta receta en esta plaza
-      const { data: todasContribuciones, error: errSuma } = await supabaseDV
-        .from('plato_recetas')
-        .select('cantidad_ops')
-        .eq('receta_id', pr.receta_id)
-        .eq('plaza', opsPlaza)
-        .not('cantidad_ops', 'is', null)
-      if (errSuma) throw errSuma
-
-      const cantidadTotal = (todasContribuciones ?? []).reduce(
-        (sum, r) => sum + (r.cantidad_ops ?? 0), 0
-      )
-
-      // 3. Buscar o crear sección del checklist para esta plaza + sección elegida
-      const secNombre = SECCIONES_OPS.find(s => s.id === opsSeccion)?.label ?? opsSeccion
-      const secIcono = SECCIONES_OPS.find(s => s.id === opsSeccion)?.icono ?? 'inventory_2'
-      const secOrden = SECCIONES_OPS.findIndex(s => s.id === opsSeccion)
-      const { data: secExistente, error: errSecSelect } = await supabaseDV
-        .from('checklist_secciones')
-        .select('id')
-        .eq('restaurante_id', restauranteId)
-        .eq('plaza', opsPlaza)
-        .ilike('nombre', secNombre)
-        .limit(1)
-      if (errSecSelect) throw errSecSelect
-      let seccionId: string | null = secExistente?.[0]?.id ?? null
-      if (!seccionId) {
-        const { data: newSec, error: errSecInsert } = await supabaseDV
-          .from('checklist_secciones')
-          .insert({ nombre: secNombre, icono: secIcono, plaza: opsPlaza, orden: secOrden, restaurante_id: restauranteId })
-          .select('id').single()
-        if (errSecInsert) throw errSecInsert
-        seccionId = newSec?.id ?? null
-      }
-
-      // 4. Upsert checklist_item con la SUMA de contribuciones + recipiente/peso
+      // 2. Sumar TODAS las contribuciones de esta receta en esta plaza y hacer
+      // upsert del checklist_item (busca/crea la sección, con recipiente/peso)
+      const { total } = await sumPlatoRecetaCantidad(supabaseDV, pr.receta_id, opsPlaza)
       const nombre = pr.receta?.nombre ?? search
-      const { data: existente, error: errExistente } = await supabaseDV
-        .from('checklist_items')
-        .select('id')
-        .eq('restaurante_id', restauranteId)
-        .eq('receta_id', pr.receta_id)
-        .eq('plaza', opsPlaza)
-        .limit(1)
-      if (errExistente) throw errExistente
+      await upsertMiseChecklistItem({
+        supabase: supabaseDV, restauranteId, recetaId: pr.receta_id, nombre,
+        plaza: opsPlaza, seccionMiseId: opsSeccion, cantidad: total, unidad: opsUnidad,
+        recipienteNombre, pesoPorcion, pesoPorcionUnidad,
+      })
 
-      if (existente?.[0]) {
-        const { error: errUpdate } = await supabaseDV.from('checklist_items').update({
-          cantidad: cantidadTotal,
-          unidad: opsUnidad,
-          seccion_id: seccionId,
-          seccion: secNombre,
-          recipiente_nombre: recipienteNombre,
-          recipiente_capacidad: recipienteCapacidad,
-          peso_porcion: pesoPorcion,
-          peso_porcion_unidad: pesoPorcionUnidad,
-        }).eq('id', existente[0].id)
-        if (errUpdate) throw errUpdate
-      } else {
-        const { error: errInsert } = await supabaseDV.from('checklist_items').insert({
-          nombre,
-          plaza: opsPlaza,
-          receta_id: pr.receta_id,
-          cantidad: cantidadTotal,
-          unidad: opsUnidad,
-          prioridad: 'sp',
-          seccion_id: seccionId,
-          seccion: secNombre,
-          restaurante_id: restauranteId,
-          orden: 0,
-          recipiente_nombre: recipienteNombre,
-          recipiente_capacidad: recipienteCapacidad,
-          peso_porcion: pesoPorcion,
-          peso_porcion_unidad: pesoPorcionUnidad,
-        })
-        if (errInsert) throw errInsert
+      // 3. Si cambió de plaza, achicar (o borrar) el checklist_item de la plaza
+      // vieja — antes esto no se hacía y el mise quedaba con un ítem fantasma.
+      if (oldPlaza && oldPlaza !== opsPlaza) {
+        await shrinkOrPruneMise({ supabase: supabaseDV, restauranteId, recetaId: pr.receta_id, plaza: oldPlaza })
       }
+
       setOpsPanel(null)
     } catch (e) {
       const msg = e instanceof Error ? e.message : (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message) : 'desconocido'
@@ -631,7 +561,7 @@ function DetailView({
                     {/* Plaza */}
                     <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Plaza de producción</div>
                     <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
-                      {PLAZAS_OPS.map(p => (
+                      {PLAZAS_OPS_PLATO.map(p => (
                         <button key={p.id} onClick={() => { setOpsPlaza(opsPlaza === p.id ? '' : p.id); setOpsSeccion('') }}
                           style={{ padding: '5px 11px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
                             background: opsPlaza === p.id ? `${p.color}18` : 'var(--surface)', color: opsPlaza === p.id ? p.color : 'var(--text-3)',
@@ -687,10 +617,7 @@ function DetailView({
                         {opsRecipienteNombre.trim() && (() => {
                           const capVal = parseFloat(opsCantidad) || 0
                           const porVal = parseFloat(opsPesoPorcion) || 0
-                          const toG2 = (v: number, u: string) => u === 'kg' ? v * 1000 : u === 'g' ? v : null
-                          const capG = toG2(capVal, opsUnidad)
-                          const porG = toG2(porVal, opsPesoPorcionUnidad)
-                          const porcionesAuto = capG !== null && porG !== null && porG > 0 ? Math.round(capG / porG) : null
+                          const porcionesAuto = porcionesDesdeCapacidad(capVal, opsUnidad, porVal, opsPesoPorcionUnidad)
                           const UNIDADES_PORCION = ['g', 'kg', 'u', 'porc', 'ml', 'l']
                           return (
                             <>
@@ -766,7 +693,9 @@ function DetailView({
                       </button>
                       {pr.plaza && (
                         <button onClick={async () => {
-                          await supabaseDV.from('plato_recetas').update({ plaza: null, cantidad_ops: null, unidad_ops: null }).eq('id', pr.id)
+                          const oldPlaza = pr.plaza!
+                          await onActualizarPlatoRecetaOpsCompleta(pr.id, { plaza: null, cantidad_ops: null, unidad_ops: null })
+                          await shrinkOrPruneMise({ supabase: supabaseDV, restauranteId, recetaId: pr.receta_id, plaza: oldPlaza })
                           setOpsPanel(null)
                         }} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                           Quitar
@@ -1386,7 +1315,7 @@ function RentabilidadView({
 type View = 'list' | 'detail' | 'edit' | 'rentabilidad' | 'menus'
 
 export default function CartaPage() {
-  const { items, loading, fetchItems, crearItem, actualizarItem, actualizarTags, toggleDisponible, eliminarItem, duplicarItem, agregarPlatoReceta, actualizarPlatoReceta, eliminarPlatoReceta, agregarPlatoPackaging, eliminarPlatoPackaging, categorias } = useCarta()
+  const { items, loading, fetchItems, crearItem, actualizarItem, actualizarTags, toggleDisponible, eliminarItem, duplicarItem, agregarPlatoReceta, actualizarPlatoReceta, actualizarPlatoRecetaOpsCompleta, eliminarPlatoReceta, agregarPlatoPackaging, eliminarPlatoPackaging, categorias } = useCarta()
   const { recetas } = useRecetas()
   const { productos } = useStock()
   const { ventas } = useVentas()
@@ -1798,6 +1727,7 @@ export default function CartaPage() {
           onEliminarPackaging={handleEliminarPackaging}
           onShowGrupos={() => setShowGrupos(true)}
           onActualizarTags={tags => actualizarTags(selectedItem.id, tags)}
+          onActualizarPlatoRecetaOpsCompleta={actualizarPlatoRecetaOpsCompleta}
           restauranteId={RESTAURANTE_ID}
         />
         {showGrupos && (
