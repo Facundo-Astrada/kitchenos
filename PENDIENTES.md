@@ -6,6 +6,9 @@ Lista priorizada de lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL.md`.
 
 ## 🔴 Crítico
 
+### 3 endpoints con admin client sin verificar quién llama (auditoría de arquitectura 31/08 — detalle en `.claude/docs/ingenieria/arquitectura-kos.md` §7.1)
+`/api/carta/86`, `/api/salon/merma-auto` y `/api/salon/prep-list-update` usan `createAdminClient()` sin auth alguna; merma-auto además acepta `restaurante_id` desde el body — y `useCuenta.cobrarCuenta` se lo manda, así que **endpoint y caller se arreglan en el mismo commit** o se rompe el cobro. Los tres alcanzables sin sesión (todo `/api/*` es público en `proxy.ts`). Anulan el RLS de las 78 tablas. Fix mecánico: `requireRestauranteId()` + verificación de pertenencia, patrón textual en `/api/stock/sync-precio`. Antes de exigir sesión en carta/86, verificar desde dónde llama el KDS. **2-3 h.**
+
 ### `tareas_duplicados_backup_20260826` expuesta sin RLS (encontrado 27/08 vía `get_advisors`)
 La tabla de respaldo creada al limpiar los duplicados de Producción (76 filas, ver `HISTORIAL.md` 26/08) tiene RLS **deshabilitado** — cualquiera con la publishable key puede leer o escribir esas filas vía REST directo. Supabase la marca ERROR (la única de nivel ERROR hoy). Dos salidas: activar RLS con policy por `restaurante_id` (si todavía se necesita de referencia), o borrar la tabla directamente si el respaldo ya cumplió su función. **Facundo decide** — no autoaplicar sin su ok (activar RLS sin policy bloquea todo acceso a la tabla).
 
@@ -29,6 +32,12 @@ Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/
 ### OPS Consolidación — diferido
 "Copiar a otro día" e "Ingredientes consolidados" (se sacaron con la planilla legacy) — reimplementar sobre `tareas` si el usuario los pide.
 
+### Ingeniería — deuda de arquitectura con bug real detrás (auditoría 31/08, detalle y evidencia en `arquitectura-kos.md` §7.2-7.4)
+Tres ítems de la misma sesión de auditoría, ordenados por valor:
+- **Completar el puerto de IA (`lib/ia/claude.ts`).** La mitad ya existe (`lib/ia/errores.ts`, usado por 7 de 12 rutas); falta la función única de fetch con modelo + reintentos (el campo `reintentable` ya existe y nadie lo consume) + log de tokens. 15 hardcodes de modelo hoy. **3-4 h.**
+- **`useFacturas.crearFactura` al servidor.** ~235 líneas multi-tabla corriendo en el browser sin transacción (factura + proveedor auto-creado + productos + precios); un corte a mitad deja datos rotos, y el matching de productos es inaccesible para `facturas-universal` (ya lo reimplementó una vez). Primer paso chico: extraer solo el matching a `lib/facturas/matching.ts` con test (2-3 h); el flujo completo, **1 día**.
+- **Gotchas verificables a CI.** 3 hooks violan hoy el gotcha #20 del propio `hooks.md` (`useFacturas:48`, `usePase:18`, `useReportes:136` — `createClient()` sin `useMemo`, 1 línea de fix c/u) y nada impide el cuarto, ni un endpoint nuevo con admin client sin `requireRestauranteId`. Test de Vitest que grepee ambos patrones (allowlist para `cron/reset-demo` e `invitar`). **2-3 h.**
+
 ---
 
 ## 🟡 Medio — Roadmap: Planes y Stripe
@@ -41,6 +50,12 @@ Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/
 
 ### Feature gating
 Coach, multi-usuario, export PDF, HACCP solo en plan Pro — `puedeUsar('coach')` derivado de `usePlan`. Depende de Stripe.
+
+### Unificar `mapRol` (×2) y conversión de unidades (×3) — auditoría 31/08, `arquitectura-kos.md` §7.5
+Sin cambios respecto del informe GRASP: `lib/permisos/roles.ts` y `lib/unidades.ts`, ambos sin `'use client'` (la duplicación existe *porque* las originales viven en archivos client — el fix es de localidad). Los tests de `consumoTeorico.test.ts` se mudan y cubren a todos. Precedente documentado en `resolver.ts:1-12`. **2-3 h.**
+
+### Declarar la convención del repositorio en `hooks.md` — auditoría 31/08, `arquitectura-kos.md` §7.6
+La firma `(supabase, restauranteId, input)` ya es la convención de facto (`mise.ts`, `activarMenu.ts`, registry del Coach) pero no está escrita — la próxima extracción puede inventar otra forma. Una sección corta + la tabla de decisión del marco. **30 min.**
 
 ---
 
@@ -85,6 +100,9 @@ Los 5 ERROR de superficie de servicio ya se resolvieron (`ConfirmSheet` extraíd
 
 ### `tareas`/`checklist`/`produccion` como permiso: gatea el sidebar pero no la ruta (encontrado al arreglar `MODULOS_ASIGNABLES`, 20/08 — revisado 27/08)
 `RUTA_A_MODULO` (`lib/constants.ts`) sigue mapeando las tres rutas al permiso `'operaciones'`, pero ahora `/tareas`, `/checklist` y `/produccion` son directamente stubs que redirigen a `/operaciones?tab=...` (consolidación de OPS) — el código ya trae un comentario explicando que es deliberado ("Mapeadas a 'operaciones' por consistencia de permisos"), no algo que se coló. Sigue siendo cierto que sacarle `checklist` a un puesto solo oculta el link, no la pestaña dentro de OPS. Bajar prioridad: parece una decisión ya tomada, no un bug pendiente — confirmar con Facundo si los tres checkboxes de sidebar deberían directamente desaparecer del editor de puesto en vez de seguir prometiendo un filtro que no aplica.
+
+### 4 hooks lista-al-montar sin SWR — migrar al tocarlos (auditoría 31/08, `arquitectura-kos.md` §7.7)
+`useUserRol`, `useOnboardingProgress`, `useProduccionRegistros`, `useCalendario` re-consultan en cada navegación. Costo chico y acotado (requests repetidos, no bugs). Patrón estándar de `hooks.md` §Cache-SWR, uno por vez cuando una sesión ya los toque — no hacer batch dedicado. Los otros 16 hooks sin SWR **no son deuda** (censo completo en `arquitectura-kos.md` §2.2): utilidades, derivados de la key compartida de config, por-demanda, o parametrizados donde SWR encaja mal a propósito.
 
 ### Tests — Testing Library para hooks
 `@testing-library/react` + `jsdom` instalados, mock reusable en `lib/test-utils/mockSupabase.ts` (ver `.claude/docs/testing.md`), primeros dos hooks cubiertos: `useTareas` y `usePermisos`. El resto (`useEquipo`, `useChecklist`, `useCarta`, `useStock`, etc.) sigue sin tests — agregar el que se toque, no perseguir cobertura total de una sola vez.

@@ -1,37 +1,41 @@
-# Sesión — 2026-08-27 (cont.) — 12 ítems del backlog sin decisión pendiente
+# Sesión — 2026-08-31 — Investigación de ingeniería, núcleo 1/3: arquitectura de aplicación
 
 ## Qué se cerró
 
-Facundo pidió atacar en una sola sesión todo lo que no dependía de su decisión, del más chico al más grande. 12 commits, build+test+lint verde después de cada uno:
+Sesión de investigación (sin código de producción). Se abrió la cuarta fuente de
+conocimiento del proyecto — disciplina de ingeniería de software — con dos docs nuevos:
 
-1. `demanda_viva` se resetea al completar la apertura (`useChecklist.resetDemandaViva`).
-2. `confirm()` nativo de servicio eliminado — `ConfirmSheet` extraído a `components/ui/`, reusado en Producción y Salón/Config.
-3. Foto de perfil del equipo (`PhotoPicker` en `turnos/page.tsx`).
-4. `facturas-universal` resuelve `producto_id` al importar (mismo matching que `useFacturas.ts`).
-5. Investigado "Ventas en 0 vs Ingeniería con datos": filtro de fecha distinto, no dos fuentes — cartel aclaratorio agregado.
-6. Notificaciones in-app completas (tabla, realtime, campanita+feed, primer trigger en `asignarTurno`).
-7. Clonar permisos entre puestos (Turnos → Puestos).
-8. 3/5 tours de capacitación (`configuracion`, `coach`, `bitacora`) — faltaba que esas pantallas escribieran `kc_screen_context`.
-9. Deshacer entrega (botón, hook ya existía) + Reportes → Auditoría ahora dice quién entregó y cuándo.
-10. Coach: productos en crítico vía RPC server-side (antes bajaba 1000 filas).
-11. 3 pistas visuales de `PLAN-ACCESO-Y-USO` § B5.3 (Modo Control, escalar por referencia, Sugerir producción).
-12. Primeros tests de hooks: Testing Library + mock de Supabase (`useTareas`, `usePermisos`).
+- `.claude/docs/ingenieria/arquitectura-marco.md` — el marco agnóstico: Hexagonal/Clean/Onion
+  (qué comprar: puertos + regla de dependencia; qué no: las capas), patrones PoEAA
+  traducidos al stack (el hook = Table Data Gateway + adaptador React; la firma de
+  repositorio `(supabase, restauranteId, input)`), connascence completa con tablas de
+  decisión, SOLID solo donde suma sobre GRASP (ISP→hooks lite, DIP→frontera `'use client'`).
+- `.claude/docs/ingenieria/arquitectura-kos.md` — KitchenOS medido contra el marco:
+  veredictos con evidencia por línea, correcciones al informe GRASP, reclasificación
+  connascence, deuda deliberada vs accidental, 7 acciones priorizadas.
+- Fila nueva en la tabla "Docs condicionales" de `CLAUDE.md`; acciones volcadas a
+  `PENDIENTES.md` (1×🔴 nueva arriba de todo, 3×🟠, 2×🟡, 1×🟢).
 
-Detalle completo de cada uno en `HISTORIAL.md`. `PENDIENTES.md` podado en paralelo — lo resuelto se sacó, lo parcial quedó recortado a lo que falta.
+Hallazgos que corrigen al informe GRASP: el adaptador de IA está a MEDIO construir
+(`lib/ia/errores.ts` existe, 7/12 rutas lo usan); `ProveedorFiscal` (`lib/fiscal/index.ts`)
+es un puerto hexagonal ya terminado; el censo de hooks es 59 (39 SWR + 20 no, y solo 4
+de los 20 son deuda). Hallazgos nuevos: 3 hooks violan el gotcha #20 del propio
+`hooks.md` (`useFacturas:48`, `usePase:18`, `useReportes:136`); `crearFactura` = 235
+líneas multi-tabla en el browser sin transacción; el agujero de `merma-auto` tiene
+cómplice cliente (`useCuenta:115` manda `restaurante_id`) — el fix es de a dos.
 
 ## Qué quedó a medias
 
-- **KDS/Muro sin tour**: contenido escrito (`TOURS.kds`/`TOURS.muro`), pero esas pantallas viven en un layout que a propósito no monta el FAB del Coach (doctrina "Registro Servicio"). Necesita que Facundo elija entre sumar el FAB ahí, un trigger mínimo propio, o dejarlas sin tour.
-- **Notificaciones**: solo el trigger de `asignarTurno`. Cualquier otro (stock crítico, vencimientos) es una decisión de producto aparte, no wireado.
-- **Ingeniería de menú**: el cartel aclara el filtro de fecha, pero si conviene que scopee a un período en vez de todo el historial sigue sin decidirse.
-- **`tareas` 594 kB** (peso en mobile) — riesgo real de romper Planificación si se aprieta la ventana de 60 días; queda para sesión propia.
+- Nada de esta sesión. Los docs quedaron completos. Sin commitear todavía.
 
 ## Probar primero mañana
 
-1. Notificaciones: asignar un turno real a alguien con cuenta vinculada y confirmar que le llega la campanita (se probó con una fila insertada por SQL, no con el flujo real de punta a punta).
-2. Deshacer entrega en un dispositivo real — el demo no tenía items de mise cargados para probar el flujo completo (entregar → deshacer).
-3. `/reportes` → Auditoría: confirmar que "Pases entregados" aparece bien apenas haya `cierres_turno` reales de esta semana (Bros, no El Rescoldo demo).
+- Nada que probar (no hubo código). Si se commitea, `npm run build` de rutina.
 
 ## Próximo paso concreto
 
-Backlog libre de nuevo — quedan los 🔴/🟠 de siempre (RLS de `tareas_duplicados_backup_20260826`, B9/B10 de reservas, SMTP propio) y las features grandes (Muro F4, Calendario F2-F5, Bitácora F2-F3, Coach en Carta, container-transform del Mise) para cuando haya una sesión dedicada a alguna. **`PENDIENTES.md` sigue en ~30 KB** pese a la poda de hoy — la mayoría es contenido de sesiones previas que no tocamos; merece su propia pasada de re-priorización con Facundo si sigue creciendo.
+1. **Commitear los docs de esta sesión** (`.claude/docs/ingenieria/`, CLAUDE.md, PENDIENTES.md, SESION.md).
+2. **El 🔴 nuevo de PENDIENTES**: cerrar los 3 endpoints sin auth + sacar `restaurante_id`
+   del body en `useCuenta` — 2-3 h, detalle en `arquitectura-kos.md` §7.1.
+3. Núcleos 2 y 3 de la investigación de ingeniería quedan pendientes (sesiones propias,
+   ver `PROMPT-INVESTIGACION-INGENIERIA.md`).

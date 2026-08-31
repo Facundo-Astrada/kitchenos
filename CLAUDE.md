@@ -57,6 +57,7 @@ No se cargan solos: abrirlos cuando la tarea entra en su tema.
 | Tocar el flujo de importación (facturas, carta, stock) | `.claude/docs/importador.md` |
 | Escribir o tocar un test (Vitest/Playwright) | `.claude/docs/testing.md` |
 | Diseñar una feature nueva o discutir una idea de producto | `SINTESIS-ORGANIZACION-GASTRONOMICA.md` (base de conocimiento gastronómico, fuera del repo por copyright: `~/Desktop/START UP KOS/06-contexto-gastronomia/`) + `AUDITORIA-4-CAPAS.md` (qué cubre K-OS hoy contra ese material) |
+| Decidir dónde va código nuevo (¿hook, lib/, endpoint, función de Postgres?), evaluar acoplamiento/duplicación, refactorizar un hook o endpoint, discutir arquitectura | `.claude/docs/ingenieria/arquitectura-marco.md` (el marco: puertos, patrones PoEAA, connascence, tablas de decisión) + `arquitectura-kos.md` (KitchenOS medido contra él, con acciones) |
 
 Endpoints clave de importación: `/api/importador/facturas-universal` · `/api/stock/rebuild` · `/api/recetas/auto-link-ingredientes`
 
