@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { pedirAClaude } from '@/lib/ia/claude'
+import { respuestaErrorIA, statusErrorIA } from '@/lib/ia/errores'
 
 const SYSTEM_PROMPT = `Sos un asistente de gestión gastronómica argentino. El usuario te envía texto libre con datos de ventas de un restaurante (puede ser un resumen del POS, una lista pegada, un texto de WhatsApp, etc.).
 
@@ -79,49 +81,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Se requiere el campo "texto"' }, { status: 400 })
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) {
+    if (!process.env.ANTHROPIC_API_KEY) {
       console.warn('[ventas/import] ANTHROPIC_API_KEY no configurada — devolviendo demo data')
       return NextResponse.json(getDemoResult(texto))
     }
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 2048,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: [{ type: 'text', text: texto }] }],
-      }),
+    const resultado = await pedirAClaude({
+      tag: '/api/ventas/import',
+      model: 'claude-haiku-4-5-20251001',
+      maxTokens: 2048,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: [{ type: 'text', text: texto }] }],
     })
 
-    if (!response.ok) {
-      const errText = await response.text()
-      console.error('[ventas/import] Claude API error:', response.status, errText)
-
-      // Fallback to demo on API errors
-      if (response.status === 529 || response.status === 503 || response.status === 402) {
+    if (!resultado.ok) {
+      // Fallback a demo en fallas del servicio (antes: 529/503/402).
+      if (resultado.error.tipo === 'saturado' || resultado.error.tipo === 'sin_credito') {
         return NextResponse.json(getDemoResult(texto))
       }
-      return NextResponse.json({ error: `Error de IA (${response.status})` }, { status: 500 })
+      return NextResponse.json(respuestaErrorIA(resultado.error), { status: statusErrorIA(resultado.error) })
     }
-
-    const claudeData = await response.json()
-    const content = claudeData.content?.[0]?.text ?? ''
 
     let parsed: Record<string, unknown>
     try {
       // Strip markdown code fences if present
-      const clean = content.replace(/```json?\n?/gi, '').replace(/```/g, '').trim()
+      const clean = resultado.texto.replace(/```json?\n?/gi, '').replace(/```/g, '').trim()
       parsed = JSON.parse(clean)
     } catch {
-      console.error('[ventas/import] JSON parse error. Raw:', content)
-      return NextResponse.json({ error: 'No se pudo interpretar la respuesta de IA', raw: content }, { status: 422 })
+      console.error('[ventas/import] JSON parse error. Raw:', resultado.texto)
+      return NextResponse.json({ error: 'No se pudo interpretar la respuesta de IA', raw: resultado.texto }, { status: 422 })
     }
 
     return NextResponse.json(parsed)

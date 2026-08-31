@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { pedirAClaude } from '@/lib/ia/claude'
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ type ExtractedItem = {
   hoja: string
 }
 
-async function extractSheetItems(sheet: SheetData, apiKey: string): Promise<ExtractedItem[]> {
+async function extractSheetItems(sheet: SheetData): Promise<ExtractedItem[]> {
   const text = sheet.rows
     .slice(0, 400)
     .map(r => r.map(c => String(c ?? '').trim()).join('\t'))
@@ -63,30 +64,18 @@ async function extractSheetItems(sheet: SheetData, apiKey: string): Promise<Extr
 
   if (!text.trim()) return []
 
+  const resultado = await pedirAClaude({
+    tag: `stock/import-planilla:${sheet.nombre}`,
+    model: 'claude-haiku-4-5-20251001',
+    maxTokens: 4096,
+    system: SHEET_SYSTEM,
+    messages: [{ role: 'user', content: `HOJA "${sheet.nombre}":\n${text}` }],
+  })
+
+  if (!resultado.ok) return []
+
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 4096,
-        system: SHEET_SYSTEM,
-        messages: [{ role: 'user', content: `HOJA "${sheet.nombre}":\n${text}` }],
-      }),
-    })
-
-    if (!resp.ok) {
-      console.warn(`[import-planilla] hoja "${sheet.nombre}" error ${resp.status}`)
-      return []
-    }
-
-    const data = await resp.json()
-    const content = (data.content?.[0]?.text ?? '') as string
-    const jsonMatch = content.match(/\{[\s\S]*\}/)
+    const jsonMatch = resultado.texto.match(/\{[\s\S]*\}/)
     if (!jsonMatch) return []
 
     const parsed = JSON.parse(jsonMatch[0])
@@ -216,8 +205,7 @@ export async function POST(req: NextRequest) {
   const sheets: SheetData[] = body.sheets ?? []
   if (!sheets.length) return NextResponse.json({ error: 'Sin hojas' }, { status: 400 })
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return NextResponse.json({ error: 'Sin API key de IA' }, { status: 500 })
+  if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: 'Sin API key de IA' }, { status: 500 })
 
   // Procesar cada hoja en paralelo — cada llamada IA es pequeña, nunca se trunca
   const BATCH = 5 // max paralelas simultáneas para no saturar rate limit
@@ -226,7 +214,7 @@ export async function POST(req: NextRequest) {
 
   for (let i = 0; i < allSheets.length; i += BATCH) {
     const batch = allSheets.slice(i, i + BATCH)
-    const results = await Promise.all(batch.map(s => extractSheetItems(s, apiKey)))
+    const results = await Promise.all(batch.map(s => extractSheetItems(s)))
     extracted.push(...results.flat())
   }
 

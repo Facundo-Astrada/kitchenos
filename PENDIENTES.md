@@ -24,9 +24,6 @@ Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/
 ### OPS Consolidación — diferido
 "Copiar a otro día" e "Ingredientes consolidados" (se sacaron con la planilla legacy) — reimplementar sobre `tareas` si el usuario los pide.
 
-### Completar el puerto de IA (`lib/ia/claude.ts`) — día 5 del plan (`arquitectura-kos.md` §7.2)
-La mitad ya existe (`lib/ia/errores.ts`, usado por 7 de 12 rutas); falta la función única de fetch con modelo + reintentos (el campo `reintentable` ya existe y nadie lo consume) + log de tokens. 15 hardcodes de modelo hoy. Empezar por las 5 rutas que no usan `errores.ts`. **3-4 h.**
-
 ### Refactor de Carta — días 6, 7 y 9 del plan; el paso a paso completo en `refactor-kos.md` §2
 Hallazgos 31/08 tras leer las 3.906 líneas completas: los 9 componentes **ya están separados a nivel de módulo** (el trabajo es mover archivos, no partir un monolito — máximo real 24 estados en un componente, no 59); **~300 líneas de código muerto** (la rama `view='nuevo'` + `isCreate` de FormView es inalcanzable, nada la setea); y el panel OPS de `DetailView` ([carta/page.tsx:1435-1544](app/(app)/carta/page.tsx#L1435-L1544)) **duplica inline los helpers de `lib/ops/mise.ts`** con su 3ª copia de `PLAZAS_OPS` y sin `shrinkOrPruneMise` — mover una receta de plaza deja el `checklist_item` viejo sin achicar (bug latente de datos). Pasos, cada uno reversible y ≤1 día: smoke e2e + borrar muerto → moves puros (cards, exportadores, drawer, modal, form) → migrar el panel OPS a los helpers (el único paso con riesgo, con `/impacto` + matriz de verificación contra la base). Punto de parada explícito: el shell de ~700 líneas queda y está bien.
 

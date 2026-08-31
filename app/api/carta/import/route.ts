@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import * as XLSX from 'xlsx'
-import { clasificarErrorIA } from '@/lib/ia/errores'
+import { pedirAClaude } from '@/lib/ia/claude'
 
 export const maxDuration = 60
 
@@ -110,7 +110,6 @@ function detectTags(texto: string): string[] {
 async function parseConIA(
   content: string | ArrayBuffer,
   mimeType: string,
-  apiKey: string,
 ): Promise<ItemImportado[]> {
   type AnthrContent =
     | { type: 'text'; text: string }
@@ -154,30 +153,20 @@ Instrucciones importantes:
 - Incluí todas las entradas, principales, postres, bebidas y guarniciones`,
   })
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 8096,
-      messages: [{ role: 'user', content: userContent }],
-    }),
+  const resultado = await pedirAClaude({
+    tag: 'carta/import',
+    model: 'claude-haiku-4-5-20251001',
+    maxTokens: 8096,
+    messages: [{ role: 'user', content: userContent }],
   })
 
-  if (!response.ok) {
+  if (!resultado.ok) {
     // El `Claude error: {json crudo}` que se tiraba acá terminaba en pantalla
     // tal cual, en inglés y sin decir qué hacer.
-    const err = clasificarErrorIA(response.status, await response.text())
-    console.error('[carta/import] IA:', err.tipo, err.requestId ?? '')
-    throw new Error(err.mensaje)
+    throw new Error(resultado.error.mensaje)
   }
 
-  const data = await response.json()
-  const text = data.content?.[0]?.text ?? '[]'
+  const text = resultado.texto || '[]'
 
   const match = text.match(/\[[\s\S]*\]/)
   if (!match) return []
@@ -210,8 +199,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return NextResponse.json({ error: 'API key no configurada' }, { status: 500 })
+  if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: 'API key no configurada' }, { status: 500 })
 
   try {
     const formData = await req.formData()
@@ -303,9 +291,9 @@ export async function POST(req: NextRequest) {
       items = parseSheet(buffer)
     } else if (mimeType === 'text/plain' || file.name.endsWith('.txt')) {
       const text = new TextDecoder().decode(buffer)
-      items = await parseConIA(text, mimeType, apiKey)
+      items = await parseConIA(text, mimeType)
     } else {
-      items = await parseConIA(buffer, mimeType || 'application/pdf', apiKey)
+      items = await parseConIA(buffer, mimeType || 'application/pdf')
     }
 
     return NextResponse.json({ items, total: items.length })

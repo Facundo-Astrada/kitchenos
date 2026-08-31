@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import * as XLSX from 'xlsx'
 import mammoth from 'mammoth'
-import { clasificarErrorIA } from '@/lib/ia/errores'
+import { pedirAClaude } from '@/lib/ia/claude'
 
 export const maxDuration = 120
 
@@ -163,33 +163,22 @@ function splitIntoRecipeBlocks(content: string, fallback: string): { name: strin
 // EXTRACTION LAYER — per-block Claude calls in batches
 // ─────────────────────────────────────────────────────────
 
-async function callClaude(apiKey: string, content: AnthropicContent[]): Promise<unknown[]> {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-beta': 'pdfs-2024-09-25',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4000,
-      temperature: 0,
-      system: systemPrompt,
-      messages: [{ role: 'user', content }],
-    }),
+async function callClaude(content: AnthropicContent[]): Promise<unknown[]> {
+  const resultado = await pedirAClaude({
+    tag: 'importador/fichas-tecnicas',
+    model: 'claude-sonnet-4-6',
+    maxTokens: 4000,
+    temperature: 0,
+    system: systemPrompt,
+    messages: [{ role: 'user', content }],
+    headers: { 'anthropic-beta': 'pdfs-2024-09-25' },
   })
-  if (!res.ok) {
-    // Devolver [] es indistinguible de "el PDF no tenía fichas" para quien lo
-    // subió. Al menos que el log diga por qué, hasta que el flujo sepa
-    // propagar el error a la pantalla.
-    const err = clasificarErrorIA(res.status, await res.text())
-    console.error('[importador/fichas-tecnicas] IA:', err.tipo, err.requestId ?? '')
-    return []
-  }
-  const data = await res.json() as { content: { type: string; text?: string }[] }
-  const text = data.content?.[0]?.type === 'text' ? (data.content[0].text ?? '') : ''
+  // Devolver [] es indistinguible de "el PDF no tenía fichas" para quien lo
+  // subió. Al menos que el log de pedirAClaude diga por qué, hasta que el
+  // flujo sepa propagar el error a la pantalla.
+  if (!resultado.ok) return []
+
+  const text = resultado.texto
   const start = text.indexOf('[')
   const end = text.lastIndexOf(']')
   if (start === -1 || end <= start) return []
@@ -201,13 +190,13 @@ async function callClaude(apiKey: string, content: AnthropicContent[]): Promise<
   }
 }
 
-async function processBlocks(apiKey: string, blocks: { name: string; text: string }[]): Promise<unknown[]> {
+async function processBlocks(blocks: { name: string; text: string }[]): Promise<unknown[]> {
   const all: unknown[] = []
   for (let i = 0; i < blocks.length; i += BATCH_SIZE) {
     const batch = blocks.slice(i, i + BATCH_SIZE)
     const results = await Promise.allSettled(
       batch.map(b =>
-        callClaude(apiKey, [{
+        callClaude([{
           type: 'text',
           text: `Nombre sugerido para la receta: "${b.name}"\n\nBloque:\n${b.text}`,
         }])
@@ -305,8 +294,7 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) return NextResponse.json({ error: 'API key no configurada' }, { status: 500 })
+    if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: 'API key no configurada' }, { status: 500 })
 
     const formData = await req.formData()
     const file = formData.get('file') as File | null
@@ -360,7 +348,7 @@ export async function POST(req: NextRequest) {
       console.log('[fichas-tecnicas] Using PDF document API fallback')
       diag.usedFallback = true
       const base64 = Buffer.from(buffer).toString('base64')
-      const recetas = await callClaude(apiKey, [
+      const recetas = await callClaude([
         { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
         { type: 'text', text: 'Extraé todas las recetas de este documento como array JSON.' },
       ])
@@ -378,7 +366,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'No se detectaron bloques de receta en el archivo', diag })
     }
 
-    let recetas = await processBlocks(apiKey, blocks) as ExtractedReceta[]
+    let recetas = await processBlocks(blocks) as ExtractedReceta[]
     diag.recipesExtracted = recetas.length
 
     if (!recetas.length) {

@@ -4,6 +4,7 @@ import { COACH_HIGHLIGHT_IDS } from '@/lib/coach/highlights'
 import { calcularSugerenciaProduccion } from '@/lib/produccion/sugerencia'
 import { fetchAllRows } from '@/lib/supabase/paginate'
 import { COACH_ERROR_MARK, COACH_PENDING_MARK } from '@/lib/coach/stream'
+import { clasificarErrorIA, errorSinApiKey, respuestaErrorIA, statusErrorIA } from '@/lib/ia/errores'
 import { getRestauranteId } from '@/lib/coach/restaurante'
 import { getPermisosServer, puedeEjecutarTool } from '@/lib/permisos/server'
 import { COACH_COST_TOOLS } from '@/lib/coach/tools/registry'
@@ -751,7 +752,8 @@ export async function POST(req: NextRequest) {
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
-    return NextResponse.json({ error: 'API key no configurada' }, { status: 500 })
+    const err = errorSinApiKey()
+    return NextResponse.json(respuestaErrorIA(err), { status: statusErrorIA(err) })
   }
 
   // Bloque dinámico: snapshot M1 + pantalla activa + contexto de stock/tareas del cliente + M5
@@ -844,8 +846,9 @@ Reglas:
   // (cubre 401/402/429/overload — el punto de falla más común).
   let anthropicRes = await callAnthropic(convo)
   if (!anthropicRes.ok) {
-    const error = await anthropicRes.text()
-    return NextResponse.json({ error }, { status: anthropicRes.status })
+    const err = clasificarErrorIA(anthropicRes.status, await anthropicRes.text())
+    console.error('[/api/coach] IA:', err.tipo, err.requestId ?? '')
+    return NextResponse.json(respuestaErrorIA(err), { status: statusErrorIA(err) })
   }
 
   const encoder = new TextEncoder()
@@ -860,8 +863,10 @@ Reglas:
       try {
         for (let round = 0; round < 4; round++) {
           if (!anthropicRes.ok || !anthropicRes.body) {
-            const err = anthropicRes.ok ? 'Sin respuesta del asistente' : await anthropicRes.text().catch(() => 'error')
-            send(`${COACH_ERROR_MARK}${err}`)
+            const mensaje = anthropicRes.ok
+              ? 'Sin respuesta del asistente'
+              : clasificarErrorIA(anthropicRes.status, await anthropicRes.text().catch(() => '')).mensaje
+            send(`${COACH_ERROR_MARK}${mensaje}`)
             break
           }
 

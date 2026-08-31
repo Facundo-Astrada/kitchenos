@@ -1,59 +1,60 @@
-# Sesión — 2026-08-31 (noche, cont. 3) — Día 4 del plan consolidado: ratchets de ingeniería
+# Sesión — 2026-08-31 (noche, cont. 4) — Día 5 del plan consolidado: puerto de IA
 
 ## Qué se cerró
 
-Día 4 completo de `.claude/docs/ingenieria/plan-consolidado.md` §2. 1 commit
-(`d46fe88`), pusheado.
+Día 5 completo de `.claude/docs/ingenieria/plan-consolidado.md` §2.
 
-- **`lib/ingenieria/ratchets.test.ts` nuevo** (corre con `npm test`, ya en
-  CI): techos de líneas de las 5 pantallas grandes (solo bajan) + 4 reglas
-  de `hooks.md`/`arquitectura-marco.md` que antes vivían solo en prosa,
-  pasadas a chequeo automático.
-- **Gotcha #20** (`createClient()` sin `useMemo`): arreglados los 3 hooks
-  que lo violaban — `useFacturas`, `usePase`, `useReportes`.
-- **Gotcha #18** (canal realtime sin `filter` por tenant): se sabía de
-  `useCarta.ts`; auditar el resto encontró **7 hooks más** con el mismo
-  problema — `useCalendario` (eventos), `useEquipo` (equipo_miembros),
-  `useEspacios` (espacios+espacio_plazas), `useFacturas` (facturas),
-  `usePedidos` (pedidos), `useProveedores` (proveedores). Todos arreglados,
-  1 línea cada uno.
-- **Ley "dominio nunca en `use client`"**: 0 violaciones reales — los 7
-  archivos que sí lo tienen fuera de `lib/hooks/` son infraestructura de
-  browser legítima (Context, animación, IndexedDB, Audio API, descarga de
-  archivo), documentados en un allowlist.
-- **`createAdminClient` sin `requireRestauranteId`**: 8 endpoints (no 2
-  como estimaba el plan) no usan el helper pero verifican sesión a mano de
-  forma equivalente — revisados uno por uno, allowlist. La excepción real:
-  **`stock/import-planilla`** tenía un UPDATE de "apply" que solo filtraba
-  por `id` de producto (dato del cliente) sin `restaurante_id` — con el
-  admin client, un id forjado podía pisar el stock de otro restaurante.
-  Corregido.
-- Build, typecheck y 219 tests OK.
+- **`lib/ia/claude.ts` nuevo** (`pedirAClaude`): punto único de llamada a
+  `api.anthropic.com/v1/messages`. Usa `clasificarErrorIA` (ya existía en
+  `lib/ia/errores.ts`) para clasificar la falla, **reintenta automáticamente**
+  lo que la clasificación marca `reintentable` (saturado — 429/529/5xx, antes
+  el campo existía y nadie lo consumía), y **loguea tokens de entrada/salida**
+  en una línea por llamada (antes no había ningún registro de consumo). Test
+  nuevo `lib/ia/claude.test.ts` (6 casos: sin key, éxito, error no
+  reintentable, reintento exitoso, reintentos agotados, falla de red) —
+  mockea `fetch`, corre con `npm test`.
+- **12 rutas migradas**, mecánico: `facturas`, `listas-precios`,
+  `carta/import`, `recetas/import`, `importador/fichas-tecnicas`,
+  `importador/mapeo`, `importador/facturas-universal` (ya usaban
+  `clasificarErrorIA` pero reimplementaban el fetch — ahora todas pasan por
+  `pedirAClaude`) + `stock/import-planilla`, `importador/productos-desde-facturas`,
+  `produccion/sugerencia/explicar`, `ventas/import` (no usaban `errores.ts`
+  todavía, ahora sí). Cada migración preservó el comportamiento exacto de
+  fallback de su ruta (demo data en `ventas/import`, degradar a "confianza
+  baja" en `mapeo`, `[]` silencioso en `fichas-tecnicas`/`import-planilla`).
+- **Coach (`/api/coach`) — decisión de alcance, documentada en el docstring
+  de `claude.ts`**: no se migró a `pedirAClaude`. Es streaming SSE con loop
+  agéntico de tool-use multi-ronda — forzarlo a la firma no-streaming del
+  puerto arriesgaba ese flujo para un beneficio marginal. En cambio se le
+  subieron sus 3 puntos de error (falta de key, primera llamada, error
+  intra-stream) a `clasificarErrorIA`/`errorSinApiKey`/`respuestaErrorIA`,
+  mismo estándar de mensaje que el resto de la app, sin tocar el streaming.
+- `anthropic-beta: pdfs-2024-09-25` (header especial de
+  `importador/fichas-tecnicas`) se preservó vía el parámetro `headers` de
+  `pedirAClaude`.
+- `PENDIENTES.md`: podado el ítem de Día 5 (resuelto).
+- Typecheck, 225 tests (219 + 6 nuevos), build y ratchets — los 4 en verde.
+  Lint: mismos 8 problemas pre-existentes de siempre (verificado con
+  `git stash`, no los introdujo esta sesión).
 
 ## Qué quedó a medias
 
 - Nada de hoy.
 - `.claude/settings.json` sigue modificado sin commitear (arrastrado desde
   jul 2026, sigue en `PENDIENTES.md` 🟢).
-- Hallazgo al margen, sin tocar: hay un git worktree viejo en
-  `.claude/worktrees/sleepy-jepsen` (rama `claude/sleepy-jepsen`) que
-  `npm run lint` recorre y duplica warnings — no se tocó por las dudas de
-  que sea trabajo en curso de otra sesión; revisar con Facundo si se puede
-  borrar (`git worktree remove`).
+- El git worktree viejo en `.claude/worktrees/sleepy-jepsen` (rama
+  `claude/sleepy-jepsen`) sigue sin revisar con Facundo (hallazgo de ayer).
 
 ## Probar primero mañana
 
-- Nada específico de UI — los cambios de hoy son de referencia estable de
-  hooks y filtros de realtime, invisibles en uso normal. Si se quiere
-  verificar el fix de seguridad: en `/stock`, importar una planilla y
-  confirmar que el "apply" sigue actualizando bien los productos propios
-  (comportamiento idéntico al de antes, solo se cerró el agujero cross-tenant).
+- Nada específico de UI — el puerto de IA es invisible en uso normal
+  (mismos prompts, mismos modelos, misma forma de respuesta). Si se quiere
+  verificar el reintento: no hay forma fácil de forzar un 529 real desde la
+  app; confiar en el test de `claude.ts` que lo cubre con `fetch` mockeado.
 
 ## Próximo paso concreto
 
-**Día 5 del plan consolidado** (`plan-consolidado.md` §2): Puerto de IA.
-`lib/ia/claude.ts` (`pedirAClaude`) usando `clasificarErrorIA` (ya existe en
-`lib/ia/errores.ts`, usado por 7 de 12 rutas) + reintentos sobre el campo
-`reintentable` (existe, nadie lo consume hoy) + log de tokens. Migrar las 12
-rutas que llaman a la IA directo (mecánico), empezando por las 5 que no
-usan `errores.ts` todavía. 3-4 h.
+**Día 6 del plan consolidado** (`plan-consolidado.md` §2): Carta — pasos 0+1.
+Smoke e2e `carta-smoke.spec.ts` + borrar las ~300 líneas muertas (rama
+`view='nuevo'`, `isCreate` de `FormView`, `CAT_ICONS`). Línea base de métricas
+en el commit. ½ + ½ día.

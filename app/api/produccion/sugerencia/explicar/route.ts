@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRestauranteId } from '@/lib/api/tenant'
 import type { SugerenciaItem } from '@/lib/produccion/sugerencia'
+import { pedirAClaude } from '@/lib/ia/claude'
+import { respuestaErrorIA, statusErrorIA } from '@/lib/ia/errores'
 
 // E1b: capa IA que solo EXPLICA la sugerencia del motor de reglas (nunca cambia los números —
 // misma fuente en OPS y en el Coach) en una línea por ítem, con contexto de eventos del calendario.
@@ -15,9 +17,6 @@ export async function POST(req: NextRequest) {
   if (!Array.isArray(sugerencias) || sugerencias.length === 0) {
     return NextResponse.json({ explicaciones: {} })
   }
-
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return NextResponse.json({ error: 'API key no configurada' }, { status: 500 })
 
   let eventosTxt = ''
   try {
@@ -45,30 +44,22 @@ NO cambies ni inventes números — usá exactamente los que te paso. Cada expli
 
 Respondé SOLO con un objeto JSON válido {"<id>": "<explicación>", ...}, sin texto antes ni después.`
 
+  const resultado = await pedirAClaude({
+    tag: '/api/produccion/sugerencia/explicar',
+    model: 'claude-haiku-4-5-20251001',
+    maxTokens: 1024,
+    messages: [{ role: 'user', content: prompt }],
+  })
+
+  if (!resultado.ok) {
+    return NextResponse.json(respuestaErrorIA(resultado.error), { status: statusErrorIA(resultado.error) })
+  }
+
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1024,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    })
-    if (!response.ok) {
-      return NextResponse.json({ error: `Error del modelo (${response.status})` }, { status: 502 })
-    }
-    const data = await response.json()
-    const text = (data.content?.[0]?.text as string | undefined) ?? ''
-    const match = text.match(/\{[\s\S]*\}/)
+    const match = resultado.texto.match(/\{[\s\S]*\}/)
     const explicaciones = match ? JSON.parse(match[0]) : {}
     return NextResponse.json({ explicaciones })
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : 'Error al generar la explicación'
-    return NextResponse.json({ error: msg }, { status: 500 })
+  } catch {
+    return NextResponse.json({ error: 'No se pudo interpretar la respuesta de IA' }, { status: 500 })
   }
 }

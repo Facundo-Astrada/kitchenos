@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRestauranteId } from '@/lib/api/tenant'
+import { pedirAClaude } from '@/lib/ia/claude'
 
 export const maxDuration = 60
 
@@ -61,8 +62,7 @@ async function categorizarBatchIA(nombres: string[], useIA: boolean): Promise<Ma
   // Fallback rule-based para todos primero
   for (const n of nombres) result.set(n, categorizarRule(n))
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!useIA || !apiKey || nombres.length === 0) return result
+  if (!useIA || !process.env.ANTHROPIC_API_KEY || nombres.length === 0) return result
 
   // Solo enviamos a IA los que cayeron en 'Otros'
   const ambiguos = nombres.filter(n => result.get(n) === 'Otros')
@@ -73,7 +73,7 @@ async function categorizarBatchIA(nombres: string[], useIA: boolean): Promise<Ma
     for (let i = 0; i < ambiguos.length; i += 50) chunks.push(ambiguos.slice(i, i + 50))
 
     // Paralelizar todos los batches con Promise.all
-    const responses = await Promise.all(chunks.map(chunk => {
+    const resultados = await Promise.all(chunks.map(chunk => {
       const prompt = `Categorizá cada producto en UNA de estas categorías:
 ${CATEGORIAS_VALIDAS.join(', ')}
 
@@ -83,25 +83,17 @@ ${chunk.map((n, i) => `${i + 1}. ${n}`).join('\n')}
 Responde SOLO un JSON array con la categoría de cada producto en el mismo orden, sin texto adicional.
 Ejemplo: ["Carnes", "Verduras", ...]`
 
-      return fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 2048,
-          messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
-        }),
-      }).then(r => r.ok ? r.json() : null).catch(() => null)
+      return pedirAClaude({
+        tag: 'importador/productos-desde-facturas',
+        model: 'claude-haiku-4-5-20251001',
+        maxTokens: 2048,
+        messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
+      })
     }))
 
-    responses.forEach((data, idx) => {
-      if (!data) return
-      const text = data.content?.[0]?.text ?? ''
-      const clean = text.replace(/```json?\n?/gi, '').replace(/```/g, '').trim()
+    resultados.forEach((resultado, idx) => {
+      if (!resultado.ok) return
+      const clean = resultado.texto.replace(/```json?\n?/gi, '').replace(/```/g, '').trim()
       try {
         const arr = JSON.parse(clean) as string[]
         chunks[idx].forEach((nombre, i) => {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { clasificarErrorIA, errorSinApiKey, respuestaErrorIA, statusErrorIA } from '@/lib/ia/errores'
+import { errorSinApiKey, respuestaErrorIA, statusErrorIA } from '@/lib/ia/errores'
+import { pedirAClaude } from '@/lib/ia/claude'
 
 function buildSystemPrompt(nombresInternos: string[]): string {
   const listaInternos = nombresInternos.length > 0
@@ -129,51 +130,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Modo no soportado' }, { status: 400 })
   }
 
+  // Antes, un 429/403 devolvía DEMO_RESULT: una factura inventada (proveedor,
+  // CUIT, montos) con un discreto "DEMO —" en la UI. Una factura fabricada
+  // que entra a la contabilidad de un restaurante es peor que un error.
+  const resultado = await pedirAClaude({
+    tag: '/api/facturas',
+    model: 'claude-sonnet-4-6',
+    maxTokens: 4096,
+    system: buildSystemPrompt(nombresInternos),
+    messages: [{ role: 'user', content: userContent }],
+  })
+
+  if (!resultado.ok) {
+    return NextResponse.json(respuestaErrorIA(resultado.error), { status: statusErrorIA(resultado.error) })
+  }
+
+  const text = resultado.texto
+
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 4096,
-        system: buildSystemPrompt(nombresInternos),
-        messages: [{ role: 'user', content: userContent }],
-      }),
-    })
-
-    if (!response.ok) {
-      // Antes, un 429/403 devolvía DEMO_RESULT: una factura inventada
-      // (proveedor, CUIT, montos) con un discreto "DEMO —" en la UI. Una
-      // factura fabricada que entra a la contabilidad de un restaurante es
-      // peor que un error. Ahora el fallo se dice.
-      const err = clasificarErrorIA(response.status, await response.text())
-      console.error('[/api/facturas] IA:', err.tipo, err.requestId ?? '')
-      return NextResponse.json(respuestaErrorIA(err), { status: statusErrorIA(err) })
+    const parsed = JSON.parse(text)
+    return NextResponse.json(filtrarPersonas(parsed, nombresInternos))
+  } catch {
+    // Try extracting JSON from response
+    const match = text.match(/\{[\s\S]*\}/)
+    if (match) {
+      return NextResponse.json(filtrarPersonas(JSON.parse(match[0]), nombresInternos))
     }
-
-    const data = await response.json()
-    const text = data.content[0].text
-
-    try {
-      const parsed = JSON.parse(text)
-      return NextResponse.json(filtrarPersonas(parsed, nombresInternos))
-    } catch {
-      // Try extracting JSON from response
-      const match = text.match(/\{[\s\S]*\}/)
-      if (match) {
-        return NextResponse.json(filtrarPersonas(JSON.parse(match[0]), nombresInternos))
-      }
-      return NextResponse.json({ error: 'No se pudo parsear respuesta', raw: text }, { status: 500 })
-    }
-  } catch (e: unknown) {
-    // Un fallo de red tampoco puede terminar en una factura fabricada.
-    console.error('[/api/facturas] fetch:', e instanceof Error ? e.message : e)
-    const err = clasificarErrorIA(0, '')
-    return NextResponse.json(respuestaErrorIA(err), { status: statusErrorIA(err) })
+    return NextResponse.json({ error: 'No se pudo parsear respuesta', raw: text }, { status: 500 })
   }
 }
 

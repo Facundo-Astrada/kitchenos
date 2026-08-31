@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { clasificarErrorIA, errorSinApiKey, respuestaErrorIA, statusErrorIA } from '@/lib/ia/errores'
+import { errorSinApiKey, respuestaErrorIA, statusErrorIA } from '@/lib/ia/errores'
+import { pedirAClaude } from '@/lib/ia/claude'
 
 const SYSTEM_PROMPT = `Sos un asistente de cocina profesional. Extraé TODOS los productos y precios de esta lista de precios de un proveedor.
 
@@ -118,47 +119,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Modo no soportado' }, { status: 400 })
   }
 
+  // Ver /api/facturas: devolver DEMO_RESULT ante un fallo de la API le metía
+  // al usuario una lista de precios inventada como si fuera la suya.
+  const resultado = await pedirAClaude({
+    tag: '/api/listas-precios',
+    model: 'claude-sonnet-4-6',
+    maxTokens: 8192,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: userContent }],
+  })
+
+  if (!resultado.ok) {
+    return NextResponse.json(respuestaErrorIA(resultado.error), { status: statusErrorIA(resultado.error) })
+  }
+
+  const text = resultado.texto
+
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 8192,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: userContent }],
-      }),
-    })
-
-    if (!response.ok) {
-      // Ver /api/facturas: devolver DEMO_RESULT ante un fallo de la API le
-      // metía al usuario una lista de precios inventada como si fuera la suya.
-      const err = clasificarErrorIA(response.status, await response.text())
-      console.error('[/api/listas-precios] IA:', err.tipo, err.requestId ?? '')
-      return NextResponse.json(respuestaErrorIA(err), { status: statusErrorIA(err) })
+    const parsed = JSON.parse(text)
+    return NextResponse.json(parsed)
+  } catch {
+    const match = text.match(/\{[\s\S]*\}/)
+    if (match) {
+      return NextResponse.json(JSON.parse(match[0]))
     }
-
-    const data = await response.json()
-    const text = data.content[0].text
-
-    try {
-      const parsed = JSON.parse(text)
-      return NextResponse.json(parsed)
-    } catch {
-      const match = text.match(/\{[\s\S]*\}/)
-      if (match) {
-        return NextResponse.json(JSON.parse(match[0]))
-      }
-      return NextResponse.json({ error: 'No se pudo parsear respuesta', raw: text }, { status: 500 })
-    }
-  } catch (e: unknown) {
-    // Un fallo de red tampoco puede terminar en una lista de precios inventada.
-    console.error('[/api/listas-precios] fetch:', e instanceof Error ? e.message : e)
-    const err = clasificarErrorIA(0, '')
-    return NextResponse.json(respuestaErrorIA(err), { status: statusErrorIA(err) })
+    return NextResponse.json({ error: 'No se pudo parsear respuesta', raw: text }, { status: 500 })
   }
 }

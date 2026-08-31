@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx'
 import { randomUUID } from 'crypto'
 import { calcularDesfasadosDeItemsNuevos, aplicarDesfasados } from '@/lib/stock/syncPrecios'
 import { matchesWholeWord, sinTildes } from '@/lib/stock/precios'
-import { clasificarErrorIA } from '@/lib/ia/errores'
+import { pedirAClaude } from '@/lib/ia/claude'
 
 export const maxDuration = 60
 
@@ -257,9 +257,6 @@ type MapeoIA = {
 }
 
 async function inferirMapeo(headers: string[], sampleRows: unknown[][]): Promise<MapeoIA> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return {}
-
   const sample = sampleRows.slice(0, 8).map((r, i) =>
     `Fila ${i + 1}: ${(r as unknown[]).map(v => String(v ?? '').trim()).join(' | ')}`
   ).join('\n')
@@ -307,32 +304,20 @@ Respondé SOLO un JSON con el mapping de NOMBRE EXACTO de header → campo Kitch
   "alicuota_iva": "<header exacto o null>"
 }`
 
+  // Degrada a "sin enriquecer" a propósito (el import sigue con lo que
+  // parseó solo) — el motivo queda en el log de pedirAClaude, si no una caída
+  // de la IA se ve igual que una factura que no tenía nada que sumar.
+  const resultado = await pedirAClaude({
+    tag: 'importador/facturas-universal',
+    model: 'claude-sonnet-4-6',
+    maxTokens: 800,
+    temperature: 0,
+    messages: [{ role: 'user', content: prompt }],
+  })
+  if (!resultado.ok) return {}
+
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 800,
-        temperature: 0,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    })
-    if (!res.ok) {
-      // Degrada a "sin enriquecer" a propósito (el import sigue con lo que
-      // parseó solo), pero el motivo tiene que quedar en el log: si no, una
-      // caída de la IA se ve igual que una factura que no tenía nada que sumar.
-      const err = clasificarErrorIA(res.status, await res.text())
-      console.error('[importador/facturas-universal] IA:', err.tipo, err.requestId ?? '')
-      return {}
-    }
-    const data = await res.json()
-    const text: string = data.content?.[0]?.text ?? '{}'
-    const match = text.match(/\{[\s\S]*\}/)
+    const match = resultado.texto.match(/\{[\s\S]*\}/)
     if (!match) return {}
     return JSON.parse(match[0]) as MapeoIA
   } catch {

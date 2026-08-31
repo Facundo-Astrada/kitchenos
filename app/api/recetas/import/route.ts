@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
 import { createClient } from '@/lib/supabase/server'
-import { clasificarErrorIA, statusErrorIA } from '@/lib/ia/errores'
+import { statusErrorIA } from '@/lib/ia/errores'
+import { pedirAClaude } from '@/lib/ia/claude'
 
 const SYSTEM_PROMPT = `Sos un asistente de cocina profesional que analiza recetas.
 Analizá la información proporcionada (puede ser una imagen de receta, texto copiado, o una transcripción de audio) y extraé los datos estructurados.
@@ -70,7 +71,6 @@ Reglas:
 - Devolvé al menos 1 receta. Si no encontrás ninguna, devolvé un array vacío`
 
 async function callClaude(
-  apiKey: string,
   system: string,
   content: Array<{ type: string; source?: any; text?: string }>,
   maxTokens: number = 2048,
@@ -79,32 +79,22 @@ async function callClaude(
 
   console.log(`[recetas/import] Calling Claude API (${model})...`)
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      system,
-      messages: [{ role: 'user', content }],
-    }),
+  const resultado = await pedirAClaude({
+    tag: 'recetas/import',
+    model,
+    maxTokens,
+    system,
+    messages: [{ role: 'user', content }],
   })
 
-  if (!response.ok) {
+  if (!resultado.ok) {
     // Devolvía el mensaje crudo de Anthropic ("Your credit balance is too
     // low…", en inglés y hablando de facturación) o el status pelado. El
     // cocinero leía eso como "la foto no sirve" y reintentaba con otra.
-    const err = clasificarErrorIA(response.status, await response.text())
-    console.error('[recetas/import] IA:', err.tipo, err.requestId ?? '')
-    return { ok: false, error: err.mensaje, status: statusErrorIA(err) }
+    return { ok: false, error: resultado.error.mensaje, status: statusErrorIA(resultado.error) }
   }
 
-  const data = await response.json()
-  return { ok: true, text: data.content?.[0]?.text || '' }
+  return { ok: true, text: resultado.texto }
 }
 
 function parseClaudeJson(rawText: string) {
@@ -122,8 +112,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
+  if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: 'ANTHROPIC_API_KEY no configurada' }, { status: 500 })
   }
 
@@ -208,7 +197,7 @@ export async function POST(req: NextRequest) {
       if (buildErr) return NextResponse.json({ error: buildErr }, { status: errorStatus || 400 })
 
       console.log('[recetas/import_multi] Calling Claude for multi-recipe extraction...')
-      const result = await callClaude(apiKey, MULTI_SYSTEM_PROMPT, content, 4096, 'claude-sonnet-4-6')
+      const result = await callClaude(MULTI_SYSTEM_PROMPT, content, 4096, 'claude-sonnet-4-6')
       if (!result.ok) {
         // Sin crédito devolvía dos recetas inventadas. El usuario subía un
         // archivo con sus recetas y recibía "Lomo al Malbec" y "Pizza
@@ -234,7 +223,7 @@ export async function POST(req: NextRequest) {
         text: `Receta actual:\n${JSON.stringify(currentRecipe, null, 2)}\n\nPedido del usuario: ${userMessage}`,
       }]
 
-      const result = await callClaude(apiKey, ADJUST_SYSTEM, content, 2048, 'claude-haiku-4-5-20251001')
+      const result = await callClaude(ADJUST_SYSTEM, content, 2048, 'claude-haiku-4-5-20251001')
       if (!result.ok) {
         // Sin crédito devolvía la receta SIN el ajuste pedido, marcada como
         // "ajuste simulado". El usuario pedía un cambio, no pasaba nada, y no
@@ -414,7 +403,7 @@ ${textForClaude}`,
 
     // Use Haiku for text-only imports (faster + cheaper), Sonnet for images
     const singleModel = image_base64 ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001'
-    const result = await callClaude(apiKey, SYSTEM_PROMPT, content, 2048, singleModel)
+    const result = await callClaude(SYSTEM_PROMPT, content, 2048, singleModel)
 
     if (!result.ok) {
       // Acá estaba el bug que se reportó como "no se reconocen las fotos"

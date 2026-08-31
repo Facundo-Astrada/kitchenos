@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { clasificarErrorIA } from '@/lib/ia/errores'
+import { pedirAClaude } from '@/lib/ia/claude'
 
 const SCHEMA_KITCHENOS = `
 ## KitchenOS — Schema de módulos para restaurantes
@@ -38,8 +38,7 @@ export async function POST(req: NextRequest) {
     fileName?: string
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return NextResponse.json({ tipo_detectado: tipo ?? 'desconocido', confianza: 'baja', mapeo: {}, advertencias: [] })
+  if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ tipo_detectado: tipo ?? 'desconocido', confianza: 'baja', mapeo: {}, advertencias: [] })
 
   const muestraTexto = sampleRows?.slice(0, 5).map((row, i) =>
     `Fila ${i + 1}: ${(row as unknown[]).map(v => String(v ?? '').trim()).join(' | ')}`
@@ -93,36 +92,26 @@ Respondé SOLO con JSON válido, sin texto extra:
 }`
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        // Mapeo de columnas: tarea de texto simple y acotada → Haiku (más barato,
-        // suficiente). Falla seguro a un fallback en cada catch.
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 600,
-        temperature: 0,
-        messages: [{ role: 'user', content: prompt }],
-      }),
+    // Mapeo de columnas: tarea de texto simple y acotada → Haiku (más barato,
+    // suficiente). Falla seguro a un fallback en cada catch.
+    const resultado = await pedirAClaude({
+      tag: 'importador/mapeo',
+      model: 'claude-haiku-4-5-20251001',
+      maxTokens: 600,
+      temperature: 0,
+      messages: [{ role: 'user', content: prompt }],
     })
-    if (!res.ok) {
+    if (!resultado.ok) {
       // Degradar a "confianza baja" es razonable acá (el usuario mapea a mano),
       // pero el motivo va al log y a las advertencias para que no parezca que
       // el archivo era ilegible.
-      const err = clasificarErrorIA(res.status, await res.text())
-      console.error('[importador/mapeo] IA:', err.tipo, err.requestId ?? '')
       return NextResponse.json({
         tipo_detectado: tipo ?? 'desconocido', confianza: 'baja', mapeo: {},
-        advertencias: [err.mensaje],
+        advertencias: [resultado.error.mensaje],
       })
     }
 
-    const data = await res.json()
-    const text: string = data.content?.[0]?.text ?? '{}'
+    const text = resultado.texto || '{}'
     const match = text.match(/\{[\s\S]*\}/)
     if (!match) return NextResponse.json({ tipo_detectado: tipo ?? 'desconocido', confianza: 'baja', mapeo: {}, advertencias: [] })
 
