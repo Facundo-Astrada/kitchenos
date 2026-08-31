@@ -4,7 +4,7 @@ import { requireRestauranteId } from '@/lib/api/tenant'
 import * as XLSX from 'xlsx'
 import { randomUUID } from 'crypto'
 import { calcularDesfasadosDeItemsNuevos, aplicarDesfasados } from '@/lib/stock/syncPrecios'
-import { matchesWholeWord, sinTildes } from '@/lib/stock/precios'
+import { matchProducto } from '@/lib/facturas/matching'
 import { pedirAClaude } from '@/lib/ia/claude'
 
 export const maxDuration = 60
@@ -681,9 +681,9 @@ async function insertBatch(
   }
 
   // Resolver producto_id contra lo que ya existe en stock — mismo criterio de
-  // matching que useFacturas.crearFactura (match exacto sin tildes, y si no,
-  // parcial de palabra completa). Un import masivo/histórico NO crea productos
-  // por cada ítem sin match (eso sí lo hace el alta manual de una factura).
+  // matching que useFacturas.crearFactura (lib/facturas/matching.ts). Un
+  // import masivo/histórico NO crea productos por cada ítem sin match (eso sí
+  // lo hace el alta manual de una factura).
   if (itemsFinal.length > 0) {
     const restId = facturasFinal[0]?.restaurante_id
     const { data: productosData } = restId
@@ -692,14 +692,7 @@ async function insertBatch(
     const productos = (productosData ?? []) as { id: string; nombre: string }[]
     if (productos.length > 0) {
       for (const item of itemsFinal) {
-        const nombreLowerSinTildes = sinTildes(item.producto_nombre.toLowerCase())
-        const match =
-          productos.find(p => sinTildes(p.nombre.toLowerCase()) === nombreLowerSinTildes) ??
-          productos.find(p => {
-            const pn = sinTildes(p.nombre.toLowerCase())
-            return pn.length >= 4 && matchesWholeWord(nombreLowerSinTildes, pn)
-          })
-        item.producto_id = match?.id ?? null
+        item.producto_id = matchProducto(item.producto_nombre, productos)?.id ?? null
       }
     }
   }
