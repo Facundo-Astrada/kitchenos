@@ -40,15 +40,28 @@ const CHAIN_METHODS = [
 ] as const
 
 export function createMockSupabaseClient() {
-  const responses = new Map<string, MockResponse>()
+  // Cada key guarda una LISTA de respuestas — normalmente de un elemento,
+  // repetido en cada llamada (comportamiento de antes). Pasar un array a
+  // setResponse arma una secuencia: cada .then() sobre esa key consume la
+  // siguiente y se queda en la última al agotarse. Sirve para probar un
+  // hook que llama dos veces a la misma tabla en la misma operación y
+  // espera respuestas distintas (ej. re-consultar tras perder una carrera).
+  const responses = new Map<string, MockResponse[]>()
+  const callIndex = new Map<string, number>()
   const calls: MockCall[] = []
 
-  function setResponse(tableOrRpc: string, response: Partial<MockResponse>) {
-    responses.set(tableOrRpc, { data: null, error: null, ...response })
+  function setResponse(tableOrRpc: string, response: Partial<MockResponse> | Partial<MockResponse>[]) {
+    const list = (Array.isArray(response) ? response : [response]).map(r => ({ data: null, error: null, ...r }))
+    responses.set(tableOrRpc, list)
+    callIndex.set(tableOrRpc, 0)
   }
 
   function resolved(key: string): MockResponse {
-    return responses.get(key) ?? { data: null, error: null }
+    const list = responses.get(key)
+    if (!list || list.length === 0) return { data: null, error: null }
+    const idx = callIndex.get(key) ?? 0
+    callIndex.set(key, idx + 1)
+    return list[Math.min(idx, list.length - 1)]
   }
 
   const WRITE_METHODS = new Set(['insert', 'update', 'upsert', 'delete'])
@@ -76,7 +89,7 @@ export function createMockSupabaseClient() {
     // ES la promesa, no algo que la devuelve al final de la cadena.
     builder.then = (onFulfilled?: (v: MockResponse) => unknown, onRejected?: (e: unknown) => unknown) => {
       const specific = writeMethod ? `${table}:${writeMethod}` : `${table}:select`
-      const res = responses.has(specific) ? responses.get(specific)! : resolved(table)
+      const res = responses.has(specific) ? resolved(specific) : resolved(table)
       return Promise.resolve(res).then(onFulfilled, onRejected)
     }
     return builder

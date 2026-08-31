@@ -64,25 +64,46 @@ export function useMesas() {
         .eq('estado', 'abierta')
         .maybeSingle()
       if (findError) throw findError
-      if (existente) return existente.id as string
 
-      const { data, error } = await supabase
-        .from('cuentas')
-        .insert({
-          restaurante_id: RESTAURANTE_ID,
-          mesa_id: mesaId,
-          estado: 'abierta',
-          mozo_id: perfil?.miembro_id ?? null,
-        })
-        .select('id')
-        .single()
-      if (error) throw error
+      let cuentaId = existente?.id as string | undefined
+
+      if (!cuentaId) {
+        const { data, error } = await supabase
+          .from('cuentas')
+          .insert({
+            restaurante_id: RESTAURANTE_ID,
+            mesa_id: mesaId,
+            estado: 'abierta',
+            mozo_id: perfil?.miembro_id ?? null,
+          })
+          .select('id')
+          .single()
+
+        if (error?.code === '23505') {
+          // Candado UNIQUE en DB (migración 20260831b): otra apertura ganó
+          // la carrera entre el SELECT y el INSERT (doble tap, dos
+          // dispositivos en la misma mesa) — usar la cuenta ganadora en vez
+          // de duplicar.
+          const { data: ganadora, error: refindError } = await supabase
+            .from('cuentas')
+            .select('id')
+            .eq('mesa_id', mesaId)
+            .eq('estado', 'abierta')
+            .single()
+          if (refindError) throw refindError
+          cuentaId = ganadora.id as string
+        } else if (error) {
+          throw error
+        } else {
+          cuentaId = data.id as string
+        }
+      }
 
       const { error: mesaError } = await supabase.from('mesas').update({ estado: 'ocupada' }).eq('id', mesaId)
       if (mesaError) throw mesaError
 
       await mutate()
-      return data.id as string
+      return cuentaId as string
     } catch (e: unknown) {
       throw new Error(errMsg(e, 'Error al abrir cuenta'))
     }

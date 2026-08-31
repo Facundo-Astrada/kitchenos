@@ -176,23 +176,27 @@ export function useMenus() {
   }, [RESTAURANTE_ID, fetchMenus]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Actualizar menú: update + reemplazar preparaciones ──
+  // Una sola RPC (reemplazar_menu_preparaciones, migración 20260831) en vez
+  // de 3 round-trips update/delete/insert: un corte de red a mitad de camino
+  // revertía la transacción del cliente y dejaba el menú sin preparaciones.
+  // La función corre las tres operaciones en una única transacción de Postgres.
   const actualizarMenu = useCallback(async (
     id: string,
     data: { nombre: string; tipo: MenuTipo; descripcion?: string | null; fecha_evento?: string | null; vigencia_desde?: string | null; vigencia_hasta?: string | null; plaza_control?: string | null; variantes?: string[] | null; precio?: number | null },
     preps: PrepInput[],
   ) => {
-    const { error } = await supabase
-      .from('menus')
-      .update({ nombre: data.nombre, tipo: data.tipo, descripcion: data.descripcion ?? null, fecha_evento: data.fecha_evento ?? null, vigencia_desde: data.vigencia_desde ?? null, vigencia_hasta: data.vigencia_hasta ?? null, plaza_control: data.plaza_control ?? null, variantes: data.variantes && data.variantes.length > 0 ? data.variantes : null, precio: data.precio ?? null, updated_at: new Date().toISOString() })
-      .eq('id', id)
-    if (error) throw new Error(error.message)
-
-    const { error: delErr } = await supabase.from('menu_preparaciones').delete().eq('menu_id', id)
-    if (delErr) throw new Error(delErr.message)
-
-    if (preps.length > 0) {
-      const rows = preps.map((p, i) => ({
-        menu_id: id,
+    const { error } = await supabase.rpc('reemplazar_menu_preparaciones', {
+      p_menu_id: id,
+      p_nombre: data.nombre,
+      p_tipo: data.tipo,
+      p_descripcion: data.descripcion ?? null,
+      p_fecha_evento: data.fecha_evento ?? null,
+      p_vigencia_desde: data.vigencia_desde ?? null,
+      p_vigencia_hasta: data.vigencia_hasta ?? null,
+      p_plaza_control: data.plaza_control ?? null,
+      p_variantes: data.variantes && data.variantes.length > 0 ? data.variantes : null,
+      p_precio: data.precio ?? null,
+      p_preparaciones: preps.map((p, i) => ({
         paso: p.paso,
         tipo: p.tipo,
         ref_id: p.ref_id,
@@ -210,10 +214,9 @@ export function useMenus() {
         peso_porcion: p.peso_porcion ?? null,
         peso_porcion_unidad: p.peso_porcion_unidad ?? null,
         orden: i,
-      }))
-      const { error: prepErr } = await supabase.from('menu_preparaciones').insert(rows)
-      if (prepErr) throw new Error(prepErr.message)
-    }
+      })),
+    })
+    if (error) throw new Error(error.message)
 
     // ── Propagar a las fechas YA activadas (hoy en adelante; el pasado no se toca) ──
     // Las tareas son un snapshot del menú al activarlo. Al editar el menú sincronizamos:
