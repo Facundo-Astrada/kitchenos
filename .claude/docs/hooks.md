@@ -60,6 +60,8 @@
 
 26. **Cuando la visibilidad de la fila A depende de una columna de la fila embebida B (ej. `checklist_items` filtrado por `menus.vigencia_hasta`), el canal de realtime necesita un `.on(...)` propio sobre la tabla B además del de A.** Un UPDATE en B no toca ninguna fila de A, así que el listener de A nunca dispara y el cliente queda con el embed viejo hasta el próximo refetch manual. Agregar `.on('postgres_changes', {event:'UPDATE', table:'B', filter}, () => mutateConfig())` al mismo canal (`useChecklist.ts`, suscripción a `menus` adjunta a la de `checklist_items`, ago 2026).
 
+27. **Un `delete` + `insert` (o cualquier secuencia de writes que deban ganar o perder juntos) hecho como 2+ llamadas separadas desde el browser no es atómico** — un corte de red entre medio deja el estado a mitad de camino, no revertido. Empaquetar en una función Postgres (`SECURITY INVOKER` — corre con el RLS de quien llama, no hace falta bypass) y llamarla con `.rpc(nombre, params)`: el cuerpo de la función es una transacción implícita. Ejemplo: `reemplazar_menu_preparaciones` (migración `20260831`, reemplaza el `update+delete+insert` que tenía `useMenus.actualizarMenu`). Para el otro caso típico de carrera — un `SELECT` (¿ya existe?) seguido de `INSERT` si no — el fix no es una transacción sino un `UNIQUE INDEX` (parcial si aplica, `WHERE estado='...'`) más atrapar el `23505` en el catch y releer la fila ganadora en vez de tratarlo como error (ejemplo: `useMesas.abrirCuenta` + `cuentas_mesa_abierta_unica`, misma migración).
+
 ## Anti-patrón: funciones internas usadas como JSX en React
 
 **Síntoma:** el teclado se cierra al primer carácter, se pierde el focus, un form "se resetea" solo.
