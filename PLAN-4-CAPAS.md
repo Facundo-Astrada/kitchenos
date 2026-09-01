@@ -350,7 +350,7 @@ Una reserva que vive sola en su pantalla no sirve. Los cuatro enganches:
 
 ## Bloque 10 — Reservas alimentan la previsión, y la sugerencia de compra
 
-- [ ] **B10** · Una o dos sesiones · Sin migración · Depende de B2, B3, B8, B9
+- [x] **B10** · Una o dos sesiones · Sin migración · Depende de B2, B3, B8, B9 — cerrado 31/08 (parte A y B)
 
 **Parte A — el motor de producción pasa de estadística a previsión.**
 
