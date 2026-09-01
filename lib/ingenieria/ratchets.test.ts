@@ -214,6 +214,9 @@ const ADMIN_CLIENT_SIN_HELPER_PERMITIDO = new Set([
   'registro/route.ts',               // alta de restaurante: valida sesión, pero el usuario TODAVÍA no tiene tenant
                                      // (ése es el punto). Genera el restaurante_id server-side y rechaza 409 a
                                      // quien ya tenga vínculo — ver user_restaurantes_solo_lectura.sql
+  'admin/overview/route.ts',         // dashboard de control del ecosistema: NO hay un tenant que resolver, lee
+                                     // a través de TODOS a propósito. Gate: sesión válida + email en
+                                     // esAdminKOS() (allowlist de 1-2 personas) antes de tocar el admin client.
 ])
 
 function listarRoutes(dir: string): string[] {
