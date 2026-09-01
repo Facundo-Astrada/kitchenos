@@ -4,7 +4,6 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef } f
 import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import type { Rol } from '@/types'
-import { MODULOS_SEED_POR_ROL_DB } from '@/lib/constants'
 import { mapRol } from '@/lib/permisos/roles'
 
 // ── Avatar color palette ──────────────────────────────────────
@@ -226,102 +225,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!userId) { console.error('[signUp] Step 1 FAIL — no userId'); return { error: 'No se pudo crear el usuario' } }
       console.log('[signUp] Step 1 OK — userId:', userId)
 
-      // 2) Create restaurante (generate UUID client-side to avoid SELECT-back RLS issue)
-      const restauranteId = crypto.randomUUID()
-      const { error: restError } = await supabase
-        .from('restaurantes')
-        .insert({ id: restauranteId, nombre: restauranteName })
-
-      if (restError) { console.error('[signUp] Step 2 FAIL — restaurante:', restError.message, restError.details, restError.hint); return { error: restError.message } }
-      console.log('[signUp] Step 2 OK — restaurante_id:', restauranteId)
-
-      // 3) Link user to restaurante as admin
-      const { error: linkError } = await supabase
-        .from('user_restaurantes')
-        .insert({ user_id: userId, restaurante_id: restauranteId, rol: 'admin' })
-
-      if (linkError) { console.error('[signUp] Step 3 FAIL — user_restaurantes:', linkError.message, linkError.details); return { error: linkError.message } }
-      console.log('[signUp] Step 3 OK — user_restaurantes linked')
-
-      // 4) Create equipo_miembros entry
-      const miembroNombre = nombre || email.split('@')[0]
-      const miembroApellido = apellido || ''
-      const { error: miembroError } = await supabase
-        .from('equipo_miembros')
-        .insert({
-          nombre: miembroNombre,
-          apellido: miembroApellido,
-          rol: 'admin',
-          auth_user_id: userId,
-          restaurante_id: restauranteId,
-          activo: true,
-        })
-
-      if (miembroError) { console.error('[signUp] Step 4 FAIL — equipo_miembros:', miembroError.message, miembroError.details); return { error: miembroError.message } }
-
-      // 5) Seed default rol_permisos for the new restaurant.
-      // Las listas de módulos viven en lib/constants.ts tipadas como ModuloId[]
-      // — estaban inline acá con strings sueltos y decían 'inicio' donde la
-      // ruta '/' pide 'home', así que ningún cocinero podía entrar al dashboard.
-      const rolPermisos = [
-        {
-          restaurante_id: restauranteId,
-          rol: 'admin',
-          modulos_visibles: MODULOS_SEED_POR_ROL_DB.admin,
-          puede_editar_stock: true,
-          puede_editar_recetas: true,
-          puede_editar_carta: true,
-          puede_editar_equipo: true,
-          puede_eliminar: true,
-        },
-        {
-          restaurante_id: restauranteId,
-          rol: 'sous_chef',
-          modulos_visibles: MODULOS_SEED_POR_ROL_DB.sous_chef,
-          puede_editar_stock: true,
-          puede_editar_recetas: true,
-          puede_editar_carta: true,
-          puede_editar_equipo: true,
-          puede_eliminar: false,
-        },
-        {
-          restaurante_id: restauranteId,
-          rol: 'cocinero',
-          modulos_visibles: MODULOS_SEED_POR_ROL_DB.cocinero,
-          puede_editar_stock: false,
-          puede_editar_recetas: false,
-          puede_editar_carta: false,
-          puede_editar_equipo: false,
-          puede_eliminar: false,
-        },
-        {
-          restaurante_id: restauranteId,
-          rol: 'bachero',
-          modulos_visibles: MODULOS_SEED_POR_ROL_DB.bachero,
-          puede_editar_stock: false,
-          puede_editar_recetas: false,
-          puede_editar_carta: false,
-          puede_editar_equipo: false,
-          puede_eliminar: false,
-        },
-        {
-          restaurante_id: restauranteId,
-          rol: 'compras',
-          modulos_visibles: MODULOS_SEED_POR_ROL_DB.compras,
-          puede_editar_stock: true,
-          puede_editar_recetas: false,
-          puede_editar_carta: false,
-          puede_editar_equipo: false,
-          puede_eliminar: false,
-        },
-      ]
-
-      const { error: permisosError } = await supabase
-        .from('rol_permisos')
-        .insert(rolPermisos)
-
-      if (permisosError) { console.error('[signUp] Step 5 FAIL — rol_permisos:', permisosError.message, permisosError.details); return { error: permisosError.message } }
-      console.log('[signUp] Step 5 OK — rol_permisos seeded')
+      // 2-5) Restaurante + vínculo + miembro + permisos: todo del lado del servidor.
+      // `user_restaurantes` es de donde sale `mi_restaurante_id()`, la variable que
+      // gobierna las 344 policies RLS. Mientras el browser pudo escribirla, cualquier
+      // usuario podía apuntar su fila al restaurante de otro. El endpoint genera el
+      // `restaurante_id` y rechaza a quien ya tenga vínculo.
+      const res = await fetch('/api/registro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre_restaurante: restauranteName, nombre, apellido }),
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        console.error('[signUp] Steps 2-5 FAIL:', payload?.error)
+        return { error: payload?.error ?? 'No se pudo crear el restaurante' }
+      }
+      const restauranteId = payload.restaurante_id as string
+      console.log('[signUp] Steps 2-5 OK — restaurante_id:', restauranteId)
 
       console.log('[signUp] ✅ Registration complete for:', email)
 

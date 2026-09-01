@@ -211,6 +211,9 @@ const ADMIN_CLIENT_SIN_HELPER_PERMITIDO = new Set([
   'fiscal/comprobantes/route.ts',    // idem
   'fiscal/emitir/route.ts',          // idem
   'stock/import-planilla/route.ts',  // valida sesión a mano; el write ahora tamb. filtra por restaurante_id (Día 4)
+  'registro/route.ts',               // alta de restaurante: valida sesión, pero el usuario TODAVÍA no tiene tenant
+                                     // (ése es el punto). Genera el restaurante_id server-side y rechaza 409 a
+                                     // quien ya tenga vínculo — ver user_restaurantes_solo_lectura.sql
 ])
 
 function listarRoutes(dir: string): string[] {
@@ -237,6 +240,50 @@ describe('Ratchets — createAdminClient sin requireRestauranteId en app/api/**'
       const rel = relative(apiDir, abs).replace(/\\/g, '/')
       if (ADMIN_CLIENT_SIN_HELPER_PERMITIDO.has(rel)) continue
       violaciones.push(rel)
+    }
+    expect(violaciones, violaciones.join('\n')).toEqual([])
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// 6. `user_restaurantes` no se escribe desde el browser (01/09/2026).
+//
+//    Esta tabla es de donde sale `mi_restaurante_id()`, la función de la que
+//    dependen las 344 policies RLS del schema. Mientras el cliente pudo
+//    escribirla, cualquier usuario podía apuntar su propia fila al restaurante
+//    de otro y quedarse con la cuenta entera — verificado en producción contra
+//    datos reales antes de cerrarlo (ver supabase/migrations/
+//    user_restaurantes_solo_lectura.sql).
+//
+//    Las policies de escritura ya no existen, así que un intento nuevo falla en
+//    runtime. Este ratchet lo agarra antes: en el diff, no en producción.
+//    Escribir esa tabla es legítimo SOLO desde app/api/** con el admin client.
+// ─────────────────────────────────────────────────────────────────────────
+
+const ESCRITURA_RE = /from\(\s*['"]user_restaurantes['"]\s*\)\s*\.\s*(insert|update|upsert|delete)/
+
+function archivosCliente(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      if (entry.name === 'node_modules' || entry.name === '.next') continue
+      archivosCliente(full, out)
+    } else if (/\.tsx?$/.test(entry.name) && !entry.name.endsWith('.test.ts')) {
+      out.push(full)
+    }
+  }
+  return out
+}
+
+describe('Ratchets — user_restaurantes es de solo lectura fuera de app/api', () => {
+  it('ningún archivo fuera de app/api/** escribe user_restaurantes', () => {
+    const violaciones: string[] = []
+    for (const raiz of ['app', 'lib', 'components']) {
+      for (const abs of archivosCliente(join(ROOT, raiz))) {
+        const rel = relative(ROOT, abs).replace(/\\/g, '/')
+        if (rel.startsWith('app/api/')) continue // admin client / service role: legítimo
+        if (ESCRITURA_RE.test(readFileSync(abs, 'utf-8'))) violaciones.push(rel)
+      }
     }
     expect(violaciones, violaciones.join('\n')).toEqual([])
   })
