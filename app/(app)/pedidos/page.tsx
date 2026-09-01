@@ -11,6 +11,7 @@ import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import PageHeader from '@/components/shell/PageHeader'
 import ActionButton from '@/components/shell/ActionButton'
 import IngresosBanner from '@/components/pedidos/IngresosBanner'
+import SugerenciaCompraSheet from '@/components/pedidos/SugerenciaCompraSheet'
 import { Toast } from '@/components/ui'
 
 // ── Helpers ─────────────────────────────────────────────
@@ -210,21 +211,29 @@ interface ItemForm {
 const EMPTY_ITEM: ItemForm = { producto_nombre: '', cantidad: '', unidad: 'kg', precio_estimado: '', producto_id: null }
 
 // ── Nuevo Pedido View ───────────────────────────────────
+export interface PrefillPedido {
+  proveedorId: string | null
+  proveedorNombre: string
+  items: ItemForm[]
+}
+
 function NuevoPedidoView({
   proveedores,
+  prefill,
   onCrear,
   onCancel,
 }: {
   proveedores: Proveedor[]
+  prefill?: PrefillPedido | null
   onCrear: (datos: Parameters<ReturnType<typeof usePedidos>['crearPedido']>[0]) => Promise<string>
   onCancel: () => void
 }) {
   const RESTAURANTE_ID = useRestauranteId()
   const { fetchProductosProveedor } = usePedidos()
   const supabase = createClient()
-  const [proveedorId, setProveedorId] = useState('')
-  const [proveedorNombre, setProveedorNombre] = useState('')
-  const [proveedorSearch, setProveedorSearch] = useState('')
+  const [proveedorId, setProveedorId] = useState(prefill?.proveedorId ?? '')
+  const [proveedorNombre, setProveedorNombre] = useState(prefill?.proveedorNombre ?? '')
+  const [proveedorSearch, setProveedorSearch] = useState(prefill?.proveedorNombre ?? '')
   const [showProvList, setShowProvList] = useState(false)
   const [facturasProvList, setFacturasProvList] = useState<{ nombre: string; id: string | null }[]>([])
 
@@ -251,7 +260,7 @@ function NuevoPedidoView({
   }, [RESTAURANTE_ID])
   const [fechaEntrega, setFechaEntrega] = useState('')
   const [notas, setNotas] = useState('')
-  const [items, setItems] = useState<ItemForm[]>([{ ...EMPTY_ITEM }])
+  const [items, setItems] = useState<ItemForm[]>(prefill?.items && prefill.items.length > 0 ? prefill.items : [{ ...EMPTY_ITEM }])
   const [sugerencias, setSugerencias] = useState<{ producto_nombre: string; unidad: string; precio_unitario: number }[]>([])
   const [saving, setSaving] = useState(false)
   const [activeItemIdx, setActiveItemIdx] = useState<number | null>(null)
@@ -1033,6 +1042,8 @@ export default function PedidosPage() {
   const [selectedItems, setSelectedItems] = useState<PedidoItem[]>([])
   const [toast, setToast] = useState('')
   const [filter, setFilter] = useState<'todos' | EstadoPedido>('todos')
+  const [showSugerencia, setShowSugerencia] = useState(false)
+  const [prefill, setPrefill] = useState<PrefillPedido | null>(null)
 
   const filtered = useMemo(() => {
     if (filter === 'todos') return pedidos
@@ -1064,6 +1075,7 @@ export default function PedidosPage() {
   const handleCrear = async (datos: Parameters<typeof crearPedido>[0]) => {
     const id = await crearPedido(datos)
     setToast('Pedido confirmado')
+    setPrefill(null)
     setView('list')
     return id
   }
@@ -1143,8 +1155,9 @@ export default function PedidosPage() {
       <>
         <NuevoPedidoView
           proveedores={proveedores}
+          prefill={prefill}
           onCrear={handleCrear}
-          onCancel={() => setView('list')}
+          onCancel={() => { setPrefill(null); setView('list') }}
         />
         {toast && <Toast msg={toast} onDone={() => setToast('')} />}
       </>
@@ -1159,7 +1172,12 @@ export default function PedidosPage() {
         title="Pedidos"
         icon="shopping_cart"
         subtitle={loading ? '…' : `${pedidos.length} pedido${pedidos.length !== 1 ? 's' : ''}`}
-        actions={<ActionButton icon="add" label="Nuevo pedido" onClick={() => setView('nuevo')} />}
+        actions={
+          <>
+            <ActionButton icon="auto_awesome" label="Sugerir pedido" onClick={() => setShowSugerencia(true)} />
+            <ActionButton icon="add" label="Nuevo pedido" onClick={() => setView('nuevo')} />
+          </>
+        }
         below={
           <div data-coach-target="pedidos-filtros" style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
             {(['todos', 'borrador', 'enviado', 'parcial', 'recibido'] as const).map(f => (
@@ -1231,6 +1249,26 @@ export default function PedidosPage() {
       </div>
 
       {toast && <Toast msg={toast} onDone={() => setToast('')} />}
+      {showSugerencia && (
+        <SugerenciaCompraSheet
+          onClose={() => setShowSugerencia(false)}
+          onCrearPedido={datos => {
+            setPrefill({
+              proveedorId: datos.proveedorId,
+              proveedorNombre: datos.proveedorNombre,
+              items: datos.items.map(it => ({
+                producto_nombre: it.producto_nombre,
+                producto_id: it.producto_id,
+                cantidad: String(it.cantidad),
+                unidad: it.unidad,
+                precio_estimado: it.precio_estimado ? String(it.precio_estimado) : '',
+              })),
+            })
+            setShowSugerencia(false)
+            setView('nuevo')
+          }}
+        />
+      )}
     </div>
     </PageTransition>
   )
