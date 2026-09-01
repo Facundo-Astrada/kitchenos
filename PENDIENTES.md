@@ -34,16 +34,41 @@ Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/
 
 ---
 
-## 🟡 Medio — Roadmap: Planes y Stripe
+## 🟡 Medio — Roadmap: Planes y cobro
 
-### Estructura de planes $60 / $99
-`restaurantes.plan` (`'trial'|'basic'|'pro'`), tabla `suscripciones` (`restaurante_id, stripe_customer_id, stripe_subscription_id, status, plan, current_period_end`), hook `usePlan()`. Definir spec en `DECISIONES.md` antes de empezar código.
+**Las decisiones de negocio de este bloque están tomadas (01/09/2026).** Viven en
+`~/Desktop/START UP KOS/00-decisiones/DECISIONES.md`, decisiones 004 a 008. Si este
+archivo y ese difieren, manda ese.
 
-### Integración Stripe
-`POST /api/stripe/checkout` (Checkout Session), `POST /api/stripe/webhook` (`customer.subscription.*` → `suscripciones`), UI en Configuración → Plan, paywall en trial expirado. Depende del ítem anterior.
+**Stripe quedó descartado: no opera en Argentina** (46-47 países, en LatAm solo Brasil
+y México — una empresa argentina no puede abrir cuenta). El cobro automático va por
+**Mercado Pago Suscripciones** (API `preapproval`). Decisión 004.
+
+### ✅ Hecho — Medición de consumo de IA (01/09)
+Tabla `ia_uso` + `lib/ia/costos.ts`. Asienta cada llamada con tokens, cache y costo USD.
+Va antes que cualquier plan: es el único costo variable del negocio y el que define el
+tope del Coach (decisión 008).
+**Falta:** imputar el tenant en las rutas que todavía asientan sin `restaurante_id` —
+`carta/import`, `recetas/import`, `stock/import-planilla`, `ventas/import`,
+`listas-precios`, `importador/mapeo`, `importador/fichas-tecnicas`,
+`importador/productos-desde-facturas`. En todas la llamada a IA vive dentro de un helper
+que no recibe el id; es enhebrar un parámetro, igual que se hizo en `facturas-universal`.
+
+### Estructura de planes (siguiente)
+Tres planes según decisión 006: **Base $48.000 · Cocina $75.000 · Control $110.000**
+(+ perfil Producción $26.000, + local adicional 65%, + implementación $300.000 única).
+`restaurantes.plan`, hook `usePlan()`, matriz plan → módulos.
+**Vale hacerlo aunque el cobro siga siendo manual** — es la parte reutilizable.
 
 ### Feature gating
-Coach, multi-usuario, export PDF, HACCP solo en plan Pro — `puedeUsar('coach')` derivado de `usePlan`. Depende de Stripe.
+Coach (con tope mensual), HACCP, Presupuesto/CMV y Reportes solo en Control; OPS/mise/pase
+desde Cocina. `puedeUsar('coach')` derivado de `usePlan`. Depende del ítem anterior, no del cobro.
+
+### Cobro automático (último)
+Mercado Pago `preapproval` + webhooks, UI en Configuración → Plan. **Recién cuando cobrar
+a mano moleste** (cliente 4-5). Con 1 cuenta y $0 facturados no compra nada.
+Prerrequisito que no es código: monotributo + facturación electrónica ARCA (decisión 001).
+Diseñar el dunning desde el día uno: 20-40% de las bajas en LatAm son involuntarias.
 
 ---
 
