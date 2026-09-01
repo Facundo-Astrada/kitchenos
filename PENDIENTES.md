@@ -21,10 +21,18 @@ El agujero no es ese bug puntual (ya está arreglado y con `.trim()` de por medi
 
 Lo más barato que lo cubriría, en orden de esfuerzo: (a) un smoke e2e contra prod que loguee y verifique que el WS de realtime conecta — es literalmente el script que encontró esto, y corre en 40 s; (b) el endpoint `/api/log-error` ya recibe errores del cliente y los tira a los logs de Vercel, pero nadie los mira — mandarlos a algún lado con alerta; (c) el dashboard de control del ecosistema (ver más abajo), que necesita esto igual.
 
-### Dashboard de control del ecosistema (decisión pendiente, 01/09)
-No existe ningún backoffice: `superadmin|backoffice|panel_admin` no da un solo resultado en el código. Para saber el estado de las cuentas hay que abrir SQL contra producción a mano — es lo que hubo que hacer para este mismo relevamiento.
-
-Con 1 cliente real se banca. Con 5+ pagando no: no hay forma de ver quién dejó de entrar, quién nunca activó un módulo, a quién se le rompió un import, ni cuánto cuesta cada cuenta en tokens de Claude. Forma sugerida: un módulo `/admin` gateado por allow-list de emails propios, leyendo con admin client métricas por tenant. **Va después de Stripe** (necesita algo que medir) y antes del cliente 5.
+### ✅ Hecho — Dashboard de control del ecosistema (01/09)
+`/admin`, gateado por `lib/admin/allowlist.ts` (emails: `facuastrada15@gmail.com`,
+`facu@broscomedor.com`) + `esAdminKOS()` verificado server-side en `/api/admin/overview`
+antes de tocar el admin client. Por restaurante: plan, usuarios, última actividad, costo
+y llamadas de IA (30d). Top de funciones más usadas (registros creados en 30d sobre 12
+tablas — mide escritura, no clicks). Filtro por restaurante (todo el desglose viaja
+por tenant en una sola respuesta, el cliente filtra sin pedir de nuevo). Changelog de
+los últimos 15 commits de `main` vía API pública de GitHub (repo público, sin token) —
+push a main es deploy automático, así que esto ES el registro de deploys.
+**Sin cubrir todavía:** "a quién se le rompió un import" — hoy no hay señal de fallos,
+solo de volumen. Si un import queda en 0 silenciosamente, esta pantalla no lo distingue
+de "no lo usó". Retomar si hace falta antes del cliente 5.
 
 ### Fiscal ARCA — homologación end-to-end
 Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/emitir/route.ts`). Falta: certificado real de ARCA del contribuyente, probar contra el servidor de testing de AFIP, URLs de prod en `config_fiscal`, cachear token/sign WSAA en Supabase.
