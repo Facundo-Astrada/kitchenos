@@ -22,8 +22,8 @@ Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/
 ### OPS Consolidación — diferido
 "Copiar a otro día" e "Ingredientes consolidados" (se sacaron con la planilla legacy) — reimplementar sobre `tareas` si el usuario los pide.
 
-### Refactor de Carta — días 6-9 resueltos; queda 5b como cola (bajo esfuerzo)
-Días 6-9 del plan consolidado resueltos (31/08): smoke e2e + código muerto, los moves puros (`cards.tsx`, `exportar.ts`, `PackagingGruposDrawer.tsx`, `ImportCartaModal.tsx`, `EditarPlato.tsx`) y la migración del panel OPS de `DetailView` a los helpers de `lib/ops/mise.ts` (el único paso con riesgo real del plan, arregló el shrink que faltaba y mató la 3ª copia de `PLAZAS_OPS`). `carta/page.tsx` en ~1.984 líneas (desde 3.906). Queda **paso 5b**: mover `DetailView` a su propio archivo — move puro (compilador + smoke), ½ día, sin riesgo. Punto de parada explícito tras 5b: el shell de ~700 líneas queda y está bien, no seguir "mejorando".
+### Refactor de Carta — completo (31/08)
+Todo el plan de `refactor-kos.md` cerrado: días 6-9 (smoke e2e + código muerto, moves puros de `cards.tsx`/`exportar.ts`/`PackagingGruposDrawer.tsx`/`ImportCartaModal.tsx`/`EditarPlato.tsx`, migración del panel OPS de `DetailView` a `lib/ops/mise.ts`) y paso 5b (mover `DetailView` a su propio archivo, move puro). `carta/page.tsx` 3.906 → 983 líneas. **Punto de parada explícito del plan**: no seguir "mejorando" esta pantalla sin un motivo nuevo.
 
 ---
 
