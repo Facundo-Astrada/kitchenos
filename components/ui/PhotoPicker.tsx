@@ -2,11 +2,17 @@
 
 import { useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 
 interface Props {
   currentUrl?: string | null
   bucket?: string
-  path: string  // e.g. 'recetas/uuid' or 'carta/uuid'
+  /**
+   * Path SIN el restaurante — p. ej. 'recetas/uuid' o 'carta/uuid'.
+   * El prefijo de tenant lo pone este componente (ver abajo): que lo pusiera
+   * cada caller era pedir que cuatro pantallas se acuerden de lo mismo.
+   */
+  path: string
   onUploaded: (url: string) => void
   onRemoved?: () => void
   size?: number  // px, default 80
@@ -18,15 +24,23 @@ export default function PhotoPicker({ currentUrl, bucket = 'fotos', path, onUplo
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const supabase = createClient()
+  const restauranteId = useRestauranteId()
 
   async function handleFile(file: File) {
     if (!file.type.startsWith('image/')) { setError('Solo se aceptan imágenes'); return }
     if (file.size > 5 * 1024 * 1024) { setError('Máx 5 MB'); return }
+    // useRestauranteId() devuelve '' mientras carga la sesión (regla de CLAUDE.md).
+    // Subir con prefijo vacío escribiría fuera del namespace del tenant y la policy
+    // de storage lo rechazaría igual — mejor un mensaje que un error crudo de RLS.
+    if (!restauranteId) { setError('Esperá a que cargue la sesión'); return }
     setError(null)
     setUploading(true)
     try {
       const ext = file.name.split('.').pop() || 'jpg'
-      const filePath = `${path}.${ext}`
+      // Primera carpeta = restaurante. Es lo que miran las policies del bucket
+      // (`storage.foldername(name))[1] = mi_restaurante_id()`): sin esto, cualquier
+      // usuario autenticado podía listar y pisar las fotos de otro restaurante.
+      const filePath = `${restauranteId}/${path}.${ext}`
       const { error: upErr } = await supabase.storage.from(bucket).upload(filePath, file, { upsert: true })
       if (upErr) throw upErr
       const { data } = supabase.storage.from(bucket).getPublicUrl(filePath)
