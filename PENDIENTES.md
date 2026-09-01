@@ -54,15 +54,24 @@ la primera aparece cuando alguien use una ruta de IA. Chequear con
 `select tag, modelo, costo_usd, created_at from ia_uso order by created_at desc limit 20;`
 antes de confiar en la estimación de la decisión 008.
 
-### Estructura de planes (siguiente)
-Tres planes según decisión 006: **Base $48.000 · Cocina $75.000 · Control $110.000**
-(+ perfil Producción $26.000, + local adicional 65%, + implementación $300.000 única).
-`restaurantes.plan`, hook `usePlan()`, matriz plan → módulos.
-**Vale hacerlo aunque el cobro siga siendo manual** — es la parte reutilizable.
+### ✅ Hecho — Estructura de planes (01/09)
+`restaurantes.plan` (TEXT nullable, CHECK `base|cocina|control|produccion`, **sin default**:
+por decisión 003 nadie paga todavía, así que ninguna cuenta existente puede perder acceso
+por una columna nueva — mismo criterio que `perfilRestaurante` null en `usePermisos`).
+`lib/planes.ts` mapea plan → módulos, acumulativo (Cocina ⊇ Base, Control ⊇ Cocina), con
+los 15 módulos explícitos de la decisión 006 y 9 inferidos por analogía (marcados como tal
+en el archivo — revisar con el segundo cliente). Hook `usePlan()` en
+`lib/hooks/usePlan.ts`, mismo patrón SWR que `useRestauranteConfig`.
+**`puedeUsar(modulo)` existe pero no está cableado a ninguna pantalla todavía** — es el
+siguiente ítem (Feature gating), separado a propósito para poder introducir el dato sin
+tocar el acceso de nadie el mismo día.
 
-### Feature gating
+### Feature gating (siguiente)
 Coach (con tope mensual), HACCP, Presupuesto/CMV y Reportes solo en Control; OPS/mise/pase
-desde Cocina. `puedeUsar('coach')` derivado de `usePlan`. Depende del ítem anterior, no del cobro.
+desde Cocina. Cablear `puedeUsar('coach')` de `usePlan()` en las pantallas — probablemente
+en `RouteGuard`, mismo lugar que ya resuelve `moduloEnPerfil`. Depende del ítem anterior
+(hecho), no del cobro. **No apurar sin al menos un cliente con plan asignado** — hoy
+`restaurantes.plan` es NULL en las 5 cuentas y `puedeUsar` devuelve `true` siempre.
 
 ### Cobro automático (último)
 Mercado Pago `preapproval` + webhooks, UI en Configuración → Plan. **Recién cuando cobrar
