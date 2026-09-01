@@ -133,9 +133,6 @@ La pantalla está deployada y verificada con datos reales de Bros. Lo que quedó
 ### Las guías viejas de OPS contradicen la app (encontrado ago 2026)
 `docs/ops-guia-rapida.html` y `docs/manual-ops.md`/`.html` describen el flujo anterior: cuentan el orden de tabs como Planificación→Producción→Mise (hoy es Producción/Mise/Planificación), dicen "Cerrar turno" donde hoy va **Entregar plaza** (que además no es fichar la salida), y explican el mise solo con carga de números, sin Modo Control. Se detectó al escribir la hoja instructiva nueva (`docs/ops-modo-control-una-hoja.html`), que documenta el flujo correcto: hoy los dos materiales juntos se contradicen. Decidir si el manual largo se actualiza o se reemplaza por hojas por pantalla (skill `hoja-instructiva`).
 
-### Demo El Rescoldo — menú duplicado
-Confirmado 27/08, sigue ahí: dos filas en `menus` con nombre "Noche de Asado - Día del Padre" y el mismo `created_at` (`e5c01d00-0000-...-d1` y `9b5722f2-76ce-...`) — parecen un duplicado de seed, no algo que haya creado el usuario. Confunde el picker de "Cargar menú"/"Planificar menú" (aparece dos veces la misma opción). No se borró todavía porque hay que revisar primero qué `menu_preparaciones`/`tareas` de junio quedaron atadas a cada una, para no dejar huérfanos.
-
 ### Marco "juego cercado" — F2/F3 (PLAN-JUEGO-CERCADO-2026-08.md)
 Fundamento conceptual externo (memoria de Claude Code: `project_fundamento_juego_cercado`) tradujo a 3 features scopeadas. **F1 pasos 1-2 shippeados (24/08)**: `cierres_turno.percepcion`/`notas_servicio` + `EntregaPlazaSheet` piden en 2-3 taps opcionales cómo salió el turno y qué debe saber el que entra. **Falta el paso 3**: mostrar esa lectura junto a un dato duro cuando exista (merma, devoluciones) en Reportes → Auditoría — la utilidad real está en la discrepancia entre percepción y dato, no en el campo aislado. Sin tocar: **F2** historial de cambios en fichas técnicas (autor/fecha, hoy `useRecetas` actualiza sin dejar rastro); **F3** bandeja de propuestas visible (depende de F2, más ambigua, scopear en la sesión).
 
@@ -148,10 +145,11 @@ Hoy el Coach solo responde preguntas de navegación; el pedido es que ayude a ca
 ### Hardening de seguridad (`get_advisors`)
 **Resuelto 27/08**: `REVOKE EXECUTE` aplicado sobre `reset_demo_restaurante()`, `checklist_registros_set_restaurante()` y `rutina_turno_registros_set_restaurante()` (esta última no estaba detectada antes — mismo patrón, función nueva de Rutina de turno) — las tres confirmadas sin caller desde el browser antes de tocarlas; el cron de reset-demo sigue andando por `service_role`, que no se ve afectado por el REVOKE.
 
+**Resuelto 31/08**: extensión `unaccent` movida de `public` a `extensions` (`ALTER EXTENSION unaccent SET SCHEMA extensions`) — verificado que ninguna función propia la llamaba fuera de sus propios objetos internos, y `search_path` de la DB ya incluía `extensions`, así que no rompe nada. Policy SELECT del bucket `fotos` restringida de `public` (anon+authenticated) a solo `authenticated` — verificado que la app nunca hace `.list()`/`.download()` sin sesión (`PhotoPicker.tsx` solo sube/borra/lee por URL pública, que no pasa por esta policy); esto cierra el listado anónimo del bucket entero mientras las URLs públicas conocidas siguen funcionando igual. Nota: los paths (`recetas/uuid`, `carta/uuid`) no están namespaced por `restaurante_id`, así que un usuario autenticado de cualquier restaurante todavía puede listar archivos de otros — no se resolvió (requeriría reestructurar paths, cambio más grande) porque nada lo pidió como urgente.
+
+**Bloqueado, no es código**: protección de contraseñas filtradas (HaveIBeenPwned) requiere plan Pro de Supabase (`PATCH .../config/auth` devuelve 402 "available on Pro Plans and up") — no se puede activar ni por dashboard ni por API en el plan actual. Retomar si se sube de plan.
+
 Queda pendiente:
-- Extensión `unaccent` instalada en el schema `public` — debería vivir en un schema propio (`extensions`); buena práctica, sin riesgo real hoy.
-- Bucket público `fotos` tiene política SELECT amplia que permite listar todos los archivos (no solo acceder por URL conocida) — evaluar si conviene restringir el listado.
-- Protección de contraseñas filtradas (HaveIBeenPwned) no está activada en Supabase Auth — activar desde el dashboard, sin código.
 - `fiscal_config`/`fiscal_tickets` tienen RLS activado pero **sin ninguna policy** — no es un agujero (falla cerrado: nadie puede leer/escribir hoy), pero significa que esas tablas están inutilizables hasta que se les agreguen policies — bloquea a `config_fiscal` de Fiscal ARCA más arriba.
 
 ---
