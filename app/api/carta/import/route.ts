@@ -110,6 +110,7 @@ function detectTags(texto: string): string[] {
 async function parseConIA(
   content: string | ArrayBuffer,
   mimeType: string,
+  restauranteId: string | null,
 ): Promise<ItemImportado[]> {
   type AnthrContent =
     | { type: 'text'; text: string }
@@ -158,6 +159,7 @@ Instrucciones importantes:
     model: 'claude-haiku-4-5-20251001',
     maxTokens: 8096,
     messages: [{ role: 'user', content: userContent }],
+    restauranteId,
   })
 
   if (!resultado.ok) {
@@ -285,15 +287,16 @@ export async function POST(req: NextRequest) {
     const mimeType = file.type
     const buffer = await file.arrayBuffer()
     let items: ItemImportado[] = []
+    const restauranteIdPreview = (formData.get('restaurante_id') as string) || null
 
     if (mimeType.includes('spreadsheet') || mimeType.includes('csv') ||
         file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.csv')) {
       items = parseSheet(buffer)
     } else if (mimeType === 'text/plain' || file.name.endsWith('.txt')) {
       const text = new TextDecoder().decode(buffer)
-      items = await parseConIA(text, mimeType)
+      items = await parseConIA(text, mimeType, restauranteIdPreview)
     } else {
-      items = await parseConIA(buffer, mimeType || 'application/pdf')
+      items = await parseConIA(buffer, mimeType || 'application/pdf', restauranteIdPreview)
     }
 
     return NextResponse.json({ items, total: items.length })

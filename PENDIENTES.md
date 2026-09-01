@@ -45,14 +45,14 @@ y México — una empresa argentina no puede abrir cuenta). El cobro automático
 **Mercado Pago Suscripciones** (API `preapproval`). Decisión 004.
 
 ### ✅ Hecho — Medición de consumo de IA (01/09)
-Tabla `ia_uso` + `lib/ia/costos.ts`. Asienta cada llamada con tokens, cache y costo USD.
-Va antes que cualquier plan: es el único costo variable del negocio y el que define el
-tope del Coach (decisión 008).
-**Falta:** imputar el tenant en las rutas que todavía asientan sin `restaurante_id` —
-`carta/import`, `recetas/import`, `stock/import-planilla`, `ventas/import`,
-`listas-precios`, `importador/mapeo`, `importador/fichas-tecnicas`,
-`importador/productos-desde-facturas`. En todas la llamada a IA vive dentro de un helper
-que no recibe el id; es enhebrar un parámetro, igual que se hizo en `facturas-universal`.
+Tabla `ia_uso` + `lib/ia/costos.ts`. Asienta cada llamada con tokens, cache y costo USD,
+imputada al `restaurante_id` en las 12 rutas de IA (incluido el Coach, que asienta aparte
+por usar streaming propio). Va antes que cualquier plan: es el único costo variable del
+negocio y el que define el tope del Coach (decisión 008).
+**Pendiente de verificar, no de construir:** todavía no se vio una fila real en prod —
+la primera aparece cuando alguien use una ruta de IA. Chequear con
+`select tag, modelo, costo_usd, created_at from ia_uso order by created_at desc limit 20;`
+antes de confiar en la estimación de la decisión 008.
 
 ### Estructura de planes (siguiente)
 Tres planes según decisión 006: **Base $48.000 · Cocina $75.000 · Control $110.000**

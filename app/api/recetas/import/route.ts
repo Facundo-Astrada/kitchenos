@@ -74,7 +74,8 @@ async function callClaude(
   system: string,
   content: Array<{ type: string; source?: any; text?: string }>,
   maxTokens: number = 2048,
-  model: string = 'claude-sonnet-4-6'
+  model: string = 'claude-sonnet-4-6',
+  restauranteId: string | null = null
 ): Promise<{ ok: true; text: string } | { ok: false; error: string; status: number }> {
 
   console.log(`[recetas/import] Calling Claude API (${model})...`)
@@ -85,6 +86,7 @@ async function callClaude(
     maxTokens,
     system,
     messages: [{ role: 'user', content }],
+    restauranteId,
   })
 
   if (!resultado.ok) {
@@ -115,6 +117,10 @@ export async function POST(req: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json({ error: 'ANTHROPIC_API_KEY no configurada' }, { status: 500 })
   }
+
+  // Solo para imputar el consumo de IA en ia_uso — no bloquea el import si falta.
+  const { data: ur } = await supabase.from('user_restaurantes').select('restaurante_id').eq('user_id', user.id).maybeSingle()
+  const restauranteId = (ur?.restaurante_id as string | undefined) ?? null
 
   try {
     const body = await req.json()
@@ -197,7 +203,7 @@ export async function POST(req: NextRequest) {
       if (buildErr) return NextResponse.json({ error: buildErr }, { status: errorStatus || 400 })
 
       console.log('[recetas/import_multi] Calling Claude for multi-recipe extraction...')
-      const result = await callClaude(MULTI_SYSTEM_PROMPT, content, 4096, 'claude-sonnet-4-6')
+      const result = await callClaude(MULTI_SYSTEM_PROMPT, content, 4096, 'claude-sonnet-4-6', restauranteId)
       if (!result.ok) {
         // Sin crédito devolvía dos recetas inventadas. El usuario subía un
         // archivo con sus recetas y recibía "Lomo al Malbec" y "Pizza
@@ -223,7 +229,7 @@ export async function POST(req: NextRequest) {
         text: `Receta actual:\n${JSON.stringify(currentRecipe, null, 2)}\n\nPedido del usuario: ${userMessage}`,
       }]
 
-      const result = await callClaude(ADJUST_SYSTEM, content, 2048, 'claude-haiku-4-5-20251001')
+      const result = await callClaude(ADJUST_SYSTEM, content, 2048, 'claude-haiku-4-5-20251001', restauranteId)
       if (!result.ok) {
         // Sin crédito devolvía la receta SIN el ajuste pedido, marcada como
         // "ajuste simulado". El usuario pedía un cambio, no pasaba nada, y no
@@ -403,7 +409,7 @@ ${textForClaude}`,
 
     // Use Haiku for text-only imports (faster + cheaper), Sonnet for images
     const singleModel = image_base64 ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001'
-    const result = await callClaude(SYSTEM_PROMPT, content, 2048, singleModel)
+    const result = await callClaude(SYSTEM_PROMPT, content, 2048, singleModel, restauranteId)
 
     if (!result.ok) {
       // Acá estaba el bug que se reportó como "no se reconocen las fotos"

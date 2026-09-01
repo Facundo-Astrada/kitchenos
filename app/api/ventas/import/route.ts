@@ -73,6 +73,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
+  // Solo para imputar el consumo de IA en ia_uso — no bloquea el import si falta.
+  const { data: ur } = await supabase.from('user_restaurantes').select('restaurante_id').eq('user_id', user.id).maybeSingle()
+  const restauranteId = (ur?.restaurante_id as string | undefined) ?? null
+
   try {
     const body = await req.json()
     const texto: string = body.texto ?? ''
@@ -92,6 +96,7 @@ export async function POST(req: NextRequest) {
       maxTokens: 2048,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: [{ type: 'text', text: texto }] }],
+      restauranteId,
     })
 
     if (!resultado.ok) {

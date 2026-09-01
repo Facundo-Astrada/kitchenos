@@ -30,6 +30,10 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
+  // Solo para imputar el consumo de IA en ia_uso — no bloquea el mapeo si falta.
+  const { data: ur } = await supabase.from('user_restaurantes').select('restaurante_id').eq('user_id', user.id).maybeSingle()
+  const restauranteId = (ur?.restaurante_id as string | undefined) ?? null
+
   const { headers, sampleRows, tipo, campos, fileName } = await req.json() as {
     headers: string[]
     sampleRows?: unknown[][]
@@ -100,6 +104,7 @@ Respondé SOLO con JSON válido, sin texto extra:
       maxTokens: 600,
       temperature: 0,
       messages: [{ role: 'user', content: prompt }],
+      restauranteId,
     })
     if (!resultado.ok) {
       // Degradar a "confianza baja" es razonable acá (el usuario mapea a mano),

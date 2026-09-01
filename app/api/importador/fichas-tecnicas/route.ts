@@ -163,7 +163,7 @@ function splitIntoRecipeBlocks(content: string, fallback: string): { name: strin
 // EXTRACTION LAYER — per-block Claude calls in batches
 // ─────────────────────────────────────────────────────────
 
-async function callClaude(content: AnthropicContent[]): Promise<unknown[]> {
+async function callClaude(content: AnthropicContent[], restauranteId: string | null): Promise<unknown[]> {
   const resultado = await pedirAClaude({
     tag: 'importador/fichas-tecnicas',
     model: 'claude-sonnet-4-6',
@@ -172,6 +172,7 @@ async function callClaude(content: AnthropicContent[]): Promise<unknown[]> {
     system: systemPrompt,
     messages: [{ role: 'user', content }],
     headers: { 'anthropic-beta': 'pdfs-2024-09-25' },
+    restauranteId,
   })
   // Devolver [] es indistinguible de "el PDF no tenía fichas" para quien lo
   // subió. Al menos que el log de pedirAClaude diga por qué, hasta que el
@@ -190,7 +191,7 @@ async function callClaude(content: AnthropicContent[]): Promise<unknown[]> {
   }
 }
 
-async function processBlocks(blocks: { name: string; text: string }[]): Promise<unknown[]> {
+async function processBlocks(blocks: { name: string; text: string }[], restauranteId: string | null): Promise<unknown[]> {
   const all: unknown[] = []
   for (let i = 0; i < blocks.length; i += BATCH_SIZE) {
     const batch = blocks.slice(i, i + BATCH_SIZE)
@@ -199,7 +200,7 @@ async function processBlocks(blocks: { name: string; text: string }[]): Promise<
         callClaude([{
           type: 'text',
           text: `Nombre sugerido para la receta: "${b.name}"\n\nBloque:\n${b.text}`,
-        }])
+        }], restauranteId)
       )
     )
     for (const r of results) {
@@ -296,6 +297,16 @@ export async function POST(req: NextRequest) {
 
     if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: 'API key no configurada' }, { status: 500 })
 
+    // Resuelto acá arriba (antes de extraer) porque tanto el fallback de PDF
+    // como processBlocks llaman a la IA antes que markDuplicates más abajo.
+    const adminSupabase = createAdminClient()
+    const { data: ur } = await adminSupabase
+      .from('user_restaurantes')
+      .select('restaurante_id')
+      .eq('user_id', user.id)
+      .single()
+    const restauranteId = (ur?.restaurante_id as string | undefined) ?? null
+
     const formData = await req.formData()
     const file = formData.get('file') as File | null
     if (!file) return NextResponse.json({ error: 'Falta el archivo' }, { status: 400 })
@@ -351,7 +362,7 @@ export async function POST(req: NextRequest) {
       const recetas = await callClaude([
         { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
         { type: 'text', text: 'Extraé todas las recetas de este documento como array JSON.' },
-      ])
+      ], restauranteId)
       diag.recipesExtracted = recetas.length
       diag.elapsedMs = Date.now() - t0
       console.log('[fichas-tecnicas] DONE (fallback)', diag)
@@ -366,7 +377,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'No se detectaron bloques de receta en el archivo', diag })
     }
 
-    let recetas = await processBlocks(blocks) as ExtractedReceta[]
+    let recetas = await processBlocks(blocks, restauranteId) as ExtractedReceta[]
     diag.recipesExtracted = recetas.length
 
     if (!recetas.length) {
@@ -378,14 +389,8 @@ export async function POST(req: NextRequest) {
     recetas = fillEmplatadoProcedures(recetas)
 
     // POST-PROCESS: mark duplicates (existing in DB + intra-batch repeated names)
-    const adminSupabase = createAdminClient()
-    const { data: ur } = await adminSupabase
-      .from('user_restaurantes')
-      .select('restaurante_id')
-      .eq('user_id', user.id)
-      .single()
-    if (ur?.restaurante_id) {
-      recetas = await markDuplicates(recetas, ur.restaurante_id)
+    if (restauranteId) {
+      recetas = await markDuplicates(recetas, restauranteId)
     }
 
     diag.elapsedMs = Date.now() - t0

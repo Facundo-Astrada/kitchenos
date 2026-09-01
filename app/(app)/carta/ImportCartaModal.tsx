@@ -123,6 +123,7 @@ export function ImportCartaModal({
       const fd = new FormData()
       fd.append('file', file)
       fd.append('modo', 'preview')
+      fd.append('restaurante_id', restauranteId)
       const res = await fetch('/api/carta/import', { method: 'POST', body: fd })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al parsear')

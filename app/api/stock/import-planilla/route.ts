@@ -55,7 +55,7 @@ type ExtractedItem = {
   hoja: string
 }
 
-async function extractSheetItems(sheet: SheetData): Promise<ExtractedItem[]> {
+async function extractSheetItems(sheet: SheetData, restauranteId: string | null): Promise<ExtractedItem[]> {
   const text = sheet.rows
     .slice(0, 400)
     .map(r => r.map(c => String(c ?? '').trim()).join('\t'))
@@ -70,6 +70,7 @@ async function extractSheetItems(sheet: SheetData): Promise<ExtractedItem[]> {
     maxTokens: 4096,
     system: SHEET_SYSTEM,
     messages: [{ role: 'user', content: `HOJA "${sheet.nombre}":\n${text}` }],
+    restauranteId,
   })
 
   if (!resultado.ok) return []
@@ -214,7 +215,7 @@ export async function POST(req: NextRequest) {
 
   for (let i = 0; i < allSheets.length; i += BATCH) {
     const batch = allSheets.slice(i, i + BATCH)
-    const results = await Promise.all(batch.map(s => extractSheetItems(s)))
+    const results = await Promise.all(batch.map(s => extractSheetItems(s, rid)))
     extracted.push(...results.flat())
   }
 

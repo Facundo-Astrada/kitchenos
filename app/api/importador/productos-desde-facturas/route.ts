@@ -57,7 +57,7 @@ function categorizarRule(nombre: string): Categoria {
   return 'Otros'
 }
 
-async function categorizarBatchIA(nombres: string[], useIA: boolean): Promise<Map<string, Categoria>> {
+async function categorizarBatchIA(nombres: string[], useIA: boolean, restauranteId: string | null): Promise<Map<string, Categoria>> {
   const result = new Map<string, Categoria>()
   // Fallback rule-based para todos primero
   for (const n of nombres) result.set(n, categorizarRule(n))
@@ -88,6 +88,7 @@ Ejemplo: ["Carnes", "Verduras", ...]`
         model: 'claude-haiku-4-5-20251001',
         maxTokens: 2048,
         messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
+        restauranteId,
       })
     }))
 
@@ -236,7 +237,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. Categorizar (regla siempre; IA solo en apply para no demorar preview)
-    const categoriasMap = await categorizarBatchIA(candidatos.map(c => c.nombre), mode === 'apply')
+    const categoriasMap = await categorizarBatchIA(candidatos.map(c => c.nombre), mode === 'apply', restaurante_id)
     for (const c of candidatos) {
       c.categoria = categoriasMap.get(c.nombre) ?? 'Otros'
     }
