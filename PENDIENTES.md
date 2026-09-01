@@ -8,9 +8,6 @@ Lista priorizada de lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL.md`.
 
 ## 🟠 Alto
 
-### Ciclo de las 4 capas — `PLAN-4-CAPAS.md` completo (31/08)
-Los 10 bloques ejecutables (B1 a B10) que salían de `AUDITORIA-4-CAPAS.md` están todos cerrados. B9 (31/08): cubiertos reservados en OPS, oferta de sentar reserva + "Cerrar servicio"/no-show en Salón, reflejo de solo lectura en Calendario, tile en Dashboard. B10 (31/08): la sugerencia de producción escala según reservas (`factor_demanda`, con fallback a 1 si falta historial confiable) y motor nuevo de sugerencia de compra por proveedor en `/pedidos` (`lib/compras/sugerencia.ts` + parser de `dias_entrega`). Detalle completo de las dos partes en `PLAN-4-CAPAS.md`. Sin ítems abiertos de este plan — el próximo tema sale de otra parte del backlog.
-
 ### Invitación por email falla a veces — falta SMTP propio en Supabase
 Auditoría 20/08 (chequeado contra la config viva vía management API): `site_url`, `uri_allow_list` y redirect a `/registro-invitado` ya están OK — ese ítem viejo estaba resuelto. El bloqueo real es otro: no hay SMTP propio configurado (`smtp_host` null) — Supabase manda con su mailer compartido, limitado a `rate_limit_email_sent: 2` (2 emails/hora) y con tendencia a caer en spam por no ser dominio propio. Si el dueño invita 3+ personas seguidas armando el equipo, la 3ra invitación falla. El frontend (`handleInvitar` en `app/(app)/turnos/page.tsx`) solo muestra el error crudo de Supabase en un toast, sin explicar el motivo ni sugerir reintentar más tarde. Fix: configurar SMTP propio (Resend recomendado, tier gratis generoso) en Supabase Auth → falta que Facundo cree la cuenta y pase la API key para conectarlo vía management API.
 
@@ -21,9 +18,6 @@ Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/
 
 ### OPS Consolidación — diferido
 "Copiar a otro día" e "Ingredientes consolidados" (se sacaron con la planilla legacy) — reimplementar sobre `tareas` si el usuario los pide.
-
-### Refactor de Carta — completo (31/08)
-Todo el plan de `refactor-kos.md` cerrado: días 6-9 (smoke e2e + código muerto, moves puros de `cards.tsx`/`exportar.ts`/`PackagingGruposDrawer.tsx`/`ImportCartaModal.tsx`/`EditarPlato.tsx`, migración del panel OPS de `DetailView` a `lib/ops/mise.ts`) y paso 5b (mover `DetailView` a su propio archivo, move puro). `carta/page.tsx` 3.906 → 983 líneas. **Punto de parada explícito del plan**: no seguir "mejorando" esta pantalla sin un motivo nuevo.
 
 ---
 
@@ -41,9 +35,6 @@ Coach, multi-usuario, export PDF, HACCP solo en plan Pro — `puedeUsar('coach')
 ---
 
 ## 🟢 Bajo — Roadmap abierto
-
-### Censo de tablas en ARQUITECTURA.md — resuelto 31/08
-90 tablas (antes decía 78), tabla de dominios actualizada con las 12 nuevas de agosto (Bitácora, Organigrama, Rutina de turno, Reservas, Notificaciones + ampliar Proveedores/Compras, Recetario/Carta, Presupuestos). De paso se encontró y arregló un bug real: `reset_demo_restaurante()` nunca clonaba `areas`/`area_capas`/`rutina_turno_items`/`rutina_turno_registros` a la demo pública — sumadas (ahora clona 73 de 90 tablas), migración aplicada y probada. El Rescoldo (la cuenta fuente de la demo) igual tiene poco cargado en Organigrama/Rutina de turno — esas features se probaron contra Bros, no contra El Rescoldo.
 
 ### Presupuesto — fuera de alcance de la Fase 1 (`/presupuesto`, ago 2026)
 Detalle completo en `PLAN-PRESUPUESTO-CMV-2026-08.md` §11: partir venta comida/bebida (requiere mapear `ventas_items` contra `carta_items`, hoy solo matchea 13 de 272 nombres), merma con costo real (registros en $0 por falta de precio de producto), comparación mes contra mes, cubiertos/Q real (El Rescoldo y Bros no cargan `cantidad_cubiertos`), presupuesto de personal/alquiler/gastos generales desglosado por sub-categoría (mismo patrón que materia prima). Coach: sin tool de servidor propia todavía — candidatos anotados como TODO en `app/api/coach/route.ts`.

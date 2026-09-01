@@ -1,64 +1,54 @@
-# Sesión — 2026-08-31 (noche, cont. 9) — Día 10 del plan: matar copias CoA + legislar glosario
+# Sesión — 2026-08-31 (noche, cont. 10) — housekeeping + B9/B10 Reservas + censo de tablas + Carta 5b
 
 ## Qué se cerró
 
-Día 10 completo de `.claude/docs/ingenieria/plan-consolidado.md` §2 —
-**último día del plan de diez.** 1 commit de código (`f0053b4`), pusheado.
+Primera sesión de "vuelta a producto" tras el plan de diez días. Arrancó con un
+pedido de planificar y confirmar todo `PENDIENTES.md` como checklist antes de
+ejecutar — 10 commits, pusheados:
 
-- **Tres copias CoA muertas** (branch by abstraction, sin cambiar
-  comportamiento): `lib/permisos/roles.ts` (`mapRol` ×2 → 1), `lib/unidades.ts`
-  (`canonUnit`/`unitConversionFactor` ×3 → 1, con re-export desde
-  `useRecetas.ts` para no tocar consumidores) y `PLAZAS_OPS` de
-  `lib/ops/mise.ts` (ahora deriva de `PLAZAS_FIJAS`/`PLAZA_LABELS`/
-  `PLAZA_COLORS` en vez de espejo a mano).
-- **Bonus no planeado**: al unificar `PLAZAS_OPS` apareció una **4ª copia**
-  no documentada en `espacios/ItemEditPanel.tsx`, ya desincronizada (plaza
-  `general` gris ahí vs. azul en todos lados — bug de color real). Se mató
-  con el mismo fix.
-- **Dos docs de legislación**: `.claude/docs/glosario.md` nuevo (7
-  significados de "turno", 3 nombres de "mise", + 3 reglas para lo nuevo:
-  `estado` no `status`, `jornada` no `turno_fecha`, "turno" reservado para
-  `TurnoServicio`) y sección nueva en `hooks.md` ("Convención — dónde va una
-  operación compartida", firma `(supabase, restauranteId, input)` + tabla de
-  decisión).
-- Typecheck, build y 254 tests (246 + 8 nuevos de `roles.test.ts`) en verde.
-  Lint: mismos ~10.000 problemas pre-existentes, cero nuevos en los archivos
-  tocados.
-- Docs: `PENDIENTES.md` (podadas las dos entradas de día 10), `HISTORIAL.md`,
-  `CLAUDE.md` (fila nueva en la tabla de docs condicionales apuntando a
-  `glosario.md`).
+- **Housekeeping**: 3 ramas huérfanas borradas (historia disjunta de `main`,
+  todo superado por código actual) + rama ya fusionada. `settings.json`
+  commiteado. Correcciones de datos stale (`confirm()` era 21 no ~80).
+- **B9 — Reservas en el día de trabajo**: los 4 enganches completos (OPS,
+  Salón con sentar-reserva + "Cerrar servicio", Calendario, Dashboard).
+- **B10 completo**: sugerencia de producción escala por reservas
+  (`factor_demanda`, con salvaguardas), y motor nuevo de sugerencia de
+  compra por proveedor en `/pedidos`.
+- **Censo de tablas**: `ARQUITECTURA.md` 78→90 tablas. Bonus: encontrado y
+  arreglado que `reset_demo_restaurante()` nunca clonaba 4 tablas de agosto
+  (Organigrama, Rutina de turno) a la demo pública.
+- **Carta paso 5b**: `DetailView` movido a su propio archivo — cierra el
+  refactor de Carta completo (3.906 → 983 líneas).
+
+Con esto, `PLAN-4-CAPAS.md` (los 10 bloques) y `refactor-kos.md` (Carta)
+quedan los dos completamente cerrados.
 
 ## Qué quedó a medias
 
-- Nada de hoy.
-- `.claude/settings.json` sigue modificado sin commitear (arrastrado desde
-  jul 2026, sigue en `PENDIENTES.md` 🟢).
-- El git worktree viejo en `.claude/worktrees/sleepy-jepsen` (rama
-  `claude/sleepy-jepsen`) sigue sin revisar con Facundo.
-- Paso 5b de Carta (mover `DetailView` a su propio archivo — move puro, ½
-  día) sigue como cola disponible para cualquier sesión que sobre tiempo.
+- Nada de lo empezado — cada ítem se cerró antes de pasar al siguiente.
+- El git worktree `.claude/worktrees/sleepy-jepsen` tiene la carpeta física
+  sin borrar (archivo bloqueado por un proceso en Windows) — las ramas ya
+  están borradas, solo falta reintentar `git worktree remove --force`
+  después de cerrar terminales/editores viejos.
 
 ## Probar primero mañana
 
-- Nada específico — son extracciones puras (mismo output, distinto archivo
-  fuente) verificadas con typecheck + build + suite completa. Si algo se
-  quiere confirmar a ojo: el selector de plaza en Espacios → editar ítem
-  (antes tenía "General" en gris, ahora en azul como en todos lados).
+- Nada específico de riesgo — todo verificado con datos reales insertados y
+  limpiados en El Rescoldo, build/typecheck/254 tests en verde en cada paso,
+  y smoke visual en dev server para B9, B10 y Carta 5b.
 
 ## Próximo paso concreto
 
-**El plan de ingeniería de diez días está completo.** Registro de riesgos
-cerrado: cero endpoints sin auth (día 1), cero writes que pierdan datos
-(días 2-3), red de ratchets en CI (día 4), puerto de IA completo (día 5),
-Carta a mitad de mudanza en estado estable (días 6-9, queda 5b como cola sin
-apuro), `crearFactura` transaccional (día 8), copias CoA muertas y glosario
-legislado (día 10, hoy).
+Quedan dos ítems de Fase 2 (bajo esfuerzo, sin dependencias) que Facundo
+decidió dejar para otra sesión:
 
-Según `plan-consolidado.md` §2: **"Después del día 10: se vuelve a
-producto."** El próximo tema no sale de una lista de ingeniería — es **B9
-(Reservas dentro del día de trabajo: OPS/Salón/Calendario/Dashboard)**, el
-bloque pendiente de `PLAN-4-CAPAS.md` (ver `PENDIENTES.md` 🟠, primera
-entrada). Si Facundo prefiere no arrancar Reservas todavía, las colas
-disponibles sin abrir tema nuevo son: paso 5b de Carta (½ día), censo de
-tablas en `ARQUITECTURA.md` (30 min), o Carta paso 3 (Rentabilidad:
-`lib/carta/reprecio.ts` + `saludCarta.ts`).
+- **Hardening de seguridad menor**: mover `unaccent` a su propio schema,
+  revisar la policy SELECT del bucket `fotos`, activar HaveIBeenPwned en
+  Supabase Auth (dashboard, sin código).
+- **Demo El Rescoldo — menú duplicado**: dos filas "Noche de Asado - Día del
+  Padre" en `menus` — revisar `menu_preparaciones`/`tareas` atadas a cada
+  una antes de borrar una.
+
+Fuera de eso, el backlog vuelve a ser reactivo (`PENDIENTES.md` 🟢 Bajo:
+priorizar según feedback real de El Rescoldo) salvo que Facundo traiga un
+tema nuevo.
