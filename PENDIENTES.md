@@ -42,8 +42,8 @@ Coach, multi-usuario, export PDF, HACCP solo en plan Pro — `puedeUsar('coach')
 
 ## 🟢 Bajo — Roadmap abierto
 
-### Actualizar el censo de tablas en ARQUITECTURA.md — auditoría de dominio 31/08
-`ARQUITECTURA.md` §5 dice 78 tablas; son 90 (recontado por SQL el 31/08 — `SELECT count(*) FROM pg_tables WHERE schemaname='public'`): faltan las 13 de agosto (`reservas`, `bitacora_*`, `control_carta_registros`, `rutina_turno_*`, `proveedor_incidencias`, `notificaciones`, `areas`, `area_capas`, `presupuesto_mes`, `presupuesto_sector`) más el resto de agosto. Actualizar conteo y tabla de dominios. **30 min.**
+### Censo de tablas en ARQUITECTURA.md — resuelto 31/08
+90 tablas (antes decía 78), tabla de dominios actualizada con las 12 nuevas de agosto (Bitácora, Organigrama, Rutina de turno, Reservas, Notificaciones + ampliar Proveedores/Compras, Recetario/Carta, Presupuestos). De paso se encontró y arregló un bug real: `reset_demo_restaurante()` nunca clonaba `areas`/`area_capas`/`rutina_turno_items`/`rutina_turno_registros` a la demo pública — sumadas (ahora clona 73 de 90 tablas), migración aplicada y probada. El Rescoldo (la cuenta fuente de la demo) igual tiene poco cargado en Organigrama/Rutina de turno — esas features se probaron contra Bros, no contra El Rescoldo.
 
 ### Presupuesto — fuera de alcance de la Fase 1 (`/presupuesto`, ago 2026)
 Detalle completo en `PLAN-PRESUPUESTO-CMV-2026-08.md` §11: partir venta comida/bebida (requiere mapear `ventas_items` contra `carta_items`, hoy solo matchea 13 de 272 nombres), merma con costo real (registros en $0 por falta de precio de producto), comparación mes contra mes, cubiertos/Q real (El Rescoldo y Bros no cargan `cantidad_cubiertos`), presupuesto de personal/alquiler/gastos generales desglosado por sub-categoría (mismo patrón que materia prima). Coach: sin tool de servidor propia todavía — candidatos anotados como TODO en `app/api/coach/route.ts`.

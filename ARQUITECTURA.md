@@ -223,7 +223,7 @@ Corren en runtime Node (no edge) — usan service role y/o Anthropic API. Todas 
 
 ---
 
-## 5. Supabase — 78 tablas
+## 5. Supabase — 90 tablas
 
 Todas con RLS habilitado, aislamiento multi-tenant real vía `mi_restaurante_id()` (ver `.claude/docs/rls.md` para la función y el patrón de políticas — **no son `USING(true)`**, esa era una nota de mayo 2026 ya superada). Columnas exactas y trampas de nombres → `.claude/docs/columnas.md`.
 
@@ -231,30 +231,35 @@ Todas con RLS habilitado, aislamiento multi-tenant real vía `mi_restaurante_id(
 |---|---|
 | Core / Auth (4) | `restaurantes`, `perfiles`, `user_restaurantes`, `rol_permisos` |
 | Productos / Stock (5) | `productos`, `categorias_producto`, `stock_sectores`, `stock_estantes`, `precio_historial` |
-| Proveedores / Compras (6) | `proveedores`, `facturas`, `factura_items`, `pedidos`, `pedido_items`, `categorias_gasto` |
-| Recetario / Carta (7) | `recetas`, `ingredientes`, `carta_items`, `carta_categorias`, `plato_recetas`, `plato_plazas`, `plato_packaging` |
+| Proveedores / Compras (7) | `proveedores`, `facturas`, `factura_items`, `pedidos`, `pedido_items`, `categorias_gasto`, `proveedor_incidencias` |
+| Recetario / Carta (8) | `recetas`, `ingredientes`, `carta_items`, `carta_categorias`, `plato_recetas`, `plato_plazas`, `plato_packaging`, `control_carta_registros` |
 | Menús (2) | `menus`, `menu_preparaciones` |
 | Packaging (2) | `packaging_grupos`, `packaging_grupo_items` |
 | Tareas / OPS / Mise (8) | `tareas`, `checklist_secciones`, `checklist_items`, `checklist_registros`, `checklist_rutina`, `checklist_rutina_registros`, `checklist_auditorias`, `cierres_turno` |
 | Comunicación (2) | `pase_mensajes`, `calendario_nota_items` |
+| Bitácora (2) | `bitacora_entradas`, `bitacora_items` |
 | HACCP (5) | `haccp_equipos`, `haccp_temperaturas`, `haccp_vencimientos`, `haccp_limpieza`, `haccp_limpieza_registros` |
 | Calendario / Equipo (6) | `eventos`, `evento_items`, `puestos`, `equipo_miembros`, `turnos`, `turnos_personal` |
+| Organigrama (2) | `areas`, `area_capas` |
+| Rutina de turno (2) | `rutina_turno_items`, `rutina_turno_registros` |
 | Producción (5) | `platos_compuestos`, `plato_componentes`, `produccion_diaria`, `produccion_registros`, `estaciones` |
 | Merma (1) | `merma` |
 | Ventas (2) | `ventas`, `ventas_items` |
+| Reservas (1) | `reservas` |
 | Salón / Servicio (9) | `espacios`, `espacio_plazas`, `mesas`, `salon_elementos`, `comandas`, `comanda_items`, `comanda_item_modificadores`, `eventos_cocina`, `cuentas` |
 | Caja / Pagos (4) | `medios_pago`, `pagos`, `cajas_turnos`, `caja_movimientos` |
 | Fiscal ARCA (5) | `config_fiscal`, `comprobantes`, `comprobante_items`, `fiscal_config`, `fiscal_tickets` |
 | Clientes (2) | `clientes`, `cuenta_corriente_movimientos` |
-| Presupuestos (1) | `presupuestos` |
+| Presupuestos (3) | `presupuestos`, `presupuesto_mes`, `presupuesto_sector` |
 | Coach (1) | `coach_acciones` |
+| Notificaciones (1) | `notificaciones` |
 | Demo / Sistema (1) | `demo_visitas` |
 
 ### Relaciones clave
-Todo `restaurante_id` → `restaurantes.id`. `user_restaurantes.user_id` / `equipo_miembros.auth_user_id` → `auth.users.id`. `ingredientes.receta_id` y `carta_items.receta_id` → `recetas.id`. `plato_recetas.plato_id` (no `receta_id`) → `carta_items.id`. Varios links son polimórficos sin FK por decisión (`menu_preparaciones.ref_id`, `checklist_secciones` ↔ HACCP por nombre `ilike`) — documentados como tales en `columnas.md`, no son deuda.
+Todo `restaurante_id` → `restaurantes.id`. `user_restaurantes.user_id` / `equipo_miembros.auth_user_id` → `auth.users.id`. `ingredientes.receta_id` y `carta_items.receta_id` → `recetas.id`. `plato_recetas.plato_id` (no `receta_id`) → `carta_items.id`. `area_capas.area_key` → `areas.area_key` (texto, catálogo fijo compartido entre restaurantes — no FK por id). Varios links son polimórficos sin FK por decisión (`menu_preparaciones.ref_id`, `checklist_secciones` ↔ HACCP por nombre `ilike`) — documentados como tales en `columnas.md`, no son deuda.
 
 ### Demo pública
-`reset_demo_restaurante()` clona El Rescoldo real → restaurante demo cada noche (cron con `CRON_SECRET`). Clona 59 de las 78 tablas — el resto son seeds únicos o no scopeadas por restaurante. **Toda tabla nueva con `restaurante_id` debe sumarse a esa función** o queda vacía en la demo.
+`reset_demo_restaurante()` clona El Rescoldo real → restaurante demo cada noche (cron con `CRON_SECRET`). Clona 73 de las 90 tablas — el resto son seeds únicos o no scopeadas por restaurante. **Toda tabla nueva con `restaurante_id` debe sumarse a esa función** o queda vacía en la demo — auditoría 31/08 encontró 4 tablas de agosto que se habían quedado afuera (`areas`, `area_capas`, `rutina_turno_items`, `rutina_turno_registros`), ya sumadas. Ojo: El Rescoldo (la cuenta fuente) hoy tiene poco cargado en Organigrama/Rutina de turno — esas dos features se armaron y probaron contra datos de Bros, no de El Rescoldo, así que la demo clona correctamente pero clona poco hasta que El Rescoldo mismo se cargue.
 
 ---
 
