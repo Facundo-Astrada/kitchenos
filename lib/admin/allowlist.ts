@@ -10,7 +10,10 @@
  * `user_restaurantes` (ver commit `44bd500`): la puerta tiene que estar del
  * lado del servidor, antes de tocar el admin client, no después.
  */
-const ADMIN_EMAILS = ['facuastrada15@gmail.com']
+const ADMIN_EMAILS = [
+  'facuastrada15@gmail.com',
+  'facu@broscomedor.com', // cuenta de Facundo dentro del tenant Bros (chef) — 01/09
+]
 
 export function esAdminKOS(email: string | null | undefined): boolean {
   if (!email) return false
