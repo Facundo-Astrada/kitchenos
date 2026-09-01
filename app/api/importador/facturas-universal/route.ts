@@ -257,7 +257,7 @@ type MapeoIA = {
   estructura?: 'flat' | 'header_detail'
 }
 
-async function inferirMapeo(headers: string[], sampleRows: unknown[][]): Promise<MapeoIA> {
+async function inferirMapeo(headers: string[], sampleRows: unknown[][], restauranteId: string): Promise<MapeoIA> {
   const sample = sampleRows.slice(0, 8).map((r, i) =>
     `Fila ${i + 1}: ${(r as unknown[]).map(v => String(v ?? '').trim()).join(' | ')}`
   ).join('\n')
@@ -314,6 +314,7 @@ Respondé SOLO un JSON con el mapping de NOMBRE EXACTO de header → campo Kitch
     maxTokens: 800,
     temperature: 0,
     messages: [{ role: 'user', content: prompt }],
+    restauranteId,
   })
   if (!resultado.ok) return {}
 
@@ -605,7 +606,7 @@ export async function POST(req: NextRequest) {
   const headers = best.headers
   const dataRows = best.dataRows
 
-  const mapeo = await inferirMapeo(headers, dataRows.slice(0, 8))
+  const mapeo = await inferirMapeo(headers, dataRows.slice(0, 8), restauranteId)
 
   if (mode === 'detect') {
     // Construir preview con el mapeo

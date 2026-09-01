@@ -141,6 +141,8 @@ export async function POST(req: NextRequest) {
     maxTokens: 4096,
     system: buildSystemPrompt(nombresInternos),
     messages: [{ role: 'user', content: userContent }],
+    restauranteId,
+    usuarioId: user.id,
   })
 
   if (!resultado.ok) {

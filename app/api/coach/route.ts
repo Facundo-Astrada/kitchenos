@@ -5,6 +5,7 @@ import { calcularSugerenciaProduccion } from '@/lib/produccion/sugerencia'
 import { fetchAllRows } from '@/lib/supabase/paginate'
 import { COACH_ERROR_MARK, COACH_PENDING_MARK } from '@/lib/coach/stream'
 import { clasificarErrorIA, errorSinApiKey, respuestaErrorIA, statusErrorIA } from '@/lib/ia/errores'
+import { registrarUsoIA } from '@/lib/ia/costos'
 import { getRestauranteId } from '@/lib/coach/restaurante'
 import { getPermisosServer, puedeEjecutarTool } from '@/lib/permisos/server'
 import { COACH_COST_TOOLS } from '@/lib/coach/tools/registry'
@@ -860,6 +861,10 @@ Reglas:
       // Cap de 1 draft por request completo (puede abarcar varias rondas): si el modelo pide
       // una segunda tool mutante en el mismo mensaje, se le pide esperar a que se resuelva la primera.
       let pendingActionForResponse: PendingAction | null = null
+      // Consumo acumulado de TODAS las rondas del loop agéntico: un turno del Coach
+      // puede ser 3-4 llamadas a la API, y el costo del turno es la suma. Se asienta
+      // una sola fila en `ia_uso` al cerrar el stream (ver finally).
+      const consumo = { entrada: 0, salida: 0, cacheLectura: 0, cacheEscritura: 0 }
       try {
         for (let round = 0; round < 4; round++) {
           if (!anthropicRes.ok || !anthropicRes.body) {
@@ -892,8 +897,25 @@ Reglas:
                 type?: string
                 content_block?: { type?: string; id?: string; name?: string }
                 delta?: { type?: string; text?: string; partial_json?: string; stop_reason?: string }
+                // `message_start` trae los tokens de entrada y de cache; `message_delta`,
+                // los de salida. Es la única vía de medir consumo en streaming.
+                message?: {
+                  usage?: {
+                    input_tokens?: number
+                    cache_read_input_tokens?: number
+                    cache_creation_input_tokens?: number
+                  }
+                }
+                usage?: { output_tokens?: number }
               }
               try { evt = JSON.parse(payload) } catch { continue }
+
+              if (evt.type === 'message_start') {
+                const u = evt.message?.usage
+                consumo.entrada += u?.input_tokens ?? 0
+                consumo.cacheLectura += u?.cache_read_input_tokens ?? 0
+                consumo.cacheEscritura += u?.cache_creation_input_tokens ?? 0
+              }
 
               if (evt.type === 'content_block_start') {
                 if (evt.content_block?.type === 'tool_use') {
@@ -914,6 +936,7 @@ Reglas:
                 if (curTool) { toolUses.push(curTool); curTool = null }
               } else if (evt.type === 'message_delta') {
                 if (evt.delta?.stop_reason) stopReason = evt.delta.stop_reason
+                consumo.salida += evt.usage?.output_tokens ?? 0
               }
             }
           }
@@ -970,6 +993,18 @@ Reglas:
         if (pendingActionForResponse) {
           try { send(COACH_PENDING_MARK + JSON.stringify(pendingActionForResponse)) } catch { /* stream ya cerrado */ }
         }
+        // Un asiento por turno del Coach, aunque el turno haya fallado a mitad:
+        // los tokens ya consumidos se pagan igual y tienen que contar para el tope.
+        registrarUsoIA({
+          tag: 'coach',
+          modelo: 'claude-sonnet-4-6',
+          restauranteId,
+          usuarioId: user.id,
+          tokensEntrada: consumo.entrada,
+          tokensSalida: consumo.salida,
+          tokensCacheLectura: consumo.cacheLectura,
+          tokensCacheEscritura: consumo.cacheEscritura,
+        })
         controller.close()
       }
     },

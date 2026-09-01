@@ -49,6 +49,7 @@ Respondé SOLO con un objeto JSON válido {"<id>": "<explicación>", ...}, sin t
     model: 'claude-haiku-4-5-20251001',
     maxTokens: 1024,
     messages: [{ role: 'user', content: prompt }],
+    restauranteId,
   })
 
   if (!resultado.ok) {

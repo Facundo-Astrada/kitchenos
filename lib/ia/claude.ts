@@ -17,6 +17,7 @@
  */
 
 import { clasificarErrorIA, errorSinApiKey, type ErrorIA } from './errores'
+import { registrarUsoIA } from './costos'
 
 export interface AnthropicSystemBlock {
   type: 'text'
@@ -42,6 +43,13 @@ export interface PedirAClaudeParams {
   headers?: Record<string, string>
   /** Reintentos ante error `reintentable` (saturado). Default 1. */
   maxReintentos?: number
+  /**
+   * Tenant al que se le imputa el consumo en `ia_uso`. Opcional para no romper
+   * a los llamadores que todavía no lo pasan, pero sin esto la llamada queda
+   * sin imputar y no cuenta para el tope del plan.
+   */
+  restauranteId?: string | null
+  usuarioId?: string | null
 }
 
 export interface PedirAClaudeOk {
@@ -115,8 +123,24 @@ export async function pedirAClaude(params: PedirAClaudeParams): Promise<PedirACl
     const data = await response.json()
     const contenido = (data.content ?? []) as Array<Record<string, unknown>>
     const texto = (contenido.find(b => b.type === 'text')?.text as string | undefined) ?? ''
-    const uso = (data.usage ?? {}) as { input_tokens?: number; output_tokens?: number }
+    const uso = (data.usage ?? {}) as {
+      input_tokens?: number
+      output_tokens?: number
+      cache_read_input_tokens?: number
+      cache_creation_input_tokens?: number
+    }
     console.log(`[ia:${params.tag}] modelo=${params.model} tokens_in=${uso.input_tokens ?? 0} tokens_out=${uso.output_tokens ?? 0}`)
+
+    registrarUsoIA({
+      tag: params.tag,
+      modelo: params.model,
+      restauranteId: params.restauranteId,
+      usuarioId: params.usuarioId,
+      tokensEntrada: uso.input_tokens ?? 0,
+      tokensSalida: uso.output_tokens ?? 0,
+      tokensCacheLectura: uso.cache_read_input_tokens ?? 0,
+      tokensCacheEscritura: uso.cache_creation_input_tokens ?? 0,
+    })
 
     return {
       ok: true,
