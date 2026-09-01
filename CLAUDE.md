@@ -40,7 +40,7 @@ Gráficos: CSS divs `width: X%` — **no Chart.js**
 
 **Claves Supabase:** `NEXT_PUBLIC_SUPABASE_ANON_KEY` = `sb_publishable_...` | `SUPABASE_SERVICE_ROLE_KEY` = `sb_secret_...` — si están cruzadas, Supabase bloquea con "Forbidden use of secret API key in browser".
 
-**RLS:** 44 tablas con `mi_restaurante_id()`.
+**RLS:** 90 tablas con `mi_restaurante_id()`. `user_restaurantes` es **solo lectura** desde el cliente — de ahí sale esa función y con ella todas las policies; la membresía la asigna el servidor (`/api/registro`, `/api/invitar`). Ver `.claude/docs/rls.md`.
 
 ---
 

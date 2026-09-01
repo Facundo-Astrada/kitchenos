@@ -13,6 +13,19 @@ Auditoría 20/08 (chequeado contra la config viva vía management API): `site_ur
 
 **Decisión 21/08:** Facundo ya creó la cuenta en Resend pero frenó ahí — hace falta además un dominio propio verificado (el dominio de prueba de Resend solo manda a la propia casilla de quien se registró, no sirve para invitar gente real). Se queda así por ahora: el caso de uso típico (invitar de a una persona) funciona sin el fix; el límite de 2/hora solo pisa si se invitan 3+ personas seguidas. Retomar cuando eso moleste en uso real o cuando haya un dominio propio de KitchenOS por otro motivo (no vale la pena comprar uno solo para esto).
 
+### Nada avisa cuando producción se rompe (encontrado 01/09)
+El realtime estuvo caído en prod por un `
+` en una env var — pase, sync del mise entre dispositivos, bumps del KDS, Muro y campanita — y **no se detectó por ningún canal**: falla del lado del browser, con 401 en el handshake del WebSocket, sin error de servidor, sin alerta, sin test que lo cubra. Se descubrió de casualidad mirando la consola mientras se verificaba otra cosa.
+
+El agujero no es ese bug puntual (ya está arreglado y con `.trim()` de por medio): es que no hay **ninguna** señal de salud de producción. Hoy la única forma de saber si algo se rompió es que alguien lo note usando la app.
+
+Lo más barato que lo cubriría, en orden de esfuerzo: (a) un smoke e2e contra prod que loguee y verifique que el WS de realtime conecta — es literalmente el script que encontró esto, y corre en 40 s; (b) el endpoint `/api/log-error` ya recibe errores del cliente y los tira a los logs de Vercel, pero nadie los mira — mandarlos a algún lado con alerta; (c) el dashboard de control del ecosistema (ver más abajo), que necesita esto igual.
+
+### Dashboard de control del ecosistema (decisión pendiente, 01/09)
+No existe ningún backoffice: `superadmin|backoffice|panel_admin` no da un solo resultado en el código. Para saber el estado de las cuentas hay que abrir SQL contra producción a mano — es lo que hubo que hacer para este mismo relevamiento.
+
+Con 1 cliente real se banca. Con 5+ pagando no: no hay forma de ver quién dejó de entrar, quién nunca activó un módulo, a quién se le rompió un import, ni cuánto cuesta cada cuenta en tokens de Claude. Forma sugerida: un módulo `/admin` gateado por allow-list de emails propios, leyendo con admin client métricas por tenant. **Va después de Stripe** (necesita algo que medir) y antes del cliente 5.
+
 ### Fiscal ARCA — homologación end-to-end
 Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/emitir/route.ts`). Falta: certificado real de ARCA del contribuyente, probar contra el servidor de testing de AFIP, URLs de prod en `config_fiscal`, cachear token/sign WSAA en Supabase.
 
@@ -143,14 +156,15 @@ Hoy el Coach solo responde preguntas de navegación; el pedido es que ayude a ca
 `facturas-universal` ya resuelve `producto_id` al insertar (27/08, mismo matching que `useFacturas.ts`: exacto sin tildes, luego parcial de palabra completa) — solo matchea contra productos existentes, no crea nuevos (eso queda para el alta manual). Sigue faltando: backfill sobre lo histórico (~1% poblado hoy, el fix nuevo solo aplica hacia adelante) y `merma.producto_id`, que queda vacío seguido y no se tocó. `lib/reportes/fuga.ts` sigue con su fallback por nombre normalizado para lo que quede sin `producto_id`.
 
 ### Hardening de seguridad (`get_advisors`)
-**Resuelto 27/08**: `REVOKE EXECUTE` aplicado sobre `reset_demo_restaurante()`, `checklist_registros_set_restaurante()` y `rutina_turno_registros_set_restaurante()` (esta última no estaba detectada antes — mismo patrón, función nueva de Rutina de turno) — las tres confirmadas sin caller desde el browser antes de tocarlas; el cron de reset-demo sigue andando por `service_role`, que no se ve afectado por el REVOKE.
-
-**Resuelto 31/08**: extensión `unaccent` movida de `public` a `extensions` (`ALTER EXTENSION unaccent SET SCHEMA extensions`) — verificado que ninguna función propia la llamaba fuera de sus propios objetos internos, y `search_path` de la DB ya incluía `extensions`, así que no rompe nada. Policy SELECT del bucket `fotos` restringida de `public` (anon+authenticated) a solo `authenticated` — verificado que la app nunca hace `.list()`/`.download()` sin sesión (`PhotoPicker.tsx` solo sube/borra/lee por URL pública, que no pasa por esta policy); esto cierra el listado anónimo del bucket entero mientras las URLs públicas conocidas siguen funcionando igual. Nota: los paths (`recetas/uuid`, `carta/uuid`) no están namespaced por `restaurante_id`, así que un usuario autenticado de cualquier restaurante todavía puede listar archivos de otros — no se resolvió (requeriría reestructurar paths, cambio más grande) porque nada lo pidió como urgente.
+Lo de agosto (extensión `unaccent` fuera de `public`, policy del bucket, los `REVOKE`) y el barrido de seguridad del 01/09 están cerrados — el detalle vive en `HISTORIAL.md`.
 
 **Bloqueado, no es código**: protección de contraseñas filtradas (HaveIBeenPwned) requiere plan Pro de Supabase (`PATCH .../config/auth` devuelve 402 "available on Pro Plans and up") — no se puede activar ni por dashboard ni por API en el plan actual. Retomar si se sube de plan.
 
 Queda pendiente:
 - `fiscal_config`/`fiscal_tickets` tienen RLS activado pero **sin ninguna policy** — no es un agujero (falla cerrado: nadie puede leer/escribir hoy), pero significa que esas tablas están inutilizables hasta que se les agreguen policies — bloquea a `config_fiscal` de Fiscal ARCA más arriba.
+- **Sacarle el `
+` a `NEXT_PUBLIC_SUPABASE_ANON_KEY` en Vercel** (01/09). `lib/supabase/env.ts` hace `.trim()` y la vuelve inofensiva, pero la variable sigue sucia: cualquier lectura que no pase por el helper reintroduce el bug. Es un cambio de dashboard, no de código.
+- **Los dos respaldos de la limpieza** (`restaurantes_basura_backup_20260901`, `voglio1_datos_backup_20260901`) — RLS activado sin policies, solo `service_role`. Borrables cuando se confirme que no hacía falta nada de esos 12 restaurantes.
 
 ---
 
