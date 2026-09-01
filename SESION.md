@@ -1,54 +1,24 @@
-# Sesión — 2026-08-31 (noche, cont. 10) — housekeeping + B9/B10 Reservas + censo de tablas + Carta 5b
+# Sesión — 2026-08-31 (noche, cont. 11) — hardening de seguridad menor + cierre del falso duplicado de El Rescoldo
 
 ## Qué se cerró
 
-Primera sesión de "vuelta a producto" tras el plan de diez días. Arrancó con un
-pedido de planificar y confirmar todo `PENDIENTES.md` como checklist antes de
-ejecutar — 10 commits, pusheados:
+Los dos ítems de baja prioridad que quedaron afuera de la sesión anterior, ambos resueltos:
 
-- **Housekeeping**: 3 ramas huérfanas borradas (historia disjunta de `main`,
-  todo superado por código actual) + rama ya fusionada. `settings.json`
-  commiteado. Correcciones de datos stale (`confirm()` era 21 no ~80).
-- **B9 — Reservas en el día de trabajo**: los 4 enganches completos (OPS,
-  Salón con sentar-reserva + "Cerrar servicio", Calendario, Dashboard).
-- **B10 completo**: sugerencia de producción escala por reservas
-  (`factor_demanda`, con salvaguardas), y motor nuevo de sugerencia de
-  compra por proveedor en `/pedidos`.
-- **Censo de tablas**: `ARQUITECTURA.md` 78→90 tablas. Bonus: encontrado y
-  arreglado que `reset_demo_restaurante()` nunca clonaba 4 tablas de agosto
-  (Organigrama, Rutina de turno) a la demo pública.
-- **Carta paso 5b**: `DetailView` movido a su propio archivo — cierra el
-  refactor de Carta completo (3.906 → 983 líneas).
+- **`unaccent` fuera de `public`**: movida al schema `extensions` (verificado sin caller propio, `search_path` ya la cubre).
+- **Policy SELECT del bucket `fotos`** restringida a `authenticated` — cierra el listado anónimo del bucket entero; las URLs públicas de lectura siguen sirviendo igual (verificado con curl, 200).
+- **HaveIBeenPwned**: bloqueado por plan — la management API devuelve 402 ("available on Pro Plans and up"), no es un fix de código ni de dashboard en el plan actual.
+- **"Menú duplicado" de El Rescoldo**: no era un bug. Las dos filas pertenecen a dos restaurantes distintos (`...0001` fuente/marketing, `...0002` demo pública que `reset_demo_restaurante()` re-clona con IDs nuevos en cada reset) — RLS filtra por `restaurante_id`, ninguna sesión ve ambas filas a la vez. Cerrado sin tocar datos.
 
-Con esto, `PLAN-4-CAPAS.md` (los 10 bloques) y `refactor-kos.md` (Carta)
-quedan los dos completamente cerrados.
+Commits: `a557795` (PENDIENTES) + doc updates de cierre (`HISTORIAL.md`, `.claude/docs/columnas.md`).
 
 ## Qué quedó a medias
 
-- Nada de lo empezado — cada ítem se cerró antes de pasar al siguiente.
-- El git worktree `.claude/worktrees/sleepy-jepsen` tiene la carpeta física
-  sin borrar (archivo bloqueado por un proceso en Windows) — las ramas ya
-  están borradas, solo falta reintentar `git worktree remove --force`
-  después de cerrar terminales/editores viejos.
+- Nada — ambos ítems se cerraron completos.
 
 ## Probar primero mañana
 
-- Nada específico de riesgo — todo verificado con datos reales insertados y
-  limpiados en El Rescoldo, build/typecheck/254 tests en verde en cada paso,
-  y smoke visual en dev server para B9, B10 y Carta 5b.
+- Nada de riesgo — cambios de config de Supabase (extensión + policy) verificados en vivo, sin tocar código de la app.
 
 ## Próximo paso concreto
 
-Quedan dos ítems de Fase 2 (bajo esfuerzo, sin dependencias) que Facundo
-decidió dejar para otra sesión:
-
-- **Hardening de seguridad menor**: mover `unaccent` a su propio schema,
-  revisar la policy SELECT del bucket `fotos`, activar HaveIBeenPwned en
-  Supabase Auth (dashboard, sin código).
-- **Demo El Rescoldo — menú duplicado**: dos filas "Noche de Asado - Día del
-  Padre" en `menus` — revisar `menu_preparaciones`/`tareas` atadas a cada
-  una antes de borrar una.
-
-Fuera de eso, el backlog vuelve a ser reactivo (`PENDIENTES.md` 🟢 Bajo:
-priorizar según feedback real de El Rescoldo) salvo que Facundo traiga un
-tema nuevo.
+Sin cola pendiente de esta sesión. El backlog vuelve a `PENDIENTES.md` (🟠 Alto: SMTP propio para invitaciones si molesta con 3+ invites seguidos, Fiscal ARCA end-to-end; 🟢 Bajo: priorizar según feedback real de El Rescoldo) salvo que Facundo traiga un tema nuevo.

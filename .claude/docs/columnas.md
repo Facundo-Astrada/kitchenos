@@ -102,7 +102,7 @@ Bucket público creado por SQL directo (la key `sb_secret_...` no funciona con l
 ```sql
 INSERT INTO storage.buckets (id, name, public) VALUES ('fotos', 'fotos', true) ON CONFLICT (id) DO NOTHING;
 ```
-RLS en `storage.objects`: SELECT público (`bucket_id='fotos'`), INSERT solo `authenticated`. Paths: `recetas/{receta_id}.{ext}`, `carta/{item_id}.{ext}`.
+RLS en `storage.objects`: SELECT y INSERT ambos solo `authenticated` (SELECT era público hasta 31/08 — permitía listar el bucket entero sin login; las URLs públicas de lectura directa no pasan por esta policy y siguen funcionando igual). Paths: `recetas/{receta_id}.{ext}`, `carta/{item_id}.{ext}` — no namespaced por `restaurante_id`, así que cualquier autenticado puede listar fotos de otras cuentas.
 
 ## Demo pública — `demo_visitas` + `reset_demo_restaurante()`
 
