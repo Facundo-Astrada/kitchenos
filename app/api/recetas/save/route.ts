@@ -27,12 +27,12 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
         }
       }
-      const { error } = await adminSupabase.from('ingredientes').insert(ingredientes)
+      const { data: inserted, error } = await adminSupabase.from('ingredientes').insert(ingredientes).select()
       if (error) {
         console.error('[save-receta] Ingredientes error:', error)
         return NextResponse.json({ error: error.message }, { status: 500 })
       }
-      return NextResponse.json({ ok: true })
+      return NextResponse.json({ ok: true, ingredientes: inserted })
     }
 
     // Mode: enrich existing recipe (replace ingredients + update procedimiento)

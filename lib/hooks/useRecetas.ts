@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useCallback, useMemo } from 'react'
+import { useEffect, useCallback, useMemo, useRef } from 'react'
 import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import type { Receta, Ingrediente, FoodCostCalc } from '@/types'
@@ -19,6 +19,12 @@ export type RecetaConCosto = Receta & {
 // para no tocar a los consumidores existentes (mismo criterio que
 // PLAZAS_OPS/SECCIONES_OPS en carta/ComposicionEditor.tsx).
 export { canonUnit, unitConversionFactor }
+
+// Ventana durante la cual un evento de realtime con un id que acabamos de
+// escribir se considera el eco de nuestra propia escritura y se ignora —
+// mismo criterio que useTareas.ts. Sin esto, cada mutación optimista de acá
+// abajo queda pisada por el refetch completo que dispara su propio eco.
+const ECO_REALTIME_MS = 5_000
 
 export function calcFoodCost(ingredientes: Ingrediente[], porciones: number, precioVenta: number): FoodCostCalc {
   // `cantidad` es la cantidad bruta (lo que se compra). El costo = bruta × precio.
@@ -43,6 +49,13 @@ function mapReceta(r: Record<string, unknown>): RecetaConCosto {
     ingredientes: ings,
     food_cost: calcFoodCost(ings, (r.porciones as number) ?? 1, (r.precio_venta as number) ?? 0),
   }
+}
+
+// Recalcula food_cost de una receta ya mapeada tras tocar sus ingredientes o
+// sus propios campos (porciones/precio_venta) — usado por las mutaciones
+// optimistas de acá abajo, no solo por el fetch inicial.
+function conFoodCostRecalculado(r: RecetaConCosto): RecetaConCosto {
+  return { ...r, food_cost: calcFoodCost(r.ingredientes ?? [], r.porciones ?? 1, r.precio_venta ?? 0) }
 }
 
 async function fetchRecetasData(key: string): Promise<RecetaConCosto[]> {
@@ -90,6 +103,20 @@ export function useRecetas() {
 
   const error = (swrError as Error | null)?.message ?? null
 
+  // Ids escritos por ESTE cliente hace poco (recetas o ingredientes). Cada
+  // mutación de acá abajo marca el id que tocó; cuando el eco de esa misma
+  // escritura vuelve por realtime se ignora — si no, el refetch completo que
+  // dispara el canal pisa el optimistic de inmediato y toda la ganancia de
+  // no esperar un round-trip por edición se pierde igual.
+  const escriturasPropias = useRef<Map<string, number>>(new Map())
+  const marcarEscrituraPropia = useCallback((id: string) => {
+    const ahora = Date.now()
+    for (const [k, ts] of escriturasPropias.current) {
+      if (ahora - ts > ECO_REALTIME_MS) escriturasPropias.current.delete(k)
+    }
+    escriturasPropias.current.set(id, ahora)
+  }, [])
+
   useEffect(() => {
     if (!RESTAURANTE_ID) return
     // recetas y carta_items se filtran por restaurante — sin filter, cualquier
@@ -98,13 +125,25 @@ export function useRecetas() {
     // canal no se puede filtrar; se deja para no perder frescura al editar
     // ingredientes desde otro dispositivo.
     const filter = `restaurante_id=eq.${RESTAURANTE_ID}`
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const revalidar = () => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => mutate(), 400)
+    }
+    const esEco = (payload: { new: unknown; old: unknown }) => {
+      const fila = (payload.new ?? payload.old) as { id?: string } | null
+      const id = fila?.id
+      if (!id) return false
+      const ts = escriturasPropias.current.get(id)
+      return ts != null && Date.now() - ts < ECO_REALTIME_MS
+    }
     const ch1 = supabase
       .channel(`recetas-rt-${RESTAURANTE_ID}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'recetas', filter }, () => mutate())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredientes' }, () => mutate())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'carta_items', filter }, () => mutate())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'recetas', filter }, (payload) => { if (!esEco(payload)) revalidar() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ingredientes' }, (payload) => { if (!esEco(payload)) revalidar() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'carta_items', filter }, (payload) => { if (!esEco(payload)) revalidar() })
       .subscribe()
-    return () => { supabase.removeChannel(ch1) }
+    return () => { if (timer) clearTimeout(timer); supabase.removeChannel(ch1) }
   }, [RESTAURANTE_ID, supabase, mutate])
 
   async function agregarReceta(datos: Omit<Receta, 'id' | 'restaurante_id' | 'ingredientes'>, ingredientesData?: Omit<Ingrediente, 'id' | 'receta_id'>[]) {
@@ -121,6 +160,7 @@ export function useRecetas() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Error al guardar receta')
       const newId = json.id as string
+      marcarEscrituraPropia(newId)
       // Optimistic: agregar a la lista antes de revalidar
       const ings = (ingredientesData || []).map(i => ({ ...i, id: '', receta_id: newId })) as Ingrediente[]
       const nueva: RecetaConCosto = {
@@ -137,7 +177,7 @@ export function useRecetas() {
         if (prev?.find(r => r.id === newId)) return prev
         return [nueva, ...(prev ?? [])]
       }, { revalidate: false })
-      mutate() // background sync
+      mutate() // background sync — una sola vez al crear, no por cada edición
 
       // Auto-link ingredientes al stock (exacto + parcial) en background
       if (ingredientesData && ingredientesData.length > 0) {
@@ -176,10 +216,18 @@ export function useRecetas() {
   }
 
   async function publicarReceta(id: string) {
+    const optimistic = (prev: RecetaConCosto[] | undefined) =>
+      (prev ?? []).map(r => r.id === id ? { ...r, status: 'published' } : r)
     try {
-      const { error } = await supabase.from('recetas').update({ status: 'published' }).eq('id', id)
-      if (error) throw error
-      await mutate()
+      marcarEscrituraPropia(id)
+      await mutate(
+        async (current) => {
+          const { error } = await supabase.from('recetas').update({ status: 'published' }).eq('id', id)
+          if (error) throw error
+          return optimistic(current)
+        },
+        { optimisticData: optimistic, revalidate: false, rollbackOnError: true }
+      )
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al publicar receta'
       console.error('[useRecetas] publicarReceta Error:', msg)
@@ -188,10 +236,18 @@ export function useRecetas() {
   }
 
   async function actualizarReceta(id: string, datos: Partial<Omit<Receta, 'id' | 'restaurante_id' | 'ingredientes'>>) {
+    const optimistic = (prev: RecetaConCosto[] | undefined) =>
+      (prev ?? []).map(r => r.id === id ? conFoodCostRecalculado({ ...r, ...datos }) : r)
     try {
-      const { error } = await supabase.from('recetas').update(datos).eq('id', id)
-      if (error) throw error
-      await mutate()
+      marcarEscrituraPropia(id)
+      await mutate(
+        async (current) => {
+          const { error } = await supabase.from('recetas').update(datos).eq('id', id)
+          if (error) throw error
+          return optimistic(current)
+        },
+        { optimisticData: optimistic, revalidate: false, rollbackOnError: true }
+      )
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al actualizar receta'
       console.error('[useRecetas] actualizarReceta Error:', msg)
@@ -200,10 +256,17 @@ export function useRecetas() {
   }
 
   async function eliminarReceta(id: string) {
+    const optimistic = (prev: RecetaConCosto[] | undefined) => (prev ?? []).filter(r => r.id !== id)
     try {
-      const { error } = await supabase.from('recetas').update({ activa: false }).eq('id', id)
-      if (error) throw error
-      mutate((prev) => prev?.filter(r => r.id !== id), { revalidate: false })
+      marcarEscrituraPropia(id)
+      await mutate(
+        async (current) => {
+          const { error } = await supabase.from('recetas').update({ activa: false }).eq('id', id)
+          if (error) throw error
+          return optimistic(current)
+        },
+        { optimisticData: optimistic, revalidate: false, rollbackOnError: true }
+      )
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al eliminar receta'
       console.error('[useRecetas] eliminarReceta Error:', msg)
@@ -218,11 +281,16 @@ export function useRecetas() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ receta: null, ingredientes: [{ ...datos, receta_id: recetaId }], addIngredientsOnly: true }),
       })
-      if (!res.ok) {
-        const json = await res.json()
-        throw new Error(json.error || 'Error al agregar ingrediente')
-      }
-      await mutate()
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Error al agregar ingrediente')
+      // El endpoint devuelve la fila insertada (con su id real) — evita el
+      // refetch completo del recetario que antes hacía falta para enterarse.
+      const nuevo = (json.ingredientes?.[0] as Ingrediente | undefined) ?? { ...datos, id: '', receta_id: recetaId } as Ingrediente
+      marcarEscrituraPropia(nuevo.id)
+      mutate((prev) => (prev ?? []).map(r => {
+        if (r.id !== recetaId) return r
+        return conFoodCostRecalculado({ ...r, ingredientes: [...(r.ingredientes ?? []), nuevo] })
+      }), { revalidate: false })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al agregar ingrediente'
       console.error('[useRecetas] agregarIngrediente Error:', msg)
@@ -231,10 +299,21 @@ export function useRecetas() {
   }
 
   async function actualizarIngrediente(id: string, datos: Partial<Omit<Ingrediente, 'id' | 'receta_id'>>) {
+    const optimistic = (prev: RecetaConCosto[] | undefined) =>
+      (prev ?? []).map(r => {
+        if (!r.ingredientes?.some(i => i.id === id)) return r
+        return conFoodCostRecalculado({ ...r, ingredientes: r.ingredientes.map(i => i.id === id ? { ...i, ...datos } : i) })
+      })
     try {
-      const { error } = await supabase.from('ingredientes').update(datos).eq('id', id)
-      if (error) throw error
-      await mutate()
+      marcarEscrituraPropia(id)
+      await mutate(
+        async (current) => {
+          const { error } = await supabase.from('ingredientes').update(datos).eq('id', id)
+          if (error) throw error
+          return optimistic(current)
+        },
+        { optimisticData: optimistic, revalidate: false, rollbackOnError: true }
+      )
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al actualizar ingrediente'
       console.error('[useRecetas] actualizarIngrediente Error:', msg)
@@ -243,10 +322,21 @@ export function useRecetas() {
   }
 
   async function eliminarIngrediente(id: string) {
+    const optimistic = (prev: RecetaConCosto[] | undefined) =>
+      (prev ?? []).map(r => {
+        if (!r.ingredientes?.some(i => i.id === id)) return r
+        return conFoodCostRecalculado({ ...r, ingredientes: r.ingredientes.filter(i => i.id !== id) })
+      })
     try {
-      const { error } = await supabase.from('ingredientes').delete().eq('id', id)
-      if (error) throw error
-      await mutate()
+      marcarEscrituraPropia(id)
+      await mutate(
+        async (current) => {
+          const { error } = await supabase.from('ingredientes').delete().eq('id', id)
+          if (error) throw error
+          return optimistic(current)
+        },
+        { optimisticData: optimistic, revalidate: false, rollbackOnError: true }
+      )
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al eliminar ingrediente'
       console.error('[useRecetas] eliminarIngrediente Error:', msg)
