@@ -56,6 +56,7 @@ No se cargan solos: abrirlos cuando la tarea entra en su tema.
 | Aplicar o revisar políticas RLS | `.claude/docs/rls.md` |
 | Tocar el flujo de importación (facturas, carta, stock) | `.claude/docs/importador.md` |
 | Escribir o tocar un test (Vitest/Playwright) | `.claude/docs/testing.md` |
+| Tocar planes, precios, cobro, gating por plan, costo de IA, el importador como onboarding — o decidir si se construye un módulo nuevo | `.claude/docs/negocio.md` (destilado de las decisiones de negocio que cambian el código; la fuente es `~/Desktop/START UP KOS/`) |
 | Diseñar una feature nueva o discutir una idea de producto | `SINTESIS-ORGANIZACION-GASTRONOMICA.md` (base de conocimiento gastronómico, fuera del repo por copyright: `~/Desktop/START UP KOS/06-contexto-gastronomia/`) + `AUDITORIA-4-CAPAS.md` (qué cubre K-OS hoy contra ese material) |
 | Decidir dónde va código nuevo (¿hook, lib/, endpoint, función de Postgres?), evaluar acoplamiento/duplicación, refactorizar un hook o endpoint, discutir arquitectura | `.claude/docs/ingenieria/arquitectura-marco.md` (el marco: puertos, patrones PoEAA, connascence, tablas de decisión) + `arquitectura-kos.md` (KitchenOS medido contra él, con acciones) |
 | Modelar una feature nueva (¿qué contexto? ¿qué agregado? ¿qué transacción?), nombrar una tabla/columna nueva, decidir cómo se integran dos módulos, evaluar si algo se puede vender/apagar por separado | `.claude/docs/ingenieria/dominio-marco.md` (el marco DDD: contextos, lenguaje, agregados, cuándo es exceso) + `dominio-kos.md` (mapa de contextos, glosario ubicuo, agregados e invariantes de KitchenOS) |
@@ -123,3 +124,7 @@ Todo lo que Claude usa para trabajar en KitchenOS — agentes, skills y docs —
 - `DECISIONES.md` — razones detrás de cada decisión
 - `HISTORIAL.md` — archivo muerto: planes cerrados, changelog detallado, todo lo "✅ Resuelto". No se carga nunca, solo consulta manual.
 - `SESION.md` — qué se cerró, qué quedó a medias, próximo paso concreto. Se lee al abrir una sesión nueva.
+
+**El negocio no vive en el repo.** Producto↔mercado, precio, clientes, finanzas y decisiones
+de negocio viven en `~/Desktop/START UP KOS/` (ver su `LEEME.md`). El repo solo tiene el
+destilado que afecta al código: `.claude/docs/negocio.md`. Si difieren, manda la carpeta.
