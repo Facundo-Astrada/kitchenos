@@ -154,7 +154,7 @@ export const TOURS: Record<string, TourStep[]> = {
       description: 'Conecta los ingredientes de tus recetas con los productos del inventario. Cuando el stock tiene precio, el food cost de la receta se calcula con datos reales. Sin la vinculación, el costo es aproximado.',
     },
     {
-      targetId: 'recetario-lista',
+      targetId: 'recetario-lista-ideas',
       requireTab: 'ideas',
       title: 'Ideas y borradores',
       description: 'Los borradores son recetas en desarrollo. Podés completarlas manualmente o usar "Completar con IA": pegás la receta en texto libre y la IA estructura los ingredientes y pasos automáticamente.',

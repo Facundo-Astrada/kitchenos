@@ -17,7 +17,7 @@ import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
 import ImageCropModal from '@/components/ui/ImageCropModal'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import ImportadorFichasTecnicas from '@/components/importador/ImportadorFichasTecnicas'
-import { HeaderAction, Skeleton } from '@/components/ui'
+import { HeaderAction, Skeleton, FilterChips, EmptyState } from '@/components/ui'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import {
   CargaRapidaIngredientes, TotalesRapidosBar, nuevaFilaRapida, filasToIngredientesData,
@@ -214,6 +214,12 @@ const itemVariants = {
   show: { opacity: 1, transition: { duration: 0.12 } },
 }
 
+type Tab = 'recetas' | 'ideas' | 'platos'
+const TAB_IDS: Tab[] = ['recetas', 'ideas', 'platos']
+function esTab(v: string | null): v is Tab {
+  return v != null && (TAB_IDS as string[]).includes(v)
+}
+
 export default function RecetarioPage() {
   const router = useRouter()
   const RESTAURANTE_ID = useRestauranteId()
@@ -226,20 +232,84 @@ export default function RecetarioPage() {
   const isDesktop = useIsDesktop()
 
   const [search, setSearch] = useState('')
-  const [catFilter, setCatFilter] = useState('')
+  // Un filtro de categoría por pestaña: con las 3 pestañas montadas a la vez
+  // (swipe scroll-snap más abajo), un único catFilter compartido cruzaría los
+  // chips de Recetas con los de Platos (categorías de la Carta, otro universo
+  // de valores). Ideas no tiene chips propios, no necesita el suyo.
+  const [catFilterRecetas, setCatFilterRecetas] = useState('')
+  const [catFilterPlatos, setCatFilterPlatos] = useState('')
   const [creando, setCreando] = useState(false)
   const [cargaRapida, setCargaRapida] = useState(false)
-  const [tab, setTab] = useState<'recetas' | 'ideas' | 'platos'>('recetas')
+  const [tab, setTab] = useState<Tab>('recetas')
+
+  // Tab inicial desde la URL (?tab=) — deep-link, mismo patrón que operaciones/page.tsx
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tab')
+    if (esTab(t)) setTab(t)
+  }, [])
 
   // Allow Kitchen Coach tour to switch tabs
   useEffect(() => {
     function handleSetTab(e: Event) {
       const { tab: t } = (e as CustomEvent<{ tab: string }>).detail
-      if (t === 'recetas' || t === 'ideas' || t === 'platos') { setTab(t); setCatFilter('') }
+      if (esTab(t)) setTab(t)
     }
     window.addEventListener('kc-set-tab', handleSetTab)
     return () => window.removeEventListener('kc-set-tab', handleSetTab)
   }, [])
+
+  // Swipe horizontal entre pestañas — scroll-snap nativo, mismo patrón que
+  // operaciones/page.tsx (ver .claude/docs/ui.md § Tabs con swipe). A
+  // diferencia de OPS, acá no hace falta lazy-mount: las 3 pestañas no tienen
+  // hooks propios de fetch (recetas/cartaItems ya están bajados arriba), así
+  // que se montan las tres desde el principio.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const tabRef = useRef<Tab>(tab)
+  useEffect(() => { tabRef.current = tab }, [tab])
+  const scrollDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const didInitScroll = useRef(false)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const idx = TAB_IDS.indexOf(tab)
+    const target = idx * el.clientWidth
+    if (Math.abs(el.scrollLeft - target) < 2) { didInitScroll.current = true; return }
+    el.scrollTo({ left: target, behavior: didInitScroll.current ? 'smooth' : 'auto' })
+    didInitScroll.current = true
+  }, [tab])
+
+  function handleTabScroll() {
+    const el = scrollRef.current
+    if (!el || el.clientWidth === 0) return
+    if (scrollDebounce.current) clearTimeout(scrollDebounce.current)
+    scrollDebounce.current = setTimeout(() => {
+      const idx = Math.round(el.scrollLeft / el.clientWidth)
+      const next = TAB_IDS[Math.min(TAB_IDS.length - 1, Math.max(0, idx))]
+      if (next !== tabRef.current) setTab(next)
+    }, 90)
+  }
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      el.scrollTo({ left: TAB_IDS.indexOf(tabRef.current) * el.clientWidth, behavior: 'auto' })
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // Volver de "Nueva ficha"/"Carga rápida" (reemplazan todo el árbol, ver los
+  // `if (creando)`/`if (cargaRapida)` de abajo) remonta la fila de swipe con
+  // scrollLeft en 0 — sin esto, salir de "Nueva" desde la pestaña Ideas te
+  // devolvía a Recetas en vez de a donde estabas.
+  useEffect(() => {
+    if (creando || cargaRapida) return
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollTo({ left: TAB_IDS.indexOf(tabRef.current) * el.clientWidth, behavior: 'auto' })
+  }, [creando, cargaRapida])
   const [showFichas, setShowFichas] = useState(false)
   const [showLink, setShowLink] = useState(false)
 
@@ -295,17 +365,24 @@ export default function RecetarioPage() {
     Array.from(new Set(platosCompuestos.map(p => p.categoria).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'es')),
     [platosCompuestos])
 
-  const activeList = tab === 'recetas' ? recetasPublicadas : recetasDraft
-
-  const filtered = useMemo(() => {
-    let list = activeList
-    if (catFilter) list = list.filter(r => normalizeCategoria(r.categoria) === catFilter)
+  // Recetas e Ideas se filtran por separado — las 3 pestañas están montadas a
+  // la vez (swipe), cada una con su propia búsqueda por nombre (search es
+  // compartido a propósito: encontrar "milanesa" tiene que valer para las 3).
+  const filteredRecetas = useMemo(() => {
+    let list = recetasPublicadas
+    if (catFilterRecetas) list = list.filter(r => normalizeCategoria(r.categoria) === catFilterRecetas)
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(r => r.nombre.toLowerCase().includes(q))
     }
     return list
-  }, [activeList, catFilter, search])
+  }, [recetasPublicadas, catFilterRecetas, search])
+
+  const filteredIdeas = useMemo(() => {
+    if (!search.trim()) return recetasDraft
+    const q = search.trim().toLowerCase()
+    return recetasDraft.filter(r => r.nombre.toLowerCase().includes(q))
+  }, [recetasDraft, search])
 
   const fcPromedio = useMemo(() => {
     const conPrecio = recetasPublicadas.filter(r => (r.precio_venta ?? 0) > 0)
@@ -407,6 +484,12 @@ export default function RecetarioPage() {
     )
   }
 
+  const slotStyle: React.CSSProperties = {
+    flex: '0 0 100%', minWidth: 0, height: '100%',
+    overflow: 'hidden', display: 'flex', flexDirection: 'column',
+    scrollSnapAlign: 'start',
+  }
+
   return (
     <PageTransition>
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -414,36 +497,36 @@ export default function RecetarioPage() {
       <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button onClick={() => router.back()} style={btnClear}><span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>arrow_back</span></button>
+            <button onClick={() => router.back()} aria-label="Volver" className="hit-slop" style={btnClear}><span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>arrow_back</span></button>
             <div>
               <div style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>Recetario</div>
               <div style={{ fontSize: 10, color: 'rgba(255,255,255,.45)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Fichas técnicas{verCostos && ' · Food cost'}</div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {/* El XLSX lleva precio, costo total, costo/porcion, FC% y margen. */}
             {verCostos && (
-              <button onClick={exportXLSX} title="Exportar Excel"
-                style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 8, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              <button onClick={exportXLSX} title="Exportar Excel" aria-label="Exportar Excel"
+                style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 10, width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: 17, color: '#fff' }}>table_view</span>
               </button>
             )}
             {isAdmin && (
-              <button data-coach-target="recetario-importar" onClick={() => setShowFichas(true)} title="Importar fichas técnicas"
-                style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 8, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              <button data-coach-target="recetario-importar" onClick={() => setShowFichas(true)} title="Importar fichas técnicas" aria-label="Importar fichas técnicas"
+                style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 10, width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: 17, color: '#fff' }}>upload_file</span>
               </button>
             )}
-            <button data-coach-target="recetario-vincular" onClick={() => setShowLink(true)} title="Vincular ingredientes con stock"
-              style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 8, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+            <button data-coach-target="recetario-vincular" onClick={() => setShowLink(true)} title="Vincular ingredientes con stock" aria-label="Vincular ingredientes con stock"
+              style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 10, width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
             >
               <span className="material-symbols-outlined" style={{ fontSize: 17, color: '#10b981' }}>link</span>
             </button>
             {canEdit && (
-              <button onClick={() => setCargaRapida(true)} title="Carga rápida — ingredientes/subrecetas al toque"
-                style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 8, width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              <button onClick={() => setCargaRapida(true)} title="Carga rápida — ingredientes/subrecetas al toque" aria-label="Carga rápida"
+                style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 10, width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: 17, color: '#f97316' }}>bolt</span>
               </button>
@@ -451,17 +534,31 @@ export default function RecetarioPage() {
             <HeaderAction label="Nueva" icon="add" onClick={() => setCreando(true)} />
           </div>
         </div>
+        {/* Tira de KPIs — food cost promedio y cuántas recetas están en zona
+            crítica. Solo en la pestaña Recetas (son datos de recetas
+            publicadas) y solo si ya hay al menos una con precio cargado, si
+            no "0.0%" se lee como food cost perfecto en vez de "sin datos". */}
+        {verCostos && tab === 'recetas' && recetasPublicadas.some(r => (r.precio_venta ?? 0) > 0) && (
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            <div style={{ flex: 1 }}>
+              <KpiBox value={`${fcPromedio.toFixed(1)}%`} label="FC promedio" color={fcColor(fcPromedio)} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <KpiBox value={String(nAlertas)} label="FC crítico" color={nAlertas > 0 ? '#ef4444' : '#4ade80'} />
+            </div>
+          </div>
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 8, padding: '0 10px', height: 34 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'rgba(255,255,255,.4)' }}>search</span>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar receta…" style={{ border: 'none', background: 'none', outline: 'none', fontSize: 12, fontFamily: 'inherit', color: '#fff', width: '100%' }} />
-          {search && <button onClick={() => setSearch('')} style={{ ...btnClear, color: 'rgba(255,255,255,.5)', fontSize: 16 }}>×</button>}
+          {search && <button onClick={() => setSearch('')} aria-label="Limpiar búsqueda" className="hit-slop" style={{ ...btnClear, color: 'rgba(255,255,255,.5)', fontSize: 16 }}>×</button>}
         </div>
       </div>
 
-      {/* ── Tabs: Recetas | Ideas ── */}
+      {/* ── Tabs: Recetas | Ideas | Platos ── */}
       <div data-coach-target="recetario-tabs" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0 14px', display: 'flex', gap: 0, flexShrink: 0 }}>
         <button
-          onClick={() => { setTab('recetas'); setCatFilter('') }}
+          onClick={() => setTab('recetas')}
           style={{
             flex: 1, padding: '10px 0', border: 'none', background: 'none', cursor: 'pointer',
             fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
@@ -473,7 +570,7 @@ export default function RecetarioPage() {
           Recetas
         </button>
         <button
-          onClick={() => { setTab('ideas'); setCatFilter('') }}
+          onClick={() => setTab('ideas')}
           style={{
             flex: 1, padding: '10px 0', border: 'none', background: 'none', cursor: 'pointer',
             fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
@@ -492,7 +589,7 @@ export default function RecetarioPage() {
           )}
         </button>
         <button
-          onClick={() => { setTab('platos'); setCatFilter('') }}
+          onClick={() => setTab('platos')}
           style={{
             flex: 1, padding: '10px 0', border: 'none', background: 'none', cursor: 'pointer',
             fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
@@ -505,113 +602,172 @@ export default function RecetarioPage() {
         </button>
       </div>
 
-      {/* Category tabs (pestaña Recetas) */}
-      {tab === 'recetas' && categoriasFiltro.length > 0 && (
-        <div data-coach-target="recetario-categorias" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '8px 14px', display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0, scrollbarWidth: 'none' }}>
-          <CatTab label="Todas" active={!catFilter} onClick={() => setCatFilter('')} />
-          {categoriasFiltro.map(c => <CatTab key={c} label={c} active={catFilter === c} onClick={() => setCatFilter(catFilter === c ? '' : c)} />)}
-        </div>
-      )}
-
-      {/* Category tabs (pestaña Platos — categorías de la Carta) */}
-      {tab === 'platos' && categoriasPlatos.length > 0 && (
-        <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '8px 14px', display: 'flex', gap: 6, overflowX: 'auto', flexShrink: 0, scrollbarWidth: 'none' }}>
-          <CatTab label="Todos" active={!catFilter} onClick={() => setCatFilter('')} />
-          {categoriasPlatos.map(c => <CatTab key={c} label={c} active={catFilter === c} onClick={() => setCatFilter(catFilter === c ? '' : c)} />)}
-        </div>
-      )}
-
-      {/* Body */}
-      <div data-coach-target="recetario-lista" style={{ flex: 1, overflowY: 'auto', padding: '12px 14px 24px' }}>
-        {tab === 'platos' ? (
-          <PlatosView platos={platosCompuestos} recetas={recetasPublicadas} loading={cartaLoading} actualizarPlatoRecetaOps={actualizarPlatoRecetaOps} actualizarItem={actualizarCartaItem} agregarPlatoReceta={agregarPlatoReceta} eliminarPlatoReceta={eliminarPlatoReceta} agregarReceta={agregarReceta} stockProductos={stockProductos} search={search} catFilter={catFilter} isDesktop={isDesktop} verCostos={verCostos} canEdit={canEdit} onOpenReceta={(rid) => router.push(`/recetario/${rid}`)} />
-        ) : (<>
-        {/* Salud del recetario */}
-        {/* Salud lista costeo incompleto y food cost critico: es plata. */}
-        {tab === 'recetas' && verCostos && !loading && salud.total > 0 && (
-          <div style={{ marginBottom: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
-            <button onClick={() => setSaludOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '11px 12px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#f59e0b' }}>health_and_safety</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Salud del recetario</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: '#f59e0b', borderRadius: 99, padding: '1px 7px' }}>{salud.total}</span>
-              <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)', marginLeft: 'auto', transform: saludOpen ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform .2s' }}>expand_more</span>
-            </button>
-            {saludOpen && (
-              <div style={{ borderTop: '1px solid var(--border)' }}>
-                {([
-                  { key: 'costeoIncompleto', label: 'Costeo incompleto', hint: 'ingredientes sin vincular o sin costo — subvalúan el food cost', color: '#f59e0b', items: salud.costeoIncompleto },
-                  { key: 'fcCritico', label: 'Food cost crítico (>35%)', hint: 'poco margen — revisá precio o receta', color: '#ef4444', items: salud.fcCritico },
-                  { key: 'sinPrecio', label: 'Sin precio de venta', hint: 'no se puede calcular el food cost', color: 'var(--text-3)', items: salud.sinPrecio },
-                ] as const).filter(g => g.items.length > 0).map(g => (
-                  <div key={g.key} style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: g.color, flexShrink: 0 }} />
-                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>{g.label}</span>
-                      <span style={{ fontSize: 11, color: 'var(--text-3)' }}>({g.items.length})</span>
-                    </div>
-                    <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 8 }}>{g.hint}</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {g.items.slice(0, 12).map(r => (
-                        <button key={r.id} onClick={() => router.push(`/recetario/${r.id}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 999, padding: '4px 10px', fontSize: 11, fontWeight: 600, color: 'var(--text-1)', cursor: 'pointer', fontFamily: 'inherit' }}>
-                          {r.nombre}
-                          {g.key === 'fcCritico' && <span style={{ fontSize: 10, fontWeight: 800, color: '#ef4444', fontFamily: "'DM Mono', monospace" }}>{r.food_cost.food_cost_pct.toFixed(0)}%</span>}
-                        </button>
-                      ))}
-                      {g.items.length > 12 && <span style={{ fontSize: 10, color: 'var(--text-3)', alignSelf: 'center' }}>+{g.items.length - 12} más</span>}
-                    </div>
+      {/* ── Swipe track: Recetas / Ideas / Platos — scroll-snap nativo, mismo
+          patrón que operaciones/page.tsx (ver .claude/docs/ui.md § Tabs con
+          swipe). Ninguna hace fetch propio (recetas/cartaItems ya están
+          bajados arriba), así que las 3 se montan siempre — a diferencia de
+          OPS no hace falta lazy-mount. ── */}
+      <div
+        ref={scrollRef}
+        onScroll={handleTabScroll}
+        className="ops-swipe-track"
+        style={{
+          flex: 1, minHeight: 0, display: 'flex',
+          overflowX: 'auto', overflowY: 'hidden',
+          scrollSnapType: 'x mandatory', overscrollBehaviorX: 'contain',
+        }}
+      >
+        {/* ── Panel: Recetas ── */}
+        <div style={slotStyle}>
+          {categoriasFiltro.length > 0 && (
+            <div data-coach-target="recetario-categorias" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '8px 14px', flexShrink: 0 }}>
+              <FilterChips
+                chips={[{ value: '', label: 'Todas' }, ...categoriasFiltro.map(c => ({ value: c, label: c }))]}
+                active={catFilterRecetas}
+                onChange={setCatFilterRecetas}
+              />
+            </div>
+          )}
+          <div data-coach-target="recetario-lista" style={{ flex: 1, overflowY: 'auto', padding: '12px 14px 24px' }}>
+            {/* Salud del recetario — lista costeo incompleto y food cost critico: es plata. */}
+            {verCostos && !loading && salud.total > 0 && (
+              <div style={{ marginBottom: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+                <button onClick={() => setSaludOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '11px 12px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#f59e0b' }}>health_and_safety</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Salud del recetario</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: '#f59e0b', borderRadius: 99, padding: '1px 7px' }}>{salud.total}</span>
+                  <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)', marginLeft: 'auto', transform: saludOpen ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform .2s' }}>expand_more</span>
+                </button>
+                {saludOpen && (
+                  <div style={{ borderTop: '1px solid var(--border)' }}>
+                    {([
+                      { key: 'costeoIncompleto', label: 'Costeo incompleto', hint: 'ingredientes sin vincular o sin costo — subvalúan el food cost', color: '#f59e0b', items: salud.costeoIncompleto },
+                      { key: 'fcCritico', label: 'Food cost crítico (>35%)', hint: 'poco margen — revisá precio o receta', color: '#ef4444', items: salud.fcCritico },
+                      { key: 'sinPrecio', label: 'Sin precio de venta', hint: 'no se puede calcular el food cost', color: 'var(--text-3)', items: salud.sinPrecio },
+                    ] as const).filter(g => g.items.length > 0).map(g => (
+                      <div key={g.key} style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: g.color, flexShrink: 0 }} />
+                          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>{g.label}</span>
+                          <span style={{ fontSize: 11, color: 'var(--text-3)' }}>({g.items.length})</span>
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 8 }}>{g.hint}</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {g.items.slice(0, 12).map(r => (
+                            <button key={r.id} onClick={() => router.push(`/recetario/${r.id}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 999, padding: '4px 10px', fontSize: 11, fontWeight: 600, color: 'var(--text-1)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                              {r.nombre}
+                              {g.key === 'fcCritico' && <span style={{ fontSize: 10, fontWeight: 800, color: '#ef4444', fontFamily: "'DM Mono', monospace" }}>{r.food_cost.food_cost_pct.toFixed(0)}%</span>}
+                            </button>
+                          ))}
+                          {g.items.length > 12 && <span style={{ fontSize: 10, color: 'var(--text-3)', alignSelf: 'center' }}>+{g.items.length - 12} más</span>}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
             )}
-          </div>
-        )}
-        {loading ? (
-          <div style={isDesktop
-            ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }
-            : { display: 'flex', flexDirection: 'column', gap: 8 }
-          }>
-            {Array.from({ length: 6 }, (_, i) => <RecetaCardSkeleton key={i} />)}
-          </div>
-        ) : error ? (
-          <div style={{ textAlign: 'center', padding: '48px 24px' }}><p style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>{error}</p></div>
-        ) : filtered.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '48px 24px', color: '#94a3b8' }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>{tab === 'ideas' ? '💡' : '📖'}</div>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>
-              {tab === 'ideas'
-                ? 'Sin ideas guardadas'
-                : activeList.length === 0 ? 'Sin recetas aún' : 'Sin resultados'}
-            </div>
-            {tab === 'recetas' && activeList.length === 0 && (
-              <p style={{ fontSize: 11, marginTop: 6, color: '#64748b' }}>Tocá "Nueva receta" para empezar</p>
-            )}
-            {tab === 'ideas' && (
-              <p style={{ fontSize: 11, marginTop: 6, color: '#64748b' }}>Podés guardar recetas como borrador mientras las desarrollás</p>
-            )}
-          </div>
-        ) : (
-          <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            animate="show"
-            style={isDesktop
-              ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }
-              : { display: 'flex', flexDirection: 'column', gap: 8 }
-            }
-          >
-            {filtered.map(r => (
-              <motion.div key={r.id} variants={itemVariants}>
-                <RecetaCard
-                  receta={r}
-                  isDraft={r.status === 'draft'}
-                  onPublish={r.status === 'draft' ? () => publicarReceta(r.id) : undefined}
-                  onCompleteIA={r.status === 'draft' ? () => { setEnrichingDraft(r); setCreando(true) } : undefined}
+            {loading ? (
+              <div style={isDesktop
+                ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }
+                : { display: 'flex', flexDirection: 'column', gap: 8 }
+              }>
+                {Array.from({ length: 6 }, (_, i) => <RecetaCardSkeleton key={i} />)}
+              </div>
+            ) : error ? (
+              <div style={{ textAlign: 'center', padding: '48px 24px' }}><p style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>{error}</p></div>
+            ) : filteredRecetas.length === 0 ? (
+              recetasPublicadas.length === 0 ? (
+                <EmptyState
+                  icon="menu_book"
+                  title="Sin recetas aún"
+                  cta={{ label: 'Nueva receta', onClick: () => setCreando(true) }}
                 />
+              ) : (
+                <EmptyState icon="menu_book" title="Sin resultados" />
+              )
+            ) : (
+              <motion.div
+                variants={containerVariants}
+                initial="hidden"
+                animate="show"
+                style={isDesktop
+                  ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }
+                  : { display: 'flex', flexDirection: 'column', gap: 8 }
+                }
+              >
+                {filteredRecetas.map(r => (
+                  <motion.div key={r.id} variants={itemVariants}>
+                    <RecetaCard receta={r} />
+                  </motion.div>
+                ))}
               </motion.div>
-            ))}
-          </motion.div>
-        )}
-        </>)}
+            )}
+          </div>
+        </div>
+
+        {/* ── Panel: Ideas ── */}
+        <div style={slotStyle}>
+          <div data-coach-target="recetario-lista-ideas" style={{ flex: 1, overflowY: 'auto', padding: '12px 14px 24px' }}>
+            {loading ? (
+              <div style={isDesktop
+                ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }
+                : { display: 'flex', flexDirection: 'column', gap: 8 }
+              }>
+                {Array.from({ length: 6 }, (_, i) => <RecetaCardSkeleton key={i} />)}
+              </div>
+            ) : error ? (
+              <div style={{ textAlign: 'center', padding: '48px 24px' }}><p style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>{error}</p></div>
+            ) : filteredIdeas.length === 0 ? (
+              recetasDraft.length === 0 ? (
+                <EmptyState
+                  icon="lightbulb"
+                  title="Sin ideas guardadas"
+                  subtitle="Podés guardar recetas como borrador mientras las desarrollás"
+                />
+              ) : (
+                <EmptyState icon="lightbulb" title="Sin resultados" />
+              )
+            ) : (
+              <motion.div
+                variants={containerVariants}
+                initial="hidden"
+                animate="show"
+                style={isDesktop
+                  ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }
+                  : { display: 'flex', flexDirection: 'column', gap: 8 }
+                }
+              >
+                {filteredIdeas.map(r => (
+                  <motion.div key={r.id} variants={itemVariants}>
+                    <RecetaCard
+                      receta={r}
+                      isDraft
+                      onPublish={() => publicarReceta(r.id)}
+                      onCompleteIA={() => { setEnrichingDraft(r); setCreando(true) }}
+                    />
+                  </motion.div>
+                ))}
+              </motion.div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Panel: Platos ── */}
+        <div style={slotStyle}>
+          {categoriasPlatos.length > 0 && (
+            <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '8px 14px', flexShrink: 0 }}>
+              <FilterChips
+                chips={[{ value: '', label: 'Todos' }, ...categoriasPlatos.map(c => ({ value: c, label: c }))]}
+                active={catFilterPlatos}
+                onChange={setCatFilterPlatos}
+              />
+            </div>
+          )}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px 24px' }}>
+            <PlatosView platos={platosCompuestos} recetas={recetasPublicadas} loading={cartaLoading} actualizarPlatoRecetaOps={actualizarPlatoRecetaOps} actualizarItem={actualizarCartaItem} agregarPlatoReceta={agregarPlatoReceta} eliminarPlatoReceta={eliminarPlatoReceta} agregarReceta={agregarReceta} stockProductos={stockProductos} search={search} catFilter={catFilterPlatos} isDesktop={isDesktop} verCostos={verCostos} canEdit={canEdit} onOpenReceta={(rid) => router.push(`/recetario/${rid}`)} />
+          </div>
+        </div>
       </div>
 
 
@@ -826,14 +982,14 @@ function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoReceta
     } finally { setBusy(false) }
   }
 
-  if (loading) return <EmptyMsg icon="hourglass_empty" text="Cargando platos…" />
+  if (loading) return <EmptyState icon="hourglass_empty" title="Cargando platos…" />
   if (platos.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: '48px 24px', color: '#94a3b8' }}>
-        <div style={{ fontSize: 28, marginBottom: 8 }}>🍽️</div>
-        <div style={{ fontSize: 13, fontWeight: 600 }}>{(search.trim() || catFilter) ? 'Sin resultados' : 'Sin platos compuestos'}</div>
-        <p style={{ fontSize: 11, marginTop: 6, color: '#64748b' }}>Los platos con recetas vinculadas desde la Carta aparecen acá como ficha técnica</p>
-      </div>
+      <EmptyState
+        icon="restaurant"
+        title={(search.trim() || catFilter) ? 'Sin resultados' : 'Sin platos compuestos'}
+        subtitle="Los platos con recetas vinculadas desde la Carta aparecen acá como ficha técnica"
+      />
     )
   }
 
@@ -1262,7 +1418,7 @@ function AudioRecorderModal({ onClose, onRecorded }: { onClose: () => void; onRe
                 onClick={handleSend}
                 className="px-6 py-3 rounded-xl bg-indigo-500 text-sm font-medium shadow-lg shadow-indigo-500/30 active:bg-indigo-600 transition-colors"
               >
-                Enviar a IA ✨
+                Enviar a IA
               </button>
             </div>
           </>
@@ -1330,7 +1486,7 @@ function IAResultScreen({ result, previewUrl, inputText, onAccept, onClose, agre
     try {
       const updated = await callRecetaAdjust(current, msg)
       setCurrent(updated)
-      setChatHistory(prev => [...prev, { role: 'ia', text: '✅ Receta actualizada con tus cambios.' }])
+      setChatHistory(prev => [...prev, { role: 'ia', text: 'Receta actualizada con tus cambios.' }])
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error al ajustar')
     } finally {
@@ -1456,7 +1612,7 @@ function IAResultScreen({ result, previewUrl, inputText, onAccept, onClose, agre
           }}>
             {/* Sparkle icon */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-              <span style={{ fontSize: 14 }}>✨</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent)' }}>auto_awesome</span>
               <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Claude</span>
             </div>
 
@@ -1466,7 +1622,9 @@ function IAResultScreen({ result, previewUrl, inputText, onAccept, onClose, agre
 
             {/* Ingredientes */}
             <div style={{ marginBottom: 12 }}>
-              <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>📋 Ingredientes:</p>
+              <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>restaurant</span>Ingredientes:
+              </p>
               {ing.map((item, i) => (
                 <p key={i} style={{ margin: '2px 0 2px 8px', fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>
                   • {item.cantidad} {item.unidad} — {item.nombre}
@@ -1476,7 +1634,9 @@ function IAResultScreen({ result, previewUrl, inputText, onAccept, onClose, agre
 
             {/* Procedimiento */}
             <div style={{ marginBottom: 12 }}>
-              <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>👨‍🍳 Procedimiento:</p>
+              <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>format_list_numbered</span>Procedimiento:
+              </p>
               {pasos.map((paso, i) => (
                 <p key={i} style={{ margin: '2px 0 2px 8px', fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>
                   {i + 1}. {paso}
@@ -1489,9 +1649,22 @@ function IAResultScreen({ result, previewUrl, inputText, onAccept, onClose, agre
               display: 'flex', gap: 12, padding: '8px 0 0', borderTop: '1px solid var(--border)',
               fontSize: 12, color: 'var(--text-3)',
             }}>
-              {current.porciones && <span>🍽️ {current.porciones} porc.{(() => { const p = calcPesoPorcion(ing, parseNum(current.porciones)); return p ? ` · ${formatPeso(p)}` : '' })()}</span>}
-              {current.tiempo_minutos && <span>⏱️ {current.tiempo_minutos} min</span>}
-              {current.categoria_sugerida && <span>📁 {current.categoria_sugerida}</span>}
+              {current.porciones && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>scale</span>
+                  {current.porciones} porc.{(() => { const p = calcPesoPorcion(ing, parseNum(current.porciones)); return p ? ` · ${formatPeso(p)}` : '' })()}
+                </span>
+              )}
+              {current.tiempo_minutos && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>schedule</span>{current.tiempo_minutos} min
+                </span>
+              )}
+              {current.categoria_sugerida && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>category</span>{current.categoria_sugerida}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -1507,7 +1680,9 @@ function IAResultScreen({ result, previewUrl, inputText, onAccept, onClose, agre
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>🍽️ Porciones</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 3 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 13 }}>scale</span>Porciones
+                </span>
                 <input
                   type="number" inputMode="numeric" min="1"
                   value={editPorciones}
@@ -1517,7 +1692,9 @@ function IAResultScreen({ result, previewUrl, inputText, onAccept, onClose, agre
                 />
               </label>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>⏱️ Tiempo (min)</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 3 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 13 }}>schedule</span>Tiempo (min)
+                </span>
                 <input
                   type="number" inputMode="numeric" min="0"
                   value={editTiempo}
@@ -1528,7 +1705,9 @@ function IAResultScreen({ result, previewUrl, inputText, onAccept, onClose, agre
               </label>
             </div>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 10 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>📁 Categoría</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 13 }}>category</span>Categoría
+              </span>
               <select
                 value={editCategoria}
                 onChange={e => setEditCategoria(e.target.value)}
@@ -1539,7 +1718,9 @@ function IAResultScreen({ result, previewUrl, inputText, onAccept, onClose, agre
               </select>
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>📝 Notas adicionales</span>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 13 }}>edit_note</span>Notas adicionales
+              </span>
               <input
                 value={extraNotes}
                 onChange={e => setExtraNotes(e.target.value)}
@@ -1843,7 +2024,7 @@ function IAMultiResultScreen({ results, previewUrl, inputText, agregarReceta, ag
             display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, padding: '8px 10px',
             background: 'rgba(28,45,74,.06)', border: '1px solid rgba(28,45,74,.15)', borderRadius: 10,
           }}>
-            <span style={{ fontSize: 14 }}>✨</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent)' }}>auto_awesome</span>
             <span style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.4 }}>
               Claude encontró <b>{results.length} recetas</b> en {previewUrl ? 'la imagen' : 'el archivo'}.
               Seleccioná las que querés importar.
@@ -2266,7 +2447,7 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
           data.type.includes('spreadsheet') ||
           data.type.includes('excel')
         ) {
-          setIaInputText(`📊 ${data.name} (${(data.size / 1024).toFixed(0)} KB)`)
+          setIaInputText(`${data.name} (${(data.size / 1024).toFixed(0)} KB)`)
           const { base64 } = await fileToBase64(data)
           const multiRes = await callRecetaImportMulti('text', { text: `__XLSX_BASE64__:${base64}` })
           if (multiRes.recetas.length === 1) {
@@ -2287,7 +2468,7 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
         setIaResult(result)
 
       } else if (mode === 'glink' && typeof data === 'string') {
-        setIaInputText(`📎 ${data}`)
+        setIaInputText(data)
         const multiRes = await callRecetaImportMulti('google_url', { google_url: data })
         if (multiRes.recetas.length === 1) {
           handleAcceptIAResult(apiToForm(multiRes.recetas[0]))
@@ -3301,23 +3482,6 @@ function KpiBox({ value, label, color }: { value: string; label: string; color: 
   )
 }
 
-function CatTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button onClick={onClick} style={{ background: active ? 'var(--navy)' : 'var(--bg)', color: active ? '#fff' : 'var(--text-2)', border: active ? 'none' : '1px solid var(--border)', borderRadius: 99, padding: '5px 12px', fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
-      {label}
-    </button>
-  )
-}
-
-function EmptyMsg({ icon, text }: { icon: string; text: string }) {
-  return (
-    <div style={{ textAlign: 'center', padding: '48px 24px' }}>
-      <span className="material-symbols-outlined" style={{ fontSize: 28, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>{icon}</span>
-      <p style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 600 }}>{text}</p>
-    </div>
-  )
-}
-
 // Forma de RecetaCard sin datos (S5.3) — reemplaza el "Cargando recetas…"
 // centrado, que saltaba a la lista completa de golpe.
 function RecetaCardSkeleton() {
@@ -3393,7 +3557,9 @@ function RecetaCard({ receta: r, isDraft, onPublish, onCompleteIA }: { receta: R
           </div>
         )}
         {sinIngredientes && (
-          <div style={{ marginTop: 6, fontSize: 10, color: '#f59e0b', fontWeight: 600 }}>⚠ Sin ingredientes cargados</div>
+          <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#f59e0b', fontWeight: 600 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 13 }}>warning</span>Sin ingredientes cargados
+          </div>
         )}
       </Link>
 

@@ -173,8 +173,9 @@ input, textarea, [contenteditable] {
   display: none;
 }
 
-/* Fila de tabs de OPS (Producción/Mise/Planificación/Turno) con scroll-snap
-   nativo — el scroll es la navegación, no debe verse como un scroll. */
+/* Fila de tabs con scroll-snap nativo (OPS: Producción/Mise/Planificación/
+   Turno; Recetario: Recetas/Ideas/Platos) — el scroll es la navegación, no
+   debe verse como un scroll. */
 .ops-swipe-track {
   scrollbar-width: none;
 }

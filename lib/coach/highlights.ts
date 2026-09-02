@@ -11,7 +11,7 @@ export const COACH_HIGHLIGHT_IDS = [
   'stock-kpis', 'stock-funciones', 'stock-stockear',
   'stock-tabs', 'stock-filtros', 'stock-lista',
   // Recetario
-  'recetario-tabs', 'recetario-categorias', 'recetario-lista',
+  'recetario-tabs', 'recetario-categorias', 'recetario-lista', 'recetario-lista-ideas',
   'recetario-nueva', 'recetario-importar', 'recetario-vincular', 'recetario-acciones',
   // Facturas
   'facturas-tabs', 'facturas-filtros', 'facturas-lista', 'facturas-acciones', 'facturas-pos', 'facturas-lote',
