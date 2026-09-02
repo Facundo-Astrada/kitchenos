@@ -1,30 +1,23 @@
-# Sesión — 2026-09-01 — relevamiento de estado + barrido de seguridad
+# Sesión — 2026-09-01 (cont.) — estrategia Stripe+planes + dashboard de control del ecosistema
 
-Sesión de investigación (funcionalidad / seguridad / estado comercial / permisos / control del ecosistema). Destapó cuatro cosas rotas y se cerraron todas el mismo día. 3 commits: `44bd500`, `d6a0dd2`, `c084ea2`.
+Arrancó como "vamos con Stripe + planes"; el relevamiento (research propio + estado real de las cuentas) cambió el plan antes de escribir código: Stripe no opera en Argentina, y K-OS resultó convivir con Fudo, no competir. 9 commits (`53910e6`…`fc21722`), pusheados. Detalle completo en `HISTORIAL.md`.
 
 ## Qué se cerró
 
-- **🔴 Escalada de tenant vía `user_restaurantes`.** Cualquier usuario podía reescribir su propia fila y quedarse con la cuenta entera de otro restaurante (verificado en prod con ROLLBACK: Bros → Origen, 27 recetas / 18 facturas / 58 productos / 8 miembros). El alta se mudó a `POST /api/registro`, se dropearon las policies de escritura + grants, y quedó el ratchet #6.
-- **🔴 Realtime muerto en producción** por un `\n` al final de `NEXT_PUBLIC_SUPABASE_ANON_KEY` en Vercel — pase, mise entre dispositivos, KDS, Muro y campanita, caídos sin ningún error de servidor. `lib/supabase/env.ts` hace `.trim()`. Verificado post-deploy: el WS conecta.
-- **🟠 `reset_demo_restaurante()` ejecutable por anónimos.** El `REVOKE` del 27/08 no cerró nada: en Postgres el `EXECUTE` viene de `PUBLIC`, y se había revocado solo a `anon`/`authenticated`.
-- **🟠 Bucket `fotos` aislado por tenant** (`PhotoPicker` prefija el `restaurante_id`) — y de paso aparecieron las policies de UPDATE/DELETE que faltaban, por las que el botón de borrar foto nunca borró nada.
-- **Base limpia**: 17 restaurantes → 5, todos reales, con respaldo.
+- **12 decisiones de negocio** escritas en `~/Desktop/START UP KOS/00-decisiones/DECISIONES.md`. Quedan 2 abiertas: el nombre y la validación del precio (dependen de que Facundo hable con Franco de Bros).
+- **`ia_uso`** — costo de IA imputado a las 12 rutas del proyecto, incluido el Coach.
+- **`restaurantes.plan` + `lib/planes.ts` + `usePlan()`** — sin default, sin cablear a ninguna pantalla todavía (a propósito).
+- **`/admin`** — dashboard de control del ecosistema: por restaurante (plan, usuarios, actividad, costo de IA), top de funciones, filtro por restaurante, changelog de commits. Ya probado por Facundo en producción, con dos vueltas de feedback aplicadas.
 
 ## Qué quedó a medias
 
-- Nada de lo abierto hoy. Los 4 hallazgos están cerrados, deployados y verificados en vivo.
+- Nada de lo tocado hoy quedó a medio camino. El bloque de "Feature gating" (cablear `puedeUsar` en `RouteGuard`) y "Cobro automático" (Mercado Pago) son el siguiente paso, sin empezar.
 
 ## Probar primero mañana
 
-- **Nada de riesgo pendiente**, pero si algo se comporta raro mirá primero el alta de restaurante (`/register` → `/api/registro`): es el flujo que más cambió. Probado end-to-end contra prod con un usuario real (después borrado).
-- El realtime volvió, así que funciones que llevaban tiempo sin andar de verdad (sync del mise entre dos dispositivos, bumps del KDS entre tablets, el Muro) van a comportarse distinto a lo que el equipo se acostumbró. Vale mirarlas en servicio.
+- Confirmar que `ia_uso` ya tiene alguna fila real (`select * from ia_uso order by created_at desc limit 5`) — hasta el cierre de hoy seguía vacía.
+- Si algo en `/admin` se ve raro (fechas, montos), es la primera pantalla nueva del proyecto fuera del shell de `(app)` — mirar `.claude/docs/ui.md` § "Vistas públicas" antes de tocar el layout.
 
 ## Próximo paso concreto
 
-Decisión de Facundo, con la recomendación puesta:
-
-1. **Stripe + planes** — es lo único que separa producto terminado de negocio. Hay 1 cliente real (Bros) y 0 pagando. Spec en `DECISIONES.md` antes de código, como dice el propio backlog.
-2. **Dashboard de control del ecosistema** — después de Stripe (necesita algo que medir). El argumento fuerte lo dio esta sesión: el realtime estuvo caído quién sabe cuánto y **nada lo detectó**. Ítem nuevo en `PENDIENTES.md` 🟠.
-3. Los días 6-10 de `.claude/docs/ingenieria/plan-consolidado.md` (refactor de Carta, copias) — valor interno, cero para vender. Con un solo cliente, yo los pausaría hasta tener 3-4 cuentas pagando.
-
-**Tarea manual para Facundo (no es código):** sacarle el `\n` a `NEXT_PUBLIC_SUPABASE_ANON_KEY` en el dashboard de Vercel. El `.trim()` la vuelve inofensiva pero la variable sigue sucia.
+Decisión de Facundo, no de código: hablar con Franco de Bros (precio real + permiso de caso de éxito). De esa charla depende validar la grilla de 3 planes y decidir el nombre. Mientras tanto, "Feature gating" puede esperar sin costo — hoy no cambia nada visible porque `plan` es NULL en las 5 cuentas.

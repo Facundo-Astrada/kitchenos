@@ -312,6 +312,8 @@ No subir ese cap a un ancho de celular: hay Android que reporta **más de 420 CS
 
 `#shell` tiene `height:100dvh; overflow:hidden` y, desde 600px, `max-width:420px` (pensado para la app logueada) — una vista pública con contenido más largo queda recortada si hereda ese overflow. Fix: layout del route group con `position:fixed; inset:0; overflowY:'auto'` (un `fixed` no es clippeado por `overflow:hidden` de un ancestro sin `transform`/`filter`/`contain`). Ver `app/(publico)/layout.tsx`; `app/(servicio)/layout.tsx` usa la misma técnica con `overflow:hidden` (scroll interno propio) en vez de `overflowY:auto`.
 
+En realidad el problema es más general: es `html, body { height:100%; overflow:hidden }` en `globals.css`, no algo propio de `#shell` — cualquier página **sin route group** (un `app/algo/page.tsx` suelto, sin `layout.tsx` propio) hereda ese `overflow:hidden` del body sin que nada scrollee. `/admin` (dashboard interno, fuera de `(app)`/`(publico)`/`(servicio)` a propósito porque no tiene restaurante) lo pisó: contenido más alto que la pantalla, sin forma de bajar. Ahí no hace falta el truco de `position:fixed` (no hay `#shell` de por medio) — alcanza con envolver la página en un flex column `height:'100dvh'` y ponerle `className="scroll-body"` (ya en `globals.css`, `flex:1; overflow-y:auto`) al contenedor del contenido, dejando el header fuera de ese div. Ver `app/admin/page.tsx`.
+
 ## Vista de servicio (Salón / KDS / Muro) — reglas UI inamovibles
 
 Route group propio (`app/(servicio)/`), sin BottomNav, UX radicalmente distinta al dashboard de gestión.

@@ -49,13 +49,15 @@ Este archivo es una foto del presente (qué existe, qué falta). El detalle hist
 
 **Resumen:** 31 módulos funcionales (incluye salón, KDS, muro, modo emprendimiento piloteado, clientes, bitácora, reservas), 0 parciales, 0 críticos pendientes.
 
+**Herramientas internas (no son parte del producto, no cuentan en el total de arriba):** `/admin` — dashboard de control del ecosistema, gateado por allow-list de emails propios (`lib/admin/allowlist.ts`). Por restaurante: plan, usuarios, última actividad, costo/llamadas de IA (30d). Top de funciones más usadas, filtro por restaurante, changelog de los últimos commits a `main` (vía API pública de GitHub). Ver `PENDIENTES.md` por lo que le falta.
+
 ---
 
-## 2. Tablas de Supabase (92 total — recontado por SQL 01/09)
+## 2. Tablas de Supabase (93 total — recontado por SQL 01/09)
 
 Ver `ARQUITECTURA.md` §5 para el desglose completo por dominio (23 grupos, al día) y §Supabase para relaciones clave. Columna por columna → `.claude/docs/columnas.md`.
 
-**Total: 92 tablas** con RLS habilitado (90 del dominio + 2 respaldos de la limpieza del 01/09, con RLS sin policies). Aislamiento multi-tenant real vía `mi_restaurante_id()` (ver `.claude/docs/rls.md`).
+**Total: 93 tablas** con RLS habilitado (90 del dominio + `ia_uso` — libro de consumo de IA por tenant, sept 2026 — + 2 respaldos de la limpieza del 01/09, con RLS sin policies). Aislamiento multi-tenant real vía `mi_restaurante_id()` (ver `.claude/docs/rls.md`). `restaurantes` ganó una columna `plan` (nullable, sin default — decisión de negocio 006 en `~/Desktop/START UP KOS/00-decisiones/DECISIONES.md`).
 
 **5 restaurantes** en prod tras la limpieza del 01/09: Bros comedor (único con uso vivo), El Rescoldo (fuente/marketing), El Rescoldo Demo, Origen, Voglio Farina. Los 12 de prueba se borraron con respaldo.
 
@@ -74,8 +76,8 @@ Ver `ARQUITECTURA.md` §5 para el desglose completo por dominio (23 grupos, al d
 | 6 | Media | `npm run lint` **corre** desde 25/08 (era un `node_modules/tsconfig-paths` incompleto, se reinstaló) y deja a la vista ~10.000 problemas preexistentes: 1021 errores, casi todos `no-explicit-any` en `scripts/`. No está wireado a CI y no puede estarlo hasta podar eso. Criterio mientras tanto: comparar el conteo de errores **por archivo tocado** antes y después del cambio. | `eslint.config.mjs`, `scripts/*` |
 | 7 | Baja | Dos dispositivos despachando el mismo ítem en el mismo segundo todavía pueden crear una tarea gemela: el guard de `useTareas.agregarTarea` compara contra la cache local, no contra la base. **No se ve** (el board fusiona), pero la fila queda y distorsiona Reportes. Se cierra con una restricción en Postgres — ver `PENDIENTES.md`. | `lib/hooks/useTareas.ts` |
 | 8 | Info | Respaldos de la limpieza del 01/09 (`restaurantes_basura_backup_20260901`, `voglio1_datos_backup_20260901`) — RLS activado sin policies, solo `service_role`. Borrables cuando se confirme que no hacía falta nada de esos 12 restaurantes. (`tareas_duplicados_backup_20260826` ya no está en la base.) | Supabase |
-| 9 | Media | **Producción no avisa cuando se rompe.** El realtime estuvo caído por un `
-` en una env var y no lo detectó nada — falla en el browser, sin error de servidor. No hay smoke contra prod ni nadie mirando `/api/log-error`. Ver `PENDIENTES.md`. | — |
+| 9 | Media | **Producción no tiene alertas, solo un dashboard manual.** `/admin` (01/09) muestra plan/actividad/costo de IA por cuenta, pero alguien tiene que abrirlo — nada avisa solo. El realtime estuvo caído por un `
+` en una env var y no lo detectó nada — falla en el browser, sin error de servidor. Sigue sin haber smoke contra prod ni nadie mirando `/api/log-error`. Ver `PENDIENTES.md`. | — |
 
 ### Resueltos (histórico)
 RLS multi-tenant real (44 políticas UPDATE con `WITH CHECK`), login con hard-navigation, matching Facturas→Stock, descuento de stock por merma, `USUARIO_MOCK` hardcoded — todos con causa raíz y fix documentados en `HISTORIAL.md` y en `.claude/docs/hooks.md`.
@@ -104,7 +106,8 @@ app/
   (auth)/         ← login + register (públicas)
   (servicio)/     ← salon/page + kds/page + muro/page (fondo oscuro fijo en KDS/Muro, tema app en Salón)
   (publico)/      ← carta/[slug] (vidriera QR sin login)
-  api/            ← coach, facturas, listas-precios, recetas/import, recetas/save, ingest/escpos, ...
+  admin/          ← dashboard de control del ecosistema, sin route group (no tiene restaurante) — gate real en api/admin/overview
+  api/            ← coach, facturas, listas-precios, recetas/import, recetas/save, ingest/escpos, admin/overview, ...
 lib/
   auth/           ← AuthProvider context + RouteGuard
   hooks/          ← hooks por módulo (useRecetas, useStock, useTareas, useComandas, useMesas, ...)

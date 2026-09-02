@@ -19,20 +19,7 @@ El realtime estuvo caído en prod por un `
 
 El agujero no es ese bug puntual (ya está arreglado y con `.trim()` de por medio): es que no hay **ninguna** señal de salud de producción. Hoy la única forma de saber si algo se rompió es que alguien lo note usando la app.
 
-Lo más barato que lo cubriría, en orden de esfuerzo: (a) un smoke e2e contra prod que loguee y verifique que el WS de realtime conecta — es literalmente el script que encontró esto, y corre en 40 s; (b) el endpoint `/api/log-error` ya recibe errores del cliente y los tira a los logs de Vercel, pero nadie los mira — mandarlos a algún lado con alerta; (c) el dashboard de control del ecosistema (ver más abajo), que necesita esto igual.
-
-### ✅ Hecho — Dashboard de control del ecosistema (01/09)
-`/admin`, gateado por `lib/admin/allowlist.ts` (emails: `facuastrada15@gmail.com`,
-`facu@broscomedor.com`) + `esAdminKOS()` verificado server-side en `/api/admin/overview`
-antes de tocar el admin client. Por restaurante: plan, usuarios, última actividad, costo
-y llamadas de IA (30d). Top de funciones más usadas (registros creados en 30d sobre 12
-tablas — mide escritura, no clicks). Filtro por restaurante (todo el desglose viaja
-por tenant en una sola respuesta, el cliente filtra sin pedir de nuevo). Changelog de
-los últimos 15 commits de `main` vía API pública de GitHub (repo público, sin token) —
-push a main es deploy automático, así que esto ES el registro de deploys.
-**Sin cubrir todavía:** "a quién se le rompió un import" — hoy no hay señal de fallos,
-solo de volumen. Si un import queda en 0 silenciosamente, esta pantalla no lo distingue
-de "no lo usó". Retomar si hace falta antes del cliente 5.
+**`/admin` (01/09) ya cubre el punto (c)** — dashboard de control del ecosistema con plan/actividad/costo de IA por cuenta (detalle en `HISTORIAL.md`). No es alerta: alguien tiene que abrirlo. Sigue faltando (a) o (b) para que algo avise solo, y el dashboard tampoco distingue "a quién se le rompió un import" de "no lo usó" — solo mide volumen, no fallos.
 
 ### Fiscal ARCA — homologación end-to-end
 Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/emitir/route.ts`). Falta: certificado real de ARCA del contribuyente, probar contra el servidor de testing de AFIP, URLs de prod en `config_fiscal`, cachear token/sign WSAA en Supabase.
@@ -52,27 +39,10 @@ archivo y ese difieren, manda ese.
 y México — una empresa argentina no puede abrir cuenta). El cobro automático va por
 **Mercado Pago Suscripciones** (API `preapproval`). Decisión 004.
 
-### ✅ Hecho — Medición de consumo de IA (01/09)
-Tabla `ia_uso` + `lib/ia/costos.ts`. Asienta cada llamada con tokens, cache y costo USD,
-imputada al `restaurante_id` en las 12 rutas de IA (incluido el Coach, que asienta aparte
-por usar streaming propio). Va antes que cualquier plan: es el único costo variable del
-negocio y el que define el tope del Coach (decisión 008).
-**Pendiente de verificar, no de construir:** todavía no se vio una fila real en prod —
-la primera aparece cuando alguien use una ruta de IA. Chequear con
-`select tag, modelo, costo_usd, created_at from ia_uso order by created_at desc limit 20;`
-antes de confiar en la estimación de la decisión 008.
-
-### ✅ Hecho — Estructura de planes (01/09)
-`restaurantes.plan` (TEXT nullable, CHECK `base|cocina|control|produccion`, **sin default**:
-por decisión 003 nadie paga todavía, así que ninguna cuenta existente puede perder acceso
-por una columna nueva — mismo criterio que `perfilRestaurante` null en `usePermisos`).
-`lib/planes.ts` mapea plan → módulos, acumulativo (Cocina ⊇ Base, Control ⊇ Cocina), con
-los 15 módulos explícitos de la decisión 006 y 9 inferidos por analogía (marcados como tal
-en el archivo — revisar con el segundo cliente). Hook `usePlan()` en
-`lib/hooks/usePlan.ts`, mismo patrón SWR que `useRestauranteConfig`.
-**`puedeUsar(modulo)` existe pero no está cableado a ninguna pantalla todavía** — es el
-siguiente ítem (Feature gating), separado a propósito para poder introducir el dato sin
-tocar el acceso de nadie el mismo día.
+**Ya hecho (01/09, detalle en `HISTORIAL.md`):** tabla `ia_uso` con costo por llamada
+imputado a las 12 rutas de IA; `restaurantes.plan` + `lib/planes.ts` (mapeo plan→módulos)
++ hook `usePlan()`. `puedeUsar(modulo)` existe pero no está cableado a ninguna pantalla
+todavía — es el siguiente ítem.
 
 ### Feature gating (siguiente)
 Coach (con tope mensual), HACCP, Presupuesto/CMV y Reportes solo en Control; OPS/mise/pase
