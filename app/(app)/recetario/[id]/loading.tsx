@@ -1,4 +1,9 @@
-export default function RecetaDetailLoading() {
+// Compartido entre dos momentos (ver .claude/docs/ui.md § Skeletons de carga):
+// Next.js monta este archivo como loading.tsx durante la transición de ruta,
+// y RecetaDetallePage reusa el mismo componente para el fetch del hook ya
+// montado (useRecetas todavía sin datos) — evita el parpadeo de pasar de este
+// esqueleto a un "Cargando…" centrado antes de llegar al contenido real.
+export function RecetaDetailSkeleton() {
   return (
     <div style={{ height: '100%', background: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Header navy */}
@@ -37,4 +42,8 @@ export default function RecetaDetailLoading() {
       </div>
     </div>
   )
+}
+
+export default function RecetaDetailLoading() {
+  return <RecetaDetailSkeleton />
 }

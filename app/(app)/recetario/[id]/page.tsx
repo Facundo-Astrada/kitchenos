@@ -11,8 +11,10 @@ import { useProduccionRegistros, type ProduccionRegistro } from '@/lib/hooks/use
 import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
 import type { Ingrediente } from '@/types'
 import PhotoPicker from '@/components/ui/PhotoPicker'
+import { FilterChips } from '@/components/ui'
 import RecetaOpsSheet from './RecetaOpsSheet'
 import IngredienteOpsSheet from './IngredienteOpsSheet'
+import { RecetaDetailSkeleton } from './loading'
 import { createClient } from '@/lib/supabase/client'
 import { upsertMiseChecklistItem, PLAZAS_OPS } from '@/lib/ops/mise'
 import type { OpsResult } from '@/components/ops/OpsPanel'
@@ -274,9 +276,9 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
     if (!receta || actualizandoReceta) return
     setActualizandoReceta(true)
     try {
-      for (const ing of receta.ingredientes ?? []) {
-        await actualizarIngrediente(ing.id, { cantidad: Math.round(ing.cantidad * promedio * 100) / 100 })
-      }
+      await Promise.all((receta.ingredientes ?? []).map(ing =>
+        actualizarIngrediente(ing.id, { cantidad: Math.round(ing.cantidad * promedio * 100) / 100 })
+      ))
       setActualizarSugerencia(null)
     } finally {
       setActualizandoReceta(false)
@@ -373,11 +375,70 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [receta, scaleFactor, recetas])
 
-  if (loading || fetchingDirect) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-      <p style={{ fontSize: 13, color: 'var(--text-2)' }}>Cargando…</p>
-    </div>
-  )
+  // ── Nav de secciones — la ficha es un scroll único largo (Ingredientes,
+  // Procedimiento, Historial, Food Cost); esto da un salto directo en vez de
+  // forzar a bajar todo a mano. El chip activo se recalcula por geometría en
+  // cada scroll (no IntersectionObserver): con una sola fuente de verdad no
+  // hay carrera entre "qué cruzó la línea" y "llegaste al fondo" — Historial
+  // y Food Cost son secciones cortas al final que, con un observer, nunca
+  // llegan a cruzar la zona de disparo por sí solas.
+  type Seccion = 'ingredientes' | 'procedimiento' | 'historial' | 'foodcost'
+  const [seccionActiva, setSeccionActiva] = useState<Seccion>('ingredientes')
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const ingredientesRef = useRef<HTMLDivElement>(null)
+  const procedimientoRef = useRef<HTMLDivElement>(null)
+  const historialRef = useRef<HTMLDivElement>(null)
+  const foodCostRef = useRef<HTMLDivElement>(null)
+  const seccionRefs = useMemo(() => ({
+    ingredientes: ingredientesRef, procedimiento: procedimientoRef, historial: historialRef, foodcost: foodCostRef,
+  }), [])
+
+  useEffect(() => {
+    const container = bodyRef.current
+    if (!container) return
+    const entradas: [Seccion, HTMLDivElement][] = (Object.entries(seccionRefs) as [Seccion, typeof ingredientesRef][])
+      .filter(([id]) => id !== 'foodcost' || verCostos)
+      .map(([id, ref]) => [id, ref.current])
+      .filter((e): e is [Seccion, HTMLDivElement] => e[1] != null)
+    if (entradas.length === 0) return
+
+    const LINEA = 0.3 // "línea de disparo": 30% del alto visible del contenedor
+    let raf: number | null = null
+    function calcular() {
+      raf = null
+      // Al fondo del scroll gana la última sección, aunque sea corta y su
+      // título nunca haya cruzado la línea por sí solo.
+      if (container!.scrollTop + container!.clientHeight >= container!.scrollHeight - 4) {
+        setSeccionActiva(entradas[entradas.length - 1][0])
+        return
+      }
+      const linea = container!.getBoundingClientRect().top + container!.clientHeight * LINEA
+      let activa = entradas[0][0]
+      for (const [id, el] of entradas) {
+        if (el.getBoundingClientRect().top <= linea) activa = id
+      }
+      setSeccionActiva(activa)
+    }
+    function onScroll() {
+      if (raf == null) raf = requestAnimationFrame(calcular)
+    }
+    calcular()
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      container.removeEventListener('scroll', onScroll)
+      if (raf != null) cancelAnimationFrame(raf)
+    }
+  }, [verCostos, receta?.id, seccionRefs])
+
+  function irASeccion(id: Seccion) {
+    const el = seccionRefs[id].current
+    const container = bodyRef.current
+    if (!el || !container) return
+    const delta = el.getBoundingClientRect().top - container.getBoundingClientRect().top
+    container.scrollTo({ top: container.scrollTop + delta - 8, behavior: 'smooth' })
+  }
+
+  if (loading || fetchingDirect) return <RecetaDetailSkeleton />
 
   if (!receta) return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12 }}>
@@ -663,7 +724,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
       <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-            <button onClick={() => router.push('/recetario')} style={btnClear}>
+            <button onClick={() => router.push('/recetario')} aria-label="Volver al recetario" className="hit-slop" style={btnClear}>
               <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>arrow_back</span>
             </button>
             <div style={{ minWidth: 0 }}>
@@ -677,22 +738,36 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-            <button onClick={() => handleExportPDF(receta)} style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 10, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button onClick={() => handleExportPDF(receta)} title="Exportar a PDF" aria-label="Exportar a PDF" style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 10, width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#fff' }}>picture_as_pdf</span>
             </button>
-            <button onClick={handleDuplicar} style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 10, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <button onClick={handleDuplicar} title="Duplicar receta" aria-label="Duplicar receta" style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 10, width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#fff' }}>content_copy</span>
             </button>
-            <button onClick={openEditReceta} style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 10, width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <button onClick={openEditReceta} title="Editar receta" aria-label="Editar receta" style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 10, width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#fff' }}>edit</span>
             </button>
           </div>
         </div>
       </div>
 
+      {/* ── Nav de secciones — salto directo, no hay que bajar todo a mano ── */}
+      <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '8px 14px', flexShrink: 0 }}>
+        <FilterChips
+          chips={[
+            { value: 'ingredientes', label: 'Ingredientes' },
+            { value: 'procedimiento', label: 'Procedimiento' },
+            { value: 'historial', label: 'Historial' },
+            ...(verCostos ? [{ value: 'foodcost', label: 'Food Cost' } as const] : []),
+          ]}
+          active={seccionActiva}
+          onChange={irASeccion}
+        />
+      </div>
+
       {/* ── Body: scroll continuo ── */}
-      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 0 80px' }}>
+      <div ref={bodyRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 0 80px' }}>
 
         {/* Foto de la receta */}
         {receta.foto_url && (
@@ -815,7 +890,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
         )}
 
         {/* ═══ INGREDIENTES ═══ */}
-        <div style={{ padding: '14px 14px 0' }}>
+        <div ref={ingredientesRef} style={{ padding: '14px 14px 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)' }}>restaurant</span>
             <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Ingredientes</span>
@@ -1000,7 +1075,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
         </div>
 
         {/* ═══ PROCEDIMIENTO ═══ */}
-        <div style={{ padding: '18px 14px 0' }}>
+        <div ref={procedimientoRef} style={{ padding: '18px 14px 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)' }}>format_list_numbered</span>
             <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Procedimiento</span>
@@ -1035,16 +1110,18 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
         </div>
 
         {/* ═══ HISTORIAL DE PRODUCCIÓN ═══ */}
-        <HistorialProduccion
-          historial={historial}
-          open={historialOpen}
-          loading={historialLoading}
-          sugerencia={actualizarSugerencia}
-          actualizando={actualizandoReceta}
-          onToggle={() => setHistorialOpen(v => !v)}
-          onActualizar={handleActualizarIngredientes}
-          onIgnorar={() => setActualizarSugerencia(null)}
-        />
+        <div ref={historialRef}>
+          <HistorialProduccion
+            historial={historial}
+            open={historialOpen}
+            loading={historialLoading}
+            sugerencia={actualizarSugerencia}
+            actualizando={actualizandoReceta}
+            onToggle={() => setHistorialOpen(v => !v)}
+            onActualizar={handleActualizarIngredientes}
+            onIgnorar={() => setActualizarSugerencia(null)}
+          />
+        </div>
 
         {/* ═══ FOOD COST (colapsable) ═══ */}
         {/* Gate de plata (PLAN-ACCESO-Y-USO B3): este bloque estaba SIN gatear.
@@ -1053,7 +1130,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
             costo por kilo a cualquiera que tuviera el módulo. Era la fuga más
             grande de las que había. */}
         {verCostos && (
-        <div style={{ padding: '18px 14px 0' }}>
+        <div ref={foodCostRef} style={{ padding: '18px 14px 0' }}>
           <button
             onClick={() => setFcOpen(!fcOpen)}
             style={{
