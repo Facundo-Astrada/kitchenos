@@ -314,3 +314,14 @@ Registro de decisiones tomadas con Facundo durante el diseño y construcción de
 - B9-B10 se diseñan genéricos — sin asumir los supuestos de una parrilla (turnos de comensales, no de asado).
 - La misma cautela aplica a la estructura de planes $60/$99 (`PENDIENTES.md` 🟡) cuando se replantee: el feature-gating no puede asumir un solo perfil de restaurante.
 - No descarta seguir usando Bros/Rescoldo como bancos de prueba operativos — solo deja de ser el único criterio de "vale la pena construir esto".
+
+---
+
+## 24. "Copiar pase" — capturar el WhatsApp en el origen, no imitarlo con texto libre
+
+**Decisión:** Franco (Bros) tipea a mano en WhatsApp, todas las noches, un mensaje con lo que queda para el turno siguiente + lo que se resolvió + notas sueltas. Dos salidas posibles: (B1) un textarea libre editable en una hoja nueva, barato pero la app nunca se entera de lo que el cocinero termina agregando a mano; (B2) capturar esas anotaciones sueltas como notas de plaza estructuradas (`pase_mensajes`, ya existían para otro fin) y generar el mensaje desde datos reales. Facundo eligió B2, y confirmó que el bloque "Hecho" (tareas en `listo` del turno) va incluido.
+**Por qué:** B1 reproduce el síntoma con un atajo — dos fuentes de verdad, la app sigue sin saber qué informó el cocinero. B2 hace que un solo tipeo alimente cuatro lectores (el mensaje copiado, el board de Producción, el Pase, el Muro) en vez de que la nota se escriba una vez para WhatsApp y se pierda para todo lo demás.
+**Cómo se aplica:**
+- El campo "¿algo que el turno siguiente deba saber?" de `EntregaPlazaSheet` dejó de ser un párrafo libre (`cierres_turno.notas_servicio`, ya sin lector) — reusa el componente `NotasPlaza` (bullets en `pase_mensajes`), precargado con lo que ya se escribió en el turno.
+- `lib/ops/textoPase.ts` es la única función que arma el texto — cualquier entry point nuevo (Mise, Producción, lo que siga) llama a la misma, no reinventa el formato.
+- No se construyó B3 (bullets tipados hecho/alerta/pendiente/ingreso, con conversión a tarea real): se shipea B2 primero y se mira dos semanas qué escribe el equipo antes de decidir si esa fricción extra se justifica.
