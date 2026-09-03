@@ -4,12 +4,16 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { ItemOps, type Densidad } from './ItemOps'
 import { QuickAdd } from './QuickAdd'
 import { NotasPlaza } from './NotasPlaza'
+import { CopiarPaseBoton } from './CopiarPaseBoton'
 import type { CrearTareaSheetConfirmData } from './CrearTareaSheet'
 import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
 import { useNotasPlaza } from '@/lib/hooks/useNotasPlaza'
 import { useCierresTurno } from '@/lib/hooks/useCierresTurno'
+import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
+import { useTareas } from '@/lib/hooks/useTareas'
+import { useAuth } from '@/lib/auth/context'
 import { plazaColor, plazaIcon, plazaLabel, todasLasPlazas } from '@/lib/constants'
-import { hoyOperativo } from '@/lib/ops/turnos'
+import { hoyOperativo, resolverTurnoDePlaza } from '@/lib/ops/turnos'
 import type { OpsEstado, OpsModo, PaseMensaje, Plaza, Tarea, TareaPrioridad } from '@/types'
 
 // ── Board de OPS Producción, vista "Todo" ────────────────────────────────────
@@ -135,7 +139,13 @@ export function ProduccionBoard({
   // entregó el turno actual?" se responde que no en el instante siguiente a la
   // entrega y el plegado se apagaría solo. La hora de corte no tiene ese
   // problema, y además sirve igual con uno, dos o cinco turnos por día.
-  const { cierres } = useCierresTurno()
+  const { cierres, entregados } = useCierresTurno()
+  // "Copiar pase" en foco (ver más abajo) necesita el turno vigente de la
+  // plaza + la lista completa de tareas (no solo la del día — un pase_turno
+  // despachado ahora puede caer en la jornada de mañana).
+  const { turnosActivos } = useTurnosServicio()
+  const { tareas: tareasCompletas } = useTareas()
+  const { perfil } = useAuth()
   const cortePorPlaza = useMemo(() => {
     const hoy = hoyOperativo()
     const m = new Map<string, string>()
@@ -276,21 +286,40 @@ export function ProduccionBoard({
     if (foco && !columnaFoco) setFoco(null)
   }, [foco, columnaFoco])
 
+  // Solo las columnas de Carta son una plaza real (plazaKey) — un paso de
+  // Menú/Evento no tiene pase de turno propio.
+  const focoTurno = useMemo(() => (
+    columnaFoco?.plazaKey
+      ? resolverTurnoDePlaza({ turnos: turnosActivos, entregados, plaza: columnaFoco.plazaKey })
+      : null
+  ), [columnaFoco, turnosActivos, entregados])
+
   if (foco && columnaFoco) {
     return (
       <div>
-        <button
-          onClick={() => setFoco(null)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10,
-            padding: '6px 12px', borderRadius: 99, cursor: 'pointer',
-            background: 'var(--surface)', border: '1px solid var(--border)',
-            color: 'var(--text-2)', fontSize: 12, fontWeight: 600, fontFamily: 'inherit',
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_back</span>
-          Ver todo el turno
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <button
+            onClick={() => setFoco(null)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '6px 12px', borderRadius: 99, cursor: 'pointer',
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              color: 'var(--text-2)', fontSize: 12, fontWeight: 600, fontFamily: 'inherit',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_back</span>
+            Ver todo el turno
+          </button>
+          {columnaFoco.plazaKey && focoTurno && (
+            <CopiarPaseBoton
+              plaza={columnaFoco.plazaKey} fecha={focoTurno.fecha} jornadaProxima={focoTurno.jornadaProxima}
+              tareas={tareasCompletas} plazasCustom={plazasCustom} turnoNombre={focoTurno.turnoNombre}
+              notasHoy={notasDe(columnaFoco.plazaKey).filter(n => n.turno_fecha === focoTurno.fecha)}
+              autor={[perfil?.nombre, perfil?.apellido].filter(Boolean).join(' ').trim() || null}
+              entregadoAt={null}
+            />
+          )}
+        </div>
         <ColumnaOps
           columna={columnaFoco}
           subtareasByParent={subtareasByParent}

@@ -222,6 +222,27 @@ export function turnoVigente(opts: {
 }
 
 /**
+ * Todo lo que necesita "Copiar pase" de una plaza en un solo lugar: en qué
+ * jornada/turno está parada (turnoVigente) y a qué jornada va lo que se
+ * despache ahora mismo (turnoSiguiente) — el mismo cálculo que ya hacía el
+ * Mise a mano (ClientView.tsx), acá extraído para que Producción lo use sin
+ * duplicarlo.
+ */
+export function resolverTurnoDePlaza(opts: {
+  turnos: TurnoServicio[]
+  entregados: ReadonlySet<string>
+  plaza: string
+  now?: Date
+}): { fecha: string; turnoId: string | null; turnoNombre: string | null; jornadaProxima: string } {
+  const vigente = turnoVigente({ turnos: opts.turnos, entregados: opts.entregados, plaza: opts.plaza, now: opts.now })
+  const fecha = vigente?.jornada ?? hoyOperativo(opts.now)
+  const turnoId = vigente?.turnoId ?? null
+  const turnoNombre = opts.turnos.find(t => t.id === turnoId)?.nombre ?? null
+  const sig = turnoId ? turnoSiguiente(fecha, turnoId, opts.turnos) : null
+  return { fecha, turnoId, turnoNombre, jornadaProxima: sig?.jornada ?? sumarDias(fecha, 1) }
+}
+
+/**
  * checklist_registros.turno codifica turno+fase ('cena:apertura') en la
  * misma columna TEXT que antes solo guardaba la fase ('apertura'/'cierre').
  * Se resuelve UNA VEZ al escribir, nunca se re-deriva al leer — si se

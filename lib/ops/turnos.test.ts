@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   fechaEnTz, horaEnTz, hoyOperativo, sumarDias, TZ_DEFAULT,
   turnoActivo, turnoAnterior, turnoSiguiente, encodeTurnoFase, parseTurnoFase, cierreIncompleto,
-  turnoVigente, claveCierre, proximoTurnoEnVentana,
+  turnoVigente, claveCierre, proximoTurnoEnVentana, resolverTurnoDePlaza,
 } from './turnos'
 import type { TurnoServicio } from '@/types'
 
@@ -231,6 +231,40 @@ describe('turnoVigente — manda el pase, el reloj es la red de contención', ()
 
   it('sin turnos activos → null', () => {
     expect(turnoVigente({ now: new Date('2026-07-30T14:00:00Z'), turnos: [] })).toBeNull()
+  })
+})
+
+describe('resolverTurnoDePlaza — lo que necesita "Copiar pase" en un solo lugar', () => {
+  it('sin entregas, jornadaProxima es el turno siguiente del reloj', () => {
+    const d = new Date('2026-07-30T14:00:00Z') // 11:00 ART → almuerzo
+    const r = resolverTurnoDePlaza({ now: d, turnos: TURNOS, entregados: new Set(), plaza: 'parrilla' })
+    expect(r).toEqual({ fecha: '2026-07-30', turnoId: 'almuerzo', turnoNombre: 'Almuerzo', jornadaProxima: '2026-07-30' })
+  })
+
+  // El caso real: cerrando la cena a la noche, lo despachado ahora es para
+  // el almuerzo de MAÑANA, no de hoy — mismo cruce de jornada que turnoSiguiente.
+  it('cerrando la cena, jornadaProxima cruza al día siguiente', () => {
+    const d = new Date('2026-07-31T01:00:00Z') // 22:00 ART 30/07 → cena
+    const r = resolverTurnoDePlaza({ now: d, turnos: TURNOS, entregados: new Set(), plaza: 'parrilla' })
+    expect(r).toEqual({ fecha: '2026-07-30', turnoId: 'cena', turnoNombre: 'Cena', jornadaProxima: '2026-07-31' })
+  })
+
+  it('la entrega ya hecha adelanta fecha/turno, igual que turnoVigente', () => {
+    const d = new Date('2026-07-30T17:00:00Z') // 14:00 ART
+    const entregados = new Set([claveCierre('2026-07-30', 'almuerzo', 'frios')])
+    const r = resolverTurnoDePlaza({ now: d, turnos: TURNOS, entregados, plaza: 'frios' })
+    expect(r.fecha).toBe('2026-07-30')
+    expect(r.turnoId).toBe('cena')
+    expect(r.jornadaProxima).toBe('2026-07-31')
+  })
+
+  it('sin turnos activos, degrada a hoyOperativo + un día, sin turno', () => {
+    const d = new Date('2026-07-30T14:00:00Z')
+    const r = resolverTurnoDePlaza({ now: d, turnos: [], entregados: new Set(), plaza: 'parrilla' })
+    expect(r.turnoId).toBeNull()
+    expect(r.turnoNombre).toBeNull()
+    expect(r.fecha).toBe(hoyOperativo(d))
+    expect(r.jornadaProxima).toBe(sumarDias(hoyOperativo(d), 1))
   })
 })
 
