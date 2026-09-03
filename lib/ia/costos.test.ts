@@ -54,3 +54,19 @@ describe('calcularCostoUsd', () => {
     expect(calcularCostoUsd('claude-sonnet-4-6', { tokensEntrada: 0, tokensSalida: 0 })).toBe(0)
   })
 })
+
+describe('precios de los modelos vigentes', () => {
+  it('cobra Sonnet 5 a su precio, no al del 4.6 que reemplazó', () => {
+    // Un millón de tokens de entrada: $2, no los $3 del fallback.
+    expect(calcularCostoUsd('claude-sonnet-5', { tokensEntrada: 1_000_000, tokensSalida: 0 }))
+      .toBeCloseTo(2, 6)
+    expect(calcularCostoUsd('claude-sonnet-5', { tokensEntrada: 0, tokensSalida: 1_000_000 }))
+      .toBeCloseTo(10, 6)
+  })
+
+  it('no confunde sonnet-5 con sonnet-4-6 al matchear por prefijo', () => {
+    const s5 = calcularCostoUsd('claude-sonnet-5', { tokensEntrada: 1_000_000, tokensSalida: 0 })
+    const s46 = calcularCostoUsd('claude-sonnet-4-6', { tokensEntrada: 1_000_000, tokensSalida: 0 })
+    expect(s5).toBeLessThan(s46)
+  })
+})

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { SugerenciaResultado } from '@/lib/produccion/sugerencia'
 import type { Tarea } from '@/types'
+import { IAIcon } from '@/components/ui'
 
 const PLAZA_LABELS: Record<string, string> = {
   parrilla: 'Parrilla', frios: 'Fríos', calientes: 'Calientes',
@@ -96,7 +97,7 @@ export default function SugerenciaProduccionSheet({ tareasExistentes, onConfirm,
         <div style={{ padding: '18px 16px 12px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)' }}>
           <div>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#8b5cf6' }}>auto_awesome</span>
+              <IAIcon size={18} />
               Sugerir producción
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-3)' }}>

@@ -8,7 +8,7 @@ import { useVentasCerradas, type VentaCerrada, type AdicionItem } from '@/lib/ho
 import { useCajaTurno } from '@/lib/hooks/useCajaTurno'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
 import type { Venta, VentaItem, OrigenVenta, CajaTurno, CajaMovimiento } from '@/types'
-import { SegmentedTabs, FilterChips, EmptyState, Num } from '@/components/ui'
+import { SegmentedTabs, FilterChips, EmptyState, Num, IAIcon, iaTinte } from '@/components/ui'
 import type { SegmentedTab, FilterChip } from '@/components/ui'
 import { normalizarNombrePlato as normName, buildCartaItemLookup } from '@/lib/reportes/consumoTeorico'
 
@@ -1021,9 +1021,9 @@ export default function VentasPage() {
                   >
                     <div
                       className="flex items-center justify-center rounded-xl shrink-0"
-                      style={{ width: 52, height: 52, background: '#8b5cf618' }}
+                      style={{ width: 52, height: 52, background: iaTinte(10) }}
                     >
-                      <span className="material-symbols-outlined text-[28px]" style={{ color: '#8b5cf6' }}>auto_awesome</span>
+                      <IAIcon size={28} />
                     </div>
                     <div>
                       <p className="text-[15px] font-semibold" style={{ color: 'var(--text-1)' }}>Pegar datos (IA)</p>

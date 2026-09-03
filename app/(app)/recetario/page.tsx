@@ -18,7 +18,7 @@ import ImageCropModal from '@/components/ui/ImageCropModal'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import ImportadorFichasTecnicas from '@/components/importador/ImportadorFichasTecnicas'
 import { clasificarArchivo } from '@/lib/recetas/iaImport'
-import { HeaderAction, Skeleton, FilterChips, EmptyState } from '@/components/ui'
+import { HeaderAction, Skeleton, FilterChips, EmptyState, IAButton, IAPanel } from '@/components/ui'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import {
   CargaRapidaIngredientes, TotalesRapidosBar, nuevaFilaRapida, filasToIngredientesData,
@@ -326,6 +326,9 @@ export default function RecetarioPage() {
     if (!el) return
     el.scrollTo({ left: TAB_IDS.indexOf(tabRef.current) * el.clientWidth, behavior: 'auto' })
   }, [creando, cargaRapida])
+  // Si "Nueva receta" abre con el panel de IA desplegado. Solo lo apaga quien
+  // eligió explícitamente cargar a mano desde el estado vacío.
+  const [importarConIA, setImportarConIA] = useState(true)
   const [showFichas, setShowFichas] = useState(false)
   const [showLink, setShowLink] = useState(false)
 
@@ -472,10 +475,12 @@ export default function RecetarioPage() {
           precio_venta: enrichingDraft.precio_venta ?? undefined,
           tiempo_min: enrichingDraft.tiempo_min ?? undefined,
         } : undefined}
-        onClose={() => { setCreando(false); setEnrichingDraft(null) }}
+        iaAbierta={importarConIA}
+        onClose={() => { setCreando(false); setEnrichingDraft(null); setImportarConIA(true) }}
         onCreated={(id, asDraft) => {
           setCreando(false)
           setEnrichingDraft(null)
+          setImportarConIA(true)
           if (asDraft) { setTab('ideas') }
           else { router.push(`/recetario/${id}`) }
         }}
@@ -697,7 +702,9 @@ export default function RecetarioPage() {
                 <EmptyState
                   icon="menu_book"
                   title="Sin recetas aún"
-                  cta={{ label: 'Nueva receta', onClick: () => setCreando(true) }}
+                  subtitle="Cargá una a mano, o sacale una foto a tus fichas y dejá que la IA las transcriba."
+                  cta={{ label: 'Cargar a mano', onClick: () => { setImportarConIA(false); setCreando(true) } }}
+                  ctaIA={{ label: 'Importar con IA', onClick: () => { setImportarConIA(true); setCreando(true) } }}
                 />
               ) : (
                 <EmptyState icon="menu_book" title="Sin resultados" />
@@ -2228,11 +2235,17 @@ interface NuevaFichaProps {
   agregarProducto: (datos: any) => Promise<void>
   actualizarReceta: (id: string, d: any) => Promise<void>
   initialDraft?: InitialDraft
+  /**
+   * Si el panel de import por IA arranca abierto. Quien vino por "Nueva
+   * receta" eligió cargar a mano y no necesita el panel encima; quien vino por
+   * "Importar con IA" viene justamente a eso.
+   */
+  iaAbierta?: boolean
   onClose: () => void
   onCreated: (id: string, asDraft?: boolean) => void
 }
 
-function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIngrediente, agregarProducto, actualizarReceta, initialDraft, onClose, onCreated }: NuevaFichaProps) {
+function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIngrediente, agregarProducto, actualizarReceta, initialDraft, iaAbierta = true, onClose, onCreated }: NuevaFichaProps) {
   const [ings, setIngs] = useState<FormIng[]>(() => [{ id: uid(), cantidad: '', unidad: 'kg', nombre: '', costo_unitario: 0, grupo: '' }])
   // Etapa actual: se asigna a los ingredientes que se agreguen de acá en adelante
   // (mismo criterio de agrupación que la ficha del recetario, ver .claude/docs/columnas.md).
@@ -2263,7 +2276,7 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
   const [iaPreviewUrl, setIaPreviewUrl] = useState<string | null>(null)
   const [iaInputText, setIaInputText] = useState<string | null>(null)
   const [iaMultiResults, setIaMultiResults] = useState<IAApiResult[] | null>(null)
-  const [iaCollapsed, setIaCollapsed] = useState(false)
+  const [iaCollapsed, setIaCollapsed] = useState(!iaAbierta)
   const [cropSrc, setCropSrc] = useState<string | null>(null)
   const [cropMode, setCropMode] = useState<ImportMode>(null)
   const [cropOriginalFile, setCropOriginalFile] = useState<File | null>(null)
@@ -2769,28 +2782,16 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
 
         {/* ═══ IMPORTAR CON IA ═══ */}
         {iaCollapsed ? (
-          /* Collapsed state — subtle link to re-open */
-          <div style={{ marginBottom: 14, textAlign: 'center' }}>
-            <button
-              onClick={() => setIaCollapsed(false)}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px',
-                borderRadius: 99, transition: 'background .15s',
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#4361a0' }}>auto_awesome</span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#4361a0' }}>Importar otra receta con IA</span>
-            </button>
+          /* Colapsado: era un link de 12px, más escondido en el segundo uso que
+             en el primero — justo al revés de lo que conviene. Ahora es el
+             mismo botón de IA que en el estado vacío. */
+          <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'center' }}>
+            <IAButton label="Importar otra receta con IA" onClick={() => setIaCollapsed(false)} />
           </div>
         ) : (
-          /* Expanded state — full IA import options */
-          <div style={{ background: 'linear-gradient(135deg, rgba(28,45,74,.05), rgba(168,85,247,.05))', borderRadius: 16, padding: '14px 12px', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#4361a0' }}>auto_awesome</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>Importar con IA</span>
-              <span style={{ fontSize: 10, color: 'var(--text-3)', marginLeft: 'auto' }}>Más rápido</span>
-            </div>
+          /* Desplegado: todas las fuentes.
+             El degradé navy→violeta que tenía está prohibido por DESIGN.md §10. */
+          <IAPanel title="Importar con IA" hint="Más rápido" style={{ marginBottom: 16 }}>
 
             {/* Grid 2×2: Foto, Imagen, Archivo, Link */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
@@ -2824,7 +2825,7 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#4361a0' }}>text_snippet</span>
+                    <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>text_snippet</span>
                     <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>Pegar texto de receta</span>
                   </div>
                   <button onClick={() => setIaMode(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}>
@@ -2865,7 +2866,7 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
                 </button>
               </div>
             )}
-          </div>
+          </IAPanel>
         )}
 
         {/* Separador */}
@@ -3127,7 +3128,7 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
           }} onClick={e => e.stopPropagation()}>
             <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 14px' }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#4361a0' }}>link</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--accent)' }}>link</span>
               <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>Pegar link de Google</span>
             </div>
             <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 12px', lineHeight: 1.5 }}>
@@ -3746,7 +3747,7 @@ const lbl: React.CSSProperties = { fontSize: 9, fontWeight: 700, color: 'var(--t
 const inp: React.CSSProperties = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 10px', fontSize: 12, fontFamily: 'inherit', color: 'var(--text-1)', outline: 'none', width: '100%', boxSizing: 'border-box' as const }
 const iaFieldStyle: React.CSSProperties = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 10px', fontSize: 12, fontFamily: 'inherit', color: 'var(--text-1)', outline: 'none', width: '100%', boxSizing: 'border-box' as const }
 const iaCardBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: 'rgba(28,45,74,.06)', border: 'none', borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' as const, transition: 'background .15s' }
-const iaCardIcon: React.CSSProperties = { fontSize: 22, color: '#4361a0', flexShrink: 0, opacity: 0.8 }
+const iaCardIcon: React.CSSProperties = { fontSize: 22, color: 'var(--accent)', flexShrink: 0, opacity: 0.8 }
 const iaCardLabel: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: 'var(--text-1)' }
 
 // ════════════════════════════════════════════════════════════════════

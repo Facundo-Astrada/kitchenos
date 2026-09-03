@@ -19,6 +19,10 @@ interface PrecioModelo {
 }
 
 const PRECIOS: Record<string, PrecioModelo> = {
+  // Sonnet 5 es más barato que el 4.6 al que reemplaza. Ojo con el orden de
+  // las claves: `precioDe` matchea por prefijo, y 'claude-sonnet-4-6' no es
+  // prefijo de 'claude-sonnet-5', así que no se pisan.
+  'claude-sonnet-5': { entrada: 2, salida: 10 },
   'claude-sonnet-4-6': { entrada: 3, salida: 15 },
   'claude-haiku-4-5': { entrada: 1, salida: 5 },
 }

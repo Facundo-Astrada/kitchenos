@@ -5,6 +5,7 @@
 // Regla de oro: ninguna pantalla introduce empty states propios; usa este componente.
 
 import { CSSProperties } from 'react'
+import { IAButton } from './IA'
 
 interface EmptyStateProps {
   icon: string
@@ -14,10 +15,20 @@ interface EmptyStateProps {
     label: string
     onClick: () => void
   }
+  /**
+   * Oferta secundaria de IA. La pantalla vacía es el momento en que el usuario
+   * más la necesita y donde antes no se le ofrecía: en Recetario la importación
+   * vivía adentro del formulario de carga manual, o sea que para encontrarla ya
+   * tenías que haber elegido cargar a mano.
+   */
+  ctaIA?: {
+    label: string
+    onClick: () => void
+  }
   style?: CSSProperties
 }
 
-export function EmptyState({ icon, title, subtitle, cta, style }: EmptyStateProps) {
+export function EmptyState({ icon, title, subtitle, cta, ctaIA, style }: EmptyStateProps) {
   return (
     <div
       style={{
@@ -43,24 +54,29 @@ export function EmptyState({ icon, title, subtitle, cta, style }: EmptyStateProp
           {subtitle}
         </p>
       )}
-      {cta && (
-        <button
-          onClick={cta.onClick}
-          style={{
-            marginTop: 16,
-            padding: '8px 20px',
-            borderRadius: 99,
-            fontSize: 13,
-            fontWeight: 700,
-            fontFamily: 'inherit',
-            background: 'var(--navy)',
-            color: '#fff',
-            border: 'none',
-            cursor: 'pointer',
-          }}
-        >
-          {cta.label}
-        </button>
+      {(cta || ctaIA) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 16 }}>
+          {cta && (
+            <button
+              onClick={cta.onClick}
+              style={{
+                minHeight: 44,
+                padding: '10px 20px',
+                borderRadius: 99,
+                fontSize: 13,
+                fontWeight: 700,
+                fontFamily: 'inherit',
+                background: 'var(--navy)',
+                color: '#fff',
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              {cta.label}
+            </button>
+          )}
+          {ctaIA && <IAButton label={ctaIA.label} onClick={ctaIA.onClick} />}
+        </div>
       )}
     </div>
   )

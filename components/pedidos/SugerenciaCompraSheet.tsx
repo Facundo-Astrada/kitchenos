@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import type { SugerenciaCompraResultado, SugerenciaCompraItem } from '@/lib/compras/sugerencia'
+import { IAIcon } from '@/components/ui'
 
 function labelEntrega(dias: number | null): string {
   if (dias === null) return 'sin días de entrega cargados'
@@ -63,7 +64,7 @@ export default function SugerenciaCompraSheet({ onCrearPedido, onClose }: Props)
         <div style={{ padding: '18px 16px 12px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)' }}>
           <div>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#8b5cf6' }}>auto_awesome</span>
+              <IAIcon size={18} />
               Sugerir pedido
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-3)' }}>

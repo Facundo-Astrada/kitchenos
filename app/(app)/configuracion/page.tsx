@@ -10,6 +10,7 @@ import { resetOnboardingDone } from '@/lib/hooks/useOnboardingProgress'
 import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
 import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
 import { SwitchRow } from '@/components/ui'
+import ConsumoIAPanel from '@/components/configuracion/ConsumoIAPanel'
 import type { EquipoMiembro, RolPermiso } from '@/types'
 import { ROLES_DISPONIBLES, PLAZAS_DISPONIBLES, TODOS_LOS_MODULOS } from '@/types'
 
@@ -813,6 +814,9 @@ function RestauranteTab({
           </button>
         </div>
       </div>
+
+      {/* Consumo de IA del mes */}
+      <ConsumoIAPanel />
 
       {/* Turnos de servicio */}
       <TurnosServicioCard showToast={showToast} />
