@@ -18,7 +18,7 @@ const ROOT = process.cwd()
 
 const TECHOS_LINEAS: Record<string, number> = {
   'app/(app)/carta/page.tsx': 2060, // día 7 plan-consolidado: moves puros a cards.tsx/exportar.ts/PackagingGruposDrawer.tsx/ImportCartaModal.tsx/EditarPlato.tsx
-  'app/(app)/recetario/page.tsx': 3810,
+  'app/(app)/recetario/page.tsx': 3300, // sep 2026: IAResultScreen+IAMultiResultScreen (~760 líneas) salieron a IAResultScreens.tsx — 4005 → 3167, techo bajado con margen
   'app/(app)/facturas/page.tsx': 3640,
   'app/(app)/stock/ClientView.tsx': 3410,
   'app/(app)/checklist/ClientView.tsx': 3160,
