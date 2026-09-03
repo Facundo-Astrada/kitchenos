@@ -62,7 +62,13 @@ export interface RecetaIAResult {
 
 export async function callRecetaImport(
   mode: 'image' | 'text',
-  payload: { text?: string; image_base64?: string; media_type?: string },
+  /**
+   * `categorias`: las de ESTE restaurante. Sin esto el servidor cae en un
+   * fallback genérico de 9 categorías fijas — la receta se guarda igual, pero
+   * con una categoría que puede no coincidir con ninguna pestaña de filtro
+   * real, así que solo aparece en "Todas".
+   */
+  payload: { text?: string; image_base64?: string; media_type?: string; categorias?: string[] },
 ): Promise<RecetaIAResult> {
   const res = await fetch('/api/recetas/import', {
     method: 'POST',

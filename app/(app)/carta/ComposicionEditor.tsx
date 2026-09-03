@@ -191,10 +191,12 @@ function buildIaRows(r: RecetaIAResult, productos: RefConCosto[]): IaIngRow[] {
 // Antes "crear idea" solo generaba una receta vacía (solo nombre) — esto la
 // crea con ingredientes y procedimiento ya extraídos, todavía como "a
 // realizar" (status draft) para afinar costeo/vínculo a stock en Recetario. ──
-function RecetaIAModal({ prefillNombre, productos, restauranteId, onClose, onCreated }: {
+function RecetaIAModal({ prefillNombre, productos, restauranteId, categoriasCarta, onClose, onCreated }: {
   prefillNombre: string
   productos: RefConCosto[]
   restauranteId: string
+  /** Categorías reales del restaurante — sin esto la IA elige de un fallback genérico. */
+  categoriasCarta: string[]
   onClose: () => void
   onCreated: (id: string, nombre: string) => void
 }) {
@@ -221,7 +223,7 @@ function RecetaIAModal({ prefillNombre, productos, restauranteId, onClose, onCre
     setStep('loading')
     try {
       const { base64, media_type } = await fileToBase64(file)
-      const r = await callRecetaImport('image', { image_base64: base64, media_type })
+      const r = await callRecetaImport('image', { image_base64: base64, media_type, categorias: categoriasCarta })
       setResult(r)
       setRows(buildIaRows(r, productos))
       setPasos(r.procedimiento || [])
@@ -237,7 +239,7 @@ function RecetaIAModal({ prefillNombre, productos, restauranteId, onClose, onCre
     if (!textInput.trim()) return
     setStep('loading')
     try {
-      const r = await callRecetaImport('text', { text: textInput.trim() })
+      const r = await callRecetaImport('text', { text: textInput.trim(), categorias: categoriasCarta })
       setResult(r)
       setRows(buildIaRows(r, productos))
       setPasos(r.procedimiento || [])
@@ -1256,6 +1258,7 @@ export default function ComposicionEditor({
           prefillNombre={iaImport.prefillNombre}
           productos={productos}
           restauranteId={RESTAURANTE_ID}
+          categoriasCarta={categoriasCarta}
           onClose={() => setIaImport(null)}
           onCreated={(id, nombreCreado) => { setIaImport(null); iaImport.onCreated(id, nombreCreado) }}
         />
