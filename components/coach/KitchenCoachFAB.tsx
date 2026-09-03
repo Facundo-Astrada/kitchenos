@@ -630,8 +630,15 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
     if (!dr.moved && Math.hypot(dx, dy) < 8) return
     dr.moved = true
     const BOTTOM_NAV = 84
-    const newBottom = Math.max(BOTTOM_NAV, Math.min(window.innerHeight - 58, dr.startBottom - dy))
-    const newRight = Math.max(8, Math.min(window.innerWidth - 58, dr.startRight - dx))
+    // El tope de arriba era `innerHeight - 58` — solo la altura del propio FAB,
+    // así que arrastrarlo a la esquina superior lo dejaba flush contra el borde,
+    // tapando los botones del header (notificaciones, "+ Nueva", etc.) por
+    // completo. FAB_H + TOP_SAFE deja un margen real bajo el header más bajo
+    // del shell (Header.tsx: ~52px de padding + 36px de botón ≈ 88-100px).
+    const FAB_H = 52
+    const TOP_SAFE = 100
+    const newBottom = Math.max(BOTTOM_NAV, Math.min(window.innerHeight - TOP_SAFE - FAB_H, dr.startBottom - dy))
+    const newRight = Math.max(8, Math.min(window.innerWidth - FAB_H - 6, dr.startRight - dx))
     dr.lastBottom = newBottom; dr.lastRight = newRight
     setFabPos({ bottom: newBottom, right: newRight })
   }
