@@ -17,6 +17,7 @@ import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
 import ImageCropModal from '@/components/ui/ImageCropModal'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import ImportadorFichasTecnicas from '@/components/importador/ImportadorFichasTecnicas'
+import { clasificarArchivo } from '@/lib/recetas/iaImport'
 import { HeaderAction, Skeleton, FilterChips, EmptyState } from '@/components/ui'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import {
@@ -59,10 +60,16 @@ interface IAApiResult {
   nombre_sugerido?: string
   categoria_sugerida?: string
   porciones?: number
+  /**
+   * Rendimiento de la receta ("Yield: 900g"). No tiene columna en `recetas`:
+   * se extrae para que el modelo no lo meta en `porciones` —el PDF de 900g
+   * venía entrando como "900 porciones"— y se muestra en la revisión.
+   */
+  rinde?: number | null
+  rinde_unidad?: string | null
   tiempo_minutos?: number
   ingredientes: { nombre: string; cantidad: string; unidad: string }[]
   procedimiento: string[]
-  _demo?: boolean
 }
 
 // Internal form shape
@@ -109,11 +116,25 @@ function fileToDataUrl(file: File): Promise<string> {
   })
 }
 
-async function callRecetaImport(mode: 'image' | 'text' | 'google_url', payload: { text?: string; image_base64?: string; media_type?: string; google_url?: string }): Promise<IAApiResult> {
+type ImportPayload = {
+  text?: string
+  image_base64?: string
+  media_type?: string
+  google_url?: string
+  /** PDF o .docx en base64. Antes estos archivos se mandaban como texto crudo. */
+  file_base64?: string
+  file_name?: string
+  /** Categorías reales del restaurante — sin esto la IA elige de una lista inventada. */
+  categorias?: string[]
+}
+
+type ImportApiMode = 'image' | 'text' | 'google_url' | 'document'
+
+async function postImport(action: 'import' | 'import_multi', mode: ImportApiMode, payload: ImportPayload) {
   const res = await fetch('/api/recetas/import', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'import', mode, ...payload }),
+    body: JSON.stringify({ action, mode, ...payload }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
@@ -122,17 +143,12 @@ async function callRecetaImport(mode: 'image' | 'text' | 'google_url', payload: 
   return res.json()
 }
 
-async function callRecetaImportMulti(mode: 'image' | 'text' | 'google_url', payload: { text?: string; image_base64?: string; media_type?: string; google_url?: string }): Promise<{ recetas: IAApiResult[]; _demo?: boolean }> {
-  const res = await fetch('/api/recetas/import', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'import_multi', mode, ...payload }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-    throw new Error(err.error || `Error ${res.status}`)
-  }
-  return res.json()
+async function callRecetaImport(mode: ImportApiMode, payload: ImportPayload): Promise<IAApiResult> {
+  return postImport('import', mode, payload)
+}
+
+async function callRecetaImportMulti(mode: ImportApiMode, payload: ImportPayload): Promise<{ recetas: IAApiResult[] }> {
+  return postImport('import_multi', mode, payload)
 }
 
 async function callRecetaAdjust(currentRecipe: IAApiResult, userMessage: string): Promise<IAApiResult> {
@@ -1559,7 +1575,6 @@ function IAResultScreen({ result, previewUrl, inputText, onAccept, onClose, agre
               <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 20 }}>arrow_back</span>
             </button>
             <span style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>Resultado de IA</span>
-            {current._demo && <span style={{ fontSize: 9, background: 'rgba(251,191,36,.2)', color: '#fbbf24', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>DEMO</span>}
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
             <button
@@ -1678,6 +1693,24 @@ function IAResultScreen({ result, previewUrl, inputText, onAccept, onClose, agre
             <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--text-1)', lineHeight: 1.5 }}>
               Confirmá estos datos antes de cargar:
             </p>
+            {/* El rinde de la ficha original ("Yield: 900g"). No tiene columna
+                propia en `recetas`, pero se muestra para que el cocinero pueda
+                calcular las porciones — antes se colaba dentro de porciones. */}
+            {current.rinde != null && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10,
+                padding: '6px 10px', borderRadius: 8,
+                background: 'var(--bg)', border: '1px solid var(--border)',
+              }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--text-3)' }}>scale</span>
+                <span style={{ fontSize: 11, color: 'var(--text-2)' }}>
+                  La ficha original rinde{' '}
+                  <b style={{ color: 'var(--text-1)', fontFamily: "'DM Mono', monospace" }}>
+                    {String(current.rinde).replace('.', ',')}{current.rinde_unidad ?? ''}
+                  </b>
+                </span>
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                 <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -2415,66 +2448,66 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
       // Determine if this source likely has multiple recipes → use multi endpoint
       const isMultiSource = mode === 'glink' || mode === 'file'
 
+      // Una sola receta ya no entra derecho al formulario: pasa por la
+      // pantalla de revisión, igual que texto y voz. Es el paso donde el
+      // cocinero compara contra su fuente antes de guardar, y era justamente
+      // el camino de la foto —el más propenso a error— el único que no lo tenía.
+      const recibir = (recetas: IAApiResult[]) => {
+        if (recetas.length === 1) setIaResult(recetas[0])
+        else setIaMultiResults(recetas)
+      }
+
       if (mode === 'text' && typeof data === 'string') {
         setIaInputText(data)
-        const result = await callRecetaImport('text', { text: data })
-        setIaResult(result)
+        setIaResult(await callRecetaImport('text', { text: data, categorias }))
 
       } else if ((mode === 'camera' || mode === 'gallery') && data instanceof File) {
-        const dataUrl = await fileToDataUrl(data)
-        setIaPreviewUrl(dataUrl)
+        setIaPreviewUrl(await fileToDataUrl(data))
         const { base64, media_type } = await fileToBase64(data)
-        const multiRes = await callRecetaImportMulti('image', { image_base64: base64, media_type })
-        if (multiRes.recetas.length === 1) {
-          handleAcceptIAResult(apiToForm(multiRes.recetas[0]))
-        } else {
-          setIaMultiResults(multiRes.recetas)
-        }
+        recibir((await callRecetaImportMulti('image', { image_base64: base64, media_type, categorias })).recetas)
 
       } else if (mode === 'file' && data instanceof File) {
-        if (data.type.startsWith('image/')) {
-          const dataUrl = await fileToDataUrl(data)
-          setIaPreviewUrl(dataUrl)
-          const { base64, media_type } = await fileToBase64(data)
-          const multiRes = await callRecetaImportMulti('image', { image_base64: base64, media_type })
-          if (multiRes.recetas.length === 1) {
-            handleAcceptIAResult(apiToForm(multiRes.recetas[0]))
-          } else {
-            setIaMultiResults(multiRes.recetas)
+        const resumen = `${data.name} (${(data.size / 1024).toFixed(0)} KB)`
+
+        switch (clasificarArchivo(data)) {
+          case 'imagen': {
+            setIaPreviewUrl(await fileToDataUrl(data))
+            const { base64, media_type } = await fileToBase64(data)
+            recibir((await callRecetaImportMulti('image', { image_base64: base64, media_type, categorias })).recetas)
+            break
           }
-        } else if (
-          data.name.match(/\.(xlsx|xls|ods|numbers)$/i) ||
-          data.type.includes('spreadsheet') ||
-          data.type.includes('excel')
-        ) {
-          setIaInputText(`${data.name} (${(data.size / 1024).toFixed(0)} KB)`)
-          const { base64 } = await fileToBase64(data)
-          const multiRes = await callRecetaImportMulti('text', { text: `__XLSX_BASE64__:${base64}` })
-          if (multiRes.recetas.length === 1) {
-            handleAcceptIAResult(apiToForm(multiRes.recetas[0]))
-          } else {
-            setIaMultiResults(multiRes.recetas)
+          case 'planilla': {
+            setIaInputText(resumen)
+            const { base64 } = await fileToBase64(data)
+            recibir((await callRecetaImportMulti('text', { text: `__XLSX_BASE64__:${base64}`, categorias })).recetas)
+            break
           }
-        } else {
-          const text = await data.text()
-          setIaInputText(text)
-          const result = await callRecetaImport('text', { text })
-          handleAcceptIAResult(apiToForm(result))
+          case 'documento': {
+            // El bug que reportó Franco vivía acá: los PDF no tenían rama y
+            // caían en `texto`, o sea `await data.text()` sobre un binario.
+            // Ahora viajan en base64 y el servidor los manda como bloque
+            // `document`, que es lo que la API sabe leer.
+            setIaInputText(resumen)
+            const { base64, media_type } = await fileToBase64(data)
+            recibir((await callRecetaImportMulti('document', {
+              file_base64: base64, media_type, file_name: data.name, categorias,
+            })).recetas)
+            break
+          }
+          default: {
+            const text = await data.text()
+            setIaInputText(text)
+            recibir((await callRecetaImportMulti('text', { text, categorias })).recetas)
+          }
         }
 
       } else if (mode === 'audio' && typeof data === 'string') {
         setIaInputText(data)
-        const result = await callRecetaImport('text', { text: data })
-        setIaResult(result)
+        setIaResult(await callRecetaImport('text', { text: data, categorias }))
 
       } else if (mode === 'glink' && typeof data === 'string') {
         setIaInputText(data)
-        const multiRes = await callRecetaImportMulti('google_url', { google_url: data })
-        if (multiRes.recetas.length === 1) {
-          handleAcceptIAResult(apiToForm(multiRes.recetas[0]))
-        } else {
-          setIaMultiResults(multiRes.recetas)
-        }
+        recibir((await callRecetaImportMulti('google_url', { google_url: data, categorias })).recetas)
 
       } else {
         throw new Error('Modo de importación no válido')
@@ -3053,7 +3086,7 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
       {/* Hidden file inputs */}
       <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => handleFileSelected('camera', e)} />
       <input ref={galleryInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handleFileSelected('gallery', e)} />
-      <input ref={fileInputRef} type="file" accept=".pdf,.xlsx,.xls,.csv,.doc,.docx,.txt,.tsv,.ods,.numbers,application/vnd.google-apps.spreadsheet,application/vnd.google-apps.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/*" style={{ display: 'none' }} onChange={e => handleFileSelected('file', e)} />
+      <input ref={fileInputRef} type="file" accept=".pdf,.xlsx,.xls,.csv,.doc,.docx,.txt,.tsv,.ods,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/*" style={{ display: 'none' }} onChange={e => handleFileSelected('file', e)} />
       {/* audio uses custom recorder modal, no hidden input */}
 
       {/* IA Processing overlay */}

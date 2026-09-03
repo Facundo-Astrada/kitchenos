@@ -39,8 +39,19 @@ export interface PedirAClaudeParams {
   system?: string | AnthropicSystemBlock[]
   temperature?: number
   tools?: unknown[]
-  /** Headers extra a mergear (ej: 'anthropic-beta' para PDFs). */
+  /** Headers extra a mergear. */
   headers?: Record<string, string>
+  /**
+   * Esquema JSON que la respuesta DEBE cumplir (`output_config.format`). Con
+   * esto el modelo no puede devolver prosa, ni envolver el JSON en backticks,
+   * ni inventar un valor fuera de un `enum` — la validación la hace la API
+   * antes de responder, no un `JSON.parse` optimista de este lado.
+   *
+   * Reemplaza el patrón de pedir "SIEMPRE respondé ÚNICAMENTE con JSON" en el
+   * system prompt y después pelar ```json con regex. No lleva beta header y
+   * anda en todos los modelos vigentes.
+   */
+  formatoJson?: Record<string, unknown>
   /** Reintentos ante error `reintentable` (saturado). Default 1. */
   maxReintentos?: number
   /**
@@ -85,8 +96,14 @@ export async function pedirAClaude(params: PedirAClaudeParams): Promise<PedirACl
     messages: params.messages,
   }
   if (params.system !== undefined) body.system = params.system
+  // `temperature` fue removido en Sonnet 5 / Opus 5 (400 si se manda). Sigue
+  // siendo válido en 4.6 y anteriores, así que se pasa solo si el llamador lo
+  // pide — pero no es la palanca para forzar formato: para eso está formatoJson.
   if (params.temperature !== undefined) body.temperature = params.temperature
   if (params.tools !== undefined) body.tools = params.tools
+  if (params.formatoJson !== undefined) {
+    body.output_config = { format: { type: 'json_schema', schema: params.formatoJson } }
+  }
 
   let ultimoError: ErrorIA = clasificarErrorIA(0, '')
 

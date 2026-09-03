@@ -1,110 +1,185 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as XLSX from 'xlsx'
+import mammoth from 'mammoth'
 import { createClient } from '@/lib/supabase/server'
 import { statusErrorIA } from '@/lib/ia/errores'
 import { pedirAClaude } from '@/lib/ia/claude'
 
-const SYSTEM_PROMPT = `Sos un asistente de cocina profesional que analiza recetas.
-Analizá la información proporcionada (puede ser una imagen de receta, texto copiado, o una transcripción de audio) y extraé los datos estructurados.
+// Una llamada de visión sobre una foto de receta puede tardar bastante. Las
+// rutas hermanas ya declaran su techo (carta/import 60, fichas-tecnicas 120);
+// esta corría con el default de la plataforma.
+export const maxDuration = 120
 
-SIEMPRE respondé ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin backticks. El JSON debe tener esta estructura exacta:
+// Vision y PDF van por Sonnet 5: es más nuevo y más barato que el 4.6 que se
+// usaba acá ($2/$10 por millón contra $3/$15). El texto plano no necesita esa
+// capacidad y sigue en Haiku.
+const MODELO_VISION = 'claude-sonnet-5'
+const MODELO_TEXTO = 'claude-haiku-4-5'
 
-{
-  "nombre_sugerido": "string - nombre de la receta",
-  "categoria_sugerida": "string - una de: Entradas, Principales, Postres, Guarniciones, Bebidas, Pastelería, Panadería",
-  "porciones": number,
-  "tiempo_minutos": number,
-  "ingredientes": [
-    { "nombre": "string", "cantidad": "string con coma decimal (ej: 0,5)", "unidad": "kg|g|l|ml|u" }
-  ],
-  "procedimiento": ["paso 1", "paso 2", "..."]
+const CATEGORIAS_FALLBACK = [
+  'Entradas', 'Principales', 'Postres', 'Guarniciones',
+  'Bebidas', 'Bases y Salsas', 'Pastelería', 'Panadería', 'Otros',
+]
+
+const UNIDADES = ['kg', 'g', 'l', 'ml', 'u']
+
+/**
+ * Un solo prompt para todas las fuentes (foto, PDF, Excel, Sheets, texto, voz).
+ *
+ * Antes había tres, y los tres decían alguna variante de "si no podés
+ * determinar un campo, usá un valor razonable" / "hacé tu mejor esfuerzo". Con
+ * un input ilegible eso no es tolerancia a fallos: es una instrucción de
+ * inventar. Un PDF que llegaba como bytes crudos producía una receta completa,
+ * plausible y falsa — distinta en cada intento.
+ *
+ * La regla de oro está copiada de `importador/fichas-tecnicas`, que es el
+ * extractor de recetas que sí venía funcionando.
+ */
+function construirSystemPrompt(categorias: string[]): string {
+  return `Sos un extractor de recetas de cocina profesional. Tu trabajo es TRANSCRIBIR lo que dice la fuente, no redactar una receta.
+
+REGLA DE ORO — no inventar:
+- Transcribí SOLO lo que está efectivamente en la fuente.
+- Si un campo no está, omitilo o dejalo en null. NUNCA lo completes con un valor plausible.
+- No agregues ingredientes que no figuran, aunque la receta "los pediría" (sal, aceite, agua, condimentos).
+- No agregues pasos que no figuran, aunque el procedimiento quede incompleto.
+- Copiá las cantidades tal como están. No las conviertas ni las escales.
+
+SI NO PODÉS LEER LA FUENTE:
+Devolvé "legible": false, explicá por qué en "motivo", y dejá "recetas" vacío.
+Esto aplica cuando el contenido llega ilegible, corrupto, comprimido, en binario,
+o cuando simplemente no es una receta. NO intentes reconstruir la receta a partir
+del título, del nombre del archivo, ni de fragmentos sueltos. Una receta inventada
+es mucho peor que un aviso de que no se pudo leer.
+
+EXTRACCIÓN:
+- Extraé TODAS las recetas que encuentres, no solo la primera.
+- Revisá todas las hojas/páginas/secciones.
+- Ignorá filas vacías, encabezados repetidos y plantillas sin datos.
+- "Rinde" / "Yield" / "Rendimiento" van en los campos rinde + rinde_unidad (ej: 900 g),
+  y NO en porciones. Si la fuente solo dice el rinde, dejá porciones en null.
+- Cantidades con coma decimal, formato argentino: "0,5" y no "0.5".
+- Las unidades solo pueden ser: ${UNIDADES.join(', ')}. Si la fuente dice
+  "3 cucharadas" o "1 taza", convertí a la unidad de peso o volumen más cercana
+  únicamente si la equivalencia es estándar; si no, usá "u" y dejá la medida
+  original en el nombre del ingrediente.
+- Categoría: elegí de esta lista, que son las categorías reales de este restaurante:
+  ${categorias.join(', ')}.`
 }
 
-Reglas:
-- Las cantidades deben usar coma como separador decimal (formato argentino): "0,5" no "0.5"
-- Unidades válidas: kg, g, l, ml, u (unidades)
-- Si no podés determinar un campo, usá un valor razonable
-- El procedimiento debe ser pasos claros y concisos
-- Si la imagen/texto está borrosa o es ilegible, hacé tu mejor esfuerzo e indicá incertidumbre en el nombre`
+const ADJUST_SYSTEM = `Sos un asistente de cocina profesional. El usuario ya importó una receta y quiere ajustarla.
+Recibís la receta actual y el pedido del usuario. Devolvé la receta completa con el ajuste aplicado.
+No inventes datos que el usuario no pidió: cambiá solo lo que pide y dejá el resto igual.`
 
-const ADJUST_SYSTEM = `Sos un asistente de cocina profesional. El usuario ya importó una receta con IA y quiere hacer ajustes.
-Recibís la receta actual en JSON y el pedido del usuario. Devolvé ÚNICAMENTE el JSON corregido completo (misma estructura), sin texto adicional, sin markdown, sin backticks.
+// ── Esquema de salida ───────────────────────────────────────────────────────
+// Con `output_config.format` la API valida esto ANTES de responder. El modelo
+// no puede devolver prosa, ni envolver el JSON en backticks, ni emitir una
+// unidad fuera del enum — que es exactamente como se coló el "3 cucharadas"
+// que reportó Franco. Reemplaza al viejo parseClaudeJson() que pelaba ```json
+// con regex y tiraba 422 cuando el modelo contestaba en castellano.
 
-La estructura JSON es:
-{
-  "nombre_sugerido": "string",
-  "categoria_sugerida": "string",
-  "porciones": number,
-  "tiempo_minutos": number,
-  "ingredientes": [{ "nombre": "string", "cantidad": "string con coma decimal", "unidad": "kg|g|l|ml|u" }],
-  "procedimiento": ["paso 1", "paso 2"]
-}`
-
-const MULTI_SYSTEM_PROMPT = `Sos un asistente de cocina profesional que analiza archivos con MÚLTIPLES recetas.
-Analizá toda la información proporcionada y extraé TODAS las recetas que encuentres.
-
-SIEMPRE respondé ÚNICAMENTE con un JSON válido, sin texto adicional, sin markdown, sin backticks. El JSON debe ser un objeto con esta estructura:
-
-{
-  "recetas": [
-    {
-      "nombre_sugerido": "string",
-      "categoria_sugerida": "string - una de: Entradas, Principales, Postres, Guarniciones, Bebidas, Pastelería, Panadería, Salsas, Bases",
-      "porciones": number,
-      "tiempo_minutos": number,
-      "ingredientes": [
-        { "nombre": "string", "cantidad": "string con coma decimal", "unidad": "kg|g|l|ml|u" }
-      ],
-      "procedimiento": ["paso 1", "paso 2"]
-    }
-  ]
+/**
+ * Campo opcional. Va como `anyOf` y no como `type: ['string','null']`: el
+ * validador de la API rechaza un `enum` declarado junto a un type de unión
+ * ("Enum value 'Entradas' does not match declared type '['string','null']'").
+ */
+function opcional(esquema: Record<string, unknown>): Record<string, unknown> {
+  return { anyOf: [esquema, { type: 'null' }] }
 }
 
-Reglas:
-- Extraé TODAS las recetas que puedas identificar, no solo la primera
-- Las cantidades deben usar coma como separador decimal (formato argentino)
-- Unidades válidas: kg, g, l, ml, u
-- Si una receta no tiene procedimiento pero sí ingredientes, incluila igual con procedimiento vacío
-- Si hay datos parciales, completá con valores razonables
-- Ignorá filas vacías, encabezados repetidos, y datos que no sean recetas
-- Si los datos están en múltiples hojas/secciones, revisá TODAS
-- Devolvé al menos 1 receta. Si no encontrás ninguna, devolvé un array vacío`
-
-async function callClaude(
-  system: string,
-  content: Array<{ type: string; source?: any; text?: string }>,
-  maxTokens: number = 2048,
-  model: string = 'claude-sonnet-4-6',
-  restauranteId: string | null = null
-): Promise<{ ok: true; text: string } | { ok: false; error: string; status: number }> {
-
-  console.log(`[recetas/import] Calling Claude API (${model})...`)
-
-  const resultado = await pedirAClaude({
-    tag: 'recetas/import',
-    model,
-    maxTokens,
-    system,
-    messages: [{ role: 'user', content }],
-    restauranteId,
-  })
-
-  if (!resultado.ok) {
-    // Devolvía el mensaje crudo de Anthropic ("Your credit balance is too
-    // low…", en inglés y hablando de facturación) o el status pelado. El
-    // cocinero leía eso como "la foto no sirve" y reintentaba con otra.
-    return { ok: false, error: resultado.error.mensaje, status: statusErrorIA(resultado.error) }
+function esquemaReceta(categorias: string[]): Record<string, unknown> {
+  return {
+    type: 'object',
+    properties: {
+      nombre_sugerido: { type: 'string' },
+      categoria_sugerida: opcional({ type: 'string', enum: categorias }),
+      porciones: opcional({ type: 'number' }),
+      rinde: opcional({ type: 'number', description: 'Rendimiento numérico, ej 900 en "Yield: 900g"' }),
+      rinde_unidad: opcional({ type: 'string', enum: UNIDADES }),
+      tiempo_minutos: opcional({ type: 'number' }),
+      ingredientes: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            nombre: { type: 'string' },
+            cantidad: { type: 'string', description: 'Coma decimal: "0,5"' },
+            unidad: { type: 'string', enum: UNIDADES },
+          },
+          required: ['nombre', 'cantidad', 'unidad'],
+          additionalProperties: false,
+        },
+      },
+      procedimiento: { type: 'array', items: { type: 'string' } },
+    },
+    required: [
+      'nombre_sugerido', 'categoria_sugerida', 'porciones', 'rinde',
+      'rinde_unidad', 'tiempo_minutos', 'ingredientes', 'procedimiento',
+    ],
+    additionalProperties: false,
   }
-
-  return { ok: true, text: resultado.texto }
 }
 
-function parseClaudeJson(rawText: string) {
-  const cleaned = rawText
-    .replace(/^```json?\s*/i, '')
-    .replace(/```\s*$/, '')
-    .trim()
-  return JSON.parse(cleaned)
+function esquemaExtraccion(categorias: string[]): Record<string, unknown> {
+  return {
+    type: 'object',
+    properties: {
+      legible: {
+        type: 'boolean',
+        description: 'false si la fuente no se pudo leer o no contiene recetas',
+      },
+      motivo: opcional({
+        type: 'string',
+        description: 'Si legible es false, por qué. En castellano, para un cocinero.',
+      }),
+      recetas: { type: 'array', items: esquemaReceta(categorias) },
+    },
+    required: ['legible', 'motivo', 'recetas'],
+    additionalProperties: false,
+  }
+}
+
+interface RecetaExtraida {
+  nombre_sugerido: string
+  categoria_sugerida: string | null
+  porciones: number | null
+  rinde: number | null
+  rinde_unidad: string | null
+  tiempo_minutos: number | null
+  ingredientes: { nombre: string; cantidad: string; unidad: string }[]
+  procedimiento: string[]
+}
+
+interface Extraccion {
+  legible: boolean
+  motivo: string | null
+  recetas: RecetaExtraida[]
+}
+
+type BloqueContenido =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+  | { type: 'document'; source: { type: 'base64'; media_type: 'application/pdf'; data: string } }
+
+// ── Helpers de normalización ────────────────────────────────────────────────
+
+function hojasATexto(buf: Buffer): string[] {
+  const wb = XLSX.read(buf, { type: 'buffer' })
+  const sheetTexts: string[] = []
+  for (const name of wb.SheetNames) {
+    const csv = XLSX.utils.sheet_to_csv(wb.Sheets[name], { blankrows: false })
+    const lines = csv.split('\n').filter((l: string) => l.trim())
+    if (lines.length > 0) sheetTexts.push(`\n══ HOJA: "${name}" (${lines.length} filas) ══\n${lines.join('\n')}`)
+  }
+  return sheetTexts
+}
+
+const MAX_CHARS = 14000
+
+function recortar(texto: string): string {
+  return texto.length > MAX_CHARS
+    ? texto.substring(0, MAX_CHARS) + '\n\n[... contenido truncado por longitud ...]'
+    : texto
 }
 
 export async function POST(req: NextRequest) {
@@ -124,312 +199,219 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { action, mode, text, image_base64, media_type, currentRecipe, userMessage, google_url } = body as {
+    const {
+      action, mode, text, image_base64, media_type, file_base64, file_name,
+      google_url, currentRecipe, userMessage, categorias: catCliente,
+    } = body as {
       action?: 'import' | 'adjust' | 'import_multi'
-      mode?: 'image' | 'text' | 'google_url'
+      mode?: 'image' | 'text' | 'google_url' | 'document'
       text?: string
       image_base64?: string
       media_type?: string
+      /** PDF o .docx en base64 — antes esto llegaba como texto crudo y era el bug. */
+      file_base64?: string
+      file_name?: string
       google_url?: string
-      currentRecipe?: any
+      currentRecipe?: unknown
       userMessage?: string
+      /** Categorías reales del restaurante. Sin esto la IA inventa las suyas. */
+      categorias?: string[]
     }
 
-    // ── Helper: build content array from mode+data (reused by import & import_multi) ──
-    async function buildContent(): Promise<{ content: Array<{ type: string; source?: any; text?: string }>; error?: string; errorStatus?: number }> {
-      const content: Array<{ type: string; source?: any; text?: string }> = []
+    const categorias = (catCliente?.length ? catCliente : CATEGORIAS_FALLBACK)
+      .map(c => String(c).trim())
+      .filter(Boolean)
 
-      if (mode === 'image' && image_base64) {
-        content.push({ type: 'image', source: { type: 'base64', media_type: media_type || 'image/jpeg', data: image_base64 } })
-        content.push({ type: 'text', text: 'Analizá esta imagen. Puede contener una o múltiples recetas. Extraé TODAS las recetas que veas.' })
-      } else if (mode === 'text' && text && text.startsWith('__XLSX_BASE64__:')) {
-        const b64 = text.replace('__XLSX_BASE64__:', '')
-        const buf = Buffer.from(b64, 'base64')
-        const wb = XLSX.read(buf, { type: 'buffer' })
-        const sheetTexts: string[] = []
-        for (const name of wb.SheetNames) {
-          const ws = wb.Sheets[name]
-          const csv = XLSX.utils.sheet_to_csv(ws, { blankrows: false })
-          const lines = csv.split('\n').filter((l: string) => l.trim())
-          if (lines.length > 0) sheetTexts.push(`\n══ HOJA: "${name}" (${lines.length} filas) ══\n${lines.join('\n')}`)
-        }
-        if (sheetTexts.length === 0) return { content: [], error: 'El archivo no contiene datos.', errorStatus: 400 }
-        const xlsText = sheetTexts.join('\n\n')
-        const maxChars = 14000
-        content.push({ type: 'text', text: `Analizá este archivo Excel/planilla con recetas de cocina. Puede tener múltiples hojas.\n\nCONTENIDO:\n${xlsText.substring(0, maxChars)}${xlsText.length > maxChars ? '\n[...truncado...]' : ''}` })
-      } else if (mode === 'text' && text) {
-        content.push({ type: 'text', text: `Analizá este texto. Puede contener una o múltiples recetas:\n\n${text}` })
-      } else if (mode === 'google_url' && google_url) {
-        const url = google_url.trim()
-        const sheetsMatch = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)
-        const docsMatch = url.match(/\/document\/d\/([a-zA-Z0-9_-]+)/)
-        if (sheetsMatch) {
-          const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetsMatch[1]}/export?format=xlsx`
-          const gRes = await fetch(exportUrl, { redirect: 'follow' })
-          if (!gRes.ok) return { content: [], error: `No se pudo descargar (${gRes.status}). Verificá que esté compartido.`, errorStatus: 400 }
-          const buf = Buffer.from(await gRes.arrayBuffer())
-          if (buf.byteLength < 100) return { content: [], error: 'Archivo vacío o inválido.', errorStatus: 400 }
-          const wb = XLSX.read(buf, { type: 'buffer' })
-          const sheetTexts: string[] = []
-          for (const name of wb.SheetNames) {
-            const ws = wb.Sheets[name]
-            const csv = XLSX.utils.sheet_to_csv(ws, { blankrows: false })
-            const lines = csv.split('\n').filter((l: string) => l.trim())
-            if (lines.length > 0) sheetTexts.push(`\n══ HOJA: "${name}" (${lines.length} filas) ══\n${lines.join('\n')}`)
-          }
-          if (sheetTexts.length === 0) return { content: [], error: 'Todas las hojas están vacías.', errorStatus: 400 }
-          const xlsText = sheetTexts.join('\n\n')
-          const maxChars = 14000
-          content.push({ type: 'text', text: `Analizá este Google Sheets con recetas de cocina. Tiene múltiples hojas.\n\nCONTENIDO:\n${xlsText.substring(0, maxChars)}${xlsText.length > maxChars ? '\n[...truncado...]' : ''}` })
-        } else if (docsMatch) {
-          const exportUrl = `https://docs.google.com/document/d/${docsMatch[1]}/export?format=txt`
-          const gRes = await fetch(exportUrl, { redirect: 'follow' })
-          if (!gRes.ok) return { content: [], error: `No se pudo descargar (${gRes.status}). Verificá permisos.`, errorStatus: 400 }
-          const googleText = await gRes.text()
-          if (!googleText.trim()) return { content: [], error: 'Documento vacío.', errorStatus: 400 }
-          content.push({ type: 'text', text: `Analizá este Google Doc con recetas:\n\n${googleText.substring(0, 14000)}` })
-        } else {
-          return { content: [], error: 'URL no reconocida.', errorStatus: 400 }
-        }
-      } else {
-        return { content: [], error: 'Datos insuficientes.', errorStatus: 400 }
-      }
-      return { content }
-    }
-
-    // ── IMPORT_MULTI: múltiples recetas ──
-    if (action === 'import_multi') {
-      const { content, error: buildErr, errorStatus } = await buildContent()
-      if (buildErr) return NextResponse.json({ error: buildErr }, { status: errorStatus || 400 })
-
-      console.log('[recetas/import_multi] Calling Claude for multi-recipe extraction...')
-      const result = await callClaude(MULTI_SYSTEM_PROMPT, content, 4096, 'claude-sonnet-4-6', restauranteId)
-      if (!result.ok) {
-        // Sin crédito devolvía dos recetas inventadas. El usuario subía un
-        // archivo con sus recetas y recibía "Lomo al Malbec" y "Pizza
-        // Napolitana" — ver el bloque de import simple más abajo.
-        return NextResponse.json({ error: result.error }, { status: result.status })
-      }
-
-      try {
-        const parsed = parseClaudeJson(result.text)
-        // Handle both { recetas: [...] } and direct array
-        const recetas = Array.isArray(parsed) ? parsed : (parsed.recetas || [parsed])
-        return NextResponse.json({ recetas })
-      } catch {
-        console.error('[recetas/import_multi] Parse error:', result.text?.substring(0, 500))
-        return NextResponse.json({ error: 'La IA no devolvió JSON válido.' }, { status: 422 })
-      }
-    }
-
-    // ── ADJUST: usuario pide correcciones ──
+    // ── ADJUST: el usuario pide correcciones sobre una receta ya extraída ──
     if (action === 'adjust' && currentRecipe && userMessage) {
-      const content = [{
-        type: 'text' as const,
-        text: `Receta actual:\n${JSON.stringify(currentRecipe, null, 2)}\n\nPedido del usuario: ${userMessage}`,
-      }]
+      const resultado = await pedirAClaude({
+        tag: 'recetas/import:adjust',
+        model: MODELO_TEXTO,
+        maxTokens: 4000,
+        system: ADJUST_SYSTEM,
+        formatoJson: esquemaReceta(categorias),
+        messages: [{
+          role: 'user',
+          content: [{
+            type: 'text',
+            text: `Receta actual:\n${JSON.stringify(currentRecipe, null, 2)}\n\nPedido del usuario: ${userMessage}`,
+          }],
+        }],
+        restauranteId,
+      })
 
-      const result = await callClaude(ADJUST_SYSTEM, content, 2048, 'claude-haiku-4-5-20251001', restauranteId)
-      if (!result.ok) {
-        // Sin crédito devolvía la receta SIN el ajuste pedido, marcada como
-        // "ajuste simulado". El usuario pedía un cambio, no pasaba nada, y no
-        // había forma de distinguirlo de que la IA hubiera decidido no cambiar
-        // nada. Mejor decir que falló.
-        return NextResponse.json({ error: result.error }, { status: result.status })
+      if (!resultado.ok) {
+        return NextResponse.json(
+          { error: resultado.error.mensaje },
+          { status: statusErrorIA(resultado.error) },
+        )
       }
-
-      try {
-        return NextResponse.json(parseClaudeJson(result.text))
-      } catch {
-        console.error('[recetas/import] Failed to parse adjust response:', result.text)
-        return NextResponse.json({ error: 'La IA no devolvió JSON válido.', raw: result.text }, { status: 422 })
-      }
+      return NextResponse.json(JSON.parse(resultado.texto))
     }
 
-    // ── IMPORT: análisis inicial ──
-    const content: Array<{ type: string; source?: any; text?: string }> = []
+    // ── Armado del contenido según la fuente ──
+    const content: BloqueContenido[] = []
 
     if (mode === 'image' && image_base64) {
       content.push({
         type: 'image',
         source: { type: 'base64', media_type: media_type || 'image/jpeg', data: image_base64 },
       })
-      content.push({
-        type: 'text',
-        text: 'Analizá esta imagen de receta y extraé toda la información estructurada.',
-      })
-    } else if (mode === 'text' && text && text.startsWith('__XLSX_BASE64__:')) {
-      // ── Uploaded Excel/spreadsheet file as base64 ──
-      console.log('[recetas/import] Parsing uploaded spreadsheet file')
-      try {
-        const b64 = text.replace('__XLSX_BASE64__:', '')
-        const buf = Buffer.from(b64, 'base64')
-        const wb = XLSX.read(buf, { type: 'buffer' })
+      content.push({ type: 'text', text: 'Transcribí las recetas que veas en esta imagen.' })
 
-        const sheetTexts: string[] = []
-        for (const name of wb.SheetNames) {
-          const ws = wb.Sheets[name]
-          const csv = XLSX.utils.sheet_to_csv(ws, { blankrows: false })
-          const lines = csv.split('\n').filter((l: string) => l.trim())
-          if (lines.length > 0) {
-            sheetTexts.push(`\n══ HOJA: "${name}" (${lines.length} filas) ══\n${lines.join('\n')}`)
-          }
-        }
+    } else if (mode === 'document' && file_base64) {
+      // ── Acá estaba el bug reportado por Franco (sep 2026) ──
+      // El cliente hacía `await file.text()` sobre un PDF y mandaba el
+      // resultado como texto: bytes binarios decodificados como UTF-8, o sea
+      // la sintaxis interna del PDF y sus streams comprimidos. Con eso más un
+      // prompt que pedía "usá un valor razonable", el modelo devolvía una
+      // receta entera inventada a partir del título. Dos importaciones del
+      // mismo PDF daban dos recetas distintas, ninguna la real.
+      // Los bloques `document` son GA y no necesitan beta header.
+      const esPdf = (media_type || '').includes('pdf') || /\.pdf$/i.test(file_name || '')
 
-        if (sheetTexts.length === 0) {
-          return NextResponse.json({ error: 'El archivo no contiene datos.' }, { status: 400 })
-        }
-
-        const xlsText = sheetTexts.join('\n\n')
-        const maxChars = 12000
-        const textForClaude = xlsText.length > maxChars
-          ? xlsText.substring(0, maxChars) + '\n\n[... contenido truncado ...]'
-          : xlsText
-
+      if (esPdf) {
         content.push({
-          type: 'text',
-          text: `Analizá este archivo Excel/planilla que contiene recetas de cocina. Tiene múltiples hojas con recetas, ingredientes, cantidades y procedimientos distribuidos de forma irregular.
-
-Identificá las recetas y elegí la más completa. Extraé ingredientes, cantidades, procedimiento y toda la info posible.
-
-CONTENIDO DEL ARCHIVO:
-${textForClaude}`,
+          type: 'document',
+          source: { type: 'base64', media_type: 'application/pdf', data: file_base64 },
         })
-      } catch (e) {
-        console.error('[recetas/import] XLSX parse error:', e)
-        return NextResponse.json({ error: 'No se pudo leer el archivo. Verificá que sea un Excel válido.' }, { status: 400 })
+        content.push({ type: 'text', text: 'Transcribí las recetas que haya en este PDF.' })
+      } else {
+        // .doc/.docx caían en el mismo `else` roto que el PDF. mammoth ya se
+        // usa para esto en importador/fichas-tecnicas.
+        const buf = Buffer.from(file_base64, 'base64')
+        let texto = ''
+        try {
+          texto = (await mammoth.extractRawText({ buffer: buf })).value
+        } catch {
+          return NextResponse.json(
+            { error: 'No se pudo leer el documento. Probá exportarlo a PDF y subirlo de nuevo.' },
+            { status: 400 },
+          )
+        }
+        if (!texto.trim()) {
+          return NextResponse.json({ error: 'El documento está vacío.' }, { status: 400 })
+        }
+        content.push({ type: 'text', text: `Transcribí las recetas de este documento:\n\n${recortar(texto)}` })
       }
-    } else if (mode === 'text' && text) {
-      content.push({
-        type: 'text',
-        text: `Analizá esta receta y extraé la información estructurada:\n\n${text}`,
-      })
-    } else if (mode === 'google_url' && google_url) {
-      // ── Fetch content from Google Sheets/Docs ──
-      console.log('[recetas/import] Fetching Google URL:', google_url)
+
+    } else if (mode === 'text' && text && text.startsWith('__XLSX_BASE64__:')) {
+      const buf = Buffer.from(text.replace('__XLSX_BASE64__:', ''), 'base64')
+      let sheetTexts: string[]
       try {
-        const url = google_url.trim()
-        let googleText = ''
-        let docType = ''
+        sheetTexts = hojasATexto(buf)
+      } catch {
+        return NextResponse.json(
+          { error: 'No se pudo leer el archivo. Verificá que sea un Excel válido.' },
+          { status: 400 },
+        )
+      }
+      if (sheetTexts.length === 0) {
+        return NextResponse.json({ error: 'El archivo no contiene datos.' }, { status: 400 })
+      }
+      content.push({ type: 'text', text: `Transcribí las recetas de esta planilla:\n\n${recortar(sheetTexts.join('\n\n'))}` })
 
-        // Google Sheets → export as XLSX and parse all sheets
-        const sheetsMatch = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)
-        if (sheetsMatch) {
-          const sheetId = sheetsMatch[1]
-          const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=xlsx`
-          docType = 'Google Sheets'
+    } else if (mode === 'text' && text) {
+      content.push({ type: 'text', text: `Transcribí las recetas de este texto:\n\n${text}` })
 
-          const gRes = await fetch(exportUrl, { redirect: 'follow' })
-          if (!gRes.ok) {
-            console.error('[recetas/import] Google Sheets fetch error:', gRes.status)
-            return NextResponse.json({
-              error: `No se pudo descargar el documento (${gRes.status}). Verificá que esté compartido como "Cualquier persona con el enlace".`
-            }, { status: 400 })
-          }
+    } else if (mode === 'google_url' && google_url) {
+      const url = google_url.trim()
+      const sheetsMatch = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)
+      const docsMatch = url.match(/\/document\/d\/([a-zA-Z0-9_-]+)/)
 
-          const buf = Buffer.from(await gRes.arrayBuffer())
-          if (buf.byteLength < 100) {
-            return NextResponse.json({ error: 'El archivo descargado está vacío o es inválido.' }, { status: 400 })
-          }
-
-          console.log('[recetas/import] XLSX downloaded, bytes:', buf.byteLength)
-          const wb = XLSX.read(buf, { type: 'buffer' })
-
-          // Extract all sheets into readable text
-          const sheetTexts: string[] = []
-          for (const name of wb.SheetNames) {
-            const ws = wb.Sheets[name]
-            const csv = XLSX.utils.sheet_to_csv(ws, { blankrows: false })
-            const lines = csv.split('\n').filter((l: string) => l.trim())
-            if (lines.length > 0) {
-              sheetTexts.push(`\n══ HOJA: "${name}" (${lines.length} filas) ══\n${lines.join('\n')}`)
-            }
-          }
-
-          if (sheetTexts.length === 0) {
-            return NextResponse.json({ error: 'Todas las hojas del documento están vacías.' }, { status: 400 })
-          }
-
-          googleText = sheetTexts.join('\n\n')
-          console.log('[recetas/import] Parsed', wb.SheetNames.length, 'sheets, total text length:', googleText.length)
+      if (sheetsMatch) {
+        const gRes = await fetch(`https://docs.google.com/spreadsheets/d/${sheetsMatch[1]}/export?format=xlsx`, { redirect: 'follow' })
+        if (!gRes.ok) {
+          return NextResponse.json(
+            { error: `No se pudo descargar (${gRes.status}). Verificá que esté compartido como "Cualquier persona con el enlace".` },
+            { status: 400 },
+          )
         }
-
-        // Google Docs → export as plain text
-        const docsMatch = url.match(/\/document\/d\/([a-zA-Z0-9_-]+)/)
-        if (docsMatch && !sheetsMatch) {
-          const docId = docsMatch[1]
-          const exportUrl = `https://docs.google.com/document/d/${docId}/export?format=txt`
-          docType = 'Google Docs'
-
-          const gRes = await fetch(exportUrl, { redirect: 'follow' })
-          if (!gRes.ok) {
-            console.error('[recetas/import] Google Docs fetch error:', gRes.status)
-            return NextResponse.json({
-              error: `No se pudo descargar el documento (${gRes.status}). Verificá que esté compartido como "Cualquier persona con el enlace".`
-            }, { status: 400 })
-          }
-
-          googleText = await gRes.text()
+        const buf = Buffer.from(await gRes.arrayBuffer())
+        if (buf.byteLength < 100) {
+          return NextResponse.json({ error: 'El archivo descargado está vacío o es inválido.' }, { status: 400 })
         }
-
-        if (!sheetsMatch && !docsMatch) {
-          return NextResponse.json({ error: 'URL no reconocida. Usá un link de Google Sheets o Google Docs.' }, { status: 400 })
+        const sheetTexts = hojasATexto(buf)
+        if (sheetTexts.length === 0) {
+          return NextResponse.json({ error: 'Todas las hojas del documento están vacías.' }, { status: 400 })
         }
+        content.push({ type: 'text', text: `Transcribí las recetas de esta planilla de Google:\n\n${recortar(sheetTexts.join('\n\n'))}` })
 
+      } else if (docsMatch) {
+        const gRes = await fetch(`https://docs.google.com/document/d/${docsMatch[1]}/export?format=txt`, { redirect: 'follow' })
+        if (!gRes.ok) {
+          return NextResponse.json(
+            { error: `No se pudo descargar (${gRes.status}). Verificá los permisos de compartido.` },
+            { status: 400 },
+          )
+        }
+        const googleText = await gRes.text()
         if (!googleText.trim()) {
           return NextResponse.json({ error: 'El documento está vacío.' }, { status: 400 })
         }
+        content.push({ type: 'text', text: `Transcribí las recetas de este documento de Google:\n\n${recortar(googleText)}` })
 
-        // Truncate to fit Claude's context but keep as much as possible
-        const maxChars = 12000
-        const textForClaude = googleText.length > maxChars
-          ? googleText.substring(0, maxChars) + '\n\n[... contenido truncado por longitud ...]'
-          : googleText
-
-        content.push({
-          type: 'text',
-          text: `Analizá este archivo de ${docType} que contiene recetas de cocina profesional. El archivo tiene múltiples hojas con recetas, ingredientes, cantidades y procedimientos distribuidos de forma irregular.
-
-Tu tarea: Identificá TODAS las recetas que puedas encontrar y elegí la más completa o la primera con datos suficientes. Extraé ingredientes, cantidades, procedimiento y toda la información posible.
-
-Si hay varias recetas, elegí la primera que tenga ingredientes Y procedimiento completos.
-
-CONTENIDO DEL ARCHIVO:
-${textForClaude}`,
-        })
-      } catch (e) {
-        console.error('[recetas/import] Google fetch exception:', e)
-        return NextResponse.json({ error: 'Error al descargar el documento de Google. Verificá el link y los permisos.' }, { status: 400 })
+      } else {
+        return NextResponse.json(
+          { error: 'URL no reconocida. Usá un link de Google Sheets o Google Docs.' },
+          { status: 400 },
+        )
       }
+
     } else {
-      return NextResponse.json({ error: 'Datos insuficientes. Enviá texto o imagen.' }, { status: 400 })
+      return NextResponse.json({ error: 'Datos insuficientes. Enviá texto, imagen o archivo.' }, { status: 400 })
     }
 
-    console.log('[recetas/import] Request:', { mode, hasImage: !!image_base64, textLen: text?.length || 0, mediaType: media_type })
+    // Foto y PDF necesitan capacidad de visión; el resto es texto plano.
+    const usaVision = mode === 'image' || (mode === 'document' && content.some(b => b.type === 'document'))
+    const modelo = usaVision ? MODELO_VISION : MODELO_TEXTO
 
-    // Use Haiku for text-only imports (faster + cheaper), Sonnet for images
-    const singleModel = image_base64 ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001'
-    const result = await callClaude(SYSTEM_PROMPT, content, 2048, singleModel, restauranteId)
+    console.log('[recetas/import]', { mode, action, modelo, bloques: content.map(b => b.type) })
 
-    if (!result.ok) {
-      // Acá estaba el bug que se reportó como "no se reconocen las fotos"
-      // (ago 2026). Sin crédito, esto devolvía getDemoResult(): una receta
-      // inventada — "Lomo al Malbec", o "Pizza Napolitana" si el nombre del
-      // archivo decía pizza — después de un setTimeout de 1500ms puesto a
-      // propósito para simular el procesamiento. El cocinero fotografiaba su
-      // receta, esperaba, y recibía otra receta con un cartelito "DEMO".
-      // Indistinguible de "la IA leyó mal la foto".
-      return NextResponse.json({ error: result.error }, { status: result.status })
+    const resultado = await pedirAClaude({
+      tag: 'recetas/import',
+      model: modelo,
+      maxTokens: 8000,
+      system: construirSystemPrompt(categorias),
+      formatoJson: esquemaExtraccion(categorias),
+      messages: [{ role: 'user', content }],
+      restauranteId,
+    })
+
+    if (!resultado.ok) {
+      return NextResponse.json(
+        { error: resultado.error.mensaje },
+        { status: statusErrorIA(resultado.error) },
+      )
     }
 
-    try {
-      return NextResponse.json(parseClaudeJson(result.text))
-    } catch {
-      console.error('[recetas/import] Failed to parse response:', result.text)
-      return NextResponse.json({ error: 'La IA no devolvió JSON válido. Intentá de nuevo.', raw: result.text }, { status: 422 })
+    const extraccion = JSON.parse(resultado.texto) as Extraccion
+
+    // El modelo avisó que no pudo leer la fuente. Antes este caso no existía:
+    // no tenía forma de decirlo, así que devolvía una receta inventada con
+    // status 200 y el cocinero no tenía cómo distinguirla de una buena.
+    if (!extraccion.legible || extraccion.recetas.length === 0) {
+      return NextResponse.json(
+        {
+          error: extraccion.motivo || 'No se pudieron leer recetas en el archivo.',
+          ilegible: true,
+        },
+        { status: 422 },
+      )
     }
+
+    // `import` devuelve una receta plana (lo que espera ComposicionEditor);
+    // `import_multi` devuelve el array. Misma extracción por debajo.
+    if (action === 'import_multi') {
+      return NextResponse.json({ recetas: extraccion.recetas })
+    }
+    return NextResponse.json(extraccion.recetas[0])
+
   } catch (e) {
-    console.error('[recetas/import] Unexpected error:', e)
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Error inesperado' }, { status: 500 })
+    console.error('[recetas/import] Error inesperado:', e)
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Error inesperado' },
+      { status: 500 },
+    )
   }
 }
