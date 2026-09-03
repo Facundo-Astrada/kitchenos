@@ -94,10 +94,10 @@ export function useCierresTurno() {
     cerradoPor?: string | null
     itemsTotal?: number | null
     itemsCompletados?: number | null
-    // Relevo (ago 2026) — lectura del que entrega + qué debe saber el que
-    // entra. Ambos opcionales: nunca bloquean la entrega.
+    // Relevo (ago 2026) — lectura del que entrega. Lo que debe saber el que
+    // entra ya no viaja acá: son notas de plaza (pase_mensajes), ver
+    // lib/ops/textoPase.ts.
     percepcion?: 'bien' | 'regular' | 'complicado' | null
-    notasServicio?: string | null
   }): Promise<void> => {
     if (!RESTAURANTE_ID) throw new Error('Sin restaurante')
     const fila = {
@@ -110,7 +110,6 @@ export function useCierresTurno() {
       items_total: args.itemsTotal ?? null,
       items_completados: args.itemsCompletados ?? null,
       percepcion: args.percepcion ?? null,
-      notas_servicio: args.notasServicio ?? null,
     }
     try {
       const { error } = await supabase

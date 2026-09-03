@@ -33,8 +33,9 @@ import { motion } from 'motion/react'
 import { tap, DURATION, EASE_OUT, useReducedMotion } from '@/lib/ui/motion'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import SectionEditor from '@/components/checklist/SectionEditor'
+import { CopiarPaseBoton } from '@/components/ops/CopiarPaseBoton'
 import { FlipCard, ConfirmSheet } from '@/components/ui'
-import type { Plaza, PlazaCustom, MisePlaceItem, MisePrioridad, ChecklistSeccionConfig, RutinaFrecuencia, ChecklistRutina, ChecklistRutinaRegistro, RutinaCondicion, CierreTurno } from '@/types'
+import type { Plaza, PlazaCustom, MisePlaceItem, MisePrioridad, ChecklistSeccionConfig, RutinaFrecuencia, ChecklistRutina, ChecklistRutinaRegistro, RutinaCondicion, CierreTurno, PaseMensaje } from '@/types'
 
 // ── Constants ──
 const PLAZAS: Plaza[] = ['parrilla', 'frios', 'calientes', 'pase', 'pasteleria', 'panaderia', 'general']
@@ -251,16 +252,19 @@ const PERCEPCION_CFG: Record<'bien' | 'regular' | 'complicado', { label: string;
   regular: { label: 'Regular', color: '#f59e0b', icon: 'sentiment_neutral' },
   complicado: { label: 'Complicado', color: '#ef4444', icon: 'sentiment_dissatisfied' },
 }
-function EntregaPlazaSheet({ plazaNombre, done, total, proximoTurnoNombre, onConfirm, onCancel }: {
+function EntregaPlazaSheet({ plazaNombre, done, total, proximoTurnoNombre, notasHoy, onAgregarNota, onEliminarNota, onConfirm, onCancel }: {
   plazaNombre: string
   done: number
   total: number
   proximoTurnoNombre: string
-  onConfirm: (percepcion: 'bien' | 'regular' | 'complicado' | null, notas: string | null) => void
+  // Notas de HOY de esta plaza (pase_mensajes) — arman el "Ojo" del pase, ver textoPase.ts.
+  notasHoy: PaseMensaje[]
+  onAgregarNota: (texto: string, importante: boolean) => Promise<void>
+  onEliminarNota: (id: string) => Promise<void>
+  onConfirm: (percepcion: 'bien' | 'regular' | 'complicado' | null) => void
   onCancel: () => void
 }) {
   const [percepcion, setPercepcion] = useState<'bien' | 'regular' | 'complicado' | null>(null)
-  const [notas, setNotas] = useState('')
   return createPortal(
     <SheetChrome>
       <div
@@ -317,22 +321,12 @@ function EntregaPlazaSheet({ plazaNombre, done, total, proximoTurnoNombre, onCon
             </div>
           </div>
 
-          {/* Recomendación — texto libre, opcional */}
+          {/* Notas para el que entra — un bullet a la vez, no un párrafo */}
           <div>
             <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
-              ¿Algo que el turno siguiente deba saber? (opcional)
+              ¿Algo que el turno siguiente deba saber?
             </div>
-            <textarea
-              value={notas}
-              onChange={e => setNotas(e.target.value)}
-              placeholder="Ej: se rompió la salamandra, queda arreglado con la 2…"
-              rows={2}
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: '9px 11px', borderRadius: 10,
-                border: '1px solid var(--border)', background: 'var(--surface)',
-                fontSize: 12.5, fontFamily: 'inherit', color: 'var(--text-1)', resize: 'none', outline: 'none',
-              }}
-            />
+            <NotasPlaza notas={notasHoy} onAgregar={onAgregarNota} onEliminar={onEliminarNota} />
           </div>
 
           <div style={{ display: 'flex', gap: 8 }}>
@@ -347,7 +341,7 @@ function EntregaPlazaSheet({ plazaNombre, done, total, proximoTurnoNombre, onCon
               Cancelar
             </button>
             <button
-              onClick={() => onConfirm(percepcion, notas.trim() || null)}
+              onClick={() => onConfirm(percepcion)}
               style={{
                 ...btnReset, flex: 1.4, padding: '13px 0', borderRadius: 12, border: 'none',
                 background: '#22c55e', color: '#fff', fontSize: 13, fontWeight: 700,
@@ -1062,12 +1056,15 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     return turnosActivos.find(t => t.id === sig.turnoId) ?? null
   }, [fecha, turnoServicioId, turnosActivos])
 
+  // notasDe() trae hoy+ayer (ventana del board); acá se recorta a hoy.
+  const notasHoyPlaza = useMemo(() => (plaza ? notasDe(plaza).filter(n => n.turno_fecha === fecha) : []), [plaza, notasDe, fecha])
+
   function handleEntregarPlaza() {
     if (!plaza || !turnoServicioId || entregando) return
     setConfirmAccion('entregar')
   }
 
-  async function doEntregarPlaza(percepcion: 'bien' | 'regular' | 'complicado' | null, notasServicio: string | null) {
+  async function doEntregarPlaza(percepcion: 'bien' | 'regular' | 'complicado' | null) {
     if (!plaza || !turnoServicioId) return
     const nombreProximo = proximoTurno?.nombre ?? 'el turno siguiente'
     setConfirmAccion(null)
@@ -1081,7 +1078,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         jornada: fecha, turnoId: turnoServicioId, plaza,
         cerradoPor: authPerfil?.miembro_id ?? null,
         itemsTotal: total, itemsCompletados: done,
-        percepcion, notasServicio,
+        percepcion,
       })
       tap(20)
       setToast(`Plaza entregada — el turno pasa a ${nombreProximo}`)
@@ -2688,6 +2685,13 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                 : proximoTurno ? `Entregala para pasar a ${proximoTurno.nombre}` : 'Entregala para pasar el turno'}
             </div>
           </div>
+          {/* Fuera del if/else: el pase se manda después de entregar tanto como antes */}
+          <CopiarPaseBoton
+            plaza={plaza} fecha={fecha} jornadaProxima={jornadaProxima} tareas={tareas}
+            notasHoy={notasHoyPlaza} plazasCustom={plazasCustom} turnoNombre={turnoActual?.nombre ?? null}
+            autor={[authPerfil?.nombre, authPerfil?.apellido].filter(Boolean).join(' ').trim() || null}
+            entregadoAt={entregaActual?.cerrado_at ?? null}
+          />
           {/* Entregar primero; una vez entregada, la barra ofrece deshacer (por si
               fue un error de tap) y la salida personal (solo si hay fichaje
               abierto que cerrar). */}
@@ -2750,6 +2754,9 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           plazaNombre={plazaLabel(plaza, plazasCustom)}
           done={done} total={total}
           proximoTurnoNombre={proximoTurno?.nombre ?? 'el turno siguiente'}
+          notasHoy={notasHoyPlaza}
+          onAgregarNota={(texto, importante) => agregarNota({ plaza, texto, importante })}
+          onEliminarNota={eliminarNota}
           onConfirm={doEntregarPlaza}
           onCancel={() => setConfirmAccion(null)}
         />
