@@ -17,70 +17,10 @@ import IngredienteOpsSheet from './IngredienteOpsSheet'
 import { RecetaDetailSkeleton } from './loading'
 import { createClient } from '@/lib/supabase/client'
 import { upsertMiseChecklistItem, PLAZAS_OPS } from '@/lib/ops/mise'
+import { toGramos, calcPesoPorcion, calcPesoNetos, formatPeso, smartQty } from '@/lib/recetas/peso'
 import type { OpsResult } from '@/components/ops/OpsPanel'
 
 const UNIDADES = ['kg', 'g', 'L', 'ml', 'unidad', 'docena', 'caja']
-
-// Convierte una cantidad+unidad a gramos (para calcular peso por porción)
-function toGramos(cantidad: number, unidad: string): number {
-  const u = (unidad || '').toLowerCase().trim()
-  if (u === 'kg') return cantidad * 1000
-  if (u === 'g') return cantidad
-  if (u === 'l' || u === 'lt' || u === 'lts') return cantidad * 1000 // 1L ≈ 1kg
-  if (u === 'ml') return cantidad
-  return 0 // unidades sueltas (u, docena, caja) no suman peso
-}
-
-function calcPesoPorcion(ingredientes: { cantidad: number; unidad: string; merma_pct?: number | null }[], porciones: number): number | null {
-  if (!porciones || porciones <= 0) return null
-  const netoG = ingredientes.reduce((s, i) => {
-    const bruto = toGramos(i.cantidad, i.unidad)
-    return s + bruto * (1 - (i.merma_pct ?? 0) / 100)
-  }, 0)
-  if (netoG <= 0) return null
-  return Math.round(netoG / porciones)
-}
-
-function calcPesoNetos(ingredientes: { cantidad: number; unidad: string; merma_pct?: number | null }[]) {
-  let brutoG = 0
-  let netoG = 0
-  for (const i of ingredientes) {
-    const g = toGramos(i.cantidad, i.unidad)
-    brutoG += g
-    netoG += g * (1 - (i.merma_pct ?? 0) / 100)
-  }
-  return { brutoG, netoG, hasMerma: brutoG > 0 && Math.abs(brutoG - netoG) > 0.01 }
-}
-
-function formatPeso(gramos: number): string {
-  if (gramos >= 1000) return `${(gramos / 1000).toFixed(gramos % 1000 === 0 ? 0 : 1)}kg/u`
-  return `${gramos}g/u`
-}
-
-// Smart display: siempre muestra la unidad más legible independiente de cómo está guardado.
-// 0.005 kg → 5g | 1500 g → 1.5kg | 0.05 l → 50ml | 2000 ml → 2l
-function smartQty(qty: number, unit: string): { qty: string; unit: string } {
-  const u = (unit || '').toLowerCase().trim()
-  if ((u === 'kg' || u === 'kgs' || u === 'kilo') && qty < 0.1 && qty > 0) {
-    const g = qty * 1000
-    return { qty: g % 1 === 0 ? String(g) : g.toFixed(1), unit: 'g' }
-  }
-  if (u === 'g' && qty >= 1000) {
-    const kg = qty / 1000
-    return { qty: kg % 1 === 0 ? String(kg) : kg.toFixed(2).replace(/\.?0+$/, ''), unit: 'kg' }
-  }
-  if ((u === 'l' || u === 'lt' || u === 'lts') && qty < 0.1 && qty > 0) {
-    const ml = qty * 1000
-    return { qty: ml % 1 === 0 ? String(ml) : ml.toFixed(1), unit: 'ml' }
-  }
-  if (u === 'ml' && qty >= 1000) {
-    const l = qty / 1000
-    return { qty: l % 1 === 0 ? String(l) : l.toFixed(2).replace(/\.?0+$/, ''), unit: 'l' }
-  }
-  // Default: format removing trailing zeros
-  const fmtQty = qty % 1 === 0 ? String(qty) : qty.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
-  return { qty: fmtQty, unit }
-}
 
 function fcColor(pct: number) {
   if (pct >= FC_ALERT_HIGH) return '#ef4444'

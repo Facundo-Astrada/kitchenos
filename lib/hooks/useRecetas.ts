@@ -6,11 +6,17 @@ import { createClient } from '@/lib/supabase/client'
 import type { Receta, Ingrediente, FoodCostCalc } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
 import { canonUnit, unitConversionFactor } from '@/lib/unidades'
+import { costoPorGramoDeReceta } from '@/lib/recetas/peso'
 
 export type RecetaConCosto = Receta & {
   food_cost: FoodCostCalc
   en_carta?: boolean   // derivado: existe un carta_item con receta_id = esta receta (publicada en carta)
   // `es_plato` es columna real de Receta (modo "trabajar como plato") — no confundir con en_carta
+  // Costo por gramo del batch completo — peso_total_g si está cargado, si no
+  // se deriva de la suma de ingredientes (lib/recetas/peso.ts). null = ninguna
+  // de las dos fuentes alcanza. Reemplaza el cálculo inline que antes repetían
+  // carta/page.tsx y ComposicionEditor.tsx exigiendo peso_total_g a mano.
+  costoPorGramo: number | null
 }
 
 // canonUnit/unitConversionFactor viven en lib/unidades.ts (día 10 de
@@ -43,11 +49,13 @@ export function calcFoodCost(ingredientes: Ingrediente[], porciones: number, pre
 function mapReceta(r: Record<string, unknown>): RecetaConCosto {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ings = ((r.ingredientes as any[]) ?? []) as Ingrediente[]
+  const food_cost = calcFoodCost(ings, (r.porciones as number) ?? 1, (r.precio_venta as number) ?? 0)
   return {
     ...(r as unknown as Receta),
     status: (r.status as string) || 'published',
     ingredientes: ings,
-    food_cost: calcFoodCost(ings, (r.porciones as number) ?? 1, (r.precio_venta as number) ?? 0),
+    food_cost,
+    costoPorGramo: costoPorGramoDeReceta({ peso_total_g: r.peso_total_g as number | null, ingredientes: ings }, food_cost.costo_total),
   }
 }
 
@@ -55,7 +63,8 @@ function mapReceta(r: Record<string, unknown>): RecetaConCosto {
 // sus propios campos (porciones/precio_venta) — usado por las mutaciones
 // optimistas de acá abajo, no solo por el fetch inicial.
 function conFoodCostRecalculado(r: RecetaConCosto): RecetaConCosto {
-  return { ...r, food_cost: calcFoodCost(r.ingredientes ?? [], r.porciones ?? 1, r.precio_venta ?? 0) }
+  const food_cost = calcFoodCost(r.ingredientes ?? [], r.porciones ?? 1, r.precio_venta ?? 0)
+  return { ...r, food_cost, costoPorGramo: costoPorGramoDeReceta({ peso_total_g: r.peso_total_g, ingredientes: r.ingredientes ?? [] }, food_cost.costo_total) }
 }
 
 async function fetchRecetasData(key: string): Promise<RecetaConCosto[]> {
@@ -163,13 +172,15 @@ export function useRecetas() {
       marcarEscrituraPropia(newId)
       // Optimistic: agregar a la lista antes de revalidar
       const ings = (ingredientesData || []).map(i => ({ ...i, id: '', receta_id: newId })) as Ingrediente[]
+      const food_cost = calcFoodCost(ings, datos.porciones ?? 1, datos.precio_venta ?? 0)
       const nueva: RecetaConCosto = {
         id: newId,
         ...datos,
         restaurante_id: RESTAURANTE_ID,
         created_at: new Date().toISOString(),
         ingredientes: ings,
-        food_cost: calcFoodCost(ings, datos.porciones ?? 1, datos.precio_venta ?? 0),
+        food_cost,
+        costoPorGramo: costoPorGramoDeReceta({ peso_total_g: datos.peso_total_g, ingredientes: ings }, food_cost.costo_total),
         status: datos.status || 'published',
         activa: true,
       }

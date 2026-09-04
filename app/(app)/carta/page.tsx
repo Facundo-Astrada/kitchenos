@@ -20,6 +20,7 @@ import {
   upsertMiseChecklistItem, parseRecipienteNombre, TAREA_PRIO_TO_MISE,
   PLAZAS_OPS, SECCIONES_OPS, sumPlatoRecetaCantidad, shrinkOrPruneMise, porcionesDesdeCapacidad,
 } from '@/lib/ops/mise'
+import { gramajeDesdeCantidadOps } from '@/lib/recetas/peso'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { clasificarIngenieriaMenu, buildVentasMap, mapaCuadrantePorId, QUAD_META } from '@/lib/carta/ingenieriaMenu'
 import { sincronizarMiseDeMenu } from '@/lib/ops/menuMise'
@@ -453,10 +454,15 @@ export default function CartaPage() {
         for (const it of compItems) {
           if ((it.tipo === 'receta' || it.tipo === 'producto') && it.ref_id) {
             if (it.tipo === 'receta') await agregarPlatoReceta(newId, it.ref_id, it.cantidad ?? 1)
-            // Guardar plaza + OPS en plato_recetas
+            // Guardar plaza + OPS en plato_recetas. Cuando cantidad_ops está en
+            // unidad de peso/volumen (sin recipiente) es también el gramaje real
+            // de este componente — se espeja a gramaje/gramaje_unidad (columna
+            // dedicada al costeo) para que el food cost de Carta no dependa de
+            // una columna que en otros casos guarda la demanda al mise (pax/porc/u).
             if (it.plaza || it.cantidad_ops != null) {
+              const { gramaje, gramaje_unidad } = gramajeDesdeCantidadOps(it.cantidad_ops ?? null, it.unidad_ops ?? null)
               await supa.from('plato_recetas')
-                .update({ plaza: it.plaza ?? null, cantidad_ops: it.cantidad_ops ?? null, unidad_ops: it.unidad_ops ?? null })
+                .update({ plaza: it.plaza ?? null, cantidad_ops: it.cantidad_ops ?? null, unidad_ops: it.unidad_ops ?? null, gramaje, gramaje_unidad })
                 .eq('plato_id', newId).eq('receta_id', it.ref_id)
             }
             // Si tiene OPS configurado: upsert checklist_items (helper compartido)
@@ -668,9 +674,9 @@ export default function CartaPage() {
           inicial={composing.inicial}
           recetas={recetas.map(r => ({
             id: r.id, nombre: r.nombre, costo: r.food_cost.costo_porcion,
-            // costo por gramo del recetario: costo_total del batch ÷ su peso bruto total.
-            // Sin peso_total_g cargado no hay forma de derivarlo — null (fallback a costo_porcion).
-            costoPorGramo: r.peso_total_g && r.peso_total_g > 0 ? r.food_cost.costo_total / r.peso_total_g : null,
+            // costoPorGramo ya viene calculado por useRecetas (peso_total_g si está
+            // cargado, si no derivado de los ingredientes — lib/recetas/peso.ts).
+            costoPorGramo: r.costoPorGramo,
             ingredientes: (r.ingredientes ?? []).map(i => ({ nombre: i.nombre, cantidad: i.cantidad, unidad: i.unidad })),
           }))}
           productos={productos.map(p => {

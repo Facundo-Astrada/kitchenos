@@ -444,7 +444,7 @@ export function DetailView({
                       {pr.receta?.nombre ?? pr.receta_id}
                     </div>
                     <div style={{ display: 'flex', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
-                      {pr.costo_calculado > 0 && (
+                      {pr.costo_calculado != null && pr.costo_calculado > 0 && (
                         <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmtMoney(pr.costo_calculado)}</span>
                       )}
                       {pr.plaza && pr.cantidad_ops != null && (() => {

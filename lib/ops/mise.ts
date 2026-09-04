@@ -227,8 +227,29 @@ export async function sumPlatoRecetaCantidad(
     .select('cantidad_ops, unidad_ops')
     .eq('receta_id', recetaId).eq('plaza', plaza).not('cantidad_ops', 'is', null)
   const rows = (data ?? []) as { cantidad_ops: number | null; unidad_ops: string | null }[]
-  const total = rows.reduce((s, r) => s + (r.cantidad_ops ?? 0), 0)
-  return { total, unidad: rows[0]?.unidad_ops ?? 'u' }
+  if (rows.length === 0) return { total: 0, unidad: 'u' }
+  // Distintos platos pueden haber cargado esta misma receta+plaza en unidades
+  // que no son sumables entre sí (un plato en "pax", otro en "g" porque alguien
+  // usó este mismo campo para el gramaje directo — ver plato_recetas.gramaje).
+  // Sumarlas igual da un número sin sentido (3g + 30pax = "33"). Se normaliza
+  // peso/volumen a gramos (sí son sumables entre sí) y se suma solo la
+  // magnitud dominante entre las filas; el resto se descarta con un aviso en
+  // vez de ensuciar el total del mise.
+  const esPeso = (u: string) => ['g', 'kg', 'ml', 'l'].includes(u)
+  const normalizadas = rows.map(r => {
+    const u = (r.unidad_ops ?? 'u').toLowerCase().trim()
+    const cant = r.cantidad_ops ?? 0
+    return esPeso(u) ? { cantidad: u === 'kg' || u === 'l' ? cant * 1000 : cant, unidad: 'g' } : { cantidad: cant, unidad: u }
+  })
+  const conteoPorUnidad = new Map<string, number>()
+  for (const n of normalizadas) conteoPorUnidad.set(n.unidad, (conteoPorUnidad.get(n.unidad) ?? 0) + 1)
+  const [unidadDominante] = [...conteoPorUnidad.entries()].sort((a, b) => b[1] - a[1])[0]
+  const descartadas = normalizadas.length - (conteoPorUnidad.get(unidadDominante) ?? 0)
+  if (descartadas > 0) {
+    console.warn(`[mise] sumPlatoRecetaCantidad: ${descartadas} fila(s) con unidad incompatible con '${unidadDominante}' descartada(s) — receta ${recetaId}, plaza ${plaza}`)
+  }
+  const total = normalizadas.filter(n => n.unidad === unidadDominante).reduce((s, n) => s + n.cantidad, 0)
+  return { total, unidad: unidadDominante }
 }
 
 // ── Achicar o borrar el checklist_item de una plaza que un componente dejó ──

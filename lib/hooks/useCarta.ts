@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { Receta, Ingrediente } from '@/types'
 import { calcFoodCost } from './useRecetas'
 import { useRestauranteId } from './useRestauranteId'
+import { costoPorGramoDeReceta, gramajeDesdeCantidadOps } from '@/lib/recetas/peso'
 
 const SWR_OPTS = {
   revalidateOnFocus: false,
@@ -60,11 +61,19 @@ interface PlatoRecetaDB {
   plaza?: string | null
   cantidad_ops?: number | null
   unidad_ops?: string | null
+  // Peso de este componente en UNA porción del plato — dedicado al food cost,
+  // separado de cantidad_ops (demanda de este plato al stock estándar de la
+  // plaza). Ver supabase/migrations/20260904_plato_recetas_gramaje.sql.
+  gramaje?: number | null
+  gramaje_unidad?: string | null
 }
 
 export interface PlatoRecetaEnriquecido extends PlatoRecetaDB {
   receta?: Receta & { ingredientes: Ingrediente[] }
-  costo_calculado: number
+  // null = sin gramaje conocido (ni columna propia, ni tamaño por porción
+  // cargado en el mise) — no se fabrica un costo asumiendo "una porción
+  // entera del batch". Ver CartaItemEnriquecido.tieneComponentesSinEstandarizar.
+  costo_calculado: number | null
 }
 
 export interface PlatoPackagingDB {
@@ -91,6 +100,10 @@ export interface CartaItemEnriquecido extends CartaItemDB {
   margen_pct_computed?: number
   costo_total_plato?: number
   costo_packaging: number
+  // true si el plato tiene al menos un componente (plato_recetas con receta
+  // vinculada) sin gramaje conocido — food_cost_pct/margen_* quedan sin
+  // calcular en ese caso en vez de asumir "una porción entera" del batch.
+  tieneComponentesSinEstandarizar?: boolean
 }
 
 async function fetchCartaCategoriasData(key: string): Promise<CartaCategoria[]> {
@@ -170,12 +183,45 @@ async function fetchCartaItemsData(key: string): Promise<CartaItemEnriquecido[]>
       }
     }
 
+    // Tamaño por porción cargado en el mise (checklist_items.peso_porcion) —
+    // cuando existe, gana sobre plato_recetas.gramaje: es un dato compartido
+    // por receta+plaza que CartaBoardCard.tsx/recetario/page.tsx ya tratan
+    // como la fuente de verdad del gramaje real (puede cambiar sin tocar cada
+    // plato_recetas). Sin esto, el costeo quedaría desincronizado del número
+    // que esas dos pantallas ya muestran.
+    const misePesoMap: Record<string, { peso: number; unidad: string }> = {}
+    const prConPlaza = prItems.filter(pr => pr.plaza)
+    if (prConPlaza.length > 0) {
+      const { data: ciData } = await supabase
+        .from('checklist_items')
+        .select('receta_id, plaza, peso_porcion, peso_porcion_unidad')
+        .eq('restaurante_id', rid)
+        .in('receta_id', [...new Set(prConPlaza.map(pr => pr.receta_id))])
+        .not('peso_porcion', 'is', null)
+      for (const ci of (ciData ?? []) as { receta_id: string; plaza: string; peso_porcion: number; peso_porcion_unidad: string | null }[]) {
+        misePesoMap[`${ci.receta_id}|${ci.plaza}`] = { peso: ci.peso_porcion, unidad: ci.peso_porcion_unidad ?? 'g' }
+      }
+    }
+    const enGramos = (v: number, u: string) => (u === 'kg' || u === 'l' ? v * 1000 : v)
+
     for (const pr of prItems) {
       if (!platoRecetasMap[pr.plato_id]) platoRecetasMap[pr.plato_id] = []
       const r = recetaMap[pr.receta_id]
-      const costo_calculado = r
-        ? calcFoodCost(r.ingredientes, r.porciones ?? 1, 0).costo_porcion * pr.porciones
-        : 0
+      // Gramaje efectivo: tamaño por porción del mise si existe, si no la
+      // columna dedicada. null = sin gramaje conocido — no se fabrica un
+      // costo asumiendo "una porción entera del batch" (bug que costeaba
+      // p.ej. un componente de un batch de 30 porciones como si el plato
+      // se llevara el batch entero).
+      const mise = pr.plaza ? misePesoMap[`${pr.receta_id}|${pr.plaza}`] : undefined
+      const gramajeEnG = mise
+        ? enGramos(mise.peso, mise.unidad)
+        : pr.gramaje != null ? enGramos(pr.gramaje, pr.gramaje_unidad ?? 'g') : null
+      let costo_calculado: number | null = null
+      if (r && gramajeEnG != null) {
+        const costoTotalReceta = calcFoodCost(r.ingredientes, r.porciones ?? 1, 0).costo_total
+        const costoPorGramo = costoPorGramoDeReceta(r, costoTotalReceta)
+        costo_calculado = costoPorGramo != null ? costoPorGramo * gramajeEnG : null
+      }
       platoRecetasMap[pr.plato_id].push({ ...pr, receta: r, costo_calculado })
     }
 
@@ -228,16 +274,28 @@ async function fetchCartaItemsData(key: string): Promise<CartaItemEnriquecido[]>
     let margen_bruto: number | undefined
     let margen_pct_computed: number | undefined
     let costo_total_plato: number | undefined
+    let tieneComponentesSinEstandarizar = false
 
     if (platoRecetas.length > 0) {
-      costo_total_plato = platoRecetas.reduce((sum, pr) => sum + pr.costo_calculado, 0)
-      const costo_con_pkg = costo_total_plato + costo_packaging
-      const precio = item.precio_venta ?? 0
-      if (precio > 0 && costo_con_pkg > 0) {
-        costo_porcion = costo_con_pkg
-        margen_bruto = precio - costo_con_pkg
-        food_cost_pct = (costo_con_pkg / precio) * 100
-        margen_pct_computed = ((precio - costo_con_pkg) / precio) * 100
+      // Con algún componente sin gramaje conocido, el % de food cost/margen no
+      // se calcula — mostrar un FC parcial (solo con lo que sí se sabe) sería
+      // fabricar un número que se lee como definitivo sin serlo. costo_total_plato
+      // sí se expone (suma de lo conocido, real aunque incompleto) para que la
+      // UI pueda mostrarlo como referencia parcial.
+      tieneComponentesSinEstandarizar = platoRecetas.some(pr => pr.receta && pr.costo_calculado == null)
+      const costeadas = platoRecetas.filter(pr => pr.costo_calculado != null)
+      if (costeadas.length > 0) {
+        costo_total_plato = costeadas.reduce((sum, pr) => sum + (pr.costo_calculado ?? 0), 0)
+      }
+      if (!tieneComponentesSinEstandarizar && costo_total_plato != null) {
+        const costo_con_pkg = costo_total_plato + costo_packaging
+        const precio = item.precio_venta ?? 0
+        if (precio > 0 && costo_con_pkg > 0) {
+          costo_porcion = costo_con_pkg
+          margen_bruto = precio - costo_con_pkg
+          food_cost_pct = (costo_con_pkg / precio) * 100
+          margen_pct_computed = ((precio - costo_con_pkg) / precio) * 100
+        }
       }
     } else if (receta && receta.ingredientes.length > 0) {
       const fc = calcFoodCost(receta.ingredientes, receta.porciones ?? 0, item.precio_venta ?? 0)
@@ -256,6 +314,7 @@ async function fetchCartaItemsData(key: string): Promise<CartaItemEnriquecido[]>
       receta, plato_recetas: platoRecetas,
       plato_packaging: platoPackaging, costo_packaging,
       food_cost_pct, costo_porcion, margen_bruto, margen_pct_computed, costo_total_plato,
+      tieneComponentesSinEstandarizar,
     }
   })
 }
@@ -487,9 +546,15 @@ export function useCarta() {
 
   // Gramaje (u otra unidad) de una receta dentro del plato → plato_recetas.cantidad_ops/unidad_ops.
   // Es el "cuántos gramos de esta receta van al plato" que se ve en la ficha derivada del recetario.
+  // Cuando la unidad es de peso/volumen (sin recipiente), ese valor ES el
+  // gramaje real del componente — se espeja a gramaje/gramaje_unidad (columna
+  // dedicada al costeo, separada de cantidad_ops que en el flujo de OPS
+  // completo significa demanda al mise) para que el food cost de Carta la
+  // use sin depender de en qué unidad haya quedado cantidad_ops esta vez.
   const actualizarPlatoRecetaOps = useCallback(async (platoRecetaId: string, datos: { cantidad_ops: number | null; unidad_ops: string | null }) => {
     try {
-      const { error } = await supabase.from('plato_recetas').update(datos).eq('id', platoRecetaId)
+      const { gramaje, gramaje_unidad } = gramajeDesdeCantidadOps(datos.cantidad_ops, datos.unidad_ops)
+      const { error } = await supabase.from('plato_recetas').update({ ...datos, gramaje, gramaje_unidad }).eq('id', platoRecetaId)
       if (error) throw error
       await fetchItems()
     } catch (e: unknown) {
