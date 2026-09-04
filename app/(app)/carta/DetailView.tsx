@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import type { CartaItemEnriquecido, PlatoRecetaEnriquecido } from '@/lib/hooks/useCarta'
+import type { CartaItemEnriquecido, PlatoRecetaEnriquecido, CartaCategoria } from '@/lib/hooks/useCarta'
 import type { RecetaConCosto } from '@/lib/hooks/useRecetas'
 import type { ProductoConEstado } from '@/lib/hooks/useStock'
 import type { MisePlaceItem } from '@/types'
@@ -10,6 +10,7 @@ import { PLAZAS_OPS, parseRecipienteNombre } from '@/lib/ops/mise'
 import { useTareas } from '@/lib/hooks/useTareas'
 import OpsPanel, { type OpsInitial, type OpsResult } from '@/components/ops/OpsPanel'
 import { RecetaEditSheet } from '@/components/recetas/RecetaEditSheet'
+import PhotoPicker from '@/components/ui/PhotoPicker'
 import { fmtMoney, fcBadge, marginBadge } from './cards'
 
 // ── Detail View ─────────────────────────────────────────
@@ -26,12 +27,13 @@ export function DetailView({
   item,
   recetas,
   productos,
+  categorias,
   checklistItems,
   recipientesUsados,
   onBack,
-  onEdit,
+  onGuardarMeta,
+  onEliminarPlato,
   onDuplicar,
-  onVincular,
   onAgregarReceta,
   onEliminarReceta,
   onAgregarPackaging,
@@ -51,12 +53,13 @@ export function DetailView({
   item: CartaItemEnriquecido
   recetas: RecetaConCosto[]
   productos: ProductoConEstado[]
+  categorias: CartaCategoria[]
   checklistItems: MisePlaceItem[]
   recipientesUsados: string[]
   onBack: () => void
-  onEdit: () => void
+  onGuardarMeta: (datos: { nombre: string; descripcion: string; precio_venta: number; categoria: string; foto_url: string }) => Promise<void>
+  onEliminarPlato: () => Promise<void>
   onDuplicar: () => Promise<void>
-  onVincular: (recetaId: string) => Promise<void>
   onAgregarReceta: (recetaId: string, porciones: number) => Promise<void>
   onEliminarReceta: (pr: PlatoRecetaEnriquecido) => Promise<void>
   onAgregarPackaging: (productoId: string, cantidad: number) => Promise<void>
@@ -88,6 +91,43 @@ export function DetailView({
   // Draft recipe creation
   const [creatingDraft, setCreatingDraft] = useState(false)
   const [creatingTarea, setCreatingTarea] = useState(false)
+  // Edición de nombre/precio/categoría/descripción/foto — reemplaza la
+  // pantalla separada EditarPlato.tsx (Fase 3): un solo salto list→detail,
+  // sin un tercer nivel de navegación solo para estos cinco campos.
+  const [editandoMeta, setEditandoMeta] = useState(false)
+  const [metaForm, setMetaForm] = useState({ nombre: '', descripcion: '', precio_venta: '', categoria: '', foto_url: '' })
+  const [savingMeta, setSavingMeta] = useState(false)
+
+  function startEditarMeta() {
+    setMetaForm({
+      nombre: item.nombre,
+      descripcion: item.descripcion ?? '',
+      precio_venta: String(item.precio_venta),
+      categoria: item.categoria,
+      foto_url: item.foto_url ?? '',
+    })
+    setEditandoMeta(true)
+  }
+
+  const metaPrecio = parseFloat(metaForm.precio_venta.replace(',', '.')) || 0
+  const metaValido = metaForm.nombre.trim().length > 0 && metaPrecio > 0
+
+  async function handleGuardarMeta() {
+    if (!metaValido || savingMeta) return
+    setSavingMeta(true)
+    try {
+      await onGuardarMeta({
+        nombre: metaForm.nombre.trim(),
+        descripcion: metaForm.descripcion.trim(),
+        precio_venta: metaPrecio,
+        categoria: metaForm.categoria,
+        foto_url: metaForm.foto_url,
+      })
+      setEditandoMeta(false)
+    } finally {
+      setSavingMeta(false)
+    }
+  }
 
   const supabaseDV = useMemo(() => createClient(), [])
   const { agregarTarea } = useTareas({ soloEscritura: true })
@@ -222,11 +262,6 @@ export function DetailView({
     } finally { setVinculando(false) }
   }
 
-  const handleVincular = async (recetaId: string) => {
-    setVinculando(true)
-    try { await onVincular(recetaId) } finally { setVinculando(false) }
-  }
-
   const handleAgregarReceta = async () => {
     if (!pendingReceta) return
     setVinculando(true)
@@ -244,27 +279,129 @@ export function DetailView({
   return (
     <div>
       <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
-          <span className="material-symbols-outlined">arrow_back</span>
+        <button onClick={editandoMeta ? () => setEditandoMeta(false) : onBack} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
+          <span className="material-symbols-outlined">{editandoMeta ? 'close' : 'arrow_back'}</span>
         </button>
-        <div style={{ flex: 1 }}>
-          <div style={{ color: '#fff', fontWeight: 700, fontSize: 17 }}>{item.nombre}</div>
-          <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>{item.categoria}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ color: '#fff', fontWeight: 700, fontSize: 17, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {editandoMeta ? 'Editar plato' : item.nombre}
+          </div>
+          {!editandoMeta && <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>{item.categoria}</div>}
         </div>
-        <button onClick={onDuplicar} style={{
-          background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8,
-          width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-        }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#fff' }}>content_copy</span>
-        </button>
-        <button onClick={onEdit} style={{
-          background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8,
-          padding: '6px 12px', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-        }}>
-          Editar
-        </button>
+        {editandoMeta ? (
+          <button onClick={handleGuardarMeta} disabled={!metaValido || savingMeta} style={{
+            background: metaValido ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 8,
+            padding: '6px 14px', color: '#fff', fontSize: 12, fontWeight: 700,
+            cursor: metaValido && !savingMeta ? 'pointer' : 'default', opacity: savingMeta ? 0.7 : 1,
+          }}>
+            {savingMeta ? 'Guardando…' : 'Guardar'}
+          </button>
+        ) : (
+          <>
+            <button onClick={onDuplicar} style={{
+              background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8,
+              width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#fff' }}>content_copy</span>
+            </button>
+            <button onClick={startEditarMeta} style={{
+              background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: 8,
+              padding: '6px 12px', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            }}>
+              Editar
+            </button>
+          </>
+        )}
       </div>
 
+      {editandoMeta ? (
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Foto */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <PhotoPicker
+              currentUrl={metaForm.foto_url || null}
+              path={`carta/${item.id}`}
+              size={80}
+              onUploaded={url => setMetaForm(f => ({ ...f, foto_url: url }))}
+              onRemoved={() => setMetaForm(f => ({ ...f, foto_url: '' }))}
+            />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', marginBottom: 2 }}>Foto del plato</div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Se muestra en la carta digital y en la lista</div>
+            </div>
+          </div>
+
+          {/* Nombre */}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 4, display: 'block' }}>Nombre del plato</label>
+            <input
+              value={metaForm.nombre}
+              onChange={e => setMetaForm(f => ({ ...f, nombre: e.target.value }))}
+              placeholder="Ej: Bife de chorizo"
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 14, color: 'var(--text-1)', boxSizing: 'border-box', fontFamily: 'inherit' }}
+            />
+          </div>
+
+          {/* Categoria pills */}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>Categoría</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {(categorias.length > 0 ? categorias : [{ nombre: 'Principales', icono: 'restaurant', id: '', orden: 0, restaurante_id: '' }]).map(cat => (
+                <button
+                  key={cat.nombre}
+                  onClick={() => setMetaForm(f => ({ ...f, categoria: cat.nombre }))}
+                  style={{
+                    padding: '7px 14px', borderRadius: 20, border: 'none',
+                    background: metaForm.categoria === cat.nombre ? 'var(--navy)' : 'var(--bg)',
+                    color: metaForm.categoria === cat.nombre ? '#fff' : 'var(--text-2)',
+                    fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'inherit',
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{cat.icono || 'restaurant'}</span>
+                  {cat.nombre}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Descripción */}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 4, display: 'block' }}>Descripción</label>
+            <textarea
+              value={metaForm.descripcion}
+              onChange={e => setMetaForm(f => ({ ...f, descripcion: e.target.value }))}
+              rows={2}
+              placeholder="Descripción corta del plato..."
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 13, color: 'var(--text-1)', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit' }}
+            />
+          </div>
+
+          {/* Precio */}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 4, display: 'block' }}>Precio de venta</label>
+            <div style={{ position: 'relative' }}>
+              <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'var(--text-3)' }}>$</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={metaForm.precio_venta}
+                onChange={e => setMetaForm(f => ({ ...f, precio_venta: e.target.value }))}
+                placeholder="0"
+                style={{ width: '100%', padding: '10px 12px 10px 24px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 14, color: 'var(--text-1)', boxSizing: 'border-box', fontFamily: 'inherit' }}
+              />
+            </div>
+          </div>
+
+          <button onClick={onEliminarPlato} style={{
+            padding: '10px', borderRadius: 10, marginTop: 8,
+            background: 'none', color: '#ef4444', border: '1px solid #fecaca',
+            fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+          }}>
+            Eliminar plato
+          </button>
+        </div>
+      ) : (
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {/* Info card */}
         <div style={{
@@ -852,6 +989,7 @@ export function DetailView({
           )}
         </div>
       </div>
+      )}
 
       {editRecetaSheet && (
         <RecetaEditSheet

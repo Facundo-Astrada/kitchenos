@@ -1,9 +1,10 @@
 'use client'
 
 // Carga rápida de ingredientes + subrecetas, con food cost en vivo.
-// Componente compartido: lo monta tanto la ficha técnica de un Plato (Recetario → Platos)
-// como la pantalla de Carga rápida de Recetario. Es controlado — el padre es dueño del
-// array de filas — para que ambos lugares puedan reusar la misma UI/lógica sin duplicarla.
+// Componente compartido: lo monta tanto RecetaEditSheet (editar una receta
+// vinculada desde Carta, sin salir de la pantalla) como la pantalla de Carga
+// rápida de Recetario. Es controlado — el padre es dueño del array de filas
+// — para que ambos lugares puedan reusar la misma UI/lógica sin duplicarla.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Ingrediente } from '@/types'
 import type { RecetaConCosto } from '@/lib/hooks/useRecetas'

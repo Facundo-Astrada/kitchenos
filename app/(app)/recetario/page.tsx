@@ -7,7 +7,6 @@ import PhotoPicker from '@/components/ui/PhotoPicker'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useRecetas, calcFoodCost, type RecetaConCosto } from '@/lib/hooks/useRecetas'
-import { useCarta, type CartaItemEnriquecido } from '@/lib/hooks/useCarta'
 import { useStock } from '@/lib/hooks/useStock'
 import { useCategoriasProducto } from '@/lib/hooks/useCategoriasProducto'
 import { usePermisos } from '@/lib/hooks/usePermisos'
@@ -153,8 +152,8 @@ const itemVariants = {
   show: { opacity: 1, transition: { duration: 0.12 } },
 }
 
-type Tab = 'recetas' | 'ideas' | 'platos'
-const TAB_IDS: Tab[] = ['recetas', 'ideas', 'platos']
+type Tab = 'recetas' | 'ideas'
+const TAB_IDS: Tab[] = ['recetas', 'ideas']
 function esTab(v: string | null): v is Tab {
   return v != null && (TAB_IDS as string[]).includes(v)
 }
@@ -164,19 +163,14 @@ export default function RecetarioPage() {
   const RESTAURANTE_ID = useRestauranteId()
   const { recetas, loading, error, agregarReceta, agregarIngrediente, actualizarReceta, eliminarReceta, publicarReceta } = useRecetas()
   const { productos: stockProductos, agregarProducto } = useStock()
-  const { items: cartaItems, loading: cartaLoading, actualizarPlatoRecetaOps, actualizarItem: actualizarCartaItem, agregarPlatoReceta, eliminarPlatoReceta } = useCarta()
   const { categorias: catDB } = useCategoriasProducto()
   const { puedeEditar, isAdmin, verCostos } = usePermisos()
   const canEdit = isAdmin || puedeEditar('recetas')
   const isDesktop = useIsDesktop()
 
   const [search, setSearch] = useState('')
-  // Un filtro de categoría por pestaña: con las 3 pestañas montadas a la vez
-  // (swipe scroll-snap más abajo), un único catFilter compartido cruzaría los
-  // chips de Recetas con los de Platos (categorías de la Carta, otro universo
-  // de valores). Ideas no tiene chips propios, no necesita el suyo.
+  // Ideas no tiene chips de categoría propios, no necesita filtro.
   const [catFilterRecetas, setCatFilterRecetas] = useState('')
-  const [catFilterPlatos, setCatFilterPlatos] = useState('')
   const [creando, setCreando] = useState(false)
   const [cargaRapida, setCargaRapida] = useState(false)
   const [tab, setTab] = useState<Tab>('recetas')
@@ -301,13 +295,7 @@ export default function RecetarioPage() {
     Array.from(new Set(recetasPublicadas.map(r => normalizeCategoria(r.categoria)).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'es')),
     [recetasPublicadas])
 
-  // Platos compuestos de la Carta + sus categorías (para la pestaña Platos)
-  const platosCompuestos = useMemo(() => cartaItems.filter(i => i.plato_recetas.length > 0), [cartaItems])
-  const categoriasPlatos = useMemo(() =>
-    Array.from(new Set(platosCompuestos.map(p => p.categoria).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'es')),
-    [platosCompuestos])
-
-  // Recetas e Ideas se filtran por separado — las 3 pestañas están montadas a
+  // Recetas e Ideas se filtran por separado — las dos pestañas están montadas a
   // la vez (swipe), cada una con su propia búsqueda por nombre (search es
   // compartido a propósito: encontrar "milanesa" tiene que valer para las 3).
   const filteredRecetas = useMemo(() => {
@@ -532,24 +520,12 @@ export default function RecetarioPage() {
             }}>{recetasDraft.length}</span>
           )}
         </button>
-        <button
-          onClick={() => setTab('platos')}
-          style={{
-            flex: 1, padding: '10px 0', border: 'none', background: 'none', cursor: 'pointer',
-            fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
-            color: tab === 'platos' ? 'var(--text-1)' : 'var(--text-3)',
-            borderBottom: tab === 'platos' ? '2px solid #f97316' : '2px solid transparent',
-            transition: 'all .15s',
-          }}
-        >
-          Platos
-        </button>
       </div>
 
-      {/* ── Swipe track: Recetas / Ideas / Platos — scroll-snap nativo, mismo
+      {/* ── Swipe track: Recetas / Ideas — scroll-snap nativo, mismo
           patrón que operaciones/page.tsx (ver .claude/docs/ui.md § Tabs con
-          swipe). Ninguna hace fetch propio (recetas/cartaItems ya están
-          bajados arriba), así que las 3 se montan siempre — a diferencia de
+          swipe). Ninguna hace fetch propio (recetas ya están bajadas
+          arriba), así que las dos se montan siempre — a diferencia de
           OPS no hace falta lazy-mount. ── */}
       <div
         ref={scrollRef}
@@ -699,21 +675,6 @@ export default function RecetarioPage() {
           </div>
         </div>
 
-        {/* ── Panel: Platos ── */}
-        <div style={slotStyle}>
-          {categoriasPlatos.length > 0 && (
-            <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '8px 14px', flexShrink: 0 }}>
-              <FilterChips
-                chips={[{ value: '', label: 'Todos' }, ...categoriasPlatos.map(c => ({ value: c, label: c }))]}
-                active={catFilterPlatos}
-                onChange={setCatFilterPlatos}
-              />
-            </div>
-          )}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 14px 24px' }}>
-            <PlatosView platos={platosCompuestos} recetas={recetasPublicadas} loading={cartaLoading} actualizarPlatoRecetaOps={actualizarPlatoRecetaOps} actualizarItem={actualizarCartaItem} agregarPlatoReceta={agregarPlatoReceta} eliminarPlatoReceta={eliminarPlatoReceta} agregarReceta={agregarReceta} stockProductos={stockProductos} search={search} catFilter={catFilterPlatos} isDesktop={isDesktop} verCostos={verCostos} canEdit={canEdit} onOpenReceta={(rid) => router.push(`/recetario/${rid}`)} />
-          </div>
-        </div>
       </div>
 
 
@@ -754,390 +715,6 @@ export default function RecetarioPage() {
   )
 }
 
-// ════════════════════════════════════════════════════════════════════
-// PLATOS VIEW — ficha técnica derivada: platos de la Carta con sus recetas
-// componentes y el gramaje de cada una. Lee en vivo de useCarta (sin migración).
-// ════════════════════════════════════════════════════════════════════
-const fmtMoneyP = (n: number) => n > 0 ? `$${Math.round(n).toLocaleString('es-AR')}` : '—'
-// Una receta "falta estandarizar" si sigue siendo borrador o si nunca se le cargó
-// el peso neto/escurrido final (el que se toma recién al terminar de cocinarla).
-const faltaEstandarizar = (r: { status?: string; peso_escurrido_g?: number | null; peso_total_g?: number | null } | null | undefined): boolean =>
-  !r || r.status === 'draft' || (r.peso_escurrido_g == null && r.peso_total_g == null)
-// Gramos de un componente SOLO si la unidad es de peso (g/kg). 'pax'/'u' no cuentan
-// para el gramaje del plato ni para el total — se piden como "+ g".
-const gramosDe = (cant: number | null | undefined, unidad: string | null | undefined): number | null => {
-  if (cant == null) return null
-  if (unidad === 'g') return cant
-  if (unidad === 'kg') return cant * 1000
-  return null
-}
-
-// Tamaño por porción cargado en el mise (checklist_items.peso_porcion), indexado
-// por receta+plaza — mismo criterio que Mesa de Trabajo/Carta.
-type PorcionMise = { peso: number; unidad: string }
-const misePorcionKey = (recetaId: string, plaza: string | null | undefined) => `${recetaId}|${plaza ?? ''}`
-
-// Edición inline del gramaje. Según de dónde salga el número que se está viendo,
-// el guardado va a plato_recetas.cantidad_ops o a checklist_items.peso_porcion.
-interface EdicionGramaje {
-  id: string            // plato_receta id
-  val: string
-  recetaId: string
-  plaza: string | null
-  enMise: boolean
-}
-
-function PlatosView({ platos: allPlatos, recetas, loading, actualizarPlatoRecetaOps, actualizarItem, agregarPlatoReceta, eliminarPlatoReceta, agregarReceta, stockProductos, search, catFilter, isDesktop, verCostos, canEdit, onOpenReceta }: {
-  platos: CartaItemEnriquecido[]
-  recetas: RecetaConCosto[]
-  loading: boolean
-  actualizarPlatoRecetaOps: (id: string, datos: { cantidad_ops: number | null; unidad_ops: string | null }) => Promise<void>
-  actualizarItem: (id: string, datos: { procedimiento?: string | null }) => Promise<void>
-  agregarPlatoReceta: (platoId: string, recetaId: string, porciones: number) => Promise<void>
-  eliminarPlatoReceta: (platoRecetaId: string) => Promise<void>
-  agregarReceta: (datos: any, ingredientesData?: any) => Promise<string>
-  stockProductos: { id: string; nombre: string; unidad: string; precio_unitario: number }[]
-  search: string
-  catFilter: string
-  isDesktop: boolean
-  verCostos: boolean
-  canEdit: boolean
-  onOpenReceta: (recetaId: string) => void
-}) {
-  const [editing, setEditing] = useState<EdicionGramaje | null>(null)
-  const [procEdit, setProcEdit] = useState<{ id: string; val: string } | null>(null)
-  const [procSaving, setProcSaving] = useState(false)
-  const [addingTo, setAddingTo] = useState<string | null>(null)   // plato id con buscador abierto
-  const [addSearch, setAddSearch] = useState('')
-  const [busy, setBusy] = useState(false)
-  // Carga rápida de ingredientes para una idea nueva, abierta inline dentro de un plato
-  const [ideaEnEdicion, setIdeaEnEdicion] = useState<{ platoId: string; nombre: string; filas: FilaIngredienteRapido[]; porciones: string } | null>(null)
-
-  // Tamaño por porción del mise. Cuando un componente tiene recipiente configurado,
-  // cantidad_ops deja de ser "gramos por plato" y pasa a ser "porciones que entran
-  // en el recipiente" — el gramaje real queda en checklist_items.peso_porcion. La
-  // ficha técnica tiene que mostrar ese número, igual que Mesa de Trabajo/Carta.
-  const supabase = useMemo(() => createClient(), [])
-  const restauranteId = useRestauranteId()
-  const [misePorciones, setMisePorciones] = useState<Record<string, PorcionMise>>({})
-
-  const cargarMisePorciones = useCallback(async () => {
-    if (!restauranteId) return
-    const { data, error } = await supabase.from('checklist_items')
-      .select('receta_id, plaza, peso_porcion, peso_porcion_unidad')
-      .eq('restaurante_id', restauranteId)
-      .not('peso_porcion', 'is', null)
-    if (error) { console.error('[Recetario/Platos] error cargando tamaños por porción:', error.message); return }
-    const map: Record<string, PorcionMise> = {}
-    for (const row of data ?? []) {
-      if (!row.receta_id || row.peso_porcion == null) continue
-      map[misePorcionKey(row.receta_id, row.plaza)] = { peso: row.peso_porcion, unidad: row.peso_porcion_unidad ?? 'g' }
-    }
-    setMisePorciones(map)
-  }, [supabase, restauranteId])
-
-  useEffect(() => { cargarMisePorciones() }, [cargarMisePorciones])
-
-  const porcionDe = useCallback(
-    (pr: { receta_id: string; plaza?: string | null }): PorcionMise | null =>
-      pr.plaza ? misePorciones[misePorcionKey(pr.receta_id, pr.plaza)] ?? null : null,
-    [misePorciones])
-
-  // El input de gramaje solo guarda en su onBlur/Enter — si el usuario cambia de tab
-  // o navega afuera mientras está editando, React desmonta el input SIN disparar blur
-  // (los browsers no emiten blur cuando el nodo enfocado se remueve del DOM), y el
-  // valor tipeado se pierde en silencio. Este ref + cleanup flushea el guardado
-  // pendiente (commitRef para que el cleanup de unmount use la última versión).
-  const editingRef = useRef(editing)
-  useEffect(() => { editingRef.current = editing }, [editing])
-  const commitRef = useRef<(ed: EdicionGramaje) => void>(() => {})
-  useEffect(() => () => {
-    const pending = editingRef.current
-    if (pending) commitRef.current(pending)
-  }, [])
-
-  const platos = useMemo(() => {
-    let list = allPlatos
-    if (catFilter) list = list.filter(p => p.categoria === catFilter)
-    if (search.trim()) {
-      const q = search.trim().toLowerCase()
-      list = list.filter(p =>
-        p.nombre.toLowerCase().includes(q) ||
-        p.plato_recetas.some(pr => (pr.receta?.nombre ?? '').toLowerCase().includes(q))
-      )
-    }
-    return list
-  }, [allPlatos, catFilter, search])
-
-  // El gramaje directo se guarda siempre en gramos (unidad fija 'g'). Si el número
-  // que se está editando es el tamaño por porción del mise, va a checklist_items
-  // (compartido por receta+plaza) conservando su unidad — igual que en CartaBoard.
-  async function guardarGramaje(ed: EdicionGramaje) {
-    setEditing(null)
-    const n = parseFloat(ed.val.replace(',', '.'))
-    const ok = !isNaN(n) && n > 0
-    if (ed.enMise) {
-      if (!ok || !ed.plaza || !restauranteId) return
-      const { error } = await supabase.from('checklist_items').update({ peso_porcion: n })
-        .eq('restaurante_id', restauranteId).eq('receta_id', ed.recetaId).eq('plaza', ed.plaza)
-      if (error) { console.error('[Recetario/Platos] error guardando tamaño por porción:', error.message); return }
-      await cargarMisePorciones()
-      return
-    }
-    await actualizarPlatoRecetaOps(ed.id, { cantidad_ops: ok ? n : null, unidad_ops: ok ? 'g' : null })
-  }
-  useEffect(() => { commitRef.current = guardarGramaje })
-
-  async function guardarProc(id: string) {
-    if (!procEdit) return
-    setProcSaving(true)
-    try { await actualizarItem(id, { procedimiento: procEdit.val.trim() || null }) }
-    finally { setProcSaving(false); setProcEdit(null) }
-  }
-
-  async function quitarReceta(prId: string) {
-    setBusy(true)
-    try { await eliminarPlatoReceta(prId) } finally { setBusy(false) }
-  }
-  async function sumarReceta(platoId: string, recetaId: string) {
-    setBusy(true)
-    try { await agregarPlatoReceta(platoId, recetaId, 1); setAddingTo(null); setAddSearch('') }
-    finally { setBusy(false) }
-  }
-  // Nombre tipeado que no matchea ninguna receta existente → se abre la carga rápida
-  // de ingredientes/subrecetas ahí mismo; al guardar se crea como Idea (borrador) y
-  // queda vinculada al plato de una, ya con sus ingredientes cargados.
-  function abrirIdeaConIngredientes(platoId: string, nombre: string) {
-    setIdeaEnEdicion({ platoId, nombre, filas: [nuevaFilaRapida()], porciones: '1' })
-  }
-  async function guardarIdeaConIngredientes() {
-    if (!ideaEnEdicion) return
-    setBusy(true)
-    try {
-      const plato = platos.find(p => p.id === ideaEnEdicion.platoId)
-      const nuevaId = await agregarReceta({
-        nombre: ideaEnEdicion.nombre,
-        categoria: plato?.categoria || 'Otros',
-        porciones: parseInt(ideaEnEdicion.porciones) || 1,
-        status: 'draft',
-        activa: true,
-      }, filasToIngredientesData(ideaEnEdicion.filas))
-      await agregarPlatoReceta(ideaEnEdicion.platoId, nuevaId, 1)
-      setIdeaEnEdicion(null)
-      setAddingTo(null); setAddSearch('')
-    } finally { setBusy(false) }
-  }
-
-  if (loading) return <EmptyState icon="hourglass_empty" title="Cargando platos…" />
-  if (platos.length === 0) {
-    return (
-      <EmptyState
-        icon="restaurant"
-        title={(search.trim() || catFilter) ? 'Sin resultados' : 'Sin platos compuestos'}
-        subtitle="Los platos con recetas vinculadas desde la Carta aparecen acá como ficha técnica"
-      />
-    )
-  }
-
-  return (
-    <div style={isDesktop ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, alignItems: 'start' } : { display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {platos.map(p => {
-        const totalG = p.plato_recetas.reduce((s, pr) => {
-          const mise = porcionDe(pr)
-          return s + (mise ? gramosDe(mise.peso, mise.unidad) ?? 0 : gramosDe(pr.cantidad_ops, pr.unidad_ops) ?? 0)
-        }, 0)
-        const fc = p.food_cost_pct
-        const fcColor = fc == null ? 'var(--text-3)' : fc < FC_ALERT_OK ? '#16a34a' : fc <= FC_ALERT_HIGH ? '#d97706' : '#dc2626'
-        return (
-          <div key={p.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, overflow: 'hidden' }}>
-            {/* Header del plato */}
-            <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#f97316', flexShrink: 0, marginTop: 1 }}>restaurant</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{p.nombre}</div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{p.categoria}</span>
-                  {verCostos && (p.precio_venta ?? 0) > 0 && <span style={{ fontSize: 11, color: 'var(--text-2)', fontFamily: "'DM Mono', monospace" }}>{fmtMoneyP(p.precio_venta)}</span>}
-                  {verCostos && fc != null && <span style={{ fontSize: 11, fontWeight: 800, color: fcColor, fontFamily: "'DM Mono', monospace" }}>{fc.toFixed(0)}% FC</span>}
-                </div>
-              </div>
-              {totalG > 0 && (
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', fontFamily: "'DM Mono', monospace" }}>{totalG >= 1000 ? `${(totalG / 1000).toFixed(2)} kg` : `${Math.round(totalG)} g`}</div>
-                  <div style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 600 }}>total</div>
-                </div>
-              )}
-            </div>
-            {/* Recetas componentes con gramaje */}
-            <div>
-              {p.plato_recetas.map((pr, idx) => {
-                const isEditing = editing?.id === pr.id
-                // Con recipiente en el mise, el gramaje real del componente es el
-                // tamaño por porción; sin recipiente, cantidad_ops en gramos.
-                const mise = porcionDe(pr)
-                const g = mise ? mise.peso : gramosDe(pr.cantidad_ops, pr.unidad_ops)
-                const unidadG = mise ? mise.unidad : 'g'
-                const tieneG = g != null
-                const sinEstandarizar = faltaEstandarizar(pr.receta)
-                return (
-                  <div key={pr.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderTop: idx > 0 ? '1px solid var(--border)' : 'none' }}>
-                    <button onClick={() => onOpenReceta(pr.receta_id)} title={sinEstandarizar ? 'Falta terminar de estandarizar (peso neto)' : 'Abrir receta'}
-                      style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', padding: 0 }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 15, color: sinEstandarizar ? '#f97316' : 'var(--accent)', flexShrink: 0 }}>{sinEstandarizar ? 'construction' : 'menu_book'}</span>
-                      <span style={{ fontSize: 13, color: sinEstandarizar ? '#f97316' : 'var(--text-1)', fontWeight: sinEstandarizar ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.receta?.nombre ?? '—'}</span>
-                    </button>
-                    {isEditing ? (
-                      <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
-                        <input autoFocus type="number" value={editing.val}
-                          onChange={e => setEditing({ ...editing, val: e.target.value })}
-                          onBlur={() => guardarGramaje(editing)}
-                          onKeyDown={e => { if (e.key === 'Enter') guardarGramaje(editing); if (e.key === 'Escape') setEditing(null) }}
-                          placeholder="30"
-                          style={{ width: 60, textAlign: 'center', fontSize: 13, fontWeight: 700, border: '1.5px solid var(--accent)', borderRadius: 8, padding: '4px 6px', background: 'var(--bg)', color: 'var(--text-1)', outline: 'none', fontFamily: "'DM Mono', monospace" }} />
-                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)' }}>{unidadG}</span>
-                        <button onMouseDown={e => { e.preventDefault(); guardarGramaje(editing) }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#16a34a', display: 'flex' }}>
-                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>check</span>
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setEditing({ id: pr.id, val: tieneG ? String(g) : '', recetaId: pr.receta_id, plaza: pr.plaza ?? null, enMise: mise != null })}
-                        title={mise ? 'Tamaño por porción (cargado en el mise)' : 'Gramaje del componente en el plato'}
-                        style={{ flexShrink: 0, border: `1px solid ${tieneG ? 'var(--border)' : 'rgba(249,115,22,.4)'}`, borderRadius: 8, background: tieneG ? 'var(--bg)' : 'rgba(249,115,22,.06)', padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit', minWidth: 52 }}>
-                        {tieneG ? (
-                          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-1)', fontFamily: "'DM Mono', monospace" }}>{g}<span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-3)', marginLeft: 2 }}>{unidadG}</span></span>
-                        ) : (
-                          <span style={{ fontSize: 11, fontWeight: 700, color: '#f97316' }}>+ g</span>
-                        )}
-                      </button>
-                    )}
-                    {canEdit && (
-                      <button onClick={() => quitarReceta(pr.id)} disabled={busy} title="Quitar del plato"
-                        style={{ background: 'none', border: 'none', cursor: busy ? 'default' : 'pointer', padding: 2, color: 'var(--text-3)', flexShrink: 0, display: 'flex' }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Agregar receta al plato */}
-            {canEdit && (
-              <div style={{ borderTop: '1px solid var(--border)' }}>
-                {ideaEnEdicion?.platoId === p.id ? (
-                  <div style={{ padding: '10px 12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#f97316', flexShrink: 0 }}>add_circle</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ideaEnEdicion.nombre}</span>
-                      <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 700 }}>PORC.</span>
-                      <input type="text" inputMode="numeric" value={ideaEnEdicion.porciones}
-                        onChange={e => setIdeaEnEdicion({ ...ideaEnEdicion, porciones: e.target.value.replace(/[^0-9]/g, '') })}
-                        style={{ width: 32, textAlign: 'center', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 2px', fontSize: 12, fontWeight: 700, fontFamily: "'DM Mono', monospace", background: 'var(--bg)', color: 'var(--text-1)', outline: 'none' }} />
-                    </div>
-                    <TotalesRapidosBar filas={ideaEnEdicion.filas} porciones={parseInt(ideaEnEdicion.porciones) || 1} />
-                    <CargaRapidaIngredientes
-                      filas={ideaEnEdicion.filas}
-                      onChange={filas => setIdeaEnEdicion({ ...ideaEnEdicion, filas })}
-                      stockProductos={stockProductos}
-                      recetasDisponibles={recetas}
-                      autoFocus
-                    />
-                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                      <button onClick={() => setIdeaEnEdicion(null)} disabled={busy}
-                        style={{ flex: 1, padding: 9, borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-2)', fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit' }}>Cancelar</button>
-                      <button onClick={guardarIdeaConIngredientes} disabled={busy}
-                        style={{ flex: 2, padding: 9, borderRadius: 9, border: 'none', background: '#f97316', color: '#fff', fontSize: 12, fontWeight: 700, cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit' }}>
-                        {busy ? 'Guardando…' : 'Guardar y vincular'}
-                      </button>
-                    </div>
-                  </div>
-                ) : addingTo === p.id ? (
-                  <div style={{ padding: '8px 12px' }}>
-                    <input autoFocus value={addSearch} onChange={e => setAddSearch(e.target.value)}
-                      placeholder="Buscar receta para agregar…"
-                      style={{ width: '100%', padding: '8px 11px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, color: 'var(--text-1)', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />
-                    <div style={{ maxHeight: 200, overflowY: 'auto', marginTop: 6 }}>
-                      {(() => {
-                        const linked = new Set(p.plato_recetas.map(pr => pr.receta_id))
-                        const q = addSearch.trim().toLowerCase()
-                        const res = recetas.filter(r => !linked.has(r.id) && (!q || r.nombre.toLowerCase().includes(q))).slice(0, 12)
-                        const nombreNuevo = addSearch.trim()
-                        const yaExiste = !!nombreNuevo && recetas.some(r => r.nombre.trim().toLowerCase() === nombreNuevo.toLowerCase())
-                        return (
-                          <>
-                            {res.length === 0 && !nombreNuevo && <div style={{ padding: '8px 4px', fontSize: 12, color: 'var(--text-3)' }}>Escribí para buscar…</div>}
-                            {res.length === 0 && nombreNuevo && <div style={{ padding: '8px 4px', fontSize: 12, color: 'var(--text-3)' }}>Sin recetas que coincidan</div>}
-                            {res.map(r => (
-                              <button key={r.id} onClick={() => sumarReceta(p.id, r.id)} disabled={busy}
-                                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 6px', border: 'none', background: 'none', cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit', borderRadius: 8 }}>
-                                <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--accent)' }}>menu_book</span>
-                                <span style={{ fontSize: 13, color: 'var(--text-1)' }}>{r.nombre}</span>
-                              </button>
-                            ))}
-                            {nombreNuevo && !yaExiste && (
-                              <button onClick={() => abrirIdeaConIngredientes(p.id, nombreNuevo)} disabled={busy}
-                                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 6px', border: '1px dashed rgba(249,115,22,.4)', background: 'rgba(249,115,22,.06)', cursor: busy ? 'default' : 'pointer', fontFamily: 'inherit', borderRadius: 8, marginTop: res.length > 0 ? 6 : 0 }}>
-                                <span className="material-symbols-outlined" style={{ fontSize: 15, color: '#f97316' }}>add_circle</span>
-                                <span style={{ fontSize: 13, color: '#f97316', fontWeight: 700 }}>Crear &quot;{nombreNuevo}&quot; como idea</span>
-                              </button>
-                            )}
-                          </>
-                        )
-                      })()}
-                    </div>
-                    <button onClick={() => { setAddingTo(null); setAddSearch('') }} style={{ marginTop: 4, fontSize: 12, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '4px 0' }}>Cerrar</button>
-                  </div>
-                ) : (
-                  <button onClick={() => { setAddingTo(p.id); setAddSearch('') }}
-                    style={{ width: '100%', padding: '9px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
-                    Agregar receta
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Procedimiento del plato */}
-            <div style={{ borderTop: '1px solid var(--border)', padding: '10px 14px' }}>
-              {procEdit?.id === p.id ? (
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Procedimiento</div>
-                  <textarea autoFocus value={procEdit.val} onChange={e => setProcEdit({ id: p.id, val: e.target.value })}
-                    placeholder="Armado del plato, emplatado, temperaturas…" rows={4}
-                    style={{ width: '100%', padding: '9px 11px', borderRadius: 9, border: '1.5px solid var(--accent)', background: 'var(--bg)', fontSize: 13, color: 'var(--text-1)', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none', resize: 'vertical', lineHeight: 1.5 }} />
-                  <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
-                    <button onClick={() => setProcEdit(null)} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-2)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancelar</button>
-                    <button onClick={() => guardarProc(p.id)} disabled={procSaving} style={{ padding: '6px 16px', borderRadius: 8, border: 'none', background: '#16a34a', color: '#fff', fontSize: 12, fontWeight: 700, cursor: procSaving ? 'default' : 'pointer', fontFamily: 'inherit', opacity: procSaving ? .6 : 1 }}>{procSaving ? '…' : 'Guardar'}</button>
-                  </div>
-                </div>
-              ) : p.procedimiento ? (
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Procedimiento</span>
-                    {canEdit && (
-                      <button onClick={() => setProcEdit({ id: p.id, val: p.procedimiento ?? '' })} title="Editar procedimiento"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-3)', display: 'flex' }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 15 }}>edit</span>
-                      </button>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{p.procedimiento}</div>
-                </div>
-              ) : canEdit ? (
-                <button onClick={() => setProcEdit({ id: p.id, val: '' })}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, color: 'var(--accent)', fontSize: 12, fontWeight: 600 }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
-                  Agregar procedimiento
-                </button>
-              ) : null}
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
 
 // ════════════════════════════════════════════════════════════════════
 // AUDIO RECORDER MODAL — estilo Gemini con animación de ondas
@@ -2695,6 +2272,11 @@ function RecetaCardSkeleton() {
     </div>
   )
 }
+
+// Una receta "falta estandarizar" si sigue siendo borrador o si nunca se le cargó
+// el peso neto/escurrido final (el que se toma recién al terminar de cocinarla).
+const faltaEstandarizar = (r: { status?: string; peso_escurrido_g?: number | null; peso_total_g?: number | null } | null | undefined): boolean =>
+  !r || r.status === 'draft' || (r.peso_escurrido_g == null && r.peso_total_g == null)
 
 function RecetaCard({ receta: r, isDraft, onPublish, onCompleteIA }: { receta: RecetaConCosto; isDraft?: boolean; onPublish?: () => void; onCompleteIA?: () => void }) {
   const fc = r.food_cost

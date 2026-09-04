@@ -7,9 +7,9 @@
 // Antes ese ícono no llevaba a ningún lado (o, en el mejor caso, solo
 // mostraba un preview de solo lectura) — quien está armando un plato tenía
 // que navegar a Recetario para corregir una cantidad y volver. Reusa
-// CargaRapidaIngredientes (mismo componente que Recetario → Ideas y
-// Recetario → Platos) y el modo "enrich" de /api/recetas/save (reemplaza
-// todos los ingredientes de la receta — ya usado por el import IA).
+// CargaRapidaIngredientes (mismo componente que Recetario → Ideas) y el modo
+// "enrich" de /api/recetas/save (reemplaza todos los ingredientes de la
+// receta — ya usado por el import IA).
 // ════════════════════════════════════════════════════════════
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'

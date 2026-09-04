@@ -544,13 +544,13 @@ export function useCarta() {
     }
   }, [fetchItems, supabase])
 
-  // Gramaje (u otra unidad) de una receta dentro del plato → plato_recetas.cantidad_ops/unidad_ops.
-  // Es el "cuántos gramos de esta receta van al plato" que se ve en la ficha derivada del recetario.
-  // Cuando la unidad es de peso/volumen (sin recipiente), ese valor ES el
-  // gramaje real del componente — se espeja a gramaje/gramaje_unidad (columna
-  // dedicada al costeo, separada de cantidad_ops que en el flujo de OPS
-  // completo significa demanda al mise) para que el food cost de Carta la
-  // use sin depender de en qué unidad haya quedado cantidad_ops esta vez.
+  // Edición rápida de gramaje/unidad sin pasar por el panel OPS completo —
+  // hoy solo la usa CartaBoardCard.tsx (Mesa de Trabajo). Cuando la unidad
+  // es de peso/volumen (sin recipiente), ese valor ES el gramaje real del
+  // componente — se espeja a gramaje/gramaje_unidad (columna dedicada al
+  // costeo, separada de cantidad_ops que en el flujo de OPS completo
+  // significa demanda al mise) para que el food cost de Carta la use sin
+  // depender de en qué unidad haya quedado cantidad_ops esta vez.
   const actualizarPlatoRecetaOps = useCallback(async (platoRecetaId: string, datos: { cantidad_ops: number | null; unidad_ops: string | null }) => {
     try {
       const { gramaje, gramaje_unidad } = gramajeDesdeCantidadOps(datos.cantidad_ops, datos.unidad_ops)
@@ -585,9 +585,9 @@ export function useCarta() {
   // cantidad_ops/unidad_ops (demanda de este plato al stock estándar de la
   // plaza, editada aparte vía actualizarPlatoRecetaOpsCompleta). Escritura
   // directa y dedicada: a diferencia de actualizarPlatoRecetaOps (que espeja
-  // gramaje desde cantidad_ops para no romper Recetario→Platos y el board de
-  // Mesa de Trabajo), esta es la del editor nuevo de Carta — no mezcla las
-  // dos columnas en ningún sentido.
+  // gramaje desde cantidad_ops para no romper el board de Mesa de Trabajo),
+  // esta es la del editor de Carta — no mezcla las dos columnas en ningún
+  // sentido.
   const actualizarPlatoRecetaGramaje = useCallback(async (platoRecetaId: string, datos: { gramaje: number | null; gramaje_unidad: string | null }) => {
     try {
       const { error } = await supabase.from('plato_recetas').update(datos).eq('id', platoRecetaId)

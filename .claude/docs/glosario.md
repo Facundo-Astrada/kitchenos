@@ -40,6 +40,25 @@ es parte de la doc.
 | **producto / ingrediente** | El bulto que se compra / la línea de la receta | Dos modelos con puente `producto_id` — es frontera, no ruptura |
 | **ficha técnica** | El estándar de referencia de un plato | `recetas` + `calcFoodCost` |
 | **merma** | Junta lo esperable y lo evitable, separados por `motivo` | `productos.merma_esperada_pct` para lo esperable — colapso deliberado |
+| **gramaje** | Peso de un componente en UNA porción del plato — food cost | `plato_recetas.gramaje`/`gramaje_unidad` |
+| **stock estándar** | Cuánto de esta prep pide este plato al par level de la plaza — mise, no costeo | `plato_recetas.cantidad_ops`/`unidad_ops` |
+| **peso por porción** | Gramaje real de una prep con recipiente en el mise — compartido por TODOS los platos que usan esa receta+plaza | `checklist_items.peso_porcion`/`peso_porcion_unidad` |
+
+**gramaje vs. stock estándar vs. peso por porción (sep 2026).** Tres conceptos
+que hasta esta fecha compartían una sola columna (`cantidad_ops`) y se
+pisaban: el food cost de Carta contaba cada componente como "una porción
+entera del batch" en vez de su peso real. Ahora, en orden de prioridad de
+lectura (`useCarta.ts`): si la prep tiene *peso por porción* cargado
+(recipiente configurado en el mise, compartido entre platos), ese gana;
+si no, el *gramaje* dedicado del componente; `cantidad_ops` nunca alimenta
+el costeo — es puramente la demanda al *stock estándar* de la plaza, editada
+desde el panel OPS. Sin ninguno de los dos primeros, el plato queda
+"sin estandarizar" (sin FC calculado) en vez de inventar un número.
+Excepción viva: `CartaBoardCard.tsx` (Mesa de Trabajo) sigue editando
+gramaje escribiendo a `cantidad_ops` por compatibilidad — `useCarta.ts`
+espeja ese valor a la columna nueva en esa escritura puntual; no repetir el
+patrón en código nuevo. Migración y backfill:
+`supabase/migrations/20260904_plato_recetas_gramaje.sql`.
 
 ## Las rupturas — una palabra, N cosas ⚠️
 

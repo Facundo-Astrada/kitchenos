@@ -30,7 +30,6 @@ import { fmtMoney, fcBadge, marginBadge, PlatoCard, PlatoCardBack, PlatoCardSkel
 import { exportCartaPDF, exportRentabilidadPDF } from './exportar'
 import { PackagingGruposDrawer } from './PackagingGruposDrawer'
 import { ImportCartaModal } from './ImportCartaModal'
-import { EditarPlato, type FormPlato } from './EditarPlato'
 import { DetailView } from './DetailView'
 // ── Helpers ─────────────────────────────────────────────
 const CATEGORIAS: CategoriaCartaItem[] = [
@@ -314,7 +313,7 @@ function RentabilidadView({
 }
 
 // ── MAIN PAGE ───────────────────────────────────────────
-type View = 'list' | 'detail' | 'edit' | 'rentabilidad' | 'menus'
+type View = 'list' | 'detail' | 'rentabilidad' | 'menus'
 
 export default function CartaPage() {
   const { items, loading, fetchItems, crearItem, actualizarItem, actualizarTags, toggleDisponible, eliminarItem, duplicarItem, agregarPlatoReceta, actualizarPlatoRecetaOpsCompleta, actualizarPlatoRecetaGramaje, eliminarPlatoReceta, agregarPlatoPackaging, eliminarPlatoPackaging, categorias } = useCarta()
@@ -590,18 +589,18 @@ export default function CartaPage() {
     }
   }
 
-  const handleEditar = async (form: FormPlato) => {
+  // Nombre/precio/categoría/descripción/foto — editable inline en DetailView
+  // (Fase 3: reemplaza la pantalla separada EditarPlato.tsx).
+  const handleGuardarMeta = async (datos: { nombre: string; descripcion: string; precio_venta: number; categoria: string; foto_url: string }) => {
     if (!selectedItemId) return
     await actualizarItem(selectedItemId, {
-      nombre: form.nombre.trim(),
-      descripcion: form.descripcion || null,
-      precio_venta: parseFloat(form.precio_venta),
-      categoria: form.categoria,
-      receta_id: form.receta_id || null,
-      foto_url: form.foto_url || null,
+      nombre: datos.nombre,
+      descripcion: datos.descripcion || null,
+      precio_venta: datos.precio_venta,
+      categoria: datos.categoria,
+      foto_url: datos.foto_url || null,
     })
     setToast('Plato actualizado')
-    setView('detail')
   }
 
   const handleEliminar = async () => {
@@ -610,12 +609,6 @@ export default function CartaPage() {
     await eliminarItem(selectedItemId)
     setToast('Plato eliminado')
     setView('list')
-  }
-
-  const handleVincular = async (recetaId: string) => {
-    if (!selectedItemId) return
-    await actualizarItem(selectedItemId, { receta_id: recetaId })
-    setToast('Receta vinculada')
   }
 
   const handleAgregarReceta = async (recetaId: string, porciones: number) => {
@@ -792,12 +785,13 @@ export default function CartaPage() {
           item={selectedItem}
           recetas={recetas}
           productos={productos}
+          categorias={categorias}
           checklistItems={checklistItems}
           recipientesUsados={recipientesUsados}
           onBack={() => setView('list')}
-          onEdit={() => setView('edit')}
+          onGuardarMeta={handleGuardarMeta}
+          onEliminarPlato={handleEliminar}
           onDuplicar={handleDuplicarPlato}
-          onVincular={handleVincular}
           onAgregarReceta={handleAgregarReceta}
           onEliminarReceta={handleEliminarReceta}
           onAgregarPackaging={handleAgregarPackaging}
@@ -827,23 +821,6 @@ export default function CartaPage() {
             onAfterApply={async () => { await fetchItems(); setShowGrupos(false); setToast('Grupo aplicado') }}
           />
         )}
-        {toast && <Toast msg={toast} onDone={() => setToast('')} />}
-      </>
-    )
-  }
-
-  // ── Edit ──
-  if (view === 'edit' && selectedItem) {
-    return (
-      <>
-        <EditarPlato
-          initialData={selectedItem}
-          recetas={recetas}
-          categorias={categorias}
-          onSave={handleEditar}
-          onDelete={handleEliminar}
-          onCancel={() => setView('detail')}
-        />
         {toast && <Toast msg={toast} onDone={() => setToast('')} />}
       </>
     )
