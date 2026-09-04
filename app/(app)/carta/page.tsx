@@ -3,7 +3,8 @@
 import PageTransition from '@/components/PageTransition'
 import { useState, useMemo, useEffect } from 'react'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
-import { useCarta, type CategoriaCartaItem, type CartaItemEnriquecido } from '@/lib/hooks/useCarta'
+import { useCarta, type CategoriaCartaItem, type CartaItemEnriquecido, type PlatoRecetaEnriquecido } from '@/lib/hooks/useCarta'
+import type { OpsResult } from '@/components/ops/OpsPanel'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { useRecetas, type RecetaConCosto, unitConversionFactor } from '@/lib/hooks/useRecetas'
@@ -316,13 +317,14 @@ function RentabilidadView({
 type View = 'list' | 'detail' | 'edit' | 'rentabilidad' | 'menus'
 
 export default function CartaPage() {
-  const { items, loading, fetchItems, crearItem, actualizarItem, actualizarTags, toggleDisponible, eliminarItem, duplicarItem, agregarPlatoReceta, actualizarPlatoReceta, actualizarPlatoRecetaOpsCompleta, eliminarPlatoReceta, agregarPlatoPackaging, eliminarPlatoPackaging, categorias } = useCarta()
-  const { recetas } = useRecetas()
+  const { items, loading, fetchItems, crearItem, actualizarItem, actualizarTags, toggleDisponible, eliminarItem, duplicarItem, agregarPlatoReceta, actualizarPlatoRecetaOpsCompleta, actualizarPlatoRecetaGramaje, eliminarPlatoReceta, agregarPlatoPackaging, eliminarPlatoPackaging, categorias } = useCarta()
+  const { recetas, refetch: refetchRecetas } = useRecetas()
   const { productos } = useStock()
   const { ventas } = useVentas()
   const { grupos, crearGrupo, eliminarGrupo, aplicarGrupoAPlatos } = usePackagingGrupos()
   const { crearMenu, actualizarMenu } = useMenus()
-  const { items: checklistItems } = useChecklist()
+  const { items: checklistItems, refetchConfig } = useChecklist()
+  const supabase = useMemo(() => createClient(), [])
 
   // Nombres de recipiente ya usados en OPS, para autocompletar el campo del
   // OpsPanel dentro del editor de composición (mismo patrón que CartaBoard.tsx).
@@ -355,6 +357,11 @@ export default function CartaPage() {
   const [showImport, setShowImport] = useState(false)
   // Editor unificado de composición (Plato / Menú / Evento)
   const [composing, setComposing] = useState<null | { inicial?: CompInicial; menuEditId?: string }>(null)
+  // OPS del detalle de plato — mismo patrón que openOpsId/savingOpsId en
+  // CartaBoard.tsx (Mesa de Trabajo): el panel es OpsPanel compartido, la
+  // persistencia vive acá, DetailView solo lo muestra.
+  const [openOpsIdDetalle, setOpenOpsIdDetalle] = useState<string | null>(null)
+  const [savingOpsIdDetalle, setSavingOpsIdDetalle] = useState<string | null>(null)
 
   // Derive selectedItem from fresh items (stays current after plato_recetas changes)
   const selectedItem = useMemo(
@@ -617,13 +624,76 @@ export default function CartaPage() {
     setToast('Receta agregada al plato')
   }
 
-  const handleActualizarReceta = async (platoRecetaId: string, porciones: number) => {
-    await actualizarPlatoReceta(platoRecetaId, porciones)
+  const handleEliminarReceta = async (pr: PlatoRecetaEnriquecido) => {
+    await eliminarPlatoReceta(pr.id)
+    // Si el componente ya aportaba a una plaza, recalcular esa plaza (puede
+    // vaciarse) — antes esto no se hacía y el mise quedaba con un ítem
+    // fantasma (mismo fix que Mesa de Trabajo ya tenía, ver CartaBoard.tsx).
+    if (pr.plaza) {
+      await shrinkOrPruneMise({ supabase, restauranteId: RESTAURANTE_ID, recetaId: pr.receta_id, plaza: pr.plaza })
+      await refetchConfig()
+    }
+    setToast('Receta desvinculada')
   }
 
-  const handleEliminarReceta = async (platoRecetaId: string) => {
-    await eliminarPlatoReceta(platoRecetaId)
-    setToast('Receta desvinculada')
+  // ── OPS del detalle de plato (mismo flujo que CartaBoard.tsx) ──
+  const handleGuardarOpsDetalle = async (pr: PlatoRecetaEnriquecido, result: OpsResult) => {
+    setSavingOpsIdDetalle(pr.id)
+    try {
+      const oldPlaza = pr.plaza ?? null
+      const recetaNombre = pr.receta?.nombre ?? 'Preparación'
+      await actualizarPlatoRecetaOpsCompleta(pr.id, { plaza: result.plaza, cantidad_ops: result.cantidad, unidad_ops: result.unidad })
+      const { total } = await sumPlatoRecetaCantidad(supabase, pr.receta_id, result.plaza)
+      await upsertMiseChecklistItem({
+        supabase, restauranteId: RESTAURANTE_ID, recetaId: pr.receta_id, nombre: recetaNombre,
+        plaza: result.plaza, seccionMiseId: result.seccion, cantidad: total, unidad: result.unidad,
+        recipienteNombre: result.recipienteNombre, recipienteCantidad: result.recipienteCantidad,
+        pesoPorcion: result.pesoPorcion, pesoPorcionUnidad: result.pesoPorcionUnidad,
+      })
+      if (oldPlaza && oldPlaza !== result.plaza) {
+        await shrinkOrPruneMise({ supabase, restauranteId: RESTAURANTE_ID, recetaId: pr.receta_id, plaza: oldPlaza })
+      }
+      await refetchConfig()
+      setOpenOpsIdDetalle(null)
+    } catch (e) {
+      console.error('[Carta] handleGuardarOpsDetalle error:', e)
+      setToast('Error al guardar en el mise')
+    } finally {
+      setSavingOpsIdDetalle(null)
+    }
+  }
+
+  const handleQuitarOpsDetalle = async (pr: PlatoRecetaEnriquecido) => {
+    if (!pr.plaza) return
+    setSavingOpsIdDetalle(pr.id)
+    try {
+      const oldPlaza = pr.plaza
+      await actualizarPlatoRecetaOpsCompleta(pr.id, { plaza: null, cantidad_ops: null, unidad_ops: null })
+      await shrinkOrPruneMise({ supabase, restauranteId: RESTAURANTE_ID, recetaId: pr.receta_id, plaza: oldPlaza })
+      await refetchConfig()
+      setOpenOpsIdDetalle(null)
+    } catch (e) {
+      console.error('[Carta] handleQuitarOpsDetalle error:', e)
+      setToast('Error al quitar de OPS')
+    } finally {
+      setSavingOpsIdDetalle(null)
+    }
+  }
+
+  // ── Gramaje del detalle de plato (mismo criterio que CartaBoardCard.tsx:
+  // con recipiente en el mise, el gramaje real es compartido — peso_porcion
+  // en checklist_items; sin recipiente, es la columna dedicada del componente) ──
+  const handleEditarGramajeDetalle = async (pr: PlatoRecetaEnriquecido, nuevoValor: number) => {
+    await actualizarPlatoRecetaGramaje(pr.id, { gramaje: nuevoValor, gramaje_unidad: 'g' })
+  }
+
+  const handleEditarPesoPorcionDetalle = async (pr: PlatoRecetaEnriquecido, nuevoValor: number) => {
+    if (!pr.plaza) return
+    const { error } = await supabase.from('checklist_items').update({ peso_porcion: nuevoValor })
+      .eq('restaurante_id', RESTAURANTE_ID).eq('receta_id', pr.receta_id).eq('plaza', pr.plaza)
+    if (error) { console.error('[Carta] handleEditarPesoPorcionDetalle error:', error.message); return }
+    await refetchConfig()
+    await fetchItems()
   }
 
   const handleAgregarPackaging = async (productoId: string, cantidad: number) => {
@@ -722,18 +792,26 @@ export default function CartaPage() {
           item={selectedItem}
           recetas={recetas}
           productos={productos}
+          checklistItems={checklistItems}
+          recipientesUsados={recipientesUsados}
           onBack={() => setView('list')}
           onEdit={() => setView('edit')}
           onDuplicar={handleDuplicarPlato}
           onVincular={handleVincular}
           onAgregarReceta={handleAgregarReceta}
-          onActualizarReceta={handleActualizarReceta}
           onEliminarReceta={handleEliminarReceta}
           onAgregarPackaging={handleAgregarPackaging}
           onEliminarPackaging={handleEliminarPackaging}
           onShowGrupos={() => setShowGrupos(true)}
           onActualizarTags={tags => actualizarTags(selectedItem.id, tags)}
-          onActualizarPlatoRecetaOpsCompleta={actualizarPlatoRecetaOpsCompleta}
+          openOpsId={openOpsIdDetalle}
+          savingOpsId={savingOpsIdDetalle}
+          onToggleOps={id => setOpenOpsIdDetalle(prev => prev === id ? null : id)}
+          onGuardarOps={handleGuardarOpsDetalle}
+          onQuitarOps={handleQuitarOpsDetalle}
+          onEditarGramaje={handleEditarGramajeDetalle}
+          onEditarPesoPorcion={handleEditarPesoPorcionDetalle}
+          onRecetaActualizada={async () => { await Promise.all([fetchItems(), refetchRecetas()]) }}
           restauranteId={RESTAURANTE_ID}
         />
         {showGrupos && (

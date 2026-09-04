@@ -1,15 +1,15 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import type { CartaItemEnriquecido } from '@/lib/hooks/useCarta'
+import type { CartaItemEnriquecido, PlatoRecetaEnriquecido } from '@/lib/hooks/useCarta'
 import type { RecetaConCosto } from '@/lib/hooks/useRecetas'
 import type { ProductoConEstado } from '@/lib/hooks/useStock'
+import type { MisePlaceItem } from '@/types'
 import { createClient } from '@/lib/supabase/client'
-import {
-  upsertMiseChecklistItem, PLAZAS_OPS, SECCIONES_OPS,
-  sumPlatoRecetaCantidad, shrinkOrPruneMise, porcionesDesdeCapacidad,
-} from '@/lib/ops/mise'
+import { PLAZAS_OPS, parseRecipienteNombre } from '@/lib/ops/mise'
 import { useTareas } from '@/lib/hooks/useTareas'
+import OpsPanel, { type OpsInitial, type OpsResult } from '@/components/ops/OpsPanel'
+import { RecetaEditSheet } from '@/components/recetas/RecetaEditSheet'
 import { fmtMoney, fcBadge, marginBadge } from './cards'
 
 // ── Detail View ─────────────────────────────────────────
@@ -26,66 +26,68 @@ export function DetailView({
   item,
   recetas,
   productos,
+  checklistItems,
+  recipientesUsados,
   onBack,
   onEdit,
   onDuplicar,
   onVincular,
   onAgregarReceta,
   onEliminarReceta,
-  onActualizarReceta,
   onAgregarPackaging,
   onEliminarPackaging,
   onShowGrupos,
   onActualizarTags,
-  onActualizarPlatoRecetaOpsCompleta,
+  openOpsId,
+  savingOpsId,
+  onToggleOps,
+  onGuardarOps,
+  onQuitarOps,
+  onEditarGramaje,
+  onEditarPesoPorcion,
+  onRecetaActualizada,
   restauranteId,
 }: {
   item: CartaItemEnriquecido
   recetas: RecetaConCosto[]
   productos: ProductoConEstado[]
+  checklistItems: MisePlaceItem[]
+  recipientesUsados: string[]
   onBack: () => void
   onEdit: () => void
   onDuplicar: () => Promise<void>
   onVincular: (recetaId: string) => Promise<void>
   onAgregarReceta: (recetaId: string, porciones: number) => Promise<void>
-  onEliminarReceta: (platoRecetaId: string) => Promise<void>
-  onActualizarReceta: (platoRecetaId: string, porciones: number) => Promise<void>
+  onEliminarReceta: (pr: PlatoRecetaEnriquecido) => Promise<void>
   onAgregarPackaging: (productoId: string, cantidad: number) => Promise<void>
   onEliminarPackaging: (packagingId: string) => Promise<void>
   onShowGrupos: () => void
   onActualizarTags: (tags: string[]) => Promise<void>
-  onActualizarPlatoRecetaOpsCompleta: (platoRecetaId: string, datos: { plaza: string | null; cantidad_ops: number | null; unidad_ops: string | null }) => Promise<void>
+  openOpsId: string | null
+  savingOpsId: string | null
+  onToggleOps: (platoRecetaId: string) => void
+  onGuardarOps: (pr: PlatoRecetaEnriquecido, result: OpsResult) => Promise<void>
+  onQuitarOps: (pr: PlatoRecetaEnriquecido) => Promise<void>
+  onEditarGramaje: (pr: PlatoRecetaEnriquecido, nuevoValor: number) => Promise<void>
+  onEditarPesoPorcion: (pr: PlatoRecetaEnriquecido, nuevoValor: number) => Promise<void>
+  onRecetaActualizada: () => Promise<void>
   restauranteId: string
 }) {
   const [search, setSearch] = useState('')
   const [vinculando, setVinculando] = useState(false)
   const [pendingReceta, setPendingReceta] = useState<RecetaConCosto | null>(null)
   const [porciones, setPorciones] = useState('1')
-  // porciones editables inline por plato_receta
-  const [editingPorcionId, setEditingPorcionId] = useState<string | null>(null)
-  const [editingPorcionVal, setEditingPorcionVal] = useState('')
+  // Gramaje editable inline por plato_receta (food cost) — misma lógica que
+  // CartaBoardCard.tsx: con recipiente en el mise, edita checklist_items.peso_porcion
+  // (compartido receta+plaza); sin recipiente, la columna dedicada del componente.
+  const [editingGramajeId, setEditingGramajeId] = useState<string | null>(null)
+  const [editingGramajeVal, setEditingGramajeVal] = useState('')
   const [savingTags, setSavingTags] = useState(false)
-  // OPS destination panel
-  const [opsPanel, setOpsPanel] = useState<string | null>(null) // plato_receta_id
-  const [opsPlaza, setOpsPlaza] = useState('')
-  const [opsSeccion, setOpsSeccion] = useState('')
-  const [opsCantidad, setOpsCantidad] = useState('')
-  const [opsUnidad, setOpsUnidad] = useState('g')
-  const [opsRecipienteNombre, setOpsRecipienteNombre] = useState('')
-  const [opsPesoPorcion, setOpsPesoPorcion] = useState('')
-  const [opsPesoPorcionUnidad, setOpsPesoPorcionUnidad] = useState('g')
-  const [opsSaving, setOpsSaving] = useState(false)
-  const [opsError, setOpsError] = useState('')
+  // Sheet de edición de ingredientes de una receta vinculada, sin salir de Carta
+  const [editRecetaSheet, setEditRecetaSheet] = useState<{ id: string; nombre: string } | null>(null)
   // Draft recipe creation
   const [creatingDraft, setCreatingDraft] = useState(false)
   const [creatingTarea, setCreatingTarea] = useState(false)
-
-  // 'menu' es la plaza de control de un menú activado en el mise (ver
-  // lib/ops/menuMise.ts) — no es una plaza física de cocina, así que no
-  // corresponde como destino de un componente de plato (mismo criterio que
-  // PLAZAS_FIJAS/todasLasPlazas en lib/constants.ts, que tampoco la incluye).
-  const PLAZAS_OPS_PLATO = PLAZAS_OPS.filter(p => p.id !== 'menu')
-  const UNIDADES_OPS = ['u', 'kg', 'g', 'l', 'ml', 'pax', 'porc', 'bandeja']
 
   const supabaseDV = useMemo(() => createClient(), [])
   const { agregarTarea } = useTareas({ soloEscritura: true })
@@ -119,50 +121,6 @@ export function DetailView({
     } finally { setCreatingTarea(false) }
   }
 
-  const handleGuardarOPS = async (pr: { id: string; receta_id: string; plaza?: string | null; receta?: { nombre: string } }) => {
-    if (!opsPlaza || !opsSeccion || opsSaving) return
-    setOpsSaving(true)
-    setOpsError('')
-    try {
-      const oldPlaza = pr.plaza ?? null
-      const capVal = parseFloat(opsCantidad) || 0
-
-      // Calcular porciones finales (si capacidad está en peso → dividir por tamaño porción)
-      const porVal = parseFloat(opsPesoPorcion) || 0
-      const porcionesCalculadas = porcionesDesdeCapacidad(capVal, opsUnidad, porVal, opsPesoPorcionUnidad)
-      const miCantidad = (['porc', 'u', 'pax'].includes(opsUnidad)) ? capVal : (porcionesCalculadas ?? capVal)
-
-      const recipienteNombre = opsRecipienteNombre.trim() || null
-      const pesoPorcion = recipienteNombre && opsPesoPorcion ? parseFloat(opsPesoPorcion) || null : null
-      const pesoPorcionUnidad = pesoPorcion ? opsPesoPorcionUnidad : null
-
-      // 1. Guardar plaza + contribución de ESTE plato en plato_recetas
-      await onActualizarPlatoRecetaOpsCompleta(pr.id, { plaza: opsPlaza, cantidad_ops: miCantidad, unidad_ops: opsUnidad })
-
-      // 2. Sumar TODAS las contribuciones de esta receta en esta plaza y hacer
-      // upsert del checklist_item (busca/crea la sección, con recipiente/peso)
-      const { total } = await sumPlatoRecetaCantidad(supabaseDV, pr.receta_id, opsPlaza)
-      const nombre = pr.receta?.nombre ?? search
-      await upsertMiseChecklistItem({
-        supabase: supabaseDV, restauranteId, recetaId: pr.receta_id, nombre,
-        plaza: opsPlaza, seccionMiseId: opsSeccion, cantidad: total, unidad: opsUnidad,
-        recipienteNombre, pesoPorcion, pesoPorcionUnidad,
-      })
-
-      // 3. Si cambió de plaza, achicar (o borrar) el checklist_item de la plaza
-      // vieja — antes esto no se hacía y el mise quedaba con un ítem fantasma.
-      if (oldPlaza && oldPlaza !== opsPlaza) {
-        await shrinkOrPruneMise({ supabase: supabaseDV, restauranteId, recetaId: pr.receta_id, plaza: oldPlaza })
-      }
-
-      setOpsPanel(null)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message) : 'desconocido'
-      console.error('[Carta] handleGuardarOPS error:', e)
-      setOpsError(msg)
-    } finally { setOpsSaving(false) }
-  }
-
   const handleToggleTag = async (tag: string) => {
     if (savingTags) return
     setSavingTags(true)
@@ -171,12 +129,25 @@ export function DetailView({
     try { await onActualizarTags(next) } finally { setSavingTags(false) }
   }
 
-  const handleSavePorcion = async (pr: { id: string; porciones: number }) => {
-    const val = parseFloat(editingPorcionVal)
-    if (!isNaN(val) && val > 0 && val !== pr.porciones) {
-      await onActualizarReceta(pr.id, Math.round(val * 10) / 10)
-    }
-    setEditingPorcionId(null)
+  // checklist_item del mise para esta receta+plaza — si existe con recipiente
+  // configurado, su peso_porcion es el gramaje real (compartido, editable
+  // desde cualquier pantalla que lo muestre); si no, el gramaje vive en la
+  // columna dedicada del componente (por plato, no compartido).
+  function checklistItemDe(pr: PlatoRecetaEnriquecido): MisePlaceItem | null {
+    return pr.plaza ? checklistItems.find(ci => ci.receta_id === pr.receta_id && ci.plaza === pr.plaza) ?? null : null
+  }
+
+  function startEditGramaje(pr: PlatoRecetaEnriquecido, valorActual: number | null | undefined) {
+    setEditingGramajeId(pr.id)
+    setEditingGramajeVal(valorActual != null ? String(valorActual) : '')
+  }
+
+  async function commitGramaje(pr: PlatoRecetaEnriquecido, usaRecipiente: boolean) {
+    setEditingGramajeId(null)
+    const n = parseFloat(editingGramajeVal.replace(',', '.'))
+    if (isNaN(n) || n <= 0) return
+    if (usaRecipiente) await onEditarPesoPorcion(pr, n)
+    else await onEditarGramaje(pr, n)
   }
 
   // Packaging state
@@ -433,12 +404,25 @@ export function DetailView({
           {/* Lista de recetas vinculadas */}
           {item.plato_recetas.length > 0 && (
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', marginBottom: 10 }}>
-              {item.plato_recetas.map((pr, idx) => (
-                <div key={pr.id} style={{ borderBottom: idx < item.plato_recetas.length - 1 || opsPanel === pr.id ? '1px solid var(--border)' : 'none' }}>
+              {item.plato_recetas.map((pr, idx) => {
+                const checklistItem = checklistItemDe(pr)
+                const usaRecipiente = checklistItem?.peso_porcion != null
+                const gramajeMostrado = usaRecipiente ? checklistItem!.peso_porcion : pr.gramaje
+                const unidadMostrada = usaRecipiente ? (checklistItem!.peso_porcion_unidad ?? 'g') : (pr.gramaje_unidad ?? 'g')
+                const isOpen = openOpsId === pr.id
+                const isSaving = savingOpsId === pr.id
+                return (
+                <div key={pr.id} style={{ borderBottom: idx < item.plato_recetas.length - 1 || isOpen ? '1px solid var(--border)' : 'none' }}>
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
                 }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)', flexShrink: 0 }}>menu_book</span>
+                  <button
+                    onClick={() => setEditRecetaSheet({ id: pr.receta_id, nombre: pr.receta?.nombre ?? 'Receta' })}
+                    title="Ver y editar receta"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', flexShrink: 0 }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>menu_book</span>
+                  </button>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {pr.receta?.nombre ?? pr.receta_id}
@@ -451,31 +435,32 @@ export function DetailView({
                         const plazaCfg = PLAZAS_OPS.find(p => p.id === pr.plaza)
                         return (
                           <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: `${plazaCfg?.color ?? '#4361a0'}18`, color: plazaCfg?.color ?? 'var(--accent)' }}>
-                            {pr.cantidad_ops} {pr.unidad_ops ?? 'u'} · {plazaCfg?.label ?? pr.plaza}
+                            Stock estándar: {pr.cantidad_ops} {pr.unidad_ops ?? 'u'} · {plazaCfg?.label ?? pr.plaza}
                           </span>
                         )
                       })()}
                     </div>
                   </div>
-                  {/* Porciones: click para editar directo */}
-                  {editingPorcionId === pr.id ? (
+                  {/* Gramaje: el peso real de este componente en el plato (food cost) */}
+                  {editingGramajeId === pr.id ? (
                     <input
                       autoFocus
                       type="number"
-                      value={editingPorcionVal}
-                      onChange={e => setEditingPorcionVal(e.target.value)}
-                      onBlur={() => handleSavePorcion(pr)}
-                      onKeyDown={e => { if (e.key === 'Enter') handleSavePorcion(pr); if (e.key === 'Escape') setEditingPorcionId(null) }}
+                      inputMode="decimal"
+                      value={editingGramajeVal}
+                      onChange={e => setEditingGramajeVal(e.target.value)}
+                      onBlur={() => commitGramaje(pr, usaRecipiente)}
+                      onKeyDown={e => { if (e.key === 'Enter') commitGramaje(pr, usaRecipiente); if (e.key === 'Escape') setEditingGramajeId(null) }}
                       style={{
-                        width: 52, textAlign: 'center', fontSize: 13, fontWeight: 700,
+                        width: 60, textAlign: 'center', fontSize: 13, fontWeight: 700,
                         border: '1.5px solid var(--accent)', borderRadius: 8, padding: '3px 4px',
                         background: 'var(--surface)', color: 'var(--navy)', outline: 'none',
                       }}
                     />
-                  ) : (
+                  ) : gramajeMostrado != null ? (
                     <button
-                      onClick={() => { setEditingPorcionId(pr.id); setEditingPorcionVal(String(pr.porciones)) }}
-                      title="Tap para editar porciones"
+                      onClick={() => startEditGramaje(pr, gramajeMostrado)}
+                      title={usaRecipiente ? 'Tamaño por porción (cargado en el mise)' : 'Gramaje del componente en el plato'}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 4,
                         border: '1px solid var(--border)', borderRadius: 8,
@@ -483,211 +468,69 @@ export function DetailView({
                         fontSize: 13, fontWeight: 700, color: 'var(--text-1)',
                       }}
                     >
-                      {pr.porciones % 1 === 0 ? pr.porciones : pr.porciones.toFixed(1)}
+                      {gramajeMostrado}{unidadMostrada}
                       <span className="material-symbols-outlined" style={{ fontSize: 12, color: 'var(--text-3)' }}>edit</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => startEditGramaje(pr, null)}
+                      style={{ fontSize: 11, fontWeight: 700, color: '#f97316', background: 'none', border: '1px dashed #f97316', borderRadius: 8, padding: '4px 8px', cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      + gramaje
                     </button>
                   )}
                   {/* → OPS button */}
                   <button
-                    onClick={async () => {
-                      if (opsPanel === pr.id) { setOpsPanel(null); return }
-                      setOpsPanel(pr.id)
-                      setOpsError('')
-                      setOpsPlaza(pr.plaza ?? '')
-                      setOpsSeccion('')
-                      setOpsCantidad(pr.cantidad_ops != null ? String(pr.cantidad_ops) : '')
-                      setOpsUnidad(pr.unidad_ops ?? 'g')
-                      setOpsRecipienteNombre('')
-                      setOpsPesoPorcion('')
-                      setOpsPesoPorcionUnidad('g')
-                      // Prefill recipiente/peso/sección desde checklist_items si ya existe
-                      if (pr.receta_id && pr.plaza) {
-                        const { data } = await supabaseDV.from('checklist_items')
-                          .select('recipiente_nombre, recipiente_capacidad, peso_porcion, peso_porcion_unidad, unidad, seccion')
-                          .eq('receta_id', pr.receta_id).eq('plaza', pr.plaza).limit(1)
-                        if (data?.[0]) {
-                          setOpsRecipienteNombre(data[0].recipiente_nombre ?? '')
-                          setOpsPesoPorcion(data[0].peso_porcion != null ? String(data[0].peso_porcion) : '')
-                          setOpsPesoPorcionUnidad(data[0].peso_porcion_unidad ?? 'g')
-                          const secMatch = SECCIONES_OPS.find(s => s.label === data[0].seccion)
-                          setOpsSeccion(secMatch?.id ?? '')
-                        }
-                      }
-                    }}
+                    onClick={() => onToggleOps(pr.id)}
                     title="Asignar a OPS"
                     style={{
                       display: 'flex', alignItems: 'center', gap: 3,
                       padding: '3px 7px', borderRadius: 7, border: 'none', cursor: 'pointer',
                       fontSize: 10, fontWeight: 700,
-                      background: opsPanel === pr.id ? '#eef2ff' : 'var(--bg)',
-                      color: opsPanel === pr.id ? 'var(--accent)' : 'var(--text-3)',
+                      background: isOpen ? '#eef2ff' : 'var(--bg)',
+                      color: isOpen ? 'var(--accent)' : 'var(--text-3)',
                     }}
                   >
                     <span className="material-symbols-outlined" style={{ fontSize: 13 }}>store</span>
                     OPS
                   </button>
                   <button
-                    onClick={() => onEliminarReceta(pr.id)}
+                    onClick={() => onEliminarReceta(pr)}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-3)', flexShrink: 0 }}
                   >
                     <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
                   </button>
                 </div>
-                {/* OPS panel inline */}
-                {opsPanel === pr.id && (
-                  <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', background: '#f8faff' }}>
-                    {/* Plaza */}
-                    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Plaza de producción</div>
-                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
-                      {PLAZAS_OPS_PLATO.map(p => (
-                        <button key={p.id} onClick={() => { setOpsPlaza(opsPlaza === p.id ? '' : p.id); setOpsSeccion('') }}
-                          style={{ padding: '5px 11px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
-                            background: opsPlaza === p.id ? `${p.color}18` : 'var(--surface)', color: opsPlaza === p.id ? p.color : 'var(--text-3)',
-                            outline: opsPlaza === p.id ? `1.5px solid ${p.color}50` : '1px solid var(--border)' }}>
-                          {p.label}
-                        </button>
-                      ))}
+                {/* OPS panel — componente compartido, NO duplicar (ver OpsPanel.tsx) */}
+                {isOpen && (() => {
+                  const { nombre: recipienteNombrePrefill, cantidad: recipienteCantidadPrefill } = parseRecipienteNombre(checklistItem?.recipiente_nombre)
+                  const initial: OpsInitial = {
+                    plaza: pr.plaza ?? null,
+                    seccion: checklistItem?.seccion_id ?? null,
+                    cantidad: pr.cantidad_ops ?? null,
+                    unidad: pr.unidad_ops ?? null,
+                    recipienteNombre: recipienteNombrePrefill,
+                    recipienteCantidad: recipienteCantidadPrefill,
+                    pesoPorcion: checklistItem?.peso_porcion ?? pr.cantidad_ops ?? null,
+                    pesoPorcionUnidad: checklistItem?.peso_porcion_unidad ?? pr.unidad_ops ?? null,
+                  }
+                  return (
+                    <div style={{ padding: '12px 14px', borderTop: '1px solid var(--border)', background: '#f8faff' }}>
+                      <OpsPanel
+                        initial={initial}
+                        hasExisting={!!pr.plaza}
+                        saving={isSaving}
+                        recipienteSugerencias={recipientesUsados}
+                        onSave={r => onGuardarOps(pr, r)}
+                        onRemove={pr.plaza ? () => onQuitarOps(pr) : undefined}
+                        onCancel={() => onToggleOps(pr.id)}
+                      />
                     </div>
-
-                    {opsPlaza && (
-                      <>
-                        {/* Sección mise */}
-                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Sección del mise</div>
-                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
-                          {SECCIONES_OPS.map(s => (
-                            <button key={s.id} onClick={() => setOpsSeccion(opsSeccion === s.id ? '' : s.id)}
-                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
-                                background: opsSeccion === s.id ? 'rgba(67,97,160,.12)' : 'var(--surface)', color: opsSeccion === s.id ? 'var(--accent)' : 'var(--text-3)',
-                                outline: opsSeccion === s.id ? '1.5px solid rgba(67,97,160,.3)' : '1px solid var(--border)' }}>
-                              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>{s.icono}</span>
-                              {s.label}
-                            </button>
-                          ))}
-                        </div>
-
-                        {/* Recipiente */}
-                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Recipiente (opcional)</div>
-                        <input type="text" value={opsRecipienteNombre}
-                          onChange={e => { setOpsRecipienteNombre(e.target.value); if (!e.target.value.trim()) setOpsPesoPorcion('') }}
-                          placeholder="ej: tupper, cubeta GN, bandeja"
-                          style={{ width: '100%', padding: '8px 12px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 13, fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)', boxSizing: 'border-box', marginBottom: 12 }} />
-
-                        {/* Porciones/peso recipiente lleno */}
-                        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>
-                          {opsRecipienteNombre.trim() ? 'Porciones/peso recipiente lleno' : 'Cantidad en mise'}
-                        </div>
-                        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-                          <input type="number" value={opsCantidad} onChange={e => setOpsCantidad(e.target.value)} inputMode="decimal" placeholder="0"
-                            style={{ width: 70, padding: '8px 10px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 14, fontWeight: 700, textAlign: 'center', fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)' }} />
-                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                            {UNIDADES_OPS.map(u => (
-                              <button key={u} onClick={() => setOpsUnidad(u)}
-                                style={{ padding: '6px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
-                                  background: opsUnidad === u ? 'var(--navy)' : 'var(--surface)', color: opsUnidad === u ? '#fff' : 'var(--text-3)',
-                                  outline: opsUnidad === u ? 'none' : '1px solid var(--border)' }}>
-                                {u}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Tamaño por porción — solo cuando hay recipiente */}
-                        {opsRecipienteNombre.trim() && (() => {
-                          const capVal = parseFloat(opsCantidad) || 0
-                          const porVal = parseFloat(opsPesoPorcion) || 0
-                          const porcionesAuto = porcionesDesdeCapacidad(capVal, opsUnidad, porVal, opsPesoPorcionUnidad)
-                          const UNIDADES_PORCION = ['g', 'kg', 'u', 'porc', 'ml', 'l']
-                          return (
-                            <>
-                              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 7 }}>Tamaño por porción</div>
-                              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
-                                <input type="number" value={opsPesoPorcion} onChange={e => setOpsPesoPorcion(e.target.value)} inputMode="decimal" placeholder="ej: 110"
-                                  style={{ width: 70, padding: '8px 10px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 14, fontWeight: 700, textAlign: 'center', fontFamily: 'inherit', outline: 'none', color: 'var(--text-1)' }} />
-                                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                                  {UNIDADES_PORCION.map(u => (
-                                    <button key={u} onClick={() => setOpsPesoPorcionUnidad(u)}
-                                      style={{ padding: '6px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
-                                        background: opsPesoPorcionUnidad === u ? '#4361a0' : 'var(--surface)', color: opsPesoPorcionUnidad === u ? '#fff' : 'var(--text-3)',
-                                        outline: opsPesoPorcionUnidad === u ? 'none' : '1px solid var(--border)' }}>
-                                      {u}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                              {porcionesAuto !== null && opsCantidad && opsPesoPorcion ? (
-                                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', marginBottom: 12, paddingLeft: 2 }}>
-                                  = {porcionesAuto} porciones por recipiente
-                                </div>
-                              ) : opsCantidad && opsPesoPorcion ? (
-                                <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 12, paddingLeft: 2 }}>
-                                  {capVal} {opsUnidad} · {porVal} {opsPesoPorcionUnidad} / porción
-                                </div>
-                              ) : <div style={{ marginBottom: 12 }} />}
-                            </>
-                          )
-                        })()}
-
-                        {/* Indicador de suma si hay otras contribuciones */}
-                        {(() => {
-                          const otrasCantidad = item.plato_recetas
-                            .filter(otro => otro.receta_id === pr.receta_id && otro.id !== pr.id && otro.plaza === opsPlaza && otro.cantidad_ops != null)
-                            .reduce((s, o) => s + (o.cantidad_ops ?? 0), 0)
-                          const miVal = parseFloat(opsCantidad) || 0
-                          if (otrasCantidad > 0) return (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: '#eef2ff', borderRadius: 8, marginBottom: 10 }}>
-                              <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent)' }}>functions</span>
-                              <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>
-                                Total OPS: <b>{otrasCantidad + miVal} {opsUnidad}</b> ({otrasCantidad} otros + {miVal} este)
-                              </span>
-                            </div>
-                          )
-                          return null
-                        })()}
-                      </>
-                    )}
-
-                    {/* Guardar / Quitar */}
-                    {opsError && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: 'rgba(239,68,68,.1)', borderRadius: 8, marginBottom: 8 }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#ef4444' }}>error</span>
-                        <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>Error al guardar: {opsError}</span>
-                      </div>
-                    )}
-                    {opsPlaza && !opsSeccion && (
-                      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 8, paddingLeft: 2 }}>
-                        Elegí una sección del mise para poder guardar.
-                      </div>
-                    )}
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => handleGuardarOPS(pr)} disabled={!opsPlaza || !opsSeccion || opsSaving}
-                        style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none',
-                          background: opsPlaza && opsSeccion && !opsSaving ? 'var(--navy)' : 'var(--border)',
-                          color: '#fff', fontWeight: 700, fontSize: 12, cursor: opsPlaza && opsSeccion ? 'pointer' : 'default',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontFamily: 'inherit' }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
-                          {opsSaving ? 'progress_activity' : 'checklist'}
-                        </span>
-                        {opsSaving ? 'Guardando…' : 'Guardar en mise'}
-                      </button>
-                      {pr.plaza && (
-                        <button onClick={async () => {
-                          const oldPlaza = pr.plaza!
-                          await onActualizarPlatoRecetaOpsCompleta(pr.id, { plaza: null, cantidad_ops: null, unidad_ops: null })
-                          await shrinkOrPruneMise({ supabase: supabaseDV, restauranteId, recetaId: pr.receta_id, plaza: oldPlaza })
-                          setOpsPanel(null)
-                        }} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                          Quitar
-                        </button>
-                      )}
-                      <button onClick={() => setOpsPanel(null)}
-                        style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-3)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                        Cancelar
-                      </button>
-                    </div>
-                  </div>
-                )}
+                  )
+                })()}
                 </div>
-              ))}
+                )
+              })}
               {item.costo_total_plato != null && item.costo_total_plato > 0 && (
                 <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', background: 'rgba(0,0,0,.02)' }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>Costo recetas</span>
@@ -1009,6 +852,17 @@ export function DetailView({
           )}
         </div>
       </div>
+
+      {editRecetaSheet && (
+        <RecetaEditSheet
+          recetaId={editRecetaSheet.id}
+          recetaNombre={editRecetaSheet.nombre}
+          stockProductos={productos}
+          recetasDisponibles={recetas}
+          onClose={() => setEditRecetaSheet(null)}
+          onSaved={onRecetaActualizada}
+        />
+      )}
     </div>
   )
 }

@@ -581,6 +581,25 @@ export function useCarta() {
     }
   }, [fetchItems, supabase])
 
+  // Gramaje real de este componente EN el plato — food cost, sin tocar
+  // cantidad_ops/unidad_ops (demanda de este plato al stock estándar de la
+  // plaza, editada aparte vía actualizarPlatoRecetaOpsCompleta). Escritura
+  // directa y dedicada: a diferencia de actualizarPlatoRecetaOps (que espeja
+  // gramaje desde cantidad_ops para no romper Recetario→Platos y el board de
+  // Mesa de Trabajo), esta es la del editor nuevo de Carta — no mezcla las
+  // dos columnas en ningún sentido.
+  const actualizarPlatoRecetaGramaje = useCallback(async (platoRecetaId: string, datos: { gramaje: number | null; gramaje_unidad: string | null }) => {
+    try {
+      const { error } = await supabase.from('plato_recetas').update(datos).eq('id', platoRecetaId)
+      if (error) throw error
+      await fetchItems()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al actualizar gramaje'
+      console.error('[useCarta] actualizarPlatoRecetaGramaje Error:', msg)
+      throw new Error(msg)
+    }
+  }, [fetchItems, supabase])
+
   const eliminarPlatoReceta = useCallback(async (platoRecetaId: string) => {
     try {
       const { error } = await supabase.from('plato_recetas').delete().eq('id', platoRecetaId)
@@ -661,7 +680,7 @@ export function useCarta() {
     fetchItems, crearItem, actualizarItem, actualizarTags,
     toggleDisponible, eliminarItem, marcar86PorNombre,
     duplicarItem,
-    agregarPlatoReceta, actualizarPlatoReceta, actualizarPlatoRecetaOps, actualizarPlatoRecetaOpsCompleta, eliminarPlatoReceta,
+    agregarPlatoReceta, actualizarPlatoReceta, actualizarPlatoRecetaOps, actualizarPlatoRecetaOpsCompleta, actualizarPlatoRecetaGramaje, eliminarPlatoReceta,
     agregarPlatoPackaging, eliminarPlatoPackaging,
   }
 }
