@@ -395,7 +395,7 @@ export function useChecklist() {
     }
   }
 
-  async function actualizarItem(id: string, datos: Partial<{ prioridad: MisePrioridad; nombre: string; cantidad: number; unidad: string; ubicacion: string | null; seccion_id: string; plaza: Plaza; seccion: string; recipiente_nombre: string | null; recipiente_capacidad: number | null; peso_porcion: number | null; peso_porcion_unidad: string | null; orden: number }>) {
+  async function actualizarItem(id: string, datos: Partial<{ prioridad: MisePrioridad; nombre: string; cantidad: number; unidad: string; ubicacion: string | null; seccion_id: string; plaza: Plaza; seccion: string; recipiente_nombre: string | null; recipiente_capacidad: number | null; peso_porcion: number | null; peso_porcion_unidad: string | null; orden: number; nota: string | null; nota_por: string | null; nota_at: string | null }>) {
     mutateConfig(
       (prev) => prev ? { ...prev, items: prev.items.map(i => i.id === id ? { ...i, ...datos } : i) } : prev,
       { revalidate: false }

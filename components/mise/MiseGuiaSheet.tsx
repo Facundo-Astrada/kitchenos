@@ -233,8 +233,9 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
         }
       >
         <b>fact_check (Modo Control):</b>{' '}deja cada ítem en una sola línea con tres decisiones y ningún
-        número: el <b>tilde</b> (está como tiene que estar), el <b>badge de prioridad</b> — un tap lo cicla
-        SP → P → REF — y el <b>+</b>, que despacha el ítem con esa prioridad y sin cantidad.
+        número: el <b>tilde</b> (está como tiene que estar), el <b>badge de prioridad</b> — mantené apretado
+        y deslizá para elegir SP / P / REF, o tocá para abrir la lista — y el <b>+</b>, que despacha el ítem
+        con esa prioridad y sin cantidad.
         <br /><br />
         La fila se pinta según cómo quedó, para que la vuelta se lea de un vistazo: <b>verde tachada</b> si
         la tildaste, <b>ámbar</b> si la despachaste (&quot;ya lo vi y va a salir&quot; — ese ítem no se vuelve

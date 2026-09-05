@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth/context'
 import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
 import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, supportsWebUSB, supportsWebBluetooth } from '@/lib/print/escpos'
 import { CrearTareaSheet, type CrearTareaSheetConfirmData } from '@/components/ops/CrearTareaSheet'
+import { PrioridadPicker, type PrioOpcion } from '@/components/ops/PrioridadPicker'
 import { parseTurnoFase } from '@/lib/ops/turnos'
 import type { MisePlaceItem, MisePrioridad, TareaPrioridad } from '@/types'
 import { tieneRecipienteMise, targetStockMise, deficitMise } from '@/lib/ops/mise'
@@ -58,17 +59,13 @@ const PRIO_CFG: Record<string, { label: string; color: string; bg: string }> = {
   ref: { label: 'REF', color: '#3b82f6', bg: 'rgba(59,130,246,.13)' },
   chk: { label: 'OK',  color: '#22c55e', bg: 'rgba(34,197,94,.13)' },
 }
-const PRIO_CYCLE: MisePrioridad[] = ['sp', 'p', 'ref', 'chk']
+const PRIO_OPCIONES: PrioOpcion<MisePrioridad>[] = (['sp', 'p', 'ref', 'chk'] as MisePrioridad[])
+  .map(v => ({ value: v, ...PRIO_CFG[v] }))
 
 const btnReset: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer', padding: 0,
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   fontFamily: 'inherit',
-}
-
-function nextPrio(current: string): MisePrioridad {
-  const idx = PRIO_CYCLE.indexOf(current as MisePrioridad)
-  return PRIO_CYCLE[(idx + 1) % PRIO_CYCLE.length]
 }
 
 function capPlaza(p: string) { return p.charAt(0).toUpperCase() + p.slice(1) }
@@ -193,13 +190,14 @@ interface ProductoMiseCardProps {
   onPrioChange: (item: MisePlaceItem, prio: MisePrioridad) => void
   onDelete: (id: string) => Promise<void>
   onCrearVencimiento: (params: { producto_nombre: string; fecha_vencimiento: string; fecha_apertura: string }) => Promise<void>
+  onAbrirNota: (item: MisePlaceItem) => void
 }
 
 function ProductoMiseCardBase({
   item, reg, fecha, turno, recetaInfo, platoPlazo, hasTareaPendiente,
   rendimientoPromedio, regCierreAnterior, restauranteNombre,
   autoFocus, onAvanzar,
-  onUpsert, onCrearTarea, onPrioChange, onDelete, onCrearVencimiento,
+  onUpsert, onCrearTarea, onPrioChange, onDelete, onCrearVencimiento, onAbrirNota,
 }: ProductoMiseCardProps) {
   // `turno` viene codificado como '<turnoId>:<fase>' cuando el restaurante tiene
   // turnos de servicio (ej. 'almuerzo:cierre') y pelado ('cierre') si no los usa.
@@ -503,22 +501,38 @@ function ProductoMiseCardBase({
           }}>
             {item.nombre}
           </div>
-          {!checked && (mostrarPeso || item.receta_id || enProduccion || demandaViva > 0 || item.menu_id) && (
+          {(item.nota || (!checked && (mostrarPeso || item.receta_id || enProduccion || demandaViva > 0 || item.menu_id))) && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const, marginTop: 2 }}>
+              {/* Anotación libre del cocinero — se ve hasta que alguien la
+                  borra, sin importar si el ítem ya está tildado: es un
+                  mensaje, no un chip de estado. */}
+              {item.nota && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onAbrirNota(item) }}
+                  title={`Nota: ${item.nota}`}
+                  style={{
+                    ...btnReset, gap: 3, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99,
+                    background: 'rgba(67,97,160,.12)', color: '#4361a0',
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 11 }}>sticky_note_2</span>
+                  Nota
+                </button>
+              )}
               {/* Ítem de un menú/evento activado (PLAN-MENUS-MISE) — distingue
                   de un vistazo lo del mise fijo de lo que se va cuando el
                   menú deja de estar vigente. */}
-              {item.menu_id && item.menus?.nombre && (
+              {!checked && item.menu_id && item.menus?.nombre && (
                 <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(124,58,237,.13)', color: '#7c3aed' }}>
                   {item.menus.nombre}
                 </span>
               )}
-              {mostrarPeso && (
+              {!checked && mostrarPeso && (
                 <span data-coach-target="mise-item-peso" style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)' }}>
                   {item.peso_porcion}{item.peso_porcion_unidad ?? 'g'}/porc
                 </span>
               )}
-              {item.receta_id && (
+              {!checked && item.receta_id && (
                 <span style={{ fontSize: 9, color: '#4361a0', fontWeight: 600 }}>receta</span>
               )}
               {enProduccion && (
@@ -529,7 +543,7 @@ function ProductoMiseCardBase({
                   en producción
                 </span>
               )}
-              {demandaViva > 0 && (
+              {!checked && demandaViva > 0 && (
                 <span style={{
                   fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99,
                   background: 'rgba(249,115,22,.13)', color: '#f97316',
@@ -906,16 +920,24 @@ function ProductoMiseCardBase({
               {/* Prioridad del ítem — default para la próxima tarea que se cree
                   desde acá. Vive en el panel expandido (no en la fila principal)
                   porque se toca poco: casi siempre se elige al crear la tarea. */}
+              <PrioridadPicker
+                variant="chip"
+                value={item.prioridad as MisePrioridad}
+                display={prio}
+                opciones={PRIO_OPCIONES}
+                onChange={(v) => onPrioChange(item, v)}
+                title="Mantené apretado para elegir la prioridad"
+              />
               <button
-                onClick={() => onPrioChange(item, nextPrio(item.prioridad))}
+                onClick={() => onAbrirNota(item)}
                 style={{
-                  ...btnReset,
-                  padding: '3px 7px', borderRadius: 7,
-                  background: prio.bg, border: `1px solid ${prio.color}40`,
-                  fontSize: 10, fontWeight: 800, color: prio.color, transition: 'all .15s',
+                  ...btnReset, gap: 4, padding: '4px 10px', borderRadius: 8,
+                  fontSize: 11, fontWeight: 600, color: 'var(--accent)',
+                  background: 'rgba(67,97,160,.08)', border: '1px solid rgba(67,97,160,.25)',
                 }}
               >
-                {prio.label}
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>sticky_note_2</span>
+                {item.nota ? 'Editar nota' : 'Nota'}
               </button>
               <button
                 onClick={() => onDelete(item.id)}
@@ -958,5 +980,6 @@ export const ProductoMiseCard = memo(ProductoMiseCardBase, (prev, next) => (
   prev.onCrearTarea === next.onCrearTarea &&
   prev.onPrioChange === next.onPrioChange &&
   prev.onDelete === next.onDelete &&
-  prev.onCrearVencimiento === next.onCrearVencimiento
+  prev.onCrearVencimiento === next.onCrearVencimiento &&
+  prev.onAbrirNota === next.onAbrirNota
 ))

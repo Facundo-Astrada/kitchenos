@@ -5,6 +5,7 @@ import { RecetaDrawer } from './RecetaDrawer'
 import { ProduccionSheetConectada } from './ProduccionSheetConectada'
 import { CrearTareaSheet, type CrearTareaSheetConfirmData } from './CrearTareaSheet'
 import { QuickAdd } from './QuickAdd'
+import { PrioridadPicker, type PrioOpcion } from './PrioridadPicker'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
 import { hoyOperativo } from '@/lib/ops/turnos'
@@ -40,18 +41,16 @@ const SECCION_LABELS: Record<string, string> = {
   pasteleria: 'Pastelería', salon: 'Salón',
 }
 
-// Chip de prioridad para modo menú (agrupado por sección) — tap para ciclar
+// Chip de prioridad para modo menú (agrupado por sección) — mantener apretado
+// abre el picker vertical (PrioridadPicker), un tap solo lo deja abierto.
 const PRIO_CHIP: Record<string, { label: string; color: string; bg: string }> = {
   critica: { label: 'SP',  color: '#ef4444', bg: 'rgba(239,68,68,.13)' },
   alta:    { label: 'P',   color: '#f97316', bg: 'rgba(249,115,22,.13)' },
   media:   { label: 'REF', color: '#3b82f6', bg: 'rgba(59,130,246,.13)' },
   baja:    { label: 'Baja',color: '#64748b', bg: 'rgba(100,116,139,.1)' },
 }
-const PRIO_CYCLE: TareaPrioridad[] = ['critica', 'alta', 'media', 'baja']
-function nextPrioridad(current: string): TareaPrioridad {
-  const idx = PRIO_CYCLE.indexOf(current as TareaPrioridad)
-  return PRIO_CYCLE[(idx + 1) % PRIO_CYCLE.length]
-}
+const PRIO_OPCIONES: PrioOpcion<TareaPrioridad>[] = (['critica', 'alta', 'media', 'baja'] as TareaPrioridad[])
+  .map(v => ({ value: v, ...PRIO_CHIP[v] }))
 
 interface ItemOpsProps {
   item: Tarea
@@ -291,24 +290,14 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
                   )
                 }
                 return (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onPrioridadChange(item.id, nextPrioridad(item.prioridad ?? 'baja')) }}
-                    title="Tocar para cambiar la prioridad"
-                    style={{
-                      // Chip más grande y con borde propio: en el board por plazas
-                      // esta es LA forma de re-priorizar (ya no hay columna por
-                      // prioridad) — tenía que verse tocable, no solo una etiqueta.
-                      display: 'inline-flex', alignItems: 'center', gap: 2,
-                      fontSize: 10, fontWeight: 800, padding: '3px 8px',
-                      borderRadius: 6, marginTop: 3, marginLeft: 3,
-                      background: chip.bg, color: chip.color,
-                      border: `1px solid ${chip.color}40`, cursor: 'pointer', fontFamily: 'inherit',
-                      touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent',
-                    }}
-                  >
-                    {chip.label}
-                    <span className="material-symbols-outlined" style={{ fontSize: 11, opacity: .7 }}>sync_alt</span>
-                  </button>
+                  <PrioridadPicker
+                    variant="chip"
+                    value={(item.prioridad as TareaPrioridad) ?? 'baja'}
+                    display={chip}
+                    opciones={PRIO_OPCIONES}
+                    onChange={(v) => onPrioridadChange(item.id, v)}
+                    title="Mantené apretado para elegir la prioridad"
+                  />
                 )
               })()}
               {item.cantidad != null && (

@@ -722,6 +722,12 @@ export interface MisePlaceItem {
   // null. Usado al despachar el ítem a Producción para caer en la columna
   // real del plan en vez de forzar 'general' (ver menuMise.ts).
   menu_paso?: string | null
+  // Anotación libre pegada al ítem (sep 2026) — vive hasta que alguien la
+  // borra, no expira con el turno. No confundir con `observacion` (columna
+  // legacy sin caller, ver .claude/docs/columnas.md).
+  nota?: string | null
+  nota_por?: string | null
+  nota_at?: string | null
 }
 
 // ── Espacios físicos (mesa de trabajo) ───────────────────────

@@ -11,6 +11,8 @@ import { createClient } from '@/lib/supabase/client'
 import { ProductoMiseCard, PLAZA_TO_SECCION, MISE_PRIO_TO_TAREA } from '@/components/mise/ProductoMiseCard'
 import type { PlatoPlaza, CrearTareaParams } from '@/components/mise/ProductoMiseCard'
 import { MiseGuiaSheet } from '@/components/mise/MiseGuiaSheet'
+import { NotaItemSheet } from '@/components/mise/NotaItemSheet'
+import { AvisosTurno } from '@/components/mise/AvisosTurno'
 import type { MiseGuiaFoco } from '@/components/mise/MiseGuiaSheet'
 import { MiseTourOverlay } from '@/components/mise/MiseTourOverlay'
 import { useProduccionRegistros } from '@/lib/hooks/useProduccionRegistros'
@@ -22,6 +24,7 @@ import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
 import { useCierresTurno } from '@/lib/hooks/useCierresTurno'
 import { useNotasPlaza } from '@/lib/hooks/useNotasPlaza'
 import { NotasPlaza } from '@/components/ops/NotasPlaza'
+import { PrioridadPicker, type PrioOpcion } from '@/components/ops/PrioridadPicker'
 import { todasLasPlazas, plazaLabel, plazaIcon, plazaColor } from '@/lib/constants'
 import { hoyOperativo, sumarDias, turnoVigente, turnoAnterior, turnoSiguiente, encodeTurnoFase, cierreIncompleto, fechaEnTz } from '@/lib/ops/turnos'
 import { menuItemVisible } from '@/lib/ops/mise'
@@ -41,7 +44,6 @@ import type { Plaza, PlazaCustom, MisePlaceItem, MisePrioridad, ChecklistSeccion
 const PLAZAS: Plaza[] = ['parrilla', 'frios', 'calientes', 'pase', 'pasteleria', 'panaderia', 'general']
 const UNIDADES = ['u', 'kg', 'g', 'l', 'ml', 'pax', 'porc', 'bandeja', 'gastro', 'tupper']
 
-const PRIO_CYCLE: MisePrioridad[] = ['sp', 'p', 'ref', 'chk']
 const PRIO_CFG: Record<string, { label: string; color: string; bg: string }> = {
   sp:  { label: 'SP',  color: '#ef4444', bg: 'rgba(239,68,68,.13)' },
   p:   { label: 'P',   color: '#f97316', bg: 'rgba(249,115,22,.13)' },
@@ -72,25 +74,20 @@ function daysAgo(isoStr: string | null) {
   if (d === 1) return 'Ayer'
   return `Hace ${d} días`
 }
-function nextPrio(current: string): MisePrioridad {
-  const idx = PRIO_CYCLE.indexOf(current as MisePrioridad)
-  return PRIO_CYCLE[(idx + 1) % PRIO_CYCLE.length]
-}
-
-// En Modo Control el badge solo recorre las prioridades de producción: el tilde
-// verde ya dice "esto está", así que un 'chk' verde al lado del check se leería
-// como un segundo tilde. Si el ítem venía en 'chk', el primer tap cae en SP.
-const PRIO_CYCLE_CONTROL: MisePrioridad[] = ['sp', 'p', 'ref']
-function nextPrioControl(current: string): MisePrioridad {
-  const idx = PRIO_CYCLE_CONTROL.indexOf(current as MisePrioridad)
-  return PRIO_CYCLE_CONTROL[(idx + 1) % PRIO_CYCLE_CONTROL.length]
-}
+// En Modo Control el picker solo ofrece las prioridades de producción: el
+// tilde verde ya dice "esto está", así que un 'chk' verde al lado del check
+// se leería como un segundo tilde. Un ítem que venía en 'chk' se ve con el
+// color de PRIO_CFG.ref (ver `prioCfg` más abajo) hasta que se elige una de
+// estas tres.
+const PRIO_CONTROL_OPCIONES: PrioOpcion<MisePrioridad>[] = (['sp', 'p', 'ref'] as MisePrioridad[])
+  .map(v => ({ value: v, ...PRIO_CFG[v] }))
 
 const btnReset: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer', padding: 0,
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   fontFamily: 'inherit',
 }
+
 
 // Carta de plaza (PLAN-SUPERFICIE S3.1) — vestir el selector de plaza del
 // Mise con el mismo patrón de MiembroCard, sin perder el gesto que ya tenía
@@ -513,6 +510,9 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   }, [])
   // Notas de plaza vacías: colapsadas a un chip hasta que alguien quiera escribir.
   const [notasAbiertas, setNotasAbiertas] = useState(false)
+  // Avisos del turno anterior — 'recibidos' | 'pendientes' | 'pendientesCierre' | null.
+  // Uno abierto a la vez; arrancan plegados.
+  const [avisoAbierto, setAvisoAbierto] = useState<string | null>(null)
   const [cerrandoTurno, setCerrandoTurno] = useState(false)
   const [entregando, setEntregando] = useState(false)
   const [deshaciendo, setDeshaciendo] = useState(false)
@@ -1267,6 +1267,32 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
   }, [])
 
+  // Nota por ítem (Modo Control): mantener apretada la fila abre el sheet de
+  // anotación. Mismo patrón que startLongPress de arriba — un solo timer
+  // compartido, no uno por ítem (esto corre dentro de un .map(), un useRef
+  // por ítem rompería las reglas de hooks). notaHoldFired distingue el tap
+  // normal (tilde) del long-press (nota), igual que startHold/holdFired de
+  // ItemOps.tsx.
+  const notaHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const notaHoldFired = useRef(false)
+  const [notaSheetItem, setNotaSheetItem] = useState<MisePlaceItem | null>(null)
+
+  const startNotaHold = useCallback((item: MisePlaceItem) => {
+    notaHoldFired.current = false
+    notaHoldTimer.current = setTimeout(() => {
+      notaHoldFired.current = true
+      tap(30)
+      setNotaSheetItem(item)
+    }, 400)
+  }, [])
+  const cancelNotaHold = useCallback(() => {
+    if (notaHoldTimer.current) { clearTimeout(notaHoldTimer.current); notaHoldTimer.current = null }
+  }, [])
+  const handleNotaTouchEnd = useCallback((e: React.TouchEvent) => {
+    cancelNotaHold()
+    if (notaHoldFired.current) { e.preventDefault(); notaHoldFired.current = false }
+  }, [cancelNotaHold])
+
   // Alias de la jornada resuelta (ver `fecha` arriba) para todo lo que compara
   // contra "hoy": tareas del día, creación de tareas. Sigue al pase, no al
   // reloj — si no, entregada la cena a la 01:20 el mise pasaría al almuerzo del
@@ -1435,6 +1461,15 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
 
   const handleDeleteItem = useCallback(async (id: string) => {
     await eliminarItemRef.current(id)
+  }, [])
+
+  // Nota pegada al ítem — vive hasta que alguien la borra, no por turno.
+  const handleGuardarNota = useCallback(async (item: MisePlaceItem, texto: string) => {
+    const autor = authPerfil ? `${authPerfil.nombre} ${authPerfil.apellido}`.trim() : null
+    await actualizarItemRef.current(item.id, { nota: texto, nota_por: autor, nota_at: new Date().toISOString() })
+  }, [authPerfil])
+  const handleBorrarNota = useCallback(async (item: MisePlaceItem) => {
+    await actualizarItemRef.current(item.id, { nota: null, nota_por: null, nota_at: null })
   }, [])
 
   // ── Modo Control: producir de un tap ────────────────────────────────────
@@ -1776,146 +1811,17 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           </button>
         ))}
 
-        {/* ── Arrastre del turno anterior (solo en apertura) — nunca bloquea,
-            solo avisa. No le pide al que entra que reconstruya el cierre
-            de quien se fue: solo que cuente lo que va a mirar igual.
-
-            Sin cierre registrado, NINGÚN ítem tiene registro previo, así que
-            "pendientes" es la plaza entera — listarlos sería duplicar la lista
-            que está justo abajo. En ese caso va solo el aviso de una línea.
-            El detalle se muestra únicamente cuando sí hubo cierre y quedaron
-            algunos colgados: ahí los nombres son información nueva. ── */}
-        {/* ── Lo que el turno anterior dejó en producción ──────────────────
-            El pase por tarea: cuando el cierre se hizo en Modo Control no hay
-            números que heredar, hay decisiones. Esto es lo que el turno que
-            entra tiene que seguir — qué falta y con qué urgencia. La cantidad
-            se habla en la cocina, a propósito: acá nadie inventa un número. ── */}
-        {!loading && tab === 'apertura' && recibidosEnProduccion.length > 0 && (
-          <div style={{
-            background: 'rgba(245,158,11,0.10)',
-            borderLeft: '3px solid #f59e0b',
-            borderRadius: 12, marginBottom: 10, overflow: 'hidden',
-          }}>
-            <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#b45309', flexShrink: 0 }}>pending</span>
-              <div style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: '#78350f', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-                Te dejaron en producción
-              </div>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#92400e', flexShrink: 0 }}>
-                {recibidosEnProduccion.length} para hacer
-              </span>
-            </div>
-            <div style={{ padding: '0 14px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {recibidosEnProduccion.map(item => {
-                const p = PRIO_CFG[item.prioridad] ?? PRIO_CFG.ref
-                return (
-                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-                    <span style={{
-                      flexShrink: 0, minWidth: 30, textAlign: 'center', padding: '2px 6px', borderRadius: 6,
-                      background: p.bg, border: `1px solid ${p.color}`,
-                      fontSize: 10, fontWeight: 800, color: p.color,
-                    }}>{p.label}</span>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: '#78350f', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {item.nombre}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {!loading && tab === 'apertura' && pendientesSinResolver.length > 0 && (
-          <div style={{
-            background: cierreAnteriorSinRastro ? 'rgba(239, 68, 68, 0.12)' : 'rgba(250, 204, 21, 0.15)',
-            borderLeft: `3px solid ${cierreAnteriorSinRastro ? '#ef4444' : '#facc15'}`,
-            borderRadius: 12,
-            marginBottom: 10,
-            overflow: 'hidden',
-          }}>
-            <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 16, color: cierreAnteriorSinRastro ? '#dc2626' : '#ca8a04', flexShrink: 0 }}>
-                {cierreAnteriorSinRastro ? 'report' : 'warning'}
-              </span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: cierreAnteriorSinRastro ? '#7f1d1d' : '#78350f', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-                  {cierreAnteriorSinRastro ? 'Recibís sin cierre del turno anterior' : 'Pendiente del turno anterior'}
-                </div>
-                {cierreAnteriorSinRastro && (
-                  <div style={{ fontSize: 12, color: '#7f1d1d', lineHeight: 1.4, marginTop: 3 }}>
-                    Nadie registró el cierre. Contá lo que veas al arrancar.{' '}
-                    <button
-                      onClick={() => setGuia({ foco: 'primera-vez' })}
-                      style={{
-                        ...btnReset, display: 'inline', padding: 0, fontSize: 12, fontWeight: 700,
-                        color: '#7f1d1d', textDecoration: 'underline',
-                      }}
-                    >
-                      ¿Cómo lo cargo?
-                    </button>
-                  </div>
-                )}
-              </div>
-              {!cierreAnteriorSinRastro && (
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#92400e', flexShrink: 0 }}>
-                  {pendientesSinResolver.length} sin cerrar
-                </span>
-              )}
-            </div>
-            {!cierreAnteriorSinRastro && (
-              <div style={{ padding: '0 14px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {pendientesSinResolver.map(item => (
-                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#ca8a04', flexShrink: 0 }}>radio_button_unchecked</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#78350f' }}>{item.nombre}</span>
-                      {item.cantidad > 0 && (
-                        <span style={{ marginLeft: 6, fontSize: 11, color: '#92400e' }}>
-                          {item.cantidad} {item.unidad}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── Pendientes del turno (solo en cierre) ── */}
-        {!loading && tab === 'cierre' && pendientesApertura.length > 0 && (
-          <div style={{
-            background: 'rgba(250, 204, 21, 0.15)',
-            borderLeft: '3px solid #facc15',
-            borderRadius: 12,
-            marginBottom: 10,
-            overflow: 'hidden',
-          }}>
-            <div style={{ padding: '10px 14px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#ca8a04', flexShrink: 0 }}>warning</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#78350f', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-                Pendiente del turno
-              </span>
-              <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: '#92400e' }}>
-                {pendientesApertura.length} sin completar
-              </span>
-            </div>
-            <div style={{ padding: '0 14px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {pendientesApertura.map(item => (
-                <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid rgba(250,204,21,0.2)' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#ca8a04', flexShrink: 0 }}>radio_button_unchecked</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#78350f' }}>{item.nombre}</span>
-                    {item.cantidad > 0 && (
-                      <span style={{ marginLeft: 6, fontSize: 11, color: '#92400e' }}>
-                        {item.cantidad} {item.unidad}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        {!loading && (
+          <AvisosTurno
+            tab={tab}
+            recibidosEnProduccion={recibidosEnProduccion}
+            pendientesSinResolver={pendientesSinResolver}
+            pendientesApertura={pendientesApertura}
+            cierreAnteriorSinRastro={cierreAnteriorSinRastro}
+            avisoAbierto={avisoAbierto}
+            onToggle={(id) => setAvisoAbierto(a => a === id ? null : id)}
+            onComoLoCargo={() => setGuia({ foco: 'primera-vez' })}
+          />
         )}
 
         {/* ── APERTURA / CIERRE ── */}
@@ -2028,12 +1934,23 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                     transition: 'background .15s',
                   }}>
                     <button
-                      onClick={() => handleMiseUpsert(item.id, fecha, turno, { completado: !tildado })}
+                      onClick={() => {
+                        if (notaHoldFired.current) { notaHoldFired.current = false; return }
+                        handleMiseUpsert(item.id, fecha, turno, { completado: !tildado })
+                      }}
+                      onMouseDown={() => startNotaHold(item)}
+                      onMouseUp={cancelNotaHold}
+                      onMouseLeave={cancelNotaHold}
+                      onTouchStart={() => startNotaHold(item)}
+                      onTouchEnd={handleNotaTouchEnd}
+                      onTouchCancel={cancelNotaHold}
+                      onContextMenu={(e) => e.preventDefault()}
+                      title="Mantené apretado para anotar algo sobre este ítem"
                       style={{
                         flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10,
                         padding: '10px 4px', background: 'none', border: 'none', cursor: 'pointer',
                         fontFamily: 'inherit', textAlign: 'left',
-                        WebkitTapHighlightColor: 'transparent',
+                        WebkitTapHighlightColor: 'transparent', touchAction: 'manipulation',
                       }}
                     >
                       <span className="material-symbols-outlined" style={{
@@ -2069,23 +1986,31 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                         </span>
                       )}
                     </button>
-                    <button
-                      onClick={() => { if (!resuelto) handlePrioChange(item, nextPrioControl(item.prioridad)) }}
+                    {item.nota && (
+                      <button
+                        onClick={() => setNotaSheetItem(item)}
+                        title={`Nota: ${item.nota}`}
+                        style={{
+                          ...btnReset, width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+                          color: 'var(--accent)',
+                        }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>sticky_note_2</span>
+                      </button>
+                    )}
+                    <PrioridadPicker
+                      variant="circle"
+                      value={item.prioridad as MisePrioridad}
+                      display={prioCfg}
+                      opciones={PRIO_CONTROL_OPCIONES}
+                      onChange={(v) => handlePrioChange(item, v)}
                       disabled={resuelto}
                       title={
                         tildado ? 'Tildado — no hay prioridad que definir'
                           : enProd ? `Despachado con prioridad ${prioCfg.label}`
-                          : `Prioridad ${prioCfg.label} — tap para cambiar`
+                          : 'Mantené apretado para elegir la prioridad'
                       }
-                      style={{
-                        ...btnReset, width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
-                        fontSize: 10, fontWeight: 800, transition: 'all .15s',
-                        WebkitTapHighlightColor: 'transparent',
-                        ...(resuelto ? btnApagado : btnVivo),
-                      }}
-                    >
-                      {prioCfg.label}
-                    </button>
+                    />
                     <button
                       onClick={() => { if (!resuelto) handleCrearTareaControl(item) }}
                       disabled={resuelto}
@@ -2132,6 +2057,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                     onCrearVencimiento={handleCrearVencimientoDesdeMise}
                     onPrioChange={handlePrioChange}
                     onDelete={handleDeleteItem}
+                    onAbrirNota={setNotaSheetItem}
                   />
                 )}
               </div>
@@ -2399,6 +2325,17 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       )}
 
       {/* Sheets */}
+      {notaSheetItem && (
+        <NotaItemSheet
+          nombreItem={notaSheetItem.nombre}
+          nota={notaSheetItem.nota ?? null}
+          notaPor={notaSheetItem.nota_por ?? null}
+          notaAt={notaSheetItem.nota_at ?? null}
+          onGuardar={(texto) => handleGuardarNota(notaSheetItem, texto)}
+          onBorrar={() => handleBorrarNota(notaSheetItem)}
+          onDismiss={() => setNotaSheetItem(null)}
+        />
+      )}
       {guia && (
         <MiseGuiaSheet
           foco={guia.foco}
@@ -3154,6 +3091,3 @@ function AddRutinaSheet({ plaza, editing, rutinasAuditoria, onSave, onClose }: {
 // ── Style constants ──
 const inp: React.CSSProperties = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: '9px 12px', fontSize: 13, fontFamily: 'inherit', color: 'var(--text-1)', outline: 'none', width: '100%', boxSizing: 'border-box' }
 const lbl: React.CSSProperties = { fontSize: 9, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em' }
-
-// suppress unused import warnings — these are used implicitly via string refs
-void nextPrio
