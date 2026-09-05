@@ -1,24 +1,24 @@
-# Sesión — 2026-09-04 — Carta: el food cost dejó de fabricarse, tres fases
+# Sesión — 2026-09-05 — Mise: prioridad sin salto, nota por ítem, avisos plegados
 
-Devolución de uso real: "Carta tiene demasiados puntos de control, no se ve el gramaje que sí se ve en Recetario". La causa era peor que UI — `plato_recetas.cantidad_ops` servía demanda de mise Y gramaje de costeo a la vez, y con `porciones` en 1 por default en el 85% de las filas, el food cost contaba cada componente como "una porción entera del batch" (el caso que disparó la queja, en Bros, daba margen -403989.7%). 3 commits, pusheados y deployados (`Ready` en Vercel).
+Devolución de uso real (capturas de Producción y Mise): cambiar la prioridad de un ítem lo saltaba de grupo con cada tap y el dedo terminaba tocando donde ya no estaba el botón; los recuadros "Te dejaron en producción"/"Pendiente del turno anterior" comían pantalla antes del primer ítem real. 2 commits, pusheados y deployados (`Ready` en Vercel).
 
 ## Qué se cerró
 
-- **Fase 1 — el número** (`528a9ec`): `plato_recetas.gramaje`/`gramaje_unidad` (columna nueva, migrada y backfillada), separada para siempre de `cantidad_ops` (que queda solo para la demanda de mise). `lib/recetas/peso.ts` nuevo, deriva costo/gramo aunque falte `peso_total_g`. Sin gramaje conocido, el plato queda "sin estandarizar" en vez de mostrar un FC inventado (decisión explícita de Facundo). `sumPlatoRecetaCantidad` ya no suma unidades incompatibles entre sí.
-- **Fase 2 — la fila del componente en Carta** (`1286d94`): ícono de receta → `RecetaEditSheet` (editable, sin salir de Carta); editor de gramaje real reemplaza al de "porciones"; chip "Stock estándar: N pax · Plaza"; panel OPS de `DetailView.tsx` reemplazado por el `OpsPanel` compartido (-250 líneas a mano).
-- **Fase 3 — menos pantallas** (`c84d984`, a pedido: "platos se va, continua fase 3"): Recetario pierde la pestaña "Platos" (-442 líneas). `EditarPlato.tsx` desaparece — nombre/precio/categoría/foto se editan in situ en `DetailView.tsx`, sin la tercera pantalla. Glosario cerrado con gramaje/stock estándar/peso por porción.
-- Verificado en las tres fases con dev server + Playwright contra Supabase real (no solo tests). Docs tocados: `ESTADO-ACTUAL.md`, `PENDIENTES.md`, `columnas.md`, `glosario.md`, `HISTORIAL.md`, ratchet de `recetario/page.tsx` bajado.
+- **Picker de prioridad sin salto** (`7a552d2`): `PrioridadPicker` nuevo (`components/ops/PrioridadPicker.tsx` + geometría pura en `lib/ui/picker.ts`, testeada) — mantener apretado abre una columna vertical SP/P/REF al lado del badge, deslizar resalta la opción, soltar recién ahí mueve el ítem; un tap solo la deja abierta para elegir tocando. Reemplaza el ciclo-por-tap en `ItemOps.tsx`, `ProductoMiseCard.tsx` y la fila de Modo Control (`checklist/ClientView.tsx`).
+- **Nota por ítem** (`7a552d2`): `checklist_items.nota/nota_por/nota_at` (migrada y aplicada en prod), `NotaItemSheet.tsx` (~1/3 de pantalla, sin `autoFocus` — abre tras un long-press, ver memoria de teclado móvil), abierto con mantener-apretado en Modo Control o el botón "Nota" del panel expandido del Mise normal. Ícono azul marca el ítem con nota. Umbral de long-press subido de 400ms a 550ms (`8f1a416`) tras feedback de que se sentía corto.
+- **Avisos del turno anterior plegados** (`7a552d2`): `AvisosTurno.tsx` — los tres recuadros pasan a chips de una línea, uno abierto a la vez, plegados por defecto.
+- Copy actualizado en `MiseGuiaSheet`, `MiseTourOverlay` y el contexto del Coach (`/api/coach/route.ts`) para que dejen de enseñar el gesto viejo.
+- Verificado con dev server + Playwright contra Supabase real (login, Modo Control, drag SP→REF, long-press→nota→guardar, tap corto sigue tildando) — datos de prueba revertidos en El Rescoldo (cuenta de capturas de marketing).
+- `ClientView.tsx` se pasó del techo de líneas del ratchet (`lib/ingenieria/ratchets.test.ts`) al sumar todo esto — se resolvió extrayendo `AvisosTurno.tsx` a archivo propio, no subiendo el techo.
 
 ## Qué quedó a medias
 
-Nada a medio hacer en lo planeado — las tres fases están completas y deployadas. Deuda dejada a propósito: el editor de "porciones" (multiplicador de batch de `fuga.ts`/`consumoTeorico.ts`) se sacó de la fila de Carta al reemplazarlo por el de gramaje, sin buscarle un lugar nuevo. La función que lo escribe sigue viva sin ningún caller — ver `PENDIENTES.md` § Backlog chico.
+Nada a medio hacer en lo planeado. Deuda dejada a propósito (anotada en `PENDIENTES.md` § Backlog chico): la nota del ítem no viaja a la tarea de Producción que sale de él (son mensajes de módulos distintos, por ahora), y `checklist_items.observacion` (legacy, sin caller) no se dropeó.
 
 ## Probar primero mañana
 
-Toda la verificación de UI fue contra el dev server local (apuntando a Supabase real) — no se abrió el build ya deployado en `kos-app-one.vercel.app`. Vale la pena entrar una vez a Carta en producción (abrir un plato con componentes, tocar el ícono de receta, el gramaje y OPS) antes de darlo por probado en la práctica — el build fue limpio así que no debería haber sorpresas, pero es el mismo hueco que dejó la sesión del 03/09.
+Todo lo de arriba ya se probó en producción real (no solo dev). Vale la pena un pase rápido en el celular real de un cocinero (no solo Playwright/desktop) para el gesto de arrastre del picker — la geometría se testeó con mouse-drag, que dispara los mismos Pointer Events que un dedo, pero el `setPointerCapture` en touch real de un celular concreto no se verificó todavía.
 
 ## Próximo paso concreto
 
-Dos opciones, sin orden forzado:
-1. **Corrección de datos en Bros** (5 min, no es código): la receta "Crema de castañas" tiene un ingrediente ("Tallos de girgolas") cargado con precio de kg puesto en el campo de gramo — 1000x de más, y va a seguir mostrando un food cost absurdo hasta que alguien lo corrija a mano en Recetario.
-2. Seguir la cola de `PENDIENTES.md` por prioridad — el 🟠 más viejo sigue siendo SMTP propio para invitaciones (Resend con dominio verificado, Facundo frenó ahí) o el punto (a)/(b) de alertas de producción rota.
+Sin instrucción explícita de qué sigue. Cola de `PENDIENTES.md` por prioridad: el 🟠 más viejo sigue siendo SMTP propio para invitaciones (frenado en dominio propio) o el punto de alertas de producción rota.
