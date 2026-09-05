@@ -1283,7 +1283,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       notaHoldFired.current = true
       tap(30)
       setNotaSheetItem(item)
-    }, 400)
+    }, 550)
   }, [])
   const cancelNotaHold = useCallback(() => {
     if (notaHoldTimer.current) { clearTimeout(notaHoldTimer.current); notaHoldTimer.current = null }
