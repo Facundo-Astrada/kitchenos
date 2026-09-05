@@ -65,7 +65,7 @@ function Seccion({ label, children, extra }: { label: string; children: React.Re
 // agregarIngrediente...). Duplicar esa capa de escritura optimista para
 // ahorrarse esta única descarga puntual no valía el riesgo.
 export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
-  const { recetas, loading, refetch, actualizarReceta, agregarIngrediente, actualizarIngrediente, eliminarIngrediente } = useRecetas()
+  const { recetas, loading, refetch, actualizarReceta, publicarReceta, agregarIngrediente, actualizarIngrediente, eliminarIngrediente } = useRecetas()
   // Para el desplegable de "producto de stock o receta" al cargar un
   // ingrediente a mano — mismo criterio que CargaRapidaIngredientes.tsx
   // (Recetario), reescrito acá porque esa lógica es privada de esa fila y
@@ -216,13 +216,23 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
     setGuardandoTodo(true)
     setGuardadoError(null)
     try {
-      if (nuevoIng.nombre.trim()) await agregarIngredienteDesdeForm()
+      const seAgregoIngrediente = !!nuevoIng.nombre.trim()
+      if (seAgregoIngrediente) await agregarIngredienteDesdeForm()
       const vPorciones = porcionesInput.trim() === '' ? null : parseInt(porcionesInput, 10)
       if ((vPorciones ?? null) !== (receta.porciones ?? null)) {
         await actualizarReceta(receta.id, { porciones: vPorciones })
       }
       if (procedimientoInput !== (receta.procedimiento ?? '')) {
         await actualizarReceta(receta.id, { procedimiento: procedimientoInput })
+      }
+      // Las recetas que llegan acá sin datos (el chip de Mise, el "Crear
+      // receta" de Producción) suelen ser placeholders en borrador — Recetario
+      // solo lista las publicadas, así que quedaban completas pero invisibles.
+      // Completarla acá ES publicarla: si ya tiene ingredientes (de antes o
+      // recién agregado) y sigue en draft, se publica sola al cerrar.
+      const tieneIngredientes = (receta.ingredientes?.length ?? 0) > 0 || seAgregoIngrediente
+      if (receta.status === 'draft' && tieneIngredientes) {
+        await publicarReceta(receta.id)
       }
       onClose()
     } catch (e) {
