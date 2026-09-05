@@ -163,34 +163,72 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
     }
   }
 
+  // Puede tirar — lo llaman tanto el botón "+" como "Listo" (que necesita
+  // enterarse si falló para no cerrar el editor perdiendo lo tipeado).
+  async function agregarIngredienteDesdeForm() {
+    if (!receta || !nuevoIng.nombre.trim()) return
+    await agregarIngrediente(receta.id, {
+      nombre: nuevoIng.nombre.trim(),
+      cantidad: parseFloat(nuevoIng.cantidad) || 0,
+      unidad: nuevoIng.unidad,
+      costo_unitario: nuevoIng.costo_unitario ? parseFloat(nuevoIng.costo_unitario) : 0,
+      unidad_costo: nuevoIng.unidad,
+      tipo: nuevoIng.tipo,
+      // Elegido del desplegable → el vínculo va directo, sin esperar al
+      // auto-link por nombre de abajo (que sigue corriendo como red de
+      // contención para lo que se tipeó a mano sin elegir sugerencia).
+      producto_id: nuevoIng.tipo === 'producto' ? (nuevoIng.productoId ?? null) : null,
+      subreceta_id: nuevoIng.tipo === 'subreceta' ? (nuevoIng.subrecetaId ?? null) : null,
+    })
+    // Recién se limpia el formulario si la escritura de verdad terminó bien
+    // — si no, el nombre/cantidad tipeados se perdían en cada intento fallido.
+    setNuevoIng({ nombre: '', cantidad: '', unidad: nuevoIng.unidad, costo_unitario: '', tipo: 'producto' })
+    setSugerenciasIng([])
+    setShowSugIng(false)
+    autoLinkIngredientes()
+  }
+
   async function handleAddIngrediente() {
     if (!receta || !nuevoIng.nombre.trim() || addingIng) return
     setAddingIng(true)
     setGuardadoError(null)
     try {
-      await agregarIngrediente(receta.id, {
-        nombre: nuevoIng.nombre.trim(),
-        cantidad: parseFloat(nuevoIng.cantidad) || 0,
-        unidad: nuevoIng.unidad,
-        costo_unitario: nuevoIng.costo_unitario ? parseFloat(nuevoIng.costo_unitario) : 0,
-        unidad_costo: nuevoIng.unidad,
-        tipo: nuevoIng.tipo,
-        // Elegido del desplegable → el vínculo va directo, sin esperar al
-        // auto-link por nombre de abajo (que sigue corriendo como red de
-        // contención para lo que se tipeó a mano sin elegir sugerencia).
-        producto_id: nuevoIng.tipo === 'producto' ? (nuevoIng.productoId ?? null) : null,
-        subreceta_id: nuevoIng.tipo === 'subreceta' ? (nuevoIng.subrecetaId ?? null) : null,
-      })
-      // Recién se limpia el formulario si la escritura de verdad terminó bien
-      // — si no, el nombre/cantidad tipeados se perdían en cada intento fallido.
-      setNuevoIng({ nombre: '', cantidad: '', unidad: nuevoIng.unidad, costo_unitario: '', tipo: 'producto' })
-      setSugerenciasIng([])
-      setShowSugIng(false)
-      autoLinkIngredientes()
+      await agregarIngredienteDesdeForm()
     } catch (e) {
       setGuardadoError(e instanceof Error ? e.message : 'No se pudo guardar el ingrediente — revisá la conexión')
     } finally {
       setAddingIng(false)
+    }
+  }
+
+  // "Listo" — antes solo cerraba (onClose) y confiaba en que cada campo ya se
+  // hubiera guardado solo al perder foco. Dos huecos reales encontrados en
+  // producción: (1) un ingrediente tipeado en la fila de alta pero sin tocar
+  // el "+" se descartaba en silencio al cerrar; (2) tocar "Listo" justo
+  // después de escribir dispara el blur y el cierre casi en el mismo
+  // instante — si el guardado del blur fallaba, el editor ya había
+  // desaparecido y el aviso de error nunca llegaba a verse. Ahora "Listo"
+  // reintenta explícitamente lo pendiente y solo cierra si todo terminó bien.
+  const [guardandoTodo, setGuardandoTodo] = useState(false)
+  async function handleListo() {
+    if (guardandoTodo) return
+    if (!receta) { onClose(); return }
+    setGuardandoTodo(true)
+    setGuardadoError(null)
+    try {
+      if (nuevoIng.nombre.trim()) await agregarIngredienteDesdeForm()
+      const vPorciones = porcionesInput.trim() === '' ? null : parseInt(porcionesInput, 10)
+      if ((vPorciones ?? null) !== (receta.porciones ?? null)) {
+        await actualizarReceta(receta.id, { porciones: vPorciones })
+      }
+      if (procedimientoInput !== (receta.procedimiento ?? '')) {
+        await actualizarReceta(receta.id, { procedimiento: procedimientoInput })
+      }
+      onClose()
+    } catch (e) {
+      setGuardadoError(e instanceof Error ? e.message : 'No se pudo guardar todo — revisá la conexión y tocá Listo de nuevo. Nada de lo que ves en pantalla se perdió.')
+    } finally {
+      setGuardandoTodo(false)
     }
   }
 
@@ -307,8 +345,12 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
 
   return createPortal(
     <SheetChrome>
+      {/* Tocar afuera cierra igual que "Listo" (no "cancelar sin guardar"): acá
+          no hay un modo borrador que descartar, todo lo que se ve en pantalla
+          o ya se guardó o está por guardarse — así que el backdrop pasa por
+          el mismo flush antes de cerrar. */}
       <div
-        onClick={onClose}
+        onClick={handleListo}
         style={{
           position: 'fixed', inset: 0, zIndex: 2000,
           background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)',
@@ -335,7 +377,7 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>Completar receta</div>
             </div>
-            <button onClick={onClose} style={btnReset}>
+            <button onClick={handleListo} disabled={guardandoTodo} style={btnReset}>
               <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-3)' }}>close</span>
             </button>
           </div>
@@ -631,14 +673,16 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
           {/* Footer */}
           <div style={{ padding: '10px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 10px)', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
             <button
-              onClick={onClose}
+              onClick={handleListo}
+              disabled={guardandoTodo}
               style={{
                 width: '100%', padding: '11px 0', borderRadius: 12, border: 'none',
                 background: 'linear-gradient(135deg, var(--navy), #4361a0)', color: '#fff',
-                fontSize: 13, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer',
+                fontSize: 13, fontWeight: 700, fontFamily: 'inherit', cursor: guardandoTodo ? 'default' : 'pointer',
+                opacity: guardandoTodo ? .7 : 1,
               }}
             >
-              Listo
+              {guardandoTodo ? 'Guardando…' : 'Listo'}
             </button>
           </div>
         </div>
