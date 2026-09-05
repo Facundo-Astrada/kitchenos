@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { SheetChrome } from '@/lib/ui/chrome'
 import { useRecetas, unitConversionFactor } from '@/lib/hooks/useRecetas'
 import { useProduccionRegistros, type ProduccionRegistro } from '@/lib/hooks/useProduccionRegistros'
 import { usePermisos } from '@/lib/hooks/usePermisos'
-import { callRecetaImport } from '@/lib/recetas/iaImport'
+import { callRecetaImport, fileToBase64, type RecetaIAResult } from '@/lib/recetas/iaImport'
 import { IAButton, IAPanel } from '@/components/ui'
 
 const UNIDADES = ['g', 'kg', 'ml', 'l', 'unidad']
@@ -54,7 +54,7 @@ function Seccion({ label, children, extra }: { label: string; children: React.Re
 // agregarIngrediente...). Duplicar esa capa de escritura optimista para
 // ahorrarse esta única descarga puntual no valía el riesgo.
 export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
-  const { recetas, loading, actualizarReceta, agregarIngrediente, actualizarIngrediente, eliminarIngrediente } = useRecetas()
+  const { recetas, loading, refetch, actualizarReceta, agregarIngrediente, actualizarIngrediente, eliminarIngrediente } = useRecetas()
   const { verCostos } = usePermisos()
   const { getHistorial } = useProduccionRegistros()
 
@@ -74,6 +74,8 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
   const [iaText, setIaText] = useState('')
   const [iaLoading, setIaLoading] = useState(false)
   const [iaError, setIaError] = useState<string | null>(null)
+  const fotoInputRef = useRef<HTMLInputElement>(null)
+  const galeriaInputRef = useRef<HTMLInputElement>(null)
 
   const [historial, setHistorial] = useState<ProduccionRegistro[]>([])
   const [historialLoading, setHistorialLoading] = useState(true)
@@ -104,6 +106,32 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
     actualizarReceta(receta.id, { procedimiento: procedimientoInput })
   }
 
+  // Vincula por nombre los ingredientes sin producto_id contra el stock real
+  // (mismo endpoint y mismo criterio — exacto/parcial, nunca fuzzy — que usa
+  // agregarReceta() en useRecetas.ts al crear una receta desde Recetario).
+  // Sin esto, un ingrediente cargado acá quedaba con costo_unitario en 0 y
+  // nunca entraba al food cost aunque el producto ya existiera en Stock.
+  // Best-effort: si falla, el ingrediente queda igual, solo sin vincular.
+  async function autoLinkIngredientes() {
+    try {
+      const res = await fetch('/api/recetas/auto-link-ingredientes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+      })
+      const { matches = [] } = await res.json() as { matches: { ingrediente_ids: string[]; producto_id: string; confianza: string }[] }
+      const toApply = matches.filter(m => m.confianza === 'exacto' || m.confianza === 'parcial')
+      if (toApply.length === 0) return
+      await fetch('/api/recetas/auto-link-ingredientes', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          links: toApply.map(m => ({ ingrediente_ids: m.ingrediente_ids, producto_id: m.producto_id })),
+        }),
+      })
+      refetch()
+    } catch (e) {
+      console.warn('[RecetaQuickEditModal] auto-link silencioso:', e)
+    }
+  }
+
   async function handleAddIngrediente() {
     if (!receta || !nuevoIng.nombre.trim() || addingIng) return
     setAddingIng(true)
@@ -116,12 +144,42 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
         unidad_costo: nuevoIng.unidad,
       })
       setNuevoIng({ nombre: '', cantidad: '', unidad: nuevoIng.unidad, costo_unitario: '' })
+      autoLinkIngredientes()
     } finally {
       setAddingIng(false)
     }
   }
 
-  async function handleIaImport() {
+  async function aplicarResultadoIA(resultado: RecetaIAResult) {
+    if (!receta) return
+    const patch: { porciones?: number | null; procedimiento?: string; peso_total_g?: number } = {}
+    if (resultado.porciones != null) patch.porciones = resultado.porciones
+    if (resultado.procedimiento?.length) patch.procedimiento = resultado.procedimiento.join('\n')
+    // Rinde en peso ("Yield: 900g") y no en porciones: no tiene columna propia
+    // (ver lib/recetas/iaImport.ts) — se guarda en peso_total_g en vez de
+    // perderlo, que es lo más parecido que ya existe en `recetas`.
+    if (resultado.porciones == null && resultado.rinde != null) {
+      if (resultado.rinde_unidad === 'g') patch.peso_total_g = resultado.rinde
+      else if (resultado.rinde_unidad === 'kg') patch.peso_total_g = resultado.rinde * 1000
+    }
+    if (Object.keys(patch).length > 0) {
+      await actualizarReceta(receta.id, patch)
+      if (patch.porciones !== undefined) setPorcionesInput(patch.porciones != null ? String(patch.porciones) : '')
+      if (patch.procedimiento !== undefined) setProcedimientoInput(patch.procedimiento)
+    }
+    for (const ing of resultado.ingredientes ?? []) {
+      const cantidad = parseFloat(String(ing.cantidad).replace(',', '.')) || 0
+      await agregarIngrediente(receta.id, {
+        nombre: ing.nombre, cantidad, unidad: ing.unidad,
+        costo_unitario: 0, unidad_costo: ing.unidad,
+      })
+    }
+    // Una sola pasada al final (no por ingrediente): el matching es sobre TODO
+    // el restaurante, repetirlo por cada alta sería N escaneos idénticos.
+    if ((resultado.ingredientes ?? []).length > 0) autoLinkIngredientes()
+  }
+
+  async function handleIaImportTexto() {
     if (!receta || !iaText.trim() || iaLoading) return
     setIaLoading(true)
     setIaError(null)
@@ -130,29 +188,7 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
       // useRecetas) — sin esto el servidor cae en un fallback genérico.
       const categorias = Array.from(new Set(recetas.map(r => r.categoria).filter(Boolean))) as string[]
       const resultado = await callRecetaImport('text', { text: iaText, categorias })
-
-      const patch: { porciones?: number | null; procedimiento?: string; peso_total_g?: number } = {}
-      if (resultado.porciones != null) patch.porciones = resultado.porciones
-      if (resultado.procedimiento?.length) patch.procedimiento = resultado.procedimiento.join('\n')
-      // Rinde en peso ("Yield: 900g") y no en porciones: no tiene columna propia
-      // (ver lib/recetas/iaImport.ts) — se guarda en peso_total_g en vez de
-      // perderlo, que es lo más parecido que ya existe en `recetas`.
-      if (resultado.porciones == null && resultado.rinde != null) {
-        if (resultado.rinde_unidad === 'g') patch.peso_total_g = resultado.rinde
-        else if (resultado.rinde_unidad === 'kg') patch.peso_total_g = resultado.rinde * 1000
-      }
-      if (Object.keys(patch).length > 0) {
-        await actualizarReceta(receta.id, patch)
-        if (patch.porciones !== undefined) setPorcionesInput(patch.porciones != null ? String(patch.porciones) : '')
-        if (patch.procedimiento !== undefined) setProcedimientoInput(patch.procedimiento)
-      }
-      for (const ing of resultado.ingredientes ?? []) {
-        const cantidad = parseFloat(String(ing.cantidad).replace(',', '.')) || 0
-        await agregarIngrediente(receta.id, {
-          nombre: ing.nombre, cantidad, unidad: ing.unidad,
-          costo_unitario: 0, unidad_costo: ing.unidad,
-        })
-      }
+      await aplicarResultadoIA(resultado)
       setIaText('')
       setIaOpen(false)
     } catch (e) {
@@ -160,6 +196,29 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
     } finally {
       setIaLoading(false)
     }
+  }
+
+  async function handleIaImportFoto(file: File) {
+    if (!receta || iaLoading) return
+    setIaLoading(true)
+    setIaError(null)
+    try {
+      const { base64, media_type } = await fileToBase64(file)
+      const categorias = Array.from(new Set(recetas.map(r => r.categoria).filter(Boolean))) as string[]
+      const resultado = await callRecetaImport('image', { image_base64: base64, media_type, categorias })
+      await aplicarResultadoIA(resultado)
+      setIaOpen(false)
+    } catch (e) {
+      setIaError(e instanceof Error ? e.message : 'No se pudo leer la foto')
+    } finally {
+      setIaLoading(false)
+    }
+  }
+
+  function handleFotoSeleccionada(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // permite elegir la misma foto de nuevo si hace falta
+    if (file) handleIaImportFoto(file)
   }
 
   function fmtFecha(iso: string) {
@@ -225,14 +284,45 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
                   </div>
                 ) : (
                   <IAPanel title="Completar con IA" style={{ marginBottom: 16 }}>
+                    {/* Foto — la mayoría de las recetas está escrita a mano en la
+                        libretita de la cocina, no tipeada. Va primero por eso. */}
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                      <button
+                        onClick={() => fotoInputRef.current?.click()}
+                        disabled={iaLoading}
+                        style={{ ...btnReset, flex: 1, gap: 6, padding: '10px 0', borderRadius: 10, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-2)', fontSize: 12, fontWeight: 700, opacity: iaLoading ? .5 : 1 }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>photo_camera</span>
+                        Tomar foto
+                      </button>
+                      <button
+                        onClick={() => galeriaInputRef.current?.click()}
+                        disabled={iaLoading}
+                        style={{ ...btnReset, flex: 1, gap: 6, padding: '10px 0', borderRadius: 10, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-2)', fontSize: 12, fontWeight: 700, opacity: iaLoading ? .5 : 1 }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>image</span>
+                        Galería
+                      </button>
+                      {/* capture="environment" abre la cámara directo en el celular;
+                          el segundo input, sin capture, deja elegir de la galería. */}
+                      <input ref={fotoInputRef} type="file" accept="image/*" capture="environment" onChange={handleFotoSeleccionada} style={{ display: 'none' }} />
+                      <input ref={galeriaInputRef} type="file" accept="image/*" onChange={handleFotoSeleccionada} style={{ display: 'none' }} />
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                      <span style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 700 }}>O ESCRIBÍ / PEGÁ TEXTO</span>
+                      <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                    </div>
+
                     <textarea
-                      autoFocus
                       value={iaText}
                       onChange={e => setIaText(e.target.value)}
                       placeholder="Pegá la receta en cualquier formato: una lista de ingredientes, una ficha técnica, notas sueltas…"
-                      rows={4}
+                      rows={3}
                       style={{ ...inputStyle, width: '100%', resize: 'vertical', lineHeight: 1.4, marginBottom: 8 }}
                     />
+                    {iaLoading && <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 8 }}>Leyendo…</div>}
                     {iaError && <div style={{ fontSize: 11, color: '#ef4444', marginBottom: 8 }}>{iaError}</div>}
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button
@@ -244,7 +334,7 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
                       <div style={{ flex: 1 }}>
                         <IAButton
                           label={iaLoading ? 'Leyendo…' : 'Completar receta'}
-                          onClick={handleIaImport}
+                          onClick={handleIaImportTexto}
                           disabled={!iaText.trim() || iaLoading}
                           variant="solid"
                           full
@@ -283,7 +373,13 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
                     const factor = unitConversionFactor(ing.unidad ?? '', ing.unidad_costo ?? ing.unidad ?? '')
                     const costoLinea = (ing.cantidad ?? 0) * factor * (ing.costo_unitario ?? 0)
                     return (
-                      <div key={ing.id} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
+                      // La key incluye los campos editables (no solo el id): son inputs
+                      // `defaultValue` (no controlados) para que tipear no dispare un
+                      // request por tecla. Sin esto, un valor que cambia desde afuera
+                      // (el auto-link de costo tras completar con IA, por ejemplo) no
+                      // se veía reflejado — React no vuelve a leer `defaultValue` en
+                      // un nodo que ya montó, así que forzar el remount es la señal.
+                      <div key={`${ing.id}:${ing.nombre}:${ing.cantidad}:${ing.unidad}:${ing.costo_unitario}`} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
                         <input
                           defaultValue={ing.nombre}
                           onBlur={e => { const v = e.target.value.trim(); if (v && v !== ing.nombre) actualizarIngrediente(ing.id, { nombre: v }) }}
