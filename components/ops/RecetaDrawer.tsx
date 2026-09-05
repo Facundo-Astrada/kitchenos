@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { RecetaQuickEditModal } from './RecetaQuickEditModal'
 
 interface Ing { nombre: string; cantidad: number | null; unidad: string }
 interface UltimaProduccion { fecha: string; cantidad_planificada: number | null; usuario_nombre: string | null }
@@ -16,12 +17,13 @@ export function RecetaDrawer({ recetaId, recetaNombre, onClose }: RecetaDrawerPr
   const [ings, setIngs] = useState<Ing[]>([])
   const [loading, setLoading] = useState(true)
   const [ultimaProd, setUltimaProd] = useState<UltimaProduccion | null>(null)
+  const [showEditor, setShowEditor] = useState(false)
   const touchY0 = useRef(0)
   const sheetRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
+  const cargar = useCallback(() => {
     const sb = createClient()
-    Promise.all([
+    return Promise.all([
       sb.from('ingredientes').select('nombre, cantidad, unidad').eq('receta_id', recetaId),
       sb.from('produccion_registros')
         .select('fecha, cantidad_planificada, usuario_nombre')
@@ -35,6 +37,17 @@ export function RecetaDrawer({ recetaId, recetaNombre, onClose }: RecetaDrawerPr
       setLoading(false)
     })
   }, [recetaId])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  // Al cerrar el editor rápido puede haber cambiado la receta (se agregaron
+  // ingredientes desde cero, por ejemplo) — sin este refetch el drawer se
+  // quedaba mostrando "Sin receta cargada" aunque ya se hubiera completado.
+  function handleCloseEditor() {
+    setShowEditor(false)
+    setLoading(true)
+    cargar()
+  }
 
   function onTouchStart(e: React.TouchEvent) {
     touchY0.current = e.touches[0].clientY
@@ -85,7 +98,21 @@ export function RecetaDrawer({ recetaId, recetaNombre, onClose }: RecetaDrawerPr
           {loading ? (
             <div style={{ textAlign: 'center', padding: 28, color: 'var(--text-3)', fontSize: 13 }}>Cargando...</div>
           ) : ings.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 28, color: 'var(--text-3)', fontSize: 13 }}>Sin receta cargada</div>
+            <div style={{ textAlign: 'center', padding: '28px 8px' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--border)' }}>menu_book</span>
+              <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 6, marginBottom: 14 }}>Sin receta cargada</div>
+              <button
+                onClick={() => setShowEditor(true)}
+                style={{
+                  padding: '11px 22px', borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                  background: 'linear-gradient(135deg, var(--navy), #4361a0)', color: '#fff',
+                  fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 17 }}>add_circle</span>
+                Crear receta
+              </button>
+            </div>
           ) : ings.map((ing, i) => (
             <div
               key={i}
@@ -124,6 +151,10 @@ export function RecetaDrawer({ recetaId, recetaNombre, onClose }: RecetaDrawerPr
           Cerrar
         </button>
       </div>
+
+      {showEditor && (
+        <RecetaQuickEditModal recetaId={recetaId} onClose={handleCloseEditor} />
+      )}
     </>
   )
 }

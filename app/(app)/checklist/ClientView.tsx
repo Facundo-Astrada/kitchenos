@@ -1276,8 +1276,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // anotación. Mismo patrón que startLongPress de arriba — un solo timer
   // compartido, no uno por ítem (esto corre dentro de un .map(), un useRef
   // por ítem rompería las reglas de hooks). notaHoldFired distingue el tap
-  // normal (tilde) del long-press (nota), igual que startHold/holdFired de
-  // ItemOps.tsx.
+  // normal (tilde) del long-press (nota).
   const notaHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const notaHoldFired = useRef(false)
   const [notaSheetItem, setNotaSheetItem] = useState<MisePlaceItem | null>(null)
@@ -1947,6 +1946,11 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                       onMouseUp={cancelNotaHold}
                       onMouseLeave={cancelNotaHold}
                       onTouchStart={() => startNotaHold(item)}
+                      // Sin esto, deslizar la lista tocando esta fila no cancelaba
+                      // el timer: un scroll que tardaba más de 550ms en soltar el
+                      // dedo abría la nota igual, aunque la intención fuera solo
+                      // scrollear. Mantenerse quieto y apretar sigue abriéndola.
+                      onTouchMove={cancelNotaHold}
                       onTouchEnd={handleNotaTouchEnd}
                       onTouchCancel={cancelNotaHold}
                       onContextMenu={(e) => e.preventDefault()}

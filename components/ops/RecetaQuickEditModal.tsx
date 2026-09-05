@@ -6,6 +6,8 @@ import { SheetChrome } from '@/lib/ui/chrome'
 import { useRecetas, unitConversionFactor } from '@/lib/hooks/useRecetas'
 import { useProduccionRegistros, type ProduccionRegistro } from '@/lib/hooks/useProduccionRegistros'
 import { usePermisos } from '@/lib/hooks/usePermisos'
+import { callRecetaImport } from '@/lib/recetas/iaImport'
+import { IAButton, IAPanel } from '@/components/ui'
 
 const UNIDADES = ['g', 'kg', 'ml', 'l', 'unidad']
 
@@ -42,7 +44,9 @@ function Seccion({ label, children, extra }: { label: string; children: React.Re
 // ── Editor rápido de receta ──────────────────────────────────────────────────
 // Se abre desde el chip de aviso del Mise (ProductoMiseCard) cuando la receta
 // vinculada a un ítem no tiene rendimiento, gramaje calculable o procedimiento
-// cargado — el cocinero completa ahí mismo, sin salir de OPS, y vuelve.
+// cargado, y desde el estado vacío de RecetaDrawer en Producción ("Sin receta
+// cargada") — en los dos casos el cocinero completa ahí mismo, sin salir de
+// OPS, y vuelve.
 //
 // A propósito usa useRecetas() completo (no useRecetasLite, que es lo que usa
 // el resto de Mise): esto es una acción explícita y poco frecuente — abrir el
@@ -60,6 +64,16 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
   const [procedimientoInput, setProcedimientoInput] = useState('')
   const [nuevoIng, setNuevoIng] = useState({ nombre: '', cantidad: '', unidad: 'g', costo_unitario: '' })
   const [addingIng, setAddingIng] = useState(false)
+
+  // Completar con IA: pegás cualquier texto (una lista suelta, una ficha, notas
+  // de WhatsApp) y se escribe directo en los campos de acá abajo — sin una
+  // pantalla de revisión intermedia como la del importador completo de
+  // Recetario. El propio editor, ya abierto, ES la revisión: si algo quedó
+  // mal, se corrige ahí mismo.
+  const [iaOpen, setIaOpen] = useState(false)
+  const [iaText, setIaText] = useState('')
+  const [iaLoading, setIaLoading] = useState(false)
+  const [iaError, setIaError] = useState<string | null>(null)
 
   const [historial, setHistorial] = useState<ProduccionRegistro[]>([])
   const [historialLoading, setHistorialLoading] = useState(true)
@@ -104,6 +118,47 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
       setNuevoIng({ nombre: '', cantidad: '', unidad: nuevoIng.unidad, costo_unitario: '' })
     } finally {
       setAddingIng(false)
+    }
+  }
+
+  async function handleIaImport() {
+    if (!receta || !iaText.trim() || iaLoading) return
+    setIaLoading(true)
+    setIaError(null)
+    try {
+      // Categorías reales de este restaurante (ya están en memoria por
+      // useRecetas) — sin esto el servidor cae en un fallback genérico.
+      const categorias = Array.from(new Set(recetas.map(r => r.categoria).filter(Boolean))) as string[]
+      const resultado = await callRecetaImport('text', { text: iaText, categorias })
+
+      const patch: { porciones?: number | null; procedimiento?: string; peso_total_g?: number } = {}
+      if (resultado.porciones != null) patch.porciones = resultado.porciones
+      if (resultado.procedimiento?.length) patch.procedimiento = resultado.procedimiento.join('\n')
+      // Rinde en peso ("Yield: 900g") y no en porciones: no tiene columna propia
+      // (ver lib/recetas/iaImport.ts) — se guarda en peso_total_g en vez de
+      // perderlo, que es lo más parecido que ya existe en `recetas`.
+      if (resultado.porciones == null && resultado.rinde != null) {
+        if (resultado.rinde_unidad === 'g') patch.peso_total_g = resultado.rinde
+        else if (resultado.rinde_unidad === 'kg') patch.peso_total_g = resultado.rinde * 1000
+      }
+      if (Object.keys(patch).length > 0) {
+        await actualizarReceta(receta.id, patch)
+        if (patch.porciones !== undefined) setPorcionesInput(patch.porciones != null ? String(patch.porciones) : '')
+        if (patch.procedimiento !== undefined) setProcedimientoInput(patch.procedimiento)
+      }
+      for (const ing of resultado.ingredientes ?? []) {
+        const cantidad = parseFloat(String(ing.cantidad).replace(',', '.')) || 0
+        await agregarIngrediente(receta.id, {
+          nombre: ing.nombre, cantidad, unidad: ing.unidad,
+          costo_unitario: 0, unidad_costo: ing.unidad,
+        })
+      }
+      setIaText('')
+      setIaOpen(false)
+    } catch (e) {
+      setIaError(e instanceof Error ? e.message : 'No se pudo leer el texto')
+    } finally {
+      setIaLoading(false)
     }
   }
 
@@ -161,6 +216,44 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
 
             {receta && (
               <>
+                {/* Completar con IA — colapsado por default, ya hay bastante
+                    campo abajo. Sirve tanto para llenar una receta vacía de
+                    un saque como para completar solo lo que falta. */}
+                {!iaOpen ? (
+                  <div style={{ marginBottom: 16 }}>
+                    <IAButton label="Completar con IA" onClick={() => setIaOpen(true)} variant="soft" />
+                  </div>
+                ) : (
+                  <IAPanel title="Completar con IA" style={{ marginBottom: 16 }}>
+                    <textarea
+                      autoFocus
+                      value={iaText}
+                      onChange={e => setIaText(e.target.value)}
+                      placeholder="Pegá la receta en cualquier formato: una lista de ingredientes, una ficha técnica, notas sueltas…"
+                      rows={4}
+                      style={{ ...inputStyle, width: '100%', resize: 'vertical', lineHeight: 1.4, marginBottom: 8 }}
+                    />
+                    {iaError && <div style={{ fontSize: 11, color: '#ef4444', marginBottom: 8 }}>{iaError}</div>}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={() => { setIaOpen(false); setIaText(''); setIaError(null) }}
+                        style={{ ...btnReset, padding: '10px 14px', borderRadius: 99, background: 'var(--bg)', color: 'var(--text-3)', fontSize: 12, fontWeight: 700 }}
+                      >
+                        Cancelar
+                      </button>
+                      <div style={{ flex: 1 }}>
+                        <IAButton
+                          label={iaLoading ? 'Leyendo…' : 'Completar receta'}
+                          onClick={handleIaImport}
+                          disabled={!iaText.trim() || iaLoading}
+                          variant="solid"
+                          full
+                        />
+                      </div>
+                    </div>
+                  </IAPanel>
+                )}
+
                 {/* Rendimiento */}
                 <Seccion label="Rendimiento (porciones)">
                   <input
