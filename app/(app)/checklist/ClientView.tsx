@@ -381,9 +381,9 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const tareasRef = useRef(tareas)
   useEffect(() => { tareasRef.current = tareas }, [tareas])
 
-  // Build receta info map (id → { porciones, pesoPorcion, vidaUtilDias }) for MiseCard display
+  // Build receta info map (id → { porciones, pesoPorcion, vidaUtilDias, incompleta }) for MiseCard display
   const recetaInfoMap = useMemo(() => {
-    const m: Record<string, { porciones?: number | null; pesoPorcion?: number | null; vidaUtilDias?: number | null }> = {}
+    const m: Record<string, { porciones?: number | null; pesoPorcion?: number | null; vidaUtilDias?: number | null; incompleta?: boolean }> = {}
     for (const r of recetas) {
       const ings = r.ingredientes ?? []
       const porciones = r.porciones ?? null
@@ -396,7 +396,12 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         }, 0)
         if (totalG > 0) pesoPorcion = Math.round(totalG / porciones)
       }
-      m[r.id] = { porciones, pesoPorcion, vidaUtilDias: r.vida_util_dias ?? null }
+      // Sin rendimiento, sin gramaje calculable o sin procedimiento escrito: al
+      // cocinero que va a producir esto le falta justo lo que necesita para
+      // hacerlo bien. Se marca acá para avisarle antes de que arranque, no
+      // después de que ya se mandó a producir mal.
+      const incompleta = !porciones || porciones <= 0 || pesoPorcion === null || !(r.procedimiento ?? '').trim()
+      m[r.id] = { porciones, pesoPorcion, vidaUtilDias: r.vida_util_dias ?? null, incompleta }
     }
     return m
   }, [recetas])

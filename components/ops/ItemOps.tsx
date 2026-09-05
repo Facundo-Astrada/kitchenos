@@ -71,8 +71,6 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [prodSheetOpen, setProdSheetOpen] = useState(false)
   const [crearTareaSheetOpen, setCrearTareaSheetOpen] = useState(false)
-  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const holdFired = useRef(false)
 
   // Stock alerts (lazy, loaded once on first expand)
   const [stockAlerts, setStockAlerts] = useState<StockAlert[]>([])
@@ -141,23 +139,8 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   }
 
-  function startHold() {
-    holdFired.current = false
-    holdTimer.current = setTimeout(() => {
-      holdFired.current = true
-      onEstadoChange(item.id, 'duda')
-    }, 600)
-  }
-  function clearHold() {
-    if (holdTimer.current) clearTimeout(holdTimer.current)
-  }
   function handleNameClick() {
-    if (holdFired.current) { holdFired.current = false; return }
     if (depth === 0) setExpanded((v) => !v)
-  }
-  function handleTouchEnd(e: React.TouchEvent) {
-    clearHold()
-    if (holdFired.current) { e.preventDefault(); holdFired.current = false }
   }
 
   function handleCheckboxClick(e: React.MouseEvent) {
@@ -211,17 +194,14 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
           )}
         </button>
 
-        {/* Name — long press → duda */}
+        {/* Name — tap expande/colapsa. El estado 'duda' (círculo ámbar con '?')
+            ya no se crea desde acá: era un long-press de 600ms sin cancelar
+            en onTouchMove, así que scrollear la lista tocando el nombre de un
+            ítem lo disparaba por error. Si un ítem ya está en 'duda' (lo puede
+            fijar El Muro) se sigue viendo y se destilda tocando el check. */}
         <div
           style={{ flex: 1, minWidth: 0, cursor: 'pointer', userSelect: 'none' }}
           onClick={handleNameClick}
-          onMouseDown={startHold}
-          onMouseUp={clearHold}
-          onMouseLeave={clearHold}
-          onTouchStart={startHold}
-          onTouchEnd={handleTouchEnd}
-          onTouchCancel={clearHold}
-          onContextMenu={(e) => e.preventDefault()}
         >
           {compacta && !expanded ? (
             // Compacta colapsada: tilde + nombre + cantidad, lado a lado, una

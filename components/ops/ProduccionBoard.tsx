@@ -717,7 +717,7 @@ function ColumnaOps({
           )}
 
           <div style={{ marginTop: 4 }}>
-            <QuickAdd onSave={handleAdd} recetas={recetas} />
+            <QuickAdd onSave={handleAdd} recetas={recetas} prominent />
           </div>
         </div>
       )}

@@ -27,6 +27,10 @@ export interface RecetaLite {
   nombre: string
   porciones: number | null
   vida_util_dias: number | null
+  // Solo para detectar receta incompleta (sin texto cargado) — nunca se
+  // muestra completo acá, así que un procedimiento largo no pesa lo que
+  // pesaría bajar ingredientes+food cost de las ~470 recetas de una cuenta.
+  procedimiento: string | null
   ingredientes: { cantidad: number | null; unidad: string | null }[]
 }
 
@@ -35,7 +39,7 @@ async function fetchRecetasLite(key: string): Promise<RecetaLite[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('recetas')
-    .select('id, nombre, porciones, vida_util_dias, ingredientes!ingredientes_receta_id_fkey(cantidad, unidad)')
+    .select('id, nombre, porciones, vida_util_dias, procedimiento, ingredientes!ingredientes_receta_id_fkey(cantidad, unidad)')
     .eq('restaurante_id', rid)
     .eq('activa', true)
     .order('nombre', { ascending: true })
@@ -47,6 +51,7 @@ async function fetchRecetasLite(key: string): Promise<RecetaLite[]> {
       nombre: (row.nombre as string) ?? '',
       porciones: (row.porciones as number | null) ?? null,
       vida_util_dias: (row.vida_util_dias as number | null) ?? null,
+      procedimiento: (row.procedimiento as string | null) ?? null,
       ingredientes: Array.isArray(row.ingredientes)
         ? (row.ingredientes as { cantidad: number | null; unidad: string | null }[])
         : [],

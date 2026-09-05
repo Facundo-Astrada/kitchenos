@@ -7,6 +7,7 @@ import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
 import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, supportsWebUSB, supportsWebBluetooth } from '@/lib/print/escpos'
 import { CrearTareaSheet, type CrearTareaSheetConfirmData } from '@/components/ops/CrearTareaSheet'
 import { PrioridadPicker, type PrioOpcion } from '@/components/ops/PrioridadPicker'
+import { RecetaQuickEditModal } from '@/components/ops/RecetaQuickEditModal'
 import { parseTurnoFase } from '@/lib/ops/turnos'
 import type { MisePlaceItem, MisePrioridad, TareaPrioridad } from '@/types'
 import { tieneRecipienteMise, targetStockMise, deficitMise } from '@/lib/ops/mise'
@@ -176,7 +177,7 @@ interface ProductoMiseCardProps {
   reg: { completado: boolean; cantidad_actual: number | null } | undefined
   fecha: string
   turno: string
-  recetaInfo?: { porciones?: number | null; pesoPorcion?: number | null; vidaUtilDias?: number | null }
+  recetaInfo?: { porciones?: number | null; pesoPorcion?: number | null; vidaUtilDias?: number | null; incompleta?: boolean }
   platoPlazo: PlatoPlaza[]
   hasTareaPendiente: boolean
   rendimientoPromedio?: number | null
@@ -210,6 +211,7 @@ function ProductoMiseCardBase({
   const [creating, setCreating] = useState(false)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [showDelete, setShowDelete] = useState(false)
+  const [showRecetaEdit, setShowRecetaEdit] = useState(false)
 
   const checked = reg?.completado ?? false
 
@@ -535,6 +537,18 @@ function ProductoMiseCardBase({
               {!checked && item.receta_id && (
                 <span style={{ fontSize: 9, color: '#4361a0', fontWeight: 600 }}>receta</span>
               )}
+              {/* Aviso muy chico a propósito (ya hay demasiados chips en esta
+                  fila): solo un ícono, sin texto. Abre el editor rápido para
+                  completar rendimiento/gramaje/procedimiento sin salir de OPS. */}
+              {!checked && item.receta_id && recetaInfo?.incompleta && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowRecetaEdit(true) }}
+                  title="Receta incompleta (sin rendimiento, gramaje o procedimiento) — tocá para completarla"
+                  style={{ ...btnReset, padding: 2, borderRadius: 5, background: 'rgba(245,158,11,.14)' }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 11, color: '#b45309' }}>edit_note</span>
+                </button>
+              )}
               {enProduccion && (
                 <span style={{
                   fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99,
@@ -842,6 +856,10 @@ function ProductoMiseCardBase({
             </button>
           )}
         </div>
+      )}
+
+      {showRecetaEdit && item.receta_id && (
+        <RecetaQuickEditModal recetaId={item.receta_id} onClose={() => setShowRecetaEdit(false)} />
       )}
 
       {/* ── Crear tarea (sheet unificado, hoy o mañana) ── */}
