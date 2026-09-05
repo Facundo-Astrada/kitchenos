@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { SheetChrome } from '@/lib/ui/chrome'
 import { useRecetas, unitConversionFactor } from '@/lib/hooks/useRecetas'
 import { useProduccionRegistros, type ProduccionRegistro } from '@/lib/hooks/useProduccionRegistros'
+import { useStock } from '@/lib/hooks/useStock'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { callRecetaImport, fileToBase64, type RecetaIAResult } from '@/lib/recetas/iaImport'
 import { IAButton, IAPanel } from '@/components/ui'
@@ -27,6 +28,16 @@ const inputStyle: React.CSSProperties = {
 const labelStyle: React.CSSProperties = {
   fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase',
   letterSpacing: '.06em', marginBottom: 6,
+}
+
+type SugerenciaIng = {
+  tipo: 'producto' | 'subreceta'
+  nombre: string
+  unidad: string
+  costoUnitario: number
+  productoId?: string
+  subrecetaId?: string
+  detalle: string
 }
 
 function Seccion({ label, children, extra }: { label: string; children: React.ReactNode; extra?: React.ReactNode }) {
@@ -55,6 +66,12 @@ function Seccion({ label, children, extra }: { label: string; children: React.Re
 // ahorrarse esta única descarga puntual no valía el riesgo.
 export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
   const { recetas, loading, refetch, actualizarReceta, agregarIngrediente, actualizarIngrediente, eliminarIngrediente } = useRecetas()
+  // Para el desplegable de "producto de stock o receta" al cargar un
+  // ingrediente a mano — mismo criterio que CargaRapidaIngredientes.tsx
+  // (Recetario), reescrito acá porque esa lógica es privada de esa fila y
+  // este editor no comparte su modelo de datos (acá cada fila ya es un
+  // registro persistido, no un array local a confirmar de una).
+  const { productos: stockProductos } = useStock()
   const { verCostos } = usePermisos()
   const { getHistorial } = useProduccionRegistros()
 
@@ -62,8 +79,13 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
 
   const [porcionesInput, setPorcionesInput] = useState('')
   const [procedimientoInput, setProcedimientoInput] = useState('')
-  const [nuevoIng, setNuevoIng] = useState({ nombre: '', cantidad: '', unidad: 'g', costo_unitario: '' })
+  const [nuevoIng, setNuevoIng] = useState<{
+    nombre: string; cantidad: string; unidad: string; costo_unitario: string
+    tipo: 'producto' | 'subreceta'; productoId?: string; subrecetaId?: string
+  }>({ nombre: '', cantidad: '', unidad: 'g', costo_unitario: '', tipo: 'producto' })
   const [addingIng, setAddingIng] = useState(false)
+  const [sugerenciasIng, setSugerenciasIng] = useState<SugerenciaIng[]>([])
+  const [showSugIng, setShowSugIng] = useState(false)
 
   // Completar con IA: pegás cualquier texto (una lista suelta, una ficha, notas
   // de WhatsApp) y se escribe directo en los campos de acá abajo — sin una
@@ -142,12 +164,54 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
         unidad: nuevoIng.unidad,
         costo_unitario: nuevoIng.costo_unitario ? parseFloat(nuevoIng.costo_unitario) : 0,
         unidad_costo: nuevoIng.unidad,
+        tipo: nuevoIng.tipo,
+        // Elegido del desplegable → el vínculo va directo, sin esperar al
+        // auto-link por nombre de abajo (que sigue corriendo como red de
+        // contención para lo que se tipeó a mano sin elegir sugerencia).
+        producto_id: nuevoIng.tipo === 'producto' ? (nuevoIng.productoId ?? null) : null,
+        subreceta_id: nuevoIng.tipo === 'subreceta' ? (nuevoIng.subrecetaId ?? null) : null,
       })
-      setNuevoIng({ nombre: '', cantidad: '', unidad: nuevoIng.unidad, costo_unitario: '' })
+      setNuevoIng({ nombre: '', cantidad: '', unidad: nuevoIng.unidad, costo_unitario: '', tipo: 'producto' })
+      setSugerenciasIng([])
+      setShowSugIng(false)
       autoLinkIngredientes()
     } finally {
       setAddingIng(false)
     }
+  }
+
+  // Mismo criterio de match que CargaRapidaIngredientes.tsx: nombre de stock
+  // y de recetas activas (excluida esta misma, para no poder autorreferenciarse).
+  function buscarSugerenciasIng(q: string) {
+    const query = q.toLowerCase().trim()
+    if (!query) { setShowSugIng(false); return }
+    const prods: SugerenciaIng[] = stockProductos
+      .filter(p => p.nombre.toLowerCase().includes(query))
+      .slice(0, 5)
+      .map(p => ({
+        tipo: 'producto', nombre: p.nombre, unidad: p.unidad, costoUnitario: p.precio_unitario || 0, productoId: p.id,
+        detalle: p.precio_unitario > 0 ? `$${p.precio_unitario.toLocaleString('es-AR')}/${p.unidad}` : p.unidad,
+      }))
+    const recs: SugerenciaIng[] = recetas
+      .filter(r => r.id !== recetaId && r.nombre.toLowerCase().includes(query))
+      .slice(0, 5)
+      .map(r => ({
+        tipo: 'subreceta', nombre: r.nombre, unidad: 'unidad', costoUnitario: r.food_cost.costo_porcion, subrecetaId: r.id,
+        detalle: `receta · $${r.food_cost.costo_porcion.toFixed(0)}/porc.`,
+      }))
+    const combinadas = [...prods, ...recs].slice(0, 8)
+    setSugerenciasIng(combinadas)
+    setShowSugIng(combinadas.length > 0)
+  }
+
+  function seleccionarSugerenciaIng(s: SugerenciaIng) {
+    setNuevoIng(v => ({
+      ...v,
+      nombre: s.nombre, unidad: s.unidad, costo_unitario: String(s.costoUnitario || ''),
+      tipo: s.tipo, productoId: s.productoId, subrecetaId: s.subrecetaId,
+      cantidad: v.cantidad || (s.tipo === 'subreceta' ? '1' : ''),
+    }))
+    setShowSugIng(false)
   }
 
   async function aplicarResultadoIA(resultado: RecetaIAResult) {
@@ -417,15 +481,48 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
                     )
                   })}
 
-                  {/* Agregar ingrediente */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '8px 0 0' }}>
+                  {/* Agregar ingrediente — el nombre busca en stock + recetas a medida
+                      que se tipea, para vincular el food cost real desde el vamos en
+                      vez de depender del auto-link por nombre exacto de después. */}
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 5, padding: '8px 0 0' }}>
                     <input
                       value={nuevoIng.nombre}
-                      onChange={e => setNuevoIng(v => ({ ...v, nombre: e.target.value }))}
-                      onKeyDown={e => { if (e.key === 'Enter') handleAddIngrediente() }}
-                      placeholder="Nuevo ingrediente…"
+                      onChange={e => {
+                        const nombre = e.target.value
+                        // Tipear después de elegir una sugerencia desvincula esa
+                        // elección — si no, se guardaría el producto/receta viejo
+                        // con un nombre que ya no le corresponde.
+                        setNuevoIng(v => ({ ...v, nombre, tipo: 'producto', productoId: undefined, subrecetaId: undefined }))
+                        buscarSugerenciasIng(nombre)
+                      }}
+                      onFocus={() => { if (nuevoIng.nombre.trim()) buscarSugerenciasIng(nuevoIng.nombre) }}
+                      onBlur={() => setTimeout(() => setShowSugIng(false), 150)}
+                      onKeyDown={e => { if (e.key === 'Enter') { setShowSugIng(false); handleAddIngrediente() } }}
+                      placeholder="Nuevo ingrediente o receta…"
                       style={{ ...inputStyle, flex: 1, minWidth: 0, borderStyle: 'dashed' }}
                     />
+                    {showSugIng && sugerenciasIng.length > 0 && (
+                      <div style={{
+                        position: 'absolute', left: 0, right: 0, top: '100%', zIndex: 5,
+                        background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8,
+                        boxShadow: '0 4px 12px rgba(0,0,0,.12)', maxHeight: 160, overflowY: 'auto',
+                      }}>
+                        {sugerenciasIng.map((s, i) => (
+                          <button
+                            key={i}
+                            onMouseDown={e => { e.preventDefault(); seleccionarSugerenciaIng(s) }}
+                            onTouchStart={e => { e.preventDefault(); seleccionarSugerenciaIng(s) }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '7px 10px', background: 'none', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
+                          >
+                            <span className="material-symbols-outlined" style={{ fontSize: 13, color: s.tipo === 'subreceta' ? 'var(--accent)' : 'var(--text-3)' }}>
+                              {s.tipo === 'subreceta' ? 'menu_book' : 'inventory_2'}
+                            </span>
+                            <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text-1)' }}>{s.nombre}</span>
+                            <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{s.detalle}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <input
                       type="number" value={nuevoIng.cantidad}
                       onChange={e => setNuevoIng(v => ({ ...v, cantidad: e.target.value }))}
