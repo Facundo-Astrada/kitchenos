@@ -86,6 +86,15 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
   const [addingIng, setAddingIng] = useState(false)
   const [sugerenciasIng, setSugerenciasIng] = useState<SugerenciaIng[]>([])
   const [showSugIng, setShowSugIng] = useState(false)
+  // Antes, si `actualizarReceta`/`agregarIngrediente`/etc. fallaban (ej. un
+  // corte de red de un segundo en el wifi de la cocina), el editor se quedaba
+  // mudo — sin aviso, el cambio no quedaba guardado y nadie se enteraba hasta
+  // volver a abrir la receta más tarde. Ahora cualquier falla de guardado se
+  // ve acá.
+  const [guardadoError, setGuardadoError] = useState<string | null>(null)
+  function conAviso(promesa: Promise<unknown>) {
+    promesa.catch(e => setGuardadoError(e instanceof Error ? e.message : 'No se pudo guardar — revisá la conexión'))
+  }
 
   // Completar con IA: pegás cualquier texto (una lista suelta, una ficha, notas
   // de WhatsApp) y se escribe directo en los campos de acá abajo — sin una
@@ -120,12 +129,12 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
     if (!receta) return
     const v = porcionesInput.trim() === '' ? null : parseInt(porcionesInput, 10)
     if ((v ?? null) === (receta.porciones ?? null)) return
-    actualizarReceta(receta.id, { porciones: v })
+    conAviso(actualizarReceta(receta.id, { porciones: v }))
   }
   function commitProcedimiento() {
     if (!receta) return
     if (procedimientoInput === (receta.procedimiento ?? '')) return
-    actualizarReceta(receta.id, { procedimiento: procedimientoInput })
+    conAviso(actualizarReceta(receta.id, { procedimiento: procedimientoInput }))
   }
 
   // Vincula por nombre los ingredientes sin producto_id contra el stock real
@@ -157,6 +166,7 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
   async function handleAddIngrediente() {
     if (!receta || !nuevoIng.nombre.trim() || addingIng) return
     setAddingIng(true)
+    setGuardadoError(null)
     try {
       await agregarIngrediente(receta.id, {
         nombre: nuevoIng.nombre.trim(),
@@ -171,10 +181,14 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
         producto_id: nuevoIng.tipo === 'producto' ? (nuevoIng.productoId ?? null) : null,
         subreceta_id: nuevoIng.tipo === 'subreceta' ? (nuevoIng.subrecetaId ?? null) : null,
       })
+      // Recién se limpia el formulario si la escritura de verdad terminó bien
+      // — si no, el nombre/cantidad tipeados se perdían en cada intento fallido.
       setNuevoIng({ nombre: '', cantidad: '', unidad: nuevoIng.unidad, costo_unitario: '', tipo: 'producto' })
       setSugerenciasIng([])
       setShowSugIng(false)
       autoLinkIngredientes()
+    } catch (e) {
+      setGuardadoError(e instanceof Error ? e.message : 'No se pudo guardar el ingrediente — revisá la conexión')
     } finally {
       setAddingIng(false)
     }
@@ -339,6 +353,20 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
 
             {receta && (
               <>
+                {guardadoError && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14,
+                    padding: '9px 12px', borderRadius: 10,
+                    background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.25)',
+                  }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#ef4444', flexShrink: 0 }}>error</span>
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: '#b91c1c' }}>{guardadoError}</span>
+                    <button onClick={() => setGuardadoError(null)} style={{ ...btnReset, flexShrink: 0 }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#b91c1c' }}>close</span>
+                    </button>
+                  </div>
+                )}
+
                 {/* Completar con IA — colapsado por default, ya hay bastante
                     campo abajo. Sirve tanto para llenar una receta vacía de
                     un saque como para completar solo lo que falta. */}
@@ -446,17 +474,17 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
                       <div key={`${ing.id}:${ing.nombre}:${ing.cantidad}:${ing.unidad}:${ing.costo_unitario}`} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
                         <input
                           defaultValue={ing.nombre}
-                          onBlur={e => { const v = e.target.value.trim(); if (v && v !== ing.nombre) actualizarIngrediente(ing.id, { nombre: v }) }}
+                          onBlur={e => { const v = e.target.value.trim(); if (v && v !== ing.nombre) conAviso(actualizarIngrediente(ing.id, { nombre: v })) }}
                           style={{ ...inputStyle, flex: 1, minWidth: 0 }}
                         />
                         <input
                           type="number" defaultValue={ing.cantidad}
-                          onBlur={e => { const v = parseFloat(e.target.value) || 0; if (v !== ing.cantidad) actualizarIngrediente(ing.id, { cantidad: v }) }}
+                          onBlur={e => { const v = parseFloat(e.target.value) || 0; if (v !== ing.cantidad) conAviso(actualizarIngrediente(ing.id, { cantidad: v })) }}
                           style={{ ...inputStyle, width: 52, textAlign: 'center', fontFamily: "'DM Mono', monospace" }}
                         />
                         <select
                           defaultValue={ing.unidad}
-                          onChange={e => actualizarIngrediente(ing.id, { unidad: e.target.value })}
+                          onChange={e => conAviso(actualizarIngrediente(ing.id, { unidad: e.target.value }))}
                           style={{ ...inputStyle, width: 60, padding: '6px 2px' }}
                         >
                           {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
@@ -466,7 +494,7 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
                             <input
                               type="number" defaultValue={ing.costo_unitario ?? 0}
                               title={`Costo por ${ing.unidad_costo ?? ing.unidad}`}
-                              onBlur={e => { const v = parseFloat(e.target.value) || 0; if (v !== ing.costo_unitario) actualizarIngrediente(ing.id, { costo_unitario: v }) }}
+                              onBlur={e => { const v = parseFloat(e.target.value) || 0; if (v !== ing.costo_unitario) conAviso(actualizarIngrediente(ing.id, { costo_unitario: v })) }}
                               style={{ ...inputStyle, width: 60, textAlign: 'center', fontFamily: "'DM Mono', monospace" }}
                             />
                             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)', minWidth: 52, textAlign: 'right', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
@@ -474,7 +502,7 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
                             </span>
                           </>
                         )}
-                        <button onClick={() => eliminarIngrediente(ing.id)} style={{ ...btnReset, flexShrink: 0 }}>
+                        <button onClick={() => conAviso(eliminarIngrediente(ing.id))} style={{ ...btnReset, flexShrink: 0 }}>
                           <span className="material-symbols-outlined" style={{ fontSize: 15, color: '#ef4444' }}>close</span>
                         </button>
                       </div>
