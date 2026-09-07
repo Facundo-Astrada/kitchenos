@@ -201,6 +201,17 @@ export default function ConfiguracionPage() {
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>rocket_launch</span>
               Guía de inicio
             </button>
+            {/* El medidor de organización (PLAN-IMPLANTACION-2026-09). Convive
+                con la guía de inicio en vez de reemplazarla de golpe: la guía
+                acompaña los primeros pasos y termina; esto no termina nunca. */}
+            <button
+              onClick={() => router.push('/implantacion')}
+              className="flex items-center gap-1.5 cursor-pointer"
+              style={{ background: 'rgba(255,255,255,.16)', border: 'none', borderRadius: 999, padding: '6px 12px', color: '#fff', fontSize: 12, fontWeight: 700 }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>landscape</span>
+              Organización
+            </button>
           </div>
         </div>
       </div>

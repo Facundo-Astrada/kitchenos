@@ -262,6 +262,10 @@ export const RUTA_A_MODULO: Record<string, string | string[]> = {
   // propio a propósito: es la apertura del turno, así que cae bajo 'operaciones'
   // y ningún puesto ya creado necesita backfill de permisos para verla.
   '/lineup': 'operaciones',
+  // /implantacion — el medidor de organización del restaurante. Mismo criterio:
+  // sin ModuloId propio (no hay backfill que hacer). Cae bajo 'home' porque mide
+  // al restaurante y no a nadie en particular: no hay nada que esconderle al equipo.
+  '/implantacion': 'home',
   '/produccion': 'operaciones',
   // /control-carta (PLAN-4-CAPAS B7) — sin ítem de nav propio, se llega por el
   // CTA de OPS en la ventana previa a la apertura. Mismo gate que OPS.
