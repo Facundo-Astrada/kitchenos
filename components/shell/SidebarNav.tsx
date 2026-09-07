@@ -127,14 +127,15 @@ export default function SidebarNav({ onImportarClick, dark = false, collapsed = 
           return (
             <div key={label} style={{ marginBottom: 20 }}>
               {collapsed ? (
-                <div style={{ height: 2, borderRadius: 1, background: color, opacity: 0.5, margin: '0 6px 6px' }} />
+                <div style={{ height: 2, borderRadius: 1, background: color, opacity: 0.8, margin: '0 6px 6px' }} />
               ) : (
                 <p style={{
-                  color,
-                  fontSize: 10, fontWeight: 700,
-                  textTransform: 'uppercase', letterSpacing: '0.1em',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  color, fontSize: 11, fontWeight: 800,
+                  textTransform: 'uppercase', letterSpacing: '0.08em',
                   padding: '0 8px', marginBottom: 4,
                 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
                   {label}
                 </p>
               )}
