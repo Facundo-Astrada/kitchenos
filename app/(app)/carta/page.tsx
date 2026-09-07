@@ -846,10 +846,13 @@ export default function CartaPage() {
             </button>
           )}
         </div>
-        {/* Navegación primaria — Platos | Menús (segmentado, mismo peso visual) */}
+        {/* Navegación primaria — Platos | Menús (segmentado, mismo peso visual).
+            maxWidth fijo (S6, sep 2026): sin el cap de ancho del shell, un
+            toggle de 2 palabras estirado a flex:1 en todo el ancho del
+            contenido quedaba absurdamente grande en desktop. */}
         <div style={{
           display: 'flex', gap: 4, background: 'rgba(255,255,255,0.1)',
-          borderRadius: 13, padding: 4,
+          borderRadius: 13, padding: 4, maxWidth: 420,
         }}>
           <button onClick={() => setView('list')} style={{
             flex: 1, border: 'none', borderRadius: 10, padding: '9px 0', cursor: 'pointer',
