@@ -442,6 +442,41 @@ export const CAPAS: { key: Capa; label: string; icon: string; explicacion: strin
   },
 ]
 
+// ── Matriz de polivalencia (Organigrama → Polivalencia) ──────
+// Escala estándar de la gestión de equipos gastronómicos, no inventada acá.
+// El nivel 4 es el que importa de más: es el REFERENTE de esa plaza, la persona
+// a la que el resto le pregunta. El research de adopción es claro en que la
+// gente consulta a un par de confianza antes que a un jefe o a soporte, así que
+// el referente no se designa a dedo — sale de acá.
+//
+// Se mide cobertura del restaurante, NO rendimiento de la persona
+// (ver DECISIONES.md § 25): de esta escala no sale ningún ranking.
+export type NivelCompetencia = 0 | 1 | 2 | 3 | 4
+
+export const NIVELES_COMPETENCIA: {
+  nivel: NivelCompetencia; label: string; corto: string; color: string; ayuda: string
+}[] = [
+  { nivel: 0, label: 'Sin formar', corto: 'Sin formar', color: '#94a3b8',
+    ayuda: 'No la hizo nunca. No puede quedar solo en esta plaza.' },
+  { nivel: 1, label: 'En formación', corto: 'Formándose', color: '#f59e0b',
+    ayuda: 'La está aprendiendo. Siempre acompañado.' },
+  { nivel: 2, label: 'Con supervisión', corto: 'Supervisado', color: '#f97316',
+    ayuda: 'La hace, pero alguien la revisa antes del servicio.' },
+  { nivel: 3, label: 'Autónomo', corto: 'Autónomo', color: '#0ea5e9',
+    ayuda: 'La hace solo, con el estándar. Puede cubrir el turno.' },
+  { nivel: 4, label: 'Referente', corto: 'Referente', color: '#10b981',
+    ayuda: 'La hace y la enseña. Es a quien le preguntan en esta plaza.' },
+]
+
+export function nivelCompetencia(nivel: number) {
+  return NIVELES_COMPETENCIA[Math.max(0, Math.min(4, nivel))]
+}
+
+/** Desde qué nivel una persona puede cubrir la plaza sola en un turno. */
+export const NIVEL_AUTONOMO: NivelCompetencia = 3
+/** El nivel que convierte a alguien en referente (sabe y enseña). */
+export const NIVEL_REFERENTE: NivelCompetencia = 4
+
 // ── Colores de prioridad ─────────────────────────────────────
 export const PRIORIDAD_CONFIG = {
   SP: { label: 'S/P', bgClass: 'bg-red-100', textClass: 'text-red-500' },

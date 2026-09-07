@@ -25,9 +25,10 @@ import { CoberturaTable } from '@/components/organigrama/CoberturaTable'
 import { OrganigramaWizardSheet } from '@/components/organigrama/OrganigramaWizardSheet'
 import { ResponsablesPicker } from '@/components/organigrama/ResponsablesPicker'
 import { exportOrganigramaPDF } from '@/lib/exportPDF'
+import PolivalenciaPanel from '@/components/organigrama/PolivalenciaPanel'
 
-type Tab = 'plantel' | 'puestos' | 'estructura' | 'cobertura'
-const TAB_IDS: Tab[] = ['plantel', 'puestos', 'estructura', 'cobertura']
+type Tab = 'plantel' | 'puestos' | 'estructura' | 'cobertura' | 'polivalencia'
+const TAB_IDS: Tab[] = ['plantel', 'puestos', 'estructura', 'cobertura', 'polivalencia']
 function esTab(v: string | null): v is Tab {
   return v != null && (TAB_IDS as string[]).includes(v)
 }
@@ -222,6 +223,7 @@ export default function OrganigramaPage() {
                 { id: 'puestos', label: 'Puestos', icon: 'badge' },
                 { id: 'estructura', label: 'Estructura', icon: 'account_tree' },
                 { id: 'cobertura', label: 'Cobertura', icon: 'fact_check' },
+                { id: 'polivalencia', label: 'Polivalencia', icon: 'school' },
               ]}
               active={tab}
               onChange={setTab}
@@ -305,6 +307,11 @@ export default function OrganigramaPage() {
             eliminarPuesto={eliminarPuesto}
             onToast={showToast}
           />
+        )}
+
+        {/* ── Vista Polivalencia (matriz de competencias) ── */}
+        {tab === 'polivalencia' && (
+          <PolivalenciaPanel miembros={miembros} isAdmin={isAdmin} onToast={showToast} />
         )}
 
         {/* ── Vista Estructura ── */}
