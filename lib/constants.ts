@@ -293,7 +293,27 @@ export interface AreaCatalogoItem {
   icon: string
   color: string
   explicacion: string
+  /**
+   * Módulos que esta área **posee**: es la única que responde por ellos y la
+   * única a la que se le avisa cuando algo falta (ver `responsableDeModulo()`).
+   *
+   * Invariante: cada `ModuloId` aparece como propio en **exactamente un** área.
+   * Lo garantiza el test de `constants.test.ts` — si agregás un módulo nuevo y
+   * no lo ponés acá, el test falla antes que la ruta de implantación se quede
+   * sin a quién avisarle (sep 2026: `presupuesto`, `organigrama`, `tareas` y
+   * `turnos` estaban huérfanos y por eso no tenían responsable posible).
+   */
   modulos: ModuloId[]
+  /**
+   * Módulos que esta área **usa** pero no posee. Se muestran en Estructura para
+   * que se entienda el alcance real del área, pero no generan responsabilidad ni
+   * avisos: de eso responde el área dueña.
+   *
+   * Existe porque 5 módulos vivían en dos áreas a la vez (`facturas`, `reportes`,
+   * `recetario`, `clientes`, `configuracion`) y un aviso que sale a dos personas
+   * no lo atiende ninguna.
+   */
+  modulosUsa?: ModuloId[]
   activaPorDefecto: boolean
 }
 
@@ -301,17 +321,23 @@ export const AREA_CATALOGO: AreaCatalogoItem[] = [
   {
     key: 'direccion', nombre: 'Dirección', icon: 'explore', color: '#4361a0',
     explicacion: 'Toma de decisiones final, filosofía del negocio, finanzas y presupuesto.',
-    modulos: ['home', 'reportes', 'ventas', 'configuracion'], activaPorDefecto: true,
+    // `presupuesto` estaba huérfano (sep 2026): es el estándar declarado del
+    // negocio, lo fija Dirección. `configuracion` y `reportes` son suyos aunque
+    // Sistemas y Administración también los usen.
+    modulos: ['home', 'reportes', 'ventas', 'configuracion', 'presupuesto'], activaPorDefecto: true,
   },
   {
     key: 'cocina', nombre: 'Cocina', icon: 'local_fire_department', color: '#ef4444',
     explicacion: 'Producción, mise en place, escandallos, plazas y pase — el corazón operativo.',
-    modulos: ['operaciones', 'recetario', 'produccion', 'pase', 'checklist', 'espacios', 'muro'], activaPorDefecto: true,
+    modulos: ['operaciones', 'tareas', 'produccion', 'pase', 'checklist', 'espacios', 'muro'], activaPorDefecto: true,
+    // La ficha técnica la define I+D; la cocina la ejecuta todos los días.
+    modulosUsa: ['recetario', 'carta'],
   },
   {
     key: 'salon', nombre: 'Salón', icon: 'table_restaurant', color: '#8b5cf6',
     explicacion: 'Servicio, rangos, relación con el cliente, cierre de caja.',
-    modulos: ['salon', 'clientes', 'kds'], activaPorDefecto: false,
+    modulos: ['salon', 'kds'], activaPorDefecto: false,
+    modulosUsa: ['clientes', 'reservas', 'carta'],
   },
   {
     key: 'compras_almacen', nombre: 'Compras y almacén', icon: 'local_shipping', color: '#f97316',
@@ -326,7 +352,10 @@ export const AREA_CATALOGO: AreaCatalogoItem[] = [
   {
     key: 'administracion', nombre: 'Administración', icon: 'account_balance', color: '#0ea5e9',
     explicacion: 'Contabilidad, impuestos, nóminas, pólizas. En equipos chicos la cubre Dirección.',
-    modulos: ['facturas', 'reportes'], activaPorDefecto: false,
+    // Ninguno propio a propósito: en un restaurante chico esta área no existe y
+    // Dirección la cubre. Lee facturas y reportes, pero el aviso va a su dueño.
+    modulos: [], activaPorDefecto: false,
+    modulosUsa: ['facturas', 'reportes', 'presupuesto'],
   },
   {
     key: 'comercial_reservas', nombre: 'Comercial y reservas', icon: 'calendar_month', color: '#ec4899',
@@ -336,7 +365,9 @@ export const AREA_CATALOGO: AreaCatalogoItem[] = [
   {
     key: 'rrhh', nombre: 'RRHH', icon: 'groups', color: '#1e3a6e',
     explicacion: 'Selección, capacitación, turnos y permisos de acceso por usuario.',
-    modulos: ['equipo'], activaPorDefecto: true,
+    // `organigrama` y `turnos` estaban huérfanos: son literalmente el trabajo de
+    // esta área. `equipo` es el id de permiso real de /turnos (ver MODULO_CONFIG).
+    modulos: ['equipo', 'organigrama', 'turnos'], activaPorDefecto: true,
   },
   {
     key: 'id_producto', nombre: 'I+D · desarrollo de producto', icon: 'science', color: '#d97706',
@@ -346,7 +377,10 @@ export const AREA_CATALOGO: AreaCatalogoItem[] = [
   {
     key: 'sistemas', nombre: 'Sistemas', icon: 'settings', color: '#64748b',
     explicacion: 'POS, mantenimiento de la app, gestión de datos.',
-    modulos: ['configuracion', 'coach'], activaPorDefecto: false,
+    // `configuracion` queda en Dirección: Sistemas está apagada por defecto y un
+    // módulo cuyo dueño no existe en la mayoría de las cuentas no tiene a quién avisarle.
+    modulos: ['coach'], activaPorDefecto: false,
+    modulosUsa: ['configuracion'],
   },
   {
     key: 'marketing', nombre: 'Marketing y comunicación', icon: 'campaign', color: '#94a3b8',
@@ -362,6 +396,22 @@ export const AREA_CATALOGO: AreaCatalogoItem[] = [
 
 export function areaCatalogoItem(key: string): AreaCatalogoItem | undefined {
   return AREA_CATALOGO.find(a => a.key === key)
+}
+
+/**
+ * El área que **posee** un módulo — la que responde por él y la que recibe el
+ * aviso cuando algo de ese módulo falta.
+ *
+ * Nunca devuelve dos. Si algún día devuelve `undefined`, el módulo quedó
+ * huérfano al agregarlo y el test de `constants.test.ts` ya falló.
+ */
+export function areaDuenaDeModulo(modulo: ModuloId): AreaCatalogoItem | undefined {
+  return AREA_CATALOGO.find(a => a.modulos.includes(modulo))
+}
+
+/** Áreas que usan el módulo sin poseerlo. Informativo: no genera responsabilidad. */
+export function areasQueUsanModulo(modulo: ModuloId): AreaCatalogoItem[] {
+  return AREA_CATALOGO.filter(a => a.modulosUsa?.includes(modulo))
 }
 
 // ── Capas del ciclo (Vista Cobertura) ────────────────────────

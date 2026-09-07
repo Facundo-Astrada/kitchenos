@@ -142,7 +142,10 @@ export interface AreaEstado {
   icon: string
   color: string
   explicacion: string
+  /** Módulos propios: esta área responde por ellos y recibe sus avisos. */
   modulos: string[]
+  /** Módulos que usa sin poseer. Informativo — el aviso va al área dueña. */
+  modulosUsa: string[]
   activa: boolean
   responsables: string[]
   orden: number
@@ -193,7 +196,37 @@ export interface PuestoTemplate {
   icon: string
 }
 
+/**
+ * Plantillas de puesto para arrancar.
+ *
+ * Hasta sep 2026 las 8 eran de cocina (`area_key: 'cocina'`) — una brigada de
+ * Escoffier comprimida, correcta pero incompleta: el organigrama gastronómico
+ * estándar tiene tres departamentos (cocina, sala y gestión) y acá solo estaba
+ * el primero. Consecuencia real: la vista Cobertura de Organigrama arrancaba con
+ * alertas rojas en Dirección, Compras, Salón, Calidad y Administración que el
+ * usuario no tenía con qué llenar. Ver `PLAN-IMPLANTACION-2026-09.md` § 4.
+ *
+ * Al agregar una plantilla nueva: `area_key` tiene que existir en `AREA_CATALOGO`
+ * y los `permisos_app` tienen que ser `ModuloId` reales (`MODULO_CONFIG`).
+ */
 export const PUESTO_TEMPLATES: PuestoTemplate[] = [
+  {
+    nombre: 'Dueño / Dirección',
+    descripcion: 'Decisión final, números del negocio y estándar de la casa',
+    nivel: 'admin',
+    plaza_default: null,
+    area_key: 'direccion',
+    icon: 'explore',
+    permisos_app: [
+      'home', 'reportes', 'ventas', 'presupuesto', 'configuracion',
+      'organigrama', 'equipo', 'carta', 'facturas', 'calendario',
+    ],
+    tareas_funciones: [
+      'Fijar el presupuesto y el CMV objetivo', 'Aprobar precios y márgenes',
+      'Leer los números del mes', 'Definir la estructura del equipo',
+      'Ajustar el estándar cuando el reporte muestra un desvío',
+    ],
+  },
   {
     nombre: 'Chef / Sous Chef',
     descripcion: 'Jefatura de cocina, supervisión general de plazas',
@@ -301,6 +334,79 @@ export const PUESTO_TEMPLATES: PuestoTemplate[] = [
       'Lavado de vajilla y ollas', 'Soporte en servicio',
     ],
   },
+  {
+    nombre: 'Encargado de compras',
+    descripcion: 'Proveedores, recepción de mercadería, facturas e inventario',
+    nivel: 'sous_chef',
+    plaza_default: null,
+    area_key: 'compras_almacen',
+    icon: 'local_shipping',
+    permisos_app: [
+      'home', 'stock', 'pedidos', 'proveedores', 'facturas', 'merma',
+      'recetario', 'calendario',
+    ],
+    tareas_funciones: [
+      'Cargar las facturas de la semana', 'Pedir a proveedores',
+      'Recibir y controlar la mercadería', 'Hacer el conteo de depósito',
+      'Registrar la merma',
+    ],
+  },
+  {
+    nombre: 'Encargado de salón',
+    descripcion: 'Servicio, rangos, mesas y cierre de caja',
+    nivel: 'sous_chef',
+    plaza_default: null,
+    area_key: 'salon',
+    icon: 'table_restaurant',
+    permisos_app: [
+      'home', 'salon', 'kds', 'clientes', 'reservas', 'carta',
+      'calendario', 'ventas', 'equipo',
+    ],
+    tareas_funciones: [
+      'Armar los rangos del turno', 'Hacer el arqueo de caja',
+      'Cargar reservas y eventos', 'Comunicar el 86 al salón',
+      'Dar el line-up de sala',
+    ],
+  },
+  {
+    nombre: 'Mozo / Moza',
+    descripcion: 'Atención de mesas, comandas y relación con el cliente',
+    nivel: 'cocinero',
+    plaza_default: null,
+    area_key: 'salon',
+    icon: 'room_service',
+    permisos_app: ['home', 'salon', 'carta', 'clientes'],
+    tareas_funciones: [
+      'Tomar y cargar comandas', 'Conocer la carta y el plato del día',
+      'Avisar alergias y restricciones a cocina', 'Montaje y repaso de salón',
+    ],
+  },
+  {
+    nombre: 'Responsable de calidad',
+    descripcion: 'BPM/HACCP, temperaturas, trazabilidad y limpieza',
+    nivel: 'sous_chef',
+    plaza_default: null,
+    area_key: 'calidad_seguridad',
+    icon: 'health_and_safety',
+    permisos_app: ['home', 'haccp', 'bitacora', 'operaciones', 'stock', 'merma'],
+    tareas_funciones: [
+      'Controlar temperaturas de heladeras y cámaras', 'Auditar limpieza por sector',
+      'Revisar vencimientos y rotulado', 'Llevar la bitácora del servicio',
+    ],
+  },
+  {
+    nombre: 'Administración',
+    descripcion: 'Contabilidad, impuestos, nóminas y pagos',
+    nivel: 'admin',
+    plaza_default: null,
+    area_key: 'administracion',
+    icon: 'account_balance',
+    permisos_app: ['home', 'facturas', 'reportes', 'presupuesto', 'equipo', 'ventas'],
+    tareas_funciones: [
+      'Controlar cuentas por pagar', 'Conciliar facturas con remitos',
+      'Liquidar horas del equipo', 'Cerrar el mes con el contador',
+    ],
+  },
 ]
 
 // ── Hook ──
@@ -405,6 +511,7 @@ export function useEquipo() {
       color: cat.color,
       explicacion: cat.explicacion,
       modulos: cat.modulos,
+      modulosUsa: cat.modulosUsa ?? [],
       activa: row?.activa ?? cat.activaPorDefecto,
       responsables: row?.responsables ?? [],
       orden: row?.orden ?? 0,

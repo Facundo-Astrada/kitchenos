@@ -534,13 +534,22 @@ function AreaBlock({
         />
       </div>
 
-      {/* Módulos que cubre */}
-      {estado.modulos.length > 0 ? (
+      {/* Módulos que cubre — llenos = propios (responde esta área), contorneados
+          = los usa pero responde otra (ver `AreaCatalogoItem.modulosUsa`). */}
+      {estado.modulos.length > 0 || estado.modulosUsa.length > 0 ? (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
           {estado.modulos.map(m => (
             <span key={m} style={{
               fontSize: 9.5, fontWeight: 700, padding: '3px 7px', borderRadius: 20,
               background: 'rgba(67,97,160,.1)', color: 'var(--accent)',
+            }}>
+              {MODULO_CONFIG[m as ModuloId]?.label ?? m}
+            </span>
+          ))}
+          {estado.modulosUsa.map(m => (
+            <span key={m} title="Lo usa, pero responde otra área" style={{
+              fontSize: 9.5, fontWeight: 600, padding: '2px 7px', borderRadius: 20,
+              border: '1px dashed var(--border)', color: 'var(--text-3)',
             }}>
               {MODULO_CONFIG[m as ModuloId]?.label ?? m}
             </span>
