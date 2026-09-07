@@ -258,6 +258,10 @@ export const RUTA_A_MODULO: Record<string, string | string[]> = {
   // La vista real vive embebida en OPS. Mapeadas a 'operaciones' por consistencia de permisos.
   '/tareas': 'operaciones',
   '/checklist': 'operaciones',
+  // /lineup — la ficha que se lee antes de abrir el servicio. No tiene ModuloId
+  // propio a propósito: es la apertura del turno, así que cae bajo 'operaciones'
+  // y ningún puesto ya creado necesita backfill de permisos para verla.
+  '/lineup': 'operaciones',
   '/produccion': 'operaciones',
   // /control-carta (PLAN-4-CAPAS B7) — sin ítem de nav propio, se llega por el
   // CTA de OPS en la ventana previa a la apertura. Mismo gate que OPS.
