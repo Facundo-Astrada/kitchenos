@@ -232,8 +232,8 @@ export default function PolivalenciaPanel({
       </div>
 
       <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
-        Se sube de nivel haciendo, no mirando: el nivel {NIVEL_AUTONOMO} es "puede cubrir el turno solo" y
-        el {NIVEL_REFERENTE} es "además lo enseña". {!isAdmin && 'Solo un administrador puede cambiar los niveles.'}
+        Se sube de nivel haciendo, no mirando: el nivel {NIVEL_AUTONOMO} es &laquo;puede cubrir el turno solo&raquo; y
+        el {NIVEL_REFERENTE} es &laquo;además lo enseña&raquo;. {!isAdmin && 'Solo un administrador puede cambiar los niveles.'}
       </p>
     </div>
   )

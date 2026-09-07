@@ -863,5 +863,8 @@ export function useEquipo() {
     toggleAreaResponsable,
     capaResponsables,
     toggleCapaResponsable,
+    /** Filas crudas de `area_capas` — las necesita `responsableDeModulo()` para
+     *  resolver a quién avisarle por cada módulo (ver lib/organigrama/responsable.ts). */
+    cobertura: areaCapasRaw,
   }
 }

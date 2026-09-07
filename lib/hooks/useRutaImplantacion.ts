@@ -37,6 +37,12 @@ interface RespuestaRuta {
   metricas: MetricasRuta
   /** Fecha de alta del restaurante — de ahí sale el día de la implantación. */
   altaISO: string | null
+  /**
+   * Días transcurridos desde el alta, calculados en el fetcher y no en el
+   * render: `Date.now()` dentro de un `useMemo` es una función impura y
+   * devuelve algo distinto en cada re-render (regla de pureza de React).
+   */
+  diasDesdeAlta: number | null
   /** Si el negocio tiene salón, para decidir si el hito 6 entra al denominador. */
   tieneSalon: boolean
 }
@@ -194,6 +200,9 @@ async function fetchRuta(key: string): Promise<RespuestaRuta> {
   return {
     metricas,
     altaISO: rest?.created_at ?? null,
+    diasDesdeAlta: rest?.created_at
+      ? Math.max(0, Math.floor((hoy.getTime() - new Date(rest.created_at).getTime()) / 86_400_000))
+      : null,
     tieneSalon: metricas.mesas > 0 || metricas.comandas > 0,
   }
 }
@@ -235,11 +244,7 @@ export function useRutaImplantacion() {
     mutate()
   }, [RESTAURANTE_ID, mutate])
 
-  const dias = useMemo(() => {
-    if (!data?.altaISO) return null
-    const alta = new Date(data.altaISO)
-    return Math.max(0, Math.floor((Date.now() - alta.getTime()) / 86_400_000))
-  }, [data?.altaISO])
+  const dias = data?.diasDesdeAlta ?? null
 
   const progreso = useMemo(() => calcularProgreso(
     data?.metricas ?? METRICAS_CERO,

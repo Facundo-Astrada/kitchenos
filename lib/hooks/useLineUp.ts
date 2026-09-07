@@ -54,7 +54,6 @@ const PRIO_ORDEN: TareaPrioridad[] = ['critica', 'alta', 'media', 'baja']
 async function fetchLineUp(key: string): Promise<CrudoLineUp> {
   const [, rid, jornada] = key.split('|')
   const supabase = createClient()
-  const manana = sumarDias(jornada, 1)
   const pasadoManana = sumarDias(jornada, 2)
 
   const [carta, tareas, notas, eventos, menus, productos] = await Promise.allSettled([

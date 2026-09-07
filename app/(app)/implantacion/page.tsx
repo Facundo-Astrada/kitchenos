@@ -23,6 +23,13 @@ import { estadoDeEstacion, hitoAtrasado, type ProgresoHito } from '@/lib/implant
 import { estacionesDeHito, type HitoId } from '@/lib/implantacion/ruta'
 import { MODULO_CONFIG, areaDuenaDeModulo } from '@/lib/constants'
 import PageHeader from '@/components/shell/PageHeader'
+import { useEquipo } from '@/lib/hooks/useEquipo'
+import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
+import { responsableDeModulo } from '@/lib/organigrama/responsable'
+import { textoRecordatorio, puedeRecordar, TIPO_RECORDATORIO } from '@/lib/implantacion/avisos'
+import { crearNotificacion } from '@/lib/notificaciones/crear'
+import { createClient } from '@/lib/supabase/client'
+import type { Estacion } from '@/lib/implantacion/ruta'
 
 const COLOR = {
   completo: '#10b981',
@@ -33,7 +40,55 @@ const COLOR = {
 export default function ImplantacionPage() {
   const router = useRouter()
   const { progreso, metricas, manual, confirmar, loading, esAdmin } = useRutaImplantacion()
+  const { miembros, cobertura } = useEquipo()
+  const RESTAURANTE_ID = useRestauranteId()
   const [abierto, setAbierto] = useState<HitoId | null>(null)
+  const [avisado, setAvisado] = useState<Record<string, string>>({})
+
+  /**
+   * Manda el recordatorio al responsable de la estación — a una persona con
+   * nombre, nunca "a los admins" (DECISIONES.md § 25). El disparo es humano y
+   * no automático a propósito: todavía no hay scheduler, y un aviso que sale
+   * solo desde el render de una pantalla se dispara de más.
+   */
+  async function avisar(e: Estacion) {
+    if (!RESTAURANTE_ID) return
+    const r = responsableDeModulo(e.modulo, cobertura)
+    const miembro = r?.miembroId ? miembros.find(m => m.id === r.miembroId) : null
+    if (!miembro?.auth_user_id) {
+      setAvisado(a => ({ ...a, [e.id]: 'Esa área todavía no tiene responsable con acceso a la app' }))
+      return
+    }
+
+    // Regla de cadencia: como mucho un recordatorio por día por persona, de
+    // cualquier estación. Se chequea contra lo que ya se mandó, no contra un
+    // flag local, para que no dependa del dispositivo desde el que se avisa.
+    const sb = createClient()
+    const { data: ultimo } = await sb.from('notificaciones')
+      .select('created_at')
+      .eq('restaurante_id', RESTAURANTE_ID)
+      .eq('usuario_id', miembro.auth_user_id)
+      .eq('tipo', TIPO_RECORDATORIO)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!puedeRecordar(ultimo?.created_at)) {
+      setAvisado(a => ({ ...a, [e.id]: `${miembro.nombre} ya recibió un aviso hoy` }))
+      return
+    }
+
+    const texto = textoRecordatorio(e, MODULO_CONFIG[e.modulo]?.href ?? '/')
+    await crearNotificacion(sb, {
+      restauranteId: RESTAURANTE_ID,
+      usuarioId: miembro.auth_user_id,
+      tipo: TIPO_RECORDATORIO,
+      titulo: texto.titulo,
+      cuerpo: texto.cuerpo,
+      link: texto.link,
+    })
+    setAvisado(a => ({ ...a, [e.id]: `Avisado a ${miembro.nombre}` }))
+  }
 
   const siguiente = progreso.siguiente
   const hrefSiguiente = siguiente ? MODULO_CONFIG[siguiente.modulo]?.href ?? '/' : null
@@ -174,6 +229,8 @@ export default function ImplantacionPage() {
             manual={manual}
             esAdmin={esAdmin}
             onConfirmar={confirmar}
+            onAvisar={avisar}
+            avisado={avisado}
           />
         )}
 
@@ -188,13 +245,15 @@ export default function ImplantacionPage() {
 }
 
 function ListaEstaciones({
-  hito, metricas, manual, esAdmin, onConfirmar,
+  hito, metricas, manual, esAdmin, onConfirmar, onAvisar, avisado,
 }: {
   hito: ProgresoHito
   metricas: Parameters<typeof estadoDeEstacion>[1]
   manual: Parameters<typeof estadoDeEstacion>[2]
   esAdmin: boolean
   onConfirmar: (id: string, nivel: 'carga' | 'insercion') => void
+  onAvisar: (e: Estacion) => void
+  avisado: Record<string, string>
 }) {
   const ests = estacionesDeHito(hito.hito)
 
@@ -259,6 +318,28 @@ function ListaEstaciones({
               }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 14 }}>do_not_disturb_on</span>
                 <span>Apaga: <i>{e.apaga}</i></span>
+              </div>
+            )}
+
+            {/* El aviso va a la persona que responde por el módulo, no "a los
+                admins": un aviso que le llega a todos no lo atiende nadie. */}
+            {esAdmin && estado !== 'insertada' && (
+              <div style={{ paddingLeft: 26, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button
+                  onClick={() => onAvisar(e)}
+                  disabled={!!avisado[e.id]}
+                  style={{
+                    fontSize: 11.5, fontWeight: 600, padding: '4px 10px', borderRadius: 999,
+                    border: '1px solid var(--border)', background: 'var(--bg)',
+                    color: avisado[e.id] ? 'var(--text-3)' : 'var(--accent)',
+                    cursor: avisado[e.id] ? 'default' : 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  {avisado[e.id] ? 'Enviado' : 'Avisarle al responsable'}
+                </button>
+                {avisado[e.id] && (
+                  <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{avisado[e.id]}</span>
+                )}
               </div>
             )}
           </div>
