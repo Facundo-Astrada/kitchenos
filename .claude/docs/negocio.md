@@ -99,6 +99,13 @@ contra 1 cuenta viva es el riesgo más grande del proyecto.
 - Si un pedido implica un módulo nuevo: **decirlo antes de escribir código.** No es un
   "no", es una decisión de negocio que hay que tomar explícitamente.
 - Todo el esfuerzo de producto va a **profundidad en lo que Bros usa todos los días**.
+- **Excepción vigente (decisión 013, 07/09/2026):** la **matriz de polivalencia** y la **ficha
+  de line-up** se aprobaron fuera de la moratoria, nombradas de forma cerrada. El argumento no
+  fue "son chicas" sino que **no agregan superficie que haya que vender: hacen que se use la que
+  ya existe** — el problema real de K-OS no es que falten módulos, es que los que hay no se
+  adoptan. Si el trabajo se estira hacia "ya que estamos, agreguemos…", eso vuelve a caer bajo
+  012. Condición de salida escrita: si la ficha de line-up se shipea y a las dos semanas nadie
+  la lee en el servicio, se revierte.
 - **No cuentan como módulo nuevo:** completar HACCP hasta los 5 registros obligatorios y
   la calculadora de octógonos — son razones de compra identificadas por el research. Pero
   entran recién cuando el perfil que las necesita sea el objetivo (decisión 005: hoy el

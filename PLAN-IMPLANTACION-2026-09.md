@@ -1,6 +1,6 @@
 # Plan — Ruta de implantación de K-OS en un restaurante
 
-**Estado:** `DISEÑADO, SIN EJECUTAR` · 07/09/2026
+**Estado:** `EJECUTADO` · 07/09/2026 (bloques A a F, mismo día)
 **Origen:** lluvia de ideas de Facundo en pizarrón (07/09) + investigación web (9 búsquedas: equipos de alto rendimiento, liderazgo en cocina, adopción de tecnología en restaurantes, formación de hábito, matriz de polivalencia, organigrama gastronómico).
 **Documento visual (tabla completa, matriz dibujada, ficha de line-up):**
 https://claude.ai/code/artifact/3a5be79b-8dcf-4d50-b747-7a865082c9e8
@@ -10,19 +10,39 @@ La respuesta corta: cada función necesita **dos** personas — una que responde
 
 ---
 
-## 0. Antes de ejecutar: la moratoria
+## 0. Estado de ejecución
+
+Los seis bloques del § 7 se ejecutaron el 07/09/2026. Commits: `a752498` (huecos 1-4),
+`0d723c9` (matriz de polivalencia), `f78ef5f` (ficha de line-up), `a7b6458` (ruta como dato
++ cordillera), `e7535a6` (avisos).
+
+**Lo que quedó fuera, a propósito:**
+- **No hay scheduler.** El aviso se dispara a mano desde `/implantacion` ("Avisarle al
+  responsable"). Un aviso automático desde el render de una pantalla se dispara de más.
+- **No hay push real.** `public/sw.js` sigue sin handler de `push`/`notificationclick`:
+  el aviso llega a la campanita, o sea solo si la persona abre la app (escalón 2 del § 5.6).
+- **El reconocimiento semanal está escrito y testeado pero no cableado** — necesita el
+  mismo scheduler que falta.
+- **`/onboarding` sigue vivo.** La cordillera convive con la guía de inicio en vez de
+  reemplazarla de golpe (estrangulamiento). Retirar la vieja es una decisión posterior,
+  cuando la nueva esté probada con un restaurante real.
+- **Tres checkpoints se confirman a mano** porque hoy no hay dato que los sostenga:
+  "sin estandarizar" por plato, "se leyó el line-up en voz alta", y la estación 5.5.
+
+### La moratoria
 
 `.claude/docs/negocio.md` § 7 (decisión 012) prohíbe módulos nuevos hasta 3 cuentas pagando,
-y obliga a decirlo **antes** de escribir código.
+y obliga a decirlo **antes** de escribir código. **Se resolvió con la decisión de negocio 013**
+(excepción nombrada de forma cerrada), escrita en
+`~/Desktop/START UP KOS/00-decisiones/DECISIONES.md` antes de tocar el código.
 
 De este plan:
 - **Los huecos 1-4 NO son módulo nuevo** — son datos, plantillas y una función de composición
   sobre lo que ya existe. Se pueden hacer sin tocar la moratoria.
 - **La ficha de line-up (hueco 6) NO es módulo nuevo** — es una pantalla que compone datos que
   ya están en la base (86, `pase_mensajes`, `checklist_items`, calendario). Cero schema.
-- **La matriz de polivalencia (hueco 5) SÍ es superficie nueva** (tabla + pantalla). Es la única
-  pieza que necesita una decisión de negocio explícita antes de construirse.
-  Si se aprueba, se escribe primero en `~/Desktop/START UP KOS/00-decisiones/DECISIONES.md`.
+- **La matriz de polivalencia (hueco 5) SÍ es superficie nueva** (tabla + pantalla).
+  Aprobada por la decisión 013.
 
 Y § 6 del mismo doc manda sobre todo el plan: se evalúa por **tiempo hasta el primer valor**,
 no por completitud. Por eso existe el hito 0 (30 minutos a un food cost real) antes de la ruta.
@@ -154,7 +174,7 @@ Está cortada en seis lugares.
 | # | Hueco | Dónde | Arreglo |
 |---|---|---|---|
 | 1 | **4 módulos sin área.** `presupuesto`, `organigrama`, `tareas`, `turnos` no figuran en ninguna de las 12 áreas → no tienen responsable posible, no hay a quién avisarle. | `lib/constants.ts` → `AREA_CATALOGO` | Presupuesto → `direccion`. Organigrama y Turnos → `rrhh`. Tareas → `cocina`. Es editar un array. |
-| 2 | **5 módulos en dos áreas.** `facturas` (compras + administración), `recetario` (cocina + I+D), `clientes` (salón + comercial), `configuracion` (dirección + sistemas), `calendario`. Un aviso saldría a dos personas — y un aviso a dos no lo atiende ninguna. | ídem | Declarar **área dueña** (una, recibe el aviso) y **áreas usuarias** (solo lo ven). |
+| 2 | **5 módulos en dos áreas.** `facturas` (compras + administración), `recetario` (cocina + I+D), `reportes` (dirección + administración), `clientes` (salón + comercial), `configuracion` (dirección + sistemas). Un aviso saldría a dos personas — y un aviso a dos no lo atiende ninguna. | ídem | Declarar **área dueña** (una, recibe el aviso) y **áreas usuarias** (solo lo ven). |
 | 3 | **Las 8 plantillas de puesto son todas de cocina** (`area_key: 'cocina'`). Es una brigada de Escoffier comprimida — correcta pero incompleta: el organigrama gastronómico estándar tiene 3 departamentos (cocina, sala, gestión) y K-OS solo trae el primero. Cobertura arranca con rojos que el usuario no tiene con qué llenar. | `lib/hooks/useEquipo.ts:196` → `PUESTO_TEMPLATES` | Faltan ~6: Dueño, Encargado de compras, Encargado de salón, Mozo, Responsable de calidad, Administración. |
 | 4 | **Permiso ≠ responsabilidad.** `puestos.permisos_app` dice quién *puede*; falta quién *debe*. | `lib/permisos/resolver.ts` | Sin schema nuevo: se compone `módulo → área dueña → area_capas.responsable`. Es una función. |
 | 5 | **Nada registra quién sabe qué.** Sin matriz de polivalencia no hay referentes, el tutorial es binario, y la grilla no puede avisar que un turno queda sin nadie que sepa la plaza. | — | Tabla chica: persona × función × nivel 0-4. **Único schema nuevo del plan** (ver § 0). |
