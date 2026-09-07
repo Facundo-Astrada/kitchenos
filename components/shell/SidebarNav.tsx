@@ -17,14 +17,17 @@ import { NotificacionesBell } from '@/components/notificaciones/NotificacionesBe
 // RouteGuard.tsx), así que se agregan de vuelta solo para ese perfil.
 // 'turnos' tampoco tiene ítem propio: comparte href literal con 'equipo'
 // (mismo /turnos, sin tab que las distinga) — se deja un solo acceso.
-function seccionesNav(esEmprendimiento: boolean): { label: string; items: ModuloId[] }[] {
+// Color por sección: categórico (var(--cat-*) en globals.css), no de estado
+// — ver el comentario ahí. Solo tiñe el título y el indicador activo, nunca
+// fondo ni ícono, para no subir el dial de "carácter" del registro Preparación.
+function seccionesNav(esEmprendimiento: boolean): { label: string; color: string; items: ModuloId[] }[] {
   return [
-    { label: 'Operaciones', items: ['home', 'operaciones', 'espacios', ...(esEmprendimiento ? (['tareas'] as ModuloId[]) : []), 'pase'] },
-    { label: 'Cocina', items: ['recetario', 'carta', ...(esEmprendimiento ? (['produccion'] as ModuloId[]) : [])] },
-    { label: 'Servicio', items: ['salon', 'kds', 'muro', 'reservas'] },
-    { label: 'Insumos', items: ['stock', 'facturas', 'pedidos', 'proveedores', 'merma'] },
-    { label: 'Gestión', items: ['reportes', 'presupuesto', 'ventas', 'clientes', 'haccp', 'calendario', 'bitacora'] },
-    { label: 'Sistema', items: ['equipo', 'organigrama', 'configuracion'] },
+    { label: 'Operaciones', color: 'var(--cat-operaciones)', items: ['home', 'operaciones', 'espacios', ...(esEmprendimiento ? (['tareas'] as ModuloId[]) : []), 'pase'] },
+    { label: 'Cocina', color: 'var(--cat-cocina)', items: ['recetario', 'carta', ...(esEmprendimiento ? (['produccion'] as ModuloId[]) : [])] },
+    { label: 'Servicio', color: 'var(--cat-servicio)', items: ['salon', 'kds', 'muro', 'reservas'] },
+    { label: 'Insumos', color: 'var(--cat-insumos)', items: ['stock', 'facturas', 'pedidos', 'proveedores', 'merma'] },
+    { label: 'Gestión', color: 'var(--cat-gestion)', items: ['reportes', 'presupuesto', 'ventas', 'clientes', 'haccp', 'calendario', 'bitacora'] },
+    { label: 'Sistema', color: 'var(--cat-sistema)', items: ['equipo', 'organigrama', 'configuracion'] },
   ]
 }
 
@@ -115,7 +118,7 @@ export default function SidebarNav({ onImportarClick, dark = false, collapsed = 
           abajo con él): un flex item con overflow:auto pero sin minHeight:0
           no se achica, empuja al padre a desbordarse en vez de scrollear. */}
       <nav className="hide-scrollbar" style={{ flex: 1, minHeight: 0, padding: '0 12px', overflowY: 'auto' }}>
-        {SECCIONES.map(({ label, items }) => {
+        {SECCIONES.map(({ label, color, items }) => {
           const visibles = items.filter(
             id => MODULO_CONFIG[id] && (isAdmin || (modulosDelRol.includes(id) && canSee(id))) && moduloEnPerfil(id)
           )
@@ -124,11 +127,11 @@ export default function SidebarNav({ onImportarClick, dark = false, collapsed = 
           return (
             <div key={label} style={{ marginBottom: 20 }}>
               {collapsed ? (
-                <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '0 6px 6px' }} />
+                <div style={{ height: 2, borderRadius: 1, background: color, opacity: 0.5, margin: '0 6px 6px' }} />
               ) : (
                 <p style={{
-                  color: 'rgba(255,255,255,0.35)',
-                  fontSize: 9, fontWeight: 700,
+                  color,
+                  fontSize: 10, fontWeight: 700,
                   textTransform: 'uppercase', letterSpacing: '0.1em',
                   padding: '0 8px', marginBottom: 4,
                 }}>
@@ -149,6 +152,7 @@ export default function SidebarNav({ onImportarClick, dark = false, collapsed = 
                     // Colapsada, el title es la única pista del destino.
                     title={collapsed ? mod.label : undefined}
                     style={{
+                      position: 'relative',
                       display: 'flex', alignItems: 'center', gap: 10,
                       justifyContent: collapsed ? 'center' : 'flex-start',
                       padding: '7px 10px', borderRadius: 8, marginBottom: 1,
@@ -177,7 +181,7 @@ export default function SidebarNav({ onImportarClick, dark = false, collapsed = 
                         position: 'absolute',
                         left: 0,
                         width: 3, height: 20, borderRadius: '0 3px 3px 0',
-                        background: 'white',
+                        background: color,
                       }} />
                     )}
                     <span className="material-symbols-outlined" style={{ fontSize: 19, flexShrink: 0 }}>

@@ -24,6 +24,19 @@
   --yellow: #f59e0b;
   --green: #10b981;
 
+  /* ── Categóricos de sidebar (sep 2026) — SOLO para diferenciar las 6
+     secciones de SidebarNav (título + indicador activo). Deliberadamente
+     apagados y en hues que no pisan verde/ámbar/rojo/naranja/azul de arriba:
+     esos son de ESTADO (ok/atención/crítico/severidad/info) y ya se usan en
+     badges reales (Stock BAJO/CRIT). Un ítem de sidebar en rojo se leería
+     como alerta, no como categoría. No usar fuera de SidebarNav. ── */
+  --cat-operaciones: #8b93c9;
+  --cat-cocina: #c98b6b;
+  --cat-servicio: #c98bab;
+  --cat-insumos: #c9ab6b;
+  --cat-gestion: #8bab8b;
+  --cat-sistema: #93a3b8;
+
   /* ── Elevación (S2, ago 2026) — halo de sombra azul en vez de borde de 1px.
      Valor calibrado en components/organigrama/MiembroCard.tsx (la carta de
      puesto), promovido acá para no seguir copiándolo a mano. 3 niveles:
