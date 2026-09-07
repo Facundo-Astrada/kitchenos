@@ -17,13 +17,17 @@ import { usePermisos } from '@/lib/hooks/usePermisos'
 import { MODULO_CONFIG, CAPAS, type ModuloId, type AreaKey, type Capa } from '@/lib/constants'
 import { SegmentedTabs, FilterChips, EmptyState, HeaderAction } from '@/components/ui'
 import { MiembroCard } from '@/components/organigrama/MiembroCard'
+import { FichaMiembroPanel } from '@/components/organigrama/FichaMiembro'
+import { PuestosEditorPanel } from '@/components/organigrama/PuestosEditor'
+import { NIVELES_ACCESO } from '@/lib/hooks/useEquipo'
+import { fieldStyle, labelStyle, btnPrimary } from '@/components/organigrama/equipoShared'
 import { CoberturaTable } from '@/components/organigrama/CoberturaTable'
 import { OrganigramaWizardSheet } from '@/components/organigrama/OrganigramaWizardSheet'
 import { ResponsablesPicker } from '@/components/organigrama/ResponsablesPicker'
 import { exportOrganigramaPDF } from '@/lib/exportPDF'
 
-type Tab = 'plantel' | 'estructura' | 'cobertura'
-const TAB_IDS: Tab[] = ['plantel', 'estructura', 'cobertura']
+type Tab = 'plantel' | 'puestos' | 'estructura' | 'cobertura'
+const TAB_IDS: Tab[] = ['plantel', 'puestos', 'estructura', 'cobertura']
 function esTab(v: string | null): v is Tab {
   return v != null && (TAB_IDS as string[]).includes(v)
 }
@@ -33,7 +37,8 @@ export default function OrganigramaPage() {
     miembros, puestos, loading,
     areas, toggleAreaActiva, setAreaActiva, toggleAreaResponsable, actualizarPuesto,
     capaResponsables, toggleCapaResponsable,
-    crearMiembro, actualizarMiembro, crearPuesto,
+    crearMiembro, actualizarMiembro, actualizarOverridesMiembro, desactivarMiembro, getModulosMiembro,
+    crearPuesto, eliminarPuesto,
   } = useEquipo()
   const { isAdmin } = usePermisos()
 
@@ -41,6 +46,46 @@ export default function OrganigramaPage() {
   const [areaFiltro, setAreaFiltro] = useState<string>('todas')
   const [wizardOpen, setWizardOpen] = useState(false)
   const [exportando, setExportando] = useState(false)
+
+  // ── Plantel: ficha/alta (movido de Turnos → Equipo, S6 sep 2026) ──
+  const [plantelMode, setPlantelMode] = useState<'grid' | 'ficha' | 'nuevo'>('grid')
+  const [plantelSelected, setPlantelSelected] = useState<Miembro | null>(null)
+  const [plantelOverrideInicial, setPlantelOverrideInicial] = useState(false)
+  const [toast, setToast] = useState('')
+
+  function showToast(msg: string) {
+    setToast(msg)
+    setTimeout(() => setToast(''), 3500)
+  }
+
+  function cerrarPlantelPanel() {
+    setPlantelMode('grid'); setPlantelSelected(null); setPlantelOverrideInicial(false)
+  }
+
+  // ── Invitar (movido de Turnos → Equipo) ──
+  const [showInvitar, setShowInvitar] = useState(false)
+  const [invEmail, setInvEmail] = useState('')
+  const [invRol, setInvRol] = useState('cocinero')
+  const [invNombre, setInvNombre] = useState('')
+  const [invPuestoId, setInvPuestoId] = useState('')
+  const [inviting, setInviting] = useState(false)
+
+  async function handleInvitar() {
+    if (!invEmail.trim()) return
+    setInviting(true)
+    try {
+      const res = await fetch('/api/invitar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: invEmail.trim(), rol: invRol, nombre: invNombre.trim(), puesto_id: invPuestoId || null }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      showToast(`Invitación enviada a ${invEmail}`)
+      setShowInvitar(false); setInvEmail(''); setInvNombre(''); setInvPuestoId('')
+    } catch (e: unknown) { showToast('Error: ' + (e instanceof Error ? e.message : 'desconocido')) }
+    finally { setInviting(false) }
+  }
 
   const areasActivas = useMemo(() => areas.filter(a => a.activa), [areas])
 
@@ -76,6 +121,9 @@ export default function OrganigramaPage() {
     window.addEventListener('kc-set-tab', handleSetTab)
     return () => window.removeEventListener('kc-set-tab', handleSetTab)
   }, [])
+
+  // Al salir de Plantel no queda la ficha abierta esperando al volver.
+  useEffect(() => { if (tab !== 'plantel') cerrarPlantelPanel() }, [tab])
 
   async function handleExportarPDF() {
     setExportando(true)
@@ -171,6 +219,7 @@ export default function OrganigramaPage() {
             <SegmentedTabs
               tabs={[
                 { id: 'plantel', label: 'Plantel', icon: 'grid_view' },
+                { id: 'puestos', label: 'Puestos', icon: 'badge' },
                 { id: 'estructura', label: 'Estructura', icon: 'account_tree' },
                 { id: 'cobertura', label: 'Cobertura', icon: 'fact_check' },
               ]}
@@ -179,7 +228,7 @@ export default function OrganigramaPage() {
             />
           </div>
 
-          {tab === 'plantel' && (
+          {tab === 'plantel' && plantelMode === 'grid' && (
             <div style={{ marginTop: 12 }} data-coach-target="organigrama-filtros">
               <FilterChips chips={filtroChips} active={areaFiltro} onChange={setAreaFiltro} context="onDark" />
             </div>
@@ -188,25 +237,74 @@ export default function OrganigramaPage() {
 
         {/* ── Vista Plantel ── */}
         {tab === 'plantel' && (
-          miembrosFiltrados.length === 0 ? (
+          plantelMode !== 'grid' ? (
+            <FichaMiembroPanel
+              key={plantelMode === 'nuevo' ? 'nuevo' : plantelSelected?.id}
+              miembro={plantelMode === 'nuevo' ? null : plantelSelected}
+              puestos={puestos}
+              isAdmin={isAdmin}
+              initialOverrideMode={plantelOverrideInicial}
+              getModulosMiembro={getModulosMiembro}
+              crearMiembro={crearMiembro}
+              actualizarMiembro={actualizarMiembro}
+              actualizarOverridesMiembro={actualizarOverridesMiembro}
+              desactivarMiembro={desactivarMiembro}
+              onClose={cerrarPlantelPanel}
+              onToast={showToast}
+              onIrACrearPuesto={() => { cerrarPlantelPanel(); setTab('puestos') }}
+            />
+          ) : miembrosFiltrados.length === 0 ? (
             <EmptyState
               icon="groups"
               title="Sin gente en esta área"
-              subtitle="Asigná un puesto de esta área a algún miembro del equipo en Equipo → Puestos."
+              subtitle="Asigná un puesto de esta área a algún miembro del equipo, o agregá uno nuevo abajo."
             />
           ) : (
-            <div
-              data-coach-target="organigrama-plantel"
-              style={{
-                display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-                gap: 12, padding: 16,
-              }}
-            >
-              {miembrosFiltrados.map(m => (
-                <MiembroCard key={m.id} miembro={m} puestos={puestos} miembros={miembros} isAdmin={isAdmin} />
-              ))}
-            </div>
+            <>
+              <div
+                data-coach-target="organigrama-plantel"
+                style={{
+                  display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+                  gap: 12, padding: 16,
+                }}
+              >
+                {miembrosFiltrados.map(m => (
+                  <MiembroCard
+                    key={m.id} miembro={m} puestos={puestos} miembros={miembros} isAdmin={isAdmin}
+                    onEditarAccesos={miembro => { setPlantelSelected(miembro); setPlantelOverrideInicial(true); setPlantelMode('ficha') }}
+                  />
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8, padding: '0 16px' }}>
+                <button
+                  onClick={() => { setPlantelSelected(null); setPlantelMode('nuevo') }}
+                  style={{ ...btnPrimary, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>person_add</span>
+                  Agregar
+                </button>
+                <button
+                  onClick={() => setShowInvitar(true)}
+                  style={{ ...btnPrimary, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'var(--accent)' }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>mail</span>
+                  Invitar
+                </button>
+              </div>
+            </>
           )
+        )}
+
+        {/* ── Vista Puestos ── */}
+        {tab === 'puestos' && (
+          <PuestosEditorPanel
+            puestos={puestos}
+            miembros={miembros}
+            crearPuesto={crearPuesto}
+            actualizarPuesto={actualizarPuesto}
+            eliminarPuesto={eliminarPuesto}
+            onToast={showToast}
+          />
         )}
 
         {/* ── Vista Estructura ── */}
@@ -301,6 +399,62 @@ export default function OrganigramaPage() {
         onActualizarMiembro={actualizarMiembro}
         onCrearPuesto={crearPuesto}
       />
+
+      {/* Modal invitar (movido de Turnos → Equipo) */}
+      {showInvitar && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 200 }} onClick={() => setShowInvitar(false)} />
+          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 201, background: 'var(--surface)', borderRadius: '20px 20px 0 0', padding: '24px 16px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>Invitar al equipo</h3>
+              <button onClick={() => setShowInvitar(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-3)' }}>close</span>
+              </button>
+            </div>
+            <div>
+              <label style={labelStyle}>Nombre (opcional)</label>
+              <input value={invNombre} onChange={e => setInvNombre(e.target.value)} placeholder="Juan" style={fieldStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Email *</label>
+              <input value={invEmail} onChange={e => setInvEmail(e.target.value)} placeholder="juan@email.com" type="email" style={fieldStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Nivel de acceso</label>
+              <select value={invRol} onChange={e => setInvRol(e.target.value)} style={fieldStyle}>
+                {NIVELES_ACCESO.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>Puesto (opcional)</label>
+              <select value={invPuestoId} onChange={e => setInvPuestoId(e.target.value)} style={fieldStyle}>
+                <option value="">Sin puesto — permisos por nivel de acceso</option>
+                {puestos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </select>
+              <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '4px 0 0' }}>
+                Si no elegís puesto, después hay que asignarlo a mano desde la ficha para que tenga los permisos correctos.
+              </p>
+            </div>
+            <button
+              onClick={handleInvitar} disabled={inviting || !invEmail.trim()}
+              style={{ ...btnPrimary, opacity: inviting || !invEmail.trim() ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>send</span>
+              {inviting ? 'Enviando...' : 'Enviar invitación'}
+            </button>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, textAlign: 'center' }}>
+              El empleado recibirá un email para crear su cuenta.
+            </p>
+          </div>
+        </>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 'var(--toast-bottom)', left: '50%', transform: 'translateX(-50%)', background: 'var(--navy)', color: '#fff', padding: '10px 20px', borderRadius: 12, fontSize: 13, fontWeight: 600, zIndex: 300, whiteSpace: 'nowrap' }}>
+          {toast}
+        </div>
+      )}
     </PageTransition>
   )
 }

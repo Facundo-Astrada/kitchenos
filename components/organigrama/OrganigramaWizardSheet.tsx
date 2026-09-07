@@ -105,6 +105,8 @@ export function OrganigramaWizardSheet({
           foto_url: null,
           costo_hora: null,
           objetivos: {},
+          uniforme: null,
+          observaciones: null,
         })
       }
 

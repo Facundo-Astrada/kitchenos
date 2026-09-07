@@ -131,7 +131,13 @@ export const MODULO_CONFIG: Record<
   facturas: { label: 'Facturas', icon: 'description', href: '/facturas' },
   produccion: { label: 'Producción', icon: 'factory', href: '/produccion' },
   merma: { label: 'Merma', icon: 'delete_sweep', href: '/merma' },
-  equipo: { label: 'Equipo', icon: 'groups', href: '/turnos' },
+  // Label/ícono actualizados (sep 2026, S6): la ficha del equipo, permisos y
+  // puestos se mudaron a Organigrama — /turnos quedó solo con la grilla de
+  // turnos y el fichaje. El id 'equipo' se deja sin tocar a propósito: es la
+  // clave de permiso real en `puestos.permisos_app`/`MODULOS_POR_ROL`
+  // (ver RUTA_A_MODULO — cambiar el id exigiría re-otorgar el permiso a mano
+  // en cada cuenta existente). Solo cambia lo que se muestra.
+  equipo: { label: 'Turnos', icon: 'schedule', href: '/turnos' },
   organigrama: { label: 'Organigrama', icon: 'account_tree', href: '/organigrama' },
   configuracion: { label: 'Config', icon: 'settings', href: '/configuracion' },
   ventas: { label: 'Ventas', icon: 'bar_chart', href: '/ventas' },
@@ -411,8 +417,8 @@ export const MODULO_DESCRIPCION: Record<ModuloId, string> = {
   facturas: 'Las facturas de proveedores, cargadas por foto o PDF.',
   produccion: 'El tablero de lo que hay que cocinar hoy, columna por plaza.',
   merma: 'El registro del desperdicio: qué se tiró, cuánto y por qué.',
-  equipo: 'Las fichas del equipo: puestos, permisos y datos de cada persona.',
-  organigrama: 'Quién es quién: las áreas del negocio y quién responde en cada una.',
+  equipo: 'La grilla del personal y el fichaje de entrada y salida.',
+  organigrama: 'Quién es quién: el plantel, los puestos, los permisos y las áreas del negocio.',
   configuracion: 'Los ajustes del restaurante: turnos, plazas, categorías y datos generales.',
   ventas: 'Lo que se vendió: cubiertos, ticket promedio y platos más pedidos.',
   espacios: 'La mesa de trabajo: espacios, plazas y producciones en curso.',

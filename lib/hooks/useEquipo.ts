@@ -39,6 +39,10 @@ export interface Miembro {
   /** Override de `puestos.ver_costos` para esta persona. null = hereda del puesto. */
   ver_costos: boolean | null
   objetivos: ObjetivosVenta   // override puntual sobre los objetivos del puesto (PLAN-4-CAPAS B6)
+  /** Prendas de uniforme prestadas, `{prenda: cantidad}`. NULL = nunca se cargó — distinto de `{}` (revisado, sin nada prestado). */
+  uniforme: Record<string, number> | null
+  /** Notas libres de un encargado sobre la persona (ausentismo, llamados de atención). */
+  observaciones: string | null
   restaurante_id: string
   created_at: string
 }

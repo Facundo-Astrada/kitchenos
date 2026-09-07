@@ -7,16 +7,9 @@
 // a quién reporta + tareas del puesto + módulos que habilita — el mini
 // manual de puesto, armado solo con datos que ya están cargados.
 
-import { useRouter } from 'next/navigation'
 import { Avatar, FlipCard } from '@/components/ui'
 import { NIVELES_ACCESO, type Miembro, type Puesto } from '@/lib/hooks/useEquipo'
 import { MODULO_CONFIG, PLAZA_ICONS, areaCatalogoItem, type ModuloId } from '@/lib/constants'
-
-// Deep-link a Turnos → Equipo para editar el acceso a módulos de una persona
-// puntual. Se resuelve del lado de Turnos (ver el useEffect que lo consume
-// en turnos/page.tsx) — localStorage, no query params, para no meter
-// useSearchParams/Suspense en una pantalla que hoy no lo necesita.
-export const DEEPLINK_EDITAR_ACCESOS_KEY = 'organigrama_editar_accesos'
 
 const NIVEL_GRADIENTE: Record<string, [string, string]> = {
   admin: ['#5b7bc4', '#3a5488'],
@@ -42,15 +35,14 @@ interface MiembroCardProps {
   puestos: Puesto[]
   miembros: Miembro[]
   isAdmin?: boolean
+  /** Abre la ficha de esta persona directo en modo "Personalizar" permisos. */
+  onEditarAccesos?: (miembro: Miembro) => void
 }
 
-export function MiembroCard({ miembro, puestos, miembros, isAdmin = false }: MiembroCardProps) {
-  const router = useRouter()
-
+export function MiembroCard({ miembro, puestos, miembros, isAdmin = false, onEditarAccesos }: MiembroCardProps) {
   function editarAccesos(e: React.MouseEvent) {
     e.stopPropagation()
-    localStorage.setItem(DEEPLINK_EDITAR_ACCESOS_KEY, JSON.stringify({ miembroId: miembro.id }))
-    router.push('/turnos')
+    onEditarAccesos?.(miembro)
   }
 
   const puesto = puestos.find(p => p.id === miembro.puesto_id)

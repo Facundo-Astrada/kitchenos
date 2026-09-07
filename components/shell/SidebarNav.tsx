@@ -16,18 +16,19 @@ import { NotificacionesBell } from '@/components/notificaciones/NotificacionesBe
 // (no pasan por Ops — ver tareas/page.tsx y RUTA_A_MODULO_EMPRENDIMIENTO en
 // RouteGuard.tsx), así que se agregan de vuelta solo para ese perfil.
 // 'turnos' tampoco tiene ítem propio: comparte href literal con 'equipo'
-// (mismo /turnos, sin tab que las distinga) — se deja un solo acceso.
+// (mismo /turnos) — se deja un solo acceso, con el id 'equipo' porque esa es
+// la clave de permiso real (ver el comentario en MODULO_CONFIG.equipo).
 // Color por sección: categórico (var(--cat-*) en globals.css), no de estado
 // — ver el comentario ahí. Solo tiñe el título y el indicador activo, nunca
 // fondo ni ícono, para no subir el dial de "carácter" del registro Preparación.
 function seccionesNav(esEmprendimiento: boolean): { label: string; color: string; items: ModuloId[] }[] {
   return [
-    { label: 'Operaciones', color: 'var(--cat-operaciones)', items: ['home', 'operaciones', 'espacios', ...(esEmprendimiento ? (['tareas'] as ModuloId[]) : []), 'pase'] },
+    { label: 'Operaciones', color: 'var(--cat-operaciones)', items: ['home', 'operaciones', 'espacios', ...(esEmprendimiento ? (['tareas'] as ModuloId[]) : []), 'pase', 'equipo'] },
     { label: 'Cocina', color: 'var(--cat-cocina)', items: ['recetario', 'carta', ...(esEmprendimiento ? (['produccion'] as ModuloId[]) : [])] },
     { label: 'Servicio', color: 'var(--cat-servicio)', items: ['salon', 'kds', 'muro', 'reservas'] },
     { label: 'Insumos', color: 'var(--cat-insumos)', items: ['stock', 'facturas', 'pedidos', 'proveedores', 'merma'] },
     { label: 'Gestión', color: 'var(--cat-gestion)', items: ['reportes', 'presupuesto', 'ventas', 'clientes', 'haccp', 'calendario', 'bitacora'] },
-    { label: 'Sistema', color: 'var(--cat-sistema)', items: ['equipo', 'organigrama', 'configuracion'] },
+    { label: 'Sistema', color: 'var(--cat-sistema)', items: ['organigrama', 'configuracion'] },
   ]
 }
 
