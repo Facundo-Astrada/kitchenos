@@ -12,10 +12,14 @@ import ImportadorUniversal from '@/components/importador/ImportadorUniversal'
 // CommandPalette (components/desktop/CommandPalette.tsx) para "ir a": es la
 // lista completa real, a diferencia de MODULOS_POR_ROL (solo fallback
 // mientras cargan los permisos, ver el filtro de abajo).
+// Sin 'produccion': ruta vieja que redirige a /operaciones (tab Planificación),
+// ya representado por 'operaciones'. Sin 'turnos': comparte href literal con
+// 'equipo' (mismo /turnos), se deja un solo acceso. Ver seccionesNav() en
+// SidebarNav.tsx para el mismo criterio aplicado al sidebar.
 export const GRID_MODULOS: ModuloId[] = [
   'operaciones', 'espacios', 'recetario', 'stock', 'pedidos', 'carta',
   'facturas', 'proveedores', 'calendario', 'reportes', 'haccp',
-  'pase', 'produccion', 'turnos', 'ventas', 'clientes', 'merma', 'equipo', 'configuracion', 'reservas',
+  'pase', 'ventas', 'clientes', 'merma', 'equipo', 'configuracion', 'reservas',
 ]
 
 // PLAN-SUPERFICIE S1.4 — la grilla mostraba los ~20 módulos de una (el

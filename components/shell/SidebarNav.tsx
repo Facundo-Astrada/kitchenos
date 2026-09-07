@@ -8,14 +8,25 @@ import { MODULO_CONFIG, MODULOS_POR_ROL, ROL_CONFIG } from '@/lib/constants'
 import type { ModuloId } from '@/lib/constants'
 import { NotificacionesBell } from '@/components/notificaciones/NotificacionesBell'
 
-const SECCIONES: { label: string; items: ModuloId[] }[] = [
-  { label: 'Operaciones', items: ['home', 'operaciones', 'espacios', 'tareas', 'pase', 'checklist'] },
-  { label: 'Cocina', items: ['recetario', 'carta', 'produccion'] },
-  { label: 'Servicio', items: ['salon', 'kds', 'muro', 'reservas'] },
-  { label: 'Insumos', items: ['stock', 'facturas', 'pedidos', 'proveedores', 'merma'] },
-  { label: 'Gestión', items: ['reportes', 'presupuesto', 'ventas', 'clientes', 'haccp', 'calendario', 'turnos', 'bitacora'] },
-  { label: 'Sistema', items: ['equipo', 'organigrama', 'configuracion'] },
-]
+// 'tareas', 'checklist' y 'produccion' NO tienen ítem propio acá: son rutas
+// viejas que redirigen a /operaciones (tabs Producción/Mise/Planificación,
+// ver operaciones/page.tsx) — mostrarlas como accesos aparte era 3 entradas
+// de sidebar para una sola pantalla. Excepción: perfil 'emprendimiento'
+// (VOGLIO Farina), donde /tareas y /produccion SÍ son pantallas propias
+// (no pasan por Ops — ver tareas/page.tsx y RUTA_A_MODULO_EMPRENDIMIENTO en
+// RouteGuard.tsx), así que se agregan de vuelta solo para ese perfil.
+// 'turnos' tampoco tiene ítem propio: comparte href literal con 'equipo'
+// (mismo /turnos, sin tab que las distinga) — se deja un solo acceso.
+function seccionesNav(esEmprendimiento: boolean): { label: string; items: ModuloId[] }[] {
+  return [
+    { label: 'Operaciones', items: ['home', 'operaciones', 'espacios', ...(esEmprendimiento ? (['tareas'] as ModuloId[]) : []), 'pase'] },
+    { label: 'Cocina', items: ['recetario', 'carta', ...(esEmprendimiento ? (['produccion'] as ModuloId[]) : [])] },
+    { label: 'Servicio', items: ['salon', 'kds', 'muro', 'reservas'] },
+    { label: 'Insumos', items: ['stock', 'facturas', 'pedidos', 'proveedores', 'merma'] },
+    { label: 'Gestión', items: ['reportes', 'presupuesto', 'ventas', 'clientes', 'haccp', 'calendario', 'bitacora'] },
+    { label: 'Sistema', items: ['equipo', 'organigrama', 'configuracion'] },
+  ]
+}
 
 interface Props {
   onImportarClick?: () => void
@@ -36,11 +47,12 @@ export const SIDEBAR_ANCHO_COLAPSADO = 68
 export default function SidebarNav({ onImportarClick, dark = false, collapsed = false }: Props) {
   const pathname = usePathname()
   const { perfil } = useAuth()
-  const { puedeVer, isAdmin, moduloEnPerfil } = usePermisos()
+  const { puedeVer, isAdmin, moduloEnPerfil, perfilRestaurante } = usePermisos()
 
   const rol = perfil?.rol ?? 'ayudante'
   const modulosDelRol = MODULOS_POR_ROL[rol]
   const rolConfig = perfil ? ROL_CONFIG[perfil.rol] : null
+  const SECCIONES = seccionesNav(perfilRestaurante === 'emprendimiento')
 
   const canSee = (id: ModuloId) =>
     (id === 'home' || isAdmin || puedeVer(id)) && moduloEnPerfil(id)
