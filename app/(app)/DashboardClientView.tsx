@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth/context'
 import DashboardHeader from '@/components/dashboard/DashboardHeader'
 import AhoraCard from '@/components/dashboard/AhoraCard'
+import ProximosDias from '@/components/dashboard/ProximosDias'
 import IngresosBanner from '@/components/pedidos/IngresosBanner'
 import PasePreview from '@/components/dashboard/PasePreview'
 import MiPlaza from '@/components/dashboard/MiPlaza'
@@ -316,6 +317,7 @@ export default function DashboardPage() {
           {/* Panel izquierdo: el día + turno + pase + plaza */}
           <div style={{ borderRight: '1px solid var(--border)', overflowY: 'auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
             <AhoraCard momento={momento} />
+            <ProximosDias />
             {/* Turno */}
             <div data-coach-target="dashboard-turno">
               {!turnoActivo ? (
@@ -382,6 +384,7 @@ export default function DashboardPage() {
           {/* El momento del día va primero — antes la pantalla abría con
               alertas de negocio antes de decir qué hacer (S1.1). */}
           <div style={{ padding: '8px 16px 0' }}><AhoraCard momento={momento} /></div>
+          <div style={{ padding: '8px 16px 0' }}><ProximosDias /></div>
           {/* Turno card */}
           <div data-coach-target="dashboard-turno" style={{ padding: '8px 16px 0' }}>
             {!turnoActivo ? (
