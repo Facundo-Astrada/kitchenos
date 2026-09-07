@@ -1,6 +1,5 @@
 'use client'
 
-import { usePathname } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import ShortcutsHelp from '@/components/desktop/ShortcutsHelp'
 import CommandPalette from '@/components/desktop/CommandPalette'
@@ -9,8 +8,6 @@ import SidebarNav from '@/components/shell/SidebarNav'
 import { useDesktopShortcuts } from '@/lib/hooks/useDesktopShortcuts'
 import { useState, useEffect, useCallback } from 'react'
 
-// Rutas que necesitan ancho completo (tabla, mapa, gráficos)
-const FULL_WIDTH_ROUTES = ['/stock', '/espacios', '/reportes']
 const DOCK_WIDTH = 380
 
 // Dynamic import: ImportadorUniversal carga xlsx (~500kB) y solo se abre a demanda.
@@ -18,7 +15,6 @@ const DOCK_WIDTH = 380
 const ImportadorUniversal = dynamic(() => import('@/components/importador/ImportadorUniversal'), { ssr: false })
 
 export default function DesktopShell({ children, sidePanel }: { children: React.ReactNode; sidePanel?: React.ReactNode }) {
-  const pathname = usePathname()
   const [showImportador, setShowImportador] = useState(false)
   const [dockCollapsed, setDockCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -45,8 +41,6 @@ export default function DesktopShell({ children, sidePanel }: { children: React.
   }, [toggleSidebar])
 
   useDesktopShortcuts()
-
-  const isFullWidth = FULL_WIDTH_ROUTES.some(r => pathname.startsWith(r))
 
   function toggleDock() {
     setDockCollapsed(prev => {
@@ -86,13 +80,12 @@ export default function DesktopShell({ children, sidePanel }: { children: React.
         </button>
       </div>
 
-      {/* ── Contenido principal ── */}
-      <main className="hide-scrollbar" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0 }}>
-        {isFullWidth ? children : (
-          <div style={{ maxWidth: 1040, margin: '0 auto', height: '100%' }}>
-            {children}
-          </div>
-        )}
+      {/* ── Contenido principal — ancho completo por default (S6, sep 2026).
+          Antes tenía un maxWidth:1040 salvo 3 rutas en una lista blanca;
+          se invirtió: cada pantalla decide su propio ancho interno si lo
+          necesita, en vez de perder ~40% del monitor por default. ── */}
+      <main className="hide-scrollbar" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minWidth: 0, height: '100%' }}>
+        {children}
       </main>
 
       {/* ── Panel lateral fijo (Kitchen Coach) — empuja el contenido, no lo tapa ── */}
