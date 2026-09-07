@@ -63,6 +63,7 @@ No se cargan solos: abrirlos cuando la tarea entra en su tema.
 | Nombrar algo nuevo (tabla, columna, variable) o dudar qué significa un término del código que ya tiene varios sentidos (turno, mise, sección...) | `.claude/docs/glosario.md` (glosario congelado + 3 reglas para lo nuevo) |
 | Refactorizar o partir una pantalla grande, extraer una función/componente, migrar código vivo (estrangulamiento), decidir qué red de tests poner antes de mover algo, evaluar deuda técnica | `.claude/docs/ingenieria/refactor-marco.md` (Fowler filtrado a React, estrangulamiento/branch-by-abstraction/parallel-run, caracterización, pirámide vs trofeo, cuadrantes de deuda) + `refactor-kos.md` (el plan ejecutable paso a paso para `carta/page.tsx` + veredictos por pantalla + métricas) |
 | Decidir qué ítem de ingeniería va primero, o retomar la lista tras un parate | `.claude/docs/ingenieria/plan-consolidado.md` (las tres sesiones cruzadas: fusiones, los 10 días ordenados, lo que NO se hace) |
+| Tocar el onboarding / la guía de inicio, la capacitación del equipo, los avisos que empujan la carga, o preguntarte "¿quién es responsable de esta función?" | `PLAN-IMPLANTACION-2026-09.md` (la ruta de 7 hitos y 31 estaciones, cada una con responsable, referente y qué costumbre vieja apaga; los 6 huecos del código; la ficha de line-up; reglas de cadencia de avisos) |
 
 Endpoints clave de importación: `/api/importador/facturas-universal` · `/api/stock/rebuild` · `/api/recetas/auto-link-ingredientes`
 

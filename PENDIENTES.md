@@ -8,6 +8,30 @@ Lista priorizada de lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL.md`.
 
 ## 🟠 Alto
 
+### Ruta de implantación — tapar los 6 huecos (diseñado 07/09, sin ejecutar)
+Plan completo en `PLAN-IMPLANTACION-2026-09.md`; versión visual con la tabla de las 31 estaciones en https://claude.ai/code/artifact/3a5be79b-8dcf-4d50-b747-7a865082c9e8
+
+La cadena `módulo → área → responsable` ya existe (`AREA_CATALOGO` + tab Cobertura de Organigrama) y **no la consulta nadie**. Está cortada en seis lugares. Los tres primeros son horas de trabajo y desbloquean todo lo demás:
+
+1. **4 módulos sin área** — `presupuesto`, `organigrama`, `tareas`, `turnos` no figuran en ninguna de las 12 áreas de `AREA_CATALOGO` (`lib/constants.ts:300`), así que no tienen responsable posible y no hay a quién avisarle. Presupuesto → `direccion`, Organigrama y Turnos → `rrhh`, Tareas → `cocina`.
+2. **5 módulos en dos áreas a la vez** — `facturas`, `recetario`, `clientes`, `configuracion`, `calendario`. Falta declarar **área dueña** (una, la que recibe el aviso) vs. **áreas usuarias**.
+3. **Las 8 `PUESTO_TEMPLATES` son todas `area_key: cocina`** (`lib/hooks/useEquipo.ts:196`). El organigrama gastronómico estándar tiene 3 departamentos (cocina, sala, gestión); K-OS solo trae el primero, así que la vista Cobertura arranca con alertas rojas que el usuario no tiene con qué llenar. Faltan ~6 plantillas: Dueño, Encargado de compras, Encargado de salón, Mozo, Responsable de calidad, Administración.
+4. **Permiso ≠ responsabilidad** — `permisos_app` dice quién *puede*; falta quién *debe*. Se compone sin schema nuevo.
+5. **Nada registra quién sabe qué** — falta matriz de polivalencia (persona × función × nivel 0-4). Único schema nuevo del plan; requiere decisión de negocio por la moratoria (`negocio.md` § 7).
+6. **K-OS no está en el line-up** — ver ítem siguiente.
+
+### Ficha de line-up (diseñado 07/09, sin ejecutar)
+El mayor retorno por línea de código del plan de implantación, y **cero schema nuevo**: una hoja de 2 minutos que se genera sola antes de cada servicio (86, pendientes del pase anterior, quién falta y quién cubre, mesa con alergias, plato a empujar) para que el chef la lea en voz alta en el line-up.
+
+El fundamento es de la investigación de formación de hábito: las capacitaciones transfieren ~10% al puesto, y lo que sí funciona es meter el uso dentro de un ritual de equipo que ya existe. El line-up es ese ritual — 5-15 min, hora y lugar fijos, todo el turno presente — y es el único momento del día con la atención de todos garantizada. Una notificación solo alcanza al que ya abre la app; esto alcanza también al que no.
+
+Ya existe la mitad: `lib/ops/textoPase.ts` ("Copiar pase") es la idea correcta en el momento equivocado — al cerrar, no al abrir.
+
+### Notificaciones — la infraestructura existe y se usa en un solo lugar
+La tabla `notificaciones`, `lib/notificaciones/crear.ts` y `NotificacionesBell` están completas, y en toda la app hay **una sola llamada** a `crearNotificacion()`: `lib/hooks/useEquipo.ts:620` (asignar turno). Enchufarla a la ruta de implantación es barato.
+Para push real falta más: `public/sw.js` (67 líneas) **no tiene handler de `push` ni de `notificationclick`** — hacen falta esos, VAPID, tabla de suscripciones y endpoint disparador.
+Reglas de cadencia ya decididas (`DECISIONES.md` § 25): recordatorio máx. 1/día al responsable nombrando la consecuencia y muriendo solo; reconocimiento **semanal** y del equipo — el diario baja 12% la confianza en la dirección.
+
 ### Invitación por email falla a veces — falta SMTP propio en Supabase
 Auditoría 20/08 (chequeado contra la config viva vía management API): `site_url`, `uri_allow_list` y redirect a `/registro-invitado` ya están OK — ese ítem viejo estaba resuelto. El bloqueo real es otro: no hay SMTP propio configurado (`smtp_host` null) — Supabase manda con su mailer compartido, limitado a `rate_limit_email_sent: 2` (2 emails/hora) y con tendencia a caer en spam por no ser dominio propio. Si el dueño invita 3+ personas seguidas armando el equipo, la 3ra invitación falla. El frontend (`handleInvitar` en `app/(app)/turnos/page.tsx`) solo muestra el error crudo de Supabase en un toast, sin explicar el motivo ni sugerir reintentar más tarde. Fix: configurar SMTP propio (Resend recomendado, tier gratis generoso) en Supabase Auth → falta que Facundo cree la cuenta y pase la API key para conectarlo vía management API.
 

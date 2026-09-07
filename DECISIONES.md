@@ -325,3 +325,19 @@ Registro de decisiones tomadas con Facundo durante el diseño y construcción de
 - El campo "¿algo que el turno siguiente deba saber?" de `EntregaPlazaSheet` dejó de ser un párrafo libre (`cierres_turno.notas_servicio`, ya sin lector) — reusa el componente `NotasPlaza` (bullets en `pase_mensajes`), precargado con lo que ya se escribió en el turno.
 - `lib/ops/textoPase.ts` es la única función que arma el texto — cualquier entry point nuevo (Mise, Producción, lo que siga) llama a la misma, no reinventa el formato.
 - No se construyó B3 (bullets tipados hecho/alerta/pendiente/ingreso, con conversión a tarea real): se shipea B2 primero y se mira dos semanas qué escribe el equipo antes de decidir si esa fricción extra se justifica.
+
+---
+
+## 25. La ruta de implantación mide al restaurante, nunca a la persona
+
+**Decisión:** el progreso de implantación de K-OS en un restaurante (ver `PLAN-IMPLANTACION-2026-09.md`) se expresa como un solo número del **restaurante**. El único número personal que existe en el producto es el nivel de competencia de cada uno en la matriz de polivalencia, visible para esa persona. Sin rankings entre compañeros, sin comparaciones, sin desvíos con nombre y apellido.
+**Por qué:** el hallazgo más replicado sobre equipos de alto rendimiento es que la seguridad psicológica pesa más que el talento o la antigüedad, y en cocina el dato es brutal — 58% de burnout, 41% de ansiedad, con la hostilidad percibida y el desbalance esfuerzo-recompensa como predictores. Un sistema que mide cumplimiento construye o destruye seguridad psicológica según a quién le atribuya el número. Ademas, los rankings entre personas se dan vuelta justo en trabajo colaborativo, sensible a la calidad y obligatorio: una cocina es las tres cosas a la vez.
+**Cómo se aplica:**
+- Era una regla de dos pantallas (el Coach señala desvíos como dato a corregir y no como falla personal; Reportes → Personal en texto neutro sin ranking de ventas). **Ahora es regla de producto**: aplica a la ruta, a los avisos y a cualquier pantalla nueva.
+- La quest colectiva del mise (equipo completo, sin ranking de personas) queda confirmada, no era una preferencia estética.
+- Corolario del research de reconocimiento: si en algún momento se muestra un ranking, que sea de **reconocimiento dado** (quién dejó el mejor pase para el que entra), nunca de reconocimiento recibido ni de volumen de tildes.
+
+**Sub-decisiones del mismo plan:**
+- **Responsable ≠ referente.** Cada estación de la ruta nombra dos personas: quien responde (se designa, sale de Organigrama → Cobertura) y a quien le preguntan (se detecta, sale de la matriz de polivalencia). Nombrar un grupo en vez de una persona produce difusión de responsabilidad de forma predecible; y el personal de línea le pregunta a un par de confianza antes que a soporte.
+- **"Qué se apaga" es la definición de insertado.** Una función no está adoptada hasta que muere la costumbre vieja que reemplaza — el pizarrón, el cuaderno, el audio de WhatsApp. Correr lo viejo y lo nuevo en paralelo demasiado tiempo es la falla de rollout más común. Es el mismo principio que la § 24.
+- **Recordatorio y reconocimiento van a cadencias distintas:** recordatorio máximo 1/día y muere solo; reconocimiento semanal y del equipo. El reconocimiento diario baja 12% la confianza en la dirección.
