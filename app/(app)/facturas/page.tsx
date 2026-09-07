@@ -156,6 +156,9 @@ interface ListaAIResult {
 
 type MainTab = 'pedidos' | 'facturas' | 'recepcion' | 'categorias' | 'listas' | 'proveedores'
 const MAIN_TABS = ['pedidos', 'recepcion', 'facturas', 'proveedores', 'listas', 'categorias'] as const
+function esMainTab(v: string | null): v is MainTab {
+  return v === 'facturas' || v === 'listas' || v === 'proveedores' || v === 'recepcion' || v === 'categorias' || v === 'pedidos'
+}
 const TAB_LABELS: Record<MainTab, string> = { pedidos: 'Pedidos', facturas: 'Gastos', recepcion: 'Recepción', categorias: 'Cat. de Gastos', listas: 'Listas', proveedores: 'Proveedores' }
 // Qué permiso habilita cada tab de Compras — hay puestos reales con 'pedidos'
 // sin 'facturas'/'proveedores' (S6, sep 2026), así que cada tab se filtra por
@@ -2658,6 +2661,18 @@ export default function FacturasPage() {
     [isAdmin, puedeVer]
   )
 
+  // Tab inicial desde la URL (?tab=) — deep-link y redirects desde las rutas
+  // viejas /pedidos y /proveedores (S6, sep 2026). Mismo patrón que
+  // operaciones/page.tsx: URLSearchParams sobre window.location.search en
+  // vez de useSearchParams(), para no exigirle un Suspense boundary a toda
+  // la pantalla solo por esto. Sin este efecto el redirect aterriza en
+  // /facturas pero se queda en el tab default (Gastos) — bug real,
+  // encontrado al verificar el Bloque 4 contra producción.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tab')
+    if (esMainTab(t)) setMainTab(t)
+  }, [])
+
   // Si el tab activo (o el default 'facturas') no está entre los que esta
   // persona puede ver, cae al primero que sí puede — evita aterrizar en un
   // tab vacío/bloqueado cuando solo tiene 'pedidos' o solo 'proveedores'.
@@ -2670,7 +2685,7 @@ export default function FacturasPage() {
   useEffect(() => {
     function handleSetTab(e: Event) {
       const { tab: t } = (e as CustomEvent<{ tab: string }>).detail
-      if (t === 'facturas' || t === 'listas' || t === 'proveedores' || t === 'recepcion' || t === 'categorias' || t === 'pedidos') setMainTab(t as MainTab)
+      if (esMainTab(t)) setMainTab(t)
     }
     window.addEventListener('kc-set-tab', handleSetTab)
     return () => window.removeEventListener('kc-set-tab', handleSetTab)

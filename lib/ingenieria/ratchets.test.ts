@@ -19,10 +19,13 @@ const ROOT = process.cwd()
 const TECHOS_LINEAS: Record<string, number> = {
   'app/(app)/carta/page.tsx': 2060, // día 7 plan-consolidado: moves puros a cards.tsx/exportar.ts/PackagingGruposDrawer.tsx/ImportCartaModal.tsx/EditarPlato.tsx
   'app/(app)/recetario/page.tsx': 2850, // sep 2026: pestaña "Platos" se fue (Fase 3, Carta pasa a ser la dueña del plato) — 3167 → 2753, techo bajado con margen
-  'app/(app)/facturas/page.tsx': 3651, // S6 sep 2026: tab Pedidos + filtro de tabs por permiso (consolidación
-  // Compras) — de-duplicado el header navy+tabs repetido 5 veces a un solo
-  // ComprasHeader (~45 líneas menos) antes de subir el techo; el resto es
-  // función real (tab nuevo + TAB_PERMISO), no relleno. 3640 → 3650.
+  'app/(app)/facturas/page.tsx': 3666, // S6 sep 2026: 3640 → 3651 por el tab Pedidos + filtro por permiso
+  // (consolidación Compras, de-duplicado el header repetido antes de subir
+  // el techo). 3651 → 3666: bug real encontrado verificando ese mismo
+  // bloque contra producción — /pedidos y /proveedores redirigían a
+  // /facturas?tab=X pero la página nunca leía ese query param, así que
+  // siempre aterrizaba en Gastos. Le faltaba el mismo efecto que ya tiene
+  // operaciones/page.tsx (URLSearchParams sobre window.location.search).
   'app/(app)/stock/ClientView.tsx': 3410,
   'app/(app)/checklist/ClientView.tsx': 3160,
 }
