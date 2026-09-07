@@ -17,7 +17,7 @@ const RUTA_A_MODULO_EMPRENDIMIENTO: Record<string, string> = {
 }
 
 const MODULO_LABEL: Record<string, string> = {
-  facturas: 'Facturas',
+  facturas: 'Compras',
   configuracion: 'Configuración',
   espacios: 'Espacios',
   reportes: 'Reportes',
@@ -53,10 +53,14 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
     if (!perfil) { setModuloBloqueado(null); return }
 
     const basePath = '/' + (pathname.split('/')[1] ?? '')
-    const modulo = (perfilRestaurante === 'emprendimiento' && RUTA_A_MODULO_EMPRENDIMIENTO[basePath])
+    const moduloRaw = (perfilRestaurante === 'emprendimiento' && RUTA_A_MODULO_EMPRENDIMIENTO[basePath])
       || RUTA_A_MODULO[basePath]
 
-    if (!modulo) { setModuloBloqueado(null); return }
+    if (!moduloRaw) { setModuloBloqueado(null); return }
+
+    // OR: una ruta puede aceptar cualquiera de varios permisos (ver el
+    // comentario en RUTA_A_MODULO — consolidación de Compras, S6 sep 2026).
+    const candidatos = Array.isArray(moduloRaw) ? moduloRaw : [moduloRaw]
 
     // La home NUNCA se bloquea. Un candado en '/' es indistinguible de una app
     // rota: el usuario no tiene a dónde ir, ni siquiera al botón "Volver al
@@ -66,12 +70,13 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
     if (basePath === '/') { setModuloBloqueado(null); return }
 
     // El perfil del restaurante (ej. modo emprendimiento) bloquea incluso a admin.
-    if (!moduloEnPerfil(modulo)) { setModuloBloqueado(modulo); return }
+    const candidatosDelPerfil = candidatos.filter(m => moduloEnPerfil(m))
+    if (candidatosDelPerfil.length === 0) { setModuloBloqueado(candidatos[0]); return }
 
     if (isAdmin) { setModuloBloqueado(null); return }
 
-    if (!puedeVer(modulo)) {
-      setModuloBloqueado(modulo)
+    if (!candidatosDelPerfil.some(m => puedeVer(m))) {
+      setModuloBloqueado(candidatosDelPerfil[0])
     } else {
       setModuloBloqueado(null)
     }

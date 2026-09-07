@@ -63,7 +63,17 @@ function resumenIncidencias(items: ProveedorIncidencia[]): string {
   return partes.join(' · ')
 }
 
-export default function ProveedoresPage({ embedded = false }: { embedded?: boolean }) {
+// Ruta vieja — Proveedores vive ahora como tab dentro de Compras (/facturas).
+// Redirigimos para una sola puerta de entrada (mismo patrón que
+// produccion/page.tsx: ProveedoresView es la vista real, reusada embebida
+// acá y desde facturas/page.tsx).
+export default function ProveedoresRoute() {
+  const router = useRouter()
+  useEffect(() => { router.replace('/facturas?tab=proveedores') }, [router])
+  return null
+}
+
+export function ProveedoresView({ embedded = false }: { embedded?: boolean }) {
   const router = useRouter()
   const RESTAURANTE_ID = useRestauranteId()
   const { proveedores, loading, error, agregarProveedor, actualizarProveedor, eliminarProveedor, fetchFacturas, guardarFactura, fetchIncidencias, agregarIncidencia, refetch: refetchProveedores } = useProveedores()

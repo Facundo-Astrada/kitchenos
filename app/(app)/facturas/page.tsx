@@ -9,7 +9,9 @@ import { usePedidos } from '@/lib/hooks/usePedidos'
 import { useCategoriasGasto, CATEGORIA_FINANCIERA_LABELS } from '@/lib/hooks/useCategoriasGasto'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
-import ProveedoresPage from '@/app/(app)/proveedores/page'
+import { usePermisos } from '@/lib/hooks/usePermisos'
+import { ProveedoresView } from '@/app/(app)/proveedores/page'
+import { PedidosView } from '@/app/(app)/pedidos/page'
 import ImageCropModal from '@/components/ui/ImageCropModal'
 import BulkUploadDrawer from '@/components/facturas/BulkUploadDrawer'
 import ExcelPOSImportModal from '@/components/facturas/ExcelPOSImportModal'
@@ -152,9 +154,42 @@ interface ListaAIResult {
   _demo?: boolean
 }
 
-type MainTab = 'facturas' | 'recepcion' | 'categorias' | 'listas' | 'proveedores'
-const MAIN_TABS = ['facturas', 'recepcion', 'categorias', 'listas', 'proveedores'] as const
-const TAB_LABELS: Record<MainTab, string> = { facturas: 'Gastos', recepcion: 'Recepción', categorias: 'Cat. de Gastos', listas: 'Listas', proveedores: 'Proveedores' }
+type MainTab = 'pedidos' | 'facturas' | 'recepcion' | 'categorias' | 'listas' | 'proveedores'
+const MAIN_TABS = ['pedidos', 'recepcion', 'facturas', 'proveedores', 'listas', 'categorias'] as const
+const TAB_LABELS: Record<MainTab, string> = { pedidos: 'Pedidos', facturas: 'Gastos', recepcion: 'Recepción', categorias: 'Cat. de Gastos', listas: 'Listas', proveedores: 'Proveedores' }
+// Qué permiso habilita cada tab de Compras — hay puestos reales con 'pedidos'
+// sin 'facturas'/'proveedores' (S6, sep 2026), así que cada tab se filtra por
+// su propio permiso en vez de asumir que quien entra a la ruta ve todo.
+const TAB_PERMISO: Record<MainTab, 'pedidos' | 'proveedores' | 'facturas'> = {
+  pedidos: 'pedidos', proveedores: 'proveedores',
+  facturas: 'facturas', recepcion: 'facturas', listas: 'facturas', categorias: 'facturas',
+}
+
+// Navy + título "Compras" + tab pills — repetido igual en 5 de los 6 tabs
+// (el sexto, Gastos/default, suma resumen de período y filtros propios).
+// Extraído acá para no seguir copiando el mismo bloque de 10 líneas.
+function ComprasHeader({
+  tabsVisibles, mainTab, onChange,
+}: {
+  tabsVisibles: readonly MainTab[]
+  mainTab: MainTab
+  onChange: (t: MainTab) => void
+}) {
+  return (
+    <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 0', flexShrink: 0 }}>
+      <h1 className="text-white text-[18px] font-bold m-0 mb-3">Compras</h1>
+      <div className="flex gap-[6px] pb-[10px]" style={{ flexWrap: 'wrap' }}>
+        {tabsVisibles.map(t => (
+          <button key={t} onClick={() => onChange(t)}
+            className="px-[12px] py-[5px] rounded-full border-none cursor-pointer text-[12px] font-semibold"
+            style={{ background: mainTab === t ? 'white' : 'rgba(255,255,255,0.15)', color: mainTab === t ? 'var(--navy)' : 'rgba(255,255,255,0.7)' }}>
+            {TAB_LABELS[t]}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 // ── Vencimiento badge (cuentas por pagar) ─────────────────────
 const VENC_CONFIG: Record<VencimientoFactura['urgencia'], { bg: string; color: string }> = {
@@ -2613,13 +2648,29 @@ export default function FacturasPage() {
   const { categorias: categoriasGasto } = useCategoriasGasto()
   const { medios: mediosPago } = useMediosPago()
   const isDesktop = useIsDesktop()
+  const { isAdmin, puedeVer } = usePermisos()
   const [mainTab, setMainTab] = useState<MainTab>('facturas')
   const [view, setView] = useState<View>('list')
+
+  // Tabs de Compras filtradas por permiso real (S6, sep 2026) — ver TAB_PERMISO.
+  const tabsVisibles = useMemo(
+    () => isAdmin ? [...MAIN_TABS] : MAIN_TABS.filter(t => puedeVer(TAB_PERMISO[t])),
+    [isAdmin, puedeVer]
+  )
+
+  // Si el tab activo (o el default 'facturas') no está entre los que esta
+  // persona puede ver, cae al primero que sí puede — evita aterrizar en un
+  // tab vacío/bloqueado cuando solo tiene 'pedidos' o solo 'proveedores'.
+  useEffect(() => {
+    if (tabsVisibles.length > 0 && !tabsVisibles.includes(mainTab)) {
+      setMainTab(tabsVisibles[0])
+    }
+  }, [tabsVisibles, mainTab])
 
   useEffect(() => {
     function handleSetTab(e: Event) {
       const { tab: t } = (e as CustomEvent<{ tab: string }>).detail
-      if (t === 'facturas' || t === 'listas' || t === 'proveedores' || t === 'recepcion' || t === 'categorias') setMainTab(t as MainTab)
+      if (t === 'facturas' || t === 'listas' || t === 'proveedores' || t === 'recepcion' || t === 'categorias' || t === 'pedidos') setMainTab(t as MainTab)
     }
     window.addEventListener('kc-set-tab', handleSetTab)
     return () => window.removeEventListener('kc-set-tab', handleSetTab)
@@ -3147,23 +3198,22 @@ export default function FacturasPage() {
     )
   }
 
+  // ── Pedidos tab (S6, sep 2026 — consolidación Compras) ──
+  if (mainTab === 'pedidos') {
+    return (
+      <div className="flex flex-col h-full">
+        <ComprasHeader tabsVisibles={tabsVisibles} mainTab={mainTab} onChange={setMainTab} />
+        <PedidosView embedded />
+      </div>
+    )
+  }
+
   // ── Proveedores tab ──
   if (mainTab === 'proveedores') {
     return (
       <div className="flex flex-col h-full">
-        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 0', flexShrink: 0 }}>
-          <h1 className="text-white text-[18px] font-bold m-0 mb-3">Compras</h1>
-          <div className="flex gap-[6px] pb-[10px]" style={{ flexWrap: 'wrap' }}>
-            {MAIN_TABS.map(t => (
-              <button key={t} onClick={() => setMainTab(t)}
-                className="px-[12px] py-[5px] rounded-full border-none cursor-pointer text-[12px] font-semibold"
-                style={{ background: mainTab === t ? 'white' : 'rgba(255,255,255,0.15)', color: mainTab === t ? 'var(--navy)' : 'rgba(255,255,255,0.7)' }}>
-                {TAB_LABELS[t]}
-              </button>
-            ))}
-          </div>
-        </div>
-        <ProveedoresPage embedded />
+        <ComprasHeader tabsVisibles={tabsVisibles} mainTab={mainTab} onChange={setMainTab} />
+        <ProveedoresView embedded />
         {toast && (
           <div className="fixed top-[60px] left-4 right-4 z-[300] rounded-[12px] p-[12px_16px] text-[13px] font-semibold text-white text-center"
             style={{ background: toast.startsWith('✓') ? '#10b981' : '#ef4444' }}>{toast}</div>
@@ -3176,21 +3226,7 @@ export default function FacturasPage() {
   if (mainTab === 'listas') {
     return (
       <div className="flex flex-col h-full">
-        {/* Header with tabs */}
-        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 0', flexShrink: 0 }}>
-          <h1 className="text-white text-[18px] font-bold m-0 mb-3">Compras</h1>
-
-          {/* Tab pills */}
-          <div className="flex gap-[6px] pb-[10px]" style={{ flexWrap: 'wrap' }}>
-            {MAIN_TABS.map(t => (
-              <button key={t} onClick={() => setMainTab(t)}
-                className="px-[12px] py-[5px] rounded-full border-none cursor-pointer text-[12px] font-semibold"
-                style={{ background: mainTab === t ? 'white' : 'rgba(255,255,255,0.15)', color: mainTab === t ? 'var(--navy)' : 'rgba(255,255,255,0.7)' }}>
-                {TAB_LABELS[t]}
-              </button>
-            ))}
-          </div>
-        </div>
+        <ComprasHeader tabsVisibles={tabsVisibles} mainTab={mainTab} onChange={setMainTab} />
 
         <ListasPreciosView showToast={showToast} />
 
@@ -3209,18 +3245,7 @@ export default function FacturasPage() {
   if (mainTab === 'categorias') {
     return (
       <div className="flex flex-col h-full">
-        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 0', flexShrink: 0 }}>
-          <h1 className="text-white text-[18px] font-bold m-0 mb-3">Compras</h1>
-          <div className="flex gap-[6px] pb-[10px]" style={{ flexWrap: 'wrap' }}>
-            {MAIN_TABS.map(t => (
-              <button key={t} onClick={() => setMainTab(t)}
-                className="px-[12px] py-[5px] rounded-full border-none cursor-pointer text-[12px] font-semibold"
-                style={{ background: mainTab === t ? 'white' : 'rgba(255,255,255,0.15)', color: mainTab === t ? 'var(--navy)' : 'rgba(255,255,255,0.7)' }}>
-                {TAB_LABELS[t]}
-              </button>
-            ))}
-          </div>
-        </div>
+        <ComprasHeader tabsVisibles={tabsVisibles} mainTab={mainTab} onChange={setMainTab} />
         <CategoriasGastoView showToast={showToast} />
         {toast && (
           <div className="fixed top-[60px] left-4 right-4 z-[300] rounded-[12px] p-[12px_16px] text-[13px] font-semibold text-white text-center"
@@ -3234,18 +3259,7 @@ export default function FacturasPage() {
   if (mainTab === 'recepcion') {
     return (
       <div className="flex flex-col h-full">
-        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 0', flexShrink: 0 }}>
-          <h1 className="text-white text-[18px] font-bold m-0 mb-3">Compras</h1>
-          <div className="flex gap-[6px] pb-[10px]" style={{ flexWrap: 'wrap' }}>
-            {MAIN_TABS.map(t => (
-              <button key={t} onClick={() => setMainTab(t)}
-                className="px-[12px] py-[5px] rounded-full border-none cursor-pointer text-[12px] font-semibold"
-                style={{ background: mainTab === t ? 'white' : 'rgba(255,255,255,0.15)', color: mainTab === t ? 'var(--navy)' : 'rgba(255,255,255,0.7)' }}>
-                {TAB_LABELS[t]}
-              </button>
-            ))}
-          </div>
-        </div>
+        <ComprasHeader tabsVisibles={tabsVisibles} mainTab={mainTab} onChange={setMainTab} />
         <RecepcionView />
         {toast && (
           <div className="fixed top-[60px] left-4 right-4 z-[300] rounded-[12px] p-[12px_16px] text-[13px] font-semibold text-white text-center"
@@ -3283,7 +3297,7 @@ export default function FacturasPage() {
 
         {/* Tab pills */}
         <div data-coach-target="facturas-tabs" className="flex gap-[6px] mb-3" style={{ flexWrap: 'wrap' }}>
-          {MAIN_TABS.map(t => (
+          {tabsVisibles.map(t => (
             <button key={t} onClick={() => setMainTab(t)}
               className="px-[12px] py-[5px] rounded-full border-none cursor-pointer text-[12px] font-semibold"
               style={{ background: mainTab === t ? 'white' : 'rgba(255,255,255,0.15)', color: mainTab === t ? 'var(--navy)' : 'rgba(255,255,255,0.7)' }}>

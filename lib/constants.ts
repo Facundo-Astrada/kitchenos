@@ -128,7 +128,12 @@ export const MODULO_CONFIG: Record<
   carta: { label: 'Carta', icon: 'receipt_long', href: '/carta' },
   checklist: { label: 'Plazas', icon: 'playlist_add_check', href: '/checklist' },
   pase: { label: 'Pase', icon: 'swap_horiz', href: '/pase' },
-  facturas: { label: 'Facturas', icon: 'description', href: '/facturas' },
+  // Label/ícono actualizados (S6, sep 2026): Pedidos y Proveedores se
+  // consolidaron acá como tabs (ver TAB_PERMISO en facturas/page.tsx) — un
+  // solo acceso de sidebar para todo el circuito de compras. El id sigue
+  // siendo 'facturas' (no se toca el permiso real de nadie); RUTA_A_MODULO
+  // ahora acepta facturas/pedidos/proveedores para esta ruta.
+  facturas: { label: 'Compras', icon: 'shopping_cart', href: '/facturas' },
   produccion: { label: 'Producción', icon: 'factory', href: '/produccion' },
   merma: { label: 'Merma', icon: 'delete_sweep', href: '/merma' },
   // Label/ícono actualizados (sep 2026, S6): la ficha del equipo, permisos y
@@ -216,22 +221,28 @@ export const MODULOS_EMPRENDIMIENTO: ModuloId[] = [
 export const NAV_ITEMS: ModuloId[] = ['home', 'operaciones', 'recetario', 'stock']
 
 // ── Mapeo ruta → módulo (para protección de rutas) ──────────
-export const RUTA_A_MODULO: Record<string, string> = {
+// Un valor string[] es OR: entra con cualquiera de esos permisos (ver
+// RouteGuard.tsx). Usado por /facturas/pedidos/proveedores desde la
+// consolidación en Compras (S6, sep 2026) — hay puestos reales con 'pedidos'
+// pero sin 'facturas'/'proveedores' (o viceversa), así que la ruta entra con
+// cualquiera de los tres; qué tabs se VEN adentro lo decide cada permiso por
+// separado (facturas/page.tsx filtra MAIN_TABS con puedeVer()).
+export const RUTA_A_MODULO: Record<string, string | string[]> = {
   '/': 'home',
   '/operaciones': 'operaciones',
   '/recetario': 'recetario',
   '/stock': 'stock',
-  '/pedidos': 'pedidos',
+  '/pedidos': ['facturas', 'pedidos', 'proveedores'],
   '/haccp': 'haccp',
   '/reportes': 'reportes',
   '/presupuesto': 'presupuesto',
   '/calendario': 'calendario',
   '/turnos': 'equipo',
   '/organigrama': 'organigrama',
-  '/proveedores': 'proveedores',
+  '/proveedores': ['facturas', 'pedidos', 'proveedores'],
   '/carta': 'carta',
   '/pase': 'pase',
-  '/facturas': 'facturas',
+  '/facturas': ['facturas', 'pedidos', 'proveedores'],
   '/configuracion': 'configuracion',
   '/merma': 'merma',
   '/ventas': 'ventas',
@@ -414,7 +425,7 @@ export const MODULO_DESCRIPCION: Record<ModuloId, string> = {
   carta: 'Los platos que se venden, con su precio y disponibilidad.',
   checklist: 'El recorrido de tu plaza: contás lo que hay y mandás a producir lo que falta.',
   pase: 'El canal entre cocina y salón: 86, avisos y novedades del servicio.',
-  facturas: 'Las facturas de proveedores, cargadas por foto o PDF.',
+  facturas: 'Compras: pedidos a proveedores, facturas cargadas por foto o PDF y recepción de mercadería.',
   produccion: 'El tablero de lo que hay que cocinar hoy, columna por plaza.',
   merma: 'El registro del desperdicio: qué se tiró, cuánto y por qué.',
   equipo: 'La grilla del personal y el fichaje de entrada y salida.',

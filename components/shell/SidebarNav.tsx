@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/auth/context'
 import { usePermisos } from '@/lib/hooks/usePermisos'
-import { MODULO_CONFIG, MODULOS_POR_ROL, ROL_CONFIG } from '@/lib/constants'
+import { MODULO_CONFIG, MODULOS_POR_ROL, ROL_CONFIG, RUTA_A_MODULO } from '@/lib/constants'
 import type { ModuloId } from '@/lib/constants'
 import { NotificacionesBell } from '@/components/notificaciones/NotificacionesBell'
 
@@ -26,7 +26,7 @@ function seccionesNav(esEmprendimiento: boolean): { label: string; color: string
     { label: 'Operaciones', color: 'var(--cat-operaciones)', items: ['home', 'operaciones', 'espacios', ...(esEmprendimiento ? (['tareas'] as ModuloId[]) : []), 'pase', 'equipo'] },
     { label: 'Cocina', color: 'var(--cat-cocina)', items: ['recetario', 'carta', ...(esEmprendimiento ? (['produccion'] as ModuloId[]) : [])] },
     { label: 'Servicio', color: 'var(--cat-servicio)', items: ['salon', 'kds', 'muro', 'reservas'] },
-    { label: 'Insumos', color: 'var(--cat-insumos)', items: ['stock', 'facturas', 'pedidos', 'proveedores', 'merma'] },
+    { label: 'Insumos', color: 'var(--cat-insumos)', items: ['stock', 'facturas', 'merma'] },
     { label: 'Gestión', color: 'var(--cat-gestion)', items: ['reportes', 'presupuesto', 'ventas', 'clientes', 'haccp', 'calendario', 'bitacora'] },
     { label: 'Sistema', color: 'var(--cat-sistema)', items: ['organigrama', 'configuracion'] },
   ]
@@ -58,8 +58,16 @@ export default function SidebarNav({ onImportarClick, dark = false, collapsed = 
   const rolConfig = perfil ? ROL_CONFIG[perfil.rol] : null
   const SECCIONES = seccionesNav(perfilRestaurante === 'emprendimiento')
 
-  const canSee = (id: ModuloId) =>
-    (id === 'home' || isAdmin || puedeVer(id)) && moduloEnPerfil(id)
+  // 'facturas' (Compras) acepta cualquiera de varios permisos desde la
+  // consolidación de Pedidos/Proveedores (S6, sep 2026) — mismo OR-set que
+  // RUTA_A_MODULO, para que el sidebar no esconda el acceso a alguien que
+  // solo tiene 'pedidos' o solo 'proveedores' pero no 'facturas'.
+  const canSee = (id: ModuloId) => {
+    if (id === 'home' || isAdmin) return moduloEnPerfil(id)
+    const gate = RUTA_A_MODULO[MODULO_CONFIG[id]?.href ?? '']
+    const candidatos = Array.isArray(gate) ? gate : [id]
+    return candidatos.some(m => puedeVer(m) && moduloEnPerfil(m))
+  }
 
   return (
     <aside style={{

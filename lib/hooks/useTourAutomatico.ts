@@ -43,9 +43,11 @@ export function useTourAutomatico(bienvenidaAbierta: boolean) {
     if (!tour || !TOURS[tour]) return
     if (tourVisto(tour) || disparadosRef.current.has(tour)) return
 
-    const modulo = RUTA_A_MODULO[basePath]
-    if (modulo && !moduloEnPerfil(modulo)) return
-    if (modulo && modulo !== 'home' && !isAdmin && !puedeVer(modulo)) return
+    // OR: ver el comentario en RUTA_A_MODULO (consolidación de Compras, S6 sep 2026).
+    const moduloRaw = RUTA_A_MODULO[basePath]
+    const candidatos = moduloRaw ? (Array.isArray(moduloRaw) ? moduloRaw : [moduloRaw]) : []
+    if (candidatos.length > 0 && !candidatos.some(m => moduloEnPerfil(m))) return
+    if (candidatos.length > 0 && !candidatos.includes('home') && !isAdmin && !candidatos.some(m => puedeVer(m))) return
 
     disparadosRef.current.add(tour)
     const t = setTimeout(() => {

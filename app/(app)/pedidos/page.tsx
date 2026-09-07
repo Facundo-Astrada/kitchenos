@@ -3,6 +3,7 @@
 import PageTransition from '@/components/PageTransition'
 import { motion } from 'motion/react'
 import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { usePedidos } from '@/lib/hooks/usePedidos'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import { createClient } from '@/lib/supabase/client'
@@ -34,6 +35,41 @@ const STATUS_COLORS: Record<EstadoPedido, { bg: string; text: string; label: str
   enviado:  { bg: '#dbeafe', text: '#1d4ed8', label: 'Enviado' },
   parcial:  { bg: '#fef3c7', text: '#92400e', label: 'Parcial' },
   recibido: { bg: '#d1fae5', text: '#065f46', label: 'Recibido' },
+}
+
+// Filtro de estado — misma lista de chips en dos superficies: `onDark`
+// dentro del PageHeader navy (ruta standalone) o clara cuando Pedidos vive
+// embebido en Compras (S6, sep 2026) y el navy ya lo puso el padre.
+function FiltrosPedidos({
+  filter, onChange, onDark = false,
+}: {
+  filter: 'todos' | EstadoPedido
+  onChange: (f: 'todos' | EstadoPedido) => void
+  onDark?: boolean
+}) {
+  return (
+    <div data-coach-target="pedidos-filtros" style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+      {(['todos', 'borrador', 'enviado', 'parcial', 'recibido'] as const).map(f => (
+        <button
+          key={f}
+          onClick={() => onChange(f)}
+          style={{
+            padding: '5px 12px', borderRadius: 20, border: onDark ? 'none' : '1px solid var(--border)',
+            background: onDark
+              ? (filter === f ? '#fff' : 'rgba(255,255,255,0.12)')
+              : (filter === f ? 'var(--navy)' : 'var(--surface)'),
+            color: onDark
+              ? (filter === f ? 'var(--navy)' : 'rgba(255,255,255,0.8)')
+              : (filter === f ? '#fff' : 'var(--text-2)'),
+            fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+            fontFamily: 'inherit',
+          }}
+        >
+          {f === 'todos' ? 'Todos' : STATUS_COLORS[f].label}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 // ── PDF Export ──────────────────────────────────────────
@@ -1032,7 +1068,17 @@ function RecibirView({
 // ── MAIN PAGE ───────────────────────────────────────────
 type View = 'list' | 'nuevo' | 'detail' | 'recibir'
 
-export default function PedidosPage() {
+// Ruta vieja — Pedidos vive ahora como tab dentro de Compras (/facturas).
+// Redirigimos para una sola puerta de entrada (mismo patrón que
+// produccion/page.tsx: PedidosView es la vista real, reusada embebida acá y
+// desde facturas/page.tsx).
+export default function PedidosRoute() {
+  const router = useRouter()
+  useEffect(() => { router.replace('/facturas?tab=pedidos') }, [router])
+  return null
+}
+
+export function PedidosView({ embedded = false }: { embedded?: boolean } = {}) {
   const RESTAURANTE_ID = useRestauranteId()
   const { pedidos, loading, crearPedido, enviarPedido, recibirPedido, eliminarPedido, fetchItems } = usePedidos()
   const { proveedores } = useProveedores()
@@ -1168,36 +1214,37 @@ export default function PedidosPage() {
   return (
     <PageTransition>
     <div className="scroll-body">
-      <PageHeader
-        title="Pedidos"
-        icon="shopping_cart"
-        subtitle={loading ? '…' : `${pedidos.length} pedido${pedidos.length !== 1 ? 's' : ''}`}
-        actions={
-          <>
-            <ActionButton icon="auto_awesome" label="Sugerir pedido" onClick={() => setShowSugerencia(true)} />
-            <ActionButton icon="add" label="Nuevo pedido" onClick={() => setView('nuevo')} />
-          </>
-        }
-        below={
-          <div data-coach-target="pedidos-filtros" style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
-            {(['todos', 'borrador', 'enviado', 'parcial', 'recibido'] as const).map(f => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                style={{
-                  padding: '5px 12px', borderRadius: 20, border: 'none',
-                  background: filter === f ? '#fff' : 'rgba(255,255,255,0.12)',
-                  color: filter === f ? 'var(--navy)' : 'rgba(255,255,255,0.8)',
-                  fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-                  fontFamily: 'inherit',
-                }}
-              >
-                {f === 'todos' ? 'Todos' : STATUS_COLORS[f].label}
-              </button>
-            ))}
+      {!embedded ? (
+        <PageHeader
+          title="Pedidos"
+          icon="shopping_cart"
+          subtitle={loading ? '…' : `${pedidos.length} pedido${pedidos.length !== 1 ? 's' : ''}`}
+          actions={
+            <>
+              <ActionButton icon="auto_awesome" label="Sugerir pedido" onClick={() => setShowSugerencia(true)} />
+              <ActionButton icon="add" label="Nuevo pedido" onClick={() => setView('nuevo')} />
+            </>
+          }
+          below={<FiltrosPedidos filter={filter} onChange={setFilter} onDark />}
+        />
+      ) : (
+        // Embebido en Compras (S6, sep 2026): el navy + tabs ya los pone el
+        // padre (facturas/page.tsx) — acá solo las acciones propias de
+        // Pedidos y el filtro de estado, en superficie clara.
+        <div style={{ padding: '12px 16px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setShowSugerencia(true)} style={{ flex: 1, padding: '11px 14px', borderRadius: 12, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-1)', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', fontFamily: 'inherit' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>auto_awesome</span>
+              Sugerir pedido
+            </button>
+            <button onClick={() => setView('nuevo')} style={{ flex: 1, padding: '11px 14px', borderRadius: 12, background: 'var(--navy)', border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', fontFamily: 'inherit' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
+              Nuevo pedido
+            </button>
           </div>
-        }
-      />
+          <FiltrosPedidos filter={filter} onChange={setFilter} />
+        </div>
+      )}
 
       {/* Content */}
       <div data-coach-target="pedidos-lista" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
