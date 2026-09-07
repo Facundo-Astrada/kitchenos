@@ -19,7 +19,13 @@ const ROOT = process.cwd()
 const TECHOS_LINEAS: Record<string, number> = {
   'app/(app)/carta/page.tsx': 2060, // día 7 plan-consolidado: moves puros a cards.tsx/exportar.ts/PackagingGruposDrawer.tsx/ImportCartaModal.tsx/EditarPlato.tsx
   'app/(app)/recetario/page.tsx': 2850, // sep 2026: pestaña "Platos" se fue (Fase 3, Carta pasa a ser la dueña del plato) — 3167 → 2753, techo bajado con margen
-  'app/(app)/facturas/page.tsx': 3666, // S6 sep 2026: 3640 → 3651 por el tab Pedidos + filtro por permiso
+  'app/(app)/facturas/page.tsx': 3692, // S6 sep 2026: 3666 → 3692 por el Bloque 5 (simplificación real de
+  // Gastos): categoría/estado/proveedor eran 3 selects + un resumen en texto
+  // siempre visibles en el header, redundante con las 4 KPI cards de abajo.
+  // Pasaron a un popover "Filtros" (badge de conteo, un solo botón) — menos
+  // elementos en pantalla, aunque el JSX del popover (backdrop + panel
+  // posicionado) sea más largo que las 3 líneas que reemplazó.
+  // 3640 → 3651 por el tab Pedidos + filtro por permiso
   // (consolidación Compras, de-duplicado el header repetido antes de subir
   // el techo). 3651 → 3666: bug real encontrado verificando ese mismo
   // bloque contra producción — /pedidos y /proveedores redirigían a

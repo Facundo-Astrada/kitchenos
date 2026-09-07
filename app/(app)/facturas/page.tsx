@@ -159,7 +159,7 @@ const MAIN_TABS = ['pedidos', 'recepcion', 'facturas', 'proveedores', 'listas', 
 function esMainTab(v: string | null): v is MainTab {
   return v === 'facturas' || v === 'listas' || v === 'proveedores' || v === 'recepcion' || v === 'categorias' || v === 'pedidos'
 }
-const TAB_LABELS: Record<MainTab, string> = { pedidos: 'Pedidos', facturas: 'Gastos', recepcion: 'Recepción', categorias: 'Cat. de Gastos', listas: 'Listas', proveedores: 'Proveedores' }
+const TAB_LABELS: Record<MainTab, string> = { pedidos: 'Pedidos', facturas: 'Facturas', recepcion: 'Recepción', categorias: 'Cat. de Gastos', listas: 'Listas', proveedores: 'Proveedores' }
 // Qué permiso habilita cada tab de Compras — hay puestos reales con 'pedidos'
 // sin 'facturas'/'proveedores' (S6, sep 2026), así que cada tab se filtra por
 // su propio permiso en vez de asumir que quien entra a la ruta ve todo.
@@ -2700,6 +2700,12 @@ export default function FacturasPage() {
   const [catFiltroId, setCatFiltroId] = useState('')
   const [estadoFiltro, setEstadoFiltro] = useState('')
   const [proveedorFiltro, setProveedorFiltro] = useState('')
+  // Bloque 5 (S6, sep 2026): categoría/estado/proveedor eran 3 selects + un
+  // resumen de período en texto siempre visibles en el header, encima de las
+  // 4 KPI cards que ya cuentan la misma plata — puro ruido antes de llegar a
+  // una sola factura. Los 3 selects pasan a un popover ("Filtros"), y se saca
+  // el resumen en texto (redundante con las KPI cards de abajo).
+  const [showFiltrosAvanzados, setShowFiltrosAvanzados] = useState(false)
   const [porPagar, setPorPagar] = useState<Factura[]>([])
   const [porPagarLoading, setPorPagarLoading] = useState(false)
   const [selectedFactura, setSelectedFactura] = useState<Factura | null>(null)
@@ -3321,64 +3327,84 @@ export default function FacturasPage() {
           ))}
         </div>
 
-        {/* Period summary */}
-        {filtro === 'por_pagar' ? (
-          <p className="text-white/70 text-[11px] m-0 mb-3">
-            Adeudado: {fmt(totalPorPagar)} en {porPagar.length} factura{porPagar.length !== 1 ? 's' : ''} a crédito · {porPagarGrupos.length} proveedor{porPagarGrupos.length !== 1 ? 'es' : ''}
-          </p>
-        ) : (
-          <p className="text-white/70 text-[11px] m-0 mb-3">
-            {filtro === 'semana' ? 'Esta semana' : filtro === 'mes' ? 'Este mes' : 'Total'}:
-            {' '}{fmt(resumen.total)} en {filtro === 'todas' && totalCount > resumen.count ? `${totalCount} facturas (${resumen.count} cargadas)` : `${resumen.count} facturas de ${resumen.proveedores} proveedores`}
-          </p>
-        )}
+        {/* Period pills + Filtros (categoría/estado/proveedor, en popover) en
+            una sola fila — antes eran 3 filas separadas (resumen en texto,
+            pills, 3 selects siempre abiertos) repitiendo lo que las KPI
+            cards de abajo ya cuentan. */}
+        <div className="flex items-center gap-[6px] pb-[12px]" style={{ flexWrap: 'wrap' }}>
+          <div data-coach-target="facturas-filtros" className="flex gap-[6px]" style={{ flexWrap: 'wrap' }}>
+            {([['todas', 'Todas'], ['semana', 'Esta semana'], ['mes', 'Este mes'], ['por_pagar', 'Por pagar']] as const).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setFiltro(id)}
+                className="px-[10px] py-[4px] rounded-full border-none cursor-pointer text-[11px] font-semibold"
+                style={{
+                  background: filtro === id ? 'white' : 'rgba(255,255,255,0.15)',
+                  color: filtro === id ? 'var(--navy)' : 'rgba(255,255,255,0.7)',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-        {/* Filter pills */}
-        <div data-coach-target="facturas-filtros" className="flex gap-[6px] pb-[10px]">
-          {([['todas', 'Todas'], ['semana', 'Esta semana'], ['mes', 'Este mes'], ['por_pagar', 'Por pagar']] as const).map(([id, label]) => (
+          <div style={{ position: 'relative', marginLeft: 'auto' }}>
             <button
-              key={id}
-              onClick={() => setFiltro(id)}
+              onClick={() => setShowFiltrosAvanzados(v => !v)}
               className="px-[10px] py-[4px] rounded-full border-none cursor-pointer text-[11px] font-semibold"
               style={{
-                background: filtro === id ? 'white' : 'rgba(255,255,255,0.15)',
-                color: filtro === id ? 'var(--navy)' : 'rgba(255,255,255,0.7)',
+                display: 'flex', alignItems: 'center', gap: 4,
+                background: (catFiltroId || estadoFiltro || proveedorFiltro) ? 'white' : 'rgba(255,255,255,0.15)',
+                color: (catFiltroId || estadoFiltro || proveedorFiltro) ? 'var(--navy)' : 'rgba(255,255,255,0.7)',
               }}
             >
-              {label}
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>tune</span>
+              Filtros
+              {[catFiltroId, estadoFiltro, proveedorFiltro].filter(Boolean).length > 0 && (
+                <span>· {[catFiltroId, estadoFiltro, proveedorFiltro].filter(Boolean).length}</span>
+              )}
             </button>
-          ))}
-        </div>
 
-        {/* Filtros: categoría / estado / proveedor */}
-        <div className="flex gap-[6px] pb-[12px]" style={{ flexWrap: 'wrap' }}>
-          {(() => {
-            const selSt: React.CSSProperties = { padding: '5px 9px', borderRadius: 8, border: '1px solid rgba(255,255,255,.25)', background: 'rgba(255,255,255,.12)', color: '#fff', fontSize: 11, fontWeight: 600, fontFamily: 'inherit', outline: 'none' }
-            return (
+            {showFiltrosAvanzados && (
               <>
-                <select value={catFiltroId} onChange={e => setCatFiltroId(e.target.value)} style={selSt}>
-                  <option value="" style={{ color: '#000' }}>Categoría: todas</option>
-                  {categoriasGasto.map(c => <option key={c.id} value={c.id} style={{ color: '#000' }}>{c.nombre}</option>)}
-                </select>
-                <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={selSt}>
-                  <option value="" style={{ color: '#000' }}>Estado: todos</option>
-                  {(['pendiente', 'confirmada', 'pagada', 'observada'] as FacturaStatus[]).map(s => (
-                    <option key={s} value={s} style={{ color: '#000' }}>{STATUS_CONFIG[s].label}</option>
-                  ))}
-                </select>
-                <select value={proveedorFiltro} onChange={e => setProveedorFiltro(e.target.value)} style={{ ...selSt, maxWidth: 180 }}>
-                  <option value="" style={{ color: '#000' }}>Proveedor: todos</option>
-                  {proveedores.map(p => <option key={p.id} value={p.nombre} style={{ color: '#000' }}>{p.nombre}</option>)}
-                </select>
-                {(catFiltroId || estadoFiltro || proveedorFiltro) && (
-                  <button onClick={() => { setCatFiltroId(''); setEstadoFiltro(''); setProveedorFiltro('') }}
-                    style={{ ...selSt, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3 }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 13 }}>close</span>Limpiar
-                  </button>
-                )}
+                <div style={{ position: 'fixed', inset: 0, zIndex: 199 }} onClick={() => setShowFiltrosAvanzados(false)} />
+                <div style={{
+                  position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 200,
+                  background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12,
+                  padding: 12, width: 220, boxShadow: 'var(--shadow-3)',
+                  display: 'flex', flexDirection: 'column', gap: 8,
+                }}>
+                  {(() => {
+                    const selSt: React.CSSProperties = { padding: '7px 9px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', outline: 'none', width: '100%' }
+                    return (
+                      <>
+                        <select value={catFiltroId} onChange={e => setCatFiltroId(e.target.value)} style={selSt}>
+                          <option value="">Categoría: todas</option>
+                          {categoriasGasto.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                        </select>
+                        <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={selSt}>
+                          <option value="">Estado: todos</option>
+                          {(['pendiente', 'confirmada', 'pagada', 'observada'] as FacturaStatus[]).map(s => (
+                            <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
+                          ))}
+                        </select>
+                        <select value={proveedorFiltro} onChange={e => setProveedorFiltro(e.target.value)} style={selSt}>
+                          <option value="">Proveedor: todos</option>
+                          {proveedores.map(p => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
+                        </select>
+                        {(catFiltroId || estadoFiltro || proveedorFiltro) && (
+                          <button onClick={() => { setCatFiltroId(''); setEstadoFiltro(''); setProveedorFiltro('') }}
+                            style={{ ...selSt, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, background: 'transparent', border: 'none', color: 'var(--accent)' }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>close</span>Limpiar filtros
+                          </button>
+                        )}
+                      </>
+                    )
+                  })()}
+                </div>
               </>
-            )
-          })()}
+            )}
+          </div>
         </div>
       </div>
 
