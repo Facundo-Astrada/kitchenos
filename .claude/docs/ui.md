@@ -195,6 +195,14 @@ Con `table-layout:fixed` y `box-sizing:border-box` (Tailwind preflight), el anch
 
 Un reordenar por long-press que compara `clientY` contra el centro de cada ítem (patrón del mise, `checklist/ClientView.tsx`) **se rompe** con dos tarjetas lado a lado: mismo centro vertical, el "más cercano" sale al azar. Si se agrega una grilla en desktop, condicionarla a `@media (min-width: 1024px) and (pointer: fine)` — no solo al ancho — para que una tablet táctil ancha (iPad landscape = 1024px) conserve columna única y drag funcionando.
 
+## Long-press con timer — cancelar en `onTouchMove`, no solo en `onTouchEnd`/`onTouchCancel`
+
+Un gesto de "mantener apretado N ms dispara X" (duda en `ItemOps.tsx`, nota en `checklist/ClientView.tsx`) que solo escucha `onTouchStart`+`onTouchEnd`/`onTouchCancel` se dispara igual cuando el toque termina siendo un scroll: el dedo no se levanta hasta después de N ms, así que el timer llega a cumplirse aunque la intención fuera solo deslizar la lista. Agregar `onTouchMove={cancelTimer}` en el mismo elemento — cualquier movimiento cancela, mantenerse quieto y apretar lo sigue disparando.
+
+## Sheet/modal con auto-guardado por campo (`onBlur`) — el botón de cerrar tiene que esperar el guardado, no solo cerrar
+
+Si cada campo persiste solo al perder foco (patrón "editar sin botón Guardar", ver `RecetaQuickEditModal.tsx`), tocar el botón de cerrar justo después de escribir dispara el blur y el cierre casi en el mismo instante: si el guardado del blur falla, el componente ya se desmontó antes de que el aviso de error pudiera verse — queda indistinguible de "guardó bien". El cierre (botón "Listo", la X, el backdrop) tiene que re-intentar explícitamente lo pendiente (`await` cada mutación) y solo desmontar si todo terminó bien; si falla, se queda abierto con el error visible. Mismo cuidado con cualquier fila de "agregar X" que dependa de un botón "+" separado del campo: cerrar sin haber tocado ese "+" descarta lo tipeado en silencio salvo que el cierre también la intente guardar.
+
 ## FABs
 
 `BottomNav` ocupa ~76px. FABs en `bottom: 110` mínimo para no quedar tapados: `<button style={{position:'fixed', bottom:110, right:16}}>`.

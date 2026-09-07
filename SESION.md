@@ -1,24 +1,32 @@
-# Sesión — 2026-09-05 — Mise: prioridad sin salto, nota por ítem, avisos plegados
+# Sesión — 2026-09-05 — Editor rápido de receta desde OPS (Mise + Producción)
 
-Devolución de uso real (capturas de Producción y Mise): cambiar la prioridad de un ítem lo saltaba de grupo con cada tap y el dedo terminaba tocando donde ya no estaba el botón; los recuadros "Te dejaron en producción"/"Pendiente del turno anterior" comían pantalla antes del primer ítem real. 2 commits, pusheados y deployados (`Ready` en Vercel).
+Devolución de uso real sobre Producción/Mise (3 pedidos sueltos) que terminó en una feature nueva completa: un editor de receta centrado, abierto sin salir de OPS, con IA y vínculo a stock. 8 commits, pusheados y deployados.
 
 ## Qué se cerró
 
-- **Picker de prioridad sin salto** (`7a552d2`): `PrioridadPicker` nuevo (`components/ops/PrioridadPicker.tsx` + geometría pura en `lib/ui/picker.ts`, testeada) — mantener apretado abre una columna vertical SP/P/REF al lado del badge, deslizar resalta la opción, soltar recién ahí mueve el ítem; un tap solo la deja abierta para elegir tocando. Reemplaza el ciclo-por-tap en `ItemOps.tsx`, `ProductoMiseCard.tsx` y la fila de Modo Control (`checklist/ClientView.tsx`).
-- **Nota por ítem** (`7a552d2`): `checklist_items.nota/nota_por/nota_at` (migrada y aplicada en prod), `NotaItemSheet.tsx` (~1/3 de pantalla, sin `autoFocus` — abre tras un long-press, ver memoria de teclado móvil), abierto con mantener-apretado en Modo Control o el botón "Nota" del panel expandido del Mise normal. Ícono azul marca el ítem con nota. Umbral de long-press subido de 400ms a 550ms (`8f1a416`) tras feedback de que se sentía corto.
-- **Avisos del turno anterior plegados** (`7a552d2`): `AvisosTurno.tsx` — los tres recuadros pasan a chips de una línea, uno abierto a la vez, plegados por defecto.
-- Copy actualizado en `MiseGuiaSheet`, `MiseTourOverlay` y el contexto del Coach (`/api/coach/route.ts`) para que dejen de enseñar el gesto viejo.
-- Verificado con dev server + Playwright contra Supabase real (login, Modo Control, drag SP→REF, long-press→nota→guardar, tap corto sigue tildando) — datos de prueba revertidos en El Rescoldo (cuenta de capturas de marketing).
-- `ClientView.tsx` se pasó del techo de líneas del ratchet (`lib/ingenieria/ratchets.test.ts`) al sumar todo esto — se resolvió extrayendo `AvisosTurno.tsx` a archivo propio, no subiendo el techo.
+- **`RecetaQuickEditModal`** (`components/ops/RecetaQuickEditModal.tsx`, nuevo): ventana centrada con fondo translúcido — rendimiento, procedimiento, ingredientes (desplegable de stock/subreceta al tipear con auto-link de costo real, historial de producción. Se abre desde un ícono chico en `ProductoMiseCard` cuando la receta vinculada está incompleta (sin rendimiento/gramaje/procedimiento), y desde "Crear receta" en `RecetaDrawer` (Producción) cuando dice "Sin receta cargada".
+- **"Completar con IA"** dentro del editor: texto pegado o foto (cámara/galería, la mayoría de las recetas está en la libretita de la cocina) vía el mismo `/api/recetas/import` que usa Recetario — sin pantalla de revisión intermedia, el editor abierto ES la revisión.
+- **Auto-link a stock real**: cada ingrediente agregado (a mano o por IA) corre el mismo matching por nombre que `agregarReceta()` de Recetario (exacto/parcial, nunca fuzzy) — antes quedaba con costo $0 aunque el producto ya existiera en Stock.
+- **Dos bugs de guardado reales, encontrados en producción real y confirmados por SQL directo**: (1) ningún punto de escritura del editor mostraba error — un fallo quedaba mudo; (2) "Listo"/X/backdrop solo cerraban, confiando en el auto-guardado por blur — un ingrediente tipeado sin tocar "+", o cerrar justo después de escribir (blur y cierre casi simultáneos), perdía el dato en silencio. Ahora todo mutation error se ve, y "Listo" reintenta explícitamente lo pendiente antes de desmontar.
+- **Recetas completadas desde el editor ahora se publican solas**: nacían en `status: 'draft'` (placeholder linkeado desde una tarea) y Recetario solo lista publicadas — quedaban invisibles pese a tener datos reales. `publicarReceta()` se dispara al cerrar si sigue en draft y ya tiene ingredientes.
+- Sacado el long-press que marcaba "duda" por accidente en Producción (`ItemOps.tsx`) — se abría al scrollear, sin cancelar en `onTouchMove`. Se deja el mismo bug arreglado (no sacado) en la nota del Mise, que sí se usa.
+- "Agregar preparación" más marcado en el pie de cada columna de Producción (prop `prominent` en `QuickAdd`).
+- Publicada a mano "Pacu asado" (la receta de prueba de esta sesión).
+- Docs actualizados: `ESTADO-ACTUAL.md` (filas Recetario/Mise/OPS), `.claude/docs/columnas.md` (`recetas.status` — el gotcha de draft invisible), `.claude/docs/ui.md` (2 patrones nuevos: long-press debe cancelar en touchmove, cierre de sheet con auto-save debe esperar el guardado).
 
 ## Qué quedó a medias
 
-Nada a medio hacer en lo planeado. Deuda dejada a propósito (anotada en `PENDIENTES.md` § Backlog chico): la nota del ítem no viaja a la tarea de Producción que sale de él (son mensajes de módulos distintos, por ahora), y `checklist_items.observacion` (legacy, sin caller) no se dropeó.
+**Hallazgo sin tocar, a pedido explícito de Facundo ("yo las reviso no las cargues")**: ~200 recetas en `draft` en esta cuenta, la mayoría placeholders vacíos (0 ingredientes) — probablemente de una sincronización vieja de menú/OPS. De esas, **9 ya tienen ingredientes cargados** y siguen invisibles en Recetario:
+- Brocheta de pollo (5), Polenta blanca. Queso y hongos. (4), Coliflor pickle (6)
+- Crema de Ajo Casera (5) — **duplicada**, dos filas distintas
+- Coco en escamas, Almendras, Nueces peladas, Queso de cabra semicurado, Sal pringles, Leche entera tetrabrick (1 c/u)
+
+No se tocaron. Facundo las revisa a mano (por la duplicada, conviene decidir cuál queda antes de publicar cualquiera).
 
 ## Probar primero mañana
 
-Todo lo de arriba ya se probó en producción real (no solo dev). Vale la pena un pase rápido en el celular real de un cocinero (no solo Playwright/desktop) para el gesto de arrastre del picker — la geometría se testeó con mouse-drag, que dispara los mismos Pointer Events que un dedo, pero el `setPointerCapture` en touch real de un celular concreto no se verificó todavía.
+Nada del código nuevo quedó sin confirmar en uso real — los 3 bugs de guardado se repitieron y se volvieron a probar hasta que el usuario confirmó "Funciona". Sí vale un pase por **desktop** (todo esto se probó y reportó desde celular) y por **otra cuenta** (Bros) para ver si el editor rápido también ayuda ahí, dado el volumen de drafts que tiene El Rescoldo.
 
 ## Próximo paso concreto
 
-Sin instrucción explícita de qué sigue. Cola de `PENDIENTES.md` por prioridad: el 🟠 más viejo sigue siendo SMTP propio para invitaciones (frenado en dominio propio) o el punto de alertas de producción rota.
+Ninguna instrucción explícita de qué sigue — quedó abierto en "Facundo revisa los 9 drafts con contenido". Cola de `PENDIENTES.md` por prioridad: el 🟠 más viejo sigue siendo SMTP propio para invitaciones (frenado en dominio propio) o el punto de alertas de producción rota.

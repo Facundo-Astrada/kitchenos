@@ -14,7 +14,7 @@
 | `productos` | `nota_recepcion TEXT NULL` — estándar de recepción (rechazar si llega con X), campo secundario fuera del modal principal | — |
 | `tareas` | `status` (`'pendiente'\|'en_proceso'\|'completada'`) | `completada` (bool) |
 | `tareas` | `fecha_limite` | `fecha_vencimiento` |
-| `recetas` | `activa` (soft-delete), `status` (`'published'\|'draft'`) | `deleted`, `activo` |
+| `recetas` | `activa` (soft-delete), `status` (`'published'\|'draft'`) — Recetario (`app/(app)/recetario/page.tsx`) solo lista `status !== 'draft'` en la vista principal; una receta placeholder linkeada desde una tarea (`tareas.receta_id`) suele nacer en `draft` y queda invisible ahí aunque tenga ingredientes reales. `publicarReceta()` (`useRecetas.ts`) la pasa a `published` | `deleted`, `activo` |
 | `recetas` | `tiempo_min` (int) | `tiempo_minutos` |
 | `ingredientes` | `producto_id` (FK), `costo_unitario`, `unidad_costo`, `grupo TEXT NULL` (etapa editable, agrupa visualmente, no afecta food cost). Columnas OPS (`plaza, seccion_mise, cantidad_ops, unidad_ops, recipiente_nombre, peso_porcion, peso_porcion_unidad`) — activas cuando la receta es `es_plato`; subrecetas alimentan el mise vía `upsertMiseChecklistItem` | — |
 | `recetas` | `es_plato BOOLEAN` — flag explícito "trabajar como plato" (muestra OPS por ingrediente). Distinto del derivado `en_carta` de `useRecetas` (existe `carta_item.receta_id`) | — |
