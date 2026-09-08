@@ -509,7 +509,7 @@ export default function PersonalReportePage() {
                         gap: 6,
                       }}
                     >
-                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy)' }}>{podioLabels[i]}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy-ink)' }}>{podioLabels[i]}</div>
                       <Avatar initials={p.initials} color={p.color} size={32} />
                       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)', marginTop: 2, lineHeight: 1.3 }}>
                         {p.nombre.split(' ')[0]}

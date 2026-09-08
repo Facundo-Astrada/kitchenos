@@ -94,7 +94,7 @@ export default function ConfiguracionPage() {
         <button
           onClick={() => router.push('/organigrama')}
           className="w-full flex items-center justify-between rounded-xl px-4 py-3 mb-4"
-          style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--navy)', cursor: 'pointer' }}
+          style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--navy-ink)', cursor: 'pointer' }}
         >
           <span className="flex items-center gap-2 text-sm font-semibold">
             <span className="material-symbols-outlined" style={{ fontSize: 18 }}>account_tree</span>
@@ -226,7 +226,7 @@ function RestauranteTab({
             <span
               key={p}
               className="px-3 py-1 rounded-full text-xs font-semibold"
-              style={{ background: 'rgba(28,45,74,0.08)', color: 'var(--navy)', border: '1px solid var(--border)' }}
+              style={{ background: 'rgba(28,45,74,0.08)', color: 'var(--navy-ink)', border: '1px solid var(--border)' }}
             >
               {p.charAt(0).toUpperCase() + p.slice(1)}
             </span>

@@ -389,7 +389,7 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
               <span className="material-symbols-outlined" style={{ fontSize: 15 }}>auto_awesome</span>
               Sugerir producción
             </button>
-            <button onClick={() => setShowMenuPicker(true)} style={{ background: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 700, color: 'var(--navy)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+            <button onClick={() => setShowMenuPicker(true)} style={{ background: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: 12, fontWeight: 700, color: 'var(--navy-ink)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 15 }}>menu_book</span>
               Cargar menú
             </button>
@@ -583,7 +583,7 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
                         flex: 1, padding: '8px 10px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
                         border: `1.5px solid ${!multiSelectMode ? 'var(--navy)' : 'var(--border)'}`,
                         background: !multiSelectMode ? 'rgba(28,45,74,.06)' : 'var(--bg)',
-                        color: !multiSelectMode ? 'var(--navy)' : 'var(--text-2)',
+                        color: !multiSelectMode ? 'var(--navy-ink)' : 'var(--text-2)',
                         fontSize: 12, fontWeight: 700,
                       }}
                     >
@@ -595,7 +595,7 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
                         flex: 1, padding: '8px 10px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
                         border: `1.5px solid ${multiSelectMode ? 'var(--navy)' : 'var(--border)'}`,
                         background: multiSelectMode ? 'rgba(28,45,74,.06)' : 'var(--bg)',
-                        color: multiSelectMode ? 'var(--navy)' : 'var(--text-2)',
+                        color: multiSelectMode ? 'var(--navy-ink)' : 'var(--text-2)',
                         fontSize: 12, fontWeight: 700,
                       }}
                     >

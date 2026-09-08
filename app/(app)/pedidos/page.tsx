@@ -204,7 +204,7 @@ function PedidoCard({ pedido, onClick, onWhatsApp, onPDF }: {
                 ? ` · llega ${fmtRangoEntrega(pedido.entrega_desde, pedido.entrega_hasta)}`
                 : pedido.fecha_entrega_esperada ? ` → ${fmtDate(pedido.fecha_entrega_esperada)}` : ''}
             </span>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy)' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy-ink)' }}>
               {fmtMoney(pedido.total_estimado ?? 0)}
             </span>
           </div>
@@ -476,12 +476,12 @@ function NuevoPedidoView({
               {sugerencias.map(s => (
                 <button key={s.producto_nombre} onClick={() => addSugerencia(s)} style={{
                   padding: '8px 12px', borderRadius: 10, fontSize: 13,
-                  border: '1.5px solid var(--navy)', background: 'var(--surface)',
+                  border: '1.5px solid var(--navy-ink)', background: 'var(--surface)',
                   color: 'var(--text-1)', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', gap: 6,
                   transition: 'background 0.15s',
                 }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--navy)' }}>add_circle</span>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--navy-ink)' }}>add_circle</span>
                   <span style={{ fontWeight: 600 }}>{s.producto_nombre}</span>
                   <span style={{ color: 'var(--text-3)', fontSize: 12 }}>
                     {fmtMoney(s.precio_unitario)}/{s.unidad}
@@ -531,7 +531,7 @@ function NuevoPedidoView({
                   {activeItemIdx === idx && stockSuggestions.length > 0 && (
                     <div style={{
                       position: 'absolute', top: '100%', left: 0, right: 0,
-                      background: 'var(--surface)', border: '1.5px solid var(--navy)',
+                      background: 'var(--surface)', border: '1.5px solid var(--navy-ink)',
                       borderRadius: 10, marginTop: 4, zIndex: 20,
                       boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
                       maxHeight: 180, overflowY: 'auto',
@@ -601,7 +601,7 @@ function NuevoPedidoView({
                 </div>
               </div>
               {(parseFloat(item.cantidad) > 0 && parseFloat(item.precio_estimado) > 0) && (
-                <div style={{ textAlign: 'right', fontSize: 12, color: 'var(--navy)', fontWeight: 600, marginTop: 6 }}>
+                <div style={{ textAlign: 'right', fontSize: 12, color: 'var(--navy-ink)', fontWeight: 600, marginTop: 6 }}>
                   Subtotal: {fmtMoney(parseFloat(item.cantidad) * parseFloat(item.precio_estimado))}
                 </div>
               )}
@@ -644,7 +644,7 @@ function NuevoPedidoView({
             <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 4 }}>
               {filledItems.length} {filledItems.length === 1 ? 'producto' : 'productos'}
             </div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--navy)' }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--navy-ink)' }}>
               {fmtMoney(total)}
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>
@@ -663,7 +663,7 @@ function NuevoPedidoView({
         }}>
           <div>
             <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Total estimado</div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--navy)' }}>{fmtMoney(total)}</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--navy-ink)' }}>{fmtMoney(total)}</div>
           </div>
           <button
             disabled={!canSave || saving}
@@ -803,7 +803,7 @@ function DetailView({
                 )}
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--navy)' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--navy-ink)' }}>
                   {fmtMoney(it.cantidad * (it.precio_estimado ?? 0))}
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
@@ -820,7 +820,7 @@ function DetailView({
           background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12,
         }}>
           <span style={{ fontWeight: 600, color: 'var(--text-1)' }}>Total estimado</span>
-          <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--navy)' }}>
+          <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--navy-ink)' }}>
             {fmtMoney(pedido.total_estimado ?? 0)}
           </span>
         </div>

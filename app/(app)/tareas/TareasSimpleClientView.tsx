@@ -387,7 +387,7 @@ function AreaGrupo({
                 disabled={enviando}
                 style={{
                   width: '100%', padding: '9px 12px', borderRadius: 10,
-                  border: '1px solid var(--navy)', background: 'var(--surface)',
+                  border: '1px solid var(--navy-ink)', background: 'var(--surface)',
                   fontSize: 13, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box',
                 }}
               />

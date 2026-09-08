@@ -112,7 +112,7 @@ export default function WelcomeDashboard({ nombre }: WelcomeDashboardProps) {
                 className="w-[36px] h-[36px] rounded-full flex items-center justify-center flex-shrink-0 text-[13px] font-bold"
                 style={{
                   background: 'rgba(67,97,160,.1)',
-                  color: 'var(--navy)',
+                  color: 'var(--navy-ink)',
                 }}
               >
                 {step}

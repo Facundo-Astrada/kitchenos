@@ -344,7 +344,7 @@ export function ImportCartaModal({
                             value={item.precio_venta ?? ''}
                             onChange={e => updateItem(idx, 'precio_venta', e.target.value ? parseFloat(e.target.value) : null)}
                             style={{
-                              width: 75, fontSize: 13, fontWeight: 700, color: 'var(--navy)',
+                              width: 75, fontSize: 13, fontWeight: 700, color: 'var(--navy-ink)',
                               border: '1px solid var(--border)', borderRadius: 6,
                               padding: '2px 6px', background: 'var(--surface)', textAlign: 'right',
                             }}

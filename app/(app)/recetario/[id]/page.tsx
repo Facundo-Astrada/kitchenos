@@ -1135,7 +1135,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                         style={{ width: 48, border: '1px solid var(--border)', background: 'var(--bg)', borderRadius: 6, padding: '3px 6px', fontSize: 12, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: 'var(--text-1)', textAlign: 'center', outline: 'none' }}
                       />
                       <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)' }}>%</span>
-                      <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--navy)', fontFamily: "'DM Mono', monospace", marginLeft: 'auto' }}>
+                      <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--navy-ink)', fontFamily: "'DM Mono', monospace", marginLeft: 'auto' }}>
                         ${sugerido.toFixed(0)}
                       </span>
                     </div>
@@ -1274,7 +1274,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
               {/* Total */}
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', borderTop: '1px solid var(--border)', background: 'rgba(0,0,0,.02)' }}>
                 <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>Costo total{scaleFactor !== 1 ? ` (×${scaleFactor.toFixed(2)})` : ''}</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy)', fontFamily: "'DM Mono', monospace" }}>${fc.costo_total.toFixed(0)}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy-ink)', fontFamily: "'DM Mono', monospace" }}>${fc.costo_total.toFixed(0)}</span>
               </div>
             </div>
           )}
@@ -1347,7 +1347,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                             <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{p.unidad} · Stock: {p.stock_actual}</div>
                           </div>
                           {p.precio_unitario > 0 && (
-                            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy)' }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy-ink)' }}>
                               ${p.precio_unitario.toLocaleString('es-AR')}
                             </span>
                           )}
@@ -1556,7 +1556,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                       <span style={{ fontWeight: 700 }}>{cantV} {ingForm.unidad}</span>
                       {netoG > 0 && netoG < mermaG && <span style={{ color: 'var(--text-3)' }}> → {netoG >= 1000 ? `${(netoG / 1000).toFixed(2)}kg` : `${Math.round(netoG)}g`} neto</span>}
                     </div>
-                    <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--navy)', fontFamily: "'DM Mono', monospace" }}>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--navy-ink)', fontFamily: "'DM Mono', monospace" }}>
                       ${subtotal.toFixed(0)}
                     </span>
                   </div>

@@ -51,7 +51,7 @@ export default function MiPlaza({ rol, completados, total }: MiPlazaProps) {
         <Link
           href="/checklist"
           className="text-[11px] font-bold border-none bg-transparent cursor-pointer"
-          style={{ color: 'var(--navy)' }}
+          style={{ color: 'var(--navy-ink)' }}
         >
           Abrir →
         </Link>

@@ -116,7 +116,7 @@ export default function MermaBottomSheet({ open, onClose, onRegistrar, prefill }
 
         <div className="px-4 pb-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-bold" style={{ color: 'var(--navy)' }}>Registrar merma</h3>
+            <h3 className="text-base font-bold" style={{ color: 'var(--navy-ink)' }}>Registrar merma</h3>
             <button onClick={onClose} className="bg-transparent border-none cursor-pointer p-1">
               <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-3)' }}>close</span>
             </button>

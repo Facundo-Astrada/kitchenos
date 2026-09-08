@@ -547,12 +547,22 @@ export default function ReportesPage() {
               <div style={{
                 width: maxVal > 0 ? `${Math.min((item.value / maxVal) * 100, 100)}%` : '0%',
                 height: '100%',
-                background: item.color || 'var(--navy)',
+                // navy-ink, no navy: la barra vive sobre var(--border) (el
+                // track), no es un header — necesita invertirse en oscuro
+                // para no quedar casi negro sobre casi negro (S6, Bloque 1).
+                background: item.color || 'var(--navy-ink)',
                 borderRadius: 6,
                 transition: 'width 0.4s ease',
                 display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 6,
               }}>
-                {item.value / maxVal > 0.15 && (
+                {/* var(--bg) como texto: sobre navy-ink funciona en los dos
+                    temas porque navy-ink es el "polo opuesto" de --bg en
+                    cada uno (oscuro en claro, claro en oscuro) — mismo truco
+                    que evita codificar un color de texto condicional. */}
+                {item.value / maxVal > 0.15 && !item.color && (
+                  <span style={{ fontSize: 11, color: 'var(--bg)', fontWeight: 600 }}>{fmtMoney(item.value)}</span>
+                )}
+                {item.value / maxVal > 0.15 && item.color && (
                   <span style={{ fontSize: 11, color: '#fff', fontWeight: 600 }}>{fmtMoney(item.value)}</span>
                 )}
               </div>
@@ -626,7 +636,7 @@ export default function ReportesPage() {
                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)', width: 18 }}>{i + 1}</span>
                   <span style={{ flex: 1, fontSize: 13, color: 'var(--text-1)', fontWeight: 500 }}>{m.nombre}</span>
                   <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{m.cantidad} vta{m.cantidad !== 1 ? 's' : ''}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy)' }}>{fmtMoney(m.ventas)}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy-ink)' }}>{fmtMoney(m.ventas)}</span>
                 </div>
               ))}
             </div>
@@ -760,7 +770,7 @@ export default function ReportesPage() {
                   <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>{f.proveedor_nombre}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{f.fecha_factura ?? 'Sin fecha'}</div>
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--navy)' }}>{fmtMoney(f.total)}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--navy-ink)' }}>{fmtMoney(f.total)}</div>
               </div>
             ))}
           </div>
@@ -922,7 +932,7 @@ export default function ReportesPage() {
               <div style={{ background: 'var(--border)', borderRadius: 6, height: 18, overflow: 'hidden' }}>
                 <div style={{
                   width: `${(r.cantidad / maxReceta) * 100}%`,
-                  height: '100%', background: 'var(--navy)', borderRadius: 6,
+                  height: '100%', background: 'var(--navy-ink)', borderRadius: 6,
                   transition: 'width 0.4s ease',
                 }} />
               </div>
@@ -988,7 +998,7 @@ export default function ReportesPage() {
             <BarChart
               items={[
                 { label: 'Ventas', value: c.ventas, color: '#16a34a', subLabel: fmtMoney(c.ventas) },
-                { label: 'Compras', value: c.compras, color: 'var(--navy)', subLabel: fmtMoney(c.compras) },
+                { label: 'Compras', value: c.compras, color: 'var(--navy-ink)', subLabel: fmtMoney(c.compras) },
               ]}
               maxVal={Math.max(c.ventas, c.compras, 1)}
             />
@@ -1401,8 +1411,8 @@ export default function ReportesPage() {
               padding: '10px 14px', fontSize: 12, fontWeight: 500,
               border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
               background: 'transparent',
-              color: tab === t.key ? 'var(--navy)' : 'var(--text-3)',
-              borderBottom: tab === t.key ? '2px solid var(--navy)' : '2px solid transparent',
+              color: tab === t.key ? 'var(--navy-ink)' : 'var(--text-3)',
+              borderBottom: tab === t.key ? '2px solid var(--navy-ink)' : '2px solid transparent',
               transition: 'all 0.2s',
             }}
           >

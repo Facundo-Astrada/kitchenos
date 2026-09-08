@@ -237,7 +237,7 @@ export default function DashboardPage() {
                     <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Turno activo</div>
                     <div style={{ fontSize: 10, color: 'var(--text-3)' }}>desde {new Date(turnoActivo).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</div>
                   </div>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy)', background: 'rgba(67,97,160,.1)', padding: '3px 8px', borderRadius: 7 }}>{turnoDisplay}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy-ink)', background: 'rgba(67,97,160,.1)', padding: '3px 8px', borderRadius: 7 }}>{turnoDisplay}</span>
                 </button>
               )}
             </div>
@@ -261,7 +261,7 @@ export default function DashboardPage() {
                     Stock crítico
                     {criticos.length > 12 && <span style={{ fontWeight: 400, marginLeft: 6, color: 'var(--text-3)' }}>· {criticos.length} productos</span>}
                   </p>
-                  <Link href="/stock" style={{ fontSize: 11, fontWeight: 700, color: 'var(--navy)', textDecoration: 'none' }}>Ver inventario →</Link>
+                  <Link href="/stock" style={{ fontSize: 11, fontWeight: 700, color: 'var(--navy-ink)', textDecoration: 'none' }}>Ver inventario →</Link>
                 </div>
                 {/* paddingRight reserva el rincón donde descansa el FAB del
                     Coach por default (52px + margen) — sin esto tapaba la
@@ -333,7 +333,7 @@ export default function DashboardPage() {
                 </div>
                 <div style={{
                   fontSize: 12, fontWeight: 700, fontFamily: "'DM Mono', monospace",
-                  color: 'var(--navy)', background: 'rgba(67,97,160,.1)',
+                  color: 'var(--navy-ink)', background: 'rgba(67,97,160,.1)',
                   padding: '4px 10px', borderRadius: 8,
                 }}>
                   {(() => {

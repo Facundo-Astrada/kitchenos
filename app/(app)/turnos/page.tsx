@@ -339,7 +339,7 @@ export default function TurnosPage() {
                     <div key={m.id} style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--border)', gap: 10 }}>
                       <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{m.nombre} {m.apellido}</div>
                       <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{dias} días</div>
-                      <div style={{ fontSize: 15, fontWeight: 800, color: totalHs > 176 ? '#ef4444' : totalHs > 0 ? 'var(--navy)' : 'var(--text-3)', minWidth: 40, textAlign: 'right' }}>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: totalHs > 176 ? '#ef4444' : totalHs > 0 ? 'var(--navy-ink)' : 'var(--text-3)', minWidth: 40, textAlign: 'right' }}>
                         {totalHs}h
                       </div>
                     </div>
@@ -417,7 +417,7 @@ export default function TurnosPage() {
           {' → '}
           {f.salida ? new Date(f.salida).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : 'en curso'}
         </span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy)', minWidth: 40, textAlign: 'right' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy-ink)', minWidth: 40, textAlign: 'right' }}>
           {f.horas_total !== null ? `${f.horas_total.toFixed(1)}h` : '—'}
         </span>
         {f.editado_por && (
@@ -486,7 +486,7 @@ export default function TurnosPage() {
                   Historial semanal por persona
                 </span>
                 {personaHistorialId && (
-                  <button onClick={() => abrirEdicionFichaje()} style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                  <button onClick={() => abrirEdicionFichaje()} style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy-ink)', background: 'none', border: 'none', cursor: 'pointer' }}>
                     + Corregir
                   </button>
                 )}

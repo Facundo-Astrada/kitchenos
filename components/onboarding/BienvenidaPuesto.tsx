@@ -109,7 +109,7 @@ export default function BienvenidaPuesto({ onCerrar }: Props) {
             display: 'flex', gap: 10, alignItems: 'center', padding: '12px 14px',
             background: 'var(--bg)', borderRadius: 12, marginBottom: 18,
           }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--navy)' }}>badge</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--navy-ink)' }}>badge</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{
                 fontSize: 10, fontWeight: 800, color: 'var(--text-3)',
@@ -142,7 +142,7 @@ export default function BienvenidaPuesto({ onCerrar }: Props) {
                     width: 30, height: 30, borderRadius: 9, flexShrink: 0, marginTop: 1,
                     background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'var(--navy)' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'var(--navy-ink)' }}>
                       {cfg?.icon ?? 'widgets'}
                     </span>
                   </div>

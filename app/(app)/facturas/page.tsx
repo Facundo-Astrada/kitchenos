@@ -300,7 +300,7 @@ function ImportSelector({ onSelect, onFile }: {
             className="hidden"
             onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f, 'camera'); e.target.value = '' }}
           />
-          <span className="material-symbols-outlined text-[28px]" style={{ color: 'var(--navy)' }}>camera_alt</span>
+          <span className="material-symbols-outlined text-[28px]" style={{ color: 'var(--navy-ink)' }}>camera_alt</span>
           <span className="text-[13px] font-bold" style={{ color: 'var(--text)' }}>Sacar foto</span>
           <span className="text-[10px] text-center" style={{ color: 'var(--text-3)' }}>Ticket, factura en papel</span>
         </label>
@@ -318,7 +318,7 @@ function ImportSelector({ onSelect, onFile }: {
             className="hidden"
             onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f, 'image'); e.target.value = '' }}
           />
-          <span className="material-symbols-outlined text-[28px]" style={{ color: 'var(--navy)' }}>image</span>
+          <span className="material-symbols-outlined text-[28px]" style={{ color: 'var(--navy-ink)' }}>image</span>
           <span className="text-[13px] font-bold" style={{ color: 'var(--text)' }}>Subir imagen</span>
           <span className="text-[10px] text-center" style={{ color: 'var(--text-3)' }}>Captura de pantalla, foto guardada</span>
         </label>
@@ -336,7 +336,7 @@ function ImportSelector({ onSelect, onFile }: {
             className="hidden"
             onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f, 'pdf'); e.target.value = '' }}
           />
-          <span className="material-symbols-outlined text-[28px]" style={{ color: 'var(--navy)' }}>picture_as_pdf</span>
+          <span className="material-symbols-outlined text-[28px]" style={{ color: 'var(--navy-ink)' }}>picture_as_pdf</span>
           <span className="text-[13px] font-bold" style={{ color: 'var(--text)' }}>Subir PDF</span>
           <span className="text-[10px] text-center" style={{ color: 'var(--text-3)' }}>Factura digital</span>
         </label>
@@ -347,7 +347,7 @@ function ImportSelector({ onSelect, onFile }: {
           className="flex flex-col items-center gap-2 p-4 rounded-[14px] border-none cursor-pointer"
           style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
         >
-          <span className="material-symbols-outlined text-[28px]" style={{ color: 'var(--navy)' }}>text_snippet</span>
+          <span className="material-symbols-outlined text-[28px]" style={{ color: 'var(--navy-ink)' }}>text_snippet</span>
           <span className="text-[13px] font-bold" style={{ color: 'var(--text)' }}>Pegar texto</span>
           <span className="text-[10px] text-center" style={{ color: 'var(--text-3)' }}>Email, datos copiados</span>
         </button>
@@ -358,7 +358,7 @@ function ImportSelector({ onSelect, onFile }: {
           className="flex flex-col items-center gap-2 p-4 rounded-[14px] border-none cursor-pointer col-span-2"
           style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
         >
-          <span className="material-symbols-outlined text-[28px]" style={{ color: 'var(--navy)' }}>table</span>
+          <span className="material-symbols-outlined text-[28px]" style={{ color: 'var(--navy-ink)' }}>table</span>
           <span className="text-[13px] font-bold" style={{ color: 'var(--text)' }}>Carga manual</span>
           <span className="text-[10px] text-center" style={{ color: 'var(--text-3)' }}>Ingresá productos en tabla</span>
         </button>
@@ -834,7 +834,7 @@ function ConfirmView({ result, productos, proveedores, categoriasGasto = [], med
             <div className="h-px my-1" style={{ background: 'var(--border)' }} />
             <div className="flex justify-between text-[14px]">
               <span className="font-bold" style={{ color: 'var(--text)' }}>TOTAL</span>
-              <span className="font-bold" style={{ color: 'var(--navy)' }}>{fmt(data.total)}</span>
+              <span className="font-bold" style={{ color: 'var(--navy-ink)' }}>{fmt(data.total)}</span>
             </div>
           </div>
         </div>
@@ -968,7 +968,7 @@ function ReconciliacionPedido({ factura, facturaItems, onVincular }: {
               <span className="text-[12px]" style={{ color: 'var(--text-1)' }}>
                 {p.proveedor_nombre} · {fmtFecha(p.fecha_pedido ?? null)}
               </span>
-              <span className="text-[12px] font-bold" style={{ color: 'var(--navy)' }}>{fmt(p.total_estimado ?? 0)}</span>
+              <span className="text-[12px] font-bold" style={{ color: 'var(--navy-ink)' }}>{fmt(p.total_estimado ?? 0)}</span>
             </button>
           ))}
           <button onClick={() => setPicking(false)} className="text-[11px] mt-1" style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', fontFamily: 'inherit', padding: '6px 4px' }}>
@@ -1326,7 +1326,7 @@ function DetailView({ factura, onBack, onStatusChange, onDelete, onUpdate, onVin
             <div><span style={{ color: 'var(--text-3)' }}>CUIT:</span> <span className="font-medium" style={{ color: 'var(--text)' }}>{factura.proveedor_cuit || '—'}</span></div>
             <div><span style={{ color: 'var(--text-3)' }}>N:</span> <span className="font-medium" style={{ color: 'var(--text)' }}>{factura.numero_factura || '—'}</span></div>
             <div><span style={{ color: 'var(--text-3)' }}>Pago:</span> <span className="font-medium" style={{ color: 'var(--text)' }}>{factura.condicion_pago}</span></div>
-            <div><span style={{ color: 'var(--text-3)' }}>Total:</span> <span className="font-bold" style={{ color: 'var(--navy)' }}>{fmt(factura.total)}</span></div>
+            <div><span style={{ color: 'var(--text-3)' }}>Total:</span> <span className="font-bold" style={{ color: 'var(--navy-ink)' }}>{fmt(factura.total)}</span></div>
             {factura.fecha_vencimiento && (
               <div><span style={{ color: 'var(--text-3)' }}>Vence:</span> <span className="font-medium" style={{ color: 'var(--text)' }}>{fmtFecha(factura.fecha_vencimiento)}</span></div>
             )}
@@ -1664,7 +1664,7 @@ function ListasPreciosView({ showToast: toast }: { showToast: (msg: string) => v
           </div>
           <div className="flex-1 flex flex-col items-center justify-center gap-4">
             <div className="w-12 h-12 rounded-full border-[3px] border-t-transparent animate-spin"
-              style={{ borderColor: 'var(--navy)', borderTopColor: 'transparent' }} />
+              style={{ borderColor: 'var(--navy-ink)', borderTopColor: 'transparent' }} />
             <p className="text-[14px] font-semibold" style={{ color: 'var(--text-2)' }}>
               Analizando lista de precios con IA...
             </p>
@@ -1748,7 +1748,7 @@ function ListasPreciosView({ showToast: toast }: { showToast: (msg: string) => v
                           setShowProveedorDropdown(false)
                         }}
                         className="w-full text-left px-3 py-[8px] border-none cursor-pointer text-[13px] font-semibold"
-                        style={{ background: 'transparent', color: 'var(--navy)', fontFamily: 'inherit' }}
+                        style={{ background: 'transparent', color: 'var(--navy-ink)', fontFamily: 'inherit' }}
                       >
                         <span className="material-symbols-outlined text-[16px] align-middle mr-1">add</span>
                         Crear &quot;{proveedorSearch.trim()}&quot;
@@ -1776,7 +1776,7 @@ function ListasPreciosView({ showToast: toast }: { showToast: (msg: string) => v
                 <div className="rounded-[10px] p-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
                   <div className="text-[13px] font-semibold" style={{ color: 'var(--text)' }}>
                     Encontre {listaResult.items.length} productos de{' '}
-                    <span style={{ color: 'var(--navy)' }}>{selectedProveedorObj?.nombre || nuevoProveedorNombre}</span>
+                    <span style={{ color: 'var(--navy-ink)' }}>{selectedProveedorObj?.nombre || nuevoProveedorNombre}</span>
                   </div>
                   {listaResult.fecha_detectada && (
                     <div className="text-[11px] mt-1" style={{ color: 'var(--text-3)' }}>
@@ -1850,7 +1850,7 @@ function ListasPreciosView({ showToast: toast }: { showToast: (msg: string) => v
                           <div className="text-[13px] font-bold truncate" style={{ color: 'var(--text)' }}>
                             {item.producto_nombre}
                           </div>
-                          <div className="text-[12px] font-semibold mt-[2px]" style={{ color: 'var(--navy)' }}>
+                          <div className="text-[12px] font-semibold mt-[2px]" style={{ color: 'var(--navy-ink)' }}>
                             {fmt(item.precio_unitario)}/{item.unidad}
                           </div>
                           {item.observaciones && (
@@ -1982,7 +1982,7 @@ function ListasPreciosView({ showToast: toast }: { showToast: (msg: string) => v
                     className="flex flex-col items-center gap-2 p-4 rounded-[14px] border-none cursor-pointer"
                     style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
                   >
-                    <span className="material-symbols-outlined text-[28px]" style={{ color: 'var(--navy)' }}>
+                    <span className="material-symbols-outlined text-[28px]" style={{ color: 'var(--navy-ink)' }}>
                       {o.icon}
                     </span>
                     <span className="text-[13px] font-bold" style={{ color: 'var(--text)' }}>{o.label}</span>
@@ -2294,7 +2294,7 @@ function ManualEntryView({ onSubmit, onBack, proveedores }: {
           <div className="px-4 pb-4">
             <div className="flex justify-between text-[13px] font-bold py-2" style={{ borderTop: '1px solid var(--border)' }}>
               <span style={{ color: 'var(--text-3)' }}>Total</span>
-              <span style={{ color: 'var(--navy)' }}>{fmt(total)}</span>
+              <span style={{ color: 'var(--navy-ink)' }}>{fmt(total)}</span>
             </div>
           </div>
         )}
@@ -2602,7 +2602,7 @@ function RecepcionView() {
           { label: 'Total documentos', value: String(kpis.total), icon: 'description', color: 'var(--text-1)' },
           { label: 'Con imagen/PDF', value: String(kpis.conImagen), icon: 'photo_camera', color: '#4361a0' },
           { label: 'Stock conciliado', value: String(kpis.stockConciliado), icon: 'inventory_2', color: '#16a34a' },
-          { label: 'Total del período', value: fmt(kpis.totalPeriodo), icon: 'payments', color: 'var(--navy)' },
+          { label: 'Total del período', value: fmt(kpis.totalPeriodo), icon: 'payments', color: 'var(--navy-ink)' },
         ].map(k => (
           <div key={k.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '9px 10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
@@ -2634,7 +2634,7 @@ function RecepcionView() {
                   Stock {d.nItemsVinculados}/{d.nItems}
                 </span>
               )}
-              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy)', fontFamily: "'DM Mono', monospace", marginLeft: 'auto' }}>{fmt(d.total)}</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy-ink)', fontFamily: "'DM Mono', monospace", marginLeft: 'auto' }}>{fmt(d.total)}</span>
             </div>
           ))}
         </div>
@@ -3072,7 +3072,7 @@ export default function FacturasPage() {
           </div>
           <div className="flex-1 flex flex-col items-center justify-center gap-4">
             <div className="w-12 h-12 rounded-full border-[3px] border-t-transparent animate-spin"
-              style={{ borderColor: 'var(--navy)', borderTopColor: 'transparent' }} />
+              style={{ borderColor: 'var(--navy-ink)', borderTopColor: 'transparent' }} />
             <p className="text-[14px] font-semibold" style={{ color: 'var(--text-2)' }}>
               Analizando factura con IA...
             </p>
@@ -3472,7 +3472,7 @@ export default function FacturasPage() {
                 <div key={g.proveedor} className="mb-3">
                   <div className="flex items-center justify-between px-1 mb-1">
                     <div className="text-[13px] font-bold truncate" style={{ color: 'var(--text-1)' }}>{g.proveedor}</div>
-                    <div className="text-[13px] font-bold whitespace-nowrap ml-2" style={{ color: 'var(--navy)' }}>{fmt(g.total)}</div>
+                    <div className="text-[13px] font-bold whitespace-nowrap ml-2" style={{ color: 'var(--navy-ink)' }}>{fmt(g.total)}</div>
                   </div>
                   {g.facturas.map(f => (
                     <FacturaCard
@@ -3537,7 +3537,7 @@ export default function FacturasPage() {
                         <span style={{ fontSize: 11, color: 'var(--text-3)' }}>—</span>
                       )}
                     </td>
-                    <td style={{ padding: '11px 16px', fontSize: 14, fontWeight: 700, color: 'var(--navy)', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt(f.total)}</td>
+                    <td style={{ padding: '11px 16px', fontSize: 14, fontWeight: 700, color: 'var(--navy-ink)', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmt(f.total)}</td>
                     <td style={{ padding: '11px 16px', textAlign: 'center' }}>
                       <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 5, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>{st.label}</span>
                     </td>

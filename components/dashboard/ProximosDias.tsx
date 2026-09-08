@@ -44,7 +44,7 @@ export default function ProximosDias({ variant = 'strip' }: ProximosDiasProps) {
           <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: 'var(--text-3)' }}>
             Próximos días
           </p>
-          <Link href="/calendario" style={{ fontSize: 11, fontWeight: 700, color: 'var(--navy)', textDecoration: 'none' }}>
+          <Link href="/calendario" style={{ fontSize: 11, fontWeight: 700, color: 'var(--navy-ink)', textDecoration: 'none' }}>
             Ver calendario →
           </Link>
         </div>

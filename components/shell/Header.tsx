@@ -36,7 +36,7 @@ export default function Header({
         <div>
           <p
             className="text-[14px] font-bold"
-            style={{ color: 'var(--navy)' }}
+            style={{ color: 'var(--navy-ink)' }}
           >
             {perfil.nombre}
           </p>
@@ -55,7 +55,7 @@ export default function Header({
           <button
             onClick={onCoachClick}
             className="w-[36px] h-[36px] rounded-[10px] flex items-center justify-center border-none cursor-pointer transition-transform active:scale-[.92]"
-            style={{ background: 'var(--bg)', color: 'var(--navy)' }}
+            style={{ background: 'var(--bg)', color: 'var(--navy-ink)' }}
             title="Kitchen Coach"
           >
             <span className="material-symbols-outlined text-[20px]">smart_toy</span>
@@ -65,7 +65,7 @@ export default function Header({
         <button
           onClick={onNotificationsClick}
           className="w-[36px] h-[36px] rounded-[10px] flex items-center justify-center border-none cursor-pointer relative transition-transform active:scale-[.92]"
-          style={{ background: 'var(--bg)', color: 'var(--navy)' }}
+          style={{ background: 'var(--bg)', color: 'var(--navy-ink)' }}
           title="Notificaciones"
         >
           <span className="material-symbols-outlined text-[20px]">notifications</span>

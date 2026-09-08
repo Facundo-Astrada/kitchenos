@@ -153,7 +153,7 @@ export default function EspacioCard(props: Props) {
               <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-3)' }}>
                 {open ? 'expand_more' : 'chevron_right'}
               </span>
-              <span className="material-symbols-outlined" style={{ fontSize: 24, color: 'var(--navy)' }}>{espacio.icono}</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 24, color: 'var(--navy-ink)' }}>{espacio.icono}</span>
               <span style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-1)', letterSpacing: '-0.01em' }}>{espacio.nombre}</span>
               <span style={{ fontSize: 12, color: 'var(--text-3)' }}>· {plazasAqui.length} {plazasAqui.length === 1 ? 'plaza' : 'plazas'}</span>
             </button>

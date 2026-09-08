@@ -10,7 +10,16 @@
   --toast-bottom: 90px; /* bottom de toasts/snackbars */
   --sidebar-w: 0px;     /* ancho del sidebar desktop */
   --surface: #ffffff;
+  /* --navy tiene dos roles que en oscuro tiran para lados opuestos (S6,
+     Bloque 1): CHROME (fondo de headers/botones sólidos, siempre con #fff
+     encima — tiene que quedar oscuro en los dos temas) y TINTA (texto/borde
+     fuerte sobre una superficie clara — tiene que invertirse en oscuro).
+     Un solo hex no puede servir a los dos: por eso --navy-ink. Regla simple
+     para decidir cuál tocar en código nuevo: si el navy está en `background`
+     con `color:#fff` adentro → --navy. Si el navy está en `color` (texto,
+     ícono, borde de acento) → --navy-ink. */
   --navy: #1c2d4a;
+  --navy-ink: #1c2d4a;
   --navy-light: #2d4070;
   --accent: #4361a0;
   --text: #1a2b4b;
@@ -51,7 +60,10 @@
 [data-theme="dark"] {
   --bg: #0a0a0a;
   --surface: #141414;
-  --navy: #c8d6e5;
+  /* --navy se queda oscuro (es CHROME: sigue siendo fondo de header/botón
+     sólido con texto blanco encima). Solo --navy-ink se invierte. */
+  --navy: #12161f;
+  --navy-ink: #c8d6e5;
   --navy-light: #a0b4cc;
   --accent: #4361a0;
   --text: #e2e8f0;
@@ -69,6 +81,7 @@
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-navy: var(--navy);
+  --color-navy-ink: var(--navy-ink);
   --color-navy-light: var(--navy-light);
   --color-accent: var(--accent);
   --color-text: var(--text);

@@ -262,7 +262,7 @@ function RentabilidadView({
                       <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>FC {(r.item.food_cost_pct ?? 0).toFixed(0)}%</div>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy)', fontFamily: "'DM Mono', monospace" }}>{fmtMoney(r.item.precio_venta)} → {fmtMoney(r.sugerido)}</div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy-ink)', fontFamily: "'DM Mono', monospace" }}>{fmtMoney(r.item.precio_venta)} → {fmtMoney(r.sugerido)}</div>
                     </div>
                   </button>
                 )
@@ -858,7 +858,7 @@ export default function CartaPage() {
             flex: 1, border: 'none', borderRadius: 10, padding: '9px 0', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
-            background: '#fff', color: 'var(--navy)',
+            background: '#fff', color: 'var(--navy-ink)',
             boxShadow: '0 1px 3px rgba(0,0,0,.15)',
           }}>
             <span className="material-symbols-outlined" style={{ fontSize: 17 }}>restaurant_menu</span>

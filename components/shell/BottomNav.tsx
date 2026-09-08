@@ -51,7 +51,7 @@ export default function BottomNav({ onMoreClick }: BottomNavProps) {
             className={cn(
               'flex-1 flex flex-col items-center gap-[2px] cursor-pointer px-0 py-1 border-none bg-transparent relative transition-colors duration-200',
               isActive
-                ? 'text-[var(--navy)]'
+                ? 'text-[var(--navy-ink)]'
                 : 'text-[var(--text-3)]'
             )}
             style={{ WebkitTapHighlightColor: 'transparent' }}
@@ -82,7 +82,7 @@ export default function BottomNav({ onMoreClick }: BottomNavProps) {
           href={accion.href}
           className={cn(
             'flex-1 flex flex-col items-center gap-[2px] cursor-pointer px-0 py-1 border-none bg-transparent relative transition-colors duration-200',
-            pathname.startsWith(accion.href.split('?')[0]) ? 'text-[var(--navy)]' : 'text-[var(--text-3)]'
+            pathname.startsWith(accion.href.split('?')[0]) ? 'text-[var(--navy-ink)]' : 'text-[var(--text-3)]'
           )}
           style={{ WebkitTapHighlightColor: 'transparent' }}
         >

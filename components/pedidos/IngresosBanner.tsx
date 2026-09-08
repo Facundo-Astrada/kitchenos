@@ -96,7 +96,7 @@ export default function IngresosBanner({ embedded = false, onCount }: Props) {
       </div>
       {montoEstimado > 0 && (
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--navy)', fontFamily: "'DM Mono', monospace" }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--navy-ink)', fontFamily: "'DM Mono', monospace" }}>
             ${montoEstimado.toLocaleString('es-AR', { maximumFractionDigits: 0 })}
           </div>
           <div style={{ fontSize: 9, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>a ingresar</div>

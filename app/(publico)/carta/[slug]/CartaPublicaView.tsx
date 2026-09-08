@@ -147,7 +147,7 @@ function ItemCard({ item }: { item: PublicCartaItem }) {
           <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', margin: 0, lineHeight: 1.3 }}>
             {item.nombre}
           </p>
-          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)', flexShrink: 0 }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy-ink)', flexShrink: 0 }}>
             <Num>{fmtPrecio(item.precio_venta)}</Num>
           </span>
         </div>

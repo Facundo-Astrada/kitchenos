@@ -117,7 +117,7 @@ function MensajeBurbuja({ msg, showHeader = true, onCrearTarea }: { msg: PaseMen
           <RenderTexto texto={msg.texto} />
           {msg.plaza && (
             <span className="inline-flex items-center px-[5px] py-[1px] rounded-[4px] text-[10px] font-bold ml-2"
-              style={{ background: 'rgba(30,58,110,0.1)', color: 'var(--navy)' }}>
+              style={{ background: 'rgba(30,58,110,0.1)', color: 'var(--navy-ink)' }}>
               {PLAZA_LABELS[msg.plaza] || `#${msg.plaza}`}
             </span>
           )}

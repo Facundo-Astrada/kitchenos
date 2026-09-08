@@ -60,7 +60,7 @@ export default function PasePreview({ puedeEscribir }: PasePreviewProps) {
         <Link
           href="/pase"
           className="text-[11px] font-bold border-none bg-transparent cursor-pointer"
-          style={{ color: 'var(--navy)' }}
+          style={{ color: 'var(--navy-ink)' }}
         >
           Ver todo →
         </Link>

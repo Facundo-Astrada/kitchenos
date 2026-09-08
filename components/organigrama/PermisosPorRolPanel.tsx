@@ -187,7 +187,7 @@ export function PermisosPorRolPanel({
                           display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8,
                           cursor: isDisabled ? 'default' : 'pointer', fontSize: 12,
                           background: checked ? 'rgba(28,45,74,0.08)' : 'transparent',
-                          color: checked ? 'var(--navy)' : 'var(--text-3)',
+                          color: checked ? 'var(--navy-ink)' : 'var(--text-3)',
                           opacity: isDisabled ? 0.6 : 1,
                         }}
                       >
@@ -222,7 +222,7 @@ export function PermisosPorRolPanel({
                           display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 8,
                           cursor: isDisabled ? 'default' : 'pointer', fontSize: 12,
                           background: checked ? 'rgba(28,45,74,0.08)' : 'transparent',
-                          color: checked ? 'var(--navy)' : 'var(--text-3)',
+                          color: checked ? 'var(--navy-ink)' : 'var(--text-3)',
                           opacity: isDisabled ? 0.6 : 1,
                         }}
                       >

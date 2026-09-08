@@ -27,7 +27,7 @@ export default function StockCriticoSection({ productos }: StockCriticoSectionPr
         <Link
           href="/stock"
           className="text-[11px] font-bold border-none bg-transparent cursor-pointer"
-          style={{ color: 'var(--navy)' }}
+          style={{ color: 'var(--navy-ink)' }}
         >
           Ver inventario →
         </Link>

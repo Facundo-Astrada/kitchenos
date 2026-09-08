@@ -74,7 +74,10 @@ export function SegmentedTabs<T extends string>({
       ...btnBase,
       borderRadius: 8,
       background: isActive ? 'var(--surface)' : 'transparent',
-      color: isActive ? 'var(--navy)' : 'var(--text-3)',
+      // navy-ink, no navy: var(--surface) se oscurece en modo oscuro, así
+      // que el texto tiene que invertirse con ella o queda navy-sobre-navy
+      // (S6, Bloque 1).
+      color: isActive ? 'var(--navy-ink)' : 'var(--text-3)',
       boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
     }
   }

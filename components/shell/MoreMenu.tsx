@@ -108,7 +108,7 @@ export default function MoreMenu({ rol, onClose }: MoreMenuProps) {
                 className="flex-1 flex items-center gap-2 rounded-[14px] px-3 py-2.5 border transition-colors active:scale-[.98]"
                 style={{ background: 'var(--surface)', border: '1px solid var(--border)', cursor: 'pointer' }}
               >
-                <span className="material-symbols-outlined text-[18px]" style={{ color: 'var(--navy)' }}>rocket_launch</span>
+                <span className="material-symbols-outlined text-[18px]" style={{ color: 'var(--navy-ink)' }}>rocket_launch</span>
                 <span className="text-[12px] font-bold" style={{ color: 'var(--text-1)' }}>Guía de inicio</span>
               </Link>
               <Link
@@ -117,7 +117,7 @@ export default function MoreMenu({ rol, onClose }: MoreMenuProps) {
                 className="flex-1 flex items-center gap-2 rounded-[14px] px-3 py-2.5 border transition-colors active:scale-[.98]"
                 style={{ background: 'var(--surface)', border: '1px solid var(--border)', cursor: 'pointer' }}
               >
-                <span className="material-symbols-outlined text-[18px]" style={{ color: 'var(--navy)' }}>landscape</span>
+                <span className="material-symbols-outlined text-[18px]" style={{ color: 'var(--navy-ink)' }}>landscape</span>
                 <span className="text-[12px] font-bold" style={{ color: 'var(--text-1)' }}>Organización</span>
               </Link>
             </div>
@@ -145,11 +145,11 @@ export default function MoreMenu({ rol, onClose }: MoreMenuProps) {
                   >
                     <div
                       className="w-[52px] h-[52px] rounded-[14px] flex items-center justify-center transition-transform active:scale-[.92]"
-                      style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--navy)' }}
+                      style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--navy-ink)' }}
                     >
                       <span className="material-symbols-outlined text-[24px]">{modulo.icon}</span>
                     </div>
-                    <span className="text-[9px] font-semibold text-center leading-tight tracking-[.02em]" style={{ color: 'var(--navy)' }}>
+                    <span className="text-[9px] font-semibold text-center leading-tight tracking-[.02em]" style={{ color: 'var(--navy-ink)' }}>
                       {modulo.label.split(' ')[0]}
                     </span>
                   </Link>

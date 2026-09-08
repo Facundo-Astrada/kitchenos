@@ -662,7 +662,7 @@ export function ProveedoresView({ embedded = false }: { embedded?: boolean }) {
                   </div>
                   <div style={{ borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Total</span>
-                    <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)', fontFamily: "'DM Mono', monospace" }}>${scanResult.total.toLocaleString('es-AR')}</span>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy-ink)', fontFamily: "'DM Mono', monospace" }}>${scanResult.total.toLocaleString('es-AR')}</span>
                   </div>
                 </div>
 

@@ -1287,7 +1287,7 @@ export default function StockPage() {
             <button
               data-coach-target="stock-stockear"
               onClick={() => setShowSectorSelect(v => !v)}
-              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, background: '#fff', color: 'var(--navy)', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', borderRadius: 8, background: '#fff', color: 'var(--navy-ink)', border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}
             >
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>speed</span>
               Stockear
@@ -1399,7 +1399,7 @@ export default function StockPage() {
                 {/* Summary bar */}
                 <div style={{ display: 'flex', gap: 8, padding: '10px 14px 0' }}>
                   <div style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 12px', textAlign: 'center' }}>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--navy)', fontFamily: "'DM Mono', monospace" }}>{nHoy}</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--navy-ink)', fontFamily: "'DM Mono', monospace" }}>{nHoy}</div>
                     <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Hoy</div>
                   </div>
                   <div style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 12px', textAlign: 'center' }}>
@@ -2039,7 +2039,7 @@ export default function StockPage() {
                 </div>
 
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <span style={{ ...lblStyle, color: 'var(--navy)' }}>
+                  <span style={{ ...lblStyle, color: 'var(--navy-ink)' }}>
                     {form.es_produccion ? 'Costo unitario ($) — desde receta' : 'Precio unitario ($)'}
                   </span>
                   <input type="text" inputMode="decimal" value={form.precio_unitario} onChange={e => setForm(f => ({ ...f, precio_unitario: e.target.value }))}

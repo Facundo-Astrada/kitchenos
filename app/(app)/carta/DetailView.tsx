@@ -408,7 +408,7 @@ export function DetailView({
           background: 'var(--surface)', border: '1px solid var(--border)',
           borderRadius: 12, padding: 14,
         }}>
-          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--navy)' }}>{fmtMoney(item.precio_venta)}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--navy-ink)' }}>{fmtMoney(item.precio_venta)}</div>
           {item.descripcion && (
             <div style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 6, lineHeight: 1.5 }}>
               {item.descripcion}
@@ -591,7 +591,7 @@ export function DetailView({
                       style={{
                         width: 60, textAlign: 'center', fontSize: 13, fontWeight: 700,
                         border: '1.5px solid var(--accent)', borderRadius: 8, padding: '3px 4px',
-                        background: 'var(--surface)', color: 'var(--navy)', outline: 'none',
+                        background: 'var(--surface)', color: 'var(--navy-ink)', outline: 'none',
                       }}
                     />
                   ) : gramajeMostrado != null ? (
@@ -671,7 +671,7 @@ export function DetailView({
               {item.costo_total_plato != null && item.costo_total_plato > 0 && (
                 <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', background: 'rgba(0,0,0,.02)' }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>Costo recetas</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy)' }}>{fmtMoney(item.costo_total_plato)}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy-ink)' }}>{fmtMoney(item.costo_total_plato)}</span>
                 </div>
               )}
             </div>

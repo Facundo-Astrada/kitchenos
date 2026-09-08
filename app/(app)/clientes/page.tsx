@@ -207,7 +207,7 @@ function ClientesTab() {
                   {c.telefono ? c.telefono + ' · ' : ''}Últ. compra: {fmtFecha(c.ultima_compra)} · {c.cant_compras} compra{c.cant_compras !== 1 ? 's' : ''}
                 </div>
               </div>
-              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--navy)', fontFamily: "'DM Mono', monospace" }}>{fmt(c.total_gastado)}</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--navy-ink)', fontFamily: "'DM Mono', monospace" }}>{fmt(c.total_gastado)}</span>
             </button>
           ))}
         </div>
@@ -295,7 +295,7 @@ function ClienteDetalle({ cliente, onBack, onUpdate, onDesactivar, fetchHistoria
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 8, marginBottom: 16 }}>
         {[
           { label: 'Compras', value: String(cliente.cant_compras), color: 'var(--accent)' },
-          { label: 'Total gastado', value: fmt(cliente.total_gastado), color: 'var(--navy)' },
+          { label: 'Total gastado', value: fmt(cliente.total_gastado), color: 'var(--navy-ink)' },
           { label: 'Última compra', value: fmtFecha(cliente.ultima_compra), color: 'var(--text-1)' },
         ].map(k => (
           <div key={k.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '9px 10px' }}>
@@ -315,7 +315,7 @@ function ClienteDetalle({ cliente, onBack, onUpdate, onDesactivar, fetchHistoria
           {historial.map((h, i) => (
             <div key={h.id} className="flex justify-between items-center" style={{ padding: '10px 12px', borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}>
               <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{fmtFechaHora(h.cerrada_at)}{h.mesa ? ` · Mesa ${h.mesa.numero}` : ''}</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy)' }}>{fmt(h.total)}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy-ink)' }}>{fmt(h.total)}</span>
             </div>
           ))}
         </div>

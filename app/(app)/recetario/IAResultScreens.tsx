@@ -754,7 +754,7 @@ export function IAMultiResultScreen({ results, previewUrl, inputText, agregarRec
             </div>
             <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
               <div style={{
-                height: '100%', background: 'var(--navy)', borderRadius: 2,
+                height: '100%', background: 'var(--navy-ink)', borderRadius: 2,
                 width: `${selectedCount > 0 ? (importProgress / selectedCount) * 100 : 0}%`,
                 transition: 'width .3s',
               }} />

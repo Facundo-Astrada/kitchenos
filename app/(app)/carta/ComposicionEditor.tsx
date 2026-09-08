@@ -1468,7 +1468,7 @@ function PlatoRecetasEditor({
                         if (e.key === 'Escape') setEditingPorcionUid(null)
                       }}
                       placeholder="30"
-                      style={{ width: 64, textAlign: 'center', fontSize: 13, fontWeight: 700, border: '1.5px solid var(--accent)', borderRadius: 8, padding: '4px 6px', background: 'var(--surface)', color: 'var(--navy)', outline: 'none' }}
+                      style={{ width: 64, textAlign: 'center', fontSize: 13, fontWeight: 700, border: '1.5px solid var(--accent)', borderRadius: 8, padding: '4px 6px', background: 'var(--surface)', color: 'var(--navy-ink)', outline: 'none' }}
                     />
                   ) : (
                     <button onClick={() => { setEditingPorcionUid(pr._uid); setEditingPorcionVal(tieneG ? String(pr.opsCantidad) : '') }}
@@ -1532,7 +1532,7 @@ function PlatoRecetasEditor({
           {costoTotal > 0 && (
             <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', background: 'var(--bg)' }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>Costo total</span>
-              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--navy)' }}>{fmtMoney(costoTotal)}</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--navy-ink)' }}>{fmtMoney(costoTotal)}</span>
             </div>
           )}
         </div>
@@ -1768,7 +1768,7 @@ function ItemRowInline({
               if (e.key === 'Escape') setEditingCantidadInline(false)
             }}
             placeholder={item.tipo === 'plato' ? '1' : '250'} inputMode="decimal"
-            style={{ width: 54, textAlign: 'center', fontSize: 12, fontWeight: 800, border: '1.5px solid var(--accent)', borderRadius: 8, padding: '4px 4px', background: 'var(--surface)', color: 'var(--navy)', outline: 'none', flexShrink: 0 }} />
+            style={{ width: 54, textAlign: 'center', fontSize: 12, fontWeight: 800, border: '1.5px solid var(--accent)', borderRadius: 8, padding: '4px 4px', background: 'var(--surface)', color: 'var(--navy-ink)', outline: 'none', flexShrink: 0 }} />
         ) : (
           <button onClick={e => { e.stopPropagation(); setEditingCantidadInline(true) }} title="Cantidad"
             style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, border: `1px solid ${item.cantidad != null ? 'var(--border)' : 'rgba(67,97,160,.4)'}`, borderRadius: 8, background: item.cantidad != null ? 'var(--bg)' : 'rgba(67,97,160,.06)', padding: '3px 8px', cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit' }}>

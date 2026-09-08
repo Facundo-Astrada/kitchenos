@@ -97,7 +97,7 @@ export function PlatoCard({
           </div>
           {verCostos && (
           <div style={{
-            fontSize: 18, fontWeight: 700, color: 'var(--navy)',
+            fontSize: 18, fontWeight: 700, color: 'var(--navy-ink)',
             whiteSpace: 'nowrap', paddingTop: 1,
           }}>
             {fmtMoney(item.precio_venta)}
@@ -226,7 +226,7 @@ export function PlatoCardBack({
         <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
           <div style={{ background: 'var(--bg)', borderRadius: 8, padding: '6px 10px', flex: 1 }}>
             <div style={{ fontSize: 9, color: 'var(--text-3)', textTransform: 'uppercase' }}>Precio</div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--navy)' }}>{fmtMoney(item.precio_venta)}</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--navy-ink)' }}>{fmtMoney(item.precio_venta)}</div>
           </div>
           {(hasMrg || hasFc) && (() => {
             const b = hasMrg ? marginBadge(item.margen_pct_computed ?? 0) : fcBadge(item.food_cost_pct ?? 0)

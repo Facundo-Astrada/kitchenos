@@ -161,7 +161,7 @@ export function OrganigramaWizardSheet({
 
         <div className="px-4 pb-6">
           <div className="flex items-center justify-between mb-1">
-            <h3 className="text-base font-bold" style={{ color: 'var(--navy)' }}>Configurar organigrama</h3>
+            <h3 className="text-base font-bold" style={{ color: 'var(--navy-ink)' }}>Configurar organigrama</h3>
             <button onClick={onClose} className="bg-transparent border-none cursor-pointer p-1">
               <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-3)' }}>close</span>
             </button>

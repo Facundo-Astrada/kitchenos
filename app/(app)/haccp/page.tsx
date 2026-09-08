@@ -261,7 +261,7 @@ function RegistrarTempsView({
               borderRadius: 12, padding: 14, transition: 'border-color 0.2s',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 22, color: outOfRange ? '#ef4444' : 'var(--navy)' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 22, color: outOfRange ? '#ef4444' : 'var(--navy-ink)' }}>
                   {EQUIPO_ICONS[e.tipo] || 'thermostat'}
                 </span>
                 <div style={{ flex: 1 }}>
@@ -477,7 +477,7 @@ function ConfigEquiposView({
             padding: '12px 14px', background: 'var(--surface)',
             border: '1px solid var(--border)', borderRadius: 12,
           }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--navy)' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--navy-ink)' }}>
               {EQUIPO_ICONS[e.tipo] || 'thermostat'}
             </span>
             <div style={{ flex: 1 }}>
@@ -992,7 +992,7 @@ export default function HaccpPage() {
                     background: 'var(--surface)', border: `1px solid ${ok ? 'var(--border)' : '#fecaca'}`,
                     borderRadius: 12, cursor: 'pointer', width: '100%', textAlign: 'left',
                   }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 24, color: ok ? 'var(--navy)' : '#ef4444' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 24, color: ok ? 'var(--navy-ink)' : '#ef4444' }}>
                       {EQUIPO_ICONS[e.tipo] || 'thermostat'}
                     </span>
                     <div style={{ flex: 1 }}>
@@ -1118,7 +1118,7 @@ export default function HaccpPage() {
                   <button key={st} onClick={() => setLimpSubTab(st)} style={{
                     flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
                     background: limpSubTab === st ? 'var(--surface)' : 'transparent',
-                    color: limpSubTab === st ? 'var(--navy)' : 'var(--text-3)',
+                    color: limpSubTab === st ? 'var(--navy-ink)' : 'var(--text-3)',
                     fontSize: 13, fontWeight: 600,
                     boxShadow: limpSubTab === st ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
                   }}>
@@ -1168,7 +1168,7 @@ export default function HaccpPage() {
                             background: isToday ? 'rgba(28,45,74,0.05)' : 'var(--surface)',
                             display: 'flex', flexDirection: 'column', gap: 1,
                           }}>
-                            <div style={{ fontSize: 10, fontWeight: 700, color: isToday ? 'var(--navy)' : 'var(--text-3)', textAlign: 'center' }}>{date.getDate()}</div>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: isToday ? 'var(--navy-ink)' : 'var(--text-3)', textAlign: 'center' }}>{date.getDate()}</div>
                             {tareasDia.slice(0, 2).map(t => (
                               <div key={t.id} style={{
                                 fontSize: 8, lineHeight: 1.15, padding: '1px 2px', borderRadius: 3,

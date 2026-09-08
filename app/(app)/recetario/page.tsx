@@ -2157,7 +2157,7 @@ function IngRow({ ing, idx, isActive, stockIndex, cantidadRefs, nombreRefs, onUp
                 <span style={{ fontSize: 9, color: 'var(--text-3)', marginLeft: 6 }}>{p.unidad}</span>
               </div>
               {p.precio_unitario > 0 && (
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--navy)' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--navy-ink)' }}>
                   ${p.precio_unitario.toLocaleString('es-AR')}
                 </span>
               )}

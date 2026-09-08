@@ -806,7 +806,7 @@ export default function VentasPage() {
                           </span>
                         </div>
                         <div className="flex items-center gap-3 mt-0.5">
-                          <span className="text-[13px] font-bold" style={{ color: 'var(--navy)' }}>
+                          <span className="text-[13px] font-bold" style={{ color: 'var(--navy-ink)' }}>
                             {fmtPrecio(v.total_ventas)}
                           </span>
                           {(v.cantidad_cubiertos ?? 0) > 0 && (
@@ -916,7 +916,7 @@ export default function VentasPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[13px] font-semibold truncate" style={{ color: 'var(--text-1)' }}>{p.nombre}</span>
-                          <span className="text-[13px] font-bold shrink-0" style={{ color: 'var(--navy)' }}><Num>{fmtPrecio(p.revenue)}</Num></span>
+                          <span className="text-[13px] font-bold shrink-0" style={{ color: 'var(--navy-ink)' }}><Num>{fmtPrecio(p.revenue)}</Num></span>
                         </div>
                         <div className="flex items-center gap-2 mt-1">
                           <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--bg)' }}>
@@ -1232,7 +1232,7 @@ function MultiDayConfirmScreen({
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-[15px] font-bold" style={{ color: 'var(--navy)' }}>{fmtP(v.total)}</p>
+                <p className="text-[15px] font-bold" style={{ color: 'var(--navy-ink)' }}>{fmtP(v.total)}</p>
                 <p className="text-[11px]" style={{ color: 'var(--text-3)' }}>a la carta</p>
               </div>
             </div>
@@ -1520,7 +1520,7 @@ function ConfirmScreen({ parsed, onSave, onCancel, saving, warnings }: ConfirmSc
                   <p className="text-[11px] mb-1" style={{ color: 'var(--text-2)' }}>Subtotal</p>
                   <div
                     className="px-2 py-1.5 rounded-lg text-[13px] font-semibold"
-                    style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--navy)' }}
+                    style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--navy-ink)' }}
                   >
                     {fmtPrecio(it.cantidad * it.precio_unitario)}
                   </div>
@@ -1787,7 +1787,7 @@ function VentasTransaccionalTab() {
                   <div style={{ fontSize: 13, color: 'var(--text-1)', fontWeight: 600 }}>{a.nombre}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{a.cantidad} × {fmtPrecio(a.precio_unitario)}</div>
                 </div>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy)' }}>{fmtPrecio(a.subtotal)}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy-ink)' }}>{fmtPrecio(a.subtotal)}</span>
               </div>
             ))}
           </div>
@@ -1856,7 +1856,7 @@ function VentasTransaccionalTab() {
                   {v.mozo_nombre ?? '—'} · {fmtHora(v.abierta_at)}{v.cerrada_at ? ' – ' + fmtHora(v.cerrada_at) : ''}
                 </div>
               </div>
-              <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--navy)', fontFamily: "'DM Mono', monospace" }}>{fmtPrecio(v.total)}</span>
+              <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--navy-ink)', fontFamily: "'DM Mono', monospace" }}>{fmtPrecio(v.total)}</span>
             </button>
           ))}
         </div>
