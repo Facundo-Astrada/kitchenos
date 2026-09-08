@@ -8,7 +8,8 @@ import { useAuth } from '@/lib/auth/context'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
-import { HeaderAction } from '@/components/ui'
+import { HeaderAction, Explicacion } from '@/components/ui'
+import { EXPLICACIONES } from '@/lib/coach/explicaciones'
 import { exportarExcel, fechaArchivo, type HojaExcel } from '@/lib/exportar'
 import {
   useReportes,
@@ -680,11 +681,20 @@ export default function ReportesPage() {
     if (!foodCostData.length) return <EmptyState icon="restaurant" text="Sin datos de food cost. Vinculá recetas a la carta (Carta → Plato → FC)." />
     const max = Math.max(...foodCostData.map(f => f.food_cost_pct))
     const avgFc = foodCostData.reduce((s, f) => s + f.food_cost_pct, 0) / foodCostData.length
+    const platoEjemplo = [...foodCostData].sort((a, b) => b.food_cost_pct - a.food_cost_pct)[0]
     return (
-      <div style={isDesktop
-        ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }
-        : { display: 'flex', flexDirection: 'column', gap: 16 }
-      }>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <Explicacion
+          id="reportes-foodcost"
+          {...EXPLICACIONES['reportes-foodcost']}
+          ejemplo={platoEjemplo && (
+            <>{platoEjemplo.nombre}: cuesta <b>{fmtMoney(platoEjemplo.costo_porcion)}</b> y se vende a <b>{fmtMoney(platoEjemplo.precio_venta)}</b> → food cost {fmtPct(platoEjemplo.food_cost_pct)}.</>
+          )}
+        />
+        <div style={isDesktop
+          ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }
+          : { display: 'flex', flexDirection: 'column', gap: 16 }
+        }>
         {/* Left: Summary + Table */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
@@ -722,6 +732,7 @@ export default function ReportesPage() {
             <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#ca8a04', marginRight: 4 }} /> 30-35% Alerta</span>
             <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#dc2626', marginRight: 4 }} /> &gt;35% Crítico</span>
           </div>
+        </div>
         </div>
       </div>
     )
@@ -980,10 +991,18 @@ export default function ReportesPage() {
     const c = cmvData
     const cmvCol = c.cmvPct < 33 ? '#16a34a' : c.cmvPct <= 40 ? '#ca8a04' : '#dc2626'
     return (
-      <div style={isDesktop
-        ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }
-        : { display: 'flex', flexDirection: 'column', gap: 16 }
-      }>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <Explicacion
+          id="reportes-cmv"
+          {...EXPLICACIONES['reportes-cmv']}
+          ejemplo={c.ventas > 0 && (
+            <>Vendiste <b>{fmtMoney(c.ventas)}</b> y compraste <b>{fmtMoney(c.compras)}</b> → CMV {fmtPct(c.cmvPct)}.</>
+          )}
+        />
+        <div style={isDesktop
+          ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'start' }
+          : { display: 'flex', flexDirection: 'column', gap: 16 }
+        }>
         {/* Left: Hero + Bar chart */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ background: 'var(--surface)', borderRadius: 14, padding: 18, border: '1px solid var(--border)', textAlign: 'center' }}>
@@ -1003,9 +1022,6 @@ export default function ReportesPage() {
               maxVal={Math.max(c.ventas, c.compras, 1)}
             />
           </div>
-          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
-            El CMV se calcula como compras de mercadería ÷ ventas del período. Un CMV sano en gastronomía suele estar entre 28% y 35%.
-          </p>
         </div>
         {/* Right: KPIs */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignContent: 'start' }}>
@@ -1022,6 +1038,7 @@ export default function ReportesPage() {
             Cargá el costo por hora de tu equipo (Turnos → Equipo → editar miembro) para ver el costo laboral del período.
           </p>
         )}
+        </div>
       </div>
     )
   }
@@ -1029,8 +1046,14 @@ export default function ReportesPage() {
   // ── Rendimiento por plaza ──
   function renderRendimiento() {
     if (!rendData.length) return <EmptyState icon="speed" text="Sin actividad por plaza en el período" />
+    const peorPlaza = [...rendData].sort((a, b) => a.cumplimientoPct - b.cumplimientoPct)[0]
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <Explicacion
+          id="reportes-rendimiento"
+          {...EXPLICACIONES['reportes-rendimiento']}
+          ejemplo={<><span style={{ textTransform: 'capitalize' }}>{peorPlaza.plaza}</span> completó <b>{peorPlaza.tareasCompletadas} de {peorPlaza.tareasTotal}</b> tareas → {fmtPct(peorPlaza.cumplimientoPct)} de cumplimiento.</>}
+        />
         {rendData.map(r => {
           const col = r.cumplimientoPct >= 80 ? '#16a34a' : r.cumplimientoPct >= 50 ? '#ca8a04' : '#dc2626'
           return (
@@ -1066,10 +1089,18 @@ export default function ReportesPage() {
       return <EmptyState icon="inventory_2" text="Sin ventas con receta vinculada en el período — todavía no hay nada para comparar." />
     }
     const conFuga = productos.filter(p => p.fuga)
+    const ejemploFuga = conFuga[0] ?? productos[0]
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <p style={{ fontSize: 12, color: 'var(--text-2)', margin: 0, lineHeight: 1.5 }}>
-          Compara lo que debería haberse consumido según lo vendido (consumo teórico, según la ficha de cada plato) contra lo comprado en el período. Aproximación: sin conteo de stock por fecha, &quot;consumo real&quot; usa las compras del período — mismo criterio que ya usa el CMV. La tolerancia sale de la merma esperada de cada producto (Stock → Estándar de recepción).
+        <Explicacion
+          id="reportes-fuga"
+          {...EXPLICACIONES['reportes-fuga']}
+          ejemplo={ejemploFuga && (
+            <>{ejemploFuga.productoNombre}: se consumieron <b>{fmtCantidad(ejemploFuga.consumoReal, ejemploFuga.unidad)}</b> contra <b>{fmtCantidad(ejemploFuga.consumoTeorico, ejemploFuga.unidad)}</b> teóricos → desvío de {fmtCantidad(ejemploFuga.diferencia, ejemploFuga.unidad)}.</>
+          )}
+        />
+        <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
+          Aproximación: sin conteo de stock por fecha, &quot;consumo real&quot; usa las compras del período — mismo criterio que ya usa el CMV.
         </p>
 
         {conFuga.length > 0 && (

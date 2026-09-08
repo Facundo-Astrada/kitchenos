@@ -5,7 +5,8 @@ import { useState, useEffect, useCallback, type CSSProperties } from 'react'
 import { useRouter } from 'next/navigation'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { usePermisos } from '@/lib/hooks/usePermisos'
-import { EmptyState, SegmentedTabs, Num } from '@/components/ui'
+import { EmptyState, SegmentedTabs, Num, Explicacion } from '@/components/ui'
+import { EXPLICACIONES } from '@/lib/coach/explicaciones'
 import { FAMILIA_GASTO_LABELS } from '@/lib/hooks/useCategoriasGasto'
 import {
   useReportes,
@@ -219,7 +220,15 @@ function BloqueA({ data, isDesktop, sinPresupuestoTodavia, sembrando, onSembrar,
 }) {
   const col = colorDesvio(data.desvioPuntos)
   return (
-    <div data-coach-target="presupuesto-hero" style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Explicacion
+        id="presupuesto-hero"
+        {...EXPLICACIONES['presupuesto-hero']}
+        ejemplo={data.ventasReales > 0 && (
+          <>Este mes vendiste <b>{fmtMoney(data.ventasReales)}</b> y gastaste <b>{fmtMoney(data.gastoTotal)}</b> en mercadería → CMV {fmtPct(data.cmvPct)} contra un objetivo de {fmtPct(data.objetivoPct)}.</>
+        )}
+      />
+      <div data-coach-target="presupuesto-hero" style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)' }}>
       <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-3)', fontWeight: 600, marginBottom: 12 }}>
         {mesLabel(data.mes)} · {data.diasCorridos} de {data.diasDelMes} días
       </div>
@@ -275,6 +284,7 @@ function BloqueA({ data, isDesktop, sinPresupuestoTodavia, sembrando, onSembrar,
           Menos de 3 meses de historia de compras: el reparto sugerido por sector es en partes iguales hasta que haya más datos.
         </p>
       )}
+      </div>
     </div>
   )
 }
@@ -352,11 +362,22 @@ function BloqueSectoresSemanas({ sectores, semanas, mesLabelStr, diasDelMes, mes
   const totalDesvio = sectores.reduce((s, r) => s + r.desvioPuntos, 0)
   const totalesSemana = [0, 1, 2, 3, 4].map(w => semanas.reduce((s, r) => s + r.celdas[w].gasto, 0))
   const presuTotalesSemana = [0, 1, 2, 3, 4].map(w => semanas.reduce((s, r) => s + r.celdas[w].presupuesto, 0))
+  const peorSector = [...sectores].sort((a, b) => b.desvioPuntos - a.desvioPuntos)[0]
 
   return (
     <div data-coach-target="presupuesto-sectores" style={{ background: 'var(--surface)', borderRadius: 14, padding: 16, border: '1px solid var(--border)' }}>
       <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-3)', fontWeight: 600, marginBottom: 12 }}>
         Sectores — el mes y semana a semana
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <Explicacion
+          id="presupuesto-sectores"
+          {...EXPLICACIONES['presupuesto-sectores']}
+          ejemplo={peorSector && (
+            <>{peorSector.nombre}: gastaste <b>{fmtMoney(peorSector.gastoReal)}</b> contra un presupuesto de <b>{fmtMoney(peorSector.presupuesto)}</b> → {fmtPuntos(peorSector.desvioPuntos)} puntos de desvío.</>
+          )}
+        />
       </div>
 
       <div data-coach-target="presupuesto-semanas" style={{ overflowX: 'auto' }}>
@@ -440,9 +461,20 @@ function BloqueSectoresSemanas({ sectores, semanas, mesLabelStr, diasDelMes, mes
         <span>Comida: <strong style={{ color: 'var(--text-1)' }}><Num>{fmtMoney(subtotalComida)}</Num></strong></span>
         <span>Bebidas: <strong style={{ color: 'var(--text-1)' }}><Num>{fmtMoney(subtotalBebidas)}</Num></strong></span>
       </div>
-      <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '10px 0 0', lineHeight: 1.5 }}>
-        El presupuesto por sector se siembra con el mix real de los últimos 3 meses y queda editable. La semana compara gasto contra presupuesto semanal, no contra ventas — las compras entran a saltos y las ventas salen parejas.
-      </p>
+      {(() => {
+        const semanaMax = totalesSemana.reduce((best, v, i) => v > totalesSemana[best] ? i : best, 0)
+        return (
+          <div style={{ marginTop: 12 }}>
+            <Explicacion
+              id="presupuesto-semanas"
+              {...EXPLICACIONES['presupuesto-semanas']}
+              ejemplo={totalesSemana[semanaMax] > 0 && (
+                <>{semanaLabels[semanaMax][0]} gastó <b>{fmtMoney(totalesSemana[semanaMax])}</b> contra un presupuesto semanal de <b>{fmtMoney(presuTotalesSemana[semanaMax])}</b>.</>
+              )}
+            />
+          </div>
+        )
+      })()}
     </div>
   )
 }
