@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth/context'
 import DashboardHeader from '@/components/dashboard/DashboardHeader'
 import AhoraCard from '@/components/dashboard/AhoraCard'
 import LineUpStrip from '@/components/dashboard/LineUpStrip'
+import ImplantacionStrip from '@/components/dashboard/ImplantacionStrip'
 import ProximosDias from '@/components/dashboard/ProximosDias'
 import IngresosBanner from '@/components/pedidos/IngresosBanner'
 import PasePreview from '@/components/dashboard/PasePreview'
@@ -319,6 +320,7 @@ export default function DashboardPage() {
           <div style={{ borderRight: '1px solid var(--border)', overflowY: 'auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
             <AhoraCard momento={momento} />
             <LineUpStrip momento={momento} />
+            <ImplantacionStrip />
             <ProximosDias />
             {/* Turno */}
             <div data-coach-target="dashboard-turno">
@@ -385,7 +387,7 @@ export default function DashboardPage() {
         <div className="scroll-body screen-enter" style={{ paddingTop: 0 }}>
           {/* El momento del día va primero — antes la pantalla abría con
               alertas de negocio antes de decir qué hacer (S1.1). */}
-          <div style={{ padding: '8px 16px 0', display: 'flex', flexDirection: 'column', gap: 10 }}><AhoraCard momento={momento} /><LineUpStrip momento={momento} /></div>
+          <div style={{ padding: '8px 16px 0', display: 'flex', flexDirection: 'column', gap: 10 }}><AhoraCard momento={momento} /><LineUpStrip momento={momento} /><ImplantacionStrip /></div>
           <div style={{ padding: '8px 16px 0' }}><ProximosDias /></div>
           {/* Turno card */}
           <div data-coach-target="dashboard-turno" style={{ padding: '8px 16px 0' }}>

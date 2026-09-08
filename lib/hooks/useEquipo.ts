@@ -430,6 +430,44 @@ async function fetchMiembrosData(key: string): Promise<Miembro[]> {
   })) as Miembro[]
 }
 
+async function fetchMiembrosInactivosData(key: string): Promise<Miembro[]> {
+  const rid = key.slice('miembros-inactivos-'.length)
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('equipo_miembros')
+    .select('*')
+    .eq('restaurante_id', rid)
+    .eq('activo', false)
+    .order('nombre')
+  if (error) throw error
+  return (data ?? []).map(m => ({
+    ...m,
+    modulos_extra: m.modulos_extra ?? [],
+    modulos_restringidos: m.modulos_restringidos ?? [],
+    ver_costos: m.ver_costos ?? null,
+    objetivos: m.objetivos ?? {},
+  })) as Miembro[]
+}
+
+/**
+ * Miembros desactivados — deliberadamente aparte de `useEquipo().miembros`
+ * (que solo trae `activo:true`) para que "Ver inactivos" en Plantel no
+ * filtre gente desactivada hacia el resto de Organigrama: Puestos, Cobertura,
+ * Estructura y Polivalencia leen `miembros` del hook principal, y ahí sí
+ * importa que un puesto vacante o una plaza sin cobertura no muestren a
+ * alguien que ya se fue. `enabled` en false no dispara ningún fetch — el
+ * chip "Inactivos" recién pide esto la primera vez que se toca.
+ */
+export function useMiembrosInactivos(enabled: boolean) {
+  const RESTAURANTE_ID = useRestauranteId()
+  const { data: inactivos = [], isLoading: loadingInactivos, mutate: mutateInactivos } = useSWR(
+    enabled && RESTAURANTE_ID ? `miembros-inactivos-${RESTAURANTE_ID}` : null,
+    fetchMiembrosInactivosData,
+    SWR_OPTS,
+  )
+  return { inactivos, loadingInactivos, mutateInactivos }
+}
+
 async function fetchPuestosData(key: string): Promise<Puesto[]> {
   const rid = key.slice('puestos-'.length)
   const supabase = createClient()

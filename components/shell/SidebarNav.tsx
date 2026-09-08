@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/auth/context'
 import { usePermisos } from '@/lib/hooks/usePermisos'
+import { resetOnboardingDone } from '@/lib/hooks/useOnboardingProgress'
 import { MODULO_CONFIG, MODULOS_POR_ROL, ROL_CONFIG, RUTA_A_MODULO } from '@/lib/constants'
 import type { ModuloId } from '@/lib/constants'
 import { NotificacionesBell } from '@/components/notificaciones/NotificacionesBell'
@@ -50,7 +51,7 @@ export const SIDEBAR_ANCHO_COLAPSADO = 68
 
 export default function SidebarNav({ onImportarClick, dark = false, collapsed = false }: Props) {
   const pathname = usePathname()
-  const { perfil } = useAuth()
+  const { perfil, user } = useAuth()
   const { puedeVer, isAdmin, moduloEnPerfil, perfilRestaurante } = usePermisos()
 
   const rol = perfil?.rol ?? 'ayudante'
@@ -204,6 +205,49 @@ export default function SidebarNav({ onImportarClick, dark = false, collapsed = 
             </div>
           )
         })}
+
+        {/* Guía de inicio / Organización — solo admin, hardcodeado (no es un
+            ModuloId: sumar uno no lo habilita para puestos ya creados en DB,
+            ver feedback_modulo_nuevo_backfill). Único acceso a /onboarding y
+            /implantacion fuera de Configuración (S7 sep 2026). */}
+        {isAdmin && (
+          <div style={{ marginBottom: 20 }}>
+            <Link
+              href="/onboarding"
+              title={collapsed ? 'Guía de inicio' : undefined}
+              onClick={() => resetOnboardingDone(user?.id)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                padding: '7px 10px', borderRadius: 8, marginBottom: 1,
+                color: 'rgba(255,255,255,0.6)', textDecoration: 'none', fontSize: 13,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.85)' }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'rgba(255,255,255,0.6)' }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 19, flexShrink: 0 }}>rocket_launch</span>
+              {!collapsed && <span>Guía de inicio</span>}
+            </Link>
+            <Link
+              href="/implantacion"
+              title={collapsed ? 'Organización' : undefined}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                justifyContent: collapsed ? 'center' : 'flex-start',
+                padding: '7px 10px', borderRadius: 8,
+                background: pathname.startsWith('/implantacion') ? 'rgba(255,255,255,0.13)' : 'transparent',
+                color: pathname.startsWith('/implantacion') ? 'white' : 'rgba(255,255,255,0.6)',
+                textDecoration: 'none', fontSize: 13,
+                fontWeight: pathname.startsWith('/implantacion') ? 600 : 400,
+              }}
+              onMouseEnter={e => { if (!pathname.startsWith('/implantacion')) e.currentTarget.style.color = 'rgba(255,255,255,0.85)' }}
+              onMouseLeave={e => { if (!pathname.startsWith('/implantacion')) e.currentTarget.style.color = 'rgba(255,255,255,0.6)' }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 19, flexShrink: 0 }}>landscape</span>
+              {!collapsed && <span>Organización</span>}
+            </Link>
+          </div>
+        )}
       </nav>
 
       {/* Usuario + atajo ? */}

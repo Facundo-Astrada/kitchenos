@@ -24,6 +24,13 @@ import { createClient } from '@/lib/supabase/server'
  * Es idempotente: si ya está vinculado no hace nada. Se puede llamar en cada
  * login sin efecto, y por eso `lib/auth/context.tsx` lo usa como auto-reparación
  * para los usuarios que ya quedaron rotos antes de este fix.
+ *
+ * Además CREA la ficha si no existe ninguna para matchear (caso Tamara,
+ * 08/09/2026): `/api/invitar` tenía un bug de índice único que hacía fallar
+ * su upsert de `equipo_miembros` en silencio — la invitación se mandaba, el
+ * usuario podía loguearse (alcanza con `user_restaurantes`), pero nunca
+ * tuvo ficha. Sin esto, `vincular` no tenía nada que actualizar y el hueco
+ * quedaba abierto para siempre. Ver PLAN-ARREGLOS-2026-09-08.md § 1.
  */
 export async function POST() {
   try {
@@ -79,10 +86,55 @@ export async function POST() {
 
     if (error) throw error
 
+    // Restaurantes donde no había ninguna ficha para vincular: el caso Tamara.
+    // Se crea directo, con el rol que ya tiene en user_restaurantes — sin
+    // puesto, para que el admin se lo asigne desde Organigrama.
+    const restaurantesVinculados = new Set((vinculadas ?? []).map(v => v.restaurante_id))
+    const restaurantesSinFicha = restauranteIds.filter(rid => !restaurantesVinculados.has(rid))
+
+    let creadas: { id: string; restaurante_id: string; puesto_id: string | null }[] = []
+    if (restaurantesSinFicha.length > 0) {
+      const { data: existentes } = await admin
+        .from('equipo_miembros')
+        .select('restaurante_id')
+        .in('restaurante_id', restaurantesSinFicha)
+        .ilike('email', emailPattern)
+      const yaExisten = new Set((existentes ?? []).map(e => e.restaurante_id))
+      const aCrear = restaurantesSinFicha.filter(rid => !yaExisten.has(rid))
+
+      if (aCrear.length > 0) {
+        const { data: ursConRol } = await admin
+          .from('user_restaurantes')
+          .select('restaurante_id, rol')
+          .eq('user_id', user.id)
+          .in('restaurante_id', aCrear)
+        const rolPorRestaurante = new Map((ursConRol ?? []).map(u => [u.restaurante_id, u.rol]))
+        const nombreMeta = (user.user_metadata?.nombre as string | undefined)?.trim()
+        const nombre = nombreMeta || email.split('@')[0]
+        const emailNormalizado = email.toLowerCase()
+
+        const { data: nuevas, error: insertError } = await admin
+          .from('equipo_miembros')
+          .insert(aCrear.map(rid => ({
+            nombre,
+            apellido: '',
+            email: emailNormalizado,
+            rol: rolPorRestaurante.get(rid) ?? 'cocinero',
+            auth_user_id: user.id,
+            activo: true,
+            restaurante_id: rid,
+          })))
+          .select('id, restaurante_id, puesto_id')
+
+        if (insertError) throw insertError
+        creadas = nuevas ?? []
+      }
+    }
+
     return NextResponse.json({
       ok: true,
-      vinculado: (vinculadas?.length ?? 0) > 0,
-      miembros: vinculadas ?? [],
+      vinculado: (vinculadas?.length ?? 0) > 0 || creadas.length > 0,
+      miembros: [...(vinculadas ?? []), ...creadas],
     })
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Error al vincular el usuario'

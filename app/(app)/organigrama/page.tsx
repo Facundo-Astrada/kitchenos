@@ -10,12 +10,12 @@
 import PageTransition from '@/components/PageTransition'
 import { useState, useMemo, useEffect } from 'react'
 import {
-  useEquipo, construirArbolPuestos, idsDescendientes,
+  useEquipo, useMiembrosInactivos, construirArbolPuestos, idsDescendientes,
   type Miembro, type Puesto, type PuestoNode, type AreaEstado,
 } from '@/lib/hooks/useEquipo'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { MODULO_CONFIG, CAPAS, type ModuloId, type AreaKey, type Capa } from '@/lib/constants'
-import { SegmentedTabs, FilterChips, EmptyState, HeaderAction } from '@/components/ui'
+import { SegmentedTabs, FilterChips, EmptyState, HeaderAction, Modal } from '@/components/ui'
 import { MiembroCard } from '@/components/organigrama/MiembroCard'
 import { FichaMiembroPanel } from '@/components/organigrama/FichaMiembro'
 import { PuestosEditorPanel } from '@/components/organigrama/PuestosEditor'
@@ -45,6 +45,13 @@ export default function OrganigramaPage() {
 
   const [tab, setTab] = useState<Tab>('plantel')
   const [areaFiltro, setAreaFiltro] = useState<string>('todas')
+  const mostrarInactivos = areaFiltro === 'inactivos'
+  const { inactivos, mutateInactivos } = useMiembrosInactivos(mostrarInactivos)
+
+  async function reactivarMiembro(id: string) {
+    await actualizarMiembro(id, { activo: true })
+    mutateInactivos(prev => (prev ?? []).filter(m => m.id !== id), { revalidate: false })
+  }
   const [wizardOpen, setWizardOpen] = useState(false)
   const [exportando, setExportando] = useState(false)
 
@@ -138,13 +145,15 @@ export default function OrganigramaPage() {
   }
 
   const miembrosFiltrados = useMemo(() => {
+    if (areaFiltro === 'inactivos') return inactivos
     if (areaFiltro === 'todas') return miembros
     return miembros.filter(m => puestos.find(p => p.id === m.puesto_id)?.area_key === areaFiltro)
-  }, [miembros, puestos, areaFiltro])
+  }, [miembros, puestos, areaFiltro, inactivos])
 
   const filtroChips = useMemo(() => [
     { value: 'todas', label: 'Todas' },
     ...areasActivas.map(a => ({ value: a.key as string, label: a.nombre })),
+    { value: 'inactivos', label: 'Inactivos' },
   ], [areasActivas])
 
   async function reasignarReportaA(puestoId: string, reportaA: string | null) {
@@ -239,27 +248,13 @@ export default function OrganigramaPage() {
 
         {/* ── Vista Plantel ── */}
         {tab === 'plantel' && (
-          plantelMode !== 'grid' ? (
-            <FichaMiembroPanel
-              key={plantelMode === 'nuevo' ? 'nuevo' : plantelSelected?.id}
-              miembro={plantelMode === 'nuevo' ? null : plantelSelected}
-              puestos={puestos}
-              isAdmin={isAdmin}
-              initialOverrideMode={plantelOverrideInicial}
-              getModulosMiembro={getModulosMiembro}
-              crearMiembro={crearMiembro}
-              actualizarMiembro={actualizarMiembro}
-              actualizarOverridesMiembro={actualizarOverridesMiembro}
-              desactivarMiembro={desactivarMiembro}
-              onClose={cerrarPlantelPanel}
-              onToast={showToast}
-              onIrACrearPuesto={() => { cerrarPlantelPanel(); setTab('puestos') }}
-            />
-          ) : miembrosFiltrados.length === 0 ? (
+          miembrosFiltrados.length === 0 ? (
             <EmptyState
-              icon="groups"
-              title="Sin gente en esta área"
-              subtitle="Asigná un puesto de esta área a algún miembro del equipo, o agregá uno nuevo abajo."
+              icon={mostrarInactivos ? 'person_off' : 'groups'}
+              title={mostrarInactivos ? 'Nadie desactivado' : 'Sin gente en esta área'}
+              subtitle={mostrarInactivos
+                ? 'Cuando desactivés a alguien desde su ficha, va a aparecer acá para poder reactivarlo.'
+                : 'Asigná un puesto de esta área a algún miembro del equipo, o agregá uno nuevo abajo.'}
             />
           ) : (
             <>
@@ -271,37 +266,64 @@ export default function OrganigramaPage() {
                 }}
               >
                 {miembrosFiltrados.map(m => (
-                  <MiembroCard
-                    key={m.id} miembro={m} puestos={puestos} miembros={miembros} isAdmin={isAdmin}
-                    onEditarAccesos={miembro => { setPlantelSelected(miembro); setPlantelOverrideInicial(true); setPlantelMode('ficha') }}
-                  />
+                  <div key={m.id} style={{ opacity: m.activo ? 1 : 0.55, filter: m.activo ? 'none' : 'grayscale(.6)' }}>
+                    <MiembroCard
+                      miembro={m} puestos={puestos} miembros={miembros} isAdmin={isAdmin}
+                      onEditarAccesos={miembro => { setPlantelSelected(miembro); setPlantelOverrideInicial(true); setPlantelMode('ficha') }}
+                    />
+                  </div>
                 ))}
               </div>
-              <div style={{ display: 'flex', gap: 8, padding: '0 16px' }}>
-                <button
-                  onClick={() => { setPlantelSelected(null); setPlantelMode('nuevo') }}
-                  style={{ ...btnPrimary, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>person_add</span>
-                  Agregar
-                </button>
-                <button
-                  onClick={() => setShowInvitar(true)}
-                  style={{ ...btnPrimary, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'var(--accent)' }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>mail</span>
-                  Invitar
-                </button>
-              </div>
+              {!mostrarInactivos && (
+                <div style={{ display: 'flex', gap: 8, padding: '0 16px' }}>
+                  <button
+                    onClick={() => { setPlantelSelected(null); setPlantelMode('nuevo') }}
+                    style={{ ...btnPrimary, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>person_add</span>
+                    Agregar
+                  </button>
+                  <button
+                    onClick={() => setShowInvitar(true)}
+                    style={{ ...btnPrimary, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'var(--accent)' }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>mail</span>
+                    Invitar
+                  </button>
+                </div>
+              )}
             </>
           )
         )}
+
+        {/* Ficha/alta del plantel — modal centrado, no un content-swap dentro
+            del tab (S7 sep 2026, feedback: "se abre una pantalla nueva sin
+            serlo"). La grilla queda montada y visible/difuminada detrás. */}
+        <Modal open={tab === 'plantel' && plantelMode !== 'grid'} onClose={cerrarPlantelPanel} maxWidth={600}>
+          <FichaMiembroPanel
+            key={plantelMode === 'nuevo' ? 'nuevo' : plantelSelected?.id}
+            miembro={plantelMode === 'nuevo' ? null : plantelSelected}
+            puestos={puestos}
+            isAdmin={isAdmin}
+            initialOverrideMode={plantelOverrideInicial}
+            getModulosMiembro={getModulosMiembro}
+            crearMiembro={crearMiembro}
+            actualizarMiembro={actualizarMiembro}
+            actualizarOverridesMiembro={actualizarOverridesMiembro}
+            desactivarMiembro={desactivarMiembro}
+            reactivarMiembro={reactivarMiembro}
+            onClose={cerrarPlantelPanel}
+            onToast={showToast}
+            onIrACrearPuesto={() => { cerrarPlantelPanel(); setTab('puestos') }}
+          />
+        </Modal>
 
         {/* ── Vista Puestos ── */}
         {tab === 'puestos' && (
           <PuestosEditorPanel
             puestos={puestos}
             miembros={miembros}
+            isAdmin={isAdmin}
             crearPuesto={crearPuesto}
             actualizarPuesto={actualizarPuesto}
             eliminarPuesto={eliminarPuesto}
@@ -408,53 +430,50 @@ export default function OrganigramaPage() {
       />
 
       {/* Modal invitar (movido de Turnos → Equipo) */}
-      {showInvitar && (
-        <>
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 200 }} onClick={() => setShowInvitar(false)} />
-          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 201, background: 'var(--surface)', borderRadius: '20px 20px 0 0', padding: '24px 16px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>Invitar al equipo</h3>
-              <button onClick={() => setShowInvitar(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-3)' }}>close</span>
-              </button>
-            </div>
-            <div>
-              <label style={labelStyle}>Nombre (opcional)</label>
-              <input value={invNombre} onChange={e => setInvNombre(e.target.value)} placeholder="Juan" style={fieldStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>Email *</label>
-              <input value={invEmail} onChange={e => setInvEmail(e.target.value)} placeholder="juan@email.com" type="email" style={fieldStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>Nivel de acceso</label>
-              <select value={invRol} onChange={e => setInvRol(e.target.value)} style={fieldStyle}>
-                {NIVELES_ACCESO.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Puesto (opcional)</label>
-              <select value={invPuestoId} onChange={e => setInvPuestoId(e.target.value)} style={fieldStyle}>
-                <option value="">Sin puesto — permisos por nivel de acceso</option>
-                {puestos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-              </select>
-              <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '4px 0 0' }}>
-                Si no elegís puesto, después hay que asignarlo a mano desde la ficha para que tenga los permisos correctos.
-              </p>
-            </div>
-            <button
-              onClick={handleInvitar} disabled={inviting || !invEmail.trim()}
-              style={{ ...btnPrimary, opacity: inviting || !invEmail.trim() ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>send</span>
-              {inviting ? 'Enviando...' : 'Enviar invitación'}
+      <Modal open={showInvitar} onClose={() => setShowInvitar(false)}>
+        <div style={{ padding: '20px 16px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>Invitar al equipo</h3>
+            <button onClick={() => setShowInvitar(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-3)' }}>close</span>
             </button>
-            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, textAlign: 'center' }}>
-              El empleado recibirá un email para crear su cuenta.
+          </div>
+          <div>
+            <label style={labelStyle}>Nombre (opcional)</label>
+            <input value={invNombre} onChange={e => setInvNombre(e.target.value)} placeholder="Juan" style={fieldStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Email *</label>
+            <input value={invEmail} onChange={e => setInvEmail(e.target.value)} placeholder="juan@email.com" type="email" style={fieldStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Nivel de acceso</label>
+            <select value={invRol} onChange={e => setInvRol(e.target.value)} style={fieldStyle}>
+              {NIVELES_ACCESO.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Puesto (opcional)</label>
+            <select value={invPuestoId} onChange={e => setInvPuestoId(e.target.value)} style={fieldStyle}>
+              <option value="">Sin puesto — permisos por nivel de acceso</option>
+              {puestos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            </select>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '4px 0 0' }}>
+              Si no elegís puesto, después hay que asignarlo a mano desde la ficha para que tenga los permisos correctos.
             </p>
           </div>
-        </>
-      )}
+          <button
+            onClick={handleInvitar} disabled={inviting || !invEmail.trim()}
+            style={{ ...btnPrimary, opacity: inviting || !invEmail.trim() ? 0.5 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>send</span>
+            {inviting ? 'Enviando...' : 'Enviar invitación'}
+          </button>
+          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, textAlign: 'center' }}>
+            El empleado recibirá un email para crear su cuenta.
+          </p>
+        </div>
+      </Modal>
 
       {/* Toast */}
       {toast && (

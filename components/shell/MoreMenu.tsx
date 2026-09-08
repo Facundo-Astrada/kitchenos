@@ -7,6 +7,8 @@ import { MODULO_CONFIG, MODULOS_POR_ROL, NAV_ITEMS } from '@/lib/constants'
 import type { ModuloId } from '@/lib/constants'
 import type { Rol } from '@/types'
 import { usePermisos } from '@/lib/hooks/usePermisos'
+import { useAuth } from '@/lib/auth/context'
+import { resetOnboardingDone } from '@/lib/hooks/useOnboardingProgress'
 import ImportadorUniversal from '@/components/importador/ImportadorUniversal'
 
 interface MoreMenuProps {
@@ -15,8 +17,14 @@ interface MoreMenuProps {
 }
 
 export default function MoreMenu({ rol, onClose }: MoreMenuProps) {
-  const { puedeVer, loading, moduloEnPerfil } = usePermisos()
+  const { puedeVer, loading, moduloEnPerfil, isAdmin } = usePermisos()
+  const { user } = useAuth()
   const [showImportador, setShowImportador] = useState(false)
+
+  function abrirGuiaInicio() {
+    resetOnboardingDone(user?.id)
+    onClose()
+  }
 
   const todosLosModulos = MODULOS_POR_ROL[rol]
   const modulosExtra = todosLosModulos.filter((m) => {
@@ -88,6 +96,32 @@ export default function MoreMenu({ rol, onClose }: MoreMenuProps) {
             </div>
             <span className="material-symbols-outlined ml-auto text-[18px]" style={{ color: 'var(--text-3)' }}>chevron_right</span>
           </button>
+
+          {/* Guía de inicio / Organización — solo admin. Único acceso fuera de
+              Configuración a /onboarding y /implantacion (S7 sep 2026,
+              feedback: "deberían tener más protagonismo"). */}
+          {isAdmin && (
+            <div className="flex gap-2 mb-4">
+              <Link
+                href="/onboarding"
+                onClick={abrirGuiaInicio}
+                className="flex-1 flex items-center gap-2 rounded-[14px] px-3 py-2.5 border transition-colors active:scale-[.98]"
+                style={{ background: 'var(--surface)', border: '1px solid var(--border)', cursor: 'pointer' }}
+              >
+                <span className="material-symbols-outlined text-[18px]" style={{ color: 'var(--navy)' }}>rocket_launch</span>
+                <span className="text-[12px] font-bold" style={{ color: 'var(--text-1)' }}>Guía de inicio</span>
+              </Link>
+              <Link
+                href="/implantacion"
+                onClick={onClose}
+                className="flex-1 flex items-center gap-2 rounded-[14px] px-3 py-2.5 border transition-colors active:scale-[.98]"
+                style={{ background: 'var(--surface)', border: '1px solid var(--border)', cursor: 'pointer' }}
+              >
+                <span className="material-symbols-outlined text-[18px]" style={{ color: 'var(--navy)' }}>landscape</span>
+                <span className="text-[12px] font-bold" style={{ color: 'var(--text-1)' }}>Organización</span>
+              </Link>
+            </div>
+          )}
 
           <p className="text-[10px] font-bold uppercase tracking-[.1em] mb-3" style={{ color: 'var(--text-2)' }}>
             Módulos

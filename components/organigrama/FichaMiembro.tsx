@@ -258,6 +258,8 @@ export interface FichaMiembroPanelProps {
   actualizarMiembro: (id: string, datos: Partial<Omit<Miembro, 'id' | 'restaurante_id' | 'created_at'>>) => Promise<unknown>
   actualizarOverridesMiembro: (id: string, modulosExtra: string[], modulosRestringidos: string[], verCostos: boolean | null) => Promise<unknown>
   desactivarMiembro: (id: string) => Promise<unknown>
+  /** Vuelve a poner `activo: true` a alguien desactivado (chip "Inactivos" de Plantel). */
+  reactivarMiembro: (id: string) => Promise<unknown>
   onClose: () => void
   onToast: (msg: string) => void
   onIrACrearPuesto: () => void
@@ -265,7 +267,7 @@ export interface FichaMiembroPanelProps {
 
 export function FichaMiembroPanel({
   miembro, puestos, isAdmin, initialOverrideMode = false, getModulosMiembro,
-  crearMiembro, actualizarMiembro, actualizarOverridesMiembro, desactivarMiembro,
+  crearMiembro, actualizarMiembro, actualizarOverridesMiembro, desactivarMiembro, reactivarMiembro,
   onClose, onToast, onIrACrearPuesto,
 }: FichaMiembroPanelProps) {
   const esNuevo = miembro === null
@@ -335,6 +337,15 @@ export function FichaMiembroPanel({
       await desactivarMiembro(miembro.id)
       onClose()
     } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error al desactivar') }
+  }
+
+  async function handleReactivar() {
+    if (!miembro) return
+    try {
+      await reactivarMiembro(miembro.id)
+      onToast(`${miembro.nombre} reactivado`)
+      onClose()
+    } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error al reactivar') }
   }
 
   function toggleExtra(modulo: string) {
@@ -478,10 +489,10 @@ export function FichaMiembroPanel({
   return (
     <div style={{ padding: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+        <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-1)', margin: 0, flex: 1 }}>Ficha</h2>
         <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-2)' }}>arrow_back</span>
+          <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-2)' }}>close</span>
         </button>
-        <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>Ficha</h2>
       </div>
 
       {/* Avatar */}
@@ -659,7 +670,11 @@ export function FichaMiembroPanel({
       {/* Acciones */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <button onClick={startEditMiembro} style={btnPrimary}>Editar datos</button>
-        <button onClick={handleDesactivar} style={btnDanger}>Desactivar</button>
+        {m.activo ? (
+          <button onClick={handleDesactivar} style={btnDanger}>Desactivar</button>
+        ) : (
+          <button onClick={handleReactivar} style={{ ...btnPrimary, background: '#10b981' }}>Reactivar</button>
+        )}
       </div>
     </div>
   )

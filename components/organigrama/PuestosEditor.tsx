@@ -14,6 +14,7 @@ import {
   fieldStyle, labelStyle, btnPrimary, btnSecondary, btnDanger,
   type PuestoForm, EMPTY_PUESTO_FORM, objetivosDeForm,
 } from './equipoShared'
+import { PermisosPorRolPanel } from './PermisosPorRolPanel'
 
 // ══════════════════════════════════════════════════════════════
 // FORM — fuera del panel para identidad estable
@@ -254,6 +255,7 @@ type PuestosView = 'list' | 'detalle' | 'nuevo' | 'template'
 export interface PuestosEditorPanelProps {
   puestos: Puesto[]
   miembros: Miembro[]
+  isAdmin: boolean
   crearPuesto: (datos: Omit<Puesto, 'id' | 'restaurante_id' | 'created_at'>) => Promise<unknown>
   actualizarPuesto: (id: string, datos: Partial<Omit<Puesto, 'id' | 'restaurante_id' | 'created_at'>>) => Promise<unknown>
   eliminarPuesto: (id: string) => Promise<unknown>
@@ -261,7 +263,7 @@ export interface PuestosEditorPanelProps {
 }
 
 export function PuestosEditorPanel({
-  puestos, miembros, crearPuesto, actualizarPuesto, eliminarPuesto, onToast,
+  puestos, miembros, isAdmin, crearPuesto, actualizarPuesto, eliminarPuesto, onToast,
 }: PuestosEditorPanelProps) {
   const [view, setView] = useState<PuestosView>('list')
   const [selectedPuesto, setSelectedPuesto] = useState<Puesto | null>(null)
@@ -645,6 +647,8 @@ export function PuestosEditorPanel({
           Crear propio
         </button>
       </div>
+
+      <PermisosPorRolPanel miembros={miembros} isAdmin={isAdmin} onToast={onToast} />
     </div>
   )
 }
