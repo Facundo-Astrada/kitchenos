@@ -1,32 +1,47 @@
-# Sesión — 2026-09-07/08
+# Sesión — 2026-09-08
 
 ## Qué se cerró
-- **Ruta de implantación completa, del pizarrón al código en el día.** Plan investigado
-  (`PLAN-IMPLANTACION-2026-09.md`, 7 hitos / 31 estaciones) + los 6 bloques ejecutados.
-  7 commits (`821dd4b`…`257dc55`), deployados — Vercel `success`, prod 08/09 00:01.
-- **Organigrama → Polivalencia** (tab nuevo): matriz persona × plaza × nivel 0-4, con lectura
-  de riesgo por plaza. Tabla `competencias`. Aprobada por decisión de negocio **013**.
-- **`/lineup`**: la ficha que se lee en voz alta antes del servicio. Cero schema nuevo.
-- **`/implantacion`**: el medidor de organización — el % lo mueve el **uso**, no la carga.
-- **Huecos del modelo**: dueño único por módulo (`modulosUsa` nuevo), 4 módulos huérfanos
-  adoptados, `PUESTO_TEMPLATES` de 8 (todas de cocina) a 14, `responsable.ts`.
-- 370 tests (76 nuevos), lint limpio en lo nuevo, build OK.
+- **Bug de datos real en Bros**: `/api/invitar` nunca creó ficha de equipo (índice único
+  faltante, `onConflict` fallaba en silencio desde siempre). Arreglado en tres capas +
+  backfill de Tamara y `zrw.viajes@gmail.com`. Gotcha #29 en `hooks.md`.
+- Ficha del plantel de Organigrama pasa a modal centrado (`components/ui/Modal.tsx`, nuevo
+  — el que `ui.md` pedía extraer hace rato).
+- Configuración pierde los tabs Equipo/Permisos (duplicaban Organigrama) + 170 líneas de
+  código muerto. Plantel gana chip "Inactivos" con reactivar.
+- Permisos por rol se muda a Organigrama → Puestos, colapsado.
+- Guía de inicio / Organización: entrada propia en sidebar+MoreMenu (admin) + tira de
+  progreso en el Dashboard.
+- Polivalencia responsive: card por plaza en mobile (la tabla no entraba).
+- 2 commits (`c0af02d`, `551bc5c`) pusheados — Vercel deploya solo.
 
 ## Qué quedó a medias
-- **No hay scheduler**: el aviso se dispara a mano; el reconocimiento semanal está escrito y
-  testeado pero sin cablear. Es el mismo agujero que "nada avisa cuando producción se rompe".
-- **Push real**: `sw.js` sigue sin handler de `push` (ver ítem Notificaciones en `PENDIENTES.md`).
-- **`/onboarding` sigue vivo** conviviendo con la cordillera (estrangulamiento, a propósito).
-- **Los umbrales de inserción son criterio, no medición** (3 semanas de facturas, 5 días de pase).
+- Dos cuentas de prueba propias de Facundo en Bros (admin + `+test`) quedaron sin ficha a
+  propósito, para no meter tarjetas falsas en el plantel de un cliente real — asignarles
+  ficha a mano si hace falta verlas en Organigrama.
+- La sombra de scroll de la tabla de Polivalencia en desktop (CSS puro, sin JS) no se vio
+  en acción todavía: en la cuenta de prueba las 6 plazas entraban sin necesitar scroll.
+  Falta verla con plazas custom que sí desborden.
+- Quedan 3 copias viejas del patrón de modal centrado sin migrar a `components/ui/Modal.tsx`
+  (calendario, stock, checklist) — anotado en `PENDIENTES.md`.
+- Errores de consola pre-existentes en Home (`usePase`/`useChecklist`: "Error al cargar...")
+  vistos de casualidad verificando con Playwright contra `admin@elrescoldo.com` — no
+  investigados, puede ser esperable para una cuenta sin plaza asignada.
+- **`PENDIENTES.md` pasó los 38KB** (objetivo ~10KB) — mucho backlog acumulado de sesiones
+  viejas sin re-verificar si sigue vigente. No se tocó hoy por no re-auditar a ciegas ítems
+  ajenos a esta sesión.
 
 ## Probar primero mañana
-- **Nada de esto se abrió en un navegador contra producción.** Ese es el paso 1, en este orden:
-  Organigrama → Polivalencia · `/lineup` · `/implantacion` · la tira ámbar del Inicio.
-- Ojo con `/implantacion` en una cuenta grande: son ~30 counts en paralelo.
+- Que Tamara y `zrw.viajes@gmail.com` ya aparezcan en el plantel real de Bros.
+- Invitar a alguien nuevo de punta a punta en producción para confirmar el fix.
+- El chip Inactivos y el modal en un celular físico (se probó con Playwright/iPhone emulado).
 
 ## Próximo paso concreto
-1. Abrir las 4 pantallas en prod (`admin@elrescoldo.com`) y confirmar que no explotan.
-2. Mirar el % real de El Rescoldo y de Bros → **recalibrar los umbrales de inserción**.
-3. Cargar la matriz de polivalencia de un local real: sin eso no hay referentes.
-4. Facundo tiene que revisar dos decisiones mías: qué área es dueña de `recetario`,
-   `configuracion` y `facturas`; y que Administración quedó sin módulos propios.
+- Confirmar con Facundo que lo de Bros quedó bien. El barrido de las 4 fichas faltantes
+  fue contra todas las cuentas (join `user_restaurantes`×`equipo_miembros` sin filtrar por
+  restaurante) y solo encontró afectados en Bros — Origen y VOGLIO Farina ya quedaron
+  cubiertos por ese chequeo, no hace falta repetirlo.
+- Si no hay más feedback puntual: retomar el tope de 🟠 Alto en `PENDIENTES.md` — el
+  scheduler de avisos de la ruta de implantación (mismo agujero que "nada avisa cuando
+  producción se rompe").
+- Dedicar una sesión aparte a podar `PENDIENTES.md` — está muy por encima del tamaño que
+  debería tener.
