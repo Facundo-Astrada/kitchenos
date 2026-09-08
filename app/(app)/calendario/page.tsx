@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import { motion, AnimatePresence } from 'motion/react'
 import {
   useCalendario,
   TIPO_CONFIG,
@@ -13,7 +14,8 @@ import { useTareas } from '@/lib/hooks/useTareas'
 import { useMenus, type MenuConPreparaciones } from '@/lib/hooks/useMenus'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
-import { useSheetOpenWhen } from '@/lib/ui/chrome'
+import { Modal } from '@/components/ui'
+import { useReducedMotion, DURATION, EASE_OUT } from '@/lib/ui/motion'
 import { createClient } from '@/lib/supabase/client'
 import { activarMenuParaFechas, rangoFechas } from '@/lib/menus/activarMenu'
 import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
@@ -124,6 +126,55 @@ const cardStyle: React.CSSProperties = {
   border: '1px solid var(--border)',
 }
 
+/* Leyenda de tipos de evento — colapsada por default, recuerda el estado
+   entre visitas (mismo patrón que Explicacion en Reportes/Presupuesto). */
+function CalendarioLeyenda() {
+  const [open, setOpen] = useState(() => {
+    if (typeof window === 'undefined') return false
+    try { return localStorage.getItem('kc_calendario_leyenda') === '1' } catch { return false }
+  })
+  function toggle() {
+    setOpen(v => {
+      const next = !v
+      try { localStorage.setItem('kc_calendario_leyenda', next ? '1' : '0') } catch {}
+      return next
+    })
+  }
+  return (
+    <div style={{ ...cardStyle, marginTop: 12, overflow: 'hidden' }}>
+      <button
+        onClick={toggle}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
+          background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+        }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'var(--text-3)', flexShrink: 0 }}>palette</span>
+        <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: 'var(--text-2)' }}>Referencias</span>
+        <span
+          className="material-symbols-outlined"
+          style={{ fontSize: 18, color: 'var(--text-3)', transform: open ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }}
+        >
+          expand_more
+        </span>
+      </button>
+      {open && (
+        <div style={{ padding: '0 12px 12px', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {(Object.keys(TIPO_CONFIG) as TipoEvento[]).map(t => {
+            const cfg = TIPO_CONFIG[t]
+            return (
+              <span key={t} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text-2)' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 15, color: cfg.color }}>{cfg.icon}</span>
+                {cfg.label}
+              </span>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ─── Page ─── */
 
 export default function CalendarioPage() {
@@ -135,6 +186,10 @@ export default function CalendarioPage() {
   const [view, setView] = useState<'mes' | 'semana'>('mes')
   const [showForm, setShowForm] = useState(false)
   const [editEvento, setEditEvento] = useState<EventoCalendario | null>(null)
+  // Dirección de la última navegación (mes o semana) — alimenta el shared
+  // axis: +1 el contenido nuevo entra desde la derecha, -1 desde la izquierda.
+  const [navDir, setNavDir] = useState(1)
+  const reducedMotion = useReducedMotion()
 
   const {
     eventos, proveedores, notaItems, loading,
@@ -150,11 +205,9 @@ export default function CalendarioPage() {
   const catalogoMenus = useMemo(() => todosLosMenus.filter(m => m.tipo === 'evento'), [todosLosMenus])
   const RESTAURANTE_ID = useRestauranteId()
   const isDesktop = useIsDesktop()
-  useSheetOpenWhen(showForm)
 
   /* ── Planificar menú: activa un Menú del catálogo para un rango de días ── */
   const [showMenuPlan, setShowMenuPlan] = useState(false)
-  useSheetOpenWhen(showMenuPlan)
   const [menuPlanMenuId, setMenuPlanMenuId] = useState('')
   const [menuPlanDesde, setMenuPlanDesde] = useState('')
   const [menuPlanHasta, setMenuPlanHasta] = useState('')
@@ -257,8 +310,16 @@ export default function CalendarioPage() {
     let y = currentYear
     if (m < 1) { m = 12; y-- }
     if (m > 12) { m = 1; y++ }
+    setNavDir(dir)
     setCurrentMonth(m)
     setCurrentYear(y)
+  }
+
+  const goWeek = (dir: number) => {
+    setNavDir(dir)
+    const d = new Date(selectedDate + 'T12:00:00')
+    d.setDate(d.getDate() + dir * 7)
+    setSelectedDate(toDateStr(d.getFullYear(), d.getMonth() + 1, d.getDate()))
   }
 
   const goHoy = () => {
@@ -557,9 +618,29 @@ export default function CalendarioPage() {
               ))}
             </div>
           )}
+      </>
+    )
 
-          {/* Actions */}
-          <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+    return (
+      <Modal open={showForm} onClose={() => setShowForm(false)} maxWidth={560}>
+        <div style={{ padding: isDesktop ? 24 : 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>
+              {editEvento ? 'Editar evento' : 'Nuevo evento'}
+            </h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {editEvento && (
+                <button onClick={handleDelete} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', padding: 4 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 22 }}>delete</span>
+                </button>
+              )}
+              <button onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', display: 'flex', padding: 4 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 22 }}>close</span>
+              </button>
+            </div>
+          </div>
+          {formFields}
+          <div style={{ display: 'flex', gap: 12 }}>
             <button
               onClick={() => setShowForm(false)}
               style={{
@@ -581,75 +662,8 @@ export default function CalendarioPage() {
               Guardar
             </button>
           </div>
-      </>
-    )
-
-    if (isDesktop) {
-      return (
-        <div
-          onClick={() => setShowForm(false)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.55)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
-          }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              background: 'var(--surface)', borderRadius: 18, width: '100%', maxWidth: 560,
-              maxHeight: 'calc(100dvh - 48px)', overflowY: 'auto', boxShadow: '0 8px 40px rgba(0,0,0,0.4)',
-              display: 'flex', flexDirection: 'column',
-            }}
-          >
-            <div style={{
-              padding: '18px 24px', borderBottom: '1px solid var(--border)', flexShrink: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>
-                {editEvento ? 'Editar evento' : 'Nuevo evento'}
-              </h2>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                {editEvento && (
-                  <button onClick={handleDelete} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', padding: 4 }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 22 }}>delete</span>
-                  </button>
-                )}
-                <button onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', display: 'flex', padding: 4 }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 22 }}>close</span>
-                </button>
-              </div>
-            </div>
-            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {formFields}
-            </div>
-          </div>
         </div>
-      )
-    }
-
-    return (
-      <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
-        {/* Header */}
-        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 24 }}>arrow_back</span>
-            </button>
-            <h1 style={{ color: '#fff', fontSize: 18, fontWeight: 700, margin: 0 }}>
-              {editEvento ? 'Editar evento' : 'Nuevo evento'}
-            </h1>
-          </div>
-          {editEvento && (
-            <button onClick={handleDelete} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 22 }}>delete</span>
-            </button>
-          )}
-        </div>
-
-        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {formFields}
-        </div>
-      </div>
+      </Modal>
     )
   }
 
@@ -754,58 +768,21 @@ export default function CalendarioPage() {
       </>
     )
 
-    if (isDesktop) {
-      return (
-        <div
-          onClick={() => setShowMenuPlan(false)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.55)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
-          }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              background: 'var(--surface)', borderRadius: 18, width: '100%', maxWidth: 560,
-              maxHeight: 'calc(100dvh - 48px)', overflowY: 'auto', boxShadow: '0 8px 40px rgba(0,0,0,0.4)',
-              display: 'flex', flexDirection: 'column',
-            }}
-          >
-            <div style={{
-              padding: '18px 24px', borderBottom: '1px solid var(--border)', flexShrink: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            }}>
-              <div>
-                <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>Planificar evento</h2>
-                <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>Activa un evento del catálogo para un rango de días</p>
-              </div>
-              <button onClick={() => setShowMenuPlan(false)} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', display: 'flex', padding: 4 }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 22 }}>close</span>
-              </button>
-            </div>
-            <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {menuPlanFields}
-            </div>
-          </div>
-        </div>
-      )
-    }
-
     return (
-      <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
-        <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={() => setShowMenuPlan(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 24 }}>arrow_back</span>
-          </button>
-          <div>
-            <h1 style={{ color: '#fff', fontSize: 18, fontWeight: 700, margin: 0 }}>Planificar evento</h1>
-            <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12, margin: '2px 0 0' }}>Activa un evento para un rango de días</p>
+      <Modal open={showMenuPlan} onClose={() => setShowMenuPlan(false)} maxWidth={560}>
+        <div style={{ padding: isDesktop ? 24 : 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>Planificar evento</h2>
+              <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>Activa un evento del catálogo para un rango de días</p>
+            </div>
+            <button onClick={() => setShowMenuPlan(false)} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', display: 'flex', padding: 4, flexShrink: 0 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 22 }}>close</span>
+            </button>
           </div>
-        </div>
-        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
           {menuPlanFields}
         </div>
-      </div>
+      </Modal>
     )
   }
 
@@ -1068,8 +1045,30 @@ export default function CalendarioPage() {
                   ))}
                 </div>
 
-                {/* Calendar grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 3 }}>
+                {/* Calendar grid — shared axis: el mes sale para el lado del que entra */}
+                <div style={{ position: 'relative', overflow: 'hidden' }}>
+                <AnimatePresence mode="popLayout" custom={navDir} initial={false}>
+                <motion.div
+                  key={`${currentMonth}-${currentYear}`}
+                  custom={navDir}
+                  variants={{
+                    enter: (dir: number) => ({ opacity: 0, x: dir * 24 }),
+                    center: { opacity: 1, x: 0 },
+                    exit: (dir: number) => ({ opacity: 0, x: dir * -24 }),
+                  }}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  transition={{ duration: reducedMotion ? 0 : DURATION.enter, ease: EASE_OUT }}
+                  drag={!isDesktop ? 'x' : false}
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={0.35}
+                  onDragEnd={(_e, info) => {
+                    if (info.offset.x < -60) goMonth(1)
+                    else if (info.offset.x > 60) goMonth(-1)
+                  }}
+                  style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 3 }}
+                >
                   {grid.map((cell, i) => {
                     const dateStr = toDateStr(cell.year, cell.month, cell.day)
                     const isToday = dateStr === today()
@@ -1081,6 +1080,8 @@ export default function CalendarioPage() {
                       <div key={i} style={{ position: 'relative' }}>
                         <button
                           onClick={() => setSelectedDate(dateStr)}
+                          onMouseEnter={e => { e.currentTarget.style.boxShadow = 'var(--shadow-2)' }}
+                          onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none' }}
                           style={{
                             width: '100%',
                             background: isSelected ? 'rgba(67,97,160,0.12)' : 'transparent',
@@ -1091,6 +1092,7 @@ export default function CalendarioPage() {
                             display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 3,
                             minHeight: isDesktop ? 118 : 64,
                             textAlign: 'left',
+                            transition: 'box-shadow .12s ease-out',
                           }}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1119,7 +1121,7 @@ export default function CalendarioPage() {
                                     key={j}
                                     style={{
                                       fontSize: 10, fontWeight: 600, padding: '1px 5px', borderRadius: 4,
-                                      background: color + '20', color, borderLeft: `2px solid ${color}`,
+                                      background: color + '20', color, borderLeft: `3px solid ${color}`,
                                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                                     }}
                                   >
@@ -1152,7 +1154,12 @@ export default function CalendarioPage() {
                       </div>
                     )
                   })}
+                </motion.div>
+                </AnimatePresence>
                 </div>
+
+                {/* Leyenda de tipos — colapsable */}
+                <CalendarioLeyenda />
 
                 {!isDesktop && (
                   <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1177,6 +1184,41 @@ export default function CalendarioPage() {
         {/* ── Weekly view ── */}
         {!loading && view === 'semana' && (
           <div>
+            {/* Nav de semana */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 6 }}>
+              <button onClick={() => goWeek(-1)} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', display: 'flex' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 22 }}>chevron_left</span>
+              </button>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)' }}>
+                {weekDates[0].dayNum} — {weekDates[6].dayNum} de {MESES[currentMonth - 1]}
+              </span>
+              <button onClick={() => goWeek(1)} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', display: 'flex' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 22 }}>chevron_right</span>
+              </button>
+            </div>
+
+            <div style={{ position: 'relative', overflow: 'hidden' }}>
+            <AnimatePresence mode="popLayout" custom={navDir} initial={false}>
+            <motion.div
+              key={weekDates[0].dateStr}
+              custom={navDir}
+              variants={{
+                enter: (dir: number) => ({ opacity: 0, x: dir * 24 }),
+                center: { opacity: 1, x: 0 },
+                exit: (dir: number) => ({ opacity: 0, x: dir * -24 }),
+              }}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{ duration: reducedMotion ? 0 : DURATION.enter, ease: EASE_OUT }}
+              drag={!isDesktop ? 'x' : false}
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.35}
+              onDragEnd={(_e, info) => {
+                if (info.offset.x < -60) goWeek(1)
+                else if (info.offset.x > 60) goWeek(-1)
+              }}
+            >
             {/* Day headers */}
             <div style={{ display: 'grid', gridTemplateColumns: '48px repeat(7,1fr)', gap: 0, marginBottom: 8 }}>
               <div />
@@ -1274,6 +1316,9 @@ export default function CalendarioPage() {
                   </div>
                 ))}
               </div>
+            </div>
+            </motion.div>
+            </AnimatePresence>
             </div>
           </div>
         )}

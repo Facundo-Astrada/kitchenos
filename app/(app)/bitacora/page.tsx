@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { motion, AnimatePresence } from 'motion/react'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { useBitacora } from '@/lib/hooks/useBitacora'
+import { useReducedMotion, DURATION } from '@/lib/ui/motion'
 import PageHeader from '@/components/shell/PageHeader'
 import ActionButton from '@/components/shell/ActionButton'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -23,6 +25,7 @@ const FILTROS: FilterChip<FiltroTipo>[] = [
 
 export default function BitacoraPage() {
   const isDesktop = useIsDesktop()
+  const reducedMotion = useReducedMotion()
   const {
     entradas, loadingEntradas,
     crearEntrada, actualizarEntrada, eliminarEntrada,
@@ -124,7 +127,13 @@ export default function BitacoraPage() {
           />
         ) : (
           visibles.map(e => (
-            <EntradaListItem key={e.id} entrada={e} active={e.id === selectedId} onClick={() => setSelectedId(e.id)} />
+            <EntradaListItem
+              key={e.id}
+              entrada={e}
+              active={e.id === selectedId}
+              onClick={() => setSelectedId(e.id)}
+              onArchivar={() => actualizarEntrada(e.id, { archivada: !e.archivada })}
+            />
           ))
         )}
       </div>
@@ -162,12 +171,23 @@ export default function BitacoraPage() {
         <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid var(--border)', overflow: 'hidden' }}>
           {listaPanel}
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {selected && docProps ? (
-            <EntradaDoc {...docProps} />
-          ) : (
-            <EmptyState icon="history_edu" title="Elegí una entrada" subtitle="O creá una nueva reunión, nota, lista o idea." style={{ height: '100%', justifyContent: 'center' }} />
-          )}
+        <div style={{ flex: 1, minWidth: 0, position: 'relative', overflow: 'hidden' }}>
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={selected?.id ?? 'empty'}
+              initial={reducedMotion ? undefined : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={reducedMotion ? undefined : { opacity: 0 }}
+              transition={{ duration: reducedMotion ? 0 : DURATION.base }}
+              style={{ height: '100%' }}
+            >
+              {selected && docProps ? (
+                <EntradaDoc {...docProps} />
+              ) : (
+                <EmptyState icon="history_edu" title="Elegí una entrada" subtitle="O creá una nueva reunión, nota, lista o idea." style={{ height: '100%', justifyContent: 'center' }} />
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
       {nuevaOpen && <NuevaEntradaSheet onClose={() => setNuevaOpen(false)} onCreate={handleCrear} />}
