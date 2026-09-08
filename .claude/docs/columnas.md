@@ -91,6 +91,32 @@
 | `reservas` (ago 2026, PLAN-4-CAPAS B8) | `cliente_id UUID NULL` (FK `clientes` SET NULL, casi siempre null — la mayoría de las reservas no tiene cliente cargado), `nombre`+`telefono` en texto libre a propósito (redundantes con `clientes`). `mesa_id UUID NULL` (FK `mesas` SET NULL, se asigna recién al sentar, B9 todavía no lo hace). `estado` (`pendiente\|confirmada\|sentada\|no_show\|cancelada`, default `pendiente`) — `no_show` es estado, no borrado. `origen` (`telefono\|whatsapp\|web\|walk_in`, default `telefono`). Aislada: sin trigger ni consumidor todavía en OPS/Salón/Calendario/Dashboard (eso es B9) | asumir que `mesa_id` ya se completa solo, o que hay algún lado que lea esta tabla todavía |
 | `notificaciones` (ago 2026) | `usuario_id UUID` → **`auth.users.id`, no `equipo_miembros.id`** (mismo patrón que `turnos_personal`) — es lo único que la policy RLS puede comparar contra `auth.uid()`. `tipo TEXT` libre (no enum), `link TEXT NULL` (ruta relativa, sin FK). Policy INSERT deliberadamente abierta al tenant (`restaurante_id = mi_restaurante_id()`, sin exigir `usuario_id = auth.uid()`): quien crea la notificación casi nunca es el destinatario | poner `equipo_miembros.id` en `usuario_id` |
 
+## Nombres de tabla que no son los que uno adivina
+
+| Buscás | La tabla se llama | Nota |
+|---|---|---|
+| Registros HACCP | `haccp_temperaturas`, `haccp_limpieza_registros`, `haccp_vencimientos`, `haccp_equipos` | No existe `haccp_registros` |
+| Arqueos de caja | `cajas_turnos` (+ `caja_movimientos`) | `estado='cerrada'` = arqueo hecho. No existe `arqueos` |
+| Ingredientes de receta | `ingredientes` | No `receta_ingredientes` |
+| Rendimiento de receta | `recetas.porciones` | No `rendimiento` |
+| Presupuesto por sector | `presupuesto_sector` / `presupuesto_mes` | No `presupuestos` (esa es la vieja, por período) |
+
+**`ingredientes` no tiene `restaurante_id`** — su RLS filtra por las recetas de la cuenta
+(`receta_id IN (SELECT id FROM recetas WHERE restaurante_id = mi_restaurante_id())`). Consecuencia
+útil: se puede contar/filtrar **directo** (`.from('ingredientes').select('*',{count:'exact',head:true})`)
+sin el embed `!inner`, y sin caer en el gotcha #8 de `hooks.md`. Cuidado con lo opuesto: escribir
+`.eq('restaurante_id', X)` ahí falla, esa columna no existe.
+
+## Matriz de polivalencia — `competencias`
+
+`competencias (restaurante_id, miembro_id → equipo_miembros CASCADE, plaza TEXT, nivel SMALLINT 0-4,
+evidencia_url, nota, actualizado_por, updated_at)`, `UNIQUE(restaurante_id, miembro_id, plaza)`.
+`plaza` es TEXT y no enum a propósito: las plazas custom viven en `restaurantes.configuracion`, no
+en el schema. **Una fila ausente no es un error: es nivel 0** — la grilla se dibuja completa aunque
+la tabla esté vacía. Nivel 4 = referente (sabe y enseña); de ahí salen los referentes de la ruta de
+implantación, no de una designación a dedo. Índice `(restaurante_id, plaza, nivel DESC)` para
+"¿quién es el referente de esta plaza?".
+
 ## Unidades de ingredientes — trampas de conversión
 
 `ingredientes.unidad`/`unidad_costo` llegan con variantes no estándar desde importaciones: `gr/grs/gramo→g`, `lt/lts/litro→l`, `cc/mililitro→ml`, `unidad/unidades/un→u`. `canonUnit()` en `lib/hooks/useRecetas.ts` canoniza antes de calcular el factor; `supabase/migrations/normalizar_unidades_ingredientes.sql` corrige en DB.

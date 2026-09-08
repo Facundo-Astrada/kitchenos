@@ -16,17 +16,13 @@ construyeron y deployaron el 07/09 (`PLAN-IMPLANTACION-2026-09.md` § 0). Falta:
    El reconocimiento semanal está escrito y testeado (`lib/implantacion/avisos.ts`) pero no
    cableado — necesita algo que corra solo. Es el mismo agujero que "nada avisa cuando
    producción se rompe": una sola pieza resolvería los dos.
-2. **Push real.** `public/sw.js` (67 líneas) sigue sin handler de `push` ni de
-   `notificationclick`. Faltan esos, claves VAPID, tabla de suscripciones y endpoint
-   disparador. Sin esto el aviso solo llega si la persona abre la app — justo lo que no hace
-   quien está abandonando.
-3. **Retirar `/onboarding`.** La cordillera (`/implantacion`) convive con la guía de inicio a
+2. **Retirar `/onboarding`.** La cordillera (`/implantacion`) convive con la guía de inicio a
    propósito (estrangulamiento). Retirar la vieja recién cuando la nueva esté probada contra
    un restaurante real.
-4. **Tres checkpoints se confirman a mano** porque no hay dato que los sostenga: "sin
+3. **Tres checkpoints se confirman a mano** porque no hay dato que los sostenga: "sin
    estandarizar" por plato (se calcula por componente en Carta, no hay columna), "se leyó el
    line-up en voz alta", y la estación 5.5 (un desvío del reporte cambió el estándar).
-5. **Nadie verificó la ruta contra datos reales todavía.** Los umbrales de inserción
+4. **Nadie verificó la ruta contra datos reales todavía.** Los umbrales de inserción
    (3 semanas de facturas, 5 días de pase, 20 tareas despachadas) son criterio, no medición:
    hay que mirarlos contra El Rescoldo y Bros y ajustarlos.
 
@@ -93,12 +89,18 @@ Prompt caching y tool use agéntico ya resueltos. Falta tabla `coach_conversacio
 `PhotoPicker` (bucket `fotos`) integrado en recetario, carta y equipo. Falta facturas, si se decide.
 
 ### Notificaciones — falta más triggers, y push/email sin decidir
-In-app ya resuelto (tabla `notificaciones`, `useNotificaciones` con realtime, campanita+feed `NotificacionesBell`, `crearNotificacion()` reusable) con un solo trigger real (`useEquipo.asignarTurno`). Falta wireear más triggers si se necesitan (stock crítico, vencimientos, etc. — cada uno es una decisión de producto aparte, no asumir). Push web (PWA + service worker + VAPID) y email/WhatsApp para alertas críticas siguen sin decisión tomada.
+In-app ya resuelto (tabla `notificaciones`, `useNotificaciones` con realtime, campanita+feed `NotificacionesBell`, `crearNotificacion()` reusable). **Dos triggers reales**: `useEquipo.asignarTurno` y el recordatorio al responsable de una estación de la ruta (`/implantacion`, sep 2026). Falta wireear más si se necesitan (stock crítico, vencimientos — cada uno es una decisión de producto aparte, no asumir).
+
+**Lo que sí está decidido** (`DECISIONES.md` § 25, implementado en `lib/implantacion/avisos.ts`): recordatorio máximo 1/día por persona chequeado contra lo ya enviado en DB y no contra un flag local; reconocimiento **semanal**, del equipo y sin nombres; a la tercera ignorada no se insiste, se sugiere reasignar. Ese código está testeado y sin cablear del todo — el reconocimiento semanal necesita algo que corra solo.
+
+**Lo que sigue abierto:** push web — `public/sw.js` (67 líneas) **no tiene handler de `push` ni de `notificationclick`**; faltan esos, claves VAPID, tabla de suscripciones y endpoint disparador. Sin eso el aviso solo llega si la persona abre la app, que es justo lo que no hace quien está abandonando. Email/WhatsApp para el que dejó de entrar sigue sin decisión.
 
 ### PWA offline — completar fuera de Salón/KDS
 La vista de servicio (Salón/KDS) ya tiene offline completo (SW cachea GETs, bumps en cola IndexedDB, banner sin-conexión). El resto de la app (stock, facturas, etc.) queda pendiente.
 
 ### Onboarding wizard guiado
+**Contexto nuevo (sep 2026):** existe `/implantacion`, la cordillera de 7 hitos / 31 estaciones que mide organización del restaurante y no termina (`PLAN-IMPLANTACION-2026-09.md`). **No reemplaza a este ítem**: mide al restaurante, no acompaña a una persona nueva. El gap de abajo sigue igual de abierto.
+
 `WelcomeDashboard` existe. Falta el flujo completo: datos del restaurante → plazas → stock inicial → equipo → permisos, persistiendo progreso en `restaurantes.configuracion.onboarding_step`.
 
 **Gap adicional (auditoría 20/08):** el wizard (`app/(app)/onboarding/page.tsx`, pasos por rol) solo se dispara vía redirect server-side cuando el restaurante tiene 0 productos, 0 facturas y 0 recetas (`app/(app)/page.tsx`). Un cocinero invitado a un restaurante ya operativo nunca cumple esa condición — cae directo al Dashboard sin ninguna guía, con el tour automático del Coach como único mecanismo de descubrimiento (y ese tiene su propio bug: el flag `kc_ops_welcomed`/`kc_app_welcomed` se marca en localStorage *antes* de que el tour termine de mostrarse, así que si el usuario navega rápido se pierde para siempre y no vuelve a aparecer). Fix: disparar el wizard (o una versión corta, solo los pasos del rol) por "primer login de este usuario", no solo por "restaurante vacío".

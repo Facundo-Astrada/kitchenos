@@ -16,7 +16,19 @@ real (`lib/ops/turnos.ts:96`). Este doc no renombra nada existente
    nueva.** `turno_fecha` ya existe y significa jornada (no turno) en
    `tareas` — ese nombre es deuda aceptada, no un patrón a copiar. Un alias
    tipado barato ayuda: `type Jornada = string`.
-3. **"turno" queda reservado para `TurnoServicio`** (el bloque horario del
+3. **Un `ModuloId` nuevo necesita área dueña, en el acto.** Al sumar un módulo a
+   `MODULO_CONFIG` hay que ponerlo en el array `modulos` de **exactamente un**
+   área de `AREA_CATALOGO` (`lib/constants.ts`). `modulos` significa "esta área
+   responde por él y recibe sus avisos"; si otras lo usan sin responder, van en
+   `modulosUsa`. Un módulo huérfano no tiene responsable posible y no hay a
+   quién avisarle; uno con dos dueños manda el aviso a dos personas, y un aviso
+   que le llega a dos no lo atiende ninguna. `lib/constants.test.ts` falla si
+   pasa cualquiera de las dos cosas — no es una convención a recordar.
+4. **Responsable ≠ referente.** El *responsable* de una función se designa
+   (Organigrama → Cobertura, `area_capas`) y es **una** persona. El *referente*
+   se detecta (matriz de polivalencia, `competencias` nivel 4) y es a quien el
+   resto le pregunta — casi nunca el mismo. No usar una palabra por la otra.
+5. **"turno" queda reservado para `TurnoServicio`** (el bloque horario del
    servicio — almuerzo/cena, configurable). Cualquier otro concepto que hoy
    se nombraría "turno" lleva prefijo: `caja_` (turno de caja), `fichaje_`
    (entrada/salida de personal), etc. Ver la lista de los 7 significados
