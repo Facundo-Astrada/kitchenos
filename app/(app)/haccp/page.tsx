@@ -2,7 +2,7 @@
 
 import PageTransition from '@/components/PageTransition'
 import { useState, useMemo, useEffect, useCallback } from 'react'
-import { useHaccp, type HaccpEquipo, type HaccpTemperatura, type HaccpVencimiento, type HaccpLimpieza } from '@/lib/hooks/useHaccp'
+import { useHaccp, type HaccpEquipo, type HaccpTemperatura, type HaccpVencimiento, type HaccpLimpieza, type HaccpLimpiezaRegistro } from '@/lib/hooks/useHaccp'
 import { limpiezaTocaFecha } from '@/lib/haccp/recurrencia'
 import { useMerma } from '@/lib/hooks/useMerma'
 import { usePermisos } from '@/lib/hooks/usePermisos'
@@ -12,7 +12,8 @@ import { useAuth } from '@/lib/auth/context'
 import { createClient } from '@/lib/supabase/client'
 import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, supportsWebUSB, supportsWebBluetooth } from '@/lib/print/escpos'
 import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
-import { fechaEnTz, TZ_DEFAULT } from '@/lib/ops/turnos'
+import { fechaEnTz, TZ_DEFAULT, hoyOperativo, sumarDias } from '@/lib/ops/turnos'
+import { Modal } from '@/components/ui'
 
 // ── Helpers ─────────────────────────────────────────────
 const fmtDate = (d: string | null) => {
@@ -642,37 +643,72 @@ function NuevoVencView({
   )
 }
 
-// ── Nueva Tarea Limpieza View ───────────────────────────
+// ── Modal Tarea Limpieza (crear/editar) ─────────────────
 const DIAS_SEMANA_LIMP = [
   { v: 1, l: 'Lun' }, { v: 2, l: 'Mar' }, { v: 3, l: 'Mié' }, { v: 4, l: 'Jue' },
   { v: 5, l: 'Vie' }, { v: 6, l: 'Sáb' }, { v: 0, l: 'Dom' },
 ]
 
-function NuevaTareaLimpView({
-  onSave,
-  onBack,
+function TareaLimpiezaModal({
+  open, initial, areasExistentes, onSave, onClose,
 }: {
-  onSave: (d: { area: string; tarea_limpieza: string; frecuencia: string; dia_semana: number | null; dia_mes: number | null; sync_ops: boolean }) => Promise<void>
-  onBack: () => void
+  open: boolean
+  initial: HaccpLimpieza | null
+  areasExistentes: string[]
+  onSave: (d: { area: string; tarea_limpieza: string; frecuencia: string; dias_semana: number[] | null; dia_mes: number | null; sync_ops: boolean }) => Promise<void>
+  onClose: () => void
 }) {
   const [area, setArea] = useState('')
   const [tarea, setTarea] = useState('')
   const [freq, setFreq] = useState('diaria')
-  const [diaSemana, setDiaSemana] = useState(1)
+  const [diasSemana, setDiasSemana] = useState<number[]>([1])
   const [diaMes, setDiaMes] = useState(1)
   const [syncOps, setSyncOps] = useState(true)
   const [saving, setSaving] = useState(false)
 
+  // Precarga al abrir — en modo edición desde `initial`, en modo creación
+  // en blanco. Sin esto, editar una tarea y después crear otra arrastraría
+  // los valores de la anterior (el formulario no se desmonta, Modal solo
+  // lo oculta/muestra).
+  useEffect(() => {
+    if (!open) return
+    setArea(initial?.area ?? '')
+    setTarea(initial?.tarea_limpieza ?? '')
+    setFreq(initial?.frecuencia ?? 'diaria')
+    setDiasSemana(initial?.dias_semana?.length ? initial.dias_semana : initial?.dia_semana != null ? [initial.dia_semana] : [1])
+    setDiaMes(initial?.dia_mes ?? 1)
+    setSyncOps(initial?.sync_ops ?? true)
+  }, [open, initial])
+
+  function toggleDia(v: number) {
+    setDiasSemana(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v].sort())
+  }
+
+  const puedeGuardar = area.trim() && tarea.trim() && (freq !== 'semanal' || diasSemana.length > 0)
+
   return (
-    <div style={{ paddingBottom: 90 }}>
-      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
-          <span className="material-symbols-outlined">arrow_back</span>
-        </button>
-        <span style={{ color: '#fff', fontWeight: 700, fontSize: 17 }}>Nueva tarea de limpieza</span>
-      </div>
-      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div><label style={labelStyle}>Área</label><input value={area} onChange={e => setArea(e.target.value)} placeholder="Ej: Cocina, Baños, Salón" style={fieldStyle} /></div>
+    <Modal open={open} onClose={onClose} maxWidth={480}>
+      <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)' }}>
+            {initial ? 'Editar tarea de limpieza' : 'Nueva tarea de limpieza'}
+          </span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-3)' }}>close</span>
+          </button>
+        </div>
+
+        <div>
+          <label style={labelStyle}>Área</label>
+          <input
+            value={area} onChange={e => setArea(e.target.value)}
+            placeholder="Ej: Cocina, Baños, Salón" style={fieldStyle}
+            list="haccp-areas-existentes"
+          />
+          <datalist id="haccp-areas-existentes">
+            {areasExistentes.map(a => <option key={a} value={a} />)}
+          </datalist>
+        </div>
         <div><label style={labelStyle}>Tarea</label><input value={tarea} onChange={e => setTarea(e.target.value)} placeholder="Describir la tarea..." style={fieldStyle} /></div>
         <div>
           <label style={labelStyle}>Frecuencia</label>
@@ -684,19 +720,23 @@ function NuevaTareaLimpView({
           </select>
         </div>
 
-        {/* Day selector — semanal */}
+        {/* Días — multi-selección: "campana los lunes y jueves" es una sola
+            tarea, no dos (S6/Bloque 3). */}
         {freq === 'semanal' && (
           <div>
-            <label style={labelStyle}>¿Qué día de la semana?</label>
+            <label style={labelStyle}>¿Qué días de la semana?</label>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {DIAS_SEMANA_LIMP.map(d => (
-                <button key={d.v} onClick={() => setDiaSemana(d.v)} style={{
-                  flex: 1, minWidth: 44, padding: '8px 0', borderRadius: 8, cursor: 'pointer',
-                  border: `1px solid ${diaSemana === d.v ? 'var(--navy)' : 'var(--border)'}`,
-                  background: diaSemana === d.v ? 'var(--navy)' : 'var(--surface)',
-                  color: diaSemana === d.v ? '#fff' : 'var(--text-2)', fontSize: 12, fontWeight: 600,
-                }}>{d.l}</button>
-              ))}
+              {DIAS_SEMANA_LIMP.map(d => {
+                const on = diasSemana.includes(d.v)
+                return (
+                  <button key={d.v} onClick={() => toggleDia(d.v)} style={{
+                    flex: 1, minWidth: 44, padding: '8px 0', borderRadius: 8, cursor: 'pointer',
+                    border: `1px solid ${on ? 'var(--navy)' : 'var(--border)'}`,
+                    background: on ? 'var(--navy)' : 'var(--surface)',
+                    color: on ? '#fff' : 'var(--text-2)', fontSize: 12, fontWeight: 600,
+                  }}>{d.l}</button>
+                )
+              })}
             </div>
           </div>
         )}
@@ -727,41 +767,41 @@ function NuevaTareaLimpView({
             <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>Aparece como rutina en el Mise de Operaciones (plaza General), el día que corresponde</div>
           </div>
         </button>
-      </div>
-      <div style={{ padding: '4px 16px 16px' }}>
-        <button disabled={!area.trim() || !tarea.trim() || saving} onClick={async () => {
+
+        <button disabled={!puedeGuardar || saving} onClick={async () => {
           setSaving(true)
           try {
             await onSave({
               area: area.trim(), tarea_limpieza: tarea.trim(), frecuencia: freq,
-              dia_semana: freq === 'semanal' ? diaSemana : null,
+              dias_semana: freq === 'semanal' ? diasSemana : null,
               dia_mes: freq === 'mensual' ? diaMes : null,
               sync_ops: syncOps,
             })
           } finally { setSaving(false) }
         }} style={{
           width: '100%', padding: '14px', borderRadius: 12,
-          background: (area.trim() && tarea.trim()) ? 'var(--navy)' : '#ccc',
+          background: puedeGuardar ? 'var(--navy)' : '#ccc',
           color: '#fff', border: 'none', fontWeight: 700, fontSize: 15, cursor: 'pointer',
         }}>
-          {saving ? 'Guardando...' : 'Agregar tarea'}
+          {saving ? 'Guardando...' : initial ? 'Guardar cambios' : 'Agregar tarea'}
         </button>
       </div>
-    </div>
+    </Modal>
   )
 }
 
 // ── MAIN PAGE ───────────────────────────────────────────
-type View = 'main' | 'registrar' | 'historial' | 'config' | 'nuevoVenc' | 'nuevaLimp'
+type View = 'main' | 'registrar' | 'historial' | 'config' | 'nuevoVenc'
 type Tab = 'temperaturas' | 'vencimientos' | 'limpieza'
 
 export default function HaccpPage() {
   const {
-    equipos, temperaturas, vencimientos, limpieza, loading,
+    equipos, temperaturas, vencimientos, limpieza, limpiezaRegistros, loading,
     crearEquipo, eliminarEquipo,
     registrarTemperaturas, fetchTemperaturas,
     crearVencimiento, descartarVencimiento,
-    crearTareaLimpieza, registrarLimpieza, eliminarTareaLimpieza,
+    crearTareaLimpieza, actualizarTareaLimpieza, registrarLimpieza, quitarRegistroLimpieza,
+    eliminarTareaLimpieza, fetchRegistrosRango,
   } = useHaccp()
   const { registrarMerma } = useMerma()
   const { isAdmin } = usePermisos()
@@ -789,8 +829,26 @@ export default function HaccpPage() {
   }, [])
   const [selectedEquipo, setSelectedEquipo] = useState<HaccpEquipo | null>(null)
   const [toast, setToast] = useState('')
-  const [limpSubTab, setLimpSubTab] = useState<'lista' | 'calendario'>('lista')
-  const [calRef, setCalRef] = useState(() => { const d = new Date(); return { m: d.getMonth(), y: d.getFullYear() } })
+  const [limpSubTab, setLimpSubTab] = useState<'hoy' | 'semana' | 'todas'>('hoy')
+  const [limpWeekOffset, setLimpWeekOffset] = useState(0)
+  const [limpModalOpen, setLimpModalOpen] = useState(false)
+  const [editandoLimp, setEditandoLimp] = useState<HaccpLimpieza | null>(null)
+  const [registrosSemana, setRegistrosSemana] = useState<HaccpLimpiezaRegistro[]>([])
+
+  const limpWeekDates = useMemo(() => {
+    const hoy = hoyOperativo()
+    const [y, m, d] = hoy.split('-').map(Number)
+    const dow = new Date(y, m - 1, d).getDay() // 0=Dom..6=Sáb
+    const diffToMon = dow === 0 ? -6 : 1 - dow
+    const monday = sumarDias(hoy, diffToMon + limpWeekOffset * 7)
+    return Array.from({ length: 7 }, (_, i) => sumarDias(monday, i))
+  }, [limpWeekOffset])
+
+  useEffect(() => {
+    if (limpSubTab !== 'semana') return
+    fetchRegistrosRango(limpWeekDates[0], limpWeekDates[6]).then(setRegistrosSemana)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [limpSubTab, limpWeekDates[0], limpWeekDates[6]])
 
   // Get latest temp per equipo
   const latestTemps = useMemo(() => {
@@ -857,10 +915,22 @@ export default function HaccpPage() {
     setView('main')
   }
 
-  const handleCrearLimp = async (d: { area: string; tarea_limpieza: string; frecuencia: string; dia_semana: number | null; dia_mes: number | null; sync_ops: boolean }) => {
-    await crearTareaLimpieza({ ...d, frecuencia: d.frecuencia as 'cada_turno' | 'diaria' | 'semanal' | 'mensual', usuario_id: null })
-    setToast(d.sync_ops ? 'Tarea agregada y enviada a OPS' : 'Tarea de limpieza agregada')
-    setView('main')
+  const handleGuardarLimp = async (d: { area: string; tarea_limpieza: string; frecuencia: string; dias_semana: number[] | null; dia_mes: number | null; sync_ops: boolean }) => {
+    const payload = { ...d, frecuencia: d.frecuencia as 'cada_turno' | 'diaria' | 'semanal' | 'mensual', dia_semana: d.dias_semana?.[0] ?? null, usuario_id: null }
+    if (editandoLimp) {
+      await actualizarTareaLimpieza(editandoLimp.id, payload)
+      setToast('Tarea de limpieza actualizada')
+    } else {
+      await crearTareaLimpieza(payload)
+      setToast(d.sync_ops ? 'Tarea agregada y enviada a OPS' : 'Tarea de limpieza agregada')
+    }
+    setLimpModalOpen(false)
+    setEditandoLimp(null)
+  }
+
+  async function toggleRegistroLimpieza(limpiezaId: string, fecha: string, yaRegistrado: boolean) {
+    if (yaRegistrado) await quitarRegistroLimpieza(limpiezaId, fecha)
+    else await registrarLimpieza(limpiezaId, fecha)
   }
 
   // ── Sub views ──
@@ -892,14 +962,6 @@ export default function HaccpPage() {
     return (
       <>
         <NuevoVencView onSave={handleCrearVenc} onBack={() => setView('main')} restauranteNombre={restauranteNombre} />
-        {toast && <Toast msg={toast} onDone={() => setToast('')} />}
-      </>
-    )
-  }
-  if (view === 'nuevaLimp') {
-    return (
-      <>
-        <NuevaTareaLimpView onSave={handleCrearLimp} onBack={() => setView('main')} />
         {toast && <Toast msg={toast} onDone={() => setToast('')} />}
       </>
     )
@@ -1102,7 +1164,7 @@ export default function HaccpPage() {
           {tab === 'limpieza' && (
             <div data-coach-target="haccp-limpieza" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {isAdmin && (
-              <button onClick={() => setView('nuevaLimp')} style={{
+              <button onClick={() => { setEditandoLimp(null); setLimpModalOpen(true) }} style={{
                 width: '100%', padding: '12px', borderRadius: 12, background: 'var(--navy)',
                 color: '#fff', border: 'none', fontWeight: 700, fontSize: 14, cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -1112,88 +1174,195 @@ export default function HaccpPage() {
               </button>
               )}
 
-              {/* Sub-tabs Lista / Calendario */}
+              {/* Sub-tabs Hoy / Semana / Todas */}
               <div style={{ display: 'flex', gap: 6, background: 'var(--bg)', borderRadius: 10, padding: 3 }}>
-                {(['lista', 'calendario'] as const).map(st => (
+                {(['hoy', 'semana', 'todas'] as const).map(st => (
                   <button key={st} onClick={() => setLimpSubTab(st)} style={{
                     flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
                     background: limpSubTab === st ? 'var(--surface)' : 'transparent',
                     color: limpSubTab === st ? 'var(--navy-ink)' : 'var(--text-3)',
-                    fontSize: 13, fontWeight: 600,
+                    fontSize: 13, fontWeight: 600, textTransform: 'capitalize',
                     boxShadow: limpSubTab === st ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
                   }}>
-                    {st === 'lista' ? 'Lista' : 'Calendario'}
+                    {st}
                   </button>
                 ))}
               </div>
 
-              {/* ── CALENDARIO ── */}
-              {limpSubTab === 'calendario' && (() => {
-                const { m, y } = calRef
-                const monthName = new Date(y, m, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
-                const firstDow = (new Date(y, m, 1).getDay() + 6) % 7 // Mon=0
-                const daysInMonth = new Date(y, m + 1, 0).getDate()
-                const cells: (Date | null)[] = []
-                for (let i = 0; i < firstDow; i++) cells.push(null)
-                for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(y, m, d))
-                const todayStr = new Date().toDateString()
+              {/* ── HOY — lo que hay que hacer y nada más ── */}
+              {limpSubTab === 'hoy' && (() => {
+                const hoy = hoyOperativo()
+                const hoyDate = new Date(hoy + 'T12:00:00')
+                const registradosHoy = new Set(limpiezaRegistros.filter(r => r.fecha === hoy).map(r => r.limpieza_id))
+                const tareasHoy = limpieza.filter(l => tareaTocaDia(l, hoyDate))
+                const hechas = tareasHoy.filter(l => registradosHoy.has(l.id)).length
+                const porArea: Record<string, HaccpLimpieza[]> = {}
+                for (const l of tareasHoy) { (porArea[l.area] ??= []).push(l) }
+                return (
+                  <>
+                    {tareasHoy.length > 0 && (
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                        {hechas} de {tareasHoy.length} hechas hoy
+                      </div>
+                    )}
+                    {tareasHoy.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: 32, color: 'var(--text-3)', fontSize: 13 }}>
+                        Nada para limpiar hoy
+                      </div>
+                    )}
+                    {Object.entries(porArea).map(([area, tasks]) => (
+                      <div key={area}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-2)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>cleaning_services</span>
+                          {area}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {tasks.map(l => {
+                            const hecha = registradosHoy.has(l.id)
+                            return (
+                              <button key={l.id} onClick={async () => {
+                                await toggleRegistroLimpieza(l.id, hoy, hecha)
+                                setToast(hecha ? 'Limpieza destildada' : 'Limpieza registrada')
+                              }} style={{
+                                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', minHeight: 56,
+                                background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10,
+                                cursor: 'pointer', width: '100%', textAlign: 'left', fontFamily: 'inherit',
+                              }}>
+                                <div style={{
+                                  width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+                                  background: hecha ? '#059669' : '#e5e7eb',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }}>
+                                  {hecha && <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#fff' }}>check</span>}
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontWeight: 500, fontSize: 13, color: 'var(--text-1)', textDecoration: hecha ? 'line-through' : 'none' }}>
+                                    {l.tarea_limpieza}
+                                  </div>
+                                  <span style={{ fontSize: 11, color: 'var(--text-3)', background: 'var(--bg)', padding: '1px 6px', borderRadius: 4 }}>
+                                    {FREQ_LABELS[l.frecuencia]}
+                                  </span>
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )
+              })()}
+
+              {/* ── SEMANA — el diagrama, área × 7 días ── */}
+              {limpSubTab === 'semana' && (() => {
+                const hoy = hoyOperativo()
+                const registrosSet = new Set(registrosSemana.map(r => `${r.limpieza_id}|${r.fecha}`))
+                const areas = Object.keys(limpiezaByArea)
+                const diaCorto = ['D', 'L', 'M', 'M', 'J', 'V', 'S']
                 return (
                   <div>
-                    {/* Month nav */}
+                    {/* Nav semana */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                      <button onClick={() => setCalRef(r => r.m === 0 ? { m: 11, y: r.y - 1 } : { m: r.m - 1, y: r.y })} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                        <span className="material-symbols-outlined" style={{ color: 'var(--text-2)' }}>chevron_left</span>
+                      <button onClick={() => setLimpWeekOffset(o => o - 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-2)' }}>chevron_left</span>
                       </button>
-                      <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)', textTransform: 'capitalize' }}>{monthName}</span>
-                      <button onClick={() => setCalRef(r => r.m === 11 ? { m: 0, y: r.y + 1 } : { m: r.m + 1, y: r.y })} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-                        <span className="material-symbols-outlined" style={{ color: 'var(--text-2)' }}>chevron_right</span>
+                      <div style={{ textAlign: 'center' }}>
+                        <button onClick={() => setLimpWeekOffset(0)} style={{
+                          background: limpWeekOffset === 0 ? 'var(--navy)' : 'var(--surface)',
+                          color: limpWeekOffset === 0 ? '#fff' : 'var(--text-1)',
+                          border: limpWeekOffset === 0 ? 'none' : '1px solid var(--border)',
+                          borderRadius: 8, padding: '4px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', marginBottom: 4,
+                        }}>Esta semana</button>
+                        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                          {fmtShortDate(limpWeekDates[0])} — {fmtShortDate(limpWeekDates[6])}
+                        </div>
+                      </div>
+                      <button onClick={() => setLimpWeekOffset(o => o + 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-2)' }}>chevron_right</span>
                       </button>
                     </div>
-                    {/* Weekday header */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3, marginBottom: 4 }}>
-                      {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((d, i) => (
-                        <div key={i} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: 'var(--text-3)' }}>{d}</div>
-                      ))}
-                    </div>
-                    {/* Grid */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3 }}>
-                      {cells.map((date, i) => {
-                        if (!date) return <div key={i} />
-                        const tareasDia = limpieza.filter(l => tareaTocaDia(l, date))
-                        const isToday = date.toDateString() === todayStr
-                        return (
-                          <div key={i} style={{
-                            minHeight: 52, borderRadius: 8, padding: '3px 2px',
-                            border: `1px solid ${isToday ? 'var(--navy)' : 'var(--border)'}`,
-                            background: isToday ? 'rgba(28,45,74,0.05)' : 'var(--surface)',
-                            display: 'flex', flexDirection: 'column', gap: 1,
-                          }}>
-                            <div style={{ fontSize: 10, fontWeight: 700, color: isToday ? 'var(--navy-ink)' : 'var(--text-3)', textAlign: 'center' }}>{date.getDate()}</div>
-                            {tareasDia.slice(0, 2).map(t => (
-                              <div key={t.id} style={{
-                                fontSize: 8, lineHeight: 1.15, padding: '1px 2px', borderRadius: 3,
-                                background: '#dbeafe', color: '#1e40af', overflow: 'hidden',
-                                textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                              }}>{t.tarea_limpieza}</div>
-                            ))}
-                            {tareasDia.length > 2 && (
-                              <div style={{ fontSize: 8, color: 'var(--text-3)', textAlign: 'center' }}>+{tareasDia.length - 2}</div>
-                            )}
+
+                    {areas.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: 32, color: 'var(--text-3)', fontSize: 13 }}>
+                        Agregá tareas para verlas en la semana
+                      </div>
+                    ) : (
+                      <div style={{ overflowX: 'auto' }}>
+                        <div style={{ minWidth: 480 }}>
+                          {/* Header de días */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '76px repeat(7, 1fr)', gap: 3, marginBottom: 4 }}>
+                            <div />
+                            {limpWeekDates.map(d => {
+                              const esHoy = d === hoy
+                              return (
+                                <div key={d} style={{
+                                  textAlign: 'center', fontSize: 10, fontWeight: 700,
+                                  color: esHoy ? 'var(--navy-ink)' : 'var(--text-3)',
+                                  background: esHoy ? 'rgba(28,45,74,.08)' : 'transparent',
+                                  borderRadius: 6, padding: '3px 0',
+                                }}>
+                                  {diaCorto[new Date(d + 'T12:00:00').getDay()]} {Number(d.slice(8, 10))}
+                                </div>
+                              )
+                            })}
                           </div>
-                        )
-                      })}
-                    </div>
-                    {limpieza.length === 0 && (
-                      <div style={{ textAlign: 'center', padding: 24, color: 'var(--text-3)', fontSize: 13 }}>
-                        Agregá tareas para verlas en el calendario
+
+                          {/* Filas por área */}
+                          {areas.map(area => (
+                            <div key={area} style={{ display: 'grid', gridTemplateColumns: '76px repeat(7, 1fr)', gap: 3, marginBottom: 6 }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)', display: 'flex', alignItems: 'center', paddingRight: 4 }}>
+                                {area}
+                              </div>
+                              {limpWeekDates.map(d => {
+                                const date = new Date(d + 'T12:00:00')
+                                const tareasDia = limpiezaByArea[area].filter(l => tareaTocaDia(l, date))
+                                const esHoy = d === hoy
+                                const esPasado = d < hoy
+                                return (
+                                  <div key={d} style={{
+                                    background: esHoy ? 'rgba(28,45,74,.04)' : 'transparent',
+                                    borderRadius: 6, padding: 2, minHeight: 30,
+                                    display: 'flex', flexDirection: 'column', gap: 2,
+                                  }}>
+                                    {tareasDia.map(l => {
+                                      const hecha = registrosSet.has(`${l.id}|${d}`)
+                                      const atrasada = esPasado && !hecha
+                                      return (
+                                        <button
+                                          key={l.id}
+                                          title={l.tarea_limpieza}
+                                          onClick={async () => {
+                                            await toggleRegistroLimpieza(l.id, d, hecha)
+                                            setRegistrosSemana(prev => hecha
+                                              ? prev.filter(r => !(r.limpieza_id === l.id && r.fecha === d))
+                                              : [...prev, { id: `tmp-${l.id}-${d}`, limpieza_id: l.id, fecha: d, completado: true, observacion: null, usuario_id: null, created_at: new Date().toISOString() }])
+                                          }}
+                                          style={{
+                                            fontSize: 9, padding: '2px 4px', borderRadius: 4, border: 'none', cursor: 'pointer',
+                                            textAlign: 'left', lineHeight: 1.25, fontFamily: 'inherit',
+                                            background: hecha ? '#d1fae5' : atrasada ? '#fef3c7' : 'var(--bg)',
+                                            color: hecha ? '#065f46' : atrasada ? '#92400e' : 'var(--text-2)',
+                                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                          }}
+                                        >
+                                          {l.tarea_limpieza}
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
                 )
               })()}
 
-              {/* ── LISTA ── */}
-              {limpSubTab === 'lista' && Object.entries(limpiezaByArea).map(([area, tasks]) => (
+              {/* ── TODAS — el catálogo, editar y borrar ── */}
+              {limpSubTab === 'todas' && Object.entries(limpiezaByArea).map(([area, tasks]) => (
                 <div key={area}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-2)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span className="material-symbols-outlined" style={{ fontSize: 16 }}>cleaning_services</span>
@@ -1231,6 +1400,13 @@ export default function HaccpPage() {
                             </div>
                           </div>
                           {isAdmin && (
+                          <button onClick={() => { setEditandoLimp(l); setLimpModalOpen(true) }} style={{
+                            background: 'none', border: 'none', cursor: 'pointer',
+                          }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)' }}>edit</span>
+                          </button>
+                          )}
+                          {isAdmin && (
                           <button onClick={() => { if (confirm('Eliminar?')) eliminarTareaLimpieza(l.id) }} style={{
                             background: 'none', border: 'none', cursor: 'pointer',
                           }}>
@@ -1243,6 +1419,14 @@ export default function HaccpPage() {
                   </div>
                 </div>
               ))}
+
+              <TareaLimpiezaModal
+                open={limpModalOpen}
+                initial={editandoLimp}
+                areasExistentes={Array.from(new Set(limpieza.map(l => l.area))).sort()}
+                onSave={handleGuardarLimp}
+                onClose={() => { setLimpModalOpen(false); setEditandoLimp(null) }}
+              />
             </div>
           )}
         </div>

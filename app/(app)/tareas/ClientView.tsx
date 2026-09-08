@@ -505,6 +505,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
       tarea_limpieza: titulo,
       frecuencia: 'diaria',
       dia_semana: null,
+      dias_semana: null,
       dia_mes: null,
       sync_ops: true,
       usuario_id: null,

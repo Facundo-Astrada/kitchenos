@@ -10,6 +10,13 @@ export function limpiezaTocaFecha(l: HaccpLimpieza, fecha: Date): boolean {
     case 'diaria':
       return true
     case 'semanal': {
+      // dias_semana (array) es la fuente de verdad desde S6/Bloque 3 — una
+      // tarea semanal puede tocar varios días ("campana lunes y jueves").
+      // dia_semana (single) se mantiene por compatibilidad con OPS/sync y
+      // como fallback para filas sin dias_semana cargado todavía.
+      if (l.dias_semana && l.dias_semana.length > 0) {
+        return l.dias_semana.includes(fecha.getDay())
+      }
       const dia = l.dia_semana ?? new Date(l.created_at).getDay()
       return fecha.getDay() === dia
     }

@@ -4,6 +4,7 @@ import { useEffect, useCallback, useMemo } from 'react'
 import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
+import { hoyOperativo } from '@/lib/ops/turnos'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -58,6 +59,11 @@ export interface HaccpLimpieza {
   restaurante_id: string
   created_at: string
   dia_semana: number | null
+  /** Días de la semana (0=Dom..6=Sáb, mismo formato que dia_semana) para
+   *  frecuencia 'semanal' — una tarea puede tocar varios días. Fuente de
+   *  verdad desde S6/Bloque 3; dia_semana se mantiene por compatibilidad
+   *  con el sync a OPS y como fallback (ver limpiezaTocaFecha). */
+  dias_semana: number[] | null
   dia_mes: number | null
   sync_ops: boolean
   checklist_item_id: string | null
@@ -317,11 +323,11 @@ export function useHaccp(opts?: { soloEscritura?: boolean }) {
   // checklist_item_id en haccp_limpieza guarda el id de la rutina creada.
   async function syncLimpiezaToOps(
     nombre: string, frecuencia: string,
-    diaSemana: number | null, diaMes: number | null,
+    diasSemana: number[] | null, diaMes: number | null,
   ): Promise<string | null> {
     try {
       // HACCP usa 0=Dom..6=Sáb; checklist_rutina usa ISO 1=Lun..7=Dom.
-      const isoDia = diaSemana == null ? null : (diaSemana === 0 ? 7 : diaSemana)
+      const isoDias = diasSemana?.length ? diasSemana.map(d => (d === 0 ? 7 : d)) : null
       const freqRutina = frecuencia === 'cada_turno' ? 'diaria'
         : (frecuencia === 'semanal' || frecuencia === 'mensual') ? frecuencia
         : 'diaria'
@@ -331,7 +337,7 @@ export function useHaccp(opts?: { soloEscritura?: boolean }) {
           nombre,
           plaza: 'general',
           frecuencia: freqRutina,
-          dias_semana: freqRutina === 'semanal' && isoDia != null ? [isoDia] : null,
+          dias_semana: freqRutina === 'semanal' && isoDias ? isoDias : null,
           dia_mes: freqRutina === 'mensual' ? diaMes : null,
           orden: 90,
           restaurante_id: RESTAURANTE_ID,
@@ -352,12 +358,16 @@ export function useHaccp(opts?: { soloEscritura?: boolean }) {
       if (datos.sync_ops) {
         checklistItemId = await syncLimpiezaToOps(
           `${datos.area}: ${datos.tarea_limpieza}`, datos.frecuencia,
-          datos.dia_semana ?? null, datos.dia_mes ?? null,
+          datos.dias_semana ?? (datos.dia_semana != null ? [datos.dia_semana] : null), datos.dia_mes ?? null,
         )
       }
 
       const { error } = await supabase.from('haccp_limpieza').insert({
         ...datos,
+        // dia_semana (single) se deriva del primero de dias_semana — lo sigue
+        // leyendo HaccpSeccionLink.tsx (badge de "próxima limpieza") sin
+        // necesidad de tocar ese componente por un caso de varios días.
+        dia_semana: datos.dias_semana?.[0] ?? datos.dia_semana ?? null,
         ultimo_registro: null,
         checklist_item_id: checklistItemId,
         restaurante_id: RESTAURANTE_ID,
@@ -371,25 +381,150 @@ export function useHaccp(opts?: { soloEscritura?: boolean }) {
     }
   }
 
-  async function registrarLimpieza(limpiezaId: string, observacion?: string) {
+  // fecha: día operativo (YYYY-MM-DD) a registrar — default hoy. Antes usaba
+  // new Date().toISOString() directo en una columna `date`: Postgres castea
+  // a la fecha UTC, así que después de las 21:00 ART una limpieza quedaba
+  // registrada al día siguiente (bug real, encontrado auditando S6/Bloque 3).
+  // upsert por (limpieza_id, fecha) — el índice único de la migración
+  // haccp_limpieza_dias_multiples — para que tildar dos veces el mismo día
+  // no duplique fila, solo actualice la observación.
+  // optimisticData en vez de esperar el `await mutate()` a ciegas: sin esto,
+  // el tilde tardaba 1-5s en aparecer (mutate() revalida los 5 datasets de
+  // HACCP juntos, no solo limpieza) y un segundo tap en esa ventana leía el
+  // estado viejo y volvía a registrar en vez de destildar — encontrado
+  // probando la vista Hoy con Playwright (S6/Bloque 3). DESIGN.md §7:
+  // tildar es la acción idempotente/reversible de manual que pide UI
+  // optimista, sin spinner.
+  async function registrarLimpieza(limpiezaId: string, fecha?: string, observacion?: string) {
+    const dia = fecha ?? hoyOperativo()
+    const optimisticRow: HaccpLimpiezaRegistro = {
+      id: `tmp-${limpiezaId}-${dia}`, limpieza_id: limpiezaId, fecha: dia,
+      completado: true, observacion: observacion ?? null, usuario_id: null,
+      created_at: new Date().toISOString(),
+    }
     try {
-      const ahora = new Date().toISOString()
+      await mutate(
+        async (current) => {
+          const { error: errRegistro } = await supabase
+            .from('haccp_limpieza_registros')
+            .upsert(
+              { limpieza_id: limpiezaId, fecha: dia, completado: true, observacion: observacion ?? null },
+              { onConflict: 'limpieza_id,fecha' }
+            )
+          if (errRegistro) throw errRegistro
 
-      const { error: errRegistro } = await supabase
-        .from('haccp_limpieza_registros')
-        .insert({ limpieza_id: limpiezaId, fecha: ahora, completado: true, observacion: observacion ?? null })
-      if (errRegistro) throw errRegistro
-
-      const { error: errUpdate } = await supabase
-        .from('haccp_limpieza')
-        .update({ ultimo_registro: ahora })
-        .eq('id', limpiezaId)
-      if (errUpdate) throw errUpdate
-
-      await mutate()
+          // ultimo_registro sigue siendo un timestamp (no una fecha): registrar
+          // "hoy" además marca el instante real, que es lo que la vista Todas
+          // (lastDone/timeAgo) necesita para decir "hace 2h" en vez de "hoy".
+          if (dia === hoyOperativo()) {
+            const { error: errUpdate } = await supabase
+              .from('haccp_limpieza')
+              .update({ ultimo_registro: new Date().toISOString() })
+              .eq('id', limpiezaId)
+            if (errUpdate) throw errUpdate
+          }
+          return current ?? EMPTY
+        },
+        {
+          optimisticData: (current) => ({
+            ...(current ?? EMPTY),
+            limpiezaRegistros: [...(current ?? EMPTY).limpiezaRegistros.filter(r => !(r.limpieza_id === limpiezaId && r.fecha === dia)), optimisticRow],
+          }),
+          populateCache: false,
+          rollbackOnError: true,
+          revalidate: true,
+        }
+      )
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al registrar limpieza'
       console.error('[useHaccp] registrarLimpieza Error:', msg)
+      throw new Error(msg)
+    }
+  }
+
+  // Destildar un día puntual de la grilla Semana — borra el registro de esa
+  // fecha exacta, no toca ultimo_registro (que representa el último registro
+  // real, sea cual sea el día).
+  async function quitarRegistroLimpieza(limpiezaId: string, fecha: string) {
+    try {
+      await mutate(
+        async (current) => {
+          const { error } = await supabase
+            .from('haccp_limpieza_registros')
+            .delete()
+            .eq('limpieza_id', limpiezaId)
+            .eq('fecha', fecha)
+          if (error) throw error
+          return current ?? EMPTY
+        },
+        {
+          optimisticData: (current) => ({
+            ...(current ?? EMPTY),
+            limpiezaRegistros: (current ?? EMPTY).limpiezaRegistros.filter(r => !(r.limpieza_id === limpiezaId && r.fecha === fecha)),
+          }),
+          populateCache: false,
+          rollbackOnError: true,
+          revalidate: true,
+        }
+      )
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al quitar el registro'
+      console.error('[useHaccp] quitarRegistroLimpieza Error:', msg)
+      throw new Error(msg)
+    }
+  }
+
+  // Registros de una semana (o cualquier rango) puntual — la grilla Semana
+  // necesita ver exactamente esos días, no "los últimos 200" (mismo patrón
+  // que fetchTurnosMes en useEquipo.ts).
+  async function fetchRegistrosRango(desde: string, hasta: string): Promise<HaccpLimpiezaRegistro[]> {
+    try {
+      const limpiezaIds = limpieza.map(l => l.id)
+      if (limpiezaIds.length === 0) return []
+      const { data, error } = await supabase
+        .from('haccp_limpieza_registros')
+        .select('*')
+        .in('limpieza_id', limpiezaIds)
+        .gte('fecha', desde)
+        .lte('fecha', hasta)
+      if (error) throw error
+      return (data ?? []) as HaccpLimpiezaRegistro[]
+    } catch (e: unknown) {
+      console.error('[useHaccp] fetchRegistrosRango Error:', e)
+      return []
+    }
+  }
+
+  async function actualizarTareaLimpieza(
+    id: string,
+    datos: Omit<HaccpLimpieza, 'id' | 'restaurante_id' | 'created_at' | 'ultimo_registro' | 'checklist_item_id'>
+  ) {
+    try {
+      const tarea = limpieza.find(l => l.id === id)
+      // Re-sincroniza la rutina OPS entera en vez de un update parcial: más
+      // simple y correcto que reconciliar día/frecuencia/nombre a mano —
+      // esto se edita poco, no vale la pena el ahorro de una escritura.
+      if (tarea?.checklist_item_id) {
+        await supabase.from('checklist_rutina').delete().eq('id', tarea.checklist_item_id)
+      }
+      let checklistItemId: string | null = null
+      if (datos.sync_ops) {
+        checklistItemId = await syncLimpiezaToOps(
+          `${datos.area}: ${datos.tarea_limpieza}`, datos.frecuencia,
+          datos.dias_semana ?? (datos.dia_semana != null ? [datos.dia_semana] : null), datos.dia_mes ?? null,
+        )
+      }
+
+      const { error } = await supabase.from('haccp_limpieza').update({
+        ...datos,
+        dia_semana: datos.dias_semana?.[0] ?? datos.dia_semana ?? null,
+        checklist_item_id: checklistItemId,
+      }).eq('id', id)
+      if (error) throw error
+      await mutate()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al actualizar tarea de limpieza'
+      console.error('[useHaccp] actualizarTareaLimpieza Error:', msg)
       throw new Error(msg)
     }
   }
@@ -445,8 +580,11 @@ export function useHaccp(opts?: { soloEscritura?: boolean }) {
     // Limpieza
     fetchLimpieza: refetch,
     fetchLimpiezaRegistros: refetch,
+    fetchRegistrosRango,
     crearTareaLimpieza,
+    actualizarTareaLimpieza,
     registrarLimpieza,
+    quitarRegistroLimpieza,
     eliminarTareaLimpieza,
   }
 }
