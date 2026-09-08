@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { ChecklistSeccionConfig, MisePlaceItem, Plaza } from '@/types'
 import { seccionTieneContenido } from '@/lib/checklist/secciones'
+import { seccionTipoColor } from '@/lib/constants'
 import ProduccionRow from './ProduccionRow'
 import StockearSeccionOverlay from './StockearSeccionOverlay'
 import HaccpSeccionLink from './HaccpSeccionLink'
@@ -46,14 +47,15 @@ export default function SeccionRow({
     : []
 
   const bloqueado = seccion ? seccionTieneContenido(seccion, allSecciones, allItems) : false
+  const tipoColor = seccionTipoColor(seccion?.tipo)
 
   return (
     <div
       ref={(el) => { if (droppable) registerDropZone(seccion!.id, el, plaza) }}
       style={{
         borderRadius: 10,
-        border: isDropTarget ? '2px solid var(--accent)' : '1px solid var(--border)',
-        background: 'var(--bg)',
+        border: isDropTarget ? '2px solid var(--accent)' : tipoColor ? `1px solid ${tipoColor}55` : '1px solid var(--border)',
+        background: tipoColor ? `${tipoColor}0d` : 'var(--bg)',
         padding: 8,
       }}
     >
@@ -65,7 +67,7 @@ export default function SeccionRow({
           <span className="material-symbols-outlined" style={{ fontSize: depth > 0 ? 14 : 16, color: 'var(--text-3)' }}>
             {open ? 'expand_more' : 'chevron_right'}
           </span>
-          <span className="material-symbols-outlined" style={{ fontSize: depth > 0 ? 14 : 16, color: 'var(--text-2)' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: depth > 0 ? 14 : 16, color: tipoColor ?? 'var(--text-2)' }}>
             {seccion?.icono ?? 'help'}
           </span>
           <span style={{ fontSize: depth > 0 ? 11 : 12, fontWeight: 600, color: depth > 0 ? 'var(--text-2)' : 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

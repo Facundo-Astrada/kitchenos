@@ -69,6 +69,8 @@ export default function EspacioCard(props: Props) {
   const customLibres = plazasCustom.filter(c => !plazasUsadas.has(c.key))
   const plazasAqui = plazasDelEspacio.map(ep => ep.plaza_key)
   const todasLasPlazas: Plaza[] = plazasDelEspacio.map(ep => ep.plaza_key)
+  const seccionesAqui = secciones.filter(s => plazasAqui.includes(s.plaza as Plaza))
+  const itemsAqui = items.filter(it => plazasAqui.includes(it.plaza as Plaza))
 
   async function handleCrearPlaza() {
     if (!nuevaPlazaNombre.trim()) return
@@ -108,10 +110,10 @@ export default function EspacioCard(props: Props) {
       borderRadius: 16,
       border: '1px solid var(--border)',
       background: 'var(--surface)',
-      boxShadow: '0 2px 8px rgba(0,0,0,.05)',
+      boxShadow: 'var(--shadow-2)',
     }}>
       {/* Header del espacio */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 14px 12px' }}>
         {editando ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginRight: 4 }}>
@@ -150,12 +152,23 @@ export default function EspacioCard(props: Props) {
               onClick={() => setOpen(o => !o)}
               style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', flex: 1, minWidth: 0, padding: 0, fontFamily: 'inherit' }}
             >
-              <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-3)' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-3)', flexShrink: 0 }}>
                 {open ? 'expand_more' : 'chevron_right'}
               </span>
-              <span className="material-symbols-outlined" style={{ fontSize: 24, color: 'var(--navy-ink)' }}>{espacio.icono}</span>
-              <span style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-1)', letterSpacing: '-0.01em' }}>{espacio.nombre}</span>
-              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>· {plazasAqui.length} {plazasAqui.length === 1 ? 'plaza' : 'plazas'}</span>
+              <span style={{
+                width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                background: 'rgba(28,45,74,.08)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--navy-ink)' }}>{espacio.icono}</span>
+              </span>
+              <div style={{ minWidth: 0, textAlign: 'left' }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-1)', letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {espacio.nombre}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>
+                  {plazasAqui.length} {plazasAqui.length === 1 ? 'plaza' : 'plazas'} · {seccionesAqui.length} {seccionesAqui.length === 1 ? 'sección' : 'secciones'} · {itemsAqui.length} {itemsAqui.length === 1 ? 'producción' : 'producciones'}
+                </div>
+              </div>
             </button>
             <button onClick={() => onLimpieza({ type: 'espacio', plazas: todasLasPlazas, nombre: espacio.nombre })} title="Limpieza del espacio" style={iconBtn}>
               <span className="material-symbols-outlined" style={{ fontSize: 18 }}>cleaning_services</span>

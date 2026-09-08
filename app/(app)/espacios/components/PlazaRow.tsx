@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import type { ChecklistSeccionConfig, MisePlaceItem, Plaza, PlazaCustom } from '@/types'
-import { plazaLabel, plazaIcon, esPlazaCustom } from '@/lib/constants'
+import { plazaLabel, plazaIcon, plazaColor, esPlazaCustom } from '@/lib/constants'
 import SeccionRow from './SeccionRow'
 
 interface Props {
@@ -35,6 +35,7 @@ export default function PlazaRow(props: Props) {
     onQuitarPlaza, onEliminarPlazaCustom, onAddSeccion, onSeedSecciones, onAddItem, onDeleteSeccion, onDeleteItem, onEditItem, onLimpieza } = props
   const [open, setOpen] = useState(true)
   const label = plazaLabel(plaza, plazasCustom)
+  const color = plazaColor(plaza, plazasCustom)
   const isCustom = esPlazaCustom(plaza, plazasCustom)
 
   // `secciones` incluye raíces + sub-secciones (planas) — un item "sin sección"
@@ -47,7 +48,7 @@ export default function PlazaRow(props: Props) {
   const seccionesRaiz = useMemo(() => secciones.filter(s => !s.parent_id), [secciones])
 
   return (
-    <div style={{ borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface)' }}>
+    <div style={{ borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface)', borderTop: `3px solid ${color}`, overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px' }}>
         <span
           draggable
@@ -65,11 +66,13 @@ export default function PlazaRow(props: Props) {
           <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)' }}>
             {open ? 'expand_more' : 'chevron_right'}
           </span>
-          <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--accent)' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 18, color }}>
             {plazaIcon(plaza, plazasCustom)}
           </span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{label}</span>
-          <span style={{ fontSize: 11, color: 'var(--text-3)' }}>· {items.length} prod.</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color }}>{label}</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color, background: color + '1f', padding: '2px 7px', borderRadius: 20 }}>
+            {items.length}
+          </span>
         </button>
         <button onClick={() => onLimpieza({ type: 'plaza', plaza, nombre: label })} title="Limpieza de la plaza" style={iconBtn}>
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>cleaning_services</span>

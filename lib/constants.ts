@@ -51,6 +51,22 @@ export function esPlazaCustom(key: Plaza, custom: PlazaCustom[]): boolean {
   return custom.some(c => c.key === key)
 }
 
+// ── Color por tipo de sección (Mesa de trabajo, S6/Bloque 5) ───────────────
+// 'produccion' (la más común, mise diario) queda sin tinte a propósito: no
+// todo necesita gritar color, y teñir la mayoría de las secciones apagaría
+// la identidad de color de la plaza (PLAZA_COLORS) que ya las contiene.
+// Los demás tipos SÍ ganan algo con el color: heladera/freezer se leen como
+// "frío" de un vistazo, almacén como "storage", estación como "puesto".
+export const SECCION_TIPO_COLOR: Partial<Record<string, string>> = {
+  heladera: '#0ea5e9',
+  freezer: '#6366f1',
+  almacen: '#c9992c',
+  estacion: '#8b5cf6',
+}
+export function seccionTipoColor(tipo: string | undefined | null): string | undefined {
+  return tipo ? SECCION_TIPO_COLOR[tipo] : undefined
+}
+
 // ── Configuración de roles ──────────────────────────────────
 export const ROL_CONFIG: Record<
   Rol,

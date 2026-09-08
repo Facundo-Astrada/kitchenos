@@ -62,6 +62,7 @@ export default function ProduccionRow({ item, isDragging, onDragStart, onDragMov
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
+      className={isDragging ? '' : 'hover:bg-[var(--bg)] hover:border-[var(--accent)] hover:shadow-[var(--shadow-1)]'}
       style={{
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '7px 10px', borderRadius: 8,
@@ -70,10 +71,8 @@ export default function ProduccionRow({ item, isDragging, onDragStart, onDragMov
         cursor: isDragging ? 'grabbing' : 'pointer',
         opacity: isDragging ? 0.35 : 1,
         touchAction: 'none', userSelect: 'none',
-        transition: 'background 0.1s, border-color 0.1s',
+        transition: 'background .1s, border-color .1s, box-shadow .1s',
       }}
-      onMouseEnter={e => { if (!isDragging) { (e.currentTarget as HTMLElement).style.background = 'var(--bg)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--accent)' } }}
-      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'var(--surface)'; (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)' }}
     >
       <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)', flexShrink: 0 }}>drag_indicator</span>
       <span style={{
