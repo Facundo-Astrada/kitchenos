@@ -47,19 +47,19 @@ export default function StockCriticoSection({ productos }: StockCriticoSectionPr
               href="/stock"
               className="block rounded-[12px] p-[10px_14px] min-w-[110px] cursor-pointer flex-shrink-0 transition-transform active:scale-[.97]"
               style={{
-                background: esCritico ? '#fef2f2' : '#fffbeb',
-                border: `1px solid ${esCritico ? '#fecaca' : '#fde68a'}`,
+                background: esCritico ? 'var(--red-bg)' : 'var(--amber-bg)',
+                border: `1px solid ${esCritico ? 'var(--red-bg)' : 'var(--amber-bg)'}`,
               }}
             >
               <div
                 className="text-[10px] font-bold uppercase tracking-[.06em] mb-1"
-                style={{ color: esCritico ? '#991b1b' : '#92400e' }}
+                style={{ color: esCritico ? 'var(--red-fg)' : 'var(--amber-fg)' }}
               >
                 {esCritico ? 'Crítico' : 'Bajo'}
               </div>
               <div
                 className="text-[15px] font-bold"
-                style={{ color: esCritico ? '#991b1b' : '#92400e' }}
+                style={{ color: esCritico ? 'var(--red-fg)' : 'var(--amber-fg)' }}
               >
                 {p.nombre}
               </div>

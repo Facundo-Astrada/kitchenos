@@ -814,14 +814,14 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
             background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.3)',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
           }}>
-            <div style={{ fontSize: 11, color: '#92400e', lineHeight: 1.4 }}>
+            <div style={{ fontSize: 11, color: 'var(--amber-fg)', lineHeight: 1.4 }}>
               <span className="material-symbols-outlined" style={{ fontSize: 14, verticalAlign: -2, marginRight: 4 }}>calculate</span>
               Receta ajustada a <b>{(ings.find(i => i.nombre === scaleRefIng)?.cantidad ?? 0 * scaleFactor).toFixed(2)}</b> de {scaleRefIng}
               <span style={{ opacity: .5, marginLeft: 4 }}>(×{scaleFactor.toFixed(2)})</span>
             </div>
             <button onClick={resetScale} style={{
               background: 'rgba(245,158,11,.2)', border: 'none', borderRadius: 6,
-              padding: '4px 8px', fontSize: 10, fontWeight: 700, color: '#92400e',
+              padding: '4px 8px', fontSize: 10, fontWeight: 700, color: 'var(--amber-fg)',
               cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
             }}>
               Restaurar original
@@ -890,7 +890,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                       borderBottom: !isLastOverall ? '1px solid var(--border)' : 'none',
                       borderLeft: i.cantidad === 0 ? '3px solid #ef4444' : '3px solid transparent',
                       transition: 'background .3s',
-                      background: isHighlighted ? 'rgba(245,158,11,.06)' : (i.cantidad === 0 ? '#fef2f2' : 'transparent'),
+                      background: isHighlighted ? 'rgba(245,158,11,.06)' : (i.cantidad === 0 ? 'var(--red-bg)' : 'transparent'),
                     }}
                   >
                     {/* Nombre — toca para editar ingrediente */}
@@ -928,7 +928,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                           style={{
                             width: 56, border: '1px solid #f59e0b', background: 'rgba(245,158,11,.08)',
                             borderRadius: 6, padding: '4px 6px', fontSize: 13, fontWeight: 700,
-                            fontFamily: "'DM Mono', monospace", color: '#92400e',
+                            fontFamily: "'DM Mono', monospace", color: 'var(--amber-fg)',
                             textAlign: 'right', outline: 'none',
                           }}
                         />
@@ -1110,7 +1110,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
               {/* Banner de sync de precio receta ↔ plato (movido acá desde el cuerpo) */}
               {linkedPlato && (receta.precio_venta ?? 0) !== (linkedPlato.precio_venta ?? 0) && (
                 <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', background: 'rgba(245,158,11,.1)' }}>
-                  <div style={{ fontSize: 11, color: '#92400e', lineHeight: 1.4, marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, color: 'var(--amber-fg)', lineHeight: 1.4, marginBottom: 8 }}>
                     <span className="material-symbols-outlined" style={{ fontSize: 14, verticalAlign: -2, marginRight: 4 }}>sync_problem</span>
                     El plato en carta figura a <b>${(linkedPlato.precio_venta ?? 0).toLocaleString('es-AR')}</b> y la receta a <b>${(receta.precio_venta ?? 0).toLocaleString('es-AR')}</b>.
                   </div>
@@ -1742,7 +1742,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
   )
 }
 
-const syncBtn: React.CSSProperties = { background: 'rgba(245,158,11,.2)', border: 'none', borderRadius: 7, padding: '5px 9px', fontSize: 10, fontWeight: 700, color: '#92400e', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }
+const syncBtn: React.CSSProperties = { background: 'rgba(245,158,11,.2)', border: 'none', borderRadius: 7, padding: '5px 9px', fontSize: 10, fontWeight: 700, color: 'var(--amber-fg)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }
 const btnClear: React.CSSProperties = { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }
 const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '.06em' }
 const inp: React.CSSProperties = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 10px', fontSize: 13, fontFamily: 'inherit', color: 'var(--text-1)', outline: 'none', width: '100%', boxSizing: 'border-box' }

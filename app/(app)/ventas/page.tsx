@@ -707,9 +707,9 @@ export default function VentasPage() {
               </div>
             )}
             {diasFaltantes.length > 0 && (
-              <div className="mt-2 flex items-start gap-2 rounded-xl p-2.5" style={{ background: '#fffbeb', border: '1px solid #fde68a' }}>
-                <span className="material-symbols-outlined text-[18px]" style={{ color: '#92400e' }}>event_busy</span>
-                <p className="text-[12px]" style={{ color: '#92400e', lineHeight: 1.4 }}>
+              <div className="mt-2 flex items-start gap-2 rounded-xl p-2.5" style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-bg)' }}>
+                <span className="material-symbols-outlined text-[18px]" style={{ color: 'var(--amber-fg)' }}>event_busy</span>
+                <p className="text-[12px]" style={{ color: 'var(--amber-fg)', lineHeight: 1.4 }}>
                   <b>{diasFaltantes.length} día{diasFaltantes.length !== 1 ? 's' : ''}</b> de este mes sin ventas cargadas. Con huecos, el CMV y el ticket promedio se distorsionan.
                 </p>
               </div>
@@ -750,7 +750,7 @@ export default function VentasPage() {
 
           {/* Error */}
           {error && !loading && (
-            <div className="mx-4 p-4 rounded-xl text-[13px]" style={{ background: '#fee2e2', color: '#dc2626' }}>
+            <div className="mx-4 p-4 rounded-xl text-[13px]" style={{ background: 'var(--red-bg)', color: 'var(--red-fg)' }}>
               {error}
             </div>
           )}
@@ -868,7 +868,7 @@ export default function VentasPage() {
                             onClick={() => handleEliminar(v.id)}
                             disabled={deletingId === v.id}
                             className="flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg"
-                            style={{ color: '#ef4444', background: '#fee2e2' }}
+                            style={{ color: '#ef4444', background: 'var(--red-bg)' }}
                           >
                             <span className="material-symbols-outlined text-[16px]">
                               {deletingId === v.id ? 'progress_activity' : 'delete'}
@@ -1197,11 +1197,11 @@ function MultiDayConfirmScreen({
 
       {/* Warnings */}
       {warnings && warnings.length > 0 && (
-        <div className="rounded-xl p-3 flex flex-col gap-1.5" style={{ background: '#fffbeb', border: '1px solid #fde68a' }}>
+        <div className="rounded-xl p-3 flex flex-col gap-1.5" style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-bg)' }}>
           {warnings.map((w, i) => (
             <div key={i} className="flex items-start gap-2">
-              <span className="material-symbols-outlined text-[16px] shrink-0 mt-0.5" style={{ color: '#92400e' }}>warning</span>
-              <p className="text-[12px]" style={{ color: '#92400e' }}>{w}</p>
+              <span className="material-symbols-outlined text-[16px] shrink-0 mt-0.5" style={{ color: 'var(--amber-fg)' }}>warning</span>
+              <p className="text-[12px]" style={{ color: 'var(--amber-fg)' }}>{w}</p>
             </div>
           ))}
         </div>
@@ -1209,7 +1209,7 @@ function MultiDayConfirmScreen({
 
       {/* Info */}
       <div className="rounded-xl p-3" style={{ background: '#eff6ff', border: '1px solid #bfdbfe' }}>
-        <p className="text-[13px]" style={{ color: '#1e40af' }}>
+        <p className="text-[13px]" style={{ color: 'var(--blue-fg)' }}>
           Se van a guardar <b>{ventas.length} registros</b> — uno por día — con sus platos vendidos. Podés editarlos después desde el resumen.
         </p>
       </div>
@@ -1393,11 +1393,11 @@ function ConfirmScreen({ parsed, onSave, onCancel, saving, warnings }: ConfirmSc
 
       {/* Warnings */}
       {warnings && warnings.length > 0 && (
-        <div className="rounded-xl p-3 flex flex-col gap-1.5" style={{ background: '#fffbeb', border: '1px solid #fde68a' }}>
+        <div className="rounded-xl p-3 flex flex-col gap-1.5" style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-bg)' }}>
           {warnings.map((w, i) => (
             <div key={i} className="flex items-start gap-2">
-              <span className="material-symbols-outlined text-[16px] shrink-0 mt-0.5" style={{ color: '#92400e' }}>warning</span>
-              <p className="text-[12px]" style={{ color: '#92400e' }}>{w}</p>
+              <span className="material-symbols-outlined text-[16px] shrink-0 mt-0.5" style={{ color: 'var(--amber-fg)' }}>warning</span>
+              <p className="text-[12px]" style={{ color: 'var(--amber-fg)' }}>{w}</p>
             </div>
           ))}
         </div>
@@ -1488,7 +1488,7 @@ function ConfirmScreen({ parsed, onSave, onCancel, saving, warnings }: ConfirmSc
                 <button
                   onClick={() => removeItem(idx)}
                   className="flex items-center justify-center rounded-lg shrink-0"
-                  style={{ width: 30, height: 30, background: '#fee2e2' }}
+                  style={{ width: 30, height: 30, background: 'var(--red-bg)' }}
                 >
                   <span className="material-symbols-outlined text-[16px]" style={{ color: '#ef4444' }}>close</span>
                 </button>
@@ -1847,7 +1847,7 @@ function VentasTransaccionalTab() {
                   <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>
                     {v.mesa_numero ? `Mesa ${v.mesa_numero}` : (ORIGEN_LABEL_VENTA[v.origen ?? ''] ?? 'Venta')}
                   </span>
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: v.estado === 'cerrada' ? 'rgba(16,185,129,.12)' : 'rgba(245,158,11,.12)', color: v.estado === 'cerrada' ? '#059669' : '#d97706' }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: v.estado === 'cerrada' ? 'rgba(16,185,129,.12)' : 'rgba(245,158,11,.12)', color: v.estado === 'cerrada' ? 'var(--green-fg)' : '#d97706' }}>
                     {v.estado === 'cerrada' ? 'Cerrada' : 'Abierta'}
                   </span>
                   {v.facturado && <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#4361a0' }} title="Facturado">receipt</span>}
@@ -1905,7 +1905,7 @@ function MovimientosCajaTab() {
       </div>
 
       <div className="flex gap-3 pb-4">
-        <StatCard icon="account_balance" label="Balance" value={fmtPrecio(balance)} color={balance >= 0 ? '#16a34a' : '#dc2626'} />
+        <StatCard icon="account_balance" label="Balance" value={fmtPrecio(balance)} color={balance >= 0 ? '#16a34a' : 'var(--red-fg)'} />
         <StatCard icon="receipt_long" label="Registros" value={String(filtered.length)} color="var(--accent)" />
       </div>
 
@@ -1917,7 +1917,7 @@ function MovimientosCajaTab() {
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
           {filtered.map((m, i) => (
             <div key={m.id} className="flex items-center gap-3" style={{ padding: '11px 12px', borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18, color: m.tipo === 'ingreso' ? '#16a34a' : '#dc2626' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18, color: m.tipo === 'ingreso' ? '#16a34a' : 'var(--red-fg)' }}>
                 {m.tipo === 'ingreso' ? 'arrow_downward' : 'arrow_upward'}
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -1926,7 +1926,7 @@ function MovimientosCajaTab() {
                   {fmtFechaHora(m.created_at)}{m.medio_nombre ? ' · ' + m.medio_nombre : ''}{m.caja_estado === 'abierta' ? ' · turno abierto' : ''}
                 </div>
               </div>
-              <span style={{ fontSize: 14, fontWeight: 800, color: m.tipo === 'ingreso' ? '#16a34a' : '#dc2626', fontFamily: "'DM Mono', monospace" }}>
+              <span style={{ fontSize: 14, fontWeight: 800, color: m.tipo === 'ingreso' ? '#16a34a' : 'var(--red-fg)', fontFamily: "'DM Mono', monospace" }}>
                 {m.tipo === 'ingreso' ? '+' : '−'}{fmtPrecio(m.monto)}
               </span>
             </div>
@@ -2031,7 +2031,7 @@ function ArqueosCajaTab() {
                     <div className="flex justify-between" style={{ fontSize: 12, color: 'var(--text-2)' }}>
                       <span>Sistema: {fmtPrecio(e)}</span>
                       <span>Usuario: {fmtPrecio(d)}</span>
-                      <span style={{ fontWeight: 700, color: diff === 0 ? 'var(--text-3)' : diff > 0 ? '#16a34a' : '#dc2626' }}>{diff === 0 ? '$0' : (diff > 0 ? '+' : '') + fmtPrecio(diff)}</span>
+                      <span style={{ fontWeight: 700, color: diff === 0 ? 'var(--text-3)' : diff > 0 ? '#16a34a' : 'var(--red-fg)' }}>{diff === 0 ? '$0' : (diff > 0 ? '+' : '') + fmtPrecio(diff)}</span>
                     </div>
                   </div>
                 )
@@ -2076,7 +2076,7 @@ function ArqueosCajaTab() {
                 <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{c.estado === 'abierta' ? 'Abierta' : `Cerrada · ${c.fecha_cierre ? fmtFechaHora(c.fecha_cierre) : ''}`}</div>
               </div>
               {c.diferencia_total != null ? (
-                <span style={{ fontSize: 13, fontWeight: 800, color: c.diferencia_total === 0 ? 'var(--text-3)' : c.diferencia_total > 0 ? '#16a34a' : '#dc2626', fontFamily: "'DM Mono', monospace" }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: c.diferencia_total === 0 ? 'var(--text-3)' : c.diferencia_total > 0 ? '#16a34a' : 'var(--red-fg)', fontFamily: "'DM Mono', monospace" }}>
                   {c.diferencia_total === 0 ? '$0' : (c.diferencia_total > 0 ? '+' : '') + fmtPrecio(c.diferencia_total)}
                 </span>
               ) : (

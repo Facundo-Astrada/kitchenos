@@ -54,7 +54,7 @@ export function formatPesoRapido(gramos: number): string {
 }
 
 export function fcColorRapido(pct: number): string {
-  return pct < FC_ALERT_OK ? '#16a34a' : pct <= FC_ALERT_HIGH ? '#d97706' : '#dc2626'
+  return pct < FC_ALERT_OK ? '#16a34a' : pct <= FC_ALERT_HIGH ? '#d97706' : 'var(--red-fg)'
 }
 
 export function calcularTotalesRapido(filas: FilaIngredienteRapido[], porciones: number, precioVenta?: number) {
@@ -94,7 +94,7 @@ export function TotalesRapidosBar({ filas, porciones, precioVenta }: {
         <span style={{ color: 'var(--text-3)' }}>FC <b style={{ color: fcColorRapido(fcPct), fontFamily: "'DM Mono', monospace" }}>{fcPct.toFixed(1)}%</b></span>
       )}
       {margen != null && (
-        <span style={{ color: 'var(--text-3)' }}>Margen <b style={{ color: margen >= 0 ? '#16a34a' : '#dc2626', fontFamily: "'DM Mono', monospace" }}>${margen.toFixed(0)}</b></span>
+        <span style={{ color: 'var(--text-3)' }}>Margen <b style={{ color: margen >= 0 ? '#16a34a' : 'var(--red-fg)', fontFamily: "'DM Mono', monospace" }}>${margen.toFixed(0)}</b></span>
       )}
       {pesoBrutoG > 0 && (
         <span style={{ color: 'var(--text-3)' }}>Peso <b style={{ color: 'var(--text-1)', fontFamily: "'DM Mono', monospace" }}>{formatPesoRapido(pesoBrutoG)}</b></span>

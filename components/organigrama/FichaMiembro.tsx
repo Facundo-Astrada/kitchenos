@@ -178,14 +178,14 @@ function MiembroFormPuesto({
       {/* Vista previa de módulos del puesto */}
       {puestoSelected && (
         <div style={{ background: '#f0f4ff', borderRadius: 12, padding: 14 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#4338ca', marginBottom: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--blue-fg)', marginBottom: 8 }}>
             Módulos incluidos con este puesto
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {(puestoSelected.permisos_app ?? []).map(mod => {
               const cfg = MODULO_CONFIG[mod as keyof typeof MODULO_CONFIG]
               return (
-                <span key={mod} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, background: '#e0e7ff', color: '#4338ca', fontWeight: 500 }}>
+                <span key={mod} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 6, background: 'var(--blue-bg)', color: 'var(--blue-fg)', fontWeight: 500 }}>
                   {cfg?.label ?? mod}
                 </span>
               )
@@ -545,10 +545,10 @@ export function FichaMiembroPanel({
 
       {/* Observaciones */}
       {m.observaciones && (
-        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 14, padding: 14, marginBottom: 16 }}>
+        <div style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-bg)', borderRadius: 14, padding: 14, marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#92400e' }}>sticky_note_2</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#92400e' }}>Observaciones</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--amber-fg)' }}>sticky_note_2</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--amber-fg)' }}>Observaciones</span>
           </div>
           <p style={{ fontSize: 13, color: '#78350f', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>{m.observaciones}</p>
         </div>
@@ -583,26 +583,26 @@ export function FichaMiembroPanel({
                       display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
                       borderRadius: 10, border: 'none', cursor: 'pointer', textAlign: 'left',
                       background:
-                        state === 'puesto' ? '#e0e7ff' :
-                        state === 'extra' ? '#d1fae5' :
-                        state === 'restringido' ? '#fee2e2' : 'var(--bg)',
+                        state === 'puesto' ? 'var(--blue-bg)' :
+                        state === 'extra' ? 'var(--green-bg)' :
+                        state === 'restringido' ? 'var(--red-bg)' : 'var(--bg)',
                     }}
                   >
                     <span className="material-symbols-outlined" style={{
                       fontSize: 18,
-                      color: state === 'puesto' ? '#4338ca' : state === 'extra' ? '#065f46' : state === 'restringido' ? '#dc2626' : 'var(--text-3)',
+                      color: state === 'puesto' ? 'var(--blue-fg)' : state === 'extra' ? '#065f46' : state === 'restringido' ? 'var(--red-fg)' : 'var(--text-3)',
                     }}>
                       {cfg?.icon ?? 'widgets'}
                     </span>
                     <span style={{
                       fontSize: 13, fontWeight: 500,
-                      color: state === 'restringido' ? '#dc2626' : 'var(--text-1)',
+                      color: state === 'restringido' ? 'var(--red-fg)' : 'var(--text-1)',
                       textDecoration: state === 'restringido' ? 'line-through' : 'none',
                       flex: 1,
                     }}>
                       {cfg?.label ?? mod}
                     </span>
-                    {state === 'puesto' && <span style={{ fontSize: 10, color: '#4338ca', fontWeight: 600 }}>PUESTO</span>}
+                    {state === 'puesto' && <span style={{ fontSize: 10, color: 'var(--blue-fg)', fontWeight: 600 }}>PUESTO</span>}
                     {state === 'extra' && <span style={{ fontSize: 10, color: '#065f46', fontWeight: 600 }}>EXTRA</span>}
                   </button>
                 )
@@ -654,8 +654,8 @@ export function FichaMiembroPanel({
                     <span key={mod} style={{
                       display: 'flex', alignItems: 'center', gap: 4,
                       fontSize: 12, fontWeight: 500, padding: '4px 10px', borderRadius: 8,
-                      background: isExtra ? '#d1fae5' : '#e0e7ff',
-                      color: isExtra ? '#065f46' : '#4338ca',
+                      background: isExtra ? 'var(--green-bg)' : 'var(--blue-bg)',
+                      color: isExtra ? '#065f46' : 'var(--blue-fg)',
                     }}>
                       <span className="material-symbols-outlined" style={{ fontSize: 14 }}>{cfg?.icon ?? 'widgets'}</span>
                       {cfg?.label ?? mod}

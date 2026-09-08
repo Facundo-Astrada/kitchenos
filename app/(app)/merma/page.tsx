@@ -309,12 +309,12 @@ export default function MermaPage() {
                   onClick={() => handleEliminar(m.id)}
                   disabled={deletingId === m.id}
                   className="shrink-0 flex items-center justify-center rounded-lg transition-colors"
-                  style={{ width: 36, height: 36, background: deletingId === m.id ? '#fee2e2' : 'transparent' }}
+                  style={{ width: 36, height: 36, background: deletingId === m.id ? 'var(--red-bg)' : 'transparent' }}
                   aria-label="Eliminar registro"
                 >
                   <span
                     className="material-symbols-outlined text-[20px]"
-                    style={{ color: deletingId === m.id ? '#dc2626' : 'var(--text-2)' }}
+                    style={{ color: deletingId === m.id ? 'var(--red-fg)' : 'var(--text-2)' }}
                   >
                     {deletingId === m.id ? 'progress_activity' : 'delete'}
                   </span>

@@ -2053,9 +2053,9 @@ export default function StockPage() {
                     display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', borderRadius: 10,
                     background: 'rgba(220,38,38,.06)', border: '1px solid rgba(220,38,38,.25)',
                   }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#dc2626', flexShrink: 0 }}>trending_up</span>
+                    <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--red-fg)', flexShrink: 0 }}>trending_up</span>
                     <span style={{ fontSize: 12, color: 'var(--text-1)', lineHeight: 1.4 }}>
-                      Pagaste <strong style={{ color: '#dc2626' }}>{badgeSobreprecio.deltaPct.toFixed(0)}% más</strong> que el mejor precio reciente
+                      Pagaste <strong style={{ color: 'var(--red-fg)' }}>{badgeSobreprecio.deltaPct.toFixed(0)}% más</strong> que el mejor precio reciente
                       ({badgeSobreprecio.mejorProveedor}, {fmtPrecio(badgeSobreprecio.mejorPrecio)} el {new Date(badgeSobreprecio.mejorFecha + 'T12:00:00').toLocaleDateString('es-AR')})
                     </span>
                   </div>
@@ -2959,7 +2959,7 @@ export default function StockPage() {
 
               {rebuildResult && (
                 <div style={{ background: 'rgba(22,101,52,.1)', border: '1px solid rgba(22,101,52,.3)', borderRadius: 10, padding: 16 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#166534', marginBottom: 8 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--green-fg)', marginBottom: 8 }}>
                     ✓ Rebuild completado
                   </div>
                   <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-1)', fontSize: 13, lineHeight: 1.7 }}>
@@ -2974,7 +2974,7 @@ export default function StockPage() {
               {rebuildPreview && !rebuildResult && (
                 <>
                   {rebuildPreview.message && (
-                    <div style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 10, padding: 14, marginBottom: 16, color: '#991b1b', fontSize: 13 }}>
+                    <div style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 10, padding: 14, marginBottom: 16, color: 'var(--red-fg)', fontSize: 13 }}>
                       {rebuildPreview.message}
                     </div>
                   )}
@@ -2986,7 +2986,7 @@ export default function StockPage() {
                   {rebuildPreview.total_productos > 0 && (
                     <>
                       <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--text-2)', lineHeight: 1.6 }}>
-                        Vas a <b style={{ color: '#991b1b' }}>borrar {productos.length} productos actuales</b> y crear:
+                        Vas a <b style={{ color: 'var(--red-fg)' }}>borrar {productos.length} productos actuales</b> y crear:
                       </div>
                       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
                         <div style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, textAlign: 'center' }}>
@@ -3080,7 +3080,7 @@ export default function StockPage() {
 
             {/* Resultado */}
             {pasteResult && (
-              <div style={{ padding: '10px 20px', background: pasteResult.err === 0 ? 'rgba(22,163,74,.08)' : 'rgba(245,158,11,.08)', borderBottom: '1px solid var(--border)', fontSize: 13, color: pasteResult.err === 0 ? '#166534' : '#92400e', fontWeight: 600 }}>
+              <div style={{ padding: '10px 20px', background: pasteResult.err === 0 ? 'rgba(22,163,74,.08)' : 'rgba(245,158,11,.08)', borderBottom: '1px solid var(--border)', fontSize: 13, color: pasteResult.err === 0 ? 'var(--green-fg)' : 'var(--amber-fg)', fontWeight: 600 }}>
                 {pasteResult.ok > 0 && `✓ ${pasteResult.ok} producto${pasteResult.ok !== 1 ? 's' : ''} importado${pasteResult.ok !== 1 ? 's' : ''}. `}
                 {pasteResult.err > 0 && `⚠ ${pasteResult.err} error${pasteResult.err !== 1 ? 's' : ''}.`}
               </div>
@@ -3278,13 +3278,13 @@ export default function StockPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     {/* Resumen */}
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <div style={{ flex: 1, minWidth: 80, background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
+                      <div style={{ flex: 1, minWidth: 80, background: 'var(--green-bg)', border: '1px solid #86efac', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
                         <p style={{ fontSize: 20, fontWeight: 800, color: '#15803d' }}>{nExacto}</p>
                         <p style={{ fontSize: 10, color: '#15803d', fontWeight: 700, textTransform: 'uppercase' }}>Exactos</p>
                       </div>
-                      <div style={{ flex: 1, minWidth: 80, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
-                        <p style={{ fontSize: 20, fontWeight: 800, color: '#92400e' }}>{nParcial}</p>
-                        <p style={{ fontSize: 10, color: '#92400e', fontWeight: 700, textTransform: 'uppercase' }}>Similares</p>
+                      <div style={{ flex: 1, minWidth: 80, background: 'var(--amber-bg)', border: '1px solid var(--amber-bg)', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
+                        <p style={{ fontSize: 20, fontWeight: 800, color: 'var(--amber-fg)' }}>{nParcial}</p>
+                        <p style={{ fontSize: 10, color: 'var(--amber-fg)', fontWeight: 700, textTransform: 'uppercase' }}>Similares</p>
                       </div>
                       <div style={{ flex: 1, minWidth: 80, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
                         <p style={{ fontSize: 20, fontWeight: 800, color: '#1d4ed8' }}>{nNuevo}</p>
@@ -3294,7 +3294,7 @@ export default function StockPage() {
 
                     {/* Error inline */}
                     {planillaError && (
-                      <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, padding: '10px 12px', color: '#991b1b', fontSize: 13 }}>
+                      <div style={{ background: 'var(--red-bg)', border: '1px solid #fca5a5', borderRadius: 10, padding: '10px 12px', color: 'var(--red-fg)', fontSize: 13 }}>
                         {planillaError}
                       </div>
                     )}
@@ -3322,9 +3322,9 @@ export default function StockPage() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {filteredItems.map((item, idx) => {
                         const realIdx = planillaItems.indexOf(item)
-                        const confColor = item.confianza === 'exacto' ? '#15803d' : item.confianza === 'parcial' ? '#92400e' : '#1d4ed8'
-                        const confBg = item.confianza === 'exacto' ? '#f0fdf4' : item.confianza === 'parcial' ? '#fffbeb' : '#eff6ff'
-                        const confBorder = item.confianza === 'exacto' ? '#86efac' : item.confianza === 'parcial' ? '#fde68a' : '#bfdbfe'
+                        const confColor = item.confianza === 'exacto' ? '#15803d' : item.confianza === 'parcial' ? 'var(--amber-fg)' : '#1d4ed8'
+                        const confBg = item.confianza === 'exacto' ? 'var(--green-bg)' : item.confianza === 'parcial' ? 'var(--amber-bg)' : '#eff6ff'
+                        const confBorder = item.confianza === 'exacto' ? '#86efac' : item.confianza === 'parcial' ? 'var(--amber-bg)' : '#bfdbfe'
                         const confLabel = item.confianza === 'exacto' ? '✓' : item.confianza === 'parcial' ? '~' : '+'
 
                         return (

@@ -46,10 +46,10 @@ function daysUntil(dateStr: string): number {
 
 function vencColor(days: number, status: string): { bg: string; text: string } {
   if (status === 'descartado') return { bg: '#f1f5f9', text: '#64748b' }
-  if (status === 'vencido' || days < 0) return { bg: '#fee2e2', text: '#991b1b' }
+  if (status === 'vencido' || days < 0) return { bg: 'var(--red-bg)', text: 'var(--red-fg)' }
   if (days <= 1) return { bg: '#fff7ed', text: '#9a3412' }
-  if (days <= 3) return { bg: '#fefce8', text: '#854d0e' }
-  return { bg: '#f0fdf4', text: '#166534' }
+  if (days <= 3) return { bg: '#fefce8', text: 'var(--amber-fg)' }
+  return { bg: 'var(--green-bg)', text: 'var(--green-fg)' }
 }
 
 function timeAgo(d: string | null): string {
@@ -249,7 +249,7 @@ function RegistrarTempsView({
       </div>
 
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={{ padding: '10px 14px', background: '#dbeafe', borderRadius: 10, fontSize: 13, color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ padding: '10px 14px', background: 'var(--blue-bg)', borderRadius: 10, fontSize: 13, color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: 6 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>info</span>
           Ingresá la temperatura actual de cada equipo
         </div>
@@ -283,7 +283,7 @@ function RegistrarTempsView({
                       width: 70, padding: '8px 10px', borderRadius: 8, textAlign: 'center',
                       border: `1.5px solid ${outOfRange ? '#ef4444' : 'var(--border)'}`,
                       fontSize: 16, fontWeight: 700, color: outOfRange ? '#ef4444' : 'var(--text-1)',
-                      background: outOfRange ? '#fee2e2' : 'var(--bg)',
+                      background: outOfRange ? 'var(--red-bg)' : 'var(--bg)',
                     }}
                   />
                   <span style={{ fontSize: 14, color: 'var(--text-3)', fontWeight: 600 }}>°C</span>
@@ -299,7 +299,7 @@ function RegistrarTempsView({
                     onChange={ev => setAcciones(prev => ({ ...prev, [e.id]: ev.target.value }))}
                     placeholder="Describir acción correctiva..."
                     rows={2}
-                    style={{ ...fieldStyle, fontSize: 13, border: '1.5px solid #ef4444', background: '#fef2f2' }}
+                    style={{ ...fieldStyle, fontSize: 13, border: '1.5px solid #ef4444', background: 'var(--red-bg)' }}
                   />
                 </div>
               )}
@@ -367,7 +367,7 @@ function HistorialView({
           <div key={t.id} style={{
             display: 'flex', alignItems: 'center', gap: 12,
             padding: '10px 14px', background: 'var(--surface)',
-            border: `1px solid ${t.dentro_rango ? 'var(--border)' : '#fecaca'}`,
+            border: `1px solid ${t.dentro_rango ? 'var(--border)' : 'var(--red-bg)'}`,
             borderRadius: 10,
           }}>
             <div style={{
@@ -1051,7 +1051,7 @@ export default function HaccpPage() {
                 return (
                   <button key={e.id} onClick={() => { setSelectedEquipo(e); setView('historial') }} style={{
                     display: 'flex', alignItems: 'center', gap: 12, padding: '14px',
-                    background: 'var(--surface)', border: `1px solid ${ok ? 'var(--border)' : '#fecaca'}`,
+                    background: 'var(--surface)', border: `1px solid ${ok ? 'var(--border)' : 'var(--red-bg)'}`,
                     borderRadius: 12, cursor: 'pointer', width: '100%', textAlign: 'left',
                   }}>
                     <span className="material-symbols-outlined" style={{ fontSize: 24, color: ok ? 'var(--navy-ink)' : '#ef4444' }}>
@@ -1230,7 +1230,7 @@ export default function HaccpPage() {
                               }}>
                                 <div style={{
                                   width: 28, height: 28, borderRadius: 8, flexShrink: 0,
-                                  background: hecha ? '#059669' : '#e5e7eb',
+                                  background: hecha ? 'var(--green-fg)' : '#e5e7eb',
                                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 }}>
                                   {hecha && <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#fff' }}>check</span>}
@@ -1340,8 +1340,8 @@ export default function HaccpPage() {
                                           style={{
                                             fontSize: 9, padding: '2px 4px', borderRadius: 4, border: 'none', cursor: 'pointer',
                                             textAlign: 'left', lineHeight: 1.25, fontFamily: 'inherit',
-                                            background: hecha ? '#d1fae5' : atrasada ? '#fef3c7' : 'var(--bg)',
-                                            color: hecha ? '#065f46' : atrasada ? '#92400e' : 'var(--text-2)',
+                                            background: hecha ? 'var(--green-bg)' : atrasada ? '#fef3c7' : 'var(--bg)',
+                                            color: hecha ? '#065f46' : atrasada ? 'var(--amber-fg)' : 'var(--text-2)',
                                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                                           }}
                                         >
@@ -1382,7 +1382,7 @@ export default function HaccpPage() {
                             setToast('Limpieza registrada')
                           }} style={{
                             width: 28, height: 28, borderRadius: 8, border: 'none',
-                            background: isRecent ? '#059669' : '#e5e7eb',
+                            background: isRecent ? 'var(--green-fg)' : '#e5e7eb',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             cursor: 'pointer', flexShrink: 0,
                           }}>
@@ -1394,7 +1394,7 @@ export default function HaccpPage() {
                               <span style={{
                                 background: 'var(--bg)', padding: '1px 6px', borderRadius: 4,
                               }}>{FREQ_LABELS[l.frecuencia]}</span>
-                              <span style={{ color: isRecent ? '#059669' : '#ef4444', fontWeight: 600 }}>
+                              <span style={{ color: isRecent ? 'var(--green-fg)' : '#ef4444', fontWeight: 600 }}>
                                 {lastDone}
                               </span>
                             </div>

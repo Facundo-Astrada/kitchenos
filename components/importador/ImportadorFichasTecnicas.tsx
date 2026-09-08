@@ -308,7 +308,7 @@ export default function ImportadorFichasTecnicas({ restauranteId, onImportComple
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden' }}>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.nombre}</span>
                     {r._existing && (
-                      <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 600, background: 'rgba(245,158,11,.15)', color: '#b45309', padding: '2px 6px', borderRadius: 4 }}>ya existe</span>
+                      <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 600, background: 'rgba(245,158,11,.15)', color: 'var(--amber-fg)', padding: '2px 6px', borderRadius: 4 }}>ya existe</span>
                     )}
                     {r._duplicate && !r._existing && (
                       <span style={{ flexShrink: 0, fontSize: 9, fontWeight: 600, background: 'rgba(100,116,139,.15)', color: '#475569', padding: '2px 6px', borderRadius: 4 }}>duplicada</span>

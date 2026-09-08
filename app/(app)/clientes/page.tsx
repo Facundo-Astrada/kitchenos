@@ -323,7 +323,7 @@ function ClienteDetalle({ cliente, onBack, onUpdate, onDesactivar, fetchHistoria
 
       {canEdit && cliente.activo && (
         <button onClick={() => { if (confirm(`¿Desactivar a ${cliente.nombre}?`)) onDesactivar(cliente.id) }}
-          style={{ fontSize: 12, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
+          style={{ fontSize: 12, color: 'var(--red-fg)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
           Desactivar cliente
         </button>
       )}
@@ -391,7 +391,7 @@ function CuentasCorrientesTab() {
             <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-3)' }}>Vinculado a una venta del Salón</div>
           )}
           <button onClick={async () => { if (confirm('¿Eliminar este movimiento?')) { await eliminarMovimiento(seleccion.id); setSeleccion(null) } }}
-            style={{ marginTop: 14, fontSize: 12, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
+            style={{ marginTop: 14, fontSize: 12, color: 'var(--red-fg)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
             Eliminar movimiento
           </button>
         </div>
@@ -418,7 +418,7 @@ function CuentasCorrientesTab() {
         </div>
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '9px 12px', flex: 1, minWidth: 130 }}>
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>Saldo</div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: (clienteFiltro ? (saldoPorCliente.get(clienteFiltro) ?? 0) : saldoTotal) < 0 ? '#dc2626' : '#16a34a' }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: (clienteFiltro ? (saldoPorCliente.get(clienteFiltro) ?? 0) : saldoTotal) < 0 ? 'var(--red-fg)' : '#16a34a' }}>
             {fmt(clienteFiltro ? (saldoPorCliente.get(clienteFiltro) ?? 0) : saldoTotal)}
           </div>
         </div>
@@ -442,7 +442,7 @@ function CuentasCorrientesTab() {
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{m.cliente_nombre}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{fmtFechaHora(m.created_at)}{m.descripcion ? ' · ' + m.descripcion : ''}</div>
               </div>
-              <span style={{ fontSize: 14, fontWeight: 800, fontFamily: "'DM Mono', monospace", color: m.tipo === 'pago' ? '#16a34a' : '#dc2626' }}>
+              <span style={{ fontSize: 14, fontWeight: 800, fontFamily: "'DM Mono', monospace", color: m.tipo === 'pago' ? '#16a34a' : 'var(--red-fg)' }}>
                 {m.tipo === 'pago' ? '+' : '−'}{fmt(m.monto)}
               </span>
             </button>
@@ -491,7 +491,7 @@ function NuevaTransaccionCC({ clientes, medios, onClose, onSave }: {
       </select>
       <div className="flex gap-2">
         <button onClick={() => setTipo('pago')} style={{ flex: 1, padding: '9px', borderRadius: 8, border: `1.5px solid ${tipo === 'pago' ? '#16a34a' : 'var(--border)'}`, background: tipo === 'pago' ? 'rgba(22,163,74,.1)' : 'var(--bg)', color: tipo === 'pago' ? '#16a34a' : 'var(--text-2)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Pago (cobra deuda)</button>
-        <button onClick={() => setTipo('cargo')} style={{ flex: 1, padding: '9px', borderRadius: 8, border: `1.5px solid ${tipo === 'cargo' ? '#dc2626' : 'var(--border)'}`, background: tipo === 'cargo' ? 'rgba(220,38,38,.1)' : 'var(--bg)', color: tipo === 'cargo' ? '#dc2626' : 'var(--text-2)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Cargo (fía)</button>
+        <button onClick={() => setTipo('cargo')} style={{ flex: 1, padding: '9px', borderRadius: 8, border: `1.5px solid ${tipo === 'cargo' ? 'var(--red-fg)' : 'var(--border)'}`, background: tipo === 'cargo' ? 'rgba(220,38,38,.1)' : 'var(--bg)', color: tipo === 'cargo' ? 'var(--red-fg)' : 'var(--text-2)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Cargo (fía)</button>
       </div>
       <input value={monto} onChange={e => setMonto(e.target.value)} placeholder="Monto" inputMode="decimal" style={inputStyle} />
       {tipo === 'pago' && (

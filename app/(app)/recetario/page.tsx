@@ -2291,7 +2291,7 @@ function RecetaCard({ receta: r, isDraft, onPublish, onCompleteIA }: { receta: R
               <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{r.nombre}</span>
               {isDraft && (
                 <span style={{
-                  fontSize: 9, fontWeight: 700, color: '#92400e', background: 'rgba(245,158,11,.15)',
+                  fontSize: 9, fontWeight: 700, color: 'var(--amber-fg)', background: 'rgba(245,158,11,.15)',
                   border: '1px solid rgba(245,158,11,.3)', borderRadius: 4, padding: '1px 6px',
                 }}>BORRADOR</span>
               )}
@@ -2352,7 +2352,7 @@ function RecetaCard({ receta: r, isDraft, onPublish, onCompleteIA }: { receta: R
               style={{
                 flex: 1, background: 'rgba(245,158,11,.12)', border: '1px solid rgba(245,158,11,.3)',
                 borderRadius: 8, padding: '5px 10px', fontSize: 10, fontWeight: 700,
-                color: '#92400e', cursor: 'pointer', fontFamily: 'inherit',
+                color: 'var(--amber-fg)', cursor: 'pointer', fontFamily: 'inherit',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
               }}
             >
@@ -2470,7 +2470,7 @@ function CargaRapidaScreen({ categorias, stockProductos, recetasDisponibles, agr
             <CargaRapidaIngredientes filas={filas} onChange={setFilas} stockProductos={stockProductos} recetasDisponibles={recetasDisponibles} />
           </Section>
 
-          {error && <div style={{ color: '#dc2626', fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--red-fg)', fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{error}</div>}
 
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => guardar(false)} disabled={saving}
@@ -2697,7 +2697,7 @@ function VincularStockDrawer({ restauranteId, onClose }: { restauranteId: string
               </>
             )}
 
-            {error && <div style={{ fontSize: 12, color: '#ef4444', padding: '8px 12px', background: '#fef2f2', borderRadius: 8, marginBottom: 12 }}>{error}</div>}
+            {error && <div style={{ fontSize: 12, color: '#ef4444', padding: '8px 12px', background: 'var(--red-bg)', borderRadius: 8, marginBottom: 12 }}>{error}</div>}
           </>
         )}
 

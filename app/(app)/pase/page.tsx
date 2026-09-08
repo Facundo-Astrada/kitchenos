@@ -102,8 +102,8 @@ function MensajeBurbuja({ msg, showHeader = true, onCrearTarea }: { msg: PaseMen
         <div
           className="rounded-[12px] rounded-tl-[4px] p-[10px_12px] leading-[1.45]"
           style={{
-            background: es86 ? '#fef2f2' : esUrgente ? '#fef2f2' : esImportante ? '#fffbeb' : 'var(--surface)',
-            border: `1px solid ${es86 ? '#fca5a5' : esUrgente ? '#fecaca' : esImportante ? '#fde68a' : 'var(--border)'}`,
+            background: es86 ? 'var(--red-bg)' : esUrgente ? 'var(--red-bg)' : esImportante ? 'var(--amber-bg)' : 'var(--surface)',
+            border: `1px solid ${es86 ? '#fca5a5' : esUrgente ? 'var(--red-bg)' : esImportante ? 'var(--amber-bg)' : 'var(--border)'}`,
             borderLeft: es86
               ? '4px solid #ef4444'
               : esUrgente ? '3px solid #ef4444'
@@ -494,7 +494,7 @@ export default function PasePage() {
             data-coach-target="pase-86"
             onClick={() => setShow86(true)}
             className="flex items-center gap-[4px] px-[10px] py-[5px] rounded-full border-none cursor-pointer whitespace-nowrap text-[11px] font-bold flex-shrink-0"
-            style={{ background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca' }}
+            style={{ background: 'var(--red-bg)', color: '#ef4444', border: '1px solid var(--red-bg)' }}
           >
             <span className="material-symbols-outlined text-[14px]">block</span>
             86
@@ -534,10 +534,10 @@ export default function PasePage() {
             }}
             className="flex-shrink-0 w-[36px] h-[36px] rounded-full flex items-center justify-center border-none cursor-pointer"
             style={{
-              background: prioridad === 'urgente' ? '#fef2f2'
-                : prioridad === 'importante' ? '#fffbeb' : 'var(--bg)',
-              border: `1px solid ${prioridad === 'urgente' ? '#fecaca'
-                : prioridad === 'importante' ? '#fde68a' : 'var(--border)'}`,
+              background: prioridad === 'urgente' ? 'var(--red-bg)'
+                : prioridad === 'importante' ? 'var(--amber-bg)' : 'var(--bg)',
+              border: `1px solid ${prioridad === 'urgente' ? 'var(--red-bg)'
+                : prioridad === 'importante' ? 'var(--amber-bg)' : 'var(--border)'}`,
             }}
             title={`Prioridad: ${prioridad}`}
           >

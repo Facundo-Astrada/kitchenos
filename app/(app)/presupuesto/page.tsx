@@ -29,7 +29,7 @@ function fmtPuntos(n: number) {
   return (n <= 0 ? '−' : '+') + fmtPct(Math.abs(n))
 }
 function colorDesvio(puntos: number) {
-  return puntos <= 0 ? '#16a34a' : puntos <= 3 ? '#ca8a04' : '#dc2626'
+  return puntos <= 0 ? '#16a34a' : puntos <= 3 ? '#ca8a04' : 'var(--red-fg)'
 }
 
 function mesActualISO(): string {
@@ -427,7 +427,7 @@ function BloqueSectoresSemanas({ sectores, semanas, mesLabelStr, diasDelMes, mes
                         <>
                           <Num>{fmtMoney(c.gasto)}</Num>
                           {c.desvioPct != null && (
-                            <span style={{ display: 'block', fontSize: 10.5, fontWeight: 500, color: c.desvioPct <= 0 ? '#16a34a' : '#dc2626' }}>
+                            <span style={{ display: 'block', fontSize: 10.5, fontWeight: 500, color: c.desvioPct <= 0 ? '#16a34a' : 'var(--red-fg)' }}>
                               {c.desvioPct >= 0 ? '+' : ''}{Math.round(c.desvioPct * 100)}%
                             </span>
                           )}
@@ -535,7 +535,7 @@ function TabFamilias({ data, aplicandoEstandar, onAplicarEstandar, onGuardarFami
   const { rows, ventas, ventasPeriodoAnterior, ebitdaPct } = data
   const sinEstructura = rows.every(r => r.presupuesto === 0)
   const ebitdaObjetivo = 15
-  const ebitdaColor = ebitdaPct >= ebitdaObjetivo ? '#16a34a' : ebitdaPct >= ebitdaObjetivo - 5 ? '#ca8a04' : '#dc2626'
+  const ebitdaColor = ebitdaPct >= ebitdaObjetivo ? '#16a34a' : ebitdaPct >= ebitdaObjetivo - 5 ? '#ca8a04' : 'var(--red-fg)'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -603,12 +603,12 @@ function TabFamilias({ data, aplicandoEstandar, onAplicarEstandar, onGuardarFami
               <span style={{ color: 'var(--text-2)' }}>
                 Real: <strong style={{ color: 'var(--text-1)' }}>{fmtPct(row.realPct)}</strong> · {fmtMoney(row.real)}
               </span>
-              <span style={{ color: row.desvioPuntos <= 0 ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
+              <span style={{ color: row.desvioPuntos <= 0 ? '#16a34a' : 'var(--red-fg)', fontWeight: 600 }}>
                 {fmtPuntos(row.desvioPuntos)} vs. objetivo · {fmtMoney(Math.abs(row.desvioPlata))}
               </span>
             </div>
             {row.presupuesto > 0 && (
-              <div style={{ fontSize: 11, color: over ? '#dc2626' : 'var(--text-3)', marginTop: 4 }}>
+              <div style={{ fontSize: 11, color: over ? 'var(--red-fg)' : 'var(--text-3)', marginTop: 4 }}>
                 {over ? `Excedido ${fmtMoney(row.real - row.presupuesto)} sobre el presupuesto cargado` : `Presupuesto: ${fmtMoney(row.presupuesto)}`}
               </div>
             )}

@@ -15,11 +15,11 @@ import { fmtMoney, fcBadge, marginBadge } from './cards'
 
 // ── Detail View ─────────────────────────────────────────
 const TAG_DEFS = [
-  { key: 's/tacc',      label: 'S/TACC',       bg: '#fef3c7', color: '#92400e' },
-  { key: 'vegano',      label: 'Vegano',        bg: '#d1fae5', color: '#065f46' },
-  { key: 'vegetariano', label: 'Vegetariano',   bg: '#dcfce7', color: '#166534' },
+  { key: 's/tacc',      label: 'S/TACC',       bg: '#fef3c7', color: 'var(--amber-fg)' },
+  { key: 'vegano',      label: 'Vegano',        bg: 'var(--green-bg)', color: '#065f46' },
+  { key: 'vegetariano', label: 'Vegetariano',   bg: '#dcfce7', color: 'var(--green-fg)' },
   { key: 'keto',        label: 'Keto',          bg: '#ede9fe', color: '#5b21b6' },
-  { key: 'picante',     label: '🌶 Picante',    bg: '#fee2e2', color: '#991b1b' },
+  { key: 'picante',     label: '🌶 Picante',    bg: 'var(--red-bg)', color: 'var(--red-fg)' },
   { key: 'sin lactosa', label: 'Sin lactosa',   bg: '#e0f2fe', color: '#075985' },
 ]
 
@@ -395,7 +395,7 @@ export function DetailView({
 
           <button onClick={onEliminarPlato} style={{
             padding: '10px', borderRadius: 10, marginTop: 8,
-            background: 'none', color: '#ef4444', border: '1px solid #fecaca',
+            background: 'none', color: '#ef4444', border: '1px solid var(--red-bg)',
             fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
           }}>
             Eliminar plato
@@ -624,7 +624,7 @@ export function DetailView({
                       display: 'flex', alignItems: 'center', gap: 3,
                       padding: '3px 7px', borderRadius: 7, border: 'none', cursor: 'pointer',
                       fontSize: 10, fontWeight: 700,
-                      background: isOpen ? '#eef2ff' : 'var(--bg)',
+                      background: isOpen ? 'var(--blue-bg)' : 'var(--bg)',
                       color: isOpen ? 'var(--accent)' : 'var(--text-3)',
                     }}
                   >
@@ -682,12 +682,12 @@ export function DetailView({
             <a href={`/recetario/${linkedReceta.id}`} style={{
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '12px 14px', borderRadius: 12,
-              border: '1px solid var(--accent)', background: '#eef2ff',
+              border: '1px solid var(--accent)', background: 'var(--blue-bg)',
               textDecoration: 'none', marginBottom: 10,
             }}>
               <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--accent)' }}>menu_book</span>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#4338ca' }}>{linkedReceta.nombre}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--blue-fg)' }}>{linkedReceta.nombre}</div>
                 <div style={{ fontSize: 11, color: 'var(--accent)' }}>
                   {linkedReceta.categoria} · Costo: {fmtMoney(linkedReceta.food_cost.costo_porcion)}
                 </div>
@@ -825,7 +825,7 @@ export function DetailView({
                     {creatingTarea ? 'progress_activity' : 'task_alt'}
                   </span>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--amber-fg)' }}>
                       {creatingTarea ? 'Creando tarea…' : `Agregar como tarea pendiente`}
                     </div>
                     <div style={{ fontSize: 10, color: 'var(--text-3)' }}>

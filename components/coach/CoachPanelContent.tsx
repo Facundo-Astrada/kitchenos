@@ -252,7 +252,7 @@ export function CoachPanelContent({ variant = 'page', writesScreenContext = fals
             {datos && (datos.criticos > 0 || datos.vencen > 0 || datos.gastoHoy > 0) && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 20 }}>
                 <DatoCard
-                  icon="warning" color="#dc2626"
+                  icon="warning" color="var(--red-fg)"
                   valor={String(datos.criticos)} label="en crítico"
                   onClick={() => doSend('¿Qué productos están en crítico y qué me conviene reponer primero?')}
                 />

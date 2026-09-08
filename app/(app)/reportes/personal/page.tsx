@@ -217,7 +217,7 @@ function Avatar({ initials, color, size = 36 }: { initials: string; color: strin
 
 function Delta({ value, label }: { value: number; label: string }) {
   if (value === 0) return <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{label}: sin cambio</span>
-  const color = value > 0 ? '#16a34a' : '#dc2626'
+  const color = value > 0 ? '#16a34a' : 'var(--red-fg)'
   const sign = value > 0 ? '+' : ''
   return (
     <span style={{ fontSize: 11, color }}>
@@ -608,7 +608,7 @@ export default function PersonalReportePage() {
                   </span>
                   <span style={{
                     textAlign: 'right', fontSize: 12, fontWeight: 600,
-                    color: p.tasa_completitud >= 80 ? '#16a34a' : p.tasa_completitud >= 60 ? '#ca8a04' : '#dc2626',
+                    color: p.tasa_completitud >= 80 ? '#16a34a' : p.tasa_completitud >= 60 ? '#ca8a04' : 'var(--red-fg)',
                   }}>
                     {p.tasa_completitud.toFixed(0)}%
                   </span>
@@ -627,7 +627,7 @@ export default function PersonalReportePage() {
             <div style={{ display: 'flex', gap: 14, fontSize: 10, color: 'var(--text-3)', marginTop: 10, flexWrap: 'wrap' }}>
               <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#16a34a', marginRight: 4 }} />≥80% Bien</span>
               <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#ca8a04', marginRight: 4 }} />60-79% Alerta</span>
-              <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: '#dc2626', marginRight: 4 }} />&lt;60% Critico</span>
+              <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: 'var(--red-fg)', marginRight: 4 }} />&lt;60% Critico</span>
               <span><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#f59e0b', marginRight: 4 }} />Tiene alertas</span>
             </div>
           </>
@@ -751,12 +751,12 @@ export default function PersonalReportePage() {
                   background: 'rgba(251,191,36,0.08)', borderRadius: 10, padding: '10px 14px',
                   border: '1px solid rgba(251,191,36,0.3)',
                 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#b45309', marginBottom: 6 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--amber-fg)', marginBottom: 6 }}>
                     <span className="material-symbols-outlined" style={{ fontSize: 14, verticalAlign: 'middle', marginRight: 4 }}>warning</span>
                     Alertas
                   </div>
                   {personaDetalle.alertas.map((a, i) => (
-                    <div key={i} style={{ fontSize: 13, color: '#92400e', marginTop: 4 }}>• {a}</div>
+                    <div key={i} style={{ fontSize: 13, color: 'var(--amber-fg)', marginTop: 4 }}>• {a}</div>
                   ))}
                 </div>
               )}

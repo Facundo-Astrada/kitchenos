@@ -312,7 +312,7 @@ export default function PerfilPage() {
         <div
           className="fixed bottom-20 left-1/2 -translate-x-1/2 px-5 py-3 rounded-[14px] text-[13px] font-medium z-50"
           style={{
-            background: toast.type === 'ok' ? '#059669' : '#dc2626',
+            background: toast.type === 'ok' ? 'var(--green-fg)' : 'var(--red-fg)',
             color: '#fff',
             boxShadow: '0 4px 20px rgba(0,0,0,.3)',
           }}

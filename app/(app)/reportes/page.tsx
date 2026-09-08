@@ -94,11 +94,11 @@ function fmtPct(n: number) {
 function fcColor(pct: number) {
   if (pct < 30) return '#16a34a'
   if (pct <= 35) return '#ca8a04'
-  return '#dc2626'
+  return 'var(--red-fg)'
 }
 
 function variacionColor(pct: number) {
-  if (pct > 2) return '#dc2626'
+  if (pct > 2) return 'var(--red-fg)'
   if (pct < -2) return '#16a34a'
   return 'var(--text-2)'
 }
@@ -510,8 +510,8 @@ export default function ReportesPage() {
     let arrowColor = 'var(--text-3)'
     if (prev !== undefined && prev > 0 && value > 0) {
       const change = ((value - prev) / prev) * 100
-      if (change > 0) { arrow = `+${change.toFixed(0)}%`; arrowColor = label.includes('Food') ? '#dc2626' : '#16a34a' }
-      else if (change < 0) { arrow = `${change.toFixed(0)}%`; arrowColor = label.includes('Food') ? '#16a34a' : '#dc2626' }
+      if (change > 0) { arrow = `+${change.toFixed(0)}%`; arrowColor = label.includes('Food') ? 'var(--red-fg)' : '#16a34a' }
+      else if (change < 0) { arrow = `${change.toFixed(0)}%`; arrowColor = label.includes('Food') ? '#16a34a' : 'var(--red-fg)' }
     } else if (prev !== undefined && prev > 0 && value === 0) {
       arrow = 'sin datos aún'; arrowColor = 'var(--text-3)'
     }
@@ -730,7 +730,7 @@ export default function ReportesPage() {
           <div style={{ display: 'flex', gap: 16, fontSize: 11, color: 'var(--text-3)' }}>
             <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#16a34a', marginRight: 4 }} /> &lt;30% Ideal</span>
             <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#ca8a04', marginRight: 4 }} /> 30-35% Alerta</span>
-            <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#dc2626', marginRight: 4 }} /> &gt;35% Crítico</span>
+            <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: 'var(--red-fg)', marginRight: 4 }} /> &gt;35% Crítico</span>
           </div>
         </div>
         </div>
@@ -856,10 +856,10 @@ export default function ReportesPage() {
             border: '1px solid rgba(220,38,38,.25)',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#dc2626' }}>savings</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--red-fg)' }}>savings</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Ahorro potencial (últimos 90 días)</span>
             </div>
-            <div style={{ fontSize: 26, fontWeight: 800, color: '#dc2626', marginBottom: 10 }}>{fmtMoney(ahorroTotal)}</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--red-fg)', marginBottom: 10 }}>{fmtMoney(ahorroTotal)}</div>
             <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10 }}>
               Top {topSobreprecio.length} productos donde pagaste por encima del mejor precio disponible entre tus proveedores
             </div>
@@ -872,7 +872,7 @@ export default function ReportesPage() {
                   <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.producto}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Mejor: {t.mejorProveedor} a {fmtMoney(t.mejorPrecio)}/{t.unidad}</div>
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#dc2626', flexShrink: 0, marginLeft: 10 }}>{fmtMoney(t.ahorroPotencial)}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--red-fg)', flexShrink: 0, marginLeft: 10 }}>{fmtMoney(t.ahorroPotencial)}</div>
               </div>
             ))}
           </div>
@@ -901,7 +901,7 @@ export default function ReportesPage() {
                   <span style={{ color: '#16a34a' }}>
                     Mejor: {c.mejorProveedor} — {fmtMoney(c.mejorPrecio)}
                   </span>
-                  <span style={{ color: c.deltaUltimoPct > 0.5 ? '#dc2626' : 'var(--text-3)', fontWeight: 600 }}>
+                  <span style={{ color: c.deltaUltimoPct > 0.5 ? 'var(--red-fg)' : 'var(--text-3)', fontWeight: 600 }}>
                     Último: {c.ultimoPagado.proveedor} — {fmtMoney(c.ultimoPagado.precio)}
                     {c.deltaUltimoPct > 0.5 ? ` (+${fmtPct(c.deltaUltimoPct)})` : ''}
                   </span>
@@ -989,7 +989,7 @@ export default function ReportesPage() {
       />
     }
     const c = cmvData
-    const cmvCol = c.cmvPct < 33 ? '#16a34a' : c.cmvPct <= 40 ? '#ca8a04' : '#dc2626'
+    const cmvCol = c.cmvPct < 33 ? '#16a34a' : c.cmvPct <= 40 ? '#ca8a04' : 'var(--red-fg)'
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <Explicacion
@@ -1055,7 +1055,7 @@ export default function ReportesPage() {
           ejemplo={<><span style={{ textTransform: 'capitalize' }}>{peorPlaza.plaza}</span> completó <b>{peorPlaza.tareasCompletadas} de {peorPlaza.tareasTotal}</b> tareas → {fmtPct(peorPlaza.cumplimientoPct)} de cumplimiento.</>}
         />
         {rendData.map(r => {
-          const col = r.cumplimientoPct >= 80 ? '#16a34a' : r.cumplimientoPct >= 50 ? '#ca8a04' : '#dc2626'
+          const col = r.cumplimientoPct >= 80 ? '#16a34a' : r.cumplimientoPct >= 50 ? '#ca8a04' : 'var(--red-fg)'
           return (
             <div key={r.plaza} style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -1068,7 +1068,7 @@ export default function ReportesPage() {
               <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-2)' }}>
                 <span><span className="material-symbols-outlined" style={{ fontSize: 14, verticalAlign: 'middle' }}>check_circle</span> {r.tareasCompletadas}/{r.tareasTotal} tareas</span>
                 {r.mermaCosto > 0 && (
-                  <span style={{ color: '#dc2626' }}><span className="material-symbols-outlined" style={{ fontSize: 14, verticalAlign: 'middle' }}>delete_sweep</span> {fmtMoney(r.mermaCosto)} merma</span>
+                  <span style={{ color: 'var(--red-fg)' }}><span className="material-symbols-outlined" style={{ fontSize: 14, verticalAlign: 'middle' }}>delete_sweep</span> {fmtMoney(r.mermaCosto)} merma</span>
                 )}
               </div>
             </div>
@@ -1104,20 +1104,20 @@ export default function ReportesPage() {
         </p>
 
         {conFuga.length > 0 && (
-          <div style={{ background: 'rgba(220,38,38,.08)', border: '1px solid rgba(220,38,38,.3)', borderRadius: 12, padding: 12, fontSize: 13, color: '#dc2626', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ background: 'rgba(220,38,38,.08)', border: '1px solid rgba(220,38,38,.3)', borderRadius: 12, padding: 12, fontSize: 13, color: 'var(--red-fg)', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 18 }}>warning</span>
             {conFuga.length} producto{conFuga.length !== 1 ? 's' : ''} por encima de la tolerancia esperada
           </div>
         )}
 
         {productos.map(row => {
-          const color = row.fuga ? '#dc2626' : '#16a34a'
+          const color = row.fuga ? 'var(--red-fg)' : '#16a34a'
           return (
             <div key={row.productoId} style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: `1px solid ${row.fuga ? 'rgba(220,38,38,.35)' : 'var(--border)'}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8 }}>
                 <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{row.productoNombre}</span>
                 {row.fuga && (
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: 'rgba(220,38,38,.12)', color: '#dc2626' }}>Posible fuga</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: 'rgba(220,38,38,.12)', color: 'var(--red-fg)' }}>Posible fuga</span>
                 )}
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, fontSize: 12, color: 'var(--text-2)' }}>
@@ -1159,7 +1159,7 @@ export default function ReportesPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {cajaHistorial.map(c => {
           const diferencia = c.diferencia_total ?? 0
-          const col = diferencia === 0 ? '#16a34a' : diferencia > 0 ? '#16a34a' : '#dc2626'
+          const col = diferencia === 0 ? '#16a34a' : diferencia > 0 ? '#16a34a' : 'var(--red-fg)'
           const medioIds = Object.keys(c.montos_declarados ?? {})
           return (
             <div key={c.id} style={{ background: 'var(--surface)', borderRadius: 12, padding: 14, border: '1px solid var(--border)' }}>
@@ -1185,7 +1185,7 @@ export default function ReportesPage() {
                   return (
                     <div key={medioId} style={{ flex: '1 1 120px', background: 'var(--bg)', borderRadius: 8, padding: '6px 10px' }}>
                       <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase' }}>{medioNombre(medioId)}</div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: diff === 0 ? 'var(--text-1)' : diff > 0 ? '#16a34a' : '#dc2626' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: diff === 0 ? 'var(--text-1)' : diff > 0 ? '#16a34a' : 'var(--red-fg)' }}>
                         {fmtMoney(declarado)}
                       </div>
                     </div>
@@ -1203,7 +1203,7 @@ export default function ReportesPage() {
   function scoreColor(score: number) {
     if (score >= 90) return '#16a34a'
     if (score >= 70) return '#f97316'
-    return '#dc2626'
+    return 'var(--red-fg)'
   }
 
   // Pases entregados (Fase 4): hecho real con autor y hora desde cierres_turno
@@ -1254,9 +1254,9 @@ export default function ReportesPage() {
     return (
       <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 16, border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#dc2626' }}>report</span>
+          <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--red-fg)' }}>report</span>
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Pase de turno incumplido</span>
-          <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#dc2626' }}>{paseTurnoIncumplidos.length} turnos</span>
+          <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: 'var(--red-fg)' }}>{paseTurnoIncumplidos.length} turnos</span>
         </div>
         <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0 }}>Turnos donde se hizo la apertura pero nadie cerró el mise. No bloquea nada — es información para conversar con el equipo.</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>

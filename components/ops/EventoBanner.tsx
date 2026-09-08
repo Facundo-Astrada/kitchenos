@@ -71,11 +71,11 @@ export function EventoBanner({ restauranteId, modo, onGenerarLista }: EventoBann
     }}>
       <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#d97706', flexShrink: 0 }}>event</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--amber-fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {fechaLabel}: {evento.titulo}
         </div>
         {evento.descripcion && (
-          <div style={{ fontSize: 11, color: '#b45309', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 11, color: 'var(--amber-fg)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {evento.descripcion}
           </div>
         )}
@@ -101,7 +101,7 @@ export function EventoBanner({ restauranteId, modo, onGenerarLista }: EventoBann
         onClick={() => setDismissed(true)}
         style={{ flexShrink: 0, padding: 2, background: 'none', border: 'none', cursor: 'pointer' }}
       >
-        <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#b45309' }}>close</span>
+        <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--amber-fg)' }}>close</span>
       </button>
     </div>
   )

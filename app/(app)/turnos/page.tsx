@@ -464,7 +464,7 @@ export default function TurnosPage() {
                         )
                       })}
                       <td style={{ padding: '4px 2px', textAlign: 'center' }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: totalP > 48 ? '#b45309' : totalP > 0 ? 'var(--text-1)' : 'var(--text-3)' }} title={totalP > 48 ? 'Más de 48h semanales' : undefined}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: totalP > 48 ? 'var(--amber-fg)' : totalP > 0 ? 'var(--text-1)' : 'var(--text-3)' }} title={totalP > 48 ? 'Más de 48h semanales' : undefined}>
                           {Math.round(totalP)}
                         </span>
                       </td>
@@ -597,7 +597,7 @@ export default function TurnosPage() {
                     <div key={m.id} style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--border)', gap: 10 }}>
                       <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{m.nombre} {m.apellido}</div>
                       <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{dias} días</div>
-                      <div style={{ fontSize: 15, fontWeight: 800, color: totalHs > 176 ? '#b45309' : totalHs > 0 ? 'var(--navy-ink)' : 'var(--text-3)', minWidth: 40, textAlign: 'right' }} title={totalHs > 176 ? 'Más de 176h en el mes' : undefined}>
+                      <div style={{ fontSize: 15, fontWeight: 800, color: totalHs > 176 ? 'var(--amber-fg)' : totalHs > 0 ? 'var(--navy-ink)' : 'var(--text-3)', minWidth: 40, textAlign: 'right' }} title={totalHs > 176 ? 'Más de 176h en el mes' : undefined}>
                         {Math.round(totalHs)}h
                       </div>
                     </div>

@@ -189,7 +189,7 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
             background: 'rgba(245,158,11,.10)', borderLeft: '3px solid #f59e0b',
             borderRadius: 8, padding: '6px 9px', display: 'inline-flex', alignItems: 'center', gap: 6,
           }}>
-            <span className={ICON} style={{ fontSize: 15, color: '#b45309' }}>pending</span>
+            <span className={ICON} style={{ fontSize: 15, color: 'var(--amber-fg)' }}>pending</span>
             <span style={{ fontSize: 10, fontWeight: 800, color: '#78350f', textTransform: 'uppercase', letterSpacing: '.05em' }}>
               3 para hacer
             </span>
@@ -306,7 +306,7 @@ export function MiseGuiaSheet({ foco, onClose, onVerEnPantalla }: {
             <span className={ICON} style={{ fontSize: 14, color: 'var(--text-3)' }}>inventory_2</span>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>1.5 ×3</span>
             <span style={{ fontSize: 10, color: 'var(--text-3)' }}>→ 15 porc</span>
-            <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(16,185,129,.12)', color: '#059669' }}>1.32kg total</span>
+            <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(16,185,129,.12)', color: 'var(--green-fg)' }}>1.32kg total</span>
           </div>
         }
       >

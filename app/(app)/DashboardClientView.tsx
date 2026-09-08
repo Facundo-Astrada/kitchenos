@@ -274,10 +274,10 @@ export default function DashboardPage() {
                   {criticos.slice(0, 12).map(p => {
                     const esCrit = getEstadoStock(p.stock_actual, p.stock_minimo, p.stock_critico) === 'critico'
                     return (
-                      <Link key={p.id} href="/stock" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, background: esCrit ? '#fef2f2' : '#fffbeb', border: `1px solid ${esCrit ? '#fecaca' : '#fde68a'}`, textDecoration: 'none' }}>
+                      <Link key={p.id} href="/stock" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, background: esCrit ? 'var(--red-bg)' : 'var(--amber-bg)', border: `1px solid ${esCrit ? 'var(--red-bg)' : 'var(--amber-bg)'}`, textDecoration: 'none' }}>
                         <div style={{ width: 8, height: 8, borderRadius: '50%', background: esCrit ? '#ef4444' : '#f59e0b', flexShrink: 0 }} />
                         <div style={{ minWidth: 0 }}>
-                          <p style={{ fontSize: 12, fontWeight: 700, color: esCrit ? '#991b1b' : '#92400e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</p>
+                          <p style={{ fontSize: 12, fontWeight: 700, color: esCrit ? 'var(--red-fg)' : 'var(--amber-fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</p>
                           <p style={{ fontSize: 11, color: esCrit ? '#ef4444' : '#f59e0b' }}>{p.stock_actual} / {p.stock_minimo} {p.unidad}</p>
                         </div>
                         <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 800, textTransform: 'uppercase', padding: '2px 6px', borderRadius: 5, background: esCrit ? '#ef4444' : '#f59e0b', color: '#fff', flexShrink: 0 }}>{esCrit ? 'CRIT' : 'BAJO'}</span>
@@ -374,7 +374,7 @@ export default function DashboardPage() {
                       <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{p.nombre}</div>
                       <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{p.stock_actual} {p.unidad} · mín {p.stock_minimo}</div>
                     </div>
-                    <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: p.estado === 'critico' ? '#fef2f2' : '#fef9c3', color: p.estado === 'critico' ? '#991b1b' : '#854d0e' }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: p.estado === 'critico' ? 'var(--red-bg)' : 'var(--amber-bg)', color: p.estado === 'critico' ? 'var(--red-fg)' : 'var(--amber-fg)' }}>
                       {p.estado === 'critico' ? 'CRÍTICO' : 'BAJO'}
                     </span>
                   </div>

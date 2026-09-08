@@ -5,7 +5,7 @@ import type { ProductoConEstado } from '@/lib/hooks/useStock'
 import type { StockSector, StockEstante } from '@/types'
 
 const ESTADO_COLOR: Record<ProductoConEstado['estado'], string> = {
-  critico: '#dc2626',
+  critico: 'var(--red-fg)',
   bajo: '#d97706',
   alto: '#38bdf8',
   ok: 'var(--text-3)',
@@ -148,7 +148,7 @@ export default function StockBoardCard({ producto, isDragging, selected, sectore
           <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
           <button
             onClick={handleEliminar}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 4px', borderRadius: 7, border: 'none', background: 'none', color: '#dc2626', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 4px', borderRadius: 7, border: 'none', background: 'none', color: 'var(--red-fg)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
           >
             <span className="material-symbols-outlined" style={{ fontSize: 15 }}>delete</span>
             Eliminar del stock

@@ -230,8 +230,8 @@ export default function BulkUploadDrawer({ open, onClose, onSaved }: BulkUploadD
               }}>
                 <span><b>{entries.length}</b> total</span>
                 {pendientes > 0 && <span>· {pendientes} pendientes</span>}
-                {procesadas > 0 && <span style={{ color: '#166534' }}>· {procesadas} procesadas</span>}
-                {errores > 0 && <span style={{ color: '#991b1b' }}>· {errores} con error</span>}
+                {procesadas > 0 && <span style={{ color: 'var(--green-fg)' }}>· {procesadas} procesadas</span>}
+                {errores > 0 && <span style={{ color: 'var(--red-fg)' }}>· {errores} con error</span>}
                 {guardadas > 0 && <span style={{ color: 'var(--accent)' }}>· {guardadas} guardadas</span>}
               </div>
 
@@ -300,8 +300,8 @@ function FileRow({ entry, onToggle, onRemove }: {
   const statusConfig: Record<Status, { icon: string; color: string; label: string }> = {
     pending: { icon: 'schedule', color: 'var(--text-3)', label: 'Pendiente' },
     processing: { icon: 'sync', color: 'var(--accent)', label: 'Procesando…' },
-    parsed: { icon: 'check_circle', color: '#166534', label: 'Procesada' },
-    error: { icon: 'error', color: '#991b1b', label: 'Error' },
+    parsed: { icon: 'check_circle', color: 'var(--green-fg)', label: 'Procesada' },
+    error: { icon: 'error', color: 'var(--red-fg)', label: 'Error' },
     saved: { icon: 'cloud_done', color: 'var(--accent)', label: 'Guardada' },
   }
   const cfg = statusConfig[entry.status]
@@ -332,7 +332,7 @@ function FileRow({ entry, onToggle, onRemove }: {
           {entry.result && (
             <span> · {entry.result.proveedor_nombre || 'Sin proveedor'} · ${entry.result.total?.toLocaleString('es-AR') ?? 0} · {entry.result.items?.length ?? 0} items</span>
           )}
-          {entry.error && <span style={{ color: '#991b1b' }}> · {entry.error}</span>}
+          {entry.error && <span style={{ color: 'var(--red-fg)' }}> · {entry.error}</span>}
         </div>
       </div>
       {entry.status !== 'saved' && (

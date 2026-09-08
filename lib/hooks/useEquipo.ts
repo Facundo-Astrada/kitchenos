@@ -170,10 +170,10 @@ export type TurnoTipo = 'mañana' | 'tarde' | 'noche' | 'franco' | 'vacaciones'
 // no ata nada (se puede pisar por persona/día). franco/vacaciones no tienen.
 export const TURNO_CONFIG: Record<TurnoTipo, { label: string; fullLabel: string; color: string; bg: string; defaultHoras?: [string, string] }> = {
   mañana:     { label: 'M', fullLabel: 'Mañana',     color: '#f59e0b', bg: '#fef3c7', defaultHoras: ['09:00', '17:00'] },
-  tarde:      { label: 'T', fullLabel: 'Tarde',      color: '#3b82f6', bg: '#dbeafe', defaultHoras: ['13:00', '21:00'] },
-  noche:      { label: 'N', fullLabel: 'Noche',      color: '#4361a0', bg: '#e0e7ff', defaultHoras: ['20:00', '02:00'] },
+  tarde:      { label: 'T', fullLabel: 'Tarde',      color: '#3b82f6', bg: 'var(--blue-bg)', defaultHoras: ['13:00', '21:00'] },
+  noche:      { label: 'N', fullLabel: 'Noche',      color: '#4361a0', bg: 'var(--blue-bg)', defaultHoras: ['20:00', '02:00'] },
   franco:     { label: 'F', fullLabel: 'Franco',     color: '#6b7280', bg: '#f3f4f6' },
-  vacaciones: { label: 'V', fullLabel: 'Vacaciones', color: '#10b981', bg: '#d1fae5' },
+  vacaciones: { label: 'V', fullLabel: 'Vacaciones', color: '#10b981', bg: 'var(--green-bg)' },
 }
 
 // ── Niveles de acceso ──

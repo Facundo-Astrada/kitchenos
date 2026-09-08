@@ -175,7 +175,7 @@ function RentabilidadView({
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: fc.text }}>{(item.food_cost_pct ?? 0).toFixed(1)}%</div>
-                  <div style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>{fmtMoney(item.margen_bruto ?? 0)}</div>
+                  <div style={{ fontSize: 11, color: 'var(--green-fg)', fontWeight: 600 }}>{fmtMoney(item.margen_bruto ?? 0)}</div>
                 </div>
               </div>
             )
@@ -200,7 +200,7 @@ function RentabilidadView({
                 Popularidad calculada sobre todo el historial de ventas cargado (no el período de Ventas).
               </div>
               {!ing.conVentas && (
-                <div style={{ background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.3)', borderRadius: 10, padding: '10px 12px', fontSize: 11.5, color: '#92400e', lineHeight: 1.5 }}>
+                <div style={{ background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.3)', borderRadius: 10, padding: '10px 12px', fontSize: 11.5, color: 'var(--amber-fg)', lineHeight: 1.5 }}>
                   Sin ventas cargadas: la clasificación es solo por rentabilidad. Cargá ventas para cruzar con popularidad.
                 </div>
               )}
@@ -220,7 +220,7 @@ function RentabilidadView({
                       <button key={x.item.id} onClick={() => onOpenPlato(x.item.id)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '9px 12px', background: 'none', border: 'none', borderTop: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit' }}>
                         <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.item.nombre}</span>
                         <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{x.pop} vend.</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: '#059669', fontFamily: "'DM Mono', monospace" }}>{fmtMoney(x.margin)}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--green-fg)', fontFamily: "'DM Mono', monospace" }}>{fmtMoney(x.margin)}</span>
                       </button>
                     ))}
                   </div>
@@ -241,7 +241,7 @@ function RentabilidadView({
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)' }}>%</span>
           </div>
           {reprecioSospechosos.length > 0 && (
-            <div style={{ background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 10, padding: '10px 12px', fontSize: 11.5, color: '#991b1b', lineHeight: 1.5 }}>
+            <div style={{ background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 10, padding: '10px 12px', fontSize: 11.5, color: 'var(--red-fg)', lineHeight: 1.5 }}>
               {reprecioSospechosos.length} plato{reprecioSospechosos.length !== 1 ? 's' : ''} con food cost por encima de {FC_SOSPECHOSO}% — casi siempre es un error de unidades en la receta (porciones o cantidad mal cargadas), no un plato caro de verdad. Se excluyeron del reprecio automático: revisalos en Recetario antes de tocar el precio.
             </div>
           )}
@@ -976,9 +976,9 @@ export default function CartaPage() {
         <div style={{ padding: '12px 16px 0' }}>
           <button data-coach-target="carta-rentabilidad" onClick={() => setView('rentabilidad')} style={{
             width: '100%', padding: '10px 14px', borderRadius: 10,
-            background: '#eef2ff', border: '1px solid var(--accent)',
+            background: 'var(--blue-bg)', border: '1px solid var(--accent)',
             display: 'flex', alignItems: 'center', gap: 8,
-            cursor: 'pointer', color: '#4338ca',
+            cursor: 'pointer', color: 'var(--blue-fg)',
           }}>
             <span className="material-symbols-outlined" style={{ fontSize: 20 }}>analytics</span>
             <div style={{ flex: 1, textAlign: 'left' }}>

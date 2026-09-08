@@ -8,15 +8,15 @@ export const fmtMoney = (n: number) =>
   n > 0 ? `$${n.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—'
 
 export function fcBadge(pct: number): { bg: string; text: string } {
-  if (pct < 30) return { bg: '#d1fae5', text: '#065f46' }
-  if (pct <= 35) return { bg: '#fef3c7', text: '#92400e' }
-  return { bg: '#fee2e2', text: '#991b1b' }
+  if (pct < 30) return { bg: 'var(--green-bg)', text: '#065f46' }
+  if (pct <= 35) return { bg: '#fef3c7', text: 'var(--amber-fg)' }
+  return { bg: 'var(--red-bg)', text: 'var(--red-fg)' }
 }
 
 export function marginBadge(pct: number): { bg: string; text: string } {
-  if (pct > 30) return { bg: '#d1fae5', text: '#065f46' }
-  if (pct >= 15) return { bg: '#fef3c7', text: '#92400e' }
-  return { bg: '#fee2e2', text: '#991b1b' }
+  if (pct > 30) return { bg: 'var(--green-bg)', text: '#065f46' }
+  if (pct >= 15) return { bg: '#fef3c7', text: 'var(--amber-fg)' }
+  return { bg: 'var(--red-bg)', text: 'var(--red-fg)' }
 }
 
 // ── Plato Card ──────────────────────────────────────────
@@ -146,7 +146,7 @@ export function PlatoCard({
           {item.plato_recetas.length > 0 && (
             <span style={{
               fontSize: 11, color: 'var(--accent)',
-              background: '#eef2ff', padding: '2px 8px', borderRadius: 6,
+              background: 'var(--blue-bg)', padding: '2px 8px', borderRadius: 6,
             }}>
               {item.plato_recetas.length} receta{item.plato_recetas.length > 1 ? 's' : ''}
             </span>
@@ -154,7 +154,7 @@ export function PlatoCard({
           {item.plato_recetas.length === 0 && item.receta && (
             <span style={{
               fontSize: 11, color: 'var(--accent)',
-              background: '#eef2ff', padding: '2px 8px', borderRadius: 6,
+              background: 'var(--blue-bg)', padding: '2px 8px', borderRadius: 6,
             }}>
               Receta vinculada
             </span>
@@ -171,12 +171,12 @@ export function PlatoCard({
         <button onClick={e => { e.stopPropagation(); onToggle() }} style={{
           display: 'flex', alignItems: 'center', gap: 6,
           background: 'none', border: 'none', cursor: 'pointer',
-          fontSize: 12, color: item.disponible ? '#059669' : '#ef4444',
+          fontSize: 12, color: item.disponible ? 'var(--green-fg)' : '#ef4444',
           fontWeight: 600,
         }}>
           <div style={{
             width: 36, height: 20, borderRadius: 10,
-            background: item.disponible ? '#059669' : '#d1d5db',
+            background: item.disponible ? 'var(--green-fg)' : '#d1d5db',
             position: 'relative', transition: 'background 0.2s',
           }}>
             <div style={{
@@ -244,7 +244,7 @@ export function PlatoCardBack({
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
         <span style={{ fontSize: 10, background: 'var(--bg)', color: 'var(--text-3)', padding: '2px 8px', borderRadius: 20 }}>{item.categoria}</span>
         {(item.tags ?? []).map(tag => (
-          <span key={tag} style={{ fontSize: 10, background: '#eef2ff', color: 'var(--accent)', padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>{tag}</span>
+          <span key={tag} style={{ fontSize: 10, background: 'var(--blue-bg)', color: 'var(--accent)', padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>{tag}</span>
         ))}
       </div>
 
@@ -253,10 +253,10 @@ export function PlatoCardBack({
         style={{
           display: 'flex', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
           background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginBottom: 8,
-          fontSize: 11, fontWeight: 600, color: item.disponible ? '#059669' : '#ef4444',
+          fontSize: 11, fontWeight: 600, color: item.disponible ? 'var(--green-fg)' : '#ef4444',
         }}
       >
-        <div style={{ width: 7, height: 7, borderRadius: '50%', background: item.disponible ? '#16a34a' : '#dc2626' }} />
+        <div style={{ width: 7, height: 7, borderRadius: '50%', background: item.disponible ? '#16a34a' : 'var(--red-fg)' }} />
         {item.disponible ? 'Disponible' : 'No disponible'}
         <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>· cambiar</span>
       </button>

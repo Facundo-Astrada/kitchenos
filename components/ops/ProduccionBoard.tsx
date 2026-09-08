@@ -261,7 +261,7 @@ export function ProduccionBoard({
     const colMenu = columnasPorPaso(porModo('menu'), 'menu')
     if (colMenu.length > 0) {
       // Mismo ámbar que PLAZA_COLORS.menu (lib/constants.ts) — mantener en espejo.
-      out.push({ id: 'menu', titulo: 'Menú', icono: 'restaurant', color: '#b45309', columnas: colMenu })
+      out.push({ id: 'menu', titulo: 'Menú', icono: 'restaurant', color: 'var(--amber-fg)', columnas: colMenu })
     }
     const colEvento = columnasPorPaso(porModo('evento'), 'evento')
     if (colEvento.length > 0) {

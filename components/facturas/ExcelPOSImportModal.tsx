@@ -177,7 +177,7 @@ export default function ExcelPOSImportModal({ open, onClose, onImported, initial
           {error && (
             <div style={{
               background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)',
-              borderRadius: 10, padding: 14, color: '#991b1b', fontSize: 13, marginBottom: 12,
+              borderRadius: 10, padding: 14, color: 'var(--red-fg)', fontSize: 13, marginBottom: 12,
             }}>
               {error}
             </div>
@@ -232,7 +232,7 @@ export default function ExcelPOSImportModal({ open, onClose, onImported, initial
                               {h.filas.toLocaleString('es-AR')} filas
                             </div>
                           </div>
-                          <div style={{ fontSize: 11, color: h.usada ? '#166534' : 'var(--text-3)', marginTop: 2 }}>
+                          <div style={{ fontSize: 11, color: h.usada ? 'var(--green-fg)' : 'var(--text-3)', marginTop: 2 }}>
                             {h.rol}
                           </div>
                           {h.columnas.length > 0 && (
@@ -301,7 +301,7 @@ export default function ExcelPOSImportModal({ open, onClose, onImported, initial
               background: 'rgba(22,101,52,.1)', border: '1px solid rgba(22,101,52,.3)',
               borderRadius: 12, padding: 16,
             }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#166534', marginBottom: 12 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--green-fg)', marginBottom: 12 }}>
                 ✓ Importación completada
               </div>
               <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-1)', fontSize: 14, lineHeight: 1.8 }}>

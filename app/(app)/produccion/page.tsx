@@ -712,7 +712,7 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
                             ) : (
                               <button onClick={e => handleActivarEnMise(e, menu)} disabled={miseSaving || sinVigencia || vigenciaVencida}
                                 title={sinVigencia ? 'Cargá vigencia desde/hasta en Editar (Carta → Menús)' : vigenciaVencida ? 'La vigencia ya venció' : 'Activar en el mise'}
-                                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: (sinVigencia || vigenciaVencida) ? 'none' : 'rgba(245,158,11,.10)', border: 'none', padding: '10px 14px', cursor: (miseSaving || sinVigencia || vigenciaVencida) ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: (sinVigencia || vigenciaVencida) ? 'var(--text-3)' : '#b45309', opacity: miseSaving ? .6 : 1 }}>
+                                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: (sinVigencia || vigenciaVencida) ? 'none' : 'rgba(245,158,11,.10)', border: 'none', padding: '10px 14px', cursor: (miseSaving || sinVigencia || vigenciaVencida) ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700, color: (sinVigencia || vigenciaVencida) ? 'var(--text-3)' : 'var(--amber-fg)', opacity: miseSaving ? .6 : 1 }}>
                                 <span className="material-symbols-outlined" style={{ fontSize: 16 }}>playlist_add_check</span>
                                 Activar en el mise
                               </button>
@@ -834,7 +834,7 @@ function MesCalendar({
 // La ejecución (tildar) se hace en el tab Producción.
 // ══════════════════════════════════════════════════════════════
 const PRIO_BADGE: Record<string, { label: string; color: string; bg: string }> = {
-  critica: { label: 'SP', color: '#ef4444', bg: '#fef2f2' },
+  critica: { label: 'SP', color: '#ef4444', bg: 'var(--red-bg)' },
   alta: { label: 'P', color: '#f97316', bg: '#fff7ed' },
   media: { label: 'REF', color: '#3b82f6', bg: '#eff6ff' },
   baja: { label: 'Check', color: '#64748b', bg: '#f8fafc' },

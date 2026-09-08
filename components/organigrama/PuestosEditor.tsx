@@ -422,7 +422,7 @@ export function PuestosEditorPanel({
             {(p.permisos_app ?? []).map(mod => {
               const cfg = MODULO_CONFIG[mod as keyof typeof MODULO_CONFIG]
               return (
-                <span key={mod} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 500, padding: '5px 10px', borderRadius: 8, background: '#e0e7ff', color: '#4338ca' }}>
+                <span key={mod} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 500, padding: '5px 10px', borderRadius: 8, background: 'var(--blue-bg)', color: 'var(--blue-fg)' }}>
                   <span className="material-symbols-outlined" style={{ fontSize: 14 }}>{cfg?.icon ?? 'widgets'}</span>
                   {cfg?.label ?? mod}
                 </span>
@@ -557,7 +557,7 @@ export function PuestosEditorPanel({
                     {nivelLabel(tpl.nivel)}
                   </span>
                   {tpl.plaza_default && (
-                    <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: '#dbeafe', color: '#1e40af' }}>
+                    <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'var(--blue-bg)', color: 'var(--blue-fg)' }}>
                       {tpl.plaza_default}
                     </span>
                   )}
@@ -605,7 +605,7 @@ export function PuestosEditorPanel({
               </div>
               <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginLeft: 10 }}>
                 {p.plaza_default && (
-                  <span style={{ fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 6, background: '#dbeafe', color: '#1e40af' }}>
+                  <span style={{ fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 6, background: 'var(--blue-bg)', color: 'var(--blue-fg)' }}>
                     {p.plaza_default}
                   </span>
                 )}

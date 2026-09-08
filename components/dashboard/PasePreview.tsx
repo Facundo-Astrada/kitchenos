@@ -13,10 +13,10 @@ const PRIORIDAD_CONFIG: Record<PrioridadPase, {
   bg: string; border: string; tagBg: string; text: string; label: string
 }> = {
   urgente: {
-    bg: '#fef2f2', border: '#fecaca', tagBg: '#ef4444', text: '#991b1b', label: 'URGENTE',
+    bg: 'var(--red-bg)', border: 'var(--red-bg)', tagBg: '#ef4444', text: 'var(--red-fg)', label: 'URGENTE',
   },
   importante: {
-    bg: '#fffbeb', border: '#fde68a', tagBg: '#f59e0b', text: '#92400e', label: 'IMPORTANTE',
+    bg: 'var(--amber-bg)', border: 'var(--amber-bg)', tagBg: '#f59e0b', text: 'var(--amber-fg)', label: 'IMPORTANTE',
   },
   normal: {
     bg: 'var(--surface)', border: 'var(--border)', tagBg: 'var(--navy)', text: 'var(--text)', label: 'NOVEDAD',

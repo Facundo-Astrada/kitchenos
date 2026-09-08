@@ -80,10 +80,10 @@ function normalizeName(s: string) {
 }
 
 const STATUS_CONFIG: Record<FacturaStatus, { bg: string; color: string; label: string }> = {
-  confirmada: { bg: '#dcfce7', color: '#166534', label: 'Confirmada' },
-  pendiente: { bg: '#fef9c3', color: '#854d0e', label: 'Pendiente' },
-  observada: { bg: '#fef2f2', color: '#991b1b', label: 'Observada' },
-  pagada: { bg: '#dbeafe', color: '#1e40af', label: 'Pagada' },
+  confirmada: { bg: '#dcfce7', color: 'var(--green-fg)', label: 'Confirmada' },
+  pendiente: { bg: 'var(--amber-bg)', color: 'var(--amber-fg)', label: 'Pendiente' },
+  observada: { bg: 'var(--red-bg)', color: 'var(--red-fg)', label: 'Observada' },
+  pagada: { bg: 'var(--blue-bg)', color: 'var(--blue-fg)', label: 'Pagada' },
 }
 
 // Una factura está "por pagar" si es a crédito y todavía no se marcó pagada.
@@ -196,8 +196,8 @@ function ComprasHeader({
 
 // ── Vencimiento badge (cuentas por pagar) ─────────────────────
 const VENC_CONFIG: Record<VencimientoFactura['urgencia'], { bg: string; color: string }> = {
-  vencida: { bg: '#fee2e2', color: '#991b1b' },
-  esta_semana: { bg: '#fef3c7', color: '#92400e' },
+  vencida: { bg: 'var(--red-bg)', color: 'var(--red-fg)' },
+  esta_semana: { bg: '#fef3c7', color: 'var(--amber-fg)' },
   proximamente: { bg: '#e0f2fe', color: '#075985' },
   sin_fecha: { bg: '#f1f5f9', color: '#64748b' },
 }
@@ -490,23 +490,23 @@ function ConfirmView({ result, productos, proveedores, categoriasGasto = [], med
         {(data.alerta_privacidad || (data.items_excluidos && data.items_excluidos.length > 0)) && (
           <div className="mx-4 mt-4 rounded-[12px] p-3" style={{ background: '#fef3c7', border: '1px solid #fcd34d' }}>
             <div className="flex items-start gap-2">
-              <span className="material-symbols-outlined text-[18px]" style={{ color: '#92400e' }}>shield_person</span>
+              <span className="material-symbols-outlined text-[18px]" style={{ color: 'var(--amber-fg)' }}>shield_person</span>
               <div className="flex-1">
-                <div className="text-[12px] font-bold" style={{ color: '#92400e' }}>Datos de personas detectados</div>
+                <div className="text-[12px] font-bold" style={{ color: 'var(--amber-fg)' }}>Datos de personas detectados</div>
                 {data.alerta_privacidad && (
-                  <div className="text-[11px] mt-1" style={{ color: '#92400e' }}>{data.alerta_privacidad}</div>
+                  <div className="text-[11px] mt-1" style={{ color: 'var(--amber-fg)' }}>{data.alerta_privacidad}</div>
                 )}
                 {data.items_excluidos && data.items_excluidos.length > 0 && (
                   <div className="mt-2 flex flex-col gap-1">
                     {data.items_excluidos.map((ex, i) => (
-                      <div key={i} className="text-[11px]" style={{ color: '#92400e' }}>
+                      <div key={i} className="text-[11px]" style={{ color: 'var(--amber-fg)' }}>
                         <span className="line-through opacity-70">{ex.concepto}</span>
                         <span className="opacity-60"> — {ex.motivo}</span>
                       </div>
                     ))}
                   </div>
                 )}
-                <div className="text-[10px] mt-2 opacity-70" style={{ color: '#92400e' }}>
+                <div className="text-[10px] mt-2 opacity-70" style={{ color: 'var(--amber-fg)' }}>
                   Estos conceptos no se cargarán como compras. Configurá los nombres internos desde el botón de privacidad en Facturas.
                 </div>
               </div>
@@ -516,7 +516,7 @@ function ConfirmView({ result, productos, proveedores, categoriasGasto = [], med
 
         {/* Alerta de variación de precio — alzas significativas */}
         {alzas.length > 0 && (
-          <div className="mx-4 mt-4 rounded-[12px] p-3" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
+          <div className="mx-4 mt-4 rounded-[12px] p-3" style={{ background: 'var(--red-bg)', border: '1px solid var(--red-bg)' }}>
             <div className="flex items-start gap-2">
               <span className="material-symbols-outlined text-[18px]" style={{ color: '#b91c1c' }}>trending_up</span>
               <div className="flex-1 min-w-0">
@@ -525,10 +525,10 @@ function ConfirmView({ result, productos, proveedores, categoriasGasto = [], med
                 </div>
                 <div className="mt-1 flex flex-col gap-1">
                   {alzas.slice(0, 5).map((a, i) => (
-                    <div key={i} className="text-[11px] flex items-center justify-between gap-2" style={{ color: '#991b1b' }}>
+                    <div key={i} className="text-[11px] flex items-center justify-between gap-2" style={{ color: 'var(--red-fg)' }}>
                       <span className="truncate">{a.nombre}</span>
                       <span className="font-bold whitespace-nowrap">
-                        {fmt(a.antes)} → {fmt(a.ahora)} <span style={{ color: '#dc2626' }}>+{a.va.toFixed(0)}%</span>
+                        {fmt(a.antes)} → {fmt(a.ahora)} <span style={{ color: 'var(--red-fg)' }}>+{a.va.toFixed(0)}%</span>
                       </span>
                     </div>
                   ))}
@@ -536,7 +536,7 @@ function ConfirmView({ result, productos, proveedores, categoriasGasto = [], med
                     <div className="text-[10px]" style={{ color: '#b91c1c', opacity: 0.7 }}>+{alzas.length - 5} más</div>
                   )}
                 </div>
-                <div className="text-[10px] mt-2 opacity-70" style={{ color: '#991b1b' }}>
+                <div className="text-[10px] mt-2 opacity-70" style={{ color: 'var(--red-fg)' }}>
                   Revisá que los precios sean correctos antes de confirmar. Podés ajustarlos tocando el lápiz en cada producto.
                 </div>
               </div>
@@ -663,9 +663,9 @@ function ConfirmView({ result, productos, proveedores, categoriasGasto = [], med
                 className="rounded-[10px] p-3 mb-2"
                 style={{
                   background: item.match_confianza === 'nueva' ? '#eff6ff'
-                    : item.match_confianza === 'media' ? '#fffbeb' : 'var(--surface)',
+                    : item.match_confianza === 'media' ? 'var(--amber-bg)' : 'var(--surface)',
                   border: `1px solid ${item.match_confianza === 'nueva' ? '#bfdbfe'
-                    : item.match_confianza === 'media' ? '#fde68a' : 'var(--border)'}`,
+                    : item.match_confianza === 'media' ? 'var(--amber-bg)' : 'var(--border)'}`,
                 }}
               >
                 <div className="flex items-start justify-between mb-1">
@@ -763,7 +763,7 @@ function ConfirmView({ result, productos, proveedores, categoriasGasto = [], med
                 {/* Smart stock link */}
                 {item.match_confianza === 'media' && !isEditing && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
-                    <span style={{ fontSize: 10, color: '#92400e', flex: 1 }}>
+                    <span style={{ fontSize: 10, color: 'var(--amber-fg)', flex: 1 }}>
                       ¿Es <b>{productos.find(p => p.id === item.producto_id)?.nombre}</b>?
                     </span>
                     <button onClick={() => vincularProducto(idx, item.producto_id!)}
@@ -802,17 +802,17 @@ function ConfirmView({ result, productos, proveedores, categoriasGasto = [], med
 
                 {/* Equivalencia kg para unidades no métricas */}
                 {!isWeightUnit(item.unidad) && !isEditing && (
-                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, background: '#fffbeb', borderRadius: 8, padding: '6px 10px' }}>
-                    <span style={{ fontSize: 11, color: '#92400e', flex: 1 }}>1 {item.unidad} =</span>
+                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--amber-bg)', borderRadius: 8, padding: '6px 10px' }}>
+                    <span style={{ fontSize: 11, color: 'var(--amber-fg)', flex: 1 }}>1 {item.unidad} =</span>
                     <input
                       type="text" inputMode="decimal"
                       value={rawVal(`${idx}-kg`, item.peso_kg)}
                       onChange={e => { const raw = e.target.value.replace(',', '.'); setRaw(`${idx}-kg`, raw); updateItem(idx, 'peso_kg', parseFloat(raw) || undefined) }}
                       onBlur={() => clearRaw(`${idx}-kg`)}
                       placeholder="0.000"
-                      style={{ width: 70, background: 'white', border: '1px solid #fcd34d', borderRadius: 6, padding: '4px 7px', fontSize: 12, fontFamily: 'inherit', color: '#92400e', outline: 'none' }}
+                      style={{ width: 70, background: 'white', border: '1px solid #fcd34d', borderRadius: 6, padding: '4px 7px', fontSize: 12, fontFamily: 'inherit', color: 'var(--amber-fg)', outline: 'none' }}
                     />
-                    <span style={{ fontSize: 11, color: '#92400e' }}>kg</span>
+                    <span style={{ fontSize: 11, color: 'var(--amber-fg)' }}>kg</span>
                   </div>
                 )}
               </div>
@@ -850,7 +850,7 @@ function ConfirmView({ result, productos, proveedores, categoriasGasto = [], med
             paddingBottom: 'max(env(safe-area-inset-bottom, 16px), 16px)',
           }}>
             {sinEquivalencia && (
-              <div style={{ marginBottom: 8, padding: '6px 12px', background: '#fffbeb', borderRadius: 8, fontSize: 11, color: '#92400e', fontWeight: 600 }}>
+              <div style={{ marginBottom: 8, padding: '6px 12px', background: 'var(--amber-bg)', borderRadius: 8, fontSize: 11, color: 'var(--amber-fg)', fontWeight: 600 }}>
                 💡 Podés ingresar la equivalencia en kg para mejor seguimiento — opcional
               </div>
             )}
@@ -1030,12 +1030,12 @@ function ReconciliacionPedido({ factura, facturaItems, onVincular }: {
                 </div>
               ))}
               {comparacion.faltantes.length > 0 && (
-                <div className="mt-2 rounded-[8px] p-2" style={{ background: '#fffbeb', border: '1px solid #fde68a' }}>
-                  <div className="text-[10px] font-bold mb-1" style={{ color: '#92400e' }}>
+                <div className="mt-2 rounded-[8px] p-2" style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-bg)' }}>
+                  <div className="text-[10px] font-bold mb-1" style={{ color: 'var(--amber-fg)' }}>
                     Pedido pero no facturado ({comparacion.faltantes.length})
                   </div>
                   {comparacion.faltantes.map(p => (
-                    <div key={p.id} className="text-[11px]" style={{ color: '#92400e' }}>
+                    <div key={p.id} className="text-[11px]" style={{ color: 'var(--amber-fg)' }}>
                       {p.producto_nombre} — {p.cantidad} {p.unidad}
                     </div>
                   ))}
@@ -1409,17 +1409,17 @@ function DetailView({ factura, onBack, onStatusChange, onDelete, onUpdate, onVin
         {/* Cuenta por pagar — marcar pagada */}
         {COND_A_CREDITO.has(String(factura.condicion_pago ?? '')) && (
           <div className="mt-4 rounded-[12px] p-3 flex items-center gap-3" style={{
-            background: factura.status === 'pagada' ? '#eff6ff' : '#fffbeb',
-            border: `1px solid ${factura.status === 'pagada' ? '#bfdbfe' : '#fde68a'}`,
+            background: factura.status === 'pagada' ? '#eff6ff' : 'var(--amber-bg)',
+            border: `1px solid ${factura.status === 'pagada' ? '#bfdbfe' : 'var(--amber-bg)'}`,
           }}>
-            <span className="material-symbols-outlined text-[20px]" style={{ color: factura.status === 'pagada' ? '#1e40af' : '#92400e' }}>
+            <span className="material-symbols-outlined text-[20px]" style={{ color: factura.status === 'pagada' ? 'var(--blue-fg)' : 'var(--amber-fg)' }}>
               {factura.status === 'pagada' ? 'check_circle' : 'schedule'}
             </span>
             <div className="flex-1">
-              <div className="text-[12px] font-bold" style={{ color: factura.status === 'pagada' ? '#1e40af' : '#92400e' }}>
+              <div className="text-[12px] font-bold" style={{ color: factura.status === 'pagada' ? 'var(--blue-fg)' : 'var(--amber-fg)' }}>
                 {factura.status === 'pagada' ? 'Pagada' : `Por pagar — ${fmt(factura.total)}`}
               </div>
-              <div className="text-[10px]" style={{ color: factura.status === 'pagada' ? '#1e40af' : '#92400e', opacity: 0.7 }}>
+              <div className="text-[10px]" style={{ color: factura.status === 'pagada' ? 'var(--blue-fg)' : 'var(--amber-fg)', opacity: 0.7 }}>
                 {factura.condicion_pago === 'cuenta_corriente' ? 'Cuenta corriente' : factura.condicion_pago}
               </div>
             </div>
@@ -1445,7 +1445,7 @@ function DetailView({ factura, onBack, onStatusChange, onDelete, onUpdate, onVin
           {factura.status !== 'observada' && (
             <button onClick={() => onStatusChange('observada')}
               className="flex-1 py-[10px] rounded-[10px] border-none cursor-pointer text-[12px] font-bold"
-              style={{ background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca' }}>
+              style={{ background: 'var(--red-bg)', color: '#ef4444', border: '1px solid var(--red-bg)' }}>
               Observar
             </button>
           )}
@@ -1764,7 +1764,7 @@ function ListasPreciosView({ showToast: toast }: { showToast: (msg: string) => v
               </div>
               {nuevoProveedorNombre && (
                 <div className="mt-2 px-3 py-[6px] rounded-[8px] text-[12px] font-semibold"
-                  style={{ background: '#dcfce7', color: '#166534' }}>
+                  style={{ background: '#dcfce7', color: 'var(--green-fg)' }}>
                   Se creará: &quot;{nuevoProveedorNombre}&quot;
                 </div>
               )}
@@ -1815,9 +1815,9 @@ function ListasPreciosView({ showToast: toast }: { showToast: (msg: string) => v
               {matchedItems.map((item, idx) => {
                 const checked = checkedItems.has(idx)
                 const statusBadge = item.status === 'actualiza'
-                  ? { bg: '#dbeafe', color: '#1e40af', label: `ya existe → actualiza${item.priceDiff !== null ? ` (${item.priceDiff > 0 ? '+' : ''}${item.priceDiff.toFixed(0)}%)` : ''}` }
+                  ? { bg: 'var(--blue-bg)', color: 'var(--blue-fg)', label: `ya existe → actualiza${item.priceDiff !== null ? ` (${item.priceDiff > 0 ? '+' : ''}${item.priceDiff.toFixed(0)}%)` : ''}` }
                   : item.status === 'nuevo'
-                  ? { bg: '#dcfce7', color: '#166534', label: 'nuevo → se crea' }
+                  ? { bg: '#dcfce7', color: 'var(--green-fg)', label: 'nuevo → se crea' }
                   : { bg: '#f3f4f6', color: '#6b7280', label: 'sin cambio' }
 
                 return (
@@ -2268,15 +2268,15 @@ function ManualEntryView({ onSubmit, onBack, proveedores }: {
 
                 {/* Equivalencia kg para unidades no métricas */}
                 {needsEquiv && (
-                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, background: '#fffbeb', borderRadius: 8, padding: '6px 10px', border: '1px solid #fcd34d' }}>
-                    <span style={{ fontSize: 11, color: '#92400e', flex: 1 }}>1 {row.unidad} =</span>
+                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, background: 'var(--amber-bg)', borderRadius: 8, padding: '6px 10px', border: '1px solid #fcd34d' }}>
+                    <span style={{ fontSize: 11, color: 'var(--amber-fg)', flex: 1 }}>1 {row.unidad} =</span>
                     <input type="text" inputMode="decimal"
                       value={rawVal(`${row.id}-kg`, row.peso_kg)}
                       onChange={e => { const raw = e.target.value.replace(',', '.'); setRaw(`${row.id}-kg`, raw); updateRow(row.id, 'peso_kg', parseFloat(raw) || undefined) }}
                       onBlur={() => clearRaw(`${row.id}-kg`)}
                       placeholder="0.000"
-                      style={{ width: 72, background: 'white', border: '1px solid #fcd34d', borderRadius: 8, padding: '6px 8px', fontSize: 13, fontFamily: 'inherit', color: '#92400e', outline: 'none', textAlign: 'right' as const }} />
-                    <span style={{ fontSize: 11, color: '#92400e' }}>kg</span>
+                      style={{ width: 72, background: 'white', border: '1px solid #fcd34d', borderRadius: 8, padding: '6px 8px', fontSize: 13, fontFamily: 'inherit', color: 'var(--amber-fg)', outline: 'none', textAlign: 'right' as const }} />
+                    <span style={{ fontSize: 11, color: 'var(--amber-fg)' }}>kg</span>
                   </div>
                 )}
               </div>
@@ -2317,7 +2317,7 @@ function ManualEntryView({ onSubmit, onBack, proveedores }: {
 // CAT. DE GASTOS — ABM de categorías + asignación masiva por proveedor
 // ════════════════════════════════════════════════════════════
 const FINANCIERA_COLOR: Record<CategoriaFinanciera, string> = {
-  mercaderia: '#059669', rrhh: '#7c3aed', alquiler: '#0891b2', operacional: '#4361a0', administrativo: '#d97706',
+  mercaderia: 'var(--green-fg)', rrhh: '#7c3aed', alquiler: '#0891b2', operacional: '#4361a0', administrativo: '#d97706',
 }
 
 function CategoriasGastoView({ showToast }: { showToast: (msg: string) => void }) {
@@ -3412,7 +3412,7 @@ export default function FacturasPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 8, padding: '12px 16px 0' }}>
         {[
           { label: 'A vencer', value: `${kpisGasto.aVencerN} · ${fmt(kpisGasto.aVencerTotal)}`, icon: 'schedule', color: '#4361a0' },
-          { label: 'Vencidos', value: `${kpisGasto.vencidasN} · ${fmt(kpisGasto.vencidasTotal)}`, icon: 'error', color: kpisGasto.vencidasN > 0 ? '#dc2626' : 'var(--text-3)' },
+          { label: 'Vencidos', value: `${kpisGasto.vencidasN} · ${fmt(kpisGasto.vencidasTotal)}`, icon: 'error', color: kpisGasto.vencidasN > 0 ? 'var(--red-fg)' : 'var(--text-3)' },
           { label: 'A pagar', value: fmt(totalPorPagar), icon: 'account_balance_wallet', color: '#d97706' },
           { label: 'Total pagado', value: fmt(kpisGasto.totalPagado), icon: 'task_alt', color: '#16a34a' },
         ].map(k => (

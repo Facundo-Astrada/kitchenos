@@ -1971,7 +1971,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                       </span>
                       <span style={{
                         flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600,
-                        color: enProd ? '#b45309' : 'var(--text-1)',
+                        color: enProd ? 'var(--amber-fg)' : 'var(--text-1)',
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         textDecoration: tildado ? 'line-through' : 'none',
                         opacity: tildado ? 0.55 : 1,
@@ -1984,7 +1984,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                           en esta fila no sobra ancho. */}
                       {enProd ? (
                         <span style={{
-                          fontSize: 9, fontWeight: 800, color: '#b45309', flexShrink: 0,
+                          fontSize: 9, fontWeight: 800, color: 'var(--amber-fg)', flexShrink: 0,
                           textTransform: 'uppercase', letterSpacing: '.04em',
                         }}>
                           {esCierre ? 'Pasa al turno' : 'En producción'}

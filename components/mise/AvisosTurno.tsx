@@ -74,7 +74,7 @@ export function AvisosTurno({
           <AvisoChip
             activo={avisoAbierto === 'recibidos'}
             onClick={() => onToggle('recibidos')}
-            icon="pending" color="#b45309" bg="rgba(245,158,11,0.14)" border="#f59e0b"
+            icon="pending" color="var(--amber-fg)" bg="rgba(245,158,11,0.14)" border="#f59e0b"
             label={`Te dejaron en producción · ${recibidosEnProduccion.length}`}
           />
         )}
@@ -83,7 +83,7 @@ export function AvisosTurno({
             activo={avisoAbierto === 'pendientes'}
             onClick={() => onToggle('pendientes')}
             icon={cierreAnteriorSinRastro ? 'report' : 'warning'}
-            color={cierreAnteriorSinRastro ? '#dc2626' : '#ca8a04'}
+            color={cierreAnteriorSinRastro ? 'var(--red-fg)' : '#ca8a04'}
             bg={cierreAnteriorSinRastro ? 'rgba(239,68,68,0.14)' : 'rgba(250,204,21,0.18)'}
             border={cierreAnteriorSinRastro ? '#ef4444' : '#facc15'}
             label={cierreAnteriorSinRastro ? 'Sin cierre del turno anterior' : `Turno anterior · ${pendientesSinResolver.length} sin cerrar`}
@@ -150,7 +150,7 @@ export function AvisosTurno({
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ fontSize: 13, fontWeight: 600, color: '#78350f' }}>{item.nombre}</span>
                     {item.cantidad > 0 && (
-                      <span style={{ marginLeft: 6, fontSize: 11, color: '#92400e' }}>
+                      <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--amber-fg)' }}>
                         {item.cantidad} {item.unidad}
                       </span>
                     )}
@@ -174,7 +174,7 @@ export function AvisosTurno({
               <div style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#78350f' }}>{item.nombre}</span>
                 {item.cantidad > 0 && (
-                  <span style={{ marginLeft: 6, fontSize: 11, color: '#92400e' }}>
+                  <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--amber-fg)' }}>
                     {item.cantidad} {item.unidad}
                   </span>
                 )}

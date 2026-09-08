@@ -29,7 +29,7 @@ export function Toast({ msg, onDone, variant = 'default' }: {
       className="toast-enter"
       style={{
         position: 'fixed', bottom: 'var(--toast-bottom)', left: '50%', transform: 'translateX(-50%)',
-        background: variant === 'error' ? '#991b1b' : '#1e293b', color: '#fff', padding: '10px 20px',
+        background: variant === 'error' ? '#dc2626' : '#1e293b', color: '#fff', padding: '10px 20px',
         borderRadius: 10, fontSize: 13, fontWeight: 600, zIndex: 100,
         boxShadow: '0 4px 12px rgba(0,0,0,0.2)', maxWidth: '90vw', textAlign: 'center',
       }}

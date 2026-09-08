@@ -63,17 +63,17 @@ export function ImportCartaModal({
     : ['Entradas', 'Principales', 'Postres', 'Bebidas', 'Guarniciones']
 
   const TAG_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
-    's/tacc':       { label: 'S/TACC',        bg: '#fef3c7', color: '#92400e' },
-    'vegano':       { label: 'Vegano',         bg: '#d1fae5', color: '#065f46' },
-    'vegetariano':  { label: 'Vegetariano',    bg: '#dcfce7', color: '#166534' },
+    's/tacc':       { label: 'S/TACC',        bg: '#fef3c7', color: 'var(--amber-fg)' },
+    'vegano':       { label: 'Vegano',         bg: 'var(--green-bg)', color: '#065f46' },
+    'vegetariano':  { label: 'Vegetariano',    bg: '#dcfce7', color: 'var(--green-fg)' },
     'keto':         { label: 'Keto',           bg: '#ede9fe', color: '#5b21b6' },
-    'picante':      { label: '🌶 Picante',     bg: '#fee2e2', color: '#991b1b' },
+    'picante':      { label: '🌶 Picante',     bg: 'var(--red-bg)', color: 'var(--red-fg)' },
     'sin lactosa':  { label: 'Sin lactosa',    bg: '#e0f2fe', color: '#075985' },
   }
 
   const TIPO_CFG = {
-    receta:   { icon: 'menu_book',    color: '#4361a0', bg: '#eef2ff', label: 'Receta' },
-    producto: { icon: 'inventory_2',  color: '#059669', bg: '#d1fae5', label: 'Producto' },
+    receta:   { icon: 'menu_book',    color: '#4361a0', bg: 'var(--blue-bg)', label: 'Receta' },
+    producto: { icon: 'inventory_2',  color: 'var(--green-fg)', bg: 'var(--green-bg)', label: 'Producto' },
     plato:    { icon: 'restaurant',   color: '#f97316', bg: '#ffedd5', label: 'Producción' },
   }
 
@@ -232,7 +232,7 @@ export function ImportCartaModal({
                 gap: 10, padding: 32,
                 border: `2px dashed ${file ? 'var(--accent)' : 'var(--border)'}`,
                 borderRadius: 14, cursor: 'pointer',
-                background: file ? '#eef2ff' : 'var(--bg)',
+                background: file ? 'var(--blue-bg)' : 'var(--bg)',
               }}>
                 <input type="file" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls,.csv,.txt" style={{ display: 'none' }}
                   onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
@@ -265,7 +265,7 @@ export function ImportCartaModal({
                 ))}
               </div>
 
-              {error && <div style={{ color: '#dc2626', fontSize: 13, padding: '8px 12px', background: '#fee2e2', borderRadius: 8 }}>{error}</div>}
+              {error && <div style={{ color: 'var(--red-fg)', fontSize: 13, padding: '8px 12px', background: 'var(--red-bg)', borderRadius: 8 }}>{error}</div>}
             </div>
           )}
 
@@ -491,7 +491,7 @@ export function ImportCartaModal({
                 </div>
               ))}
 
-              {error && <div style={{ color: '#dc2626', fontSize: 13, padding: '8px 12px', background: '#fee2e2', borderRadius: 8 }}>{error}</div>}
+              {error && <div style={{ color: 'var(--red-fg)', fontSize: 13, padding: '8px 12px', background: 'var(--red-bg)', borderRadius: 8 }}>{error}</div>}
             </div>
           )}
         </div>

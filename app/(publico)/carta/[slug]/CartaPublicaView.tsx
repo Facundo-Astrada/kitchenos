@@ -28,11 +28,11 @@ export interface PublicCartaItem {
 }
 
 const TAG_DEFS: Record<string, { label: string; bg: string; color: string }> = {
-  's/tacc': { label: 'S/TACC', bg: '#fef3c7', color: '#92400e' },
-  vegano: { label: 'Vegano', bg: '#d1fae5', color: '#065f46' },
-  vegetariano: { label: 'Vegetariano', bg: '#dcfce7', color: '#166534' },
+  's/tacc': { label: 'S/TACC', bg: '#fef3c7', color: 'var(--amber-fg)' },
+  vegano: { label: 'Vegano', bg: 'var(--green-bg)', color: '#065f46' },
+  vegetariano: { label: 'Vegetariano', bg: '#dcfce7', color: 'var(--green-fg)' },
   keto: { label: 'Keto', bg: '#ede9fe', color: '#5b21b6' },
-  picante: { label: 'Picante', bg: '#fee2e2', color: '#991b1b' },
+  picante: { label: 'Picante', bg: 'var(--red-bg)', color: 'var(--red-fg)' },
   'sin lactosa': { label: 'Sin lactosa', bg: '#e0f2fe', color: '#075985' },
 }
 

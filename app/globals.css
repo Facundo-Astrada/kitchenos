@@ -55,6 +55,21 @@
   --shadow-1: 0 1px 2px rgba(28, 45, 74, .06);
   --shadow-2: 0 1px 2px rgba(28, 45, 74, .08), 0 6px 16px rgba(28, 45, 74, .10);
   --shadow-3: 0 1px 2px rgba(28, 45, 74, .08), 0 10px 24px rgba(28, 45, 74, .14);
+
+  /* ── Pares pastel de estado (S6, Bloque 8) — bg claro + texto oscuro para
+     chips/badges (crítico, vencido, picante...). 1567 hexes literales había
+     en el repo; la mayoría (rojo/ámbar/verde/azul saturados) se leen bien
+     sobre negro y no se tocan. Los que rompían eran justo estos pares: en
+     oscuro el bg pastel se queda blanco (es un hex fijo, no un token) y
+     queda como un parche — de ahí estos 4 pares con su variante oscura. ── */
+  --red-bg: #fee2e2;
+  --red-fg: #dc2626;
+  --amber-bg: #fffbeb;
+  --amber-fg: #92400e;
+  --green-bg: #d1fae5;
+  --green-fg: #059669;
+  --blue-bg: #dbeafe;
+  --blue-fg: #1e40af;
 }
 
 [data-theme="dark"] {
@@ -75,6 +90,17 @@
   --shadow-1: 0 0 0 1px rgba(255, 255, 255, .04), 0 1px 3px rgba(0, 0, 0, .4);
   --shadow-2: 0 0 0 1px rgba(255, 255, 255, .05), 0 4px 12px rgba(0, 0, 0, .5);
   --shadow-3: 0 0 0 1px rgba(255, 255, 255, .06), 0 10px 24px rgba(0, 0, 0, .6);
+
+  /* Bg pastel → tinte oscuro semitransparente sobre --surface casi negro;
+     fg → variante clara del mismo hue (legible sobre ese tinte y sobre --bg). */
+  --red-bg: rgba(220, 38, 38, .18);
+  --red-fg: #f87171;
+  --amber-bg: rgba(217, 119, 6, .18);
+  --amber-fg: #fbbf24;
+  --green-bg: rgba(5, 150, 105, .18);
+  --green-fg: #34d399;
+  --blue-bg: rgba(37, 99, 235, .18);
+  --blue-fg: #60a5fa;
 }
 
 @theme inline {

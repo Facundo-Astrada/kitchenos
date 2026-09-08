@@ -353,7 +353,7 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
                   borderRadius: 8, marginBottom: 3,
                 }}>
                   <span style={{ fontSize: 12, color: '#ef4444' }}>●</span>
-                  <span style={{ flex: 1, fontSize: 11, color: '#991b1b', fontWeight: 600 }}>
+                  <span style={{ flex: 1, fontSize: 11, color: 'var(--red-fg)', fontWeight: 600 }}>
                     {a.nombre}: {a.stock_actual} {a.unidad} (mín {a.stock_minimo})
                   </span>
                   <button

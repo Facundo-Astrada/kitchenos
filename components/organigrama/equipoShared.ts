@@ -49,8 +49,8 @@ export const btnSecondary: React.CSSProperties = {
   border: '1px solid var(--border)', cursor: 'pointer', width: '100%', textAlign: 'center',
 }
 export const btnDanger: React.CSSProperties = {
-  padding: '12px 20px', borderRadius: 12, background: '#fee2e2',
-  color: '#dc2626', fontSize: 14, fontWeight: 600, border: 'none',
+  padding: '12px 20px', borderRadius: 12, background: 'var(--red-bg)',
+  color: 'var(--red-fg)', fontSize: 14, fontWeight: 600, border: 'none',
   cursor: 'pointer', width: '100%', textAlign: 'center',
 }
 

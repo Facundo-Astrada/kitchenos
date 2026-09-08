@@ -36,7 +36,7 @@ const FILTROS: FilterChip<FiltroEstado>[] = [
 ]
 
 const PRIORIDADES: { value: TareaPrioridad; label: string; color: string }[] = [
-  { value: 'alta', label: 'Alta', color: '#dc2626' },
+  { value: 'alta', label: 'Alta', color: 'var(--red-fg)' },
   { value: 'media', label: 'Media', color: '#d97706' },
   { value: 'baja', label: 'Baja', color: '#64748b' },
 ]
@@ -481,7 +481,7 @@ function TareaRow({ tarea, onToggle, onEdit }: { tarea: Tarea; onToggle: () => v
               <span style={{
                 fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
                 background: vencida ? 'rgba(220,38,38,.12)' : 'rgba(100,116,139,.12)',
-                color: vencida ? '#dc2626' : 'var(--text-3)',
+                color: vencida ? 'var(--red-fg)' : 'var(--text-3)',
               }}>
                 {fmtFechaCorta(tarea.fecha_limite)}
               </span>
@@ -676,7 +676,7 @@ function TareaSheet({
               onClick={onEliminar}
               style={{
                 width: '100%', padding: 12, borderRadius: 12,
-                border: '1px solid rgba(220,38,38,.3)', background: 'none', color: '#dc2626',
+                border: '1px solid rgba(220,38,38,.3)', background: 'none', color: 'var(--red-fg)',
                 fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
               }}
             >

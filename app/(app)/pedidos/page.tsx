@@ -32,9 +32,9 @@ const fmtRangoEntrega = (desde?: string | null, hasta?: string | null): string =
 
 const STATUS_COLORS: Record<EstadoPedido, { bg: string; text: string; label: string }> = {
   borrador: { bg: '#e8e8e8', text: '#666', label: 'Borrador' },
-  enviado:  { bg: '#dbeafe', text: '#1d4ed8', label: 'Enviado' },
-  parcial:  { bg: '#fef3c7', text: '#92400e', label: 'Parcial' },
-  recibido: { bg: '#d1fae5', text: '#065f46', label: 'Recibido' },
+  enviado:  { bg: 'var(--blue-bg)', text: '#1d4ed8', label: 'Enviado' },
+  parcial:  { bg: '#fef3c7', text: 'var(--amber-fg)', label: 'Parcial' },
+  recibido: { bg: 'var(--green-bg)', text: '#065f46', label: 'Recibido' },
 }
 
 // Filtro de estado — misma lista de chips en dos superficies: `onDark`
@@ -790,7 +790,7 @@ function DetailView({
                 <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
                   {it.cantidad} {it.unidad}
                   {it.recibido && (
-                    <span style={{ color: '#059669', marginLeft: 6 }}>
+                    <span style={{ color: 'var(--green-fg)', marginLeft: 6 }}>
                       Recibido{it.cantidad_recibida != null ? `: ${it.cantidad_recibida} ${it.unidad}` : ''}
                     </span>
                   )}
@@ -909,7 +909,7 @@ function DetailView({
             <button onClick={onEliminar} style={{
               padding: '10px', borderRadius: 10,
               background: 'none', color: '#ef4444',
-              border: '1px solid #fecaca',
+              border: '1px solid var(--red-bg)',
               fontWeight: 600, fontSize: 13, cursor: 'pointer',
             }}>
               Eliminar pedido
@@ -978,7 +978,7 @@ function RecibirView({
 
       <div style={{ padding: 16 }}>
         <div style={{
-          padding: '10px 14px', background: '#dbeafe', borderRadius: 10,
+          padding: '10px 14px', background: 'var(--blue-bg)', borderRadius: 10,
           fontSize: 13, color: '#1d4ed8', marginBottom: 12,
           display: 'flex', alignItems: 'center', gap: 6,
         }}>
@@ -988,14 +988,14 @@ function RecibirView({
 
         {items.map((it, idx) => (
           <div key={it.id} style={{
-            background: 'var(--surface)', border: `1px solid ${it.recibido ? '#059669' : 'var(--border)'}`,
+            background: 'var(--surface)', border: `1px solid ${it.recibido ? 'var(--green-fg)' : 'var(--border)'}`,
             borderRadius: 10, padding: 12, marginBottom: 8,
             transition: 'border-color 0.2s',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <button onClick={() => toggleRecibido(idx)} style={{
                 width: 28, height: 28, borderRadius: 8, border: 'none',
-                background: it.recibido ? '#059669' : '#e5e7eb',
+                background: it.recibido ? 'var(--green-fg)' : '#e5e7eb',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: 'pointer', flexShrink: 0,
               }}>
@@ -1025,7 +1025,7 @@ function RecibirView({
                   onChange={e => setCantidad(idx, e.target.value)}
                   style={{
                     width: 80, padding: '6px 8px', borderRadius: 8,
-                    border: '1px solid #059669', fontSize: 13, color: 'var(--text-1)',
+                    border: '1px solid var(--green-fg)', fontSize: 13, color: 'var(--text-1)',
                     background: 'var(--bg)',
                   }}
                 />
@@ -1051,7 +1051,7 @@ function RecibirView({
           onClick={handleConfirm}
           style={{
             padding: '12px 24px', borderRadius: 10,
-            background: recibidos > 0 ? '#059669' : '#ccc',
+            background: recibidos > 0 ? 'var(--green-fg)' : '#ccc',
             color: '#fff', border: 'none', fontWeight: 700,
             fontSize: 14, cursor: recibidos > 0 ? 'pointer' : 'default',
             opacity: saving ? 0.6 : 1,

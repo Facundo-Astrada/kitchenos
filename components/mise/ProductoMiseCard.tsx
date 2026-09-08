@@ -546,13 +546,13 @@ function ProductoMiseCardBase({
                   title="Receta incompleta (sin rendimiento, gramaje o procedimiento) — tocá para completarla"
                   style={{ ...btnReset, padding: 2, borderRadius: 5, background: 'rgba(245,158,11,.14)' }}
                 >
-                  <span className="material-symbols-outlined" style={{ fontSize: 11, color: '#b45309' }}>edit_note</span>
+                  <span className="material-symbols-outlined" style={{ fontSize: 11, color: 'var(--amber-fg)' }}>edit_note</span>
                 </button>
               )}
               {enProduccion && (
                 <span style={{
                   fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99,
-                  background: 'rgba(245,158,11,.14)', color: '#b45309',
+                  background: 'rgba(245,158,11,.14)', color: 'var(--amber-fg)',
                 }}>
                   en producción
                 </span>
@@ -771,7 +771,7 @@ function ProductoMiseCardBase({
             </span>
             <span style={{ fontSize: 10, color: 'var(--text-3)' }}>→ {item.recipiente_capacidad} porc</span>
             {pesoTotalRecipientes != null && (
-              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(16,185,129,.12)', color: '#059669' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(16,185,129,.12)', color: 'var(--green-fg)' }}>
                 {fmtPeso(pesoTotalRecipientes, item.peso_porcion_unidad ?? 'g')} total
               </span>
             )}

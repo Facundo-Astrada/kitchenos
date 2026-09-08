@@ -88,7 +88,7 @@ export { PLAZAS_OPS, SECCIONES_OPS }
 const DEFAULT_SECCIONES = ['Entradas', 'Principales', 'Postres']
 
 const PRIORIDADES: { id: CompPrioridad; label: string; sublabel: string; color: string; bg: string }[] = [
-  { id: 'critica', label: 'SP',    sublabel: 'Super Prior.', color: '#ef4444', bg: '#fef2f2' },
+  { id: 'critica', label: 'SP',    sublabel: 'Super Prior.', color: '#ef4444', bg: 'var(--red-bg)' },
   { id: 'alta',    label: 'P',     sublabel: 'Prioridad',    color: '#f97316', bg: '#fff7ed' },
   { id: 'media',   label: 'REF',   sublabel: 'Refuerzo',     color: '#3b82f6', bg: '#eff6ff' },
   { id: 'baja',    label: 'Check', sublabel: 'Check',        color: '#64748b', bg: '#f8fafc' },
@@ -99,15 +99,15 @@ const PRIO_CFG: Record<CompPrioridad, { label: string; color: string }> = {
 }
 const TIPO_CFG: Record<'receta' | 'producto' | 'plato', { icon: string; color: string; bg: string; label: string }> = {
   receta:   { icon: 'menu_book',   color: '#4361a0', bg: 'rgba(67,97,160,.12)', label: 'Receta' },
-  producto: { icon: 'inventory_2', color: '#059669', bg: 'rgba(5,150,105,.14)', label: 'Ingrediente' },
+  producto: { icon: 'inventory_2', color: 'var(--green-fg)', bg: 'rgba(5,150,105,.14)', label: 'Ingrediente' },
   plato:    { icon: 'restaurant',  color: '#f97316', bg: 'rgba(249,115,22,.14)', label: 'Plato' },
 }
 const TAG_CFG: Record<string, { label: string; bg: string; color: string }> = {
-  's/tacc':      { label: 'S/TACC',      bg: 'rgba(146,64,14,.14)', color: '#92400e' },
+  's/tacc':      { label: 'S/TACC',      bg: 'rgba(146,64,14,.14)', color: 'var(--amber-fg)' },
   'vegano':      { label: 'Vegano',      bg: 'rgba(6,95,70,.14)',   color: '#065f46' },
-  'vegetariano': { label: 'Vegetariano', bg: 'rgba(22,101,52,.14)', color: '#166534' },
+  'vegetariano': { label: 'Vegetariano', bg: 'rgba(22,101,52,.14)', color: 'var(--green-fg)' },
   'keto':        { label: 'Keto',        bg: 'rgba(91,33,182,.14)', color: '#5b21b6' },
-  'picante':     { label: 'Picante',     bg: 'rgba(153,27,27,.14)', color: '#991b1b' },
+  'picante':     { label: 'Picante',     bg: 'rgba(153,27,27,.14)', color: 'var(--red-fg)' },
   'sin lactosa': { label: 'Sin lactosa', bg: 'rgba(7,89,133,.14)',  color: '#075985' },
 }
 const fmtMoney = (n: number) => n > 0 ? `$${Math.round(n).toLocaleString('es-AR')}` : '—'
@@ -477,7 +477,7 @@ function RecetaIAModal({ prefillNombre, productos, restauranteId, categoriasCart
 
           {step === 'error' && (
             <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 10, background: 'rgba(220,38,38,.08)', color: '#dc2626', fontSize: 12, marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 10, background: 'rgba(220,38,38,.08)', color: 'var(--red-fg)', fontSize: 12, marginBottom: 12 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }}>error</span>
                 {errorMsg}
               </div>
@@ -760,7 +760,7 @@ export default function ComposicionEditor({
 
   const precioN = parseFloat(precio.replace(',', '.')) || 0
   const fcPct = precioN > 0 && costoTotal > 0 ? (costoTotal / precioN) * 100 : null
-  const fcColor = fcPct == null ? 'var(--text-3)' : fcPct < 30 ? '#16a34a' : fcPct <= 35 ? '#d97706' : '#dc2626'
+  const fcColor = fcPct == null ? 'var(--text-3)' : fcPct < 30 ? '#16a34a' : fcPct <= 35 ? '#d97706' : 'var(--red-fg)'
 
   const searchResults = useMemo(() => {
     if (!sectionQuery.trim()) return []
@@ -917,7 +917,7 @@ export default function ComposicionEditor({
                 <Metric label="Ítems" value={String(esPlato ? platoRecetas.length : items.filter(i => i.nombre.trim()).length)} />
                 {isAdmin && <Metric label="Costo" value={fmtMoney(costoTotal)} />}
                 {isAdmin && fcPct != null && <Metric label="Food cost" value={`${fcPct.toFixed(0)}%`} color={fcColor} big />}
-                {isAdmin && esPlato && precioN > 0 && <Metric label="Margen" value={fmtMoney(precioN - costoTotal)} color={precioN - costoTotal > 0 ? '#16a34a' : '#dc2626'} />}
+                {isAdmin && esPlato && precioN > 0 && <Metric label="Margen" value={fmtMoney(precioN - costoTotal)} color={precioN - costoTotal > 0 ? '#16a34a' : 'var(--red-fg)'} />}
               </>
             )
           })()}
@@ -989,7 +989,7 @@ export default function ComposicionEditor({
                 <input type="date" value={vigenciaHasta} onChange={e => setVigenciaHasta(e.target.value)} style={{ ...inp, flex: 1 }} />
               </div>
               {vigenciaDesde && vigenciaHasta && vigenciaHasta < vigenciaDesde && (
-                <div style={{ fontSize: 11, color: '#dc2626', marginTop: 5, fontWeight: 600 }}>
+                <div style={{ fontSize: 11, color: 'var(--red-fg)', marginTop: 5, fontWeight: 600 }}>
                   &quot;Hasta&quot; no puede ser antes que &quot;Desde&quot;
                 </div>
               )}
@@ -1439,10 +1439,10 @@ function PlatoRecetasEditor({
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: (pr.tipo === 'receta' && draftRecetaIds.has(pr.ref_id)) ? '#dc2626' : 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: (pr.tipo === 'receta' && draftRecetaIds.has(pr.ref_id)) ? 'var(--red-fg)' : 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {pr.nombre}
                       </div>
-                      {pr.tipo === 'receta' && draftRecetaIds.has(pr.ref_id) && <span style={{ fontSize: 8, fontWeight: 800, padding: '1px 5px', borderRadius: 99, background: 'rgba(220,38,38,.1)', color: '#dc2626', textTransform: 'uppercase', letterSpacing: '.04em', flexShrink: 0 }}>a realizar</span>}
+                      {pr.tipo === 'receta' && draftRecetaIds.has(pr.ref_id) && <span style={{ fontSize: 8, fontWeight: 800, padding: '1px 5px', borderRadius: 99, background: 'rgba(220,38,38,.1)', color: 'var(--red-fg)', textTransform: 'uppercase', letterSpacing: '.04em', flexShrink: 0 }}>a realizar</span>}
                     </div>
                     <div style={{ display: 'flex', gap: 5, marginTop: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                       {item && item.costo > 0 && (
@@ -1731,10 +1731,10 @@ function ItemRowInline({
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: isDraft ? '#dc2626' : (item.nombre ? 'var(--text-1)' : 'var(--text-3)'), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: isDraft ? 'var(--red-fg)' : (item.nombre ? 'var(--text-1)' : 'var(--text-3)'), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {item.nombre || 'Tocá para completar…'}
             </div>
-            {isDraft && <span style={{ fontSize: 8, fontWeight: 800, padding: '1px 5px', borderRadius: 99, background: 'rgba(220,38,38,.1)', color: '#dc2626', textTransform: 'uppercase', letterSpacing: '.04em', flexShrink: 0 }}>a realizar</span>}
+            {isDraft && <span style={{ fontSize: 8, fontWeight: 800, padding: '1px 5px', borderRadius: 99, background: 'rgba(220,38,38,.1)', color: 'var(--red-fg)', textTransform: 'uppercase', letterSpacing: '.04em', flexShrink: 0 }}>a realizar</span>}
           </div>
           {!expanded && (plazaEfectiva || item.seccion_mise || item.variante) && (
             <div style={{ display: 'flex', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
