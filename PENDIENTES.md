@@ -45,18 +45,15 @@ Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/
 ### OPS Consolidación — diferido
 "Copiar a otro día" e "Ingredientes consolidados" (se sacaron con la planilla legacy) — reimplementar sobre `tareas` si el usuario los pide.
 
-### Migrar las copias viejas de "modal centrado" a `components/ui/Modal.tsx`
-Extraído el 08/09 (ficha del plantel en Organigrama, ver `PLAN-ARREGLOS-2026-09-08.md` § 2)
-siguiendo la estructura que `ui.md` venía documentando. El barrido del Bloque 2 (mismo día,
-`PLAN-PANTALLAS-2026-09-08.md`) migró las 12 pantallas de uso diario: Merma, CrearTareaSheet,
-ProduccionSheet, PaseSheet (OPS), NotaItemSheet (Mise), RutinaItemSheet, SugerenciaCompraSheet,
-SugerenciaProduccionSheet, LimpiezaPanel (Espacios), IngredienteOpsSheet + RecetaOpsSheet
-(Recetario), el editar-fichaje de Turnos y los dos sheets de Dashboard (notificaciones + cierre
-de turno). Quedan 3 copias a mano sin migrar: `calendario/page.tsx` (form de evento y de
-planificar menú), `stock/ClientView.tsx` (alta/edición de producto) y `checklist/ClientView.tsx`
-(selector de plaza+turno) — deliberadamente afuera, calendario se resuelve solo en el Bloque 7
-del mismo plan (color y movimiento de Calendario/Bitácora); stock y checklist migrar la próxima
-vez que se toque esa pantalla, no antes.
+### Migrar las copias viejas de "modal centrado" a `components/ui/Modal.tsx` — quedan 2
+El barrido de los Bloques 2 y 7 (08/09, `PLAN-PANTALLAS-2026-09-08.md`) migró 14 pantallas:
+las 12 de uso diario del Bloque 2 (Merma, CrearTareaSheet, ProduccionSheet, PaseSheet OPS,
+NotaItemSheet Mise, RutinaItemSheet, SugerenciaCompraSheet, SugerenciaProduccionSheet,
+LimpiezaPanel Espacios, IngredienteOpsSheet + RecetaOpsSheet Recetario, editar-fichaje de
+Turnos, los dos sheets de Dashboard) más `calendario/page.tsx` (form de evento y de
+planificar evento) en el Bloque 7. Quedan 2 copias a mano sin migrar: `stock/ClientView.tsx`
+(alta/edición de producto) y `checklist/ClientView.tsx` (selector de plaza+turno) — migrar la
+próxima vez que se toque esa pantalla, no antes.
 
 ---
 
@@ -156,7 +153,6 @@ La tabla completa está en `PLAN-ACCESO-Y-USO-2026-08.md` § B5.3. Ya resueltas:
 
 ### Backlog chico — sin síntoma de usuario reportado, priorizar solo si molesta en uso real
 - **`puestos.nivel` no es confiable para decisiones automáticas** (encontrado 25/08 al backfillear `ver_costos`): "Chef Ejecutivo" y "Sous Chef" están cargados con `nivel='cocinero'`, no `sous_chef`. Solo "Dueño / Dirección" tiene `nivel='admin'` y "jefe de cocina" `sous_chef`. Cualquier migración o regla que segmente por `nivel` va a errarle — segmentar por el puesto concreto o pedirle al admin que lo corrija.
-- **Dark mode — contraste pobre en toda superficie navy** (encontrado ago 2026, PLAN-SUPERFICIE S2): `[data-theme="dark"] --navy` es `#c8d6e5` (gris-azul claro, no navy oscuro — decisión pre-existente, no de esa sesión). Todo componente con `background: var(--navy)` + texto blanco (header del Dashboard, `MiPlaza`, botón "Iniciar turno", `AhoraCard`) queda con texto blanco sobre fondo claro en dark mode — difícil de leer. Es sistémico (afecta todas las superficies navy a la vez), no se arregla tocando un componente suelto; necesita decidir si `--navy` en dark mode debería invertir a un navy oscuro real o si el texto de esas superficies debería pasar a oscuro cuando el token se invierte.
 - HACCP: 3 modales largos (limpieza/vencimientos/temperaturas) sin agrupar — mismo problema que tenía el modal de Stock (muchos campos heterogéneos sin secciones), candidato a la misma cura de fondo pero con otro tratamiento (no son checkboxes, no aplica `SwitchRow`).
 - OPS Producción: el orden de columnas (drag-and-drop) persiste en `localStorage` por dispositivo, no en DB — cada navegador recuerda su propio orden. Mover a una tabla nueva (ej. `ops_orden_columnas`) si se necesita compartido entre dispositivos del mismo restaurante.
 - Mise en tablet táctil ancha (iPad landscape, 1024px exactos): se queda en columna única porque la grilla de desktop está condicionada a `pointer: fine`. El motivo es que el reordenar es un long-press que compara `clientY` contra el centro vertical de cada ítem — con dos tarjetas lado a lado elige al azar. Para ganar la grilla ahí habría que hacer el drag 2D (comparar también `clientX` dentro de la fila). Solo si alguien usa el mise desde tablet.

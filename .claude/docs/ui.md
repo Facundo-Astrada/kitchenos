@@ -99,11 +99,18 @@ import { Toast } from '@/components/ui'
 ## Variables de color
 
 ```css
-var(--navy) /* #1c2d4a header */  var(--accent) /* #4361a0 botones/énfasis */
+var(--navy) /* header/botón sólido, CHROME */  var(--navy-ink) /* texto/ícono/borde de acento, TINTA */
+var(--accent) /* #4361a0 botones/énfasis */
 var(--bg)   /* background */       var(--surface) /* cards, sheets */
 var(--border) /* separadores */
 var(--text-1/2/3) /* contraste máximo/medio/bajo */
+var(--shadow-1/2/3) /* elevación — 1 lista, 2 destacada, 3 flotante */
+var(--red-bg/-fg) var(--amber-bg/-fg) var(--green-bg/-fg) var(--blue-bg/-fg) /* chips/badges de estado */
 ```
+
+`--navy` y `--navy-ink` son dos roles, no dos nombres del mismo color: `--navy` es CHROME (fondo de header/botón sólido, siempre con `#fff` encima, se queda oscuro en los dos temas); `--navy-ink` es TINTA (texto/ícono/borde de acento sobre una superficie clara, se invierte en oscuro). Si el navy está en `background` con `color:#fff` adentro → `--navy`. Si está en `color` → `--navy-ink`.
+
+Los 4 pares `--red/-amber/-green/-blue-bg/-fg` son para chips de estado (vencido, crítico, picante, s/tacc...): `bg` es el fondo pastel, `fg` el texto/ícono oscuro sobre ese fondo — en oscuro `bg` pasa a ser un tinte rgba semitransparente y `fg` una variante clara del mismo hue. **No usar `-fg` como background sólido de un botón con texto blanco encima** (en oscuro es más claro que el light-mode original, baja el contraste) — para eso el hex saturado literal (`#dc2626`, `#059669`...) sigue siendo la elección correcta, ya se lee bien en los dos temas. Tampoco usar `-bg` como `color` de texto (en oscuro es una rgba, un texto translúcido queda turbio) ni en un array de colores categóricos (paleta de avatares) — ahí el hex literal evita acoplar algo sin relación de estado al color de error/éxito del resto de la app.
 
 ## Selección de texto en mobile
 
