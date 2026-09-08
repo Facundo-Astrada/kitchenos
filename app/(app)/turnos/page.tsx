@@ -9,7 +9,8 @@ import {
 import { useFichaje, type FichajeDia } from '@/lib/hooks/useFichaje'
 import { useAuth } from '@/lib/auth/context'
 import { usePermisos } from '@/lib/hooks/usePermisos'
-import { Modal } from '@/components/ui'
+import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
+import { Modal, Avatar } from '@/components/ui'
 
 // ── Constantes ──
 
@@ -35,6 +36,25 @@ function getWeekDates(offset: number): Date[] {
 function fmtDate(d: Date) { return d.toISOString().slice(0, 10) }
 function fmtDateShort(d: Date) { return `${d.getDate()}/${d.getMonth() + 1}` }
 
+// "09:00:00" (Postgres time) o "09:00" (input type=time) → "09:00"
+function hhmm(t: string | null | undefined): string { return t ? t.slice(0, 5) : '' }
+
+// Horas reales de un turno — hora_entrada/hora_salida si están cargadas
+// (ya sea porque se tipearon o porque asignarTurno precargó el default del
+// tipo), si no 8h de respaldo. Cruce de medianoche (noche 20→02) contado
+// bien: la resta da negativo, se le suma un día.
+function horasDeTurno(t: Turno | undefined, tipo: TurnoTipo | undefined): number {
+  if (!tipo || tipo === 'franco' || tipo === 'vacaciones') return 0
+  const entrada = hhmm(t?.hora_entrada) || TURNO_CONFIG[tipo].defaultHoras?.[0]
+  const salida = hhmm(t?.hora_salida) || TURNO_CONFIG[tipo].defaultHoras?.[1]
+  if (!entrada || !salida) return 8
+  const [eh, em] = entrada.split(':').map(Number)
+  const [sh, sm] = salida.split(':').map(Number)
+  let mins = (sh * 60 + sm) - (eh * 60 + em)
+  if (mins <= 0) mins += 24 * 60
+  return mins / 60
+}
+
 // ── Estilos compartidos ──
 
 const fieldStyle: React.CSSProperties = {
@@ -56,11 +76,12 @@ type Tab = 'turnos' | 'fichajes'
 
 export default function TurnosPage() {
   const {
-    miembros, turnos, loading,
-    fetchTurnos, fetchTurnosMes, asignarTurno, limpiarTurno,
+    miembros, turnos, puestos, loading,
+    fetchTurnos, fetchTurnosMes, asignarTurno, limpiarTurno, copiarSemanaAnterior,
   } = useEquipo()
   const { user } = useAuth()
   const { isAdmin } = usePermisos()
+  const isDesktop = useIsDesktop()
   const { fetchQuienEstaAdentro, fetchHistorial, guardarFichajeManual } = useFichaje()
 
   const [tab, setTab] = useState<Tab>('turnos')
@@ -83,6 +104,13 @@ export default function TurnosPage() {
   const weekStart = fmtDate(weekDates[0])
   const weekEnd = fmtDate(weekDates[6])
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [diaMobileIdx, setDiaMobileIdx] = useState(0)
+  const [copiando, setCopiando] = useState(false)
+  const [editandoCelda, setEditandoCelda] = useState<{
+    miembroId: string; miembroNombre: string; fecha: string
+    tipo: TurnoTipo | null; horaEntrada: string; horaSalida: string
+  } | null>(null)
+  const [guardandoCelda, setGuardandoCelda] = useState(false)
 
   // ── Fichajes state ──
   const [quienAdentro, setQuienAdentro] = useState<(FichajeDia & { nombre: string })[]>([])
@@ -122,21 +150,50 @@ export default function TurnosPage() {
     fetchHistorial(personaHistorialId, desdeD.toISOString().slice(0, 10), hasta).then(setHistorialPersona)
   }, [personaHistorialId, fetchHistorial])
 
-  const turnoMap = useMemo(() => {
-    const m: Record<string, string> = {}
-    for (const t of turnos) m[`${t.miembro_id}_${t.fecha}`] = t.turno_tipo
+  // Indexado por miembro+fecha — coberturaDia/totalDia/totalPersona y las
+  // dos grillas (desktop/mobile) lo consultan en bucle, O(1) en vez de
+  // escanear `turnos` por cada celda.
+  const turnoPorClave = useMemo(() => {
+    const m: Record<string, Turno> = {}
+    for (const t of turnos) m[`${t.miembro_id}_${t.fecha}`] = t
     return m
   }, [turnos])
 
   // ── Handlers: Turnos ──
 
-  async function handleCycleTurno(miembroId: string, fecha: string, currentTipo: TurnoTipo | undefined) {
-    const idx = currentTipo ? TURNO_TIPOS.indexOf(currentTipo) : -1
-    const next = TURNO_TIPOS[(idx + 1) % TURNO_TIPOS.length]
+  function abrirEditorCelda(miembroId: string, miembroNombre: string, fecha: string, tipoActual: TurnoTipo | undefined, turno: Turno | undefined) {
+    if (!isAdmin) return
+    const tipo = tipoActual ?? null
+    setEditandoCelda({
+      miembroId, miembroNombre, fecha, tipo,
+      horaEntrada: hhmm(turno?.hora_entrada) || (tipo ? TURNO_CONFIG[tipo].defaultHoras?.[0] ?? '' : ''),
+      horaSalida: hhmm(turno?.hora_salida) || (tipo ? TURNO_CONFIG[tipo].defaultHoras?.[1] ?? '' : ''),
+    })
+  }
+
+  function elegirTipoCelda(tipo: TurnoTipo) {
+    setEditandoCelda(prev => prev && {
+      ...prev, tipo,
+      horaEntrada: prev.horaEntrada || TURNO_CONFIG[tipo].defaultHoras?.[0] || '',
+      horaSalida: prev.horaSalida || TURNO_CONFIG[tipo].defaultHoras?.[1] || '',
+    })
+  }
+
+  async function guardarCelda() {
+    if (!editandoCelda?.tipo) return
+    setGuardandoCelda(true)
     try {
-      await asignarTurno(miembroId, fecha, next)
+      await asignarTurno(editandoCelda.miembroId, editandoCelda.fecha, editandoCelda.tipo, {
+        hora_entrada: editandoCelda.horaEntrada || null,
+        hora_salida: editandoCelda.horaSalida || null,
+      })
       await fetchTurnos(weekStart, weekEnd)
-    } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error al asignar turno') }
+      setEditandoCelda(null)
+    } catch (e: unknown) {
+      setToast(e instanceof Error ? e.message : 'Error al asignar turno')
+    } finally {
+      setGuardandoCelda(false)
+    }
   }
 
   async function handleClearTurno(miembroId: string, fecha: string) {
@@ -144,6 +201,36 @@ export default function TurnosPage() {
       await limpiarTurno(miembroId, fecha)
       await fetchTurnos(weekStart, weekEnd)
     } catch {}
+  }
+
+  async function quitarCelda() {
+    if (!editandoCelda) return
+    setGuardandoCelda(true)
+    try {
+      await handleClearTurno(editandoCelda.miembroId, editandoCelda.fecha)
+      setEditandoCelda(null)
+    } finally {
+      setGuardandoCelda(false)
+    }
+  }
+
+  // Rellena la semana visible con los turnos de la anterior, corridos 7
+  // días. Pide confirmación solo si la semana visible ya tiene algo cargado
+  // — pisar sin avisar sería perder trabajo (DESIGN.md §7: undo/confirmación
+  // en acciones que pueden perder datos, esto es gestión, no servicio).
+  async function handleCopiarSemana() {
+    if (turnos.length > 0 && !confirm('Esta semana ya tiene turnos cargados. ¿Reemplazar con los de la semana anterior?')) return
+    setCopiando(true)
+    try {
+      const prevWeek = getWeekDates(weekOffset - 1)
+      const n = await copiarSemanaAnterior(fmtDate(prevWeek[0]), fmtDate(prevWeek[6]))
+      await fetchTurnos(weekStart, weekEnd)
+      setToast(n > 0 ? `${n} turnos copiados` : 'La semana anterior no tenía turnos')
+    } catch (e: unknown) {
+      setToast(e instanceof Error ? e.message : 'Error al copiar la semana')
+    } finally {
+      setCopiando(false)
+    }
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -204,11 +291,48 @@ export default function TurnosPage() {
   // ══════════════════════════════════════════════════════════════
 
   function TabTurnos() {
+    function puestoDe(miembroId: string) {
+      const m = miembros.find(x => x.id === miembroId)
+      return m?.puesto_id ? puestos.find(p => p.id === m.puesto_id) : undefined
+    }
+
+    const coberturaDia = (d: Date) => {
+      const dateStr = fmtDate(d)
+      let personas = 0, horas = 0
+      for (const m of miembros) {
+        const t = turnoPorClave[`${m.id}_${dateStr}`]
+        const tipo = t?.turno_tipo as TurnoTipo | undefined
+        if (!tipo || tipo === 'franco' || tipo === 'vacaciones') continue
+        personas++
+        horas += horasDeTurno(t, tipo)
+      }
+      return { personas, horas }
+    }
+
+    const totalDia = (d: Date) => {
+      const dateStr = fmtDate(d)
+      let total = 0
+      for (const m of miembros) {
+        const t = turnoPorClave[`${m.id}_${dateStr}`]
+        total += horasDeTurno(t, t?.turno_tipo as TurnoTipo | undefined)
+      }
+      return total
+    }
+
+    const totalPersona = (miembroId: string) => {
+      let total = 0
+      weekDates.forEach(d => {
+        const t = turnoPorClave[`${miembroId}_${fmtDate(d)}`]
+        total += horasDeTurno(t, t?.turno_tipo as TurnoTipo | undefined)
+      })
+      return total
+    }
+
     return (
       <div style={{ padding: 16 }}>
-        {/* Selector de semana */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <button onClick={() => setWeekOffset(o => o - 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+        {/* Selector de semana + copiar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8 }}>
+          <button onClick={() => setWeekOffset(o => o - 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-2)' }}>chevron_left</span>
           </button>
           <div style={{ textAlign: 'center' }}>
@@ -225,80 +349,214 @@ export default function TurnosPage() {
               {DIAS[0]} {fmtDateShort(weekDates[0])} — {DIAS[6]} {fmtDateShort(weekDates[6])}
             </div>
           </div>
-          <button onClick={() => setWeekOffset(o => o + 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+          <button onClick={() => setWeekOffset(o => o + 1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-2)' }}>chevron_right</span>
           </button>
         </div>
 
-        {/* Grilla */}
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 400 }}>
-            <thead>
-              <tr>
-                <th style={{ width: 70, padding: '6px 4px', fontSize: 11, color: 'var(--text-3)', textAlign: 'left', fontWeight: 600, position: 'sticky', left: 0, background: 'var(--surface)', zIndex: 2 }} />
-                {weekDates.map((d, i) => (
-                  <th key={i} style={{ padding: '6px 2px', fontSize: 11, color: 'var(--text-3)', textAlign: 'center', fontWeight: 600 }}>
-                    <div>{DIAS[i]}</div>
-                    <div style={{ fontWeight: 700, color: 'var(--text-2)' }}>{d.getDate()}</div>
-                  </th>
-                ))}
-                <th style={{ width: 36, padding: '6px 2px', fontSize: 9, color: 'var(--text-3)', textAlign: 'center', fontWeight: 700 }}>Hs</th>
-              </tr>
-            </thead>
-            <tbody>
-              {miembros.map(m => (
-                <tr key={m.id}>
-                  <td style={{ padding: '4px 4px', fontSize: 12, fontWeight: 600, color: 'var(--text-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 70, position: 'sticky', left: 0, background: 'var(--surface)', zIndex: 1 }}>
-                    {m.nombre.slice(0, 3)}.{m.apellido?.[0] ?? ''}
-                  </td>
-                  {weekDates.map((d, i) => {
-                    const dateStr = fmtDate(d)
-                    const tipo = turnoMap[`${m.id}_${dateStr}`] as TurnoTipo | undefined
-                    return (
-                      <td key={i} style={{ padding: 2, textAlign: 'center' }}>
-                        <div
-                          onClick={() => handleCycleTurno(m.id, dateStr, tipo)}
-                          onTouchStart={() => { longPressTimer.current = setTimeout(() => handleClearTurno(m.id, dateStr), 600) }}
-                          onTouchEnd={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }}
-                          onTouchMove={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }}
-                          style={{
-                            width: 44, height: 44, borderRadius: 10,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            cursor: 'pointer', margin: '0 auto',
-                            background: tipo ? TURNO_CONFIG[tipo].bg : 'var(--surface)',
-                            border: tipo ? 'none' : '1px dashed var(--border)',
-                            color: tipo ? TURNO_CONFIG[tipo].color : 'var(--text-3)',
-                            fontSize: tipo ? 15 : 18, fontWeight: 700,
-                            userSelect: 'none', WebkitUserSelect: 'none',
-                          }}
-                        >
-                          {tipo ? TURNO_CONFIG[tipo].label : '+'}
-                        </div>
-                      </td>
-                    )
-                  })}
-                  <td style={{ padding: '4px 2px', textAlign: 'center' }}>
-                    {(() => {
-                      const HOURS: Record<string, number> = { mañana: 8, tarde: 8, noche: 8, franco: 0, vacaciones: 0 }
-                      let total = 0
-                      weekDates.forEach(d => { const t = turnoMap[`${m.id}_${fmtDate(d)}`]; if (t) total += HOURS[t] ?? 0 })
-                      return (
-                        <span style={{ fontSize: 11, fontWeight: 700, color: total > 48 ? '#ef4444' : total > 0 ? 'var(--text-1)' : 'var(--text-3)' }}>
-                          {total}
-                        </span>
-                      )
-                    })()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {isAdmin && miembros.length > 0 && (
+          <button onClick={handleCopiarSemana} disabled={copiando} style={{
+            display: 'flex', alignItems: 'center', gap: 6, margin: '0 auto 14px', background: 'none',
+            border: '1px dashed var(--border)', borderRadius: 10, padding: '6px 12px',
+            fontSize: 12, fontWeight: 600, color: 'var(--text-2)', cursor: copiando ? 'default' : 'pointer',
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>content_copy</span>
+            {copiando ? 'Copiando…' : 'Copiar semana anterior'}
+          </button>
+        )}
+
+        {/* Leyenda */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+          {TURNO_TIPOS.map(tp => (
+            <div key={tp} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-3)' }}>
+              <span style={{ width: 10, height: 10, borderRadius: 3, background: TURNO_CONFIG[tp].color, flexShrink: 0 }} />
+              {TURNO_CONFIG[tp].fullLabel}
+            </div>
+          ))}
         </div>
 
-        {miembros.length === 0 && (
+        {miembros.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
             Agrega miembros del equipo primero
           </div>
+        ) : isDesktop ? (
+          /* ── DESKTOP: grilla completa ── */
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 760 }}>
+              <thead>
+                <tr>
+                  <th style={{ width: 160, padding: '6px 8px', position: 'sticky', left: 0, background: 'var(--bg)', zIndex: 2 }} />
+                  {weekDates.map((d, i) => {
+                    const esHoy = fmtDate(d) === fmtDate(new Date())
+                    const cob = coberturaDia(d)
+                    return (
+                      <th key={i} style={{
+                        padding: '6px 4px', textAlign: 'center', fontWeight: 600,
+                        background: esHoy ? 'rgba(28,45,74,.06)' : 'transparent', borderRadius: 8,
+                      }}>
+                        <div style={{ fontSize: 11, color: esHoy ? 'var(--navy-ink)' : 'var(--text-3)' }}>{DIAS[i]}</div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: esHoy ? 'var(--navy-ink)' : 'var(--text-2)' }}>{d.getDate()}</div>
+                        <div style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 500, marginTop: 1 }}>
+                          {cob.personas > 0 ? `${cob.personas} · ${Math.round(cob.horas)}h` : '—'}
+                        </div>
+                      </th>
+                    )
+                  })}
+                  <th style={{ width: 44, padding: '6px 2px', fontSize: 9, color: 'var(--text-3)', textAlign: 'center', fontWeight: 700 }}>Hs</th>
+                </tr>
+              </thead>
+              <tbody>
+                {miembros.map(m => {
+                  const puesto = puestoDe(m.id)
+                  const nombreCompleto = `${m.nombre} ${m.apellido}`.trim()
+                  const totalP = totalPersona(m.id)
+                  return (
+                    <tr key={m.id}>
+                      <td style={{
+                        padding: '6px 8px', position: 'sticky', left: 0, background: 'var(--bg)', zIndex: 1,
+                        display: 'flex', alignItems: 'center', gap: 8, minWidth: 160,
+                      }}>
+                        <Avatar name={nombreCompleto} size={28} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {nombreCompleto}
+                          </div>
+                          {puesto && (
+                            <div style={{ fontSize: 9, color: 'var(--text-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {puesto.nombre}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      {weekDates.map((d, i) => {
+                        const dateStr = fmtDate(d)
+                        const t = turnoPorClave[`${m.id}_${dateStr}`]
+                        const tipo = t?.turno_tipo as TurnoTipo | undefined
+                        const esHoy = dateStr === fmtDate(new Date())
+                        return (
+                          <td key={i} style={{ padding: 2, textAlign: 'center', background: esHoy ? 'rgba(28,45,74,.03)' : 'transparent' }}>
+                            <button
+                              onClick={() => abrirEditorCelda(m.id, nombreCompleto, dateStr, tipo, t)}
+                              onTouchStart={() => { if (tipo) longPressTimer.current = setTimeout(() => handleClearTurno(m.id, dateStr), 600) }}
+                              onTouchEnd={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }}
+                              onTouchMove={() => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }}
+                              style={{
+                                width: '100%', minHeight: 44, borderRadius: 10, border: 'none', cursor: isAdmin ? 'pointer' : 'default',
+                                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
+                                background: tipo ? TURNO_CONFIG[tipo].bg : 'transparent',
+                                fontFamily: 'inherit',
+                              }}
+                            >
+                              {tipo ? (
+                                <>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: TURNO_CONFIG[tipo].color }}>{TURNO_CONFIG[tipo].fullLabel}</span>
+                                  {tipo !== 'franco' && tipo !== 'vacaciones' && (
+                                    <span style={{ fontSize: 9, color: TURNO_CONFIG[tipo].color, opacity: .8 }}>
+                                      {hhmm(t?.hora_entrada) || TURNO_CONFIG[tipo].defaultHoras?.[0]}–{hhmm(t?.hora_salida) || TURNO_CONFIG[tipo].defaultHoras?.[1]}
+                                    </span>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)', opacity: .4 }}>add</span>
+                              )}
+                            </button>
+                          </td>
+                        )
+                      })}
+                      <td style={{ padding: '4px 2px', textAlign: 'center' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: totalP > 48 ? '#b45309' : totalP > 0 ? 'var(--text-1)' : 'var(--text-3)' }} title={totalP > 48 ? 'Más de 48h semanales' : undefined}>
+                          {Math.round(totalP)}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+                <tr>
+                  <td style={{ padding: '6px 8px', position: 'sticky', left: 0, background: 'var(--bg)', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>
+                    Total
+                  </td>
+                  {weekDates.map((d, i) => (
+                    <td key={i} style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: 'var(--text-2)' }}>
+                      {Math.round(totalDia(d))}h
+                    </td>
+                  ))}
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          /* ── MOBILE: un día por pantalla ── */
+          (() => {
+            const d = weekDates[diaMobileIdx]
+            const dateStr = fmtDate(d)
+            const esHoy = dateStr === fmtDate(new Date())
+            const cob = coberturaDia(d)
+            function irDia(delta: 1 | -1) {
+              const next = diaMobileIdx + delta
+              if (next < 0) { setWeekOffset(o => o - 1); setDiaMobileIdx(6) }
+              else if (next > 6) { setWeekOffset(o => o + 1); setDiaMobileIdx(0) }
+              else setDiaMobileIdx(next)
+            }
+            return (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <button onClick={() => irDia(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-2)' }}>chevron_left</span>
+                  </button>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: esHoy ? 'var(--navy-ink)' : 'var(--text-1)' }}>
+                      {DIAS[diaMobileIdx]} {d.getDate()}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                      {cob.personas > 0 ? `${cob.personas} personas · ${Math.round(cob.horas)}h` : 'Sin turnos'}
+                    </div>
+                  </div>
+                  <button onClick={() => irDia(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--text-2)' }}>chevron_right</span>
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {miembros.map(m => {
+                    const puesto = puestoDe(m.id)
+                    const nombreCompleto = `${m.nombre} ${m.apellido}`.trim()
+                    const t = turnoPorClave[`${m.id}_${dateStr}`]
+                    const tipo = t?.turno_tipo as TurnoTipo | undefined
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => abrirEditorCelda(m.id, nombreCompleto, dateStr, tipo, t)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', minHeight: 56,
+                          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12,
+                          cursor: isAdmin ? 'pointer' : 'default', width: '100%', textAlign: 'left', fontFamily: 'inherit',
+                        }}
+                      >
+                        <Avatar name={nombreCompleto} size={32} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{nombreCompleto}</div>
+                          {puesto && <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{puesto.nombre}</div>}
+                        </div>
+                        {tipo ? (
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: TURNO_CONFIG[tipo].color }}>{TURNO_CONFIG[tipo].fullLabel}</div>
+                            {tipo !== 'franco' && tipo !== 'vacaciones' && (
+                              <div style={{ fontSize: 10, color: 'var(--text-3)' }}>
+                                {hhmm(t?.hora_entrada) || TURNO_CONFIG[tipo].defaultHoras?.[0]}–{hhmm(t?.hora_salida) || TURNO_CONFIG[tipo].defaultHoras?.[1]}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)', opacity: .5 }}>add</span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()
         )}
 
         {/* Resumen mensual */}
@@ -332,16 +590,15 @@ export default function TurnosPage() {
                   {new Date().toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}
                 </div>
                 {miembros.map(m => {
-                  const HOURS: Record<string, number> = { mañana: 8, tarde: 8, noche: 8, franco: 0, vacaciones: 0 }
                   const mTurnos = turnosMes.filter(t => t.miembro_id === m.id)
-                  const totalHs = mTurnos.reduce((acc, t) => acc + (HOURS[t.turno_tipo] ?? 0), 0)
+                  const totalHs = mTurnos.reduce((acc, t) => acc + horasDeTurno(t, t.turno_tipo as TurnoTipo), 0)
                   const dias = mTurnos.filter(t => t.turno_tipo !== 'franco' && t.turno_tipo !== 'vacaciones').length
                   return (
                     <div key={m.id} style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--border)', gap: 10 }}>
                       <div style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{m.nombre} {m.apellido}</div>
                       <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{dias} días</div>
-                      <div style={{ fontSize: 15, fontWeight: 800, color: totalHs > 176 ? '#ef4444' : totalHs > 0 ? 'var(--navy-ink)' : 'var(--text-3)', minWidth: 40, textAlign: 'right' }}>
-                        {totalHs}h
+                      <div style={{ fontSize: 15, fontWeight: 800, color: totalHs > 176 ? '#b45309' : totalHs > 0 ? 'var(--navy-ink)' : 'var(--text-3)', minWidth: 40, textAlign: 'right' }} title={totalHs > 176 ? 'Más de 176h en el mes' : undefined}>
+                        {Math.round(totalHs)}h
                       </div>
                     </div>
                   )
@@ -350,6 +607,66 @@ export default function TurnosPage() {
             )}
           </div>
         )}
+
+        {/* Editor de celda (crear/editar/quitar turno) */}
+        <Modal open={!!editandoCelda} onClose={() => setEditandoCelda(null)} maxWidth={380}>
+          {editandoCelda && (
+            <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>{editandoCelda.miembroNombre}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{new Date(editandoCelda.fecha + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'short' })}</div>
+                </div>
+                <button onClick={() => setEditandoCelda(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-3)' }}>close</span>
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {TURNO_TIPOS.map(tp => {
+                  const on = editandoCelda.tipo === tp
+                  return (
+                    <button key={tp} onClick={() => elegirTipoCelda(tp)} style={{
+                      padding: '8px 12px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+                      border: `1px solid ${on ? TURNO_CONFIG[tp].color : 'var(--border)'}`,
+                      background: on ? TURNO_CONFIG[tp].bg : 'var(--surface)',
+                      color: on ? TURNO_CONFIG[tp].color : 'var(--text-2)',
+                      fontSize: 12, fontWeight: 700,
+                    }}>{TURNO_CONFIG[tp].fullLabel}</button>
+                  )
+                })}
+              </div>
+
+              {editandoCelda.tipo && editandoCelda.tipo !== 'franco' && editandoCelda.tipo !== 'vacaciones' && (
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={labelStyle}>Entrada</label>
+                    <input type="time" style={fieldStyle} value={editandoCelda.horaEntrada}
+                      onChange={e => setEditandoCelda(prev => prev && { ...prev, horaEntrada: e.target.value })} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={labelStyle}>Salida</label>
+                    <input type="time" style={fieldStyle} value={editandoCelda.horaSalida}
+                      onChange={e => setEditandoCelda(prev => prev && { ...prev, horaSalida: e.target.value })} />
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={quitarCelda} disabled={guardandoCelda} style={{
+                  flex: 1, padding: 13, borderRadius: 12, background: 'var(--bg)',
+                  border: '1px solid var(--border)', fontSize: 13, fontWeight: 600,
+                  color: 'var(--text-2)', cursor: 'pointer',
+                }}>Quitar turno</button>
+                <button onClick={guardarCelda} disabled={!editandoCelda.tipo || guardandoCelda} style={{
+                  flex: 2, padding: 13, borderRadius: 12, background: editandoCelda.tipo ? 'var(--navy)' : 'var(--border)',
+                  border: 'none', fontSize: 13, fontWeight: 700,
+                  color: '#fff', cursor: editandoCelda.tipo ? 'pointer' : 'default', opacity: guardandoCelda ? 0.6 : 1,
+                }}>{guardandoCelda ? 'Guardando…' : 'Guardar'}</button>
+              </div>
+            </div>
+          )}
+        </Modal>
       </div>
     )
   }

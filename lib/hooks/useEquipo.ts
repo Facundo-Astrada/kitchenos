@@ -166,10 +166,12 @@ export interface AreaCapaRow {
 
 export type TurnoTipo = 'mañana' | 'tarde' | 'noche' | 'franco' | 'vacaciones'
 
-export const TURNO_CONFIG: Record<TurnoTipo, { label: string; fullLabel: string; color: string; bg: string }> = {
-  mañana:     { label: 'M', fullLabel: 'Mañana',     color: '#f59e0b', bg: '#fef3c7' },
-  tarde:      { label: 'T', fullLabel: 'Tarde',      color: '#3b82f6', bg: '#dbeafe' },
-  noche:      { label: 'N', fullLabel: 'Noche',      color: '#4361a0', bg: '#e0e7ff' },
+// defaultHoras: horario por defecto al asignar el tipo — precarga el picker,
+// no ata nada (se puede pisar por persona/día). franco/vacaciones no tienen.
+export const TURNO_CONFIG: Record<TurnoTipo, { label: string; fullLabel: string; color: string; bg: string; defaultHoras?: [string, string] }> = {
+  mañana:     { label: 'M', fullLabel: 'Mañana',     color: '#f59e0b', bg: '#fef3c7', defaultHoras: ['09:00', '17:00'] },
+  tarde:      { label: 'T', fullLabel: 'Tarde',      color: '#3b82f6', bg: '#dbeafe', defaultHoras: ['13:00', '21:00'] },
+  noche:      { label: 'N', fullLabel: 'Noche',      color: '#4361a0', bg: '#e0e7ff', defaultHoras: ['20:00', '02:00'] },
   franco:     { label: 'F', fullLabel: 'Franco',     color: '#6b7280', bg: '#f3f4f6' },
   vacaciones: { label: 'V', fullLabel: 'Vacaciones', color: '#10b981', bg: '#d1fae5' },
 }
@@ -746,12 +748,19 @@ export function useEquipo() {
     }
   }, [RESTAURANTE_ID, supabase])
 
-  async function asignarTurno(miembro_id: string, fecha: string, turno_tipo: TurnoTipo) {
+  async function asignarTurno(
+    miembro_id: string, fecha: string, turno_tipo: TurnoTipo,
+    horas?: { hora_entrada: string | null; hora_salida: string | null },
+  ) {
     try {
       const { error } = await supabase
         .from('turnos')
         .upsert(
-          { miembro_id, fecha, turno_tipo, restaurante_id: RESTAURANTE_ID },
+          {
+            miembro_id, fecha, turno_tipo, restaurante_id: RESTAURANTE_ID,
+            hora_entrada: horas?.hora_entrada ?? TURNO_CONFIG[turno_tipo].defaultHoras?.[0] ?? null,
+            hora_salida: horas?.hora_salida ?? TURNO_CONFIG[turno_tipo].defaultHoras?.[1] ?? null,
+          },
           { onConflict: 'miembro_id,fecha' }
         )
       if (error) throw error
@@ -789,6 +798,45 @@ export function useEquipo() {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al limpiar turno'
       console.error('[useEquipo] limpiarTurno Error:', msg)
+    }
+  }
+
+  // Copia los turnos de una semana (fecha ya corrida al destino, ej. la
+  // semana anterior a la que se está viendo) 7 días adelante. onConflict
+  // pisa lo que ya hubiera en el destino para esa persona+día a propósito:
+  // es "rellenar la semana con la anterior", no un merge.
+  async function copiarSemanaAnterior(semanaAnteriorStart: string, semanaAnteriorEnd: string): Promise<number> {
+    try {
+      const { data: prevTurnos, error: fetchErr } = await supabase
+        .from('turnos')
+        .select('*')
+        .eq('restaurante_id', RESTAURANTE_ID)
+        .gte('fecha', semanaAnteriorStart)
+        .lte('fecha', semanaAnteriorEnd)
+      if (fetchErr) throw fetchErr
+      if (!prevTurnos || prevTurnos.length === 0) return 0
+
+      const inserts = prevTurnos.map((t: Turno) => {
+        const d = new Date(t.fecha + 'T12:00:00')
+        d.setDate(d.getDate() + 7)
+        return {
+          miembro_id: t.miembro_id,
+          fecha: d.toISOString().slice(0, 10),
+          turno_tipo: t.turno_tipo,
+          hora_entrada: t.hora_entrada,
+          hora_salida: t.hora_salida,
+          restaurante_id: RESTAURANTE_ID,
+        }
+      })
+      const { error: upsertErr } = await supabase
+        .from('turnos')
+        .upsert(inserts, { onConflict: 'miembro_id,fecha' })
+      if (upsertErr) throw upsertErr
+      return inserts.length
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al copiar la semana'
+      console.error('[useEquipo] copiarSemanaAnterior Error:', msg)
+      throw new Error(msg)
     }
   }
 
@@ -888,6 +936,7 @@ export function useEquipo() {
     fetchTurnosMes,
     asignarTurno,
     limpiarTurno,
+    copiarSemanaAnterior,
     fetchPuestos,
     crearPuesto,
     actualizarPuesto,
