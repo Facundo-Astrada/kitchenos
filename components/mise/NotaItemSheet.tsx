@@ -12,8 +12,8 @@
 // feedback_mobile_keyboard_inline_edit). El textarea ya está montado cuando
 // se ve, así que tocarlo sí abre el teclado al primer toque.
 
-import { useRef, useState } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
+import { useState } from 'react'
+import { Modal } from '@/components/ui'
 
 function formatDesde(iso: string): string {
   const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
@@ -39,13 +39,6 @@ export function NotaItemSheet({ nombreItem, nota, notaPor, notaAt, onGuardar, on
   const [saving, setSaving] = useState(false)
   const [borrando, setBorrando] = useState(false)
 
-  const startY = useRef<number>(0)
-  function handleTouchStart(e: React.TouchEvent) { startY.current = e.touches[0].clientY }
-  function handleTouchEnd(e: React.TouchEvent) {
-    const delta = e.changedTouches[0].clientY - startY.current
-    if (delta > 60) onDismiss()
-  }
-
   async function handleGuardar() {
     if (saving || !texto.trim()) return
     setSaving(true)
@@ -69,31 +62,16 @@ export function NotaItemSheet({ nombreItem, nota, notaPor, notaAt, onGuardar, on
   }
 
   return (
-    <AnimatePresence>
-      <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-        <motion.div
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }} onClick={onDismiss}
-          style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.45)' }}
-        />
-        <motion.div
-          initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-          transition={{ type: 'spring', damping: 30, stiffness: 350 }}
-          onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}
-          style={{
-            position: 'relative', background: 'var(--surface)', borderRadius: '18px 18px 0 0',
-            maxHeight: 'min(340px, 40vh)', display: 'flex', flexDirection: 'column',
-            paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 6px', flexShrink: 0 }}>
-            <div style={{ width: 36, height: 4, borderRadius: 99, background: 'var(--border)' }} />
-          </div>
-
-          <div style={{ padding: '0 16px', overflowY: 'auto', flex: 1, minHeight: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>sticky_note_2</span>
-              <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>{nombreItem}</span>
+    <Modal open onClose={onDismiss} maxWidth={420}>
+          <div style={{ padding: '20px 16px', paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>sticky_note_2</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>{nombreItem}</span>
+              </div>
+              <button onClick={onDismiss} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-3)' }}>close</span>
+              </button>
             </div>
 
             <textarea
@@ -144,8 +122,6 @@ export function NotaItemSheet({ nombreItem, nota, notaPor, notaAt, onGuardar, on
               )}
             </div>
           </div>
-        </motion.div>
-      </div>
-    </AnimatePresence>
+    </Modal>
   )
 }

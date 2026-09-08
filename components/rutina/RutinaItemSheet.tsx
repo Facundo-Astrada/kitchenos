@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { SheetChrome } from '@/lib/ui/chrome'
+import { Modal } from '@/components/ui'
 import type { RutinaTurnoItem, RutinaTurnoFase } from '@/types'
 import type { TurnoServicio } from '@/types'
 
@@ -86,25 +86,14 @@ export function RutinaItemSheet({ item, fase, turnos, onSave, onClose }: {
   const enTurno = (id: string) => !soloTurnos || soloTurnos.includes(id)
 
   return (
-    <SheetChrome>
-      <div
-        onClick={onClose}
-        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000, display: 'flex', alignItems: 'flex-end' }}
-      >
-        <div
-          onClick={e => e.stopPropagation()}
-          style={{
-            width: '100%', background: 'var(--surface)', borderRadius: '20px 20px 0 0',
-            maxHeight: '85vh', display: 'flex', flexDirection: 'column',
-          }}
-        >
-          <div style={{ padding: '18px 16px 0', flexShrink: 0 }}>
+    <Modal open onClose={onClose} maxWidth={480}>
+        <div style={{ padding: '18px 16px 0' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-1)' }}>
               {item ? 'Editar paso' : `Nuevo paso de ${fase === 'apertura' ? 'apertura' : 'cierre'}`}
             </div>
           </div>
 
-          <div style={{ overflowY: 'auto', flex: 1, padding: '16px' }}>
+          <div style={{ padding: '16px' }}>
             <div style={{ marginBottom: 16 }}>
               <label style={label}>Qué se hace</label>
               <input
@@ -246,8 +235,6 @@ export function RutinaItemSheet({ item, fase, turnos, onSave, onClose }: {
               }}
             >{guardando ? 'Guardando…' : 'Guardar'}</button>
           </div>
-        </div>
-      </div>
-    </SheetChrome>
+    </Modal>
   )
 }

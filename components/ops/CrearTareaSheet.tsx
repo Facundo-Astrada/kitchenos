@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useRef } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
+import { useState } from 'react'
+import { Modal } from '@/components/ui'
 import type { TareaPrioridad } from '@/types'
 
 export type CrearTareaDia = 'hoy' | 'manana'
@@ -55,13 +55,6 @@ export function CrearTareaSheet({
   const [nota, setNota] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const startY = useRef<number>(0)
-  function handleTouchStart(e: React.TouchEvent) { startY.current = e.touches[0].clientY }
-  function handleTouchEnd(e: React.TouchEvent) {
-    const delta = e.changedTouches[0].clientY - startY.current
-    if (delta > 60) onDismiss()
-  }
-
   async function handleConfirm() {
     if (saving) return
     setSaving(true)
@@ -76,32 +69,18 @@ export function CrearTareaSheet({
   }
 
   return (
-    <AnimatePresence>
-      <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-        <motion.div
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }} onClick={onDismiss}
-          style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.45)' }}
-        />
-        <motion.div
-          initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
-          transition={{ type: 'spring', damping: 30, stiffness: 350 }}
-          onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}
-          style={{
-            position: 'relative', background: 'var(--surface)', borderRadius: '18px 18px 0 0',
-            paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 6px' }}>
-            <div style={{ width: 36, height: 4, borderRadius: 99, background: 'var(--border)' }} />
-          </div>
-
-          <div style={{ padding: '0 16px' }}>
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>Crear tarea</div>
-              <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-                <span style={{ fontWeight: 600, color: 'var(--text-2)' }}>{nombreComponente}</span>
+    <Modal open onClose={onDismiss} maxWidth={420}>
+          <div style={{ padding: '20px 16px', paddingBottom: 'max(20px, env(safe-area-inset-bottom, 20px))' }}>
+            <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>Crear tarea</div>
+                <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+                  <span style={{ fontWeight: 600, color: 'var(--text-2)' }}>{nombreComponente}</span>
+                </div>
               </div>
+              <button onClick={onDismiss} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-3)' }}>close</span>
+              </button>
             </div>
 
             {/* Día */}
@@ -279,8 +258,6 @@ export function CrearTareaSheet({
               Cancelar
             </button>
           </div>
-        </motion.div>
-      </div>
-    </AnimatePresence>
+    </Modal>
   )
 }

@@ -9,6 +9,7 @@ import {
 import { useFichaje, type FichajeDia } from '@/lib/hooks/useFichaje'
 import { useAuth } from '@/lib/auth/context'
 import { usePermisos } from '@/lib/hooks/usePermisos'
+import { Modal } from '@/components/ui'
 
 // ── Constantes ──
 
@@ -519,14 +520,9 @@ export default function TurnosPage() {
         )}
 
         {/* Modal de edición manual (admin) */}
-        {editandoFichaje && (
-          <>
-            <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.5)' }} onClick={() => setEditandoFichaje(null)} />
-            <div style={{
-              position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 101,
-              background: 'var(--surface)', borderRadius: '20px 20px 0 0',
-              padding: '20px 20px', paddingBottom: 'max(env(safe-area-inset-bottom, 20px), 20px)',
-            }}>
+        <Modal open={!!editandoFichaje} onClose={() => setEditandoFichaje(null)} maxWidth={420}>
+          {editandoFichaje && (
+            <div style={{ padding: '20px 20px', paddingBottom: 'max(env(safe-area-inset-bottom, 20px), 20px)' }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 14 }}>
                 {editandoFichaje.id ? 'Corregir fichaje' : 'Agregar fichaje'} — {editandoFichaje.fecha}
               </div>
@@ -562,8 +558,8 @@ export default function TurnosPage() {
                 }}>{guardandoFichaje ? 'Guardando...' : 'Guardar'}</button>
               </div>
             </div>
-          </>
-        )}
+          )}
+        </Modal>
       </div>
     )
   }

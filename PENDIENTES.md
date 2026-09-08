@@ -47,10 +47,16 @@ Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/
 
 ### Migrar las copias viejas de "modal centrado" a `components/ui/Modal.tsx`
 Extraído el 08/09 (ficha del plantel en Organigrama, ver `PLAN-ARREGLOS-2026-09-08.md` § 2)
-siguiendo la estructura que `ui.md` venía documentando. Quedan 4 copias a mano sin migrar:
-`calendario/page.tsx` (form de evento y de planificar menú), `stock/ClientView.tsx` (alta/edición
-de producto) y `checklist/ClientView.tsx` (selector de plaza+turno). Migrar la próxima vez que se
-toque cualquiera de las cuatro — no antes, para no tocar código que no pidió nadie.
+siguiendo la estructura que `ui.md` venía documentando. El barrido del Bloque 2 (mismo día,
+`PLAN-PANTALLAS-2026-09-08.md`) migró las 12 pantallas de uso diario: Merma, CrearTareaSheet,
+ProduccionSheet, PaseSheet (OPS), NotaItemSheet (Mise), RutinaItemSheet, SugerenciaCompraSheet,
+SugerenciaProduccionSheet, LimpiezaPanel (Espacios), IngredienteOpsSheet + RecetaOpsSheet
+(Recetario), el editar-fichaje de Turnos y los dos sheets de Dashboard (notificaciones + cierre
+de turno). Quedan 3 copias a mano sin migrar: `calendario/page.tsx` (form de evento y de
+planificar menú), `stock/ClientView.tsx` (alta/edición de producto) y `checklist/ClientView.tsx`
+(selector de plaza+turno) — deliberadamente afuera, calendario se resuelve solo en el Bloque 7
+del mismo plan (color y movimiento de Calendario/Bitácora); stock y checklist migrar la próxima
+vez que se toque esa pantalla, no antes.
 
 ---
 

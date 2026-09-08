@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { MOTIVOS_MERMA } from '@/types'
 import type { MotivoMerma } from '@/types'
-import { useSheetOpenWhen } from '@/lib/ui/chrome'
+import { Modal } from '@/components/ui'
 
 interface MermaBottomSheetProps {
   open: boolean
@@ -28,7 +28,6 @@ interface MermaBottomSheetProps {
 }
 
 export default function MermaBottomSheet({ open, onClose, onRegistrar, prefill }: MermaBottomSheetProps) {
-  useSheetOpenWhen(open)
   const RESTAURANTE_ID = useRestauranteId()
   const [supabase] = useState(() => createClient())
   const [productos, setProductos] = useState<{ id: string; nombre: string; unidad: string; precio_unitario: number }[]>([])
@@ -99,22 +98,9 @@ export default function MermaBottomSheet({ open, onClose, onRegistrar, prefill }
     }
   }
 
-  if (!open) return null
-
   return (
-    <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/50 z-[300]" onClick={onClose} />
-
-      {/* Sheet */}
-      <div className="fixed bottom-0 left-0 right-0 z-[301] rounded-t-[20px] max-h-[85vh] overflow-y-auto"
-        style={{ background: 'var(--surface)' }}>
-        {/* Handle */}
-        <div className="flex justify-center pt-3 pb-1 sticky top-0" style={{ background: 'var(--surface)' }}>
-          <div className="w-10 h-1 rounded-full" style={{ background: 'var(--border)' }} />
-        </div>
-
-        <div className="px-4 pb-6">
+    <Modal open={open} onClose={onClose} maxWidth={480}>
+      <div className="px-4 py-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-bold" style={{ color: 'var(--navy-ink)' }}>Registrar merma</h3>
             <button onClick={onClose} className="bg-transparent border-none cursor-pointer p-1">
@@ -212,8 +198,7 @@ export default function MermaBottomSheet({ open, onClose, onRegistrar, prefill }
             style={{ background: '#ef4444', opacity: (saving || !busqueda.trim() || !cantidad || !motivo) ? 0.5 : 1 }}>
             {saving ? 'Registrando...' : `Registrar merma${cantidad ? `: ${cantidad}${unidad} ${busqueda}` : ''}`}
           </button>
-        </div>
       </div>
-    </>
+    </Modal>
   )
 }

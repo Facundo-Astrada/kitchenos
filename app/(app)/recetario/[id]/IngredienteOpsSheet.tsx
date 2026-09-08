@@ -1,6 +1,6 @@
 'use client'
 
-import { useSheetOpen } from '@/lib/ui/chrome'
+import { Modal } from '@/components/ui'
 import OpsPanel, { type OpsInitial, type OpsResult } from '@/components/ops/OpsPanel'
 import type { Ingrediente } from '@/types'
 
@@ -19,8 +19,6 @@ export default function IngredienteOpsSheet({
   onSave: (result: OpsResult) => void
   onRemove: () => void
 }) {
-  useSheetOpen()
-
   const initial: OpsInitial = {
     plaza: ing.plaza,
     // seccion_mise ya guarda el id tal cual lo emitió OpsPanel (legacy o UUID
@@ -34,14 +32,9 @@ export default function IngredienteOpsSheet({
   }
 
   return (
-    <>
-      <div className="fixed inset-0 z-[200]" style={{ background: 'rgba(0,0,0,.45)' }} onClick={onClose} />
-      <div
-        className="fixed inset-x-0 bottom-0 z-[201]"
-        style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', maxHeight: '88dvh', display: 'flex', flexDirection: 'column', maxWidth: 520, margin: '0 auto' }}
-      >
+    <Modal open onClose={onClose} maxWidth={520}>
         {/* Título fijo */}
-        <div style={{ padding: '18px 16px 10px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)' }}>
+        <div style={{ padding: '18px 16px 10px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)' }}>
           <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--accent)' }}>restaurant_menu</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>Asignar a OPS / Mise</div>
@@ -54,8 +47,7 @@ export default function IngredienteOpsSheet({
           </button>
         </div>
 
-        {/* Cuerpo scrolleable */}
-        <div style={{ overflowY: 'auto', flex: 1, padding: '14px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}>
+        <div style={{ padding: '14px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}>
           <OpsPanel
             initial={initial}
             hasExisting={!!ing.plaza}
@@ -64,7 +56,6 @@ export default function IngredienteOpsSheet({
             onRemove={onRemove}
           />
         </div>
-      </div>
-    </>
+    </Modal>
   )
 }

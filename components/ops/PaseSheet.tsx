@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { createPortal } from 'react-dom'
-import { SheetChrome } from '@/lib/ui/chrome'
+import { Modal } from '@/components/ui'
 import { tap } from '@/lib/ui/motion'
 
 // ── Hoja "Copiar pase" ───────────────────────────────────────────────────
@@ -82,25 +81,12 @@ export function PaseSheet({ titulo, textoInicial, onClose }: PaseSheetProps) {
     }
   }
 
-  if (typeof document === 'undefined') return null
-  return createPortal(
-    <SheetChrome>
-      <div
-        onClick={onClose}
-        style={{
-          position: 'fixed', inset: 0, zIndex: 2000,
-          background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 0,
-        }}
-      >
+  return (
+    <Modal open onClose={onClose} maxWidth={420}>
         <div
-          onClick={e => e.stopPropagation()}
-          className="toast-enter"
           style={{
-            width: '100%', maxWidth: 420, background: 'var(--bg)', borderRadius: '20px 20px 0 0',
             padding: '20px 20px max(18px, env(safe-area-inset-bottom, 18px))',
-            boxShadow: '0 -8px 30px rgba(0,0,0,.25)', display: 'flex', flexDirection: 'column', gap: 12,
-            maxHeight: '85vh',
+            display: 'flex', flexDirection: 'column', gap: 12,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -153,8 +139,6 @@ export function PaseSheet({ titulo, textoInicial, onClose }: PaseSheetProps) {
             </button>
           </div>
         </div>
-      </div>
-    </SheetChrome>,
-    document.body,
+    </Modal>
   )
 }

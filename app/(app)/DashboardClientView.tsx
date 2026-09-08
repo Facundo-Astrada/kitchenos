@@ -14,6 +14,7 @@ import MiPlaza from '@/components/dashboard/MiPlaza'
 import StockCriticoSection from '@/components/dashboard/StockCriticoSection'
 import ModulosGrid from '@/components/dashboard/ModulosGrid'
 import WelcomeDashboard from '@/components/dashboard/WelcomeDashboard'
+import { Modal } from '@/components/ui'
 import { useStock } from '@/lib/hooks/useStock'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { useChecklist } from '@/lib/hooks/useChecklist'
@@ -356,11 +357,8 @@ export default function DashboardPage() {
         </div>
       )}
       {/* Notificaciones panel */}
-      {showNotif && (
-        <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.5)' }} onClick={() => setShowNotif(false)} />
-          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 101, background: 'var(--surface)', borderRadius: '20px 20px 0 0', padding: '20px 16px', paddingBottom: 'max(env(safe-area-inset-bottom, 20px), 20px)', maxHeight: '70vh', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 16px' }} />
+      <Modal open={showNotif} onClose={() => setShowNotif(false)} maxWidth={420}>
+          <div style={{ padding: '20px 16px', paddingBottom: 'max(env(safe-area-inset-bottom, 20px), 20px)', maxHeight: '70vh', display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 12 }}>Alertas de stock</div>
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {productos.filter(p => p.estado === 'critico' || p.estado === 'bajo').length === 0 ? (
@@ -384,18 +382,12 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
-        </>
-      )}
+      </Modal>
 
       {/* Cierre de turno modal */}
-      {showCierre && turnoActivo && (
-        <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.5)' }} onClick={() => setShowCierre(false)} />
-          <div style={{
-            position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 101,
-            background: 'var(--surface)', borderRadius: '20px 20px 0 0',
-            padding: '24px 20px', paddingBottom: 'max(env(safe-area-inset-bottom, 20px), 20px)',
-          }}>
+      <Modal open={showCierre && !!turnoActivo} onClose={() => setShowCierre(false)} maxWidth={420}>
+        {turnoActivo && (
+          <div style={{ padding: '24px 20px', paddingBottom: 'max(env(safe-area-inset-bottom, 20px), 20px)' }}>
             <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)', marginBottom: 16 }}>
               Resumen del turno
             </div>
@@ -444,8 +436,8 @@ export default function DashboardPage() {
               }}>Cerrar turno</button>
             </div>
           </div>
-        </>
-      )}
+        )}
+      </Modal>
     </div>
     </PageTransition>
   )

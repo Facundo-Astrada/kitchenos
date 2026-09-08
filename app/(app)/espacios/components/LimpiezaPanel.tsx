@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { Modal } from '@/components/ui'
 import type { ChecklistRutina, Plaza, RutinaFrecuencia } from '@/types'
 
 // ISO 1=Lun..7=Dom (checklist_rutina.dias_semana usa este formato)
@@ -65,23 +66,9 @@ export default function LimpiezaPanel({ scope, rutinas, onClose, onAgregarRutina
   }
 
   return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 200,
-        background: 'rgba(0,0,0,0.4)',
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-      }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div style={{
-        background: 'var(--surface)',
-        borderRadius: '20px 20px 0 0',
-        width: '100%', maxWidth: 540,
-        maxHeight: '80vh',
-        display: 'flex', flexDirection: 'column',
-      }}>
+    <Modal open onClose={onClose} maxWidth={540}>
         {/* Header */}
-        <div style={{ padding: '20px 20px 0', flexShrink: 0 }}>
+        <div style={{ padding: '20px 20px 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--accent)' }}>cleaning_services</span>
             <div>
@@ -94,8 +81,7 @@ export default function LimpiezaPanel({ scope, rutinas, onClose, onAgregarRutina
           </div>
         </div>
 
-        {/* Contenido scrolleable */}
-        <div style={{ overflowY: 'auto', flex: 1, padding: '16px 20px' }}>
+        <div style={{ padding: '16px 20px' }}>
 
           {/* Rutinas existentes */}
           {rutinasScope.length > 0 && (
@@ -242,7 +228,6 @@ export default function LimpiezaPanel({ scope, rutinas, onClose, onAgregarRutina
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }

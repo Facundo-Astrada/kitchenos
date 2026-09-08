@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { SECCIONES_OPS, upsertMiseChecklistItem, parseRecipienteNombre } from '@/lib/ops/mise'
-import { useSheetOpen } from '@/lib/ui/chrome'
+import { Modal } from '@/components/ui'
 import OpsPanel, { type OpsInitial, type OpsResult } from '@/components/ops/OpsPanel'
 
 // ════════════════════════════════════════════════════════════
@@ -21,7 +21,6 @@ export default function RecetaOpsSheet({
   onClose: () => void
   onSaved?: () => void
 }) {
-  useSheetOpen()
   const [initial, setInitial] = useState<OpsInitial | null>(null)
   const [existingId, setExistingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -100,14 +99,9 @@ export default function RecetaOpsSheet({
   }
 
   return (
-    <>
-      <div className="fixed inset-0 z-[200]" style={{ background: 'rgba(0,0,0,.45)' }} onClick={onClose} />
-      <div
-        className="fixed inset-x-0 bottom-0 z-[201]"
-        style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', maxHeight: '88dvh', display: 'flex', flexDirection: 'column', maxWidth: 520, margin: '0 auto' }}
-      >
+    <Modal open onClose={onClose} maxWidth={520}>
         {/* Título fijo */}
-        <div style={{ padding: '18px 16px 10px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)' }}>
+        <div style={{ padding: '18px 16px 10px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)' }}>
           <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--accent)' }}>restaurant_menu</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>Asignar a OPS / Mise</div>
@@ -118,8 +112,7 @@ export default function RecetaOpsSheet({
           </button>
         </div>
 
-        {/* Cuerpo scrolleable */}
-        <div style={{ overflowY: 'auto', flex: 1, padding: '14px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}>
+        <div style={{ padding: '14px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}>
           {initial === null ? (
             <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: 'var(--text-3)' }}>Cargando…</div>
           ) : (
@@ -132,7 +125,6 @@ export default function RecetaOpsSheet({
             />
           )}
         </div>
-      </div>
-    </>
+    </Modal>
   )
 }

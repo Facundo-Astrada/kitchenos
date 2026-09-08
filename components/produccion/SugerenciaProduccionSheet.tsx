@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { SugerenciaResultado } from '@/lib/produccion/sugerencia'
 import type { Tarea } from '@/types'
-import { IAIcon } from '@/components/ui'
+import { IAIcon, Modal } from '@/components/ui'
 
 const PLAZA_LABELS: Record<string, string> = {
   parrilla: 'Parrilla', frios: 'Fríos', calientes: 'Calientes',
@@ -89,12 +89,8 @@ export default function SugerenciaProduccionSheet({ tareasExistentes, onConfirm,
     : 0
 
   return (
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 520, maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '18px 16px 12px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)' }}>
+    <Modal open onClose={onClose} maxWidth={520}>
+        <div style={{ padding: '18px 16px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)' }}>
           <div>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', display: 'flex', alignItems: 'center', gap: 6 }}>
               <IAIcon size={18} />
@@ -119,7 +115,7 @@ export default function SugerenciaProduccionSheet({ tareasExistentes, onConfirm,
           </div>
         )}
 
-        <div style={{ overflowY: 'auto', flex: 1, padding: '12px 16px' }}>
+        <div style={{ padding: '12px 16px' }}>
           {loading && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40, gap: 8 }}>
               <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-3)', animation: 'spin 1s linear infinite' }}>progress_activity</span>
@@ -221,7 +217,6 @@ export default function SugerenciaProduccionSheet({ tareasExistentes, onConfirm,
             {confirmando ? 'Creando tareas…' : totalSeleccionados > 0 ? `Crear ${totalSeleccionados} ${totalSeleccionados === 1 ? 'tarea' : 'tareas'}` : 'Nada seleccionado'}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   )
 }
