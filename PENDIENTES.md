@@ -45,6 +45,13 @@ Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/
 ### OPS Consolidación — diferido
 "Copiar a otro día" e "Ingredientes consolidados" (se sacaron con la planilla legacy) — reimplementar sobre `tareas` si el usuario los pide.
 
+### Migrar las copias viejas de "modal centrado" a `components/ui/Modal.tsx`
+Extraído el 08/09 (ficha del plantel en Organigrama, ver `PLAN-ARREGLOS-2026-09-08.md` § 2)
+siguiendo la estructura que `ui.md` venía documentando. Quedan 4 copias a mano sin migrar:
+`calendario/page.tsx` (form de evento y de planificar menú), `stock/ClientView.tsx` (alta/edición
+de producto) y `checklist/ClientView.tsx` (selector de plaza+turno). Migrar la próxima vez que se
+toque cualquiera de las cuatro — no antes, para no tocar código que no pidió nadie.
+
 ---
 
 ## 🟡 Medio — Roadmap: Planes y cobro
