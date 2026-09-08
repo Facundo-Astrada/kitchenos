@@ -1245,7 +1245,7 @@ export default function StockPage() {
         onBack={() => router.back()}
         actions={
           <div style={{ position: 'relative', overflow: 'hidden', maxWidth: '100%' }}>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', scrollbarWidth: 'none' }}>
+          <div className="hide-scrollbar" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto' }}>
             <button
               data-coach-target="stock-kpis"
               onClick={() => setEstadoFilter(f => f === 'bajo' ? 'all' : 'bajo')}

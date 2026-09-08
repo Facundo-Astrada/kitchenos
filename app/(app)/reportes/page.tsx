@@ -1386,7 +1386,7 @@ export default function ReportesPage() {
       </div>
 
       {/* Tabs */}
-      <div data-coach-target="reportes-tabs" style={{
+      <div data-coach-target="reportes-tabs" className="hide-scrollbar" style={{
         display: 'flex', overflowX: 'auto', gap: 0,
         borderBottom: '1px solid var(--border)',
         background: 'var(--surface)',

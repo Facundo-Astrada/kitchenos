@@ -9,7 +9,6 @@ import AhoraCard from '@/components/dashboard/AhoraCard'
 import LineUpStrip from '@/components/dashboard/LineUpStrip'
 import ImplantacionStrip from '@/components/dashboard/ImplantacionStrip'
 import ProximosDias from '@/components/dashboard/ProximosDias'
-import IngresosBanner from '@/components/pedidos/IngresosBanner'
 import PasePreview from '@/components/dashboard/PasePreview'
 import MiPlaza from '@/components/dashboard/MiPlaza'
 import StockCriticoSection from '@/components/dashboard/StockCriticoSection'
@@ -19,7 +18,7 @@ import { useStock } from '@/lib/hooks/useStock'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { useChecklist } from '@/lib/hooks/useChecklist'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
-import { getEstadoStock, calcularVencimientoFactura } from '@/lib/utils'
+import { getEstadoStock } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useFichaje } from '@/lib/hooks/useFichaje'
 import { hoyOperativo, sumarDias, fechaEnTz } from '@/lib/ops/turnos'
@@ -47,106 +46,6 @@ function useEn86Count(restauranteId: string): number | null {
     return () => { cancel = true }
   }, [restauranteId])
   return count
-}
-
-// KPI "Cuentas por pagar" — solo admin, oculto si no hay deuda. Query liviana propia.
-// Prioriza el mensaje por urgencia (vencidas > vencen esta semana > total), mismo
-// cálculo de vencimiento que la agenda de Facturas (lib/utils.ts) para que nunca diverjan.
-function CuentasPorPagarCard({ restauranteId, onCount }: { restauranteId: string; onCount?: (n: number) => void }) {
-  const [data, setData] = useState<{ total: number; count: number; vencidas: number; vencidasTotal: number; estaSemana: number; estaSemanaTotal: number } | null>(null)
-  useEffect(() => {
-    if (!restauranteId) return
-    let cancel = false
-    ;(async () => {
-      const supabase = createClient()
-      const { data: rows } = await supabase.from('facturas').select('total, fecha_factura, condicion_pago, status')
-        .eq('restaurante_id', restauranteId)
-        .in('condicion_pago', ['cuenta_corriente', '30dias', '60dias'])
-        .neq('status', 'pagada')
-      if (cancel) return
-      const list = (rows ?? []) as { total: number | null; fecha_factura: string; condicion_pago: string | null }[]
-      let vencidas = 0, vencidasTotal = 0, estaSemana = 0, estaSemanaTotal = 0
-      for (const f of list) {
-        const v = calcularVencimientoFactura(f)
-        if (v.urgencia === 'vencida') { vencidas++; vencidasTotal += f.total ?? 0 }
-        else if (v.urgencia === 'esta_semana') { estaSemana++; estaSemanaTotal += f.total ?? 0 }
-      }
-      setData({ total: list.reduce((s, f) => s + (f.total ?? 0), 0), count: list.length, vencidas, vencidasTotal, estaSemana, estaSemanaTotal })
-    })()
-    return () => { cancel = true }
-  }, [restauranteId])
-  useEffect(() => { if (data) onCount?.(data.count) }, [data, onCount])
-  if (!data || data.count === 0) return null
-  const fmt = (n: number) => n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 })
-
-  const urgente = data.vencidas > 0 || data.estaSemana > 0
-  const tituloUrgente = data.vencidas > 0
-    ? `${data.vencidas} factura${data.vencidas !== 1 ? 's' : ''} vencida${data.vencidas !== 1 ? 's' : ''}`
-    : `Vencen esta semana`
-  const montoUrgente = data.vencidas > 0 ? data.vencidasTotal : data.estaSemanaTotal
-
-  return (
-    <Link href="/facturas" style={{
-      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 14, textDecoration: 'none',
-      background: data.vencidas > 0 ? '#fef2f2' : '#fffbeb',
-      border: `1px solid ${data.vencidas > 0 ? '#fecaca' : '#fde68a'}`,
-    }}>
-      <span className="material-symbols-outlined" style={{ fontSize: 22, color: data.vencidas > 0 ? '#991b1b' : '#92400e' }}>
-        {data.vencidas > 0 ? 'error' : 'account_balance_wallet'}
-      </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: data.vencidas > 0 ? '#991b1b' : '#92400e' }}>
-          {urgente ? tituloUrgente : 'Cuentas por pagar'}
-        </div>
-        <div style={{ fontSize: 11, color: data.vencidas > 0 ? '#b91c1c' : '#b45309' }}>
-          {data.count} factura{data.count !== 1 ? 's' : ''} a crédito en total
-        </div>
-      </div>
-      <div style={{ fontSize: 15, fontWeight: 800, color: data.vencidas > 0 ? '#991b1b' : '#92400e', whiteSpace: 'nowrap' }}>
-        {fmt(urgente ? montoUrgente : data.total)}
-      </div>
-    </Link>
-  )
-}
-
-// Fila plegada que agrupa los dos banners rojos (pedidos atrasados + facturas
-// a pagar) — antes competían por el pixel de arriba con el bloque de trabajo
-// (PLAN-SUPERFICIE S1.3). Los banners quedan siempre montados (necesitan
-// seguir vivos para reportar su conteo vía onCount); el plegado solo esconde
-// el detalle, no los desmonta — mismo criterio que un sheet oculto con CSS.
-function PendientesDelNegocio({ restauranteId }: { restauranteId: string }) {
-  const [open, setOpen] = useState(false)
-  const [nPedidos, setNPedidos] = useState(0)
-  const [nFacturas, setNFacturas] = useState(0)
-  const total = nPedidos + nFacturas
-
-  return (
-    <div style={{ margin: '8px 16px 0' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          width: '100%', display: total > 0 ? 'flex' : 'none', alignItems: 'center', gap: 10,
-          padding: '10px 14px', borderRadius: 12, cursor: 'pointer',
-          background: '#fef2f2', border: '1px solid #fecaca', fontFamily: 'inherit',
-        }}
-      >
-        <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#991b1b' }}>error</span>
-        <span style={{ flex: 1, textAlign: 'left', fontSize: 12, fontWeight: 700, color: '#991b1b' }}>
-          Pendientes del negocio · {total}
-        </span>
-        <span
-          className="material-symbols-outlined"
-          style={{ fontSize: 18, color: '#991b1b', transform: open ? 'rotate(180deg)' : undefined, transition: 'transform .2s' }}
-        >
-          expand_more
-        </span>
-      </button>
-      <div style={{ display: open ? 'flex' : 'none', flexDirection: 'column', gap: 8, marginTop: total > 0 ? 8 : 0 }}>
-        <IngresosBanner embedded onCount={setNPedidos} />
-        <CuentasPorPagarCard restauranteId={restauranteId} onCount={setNFacturas} />
-      </div>
-    </div>
-  )
 }
 
 export default function DashboardPage() {
@@ -321,7 +220,6 @@ export default function DashboardPage() {
             <AhoraCard momento={momento} />
             <LineUpStrip momento={momento} />
             <ImplantacionStrip />
-            <ProximosDias />
             {/* Turno */}
             <div data-coach-target="dashboard-turno">
               {!turnoActivo ? (
@@ -344,15 +242,17 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {rol === 'admin' && <CuentasPorPagarCard restauranteId={perfil.restaurante_id} />}
             <div data-coach-target="dashboard-pase"><PasePreview puedeEscribir={puedeEscribir} /></div>
             <div data-coach-target="dashboard-plaza"><MiPlaza rol={rol} completados={plazaStats.completados} total={plazaStats.total} /></div>
           </div>
 
-          {/* Panel derecho: pendientes del negocio + stock — la navegación
-              a módulos ya la resuelve el sidebar, no se duplica acá (S1.4). */}
+          {/* Panel derecho: el calendario en su densidad completa + stock —
+              la navegación a módulos ya la resuelve el sidebar, no se
+              duplica acá (S1.4). Los banners de plata (pedidos atrasados,
+              cuentas por pagar) se sacaron del Inicio (S6, Bloque 0): viven
+              en Compras/Facturas, que es donde se actúa sobre ellos. */}
           <div style={{ overflowY: 'auto', padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 28 }}>
-            {rol === 'admin' && <IngresosBanner embedded />}
+            <ProximosDias variant="panel" />
 
             {criticos.length > 0 && (
               <div data-coach-target="dashboard-stock">
@@ -363,7 +263,13 @@ export default function DashboardPage() {
                   </p>
                   <Link href="/stock" style={{ fontSize: 11, fontWeight: 700, color: 'var(--navy)', textDecoration: 'none' }}>Ver inventario →</Link>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+                {/* paddingRight reserva el rincón donde descansa el FAB del
+                    Coach por default (52px + margen) — sin esto tapaba la
+                    última tarjeta de la grilla (S6, Bloque 0). El FAB es
+                    arrastrable y su posición queda en localStorage por
+                    usuario, así que no hay forma exacta de esquivarlo: esto
+                    es la reserva conservadora, no un cálculo pixel-perfect. */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8, paddingRight: 64 }}>
                   {criticos.slice(0, 12).map(p => {
                     const esCrit = getEstadoStock(p.stock_actual, p.stock_minimo, p.stock_critico) === 'critico'
                     return (
@@ -443,8 +349,6 @@ export default function DashboardPage() {
 
           <div data-coach-target="dashboard-pase"><PasePreview puedeEscribir={puedeEscribir} /></div>
           <div data-coach-target="dashboard-plaza"><MiPlaza rol={rol} completados={plazaStats.completados} total={plazaStats.total} /></div>
-          {/* Alertas de negocio plegadas, debajo del bloque de trabajo (S1.3) */}
-          {rol === 'admin' && <PendientesDelNegocio restauranteId={perfil.restaurante_id} />}
           <div data-coach-target="dashboard-stock"><StockCriticoSection productos={productos} /></div>
           <div data-coach-target="dashboard-modulos"><ModulosGrid rol={rol} /></div>
 

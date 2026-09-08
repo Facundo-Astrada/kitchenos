@@ -115,14 +115,24 @@ async function fetchCartaCategoriasData(key: string): Promise<CartaCategoria[]> 
     .eq('restaurante_id', rid)
     .order('orden')
   if (data && data.length > 0) return data as CartaCategoria[]
-  // Primera vez: sembrar categorías por defecto
+  // Primera vez: sembrar categorías por defecto. upsert + ignoreDuplicates
+  // en vez de insert — con el índice único (restaurante_id, nombre) esto
+  // protege contra dos montajes simultáneos sembrando dos veces (bug real
+  // en prod, ver migración carta_categorias_unicas.sql). Con
+  // ignoreDuplicates, Supabase solo devuelve las filas efectivamente
+  // insertadas por ESTE llamado — si el otro montaje ganó la carrera, hay
+  // que releer para tener la lista completa.
   const inserts = CATEGORIAS_DEFAULT.map((c, i) => ({
     nombre: c.nombre, icono: c.icono, orden: i, restaurante_id: rid,
   }))
+  await supabase
+    .from('carta_categorias')
+    .upsert(inserts, { onConflict: 'restaurante_id,nombre', ignoreDuplicates: true })
   const { data: seeded } = await supabase
     .from('carta_categorias')
-    .insert(inserts)
     .select('id, nombre, icono, orden, restaurante_id')
+    .eq('restaurante_id', rid)
+    .order('orden')
   return (seeded ?? []) as CartaCategoria[]
 }
 

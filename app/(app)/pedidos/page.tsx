@@ -48,7 +48,7 @@ function FiltrosPedidos({
   onDark?: boolean
 }) {
   return (
-    <div data-coach-target="pedidos-filtros" style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+    <div data-coach-target="pedidos-filtros" className="hide-scrollbar" style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
       {(['todos', 'borrador', 'enviado', 'parcial', 'recibido'] as const).map(f => (
         <button
           key={f}

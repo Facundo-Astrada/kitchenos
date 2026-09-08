@@ -19,6 +19,7 @@ export interface ItemProximoDia {
   titulo: string
   color: string
   icon: string
+  hora: string | null
 }
 
 export interface DiaProximo {
@@ -42,7 +43,7 @@ async function fetchProximosDiasData(key: string): Promise<DiaProximo[]> {
   const [{ data: eventos }, { data: menus }] = await Promise.all([
     supabase
       .from('eventos')
-      .select('id, titulo, tipo, fecha_inicio')
+      .select('id, titulo, tipo, fecha_inicio, hora_inicio')
       .eq('restaurante_id', restauranteId)
       .gte('fecha_inicio', hoy)
       .lte('fecha_inicio', hasta)
@@ -62,7 +63,10 @@ async function fetchProximosDiasData(key: string): Promise<DiaProximo[]> {
     for (const e of eventos ?? []) {
       if (e.fecha_inicio !== fecha) continue
       const cfg = TIPO_CONFIG[e.tipo as TipoEvento]
-      items.push({ id: e.id, titulo: e.titulo, color: cfg?.color ?? '#6b7280', icon: cfg?.icon ?? 'event' })
+      items.push({
+        id: e.id, titulo: e.titulo, color: cfg?.color ?? '#6b7280', icon: cfg?.icon ?? 'event',
+        hora: e.hora_inicio ? e.hora_inicio.slice(0, 5) : null,
+      })
     }
 
     for (const m of menus ?? []) {
@@ -70,7 +74,7 @@ async function fetchProximosDiasData(key: string): Promise<DiaProximo[]> {
       // repite el menú fijo todos los días de su vigencia, sería ruido.
       const esDelDia = (m.tipo === 'evento' && m.fecha_evento === fecha) || (m.tipo === 'fijo' && m.vigencia_desde === fecha)
       if (!esDelDia) continue
-      items.push({ id: `menu-${m.id}`, titulo: m.nombre, color: '#10b981', icon: 'menu_book' })
+      items.push({ id: `menu-${m.id}`, titulo: m.nombre, color: '#10b981', icon: 'menu_book', hora: null })
     }
 
     return { fecha, items }

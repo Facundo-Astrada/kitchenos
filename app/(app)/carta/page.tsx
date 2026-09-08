@@ -923,8 +923,26 @@ export default function CartaPage() {
           </div>
         )}
 
-        {/* Filters */}
-        <div data-coach-target="carta-filtros" style={{ display: 'flex', gap: 6, marginTop: 10, overflowX: 'auto', paddingBottom: 2 }}>
+        {/* Filters — la barra de scroll queda oculta (hide-scrollbar) pero el
+            degradado en los bordes avisa que hay más categorías para el lado:
+            mismo truco CSS puro (background-attachment local+scroll, sin JS)
+            que la sombra de scroll de Polivalencia, adaptado a fundirse con
+            var(--navy) en vez de var(--surface) — este header es oscuro. */}
+        <div
+          data-coach-target="carta-filtros"
+          className="hide-scrollbar"
+          style={{
+            display: 'flex', gap: 6, marginTop: 10, overflowX: 'auto', paddingBottom: 2,
+            background: `
+              linear-gradient(to right, var(--navy) 30%, rgba(28,45,74,0)),
+              linear-gradient(to right, rgba(28,45,74,0), var(--navy) 70%) 100% 0
+            `,
+            backgroundRepeat: 'no-repeat',
+            backgroundColor: 'var(--navy)',
+            backgroundSize: '24px 100%, 24px 100%',
+            backgroundAttachment: 'local, local',
+          }}
+        >
           {(['Todas', ...categorias.map(c => c.nombre)]).map(cat => {
             const catObj = categorias.find(c => c.nombre === cat)
             return (

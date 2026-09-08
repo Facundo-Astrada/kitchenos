@@ -156,7 +156,7 @@ export default function ImplantacionPage() {
         </section>
 
         {/* ── La cordillera ── */}
-        <section style={{
+        <section className="hide-scrollbar" style={{
           background: 'var(--surface)', border: '1px solid var(--border)',
           borderRadius: 16, padding: '18px 12px 12px', overflowX: 'auto',
         }}>
