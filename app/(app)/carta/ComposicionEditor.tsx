@@ -2031,6 +2031,10 @@ function ItemRowInline({
 }) {
   const [showResults, setShowResults] = useState(false)
   const [opsOpen, setOpsOpen] = useState(false)
+  // Producción (prioridad/plaza/cantidad) colapsada por defecto en un ítem
+  // recién creado ("Texto libre" no debería obligar a llenar todo esto para
+  // poder terminar) — si ya tiene algo cargado, arranca abierta.
+  const [prodOpen, setProdOpen] = useState(() => !!(item.plaza || item.prioridad !== 'media' || item.cantidad != null || item.variante))
   const [showPreview, setShowPreview] = useState(false)
   const [previewSearchResult, setPreviewSearchResult] = useState<{ nombre: string; ingredientes: { nombre: string; cantidad: number; unidad: string }[] } | null>(null)
   // Solo hace falta para el selector de plaza reducido en evento (ver esEvento).
@@ -2218,6 +2222,31 @@ function ItemRowInline({
             </div>
           )}
 
+          {/* Nota libre — instrucción puntual sobre este componente, distinta
+              de la receta en sí ("freír en la freidora chica"). Viaja al
+              mise (checklist_items.nota) y a la tarea (tareas.nota) al
+              activar, para que no se pierda entre la carga y la cocina.
+              Arriba de Producción a propósito: cargar "Texto libre" es
+              justamente escribir un nombre y, a veces, esta nota — sin
+              obligar a pasar por prioridad/plaza/cantidad para terminar. */}
+          <label style={lbl}>Nota <span style={{ textTransform: 'none', fontWeight: 500, color: 'var(--text-3)' }}>(opcional — para quien lo va a hacer)</span></label>
+          <textarea value={item.nota ?? ''} onChange={e => onChange({ nota: e.target.value || null })}
+            placeholder="Ej: freír en la freidora chica"
+            rows={2} style={{ ...fieldInp, resize: 'vertical', fontFamily: 'inherit', marginBottom: 10 }} />
+
+          {/* Producción — prioridad/plaza/cantidad quedan colapsados por
+              defecto en un ítem nuevo (ver "Texto libre"): cargar una
+              anotación rápida no debería obligar a pasar por todo esto. Un
+              ítem que YA tiene algo cargado (se está reabriendo para editar)
+              arranca expandido — ver default de `prodOpen`. */}
+          {!prodOpen ? (
+            <button onClick={() => setProdOpen(true)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 11px', borderRadius: 9, border: '1px dashed var(--border)', background: 'none', color: 'var(--text-3)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
+              Agregar detalles de producción (prioridad, plaza, cantidad)
+            </button>
+          ) : (
+          <>
           {/* Producción — separa "qué es" (arriba) de "dónde/cuánto" (abajo);
               antes todo el bloque tenía el mismo peso visual gris. */}
           <div style={{ fontSize: 9, fontWeight: 800, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.08em', margin: '2px 2px 9px', paddingTop: 10, borderTop: '1px solid var(--border)' }}>
@@ -2357,15 +2386,8 @@ function ItemRowInline({
               )}
             </div>
           )}
-
-          {/* Nota libre — instrucción puntual sobre este componente, distinta
-              de la receta en sí ("freír en la freidora chica"). Viaja al
-              mise (checklist_items.nota) y a la tarea (tareas.nota) al
-              activar, para que no se pierda entre la carga y la cocina. */}
-          <label style={{ ...lbl, marginTop: 10 }}>Nota <span style={{ textTransform: 'none', fontWeight: 500, color: 'var(--text-3)' }}>(opcional — para quien lo va a hacer)</span></label>
-          <textarea value={item.nota ?? ''} onChange={e => onChange({ nota: e.target.value || null })}
-            placeholder="Ej: freír en la freidora chica"
-            rows={2} style={{ ...fieldInp, resize: 'vertical', fontFamily: 'inherit' }} />
+          </>
+          )}
         </div>
       )}
       {showPreview && recetaVinculada && (
