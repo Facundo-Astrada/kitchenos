@@ -177,8 +177,27 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     // 'todo' junta Carta+Menú+Evento — no filtra por modo, solo por fecha/estado.
     const todasHoyModo = tareas.filter((t) => (modo === 'todo' || t.modo === modo) && !t.parent_id && t.turno_fecha === today)
     const clavesHoyModo = new Set(todasHoyModo.map((t) => t.titulo.trim().toLowerCase()))
+
+    // ── Evento: el arrastre llega hasta el día del evento ──────────────────
+    // Un evento se cocina escalonado (menu_preparaciones.dias_antes): el fondo
+    // 3 días antes, el porcionado la víspera. Con el carryover de un solo día,
+    // un fondo que no se hizo el miércoles desaparecía del tablero el viernes
+    // y reaparecía recién como faltante el día del evento. Mientras el evento
+    // no pasó, lo pendiente sigue a la vista.
+    //
+    // "El evento no pasó todavía" se deduce de la lista que ya está en memoria
+    // (useTareas trae 60 días) — alguna tarea de ese menú cae hoy o después.
+    const eventosEnCurso = new Set<string>()
+    for (const t of tareas) {
+      if (t.modo === 'evento' && t.menu_id && (t.turno_fecha ?? '') >= today) eventosEnCurso.add(t.menu_id)
+    }
+    const arrastraDeEvento = (t: Tarea) =>
+      t.modo === 'evento' && !!t.menu_id && eventosEnCurso.has(t.menu_id)
+      && !!t.turno_fecha && t.turno_fecha < ayer
+
     const ayerCandidates = tareas.filter((t) =>
-      (modo === 'todo' || t.modo === modo) && !t.parent_id && t.turno_fecha === ayer && t.estado !== 'listo'
+      (modo === 'todo' || t.modo === modo) && !t.parent_id && t.estado !== 'listo'
+      && (t.turno_fecha === ayer || arrastraDeEvento(t))
     )
     // Si hoy ya existe una tarea con el mismo título (mismo modo), la de ayer es un
     // duplicado: se oculta acá y se borra de DB abajo (ver activarMenu, que ahora
@@ -186,7 +205,13 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     const ayerDuplicados: Tarea[] = []
     const ayerNoDuplicados: Tarea[] = []
     for (const t of ayerCandidates) {
-      if (clavesHoyModo.has(t.titulo.trim().toLowerCase())) ayerDuplicados.push(t)
+      if (clavesHoyModo.has(t.titulo.trim().toLowerCase())) {
+        // Solo se BORRA el duplicado estricto de ayer, que es el que dejaba
+        // activarMenu al recrear la fila de hoy. Una tarea de evento arrastrada
+        // de hace varios días se oculta, pero no se toca: es trabajo real que
+        // alguien cargó y del que nadie pidió deshacerse.
+        if (t.turno_fecha === ayer) ayerDuplicados.push(t)
+      }
       else ayerNoDuplicados.push(t)
     }
     const hoyCandidates = [...todasHoyModo, ...ayerNoDuplicados].sort((a, b) => {

@@ -14,7 +14,7 @@ import { PLAZA_TO_SECCION } from '@/components/mise/ProductoMiseCard'
 import SugerenciaProduccionSheet from '@/components/produccion/SugerenciaProduccionSheet'
 import { ConfirmSheet } from '@/components/ui'
 import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
-import { activarMenuParaFechas } from '@/lib/menus/activarMenu'
+import { activarMenuParaFechas, resumenActivacion } from '@/lib/menus/activarMenu'
 import { estadoMiseMenu } from '@/lib/ops/menuMise'
 import { tareaExistentePara } from '@/lib/ops/dedupeTareas'
 
@@ -149,13 +149,12 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
     setCargandoMenu(true)
     try {
       const supabase = createClient()
-      const { totalTareas, diasActivados, diasYaActivos } = await activarMenuParaFechas(supabase, RESTAURANTE_ID, menu, fechas)
+      const res = await activarMenuParaFechas(supabase, RESTAURANTE_ID, menu, fechas)
       refetchTareas()
       setShowMenuPicker(false)
       if (multiSelectMode) { setDiasSeleccionados(new Set()); setMultiSelectMode(false) }
-      if (diasActivados === 0) showToast('Ese menú ya estaba activo en los días elegidos')
-      else if (fechas.length === 1) showToast(`Menú activado · ${totalTareas} ${totalTareas === 1 ? 'tarea' : 'tareas'} en Producción`)
-      else showToast(`Menú activado en ${diasActivados} ${diasActivados === 1 ? 'día' : 'días'}${diasYaActivos > 0 ? ` (${diasYaActivos} ya activos)` : ''}`)
+      if (res.diasActivados === 0) showToast(fechas.length === 1 ? 'Ese menú ya estaba activo ese día' : 'Ese menú ya estaba activo en los días elegidos')
+      else showToast(`Menú activado · ${resumenActivacion(res)}${res.diasYaActivos > 0 ? ` (${res.diasYaActivos} ya activos)` : ''}`)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message
         : (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message)

@@ -17,7 +17,7 @@ import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { Modal } from '@/components/ui'
 import { useReducedMotion, DURATION, EASE_OUT } from '@/lib/ui/motion'
 import { createClient } from '@/lib/supabase/client'
-import { activarMenuParaFechas, rangoFechas } from '@/lib/menus/activarMenu'
+import { activarMenuParaFechas, rangoFechas, resumenActivacion } from '@/lib/menus/activarMenu'
 import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
 import { todasLasPlazas, plazaLabel, plazaColor } from '@/lib/constants'
 import type { Plaza } from '@/types'
@@ -236,12 +236,11 @@ export default function CalendarioPage() {
     try {
       const supabase = createClient()
       const fechas = rangoFechas(menuPlanDesde, menuPlanHasta)
-      const { totalTareas, diasActivados, diasYaActivos } = await activarMenuParaFechas(supabase, RESTAURANTE_ID, menu, fechas)
+      const res = await activarMenuParaFechas(supabase, RESTAURANTE_ID, menu, fechas)
       setShowMenuPlan(false)
       fetchEventos(currentMonth, currentYear)
-      if (diasActivados === 0) showToast('Ese menú ya estaba activo en esas fechas')
-      else if (fechas.length === 1) showToast(`Menú activado · ${totalTareas} ${totalTareas === 1 ? 'tarea' : 'tareas'} en Producción`)
-      else showToast(`Menú activado en ${diasActivados} ${diasActivados === 1 ? 'día' : 'días'}${diasYaActivos > 0 ? ` (${diasYaActivos} ya activos)` : ''}`)
+      if (res.diasActivados === 0) showToast('Ese menú ya estaba activo en esas fechas')
+      else showToast(`Menú activado · ${resumenActivacion(res)}${res.diasYaActivos > 0 ? ` (${res.diasYaActivos} ya activos)` : ''}`)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al activar el menú'
       showToast('Error: ' + msg)

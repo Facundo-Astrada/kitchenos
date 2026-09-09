@@ -4,6 +4,10 @@ import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
 import { sincronizarMiseDeMenu, desactivarMiseDeMenu, type SincronizarMiseResultado } from '@/lib/ops/menuMise'
+// Import de valor hacia activarMenu, que a su vez importa SOLO tipos de acá
+// (`import type`, borrado en compilación): no hay ciclo en runtime.
+import { fechaProduccion } from '@/lib/menus/activarMenu'
+import { hoyOperativo } from '@/lib/ops/turnos'
 
 export type MenuTipo = 'fijo' | 'evento'
 export type PrepTipo = 'plato' | 'receta' | 'producto' | null
@@ -34,6 +38,11 @@ export interface MenuPreparacion {
   // (sincronizarMiseDeMenu) y a tareas.nota al activar por fecha
   // (activarMenuParaFechas) — se carga acá, no después.
   nota: string | null
+  // Anticipación de ESTA preparación respecto del día del evento — sep 2026.
+  // 0 = el día del evento, 3 = tres días antes. Ver lib/menus/activarMenu.ts.
+  // Solo tiene sentido en un evento: el menú fijo entra al mise por vigencia,
+  // no por fecha a Producción.
+  dias_antes: number
 }
 
 export interface MenuConPreparaciones {
@@ -63,6 +72,9 @@ export interface MenuConPreparaciones {
   enMise: boolean
 }
 
+/** Fila mínima de `tareas` que la propagación de un menú editado necesita. */
+interface TareaActivada { id: string; titulo: string; turno_fecha: string; estado: string }
+
 // Datos de una preparación al crear/editar (sin id ni menu_id — se asignan al guardar)
 export interface PrepInput {
   paso: string
@@ -82,6 +94,7 @@ export interface PrepInput {
   peso_porcion?: number | null
   peso_porcion_unidad?: string | null
   nota?: string | null
+  dias_antes?: number | null
 }
 
 async function fetchMenusData(key: string): Promise<MenuConPreparaciones[]> {
@@ -178,6 +191,7 @@ export function useMenus() {
         peso_porcion: p.peso_porcion ?? null,
         peso_porcion_unidad: p.peso_porcion_unidad ?? null,
         nota: p.nota ?? null,
+        dias_antes: p.dias_antes ?? 0,
         orden: i,
       }))
       const { error: prepErr } = await supabase.from('menu_preparaciones').insert(rows)
@@ -227,6 +241,7 @@ export function useMenus() {
         peso_porcion: p.peso_porcion ?? null,
         peso_porcion_unidad: p.peso_porcion_unidad ?? null,
         nota: p.nota ?? null,
+        dias_antes: p.dias_antes ?? 0,
         orden: i,
       })),
     })
@@ -236,19 +251,81 @@ export function useMenus() {
     // Las tareas son un snapshot del menú al activarlo. Al editar el menú sincronizamos:
     // agregamos las preparaciones nuevas, refrescamos las existentes, y sacamos las
     // borradas SOLO si todavía no se empezaron (no se pisa trabajo ya hecho/en curso).
-    const hoy = new Date().toISOString().split('T')[0]
-    const { data: activadas } = await supabase
+    // hoyOperativo() y no new Date().toISOString(): a las 22:00 en Argentina el
+    // ISO en UTC ya es mañana, y el corte de jornada rueda a las 05:00.
+    const hoy = hoyOperativo()
+    const { data: activadasData } = await supabase
       .from('tareas')
       .select('id, titulo, turno_fecha, estado')
       .eq('menu_id', id)
       .is('parent_id', null)
       .gte('turno_fecha', hoy)
-    if (activadas && activadas.length > 0) {
-      const fechas = [...new Set((activadas as { turno_fecha: string }[]).map(t => t.turno_fecha))]
+    const activadas = (activadasData ?? []) as TareaActivada[]
+
+    // ── Evento con fecha: el cronograma manda ────────────────────────────
+    // Las fechas de trabajo se DERIVAN de fecha_evento − dias_antes, no de
+    // dónde quedaron las tareas. Sin esta rama, la lógica de menú fijo de
+    // abajo ("completar cada fecha activada con las preparaciones que le
+    // falten") metería las 14 preparaciones del evento en cada uno de los
+    // 4 días del cronograma: 56 tareas para 14 trabajos.
+    if (data.tipo === 'evento' && data.fecha_evento && activadas.length > 0) {
+      const clave = (t: string) => t.trim().toLowerCase()
+      const existentePorNombre = new Map(activadas.map(t => [clave(t.titulo), t]))
+      const vivos = new Set(preps.map(p => clave(p.nombre)))
+
+      const nuevas: Record<string, unknown>[] = []
+      const actualizaciones: { id: string; patch: Record<string, unknown> }[] = []
+      preps.forEach((p, i) => {
+        // Una preparación agregada con más anticipación de la que queda
+        // (evento el viernes, dias_antes=3, hoy jueves) cae en el pasado:
+        // se siembra hoy, que es el primer día en que todavía se puede hacer.
+        const objetivo = fechaProduccion(data.fecha_evento!, p.dias_antes)
+        const destino = objetivo < hoy ? hoy : objetivo
+        const existente = existentePorNombre.get(clave(p.nombre))
+        if (!existente) {
+          nuevas.push({
+            titulo: p.nombre, descripcion: data.nombre,
+            status: 'pendiente', estado: 'pendiente', prioridad: p.prioridad,
+            categoria: 'produccion', modo: 'evento', seccion: p.paso || 'general',
+            plaza: p.plaza, asignado_a: p.usuario_asignado,
+            receta_id: p.tipo === 'receta' ? p.ref_id : null,
+            cantidad: p.cantidad ?? null, nota: p.nota ?? null,
+            turno_fecha: destino, menu_id: id, orden: i,
+            restaurante_id: RESTAURANTE_ID,
+          })
+          return
+        }
+        // Mover de día solo lo que nadie empezó: si ya está en curso, listo o
+        // con duda, la fecha es un hecho del turno y no se pisa.
+        const mueve = existente.estado === 'pendiente' && existente.turno_fecha !== destino
+        actualizaciones.push({ id: existente.id, patch: {
+          prioridad: p.prioridad,
+          seccion: p.paso || 'general',
+          plaza: p.plaza,
+          receta_id: p.tipo === 'receta' ? p.ref_id : null,
+          cantidad: p.cantidad ?? null,
+          nota: p.nota ?? null,
+          ...(mueve ? { turno_fecha: destino } : {}),
+        } })
+      })
+      for (const u of actualizaciones) {
+        await supabase.from('tareas').update(u.patch).eq('id', u.id)
+      }
+      if (nuevas.length > 0) await supabase.from('tareas').insert(nuevas)
+
+      // Sacadas del menú: se borran solo si nadie las empezó.
+      const aBorrar = activadas.filter(t => !vivos.has(clave(t.titulo)) && t.estado === 'pendiente').map(t => t.id)
+      if (aBorrar.length > 0) await supabase.from('tareas').delete().in('id', aBorrar)
+
+      await fetchMenus()
+      return
+    }
+
+    if (activadas.length > 0) {
+      const fechas = [...new Set(activadas.map(t => t.turno_fecha))]
       const prepByName = new Map(preps.map(p => [p.nombre, p]))
       for (const f of fechas) {
-        const existentes = (activadas as { id: string; titulo: string; turno_fecha: string; estado: string }[])
-          .filter(t => t.turno_fecha === f)
+        const existentes = activadas.filter(t => t.turno_fecha === f)
         const existentesNombres = new Set(existentes.map(t => t.titulo))
         // AGREGAR las preparaciones que aún no existen en esa fecha
         const nuevas = preps
@@ -305,6 +382,7 @@ export function useMenus() {
       cantidad: p.cantidad, unidad: p.unidad, variante: p.variante,
       cantidad_ops: p.cantidad_ops, unidad_ops: p.unidad_ops, recipiente_nombre: p.recipiente_nombre,
       peso_porcion: p.peso_porcion, peso_porcion_unidad: p.peso_porcion_unidad, nota: p.nota,
+      dias_antes: p.dias_antes,
     }))
     return await crearMenu({
       nombre: `Copia de ${menu.nombre}`,

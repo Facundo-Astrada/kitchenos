@@ -25,7 +25,7 @@ import { gramajeDesdeCantidadOps } from '@/lib/recetas/peso'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { clasificarIngenieriaMenu, buildVentasMap, mapaCuadrantePorId, QUAD_META } from '@/lib/carta/ingenieriaMenu'
 import { sincronizarMiseDeMenu } from '@/lib/ops/menuMise'
-import { activarMenuParaFechas } from '@/lib/menus/activarMenu'
+import { activarMenuParaFechas, resumenActivacion } from '@/lib/menus/activarMenu'
 import { Toast, FlipCard } from '@/components/ui'
 import { fmtMoney, fcBadge, marginBadge, PlatoCard, PlatoCardBack, PlatoCardSkeleton } from './cards'
 import { exportCartaPDF, exportRentabilidadPDF } from './exportar'
@@ -517,6 +517,7 @@ export default function CartaPage() {
         peso_porcion: it.peso_porcion ?? null,
         peso_porcion_unidad: it.peso_porcion_unidad ?? null,
         nota: it.nota ?? null,
+        dias_antes: it.dias_antes ?? 0,
       })))
       const data = {
         nombre: payload.nombre,
@@ -554,8 +555,9 @@ export default function CartaPage() {
       // de entrada visible desde Carta — ver adenda 2026-08-20).
       if (newEventoId && payload.tipo === 'evento' && data.fecha_evento && RESTAURANTE_ID) {
         const supaActivar = createClient()
-        await activarMenuParaFechas(supaActivar, RESTAURANTE_ID, { id: newEventoId, tipo: 'evento', nombre: data.nombre, preparaciones: preps }, [data.fecha_evento])
-        setToast(`Evento guardado y activado en Producción para el ${new Date(data.fecha_evento + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}`)
+        const resAct = await activarMenuParaFechas(supaActivar, RESTAURANTE_ID, { id: newEventoId, tipo: 'evento', nombre: data.nombre, preparaciones: preps }, [data.fecha_evento])
+        const fechaTxt = new Date(data.fecha_evento + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })
+        setToast(`Evento del ${fechaTxt} · ${resumenActivacion(resAct)}`)
       } else {
         setToast(payload.tipo === 'evento' ? 'Evento guardado' : 'Menú guardado')
       }
@@ -606,6 +608,7 @@ export default function CartaPage() {
           peso_porcion: p.peso_porcion,
           peso_porcion_unidad: p.peso_porcion_unidad,
           nota: p.nota,
+          dias_antes: p.dias_antes,
         })),
       })),
     }

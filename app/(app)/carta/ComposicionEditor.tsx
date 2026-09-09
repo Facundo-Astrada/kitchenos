@@ -12,6 +12,7 @@ import { SegmentedTabs } from '@/components/ui'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import { fileToBase64, callRecetaImport, matchPorNombre, type RecetaIAResult } from '@/lib/recetas/iaImport'
 import { moverItemSobreItem, moverItemASeccion } from '@/lib/carta/reordenarItems'
+import { fechaProduccion } from '@/lib/menus/activarMenu'
 import { RecetaEditSheet } from '@/components/recetas/RecetaEditSheet'
 import type { RecetaConCosto } from '@/lib/hooks/useRecetas'
 import type { ProductoConEstado } from '@/lib/hooks/useStock'
@@ -43,6 +44,10 @@ export interface CompItemOut {
   // separada de la receta en sí: es una instrucción puntual para este
   // plato/menú, no algo que valga para todas las veces que se usa la receta.
   nota?: string | null
+  // Cuántos días ANTES del evento se cocina esto (0 = el mismo día). Solo
+  // eventos: es lo que reparte las preparaciones en un cronograma en vez de
+  // volcarlas todas el día del servicio. Ver lib/menus/activarMenu.ts.
+  dias_antes?: number | null
 }
 export interface CompPayload {
   tipo: CompModo
@@ -130,6 +135,21 @@ const TAG_CFG: Record<string, { label: string; bg: string; color: string }> = {
 const fmtMoney = (n: number) => n > 0 ? `$${Math.round(n).toLocaleString('es-AR')}` : '—'
 
 interface ItemRow extends CompItemOut { _uid: number; _seccion: string }
+
+// ── Anticipación de una preparación de evento ───────────────────────────
+// Hasta 5 días: más que eso ya no es mise sino congelado o compra, y eso se
+// planifica en Stock/Pedidos, no en la ficha del evento.
+const ANTICIPACIONES: { dias: number; label: string }[] = [
+  { dias: 0, label: 'Mismo día' },
+  { dias: 1, label: '1 día antes' },
+  { dias: 2, label: '2 días' },
+  { dias: 3, label: '3 días' },
+  { dias: 4, label: '4 días' },
+  { dias: 5, label: '5 días' },
+]
+function fmtDiaCorto(iso: string): string {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' })
+}
 let _u = 0
 const uid = () => ++_u
 
@@ -1498,6 +1518,7 @@ export default function ComposicionEditor({
                           onCantidadCommitted={() => { setAutoFocusCantidadUid(null); setTimeout(() => searchRef.current?.focus(), 60) }}
                           plazaControl={plazaControl || undefined}
                           esEvento={modo === 'evento'}
+                          fechaEvento={fechaEvento || undefined}
                           onEditReceta={(id, nombre) => setEditRecetaSheet({ id, nombre })}
                         />
                       </div>
@@ -2095,7 +2116,7 @@ function PlatoRecetasEditor({
 // ════════════════════════════════════════════════════════════
 function ItemRowInline({
   item, expanded, onToggle, onChange, onRemove, recetas, productos, cartaItems, variantes, draftRecetaIds, recipientesUsados,
-  autoFocusCantidad, onCantidadCommitted, plazaControl, onEditReceta, esEvento,
+  autoFocusCantidad, onCantidadCommitted, plazaControl, onEditReceta, esEvento, fechaEvento,
 }: {
   item: ItemRow
   expanded: boolean
@@ -2121,6 +2142,10 @@ function ItemRowInline({
   // panel OPS completo se perderían en silencio. Con esEvento, el panel se
   // reduce a elegir plaza.
   esEvento?: boolean
+  // Día del evento — solo para mostrar en qué fecha real cae la anticipación
+  // elegida ("3 días antes → mié 9 sep"). Sin fecha cargada, los chips se
+  // eligen igual y el cronograma se resuelve al activar.
+  fechaEvento?: string
 }) {
   const [showResults, setShowResults] = useState(false)
   const [opsOpen, setOpsOpen] = useState(false)
@@ -2217,8 +2242,15 @@ function ItemRowInline({
             {isDraft && <span style={{ fontSize: 8, fontWeight: 800, padding: '1px 5px', borderRadius: 99, background: 'rgba(220,38,38,.1)', color: 'var(--red-fg)', textTransform: 'uppercase', letterSpacing: '.04em', flexShrink: 0 }}>a realizar</span>}
             {item.nota && <span className="material-symbols-outlined" title={item.nota} style={{ fontSize: 13, color: '#d97706', flexShrink: 0 }}>sticky_note_2</span>}
           </div>
-          {!expanded && (plazaEfectiva || item.seccion_mise || item.variante) && (
+          {!expanded && (plazaEfectiva || item.seccion_mise || item.variante || (esEvento && !!item.dias_antes)) && (
             <div style={{ display: 'flex', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
+              {/* La anticipación va primera: en un evento es el dato que
+                  ordena el trabajo, más que la plaza o la prioridad. */}
+              {esEvento && !!item.dias_antes && (
+                <span style={{ fontSize: 9, fontWeight: 800, padding: '1px 6px', borderRadius: 99, background: 'rgba(217,119,6,.13)', color: '#b45309' }}>
+                  −{item.dias_antes} {item.dias_antes === 1 ? 'día' : 'días'}
+                </span>
+              )}
               {item.variante && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(139,92,246,.12)', color: '#7c3aed' }}>{item.variante}</span>}
               {plazaEfectiva && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(67,97,160,.1)', color: 'var(--accent)', textTransform: 'capitalize' }}>{plazaCfg?.label ?? plazaEfectiva}</span>}
               {/* Prioridad solo tiene sentido leerla de un vistazo cuando el ítem
@@ -2392,6 +2424,31 @@ function ItemRowInline({
                   </button>
                 ))}
               </div>
+
+              {/* Cuándo se cocina — reparte las preparaciones del evento en un
+                  cronograma en vez de volcarlas todas el día del servicio.
+                  Es lo único que hace que un evento se pueda ir produciendo
+                  desde días antes (ver lib/menus/activarMenu.ts). */}
+              <label style={lbl}>Cuándo se produce <span style={{ textTransform: 'none', fontWeight: 500, color: 'var(--text-3)' }}>(respecto del día del evento)</span></label>
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: fechaEvento ? 4 : 10 }}>
+                {ANTICIPACIONES.map(a => {
+                  const activo = (item.dias_antes ?? 0) === a.dias
+                  return (
+                    <button key={a.dias} type="button" onClick={() => onChange({ dias_antes: a.dias })}
+                      style={{ padding: '5px 11px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                        background: activo ? 'rgba(217,119,6,.13)' : 'var(--bg)',
+                        color: activo ? '#b45309' : 'var(--text-3)',
+                        outline: activo ? '1.5px solid rgba(217,119,6,.4)' : '1px solid var(--border)' }}>
+                      {a.label}
+                    </button>
+                  )
+                })}
+              </div>
+              {fechaEvento && (
+                <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10 }}>
+                  Se cocina el <strong style={{ color: 'var(--text-2)', textTransform: 'capitalize' }}>{fmtDiaCorto(fechaProduccion(fechaEvento, item.dias_antes))}</strong>
+                </div>
+              )}
             </>
           ) : (
           <>
