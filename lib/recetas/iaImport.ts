@@ -60,6 +60,30 @@ export interface RecetaIAResult {
   procedimiento: string[]
 }
 
+export function normalizeNombre(s: string): string {
+  return s.toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ')
+}
+
+/**
+ * Auto-match simple de un nombre extraído por IA contra una lista ya
+ * cargada (stock, recetas) — mismo criterio que
+ * `/api/recetas/auto-link-ingredientes` pero client-side, para sugerir sin
+ * pegarle a un endpoint que opera sobre TODAS las recetas del restaurante.
+ * Compartido entre el import de un plato/menú nuevo (ComposicionEditor) y
+ * el de ingredientes de una receta ya existente (RecetaEditSheet).
+ */
+export function matchPorNombre<T extends { nombre: string }>(nombre: string, candidatos: T[]): T | null {
+  const norm = normalizeNombre(nombre)
+  if (!norm) return null
+  const exact = candidatos.find(c => normalizeNombre(c.nombre) === norm)
+  if (exact) return exact
+  const contains = candidatos.find(c => {
+    const cn = normalizeNombre(c.nombre)
+    return cn.includes(norm) || norm.includes(cn)
+  })
+  return contains ?? null
+}
+
 export async function callRecetaImport(
   mode: 'image' | 'text',
   /**

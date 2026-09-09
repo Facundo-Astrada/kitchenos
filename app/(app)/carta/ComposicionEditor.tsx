@@ -10,7 +10,7 @@ import { createClient } from '@/lib/supabase/client'
 import OpsPanel, { type OpsResult } from '@/components/ops/OpsPanel'
 import { SegmentedTabs } from '@/components/ui'
 import PhotoPicker from '@/components/ui/PhotoPicker'
-import { fileToBase64, callRecetaImport, type RecetaIAResult } from '@/lib/recetas/iaImport'
+import { fileToBase64, callRecetaImport, matchPorNombre, type RecetaIAResult } from '@/lib/recetas/iaImport'
 import { RecetaEditSheet } from '@/components/recetas/RecetaEditSheet'
 import type { RecetaConCosto } from '@/lib/hooks/useRecetas'
 import type { ProductoConEstado } from '@/lib/hooks/useStock'
@@ -185,23 +185,10 @@ const UNIDADES_ING = ['kg', 'g', 'l', 'ml', 'u']
 // stock antes de guardar (la IA solo propone un punto de partida).
 interface IaIngRow { nombre: string; cantidad: string; unidad: string; productoId: string | null }
 
-function normalizeNombre(s: string): string {
-  return s.toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ')
-}
-
-// Auto-match simple contra el stock ya cargado (mismo criterio que
-// /api/recetas/auto-link-ingredientes pero client-side, para sugerir sin
-// pegarle a un endpoint que opera sobre TODAS las recetas del restaurante).
+// Auto-match contra el stock/recetas ya cargados — helper compartido con
+// RecetaEditSheet (ver lib/recetas/iaImport.ts), acá con el nombre histórico.
 function matchProducto(nombre: string, productos: RefConCosto[]): RefConCosto | null {
-  const norm = normalizeNombre(nombre)
-  if (!norm) return null
-  const exact = productos.find(p => normalizeNombre(p.nombre) === norm)
-  if (exact) return exact
-  const contains = productos.find(p => {
-    const pn = normalizeNombre(p.nombre)
-    return pn.includes(norm) || norm.includes(pn)
-  })
-  return contains ?? null
+  return matchPorNombre(nombre, productos)
 }
 
 function buildIaRows(r: RecetaIAResult, productos: RefConCosto[]): IaIngRow[] {
@@ -755,12 +742,15 @@ export default function ComposicionEditor({
     if (draggingItemUid == null) return
     const dragged = items.find(it => it._uid === draggingItemUid)
     if (!dragged) return
+    const x = e.clientX
     const y = e.clientY
+    // 1) ¿Sobre otro ítem? — se ubica en su lugar; si es de otra sección, migra
+    // también la sección (ver pedido: mover de Entrada a Principal arrastrando).
     for (const [uidStr, el] of Object.entries(itemRefs.current)) {
       const targetUid = Number(uidStr)
       if (!el || targetUid === draggingItemUid) continue
       const target = items.find(it => it._uid === targetUid)
-      if (!target || target._seccion !== dragged._seccion) continue
+      if (!target) continue
       const rect = el.getBoundingClientRect()
       if (y >= rect.top && y <= rect.bottom) {
         setItems(prev => {
@@ -769,10 +759,27 @@ export default function ComposicionEditor({
           if (from === -1 || to === -1 || from === to) return prev
           const next = [...prev]
           const [moved] = next.splice(from, 1)
-          next.splice(to, 0, moved)
+          next.splice(to, 0, { ...moved, _seccion: target._seccion })
           return next
         })
-        break
+        return
+      }
+    }
+    // 2) Ningún ítem puntual debajo del cursor pero sí dentro de OTRA
+    // sección (área vacía, header, botón "Agregar") — lo manda al final de esa.
+    for (const [secName, el] of Object.entries(seccionRefs.current)) {
+      if (!el || secName === dragged._seccion) continue
+      const rect = el.getBoundingClientRect()
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        setItems(prev => {
+          const from = prev.findIndex(it => it._uid === draggingItemUid)
+          if (from === -1) return prev
+          const next = [...prev]
+          const [moved] = next.splice(from, 1)
+          next.push({ ...moved, _seccion: secName })
+          return next
+        })
+        return
       }
     }
   }
@@ -1857,13 +1864,20 @@ function PlatoRecetasEditor({
                   </button>
                 </div>
 
-                {/* Panel de nota inline */}
+                {/* Panel de nota inline — marco ámbar para que no se pierda
+                    entre gramaje/OPS (mismo color que el ícono de la fila). */}
                 {notaActiva && (
                   <div style={{ padding: '10px 14px', borderBottom: (idx < platoRecetas.length - 1 || opsActiva) ? '1px solid var(--border)' : 'none', background: 'var(--surface)' }}>
-                    <textarea autoFocus value={pr.nota ?? ''}
-                      onChange={e => setPlatoRecetas(prev => prev.map(x => x._uid === pr._uid ? { ...x, nota: e.target.value || null } : x))}
-                      placeholder="Ej: freír en la freidora chica" rows={2}
-                      style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 12, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
+                    <div style={{ border: '1.5px solid rgba(217,119,6,.35)', background: 'rgba(217,119,6,.06)', borderRadius: 10, padding: 8 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: '#d97706', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 13 }}>sticky_note_2</span>
+                        Nota
+                      </label>
+                      <textarea autoFocus value={pr.nota ?? ''}
+                        onChange={e => setPlatoRecetas(prev => prev.map(x => x._uid === pr._uid ? { ...x, nota: e.target.value || null } : x))}
+                        placeholder="Ej: freír en la freidora chica" rows={2}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(217,119,6,.35)', background: 'var(--bg)', fontSize: 12, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
+                    </div>
                   </div>
                 )}
 
@@ -2228,11 +2242,18 @@ function ItemRowInline({
               activar, para que no se pierda entre la carga y la cocina.
               Arriba de Producción a propósito: cargar "Texto libre" es
               justamente escribir un nombre y, a veces, esta nota — sin
-              obligar a pasar por prioridad/plaza/cantidad para terminar. */}
-          <label style={lbl}>Nota <span style={{ textTransform: 'none', fontWeight: 500, color: 'var(--text-3)' }}>(opcional — para quien lo va a hacer)</span></label>
-          <textarea value={item.nota ?? ''} onChange={e => onChange({ nota: e.target.value || null })}
-            placeholder="Ej: freír en la freidora chica"
-            rows={2} style={{ ...fieldInp, resize: 'vertical', fontFamily: 'inherit', marginBottom: 10 }} />
+              obligar a pasar por prioridad/plaza/cantidad para terminar.
+              Con marco propio (mismo ámbar que el ícono de la fila colapsada)
+              para que no se pierda entre el resto de los campos. */}
+          <div style={{ border: '1.5px solid rgba(217,119,6,.35)', background: 'rgba(217,119,6,.06)', borderRadius: 10, padding: 10, marginBottom: 10 }}>
+            <label style={{ ...lbl, display: 'flex', alignItems: 'center', gap: 4, color: '#d97706' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>sticky_note_2</span>
+              Nota <span style={{ textTransform: 'none', fontWeight: 500, color: 'var(--text-3)' }}>(opcional — para quien lo va a hacer)</span>
+            </label>
+            <textarea value={item.nota ?? ''} onChange={e => onChange({ nota: e.target.value || null })}
+              placeholder="Ej: freír en la freidora chica"
+              rows={2} style={{ ...fieldInp, resize: 'vertical', fontFamily: 'inherit', border: '1px solid rgba(217,119,6,.35)' }} />
+          </div>
 
           {/* Producción — prioridad/plaza/cantidad quedan colapsados por
               defecto en un ítem nuevo (ver "Texto libre"): cargar una

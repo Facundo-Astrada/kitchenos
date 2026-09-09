@@ -11,16 +11,35 @@
 // "enrich" de /api/recetas/save (reemplaza todos los ingredientes de la
 // receta — ya usado por el import IA).
 // ════════════════════════════════════════════════════════════
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useSheetOpen } from '@/lib/ui/chrome'
 import type { RecetaConCosto } from '@/lib/hooks/useRecetas'
+import { fileToBase64, callRecetaImport, matchPorNombre, type RecetaIAResult } from '@/lib/recetas/iaImport'
 import {
   CargaRapidaIngredientes, TotalesRapidosBar, filasToIngredientesData,
   nuevaFilaRapida, type FilaIngredienteRapido,
 } from './CargaRapidaIngredientes'
 
 interface StockItem { id: string; nombre: string; unidad: string; precio_unitario: number }
+
+const iaMiniBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, flex: 1, padding: '7px 8px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-2)', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }
+
+// Convierte lo que devuelve la IA (foto/texto) en filas de
+// CargaRapidaIngredientes, matcheando contra el stock ya cargado — mismo
+// criterio que el import de un plato/menú nuevo (ver ComposicionEditor).
+function iaIngredientesAFilas(ingredientes: RecetaIAResult['ingredientes'], stockProductos: StockItem[]): FilaIngredienteRapido[] {
+  return ingredientes.filter(i => i.nombre?.trim()).map(i => {
+    const match = matchPorNombre(i.nombre, stockProductos)
+    return {
+      ...nuevaFilaRapida(),
+      nombre: i.nombre.trim(),
+      cantidad: String(i.cantidad ?? '').replace('.', ','),
+      unidad: match?.unidad || i.unidad || 'kg',
+      costoUnitario: match?.precio_unitario ?? 0,
+    }
+  })
+}
 
 export function RecetaEditSheet({
   recetaId, recetaNombre, stockProductos, recetasDisponibles, onClose, onSaved,
@@ -39,6 +58,55 @@ export function RecetaEditSheet({
   const [filas, setFilas] = useState<FilaIngredienteRapido[]>([])
   const [porciones, setPorciones] = useState(1)
   const [saving, setSaving] = useState(false)
+
+  // Cargar ingredientes con IA (foto/texto) — antes solo se podía tipear fila
+  // por fila con "+ Agregar fila"; el mismo atajo que ya existe al crear una
+  // receta nueva desde el buscador de Carta faltaba acá, para completar una
+  // que ya existe pero llegó vacía (idea/draft).
+  const [iaBusy, setIaBusy] = useState(false)
+  const [iaError, setIaError] = useState('')
+  const [iaTextOpen, setIaTextOpen] = useState(false)
+  const [iaText, setIaText] = useState('')
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const galleryRef = useRef<HTMLInputElement>(null)
+
+  function aplicarResultadoIA(r: RecetaIAResult) {
+    const nuevas = iaIngredientesAFilas(r.ingredientes, stockProductos)
+    if (nuevas.length > 0) {
+      setFilas(prev => {
+        const conNombre = prev.filter(f => f.nombre.trim())
+        return [...conNombre, ...nuevas]
+      })
+    }
+    if (r.porciones && r.porciones > 0) setPorciones(r.porciones)
+  }
+
+  async function runIaImage(file: File) {
+    setIaBusy(true); setIaError('')
+    try {
+      const { base64, media_type } = await fileToBase64(file)
+      const r = await callRecetaImport('image', { image_base64: base64, media_type })
+      aplicarResultadoIA(r)
+    } catch (e) {
+      setIaError(e instanceof Error ? e.message : 'Error al analizar la imagen')
+    } finally {
+      setIaBusy(false)
+    }
+  }
+
+  async function runIaText() {
+    if (!iaText.trim()) return
+    setIaBusy(true); setIaError('')
+    try {
+      const r = await callRecetaImport('text', { text: iaText.trim() })
+      aplicarResultadoIA(r)
+      setIaText(''); setIaTextOpen(false)
+    } catch (e) {
+      setIaError(e instanceof Error ? e.message : 'Error al analizar el texto')
+    } finally {
+      setIaBusy(false)
+    }
+  }
 
   useEffect(() => {
     let cancel = false
@@ -104,6 +172,45 @@ export function RecetaEditSheet({
           ) : (
             <>
               <TotalesRapidosBar filas={filas} porciones={porciones} />
+
+              {/* Cargar con IA — foto de la receta anotada/libro/pantalla, o
+                  texto pegado. Suma filas a las que ya haya, no las pisa. */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: iaTextOpen || iaError ? 8 : 10 }}>
+                <button onClick={() => cameraRef.current?.click()} disabled={iaBusy} style={{ ...iaMiniBtn, opacity: iaBusy ? .6 : 1 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 15 }}>{iaBusy ? 'progress_activity' : 'photo_camera'}</span>
+                  Foto
+                </button>
+                <button onClick={() => galleryRef.current?.click()} disabled={iaBusy} style={{ ...iaMiniBtn, opacity: iaBusy ? .6 : 1 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 15 }}>image</span>
+                  Galería
+                </button>
+                <button onClick={() => setIaTextOpen(v => !v)} disabled={iaBusy} style={{ ...iaMiniBtn, opacity: iaBusy ? .6 : 1, ...(iaTextOpen ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : {}) }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 15 }}>content_paste</span>
+                  Texto
+                </button>
+              </div>
+              {iaTextOpen && (
+                <div style={{ marginBottom: 10 }}>
+                  <textarea autoFocus value={iaText} onChange={e => setIaText(e.target.value)}
+                    placeholder="Pegá la lista de ingredientes (de una nota, Instagram, etc.)"
+                    rows={3} style={{ width: '100%', padding: 9, borderRadius: 9, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 12, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none', resize: 'vertical', boxSizing: 'border-box', marginBottom: 6 }} />
+                  <button onClick={runIaText} disabled={iaBusy || !iaText.trim()}
+                    style={{ width: '100%', padding: '8px', borderRadius: 9, border: 'none', background: 'var(--navy)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: iaBusy ? 'default' : 'pointer', fontFamily: 'inherit', opacity: iaBusy || !iaText.trim() ? .6 : 1 }}>
+                    {iaBusy ? 'Analizando…' : 'Analizar con IA'}
+                  </button>
+                </div>
+              )}
+              {iaError && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px', borderRadius: 9, background: 'rgba(220,38,38,.08)', color: 'var(--red-fg)', fontSize: 11, marginBottom: 10 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 15 }}>error</span>
+                  {iaError}
+                </div>
+              )}
+              <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) runIaImage(f) }} />
+              <input ref={galleryRef} type="file" accept="image/*" style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) runIaImage(f) }} />
+
               <CargaRapidaIngredientes
                 filas={filas}
                 onChange={setFilas}
