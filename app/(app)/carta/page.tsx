@@ -547,6 +547,10 @@ export default function CartaPage() {
     } catch (e) {
       console.error('[Carta] handleComposicionSave error:', e)
       setToast('Error al guardar: ' + (e instanceof Error ? e.message : 'desconocido'))
+      // Re-lanzar: ComposicionEditor necesita saber que falló para NO borrar
+      // el borrador local (si no, un error de red se lleva puesto el trabajo
+      // sin guardar, justo lo que el borrador existe para evitar).
+      throw e
     }
   }
 
@@ -759,6 +763,7 @@ export default function CartaPage() {
           recetasFull={recetas}
           productosStock={productos}
           onRecetaActualizada={refetchRecetas}
+          draftId={composing.menuEditId}
         />
         {toast && <Toast msg={toast} onDone={() => setToast('')} />}
       </>

@@ -279,6 +279,30 @@ export function useMenus() {
     await fetchMenus()
   }, [RESTAURANTE_ID, fetchMenus]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Duplicar — "el menú del sábado con 3 cambios" sin rehacerlo de cero.
+  // No hereda fecha ni vigencia: la copia arranca inactiva/sin agendar, el
+  // chef la revisa y recién ahí decide cuándo entra. ──
+  const duplicarMenu = useCallback(async (menu: MenuConPreparaciones): Promise<string | null> => {
+    const preps: PrepInput[] = menu.preparaciones.map(p => ({
+      paso: p.paso, tipo: p.tipo, ref_id: p.ref_id, nombre: p.nombre, prioridad: p.prioridad,
+      plaza: p.plaza, seccion_mise: p.seccion_mise, usuario_asignado: p.usuario_asignado,
+      cantidad: p.cantidad, unidad: p.unidad, variante: p.variante,
+      cantidad_ops: p.cantidad_ops, unidad_ops: p.unidad_ops, recipiente_nombre: p.recipiente_nombre,
+      peso_porcion: p.peso_porcion, peso_porcion_unidad: p.peso_porcion_unidad,
+    }))
+    return await crearMenu({
+      nombre: `Copia de ${menu.nombre}`,
+      tipo: menu.tipo,
+      descripcion: menu.descripcion,
+      fecha_evento: null,
+      vigencia_desde: null,
+      vigencia_hasta: null,
+      plaza_control: menu.plaza_control,
+      variantes: menu.variantes,
+      precio: menu.precio,
+    }, preps)
+  }, [crearMenu])
+
   // ── Soft-delete ──
   const eliminarMenu = useCallback(async (id: string) => {
     const { error } = await supabase.from('menus').update({ activo: false }).eq('id', id)
@@ -299,5 +323,5 @@ export function useMenus() {
     await fetchMenus()
   }, [fetchMenus]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { menus, loading, fetchMenus, crearMenu, actualizarMenu, eliminarMenu, activarEnMise, desactivarEnMise }
+  return { menus, loading, fetchMenus, crearMenu, actualizarMenu, duplicarMenu, eliminarMenu, activarEnMise, desactivarEnMise }
 }

@@ -27,7 +27,7 @@ export default function MenusView({
   onEditar: (menu: MenuConPreparaciones) => void
   onToast: (msg: string) => void
 }) {
-  const { menus, loading, eliminarMenu, activarEnMise, desactivarEnMise } = useMenus()
+  const { menus, loading, eliminarMenu, duplicarMenu, activarEnMise, desactivarEnMise } = useMenus()
   const [tipoFilter, setTipoFilter] = useState<MenuTipo | 'todos'>('todos')
 
   const filtered = useMemo(
@@ -69,6 +69,10 @@ export default function MenusView({
             {filtered.map(menu => (
               <MenuCard key={menu.id} menu={menu}
                 onEdit={() => onEditar(menu)}
+                onDuplicar={async () => {
+                  try { await duplicarMenu(menu); onToast(`"Copia de ${menu.nombre}" creada arriba de la lista`) }
+                  catch (e) { onToast('Error al duplicar: ' + (e instanceof Error ? e.message : 'desconocido')) }
+                }}
                 onDelete={async () => {
                   if (!confirm(`¿Eliminar el menú “${menu.nombre}”?`)) return
                   try { await eliminarMenu(menu.id); onToast('Menú eliminado') }
@@ -96,14 +100,20 @@ export default function MenusView({
 }
 
 // ── Card de menú en la lista ──
-function MenuCard({ menu, onEdit, onDelete, onActivarMise, onSacarMise }: {
+function MenuCard({ menu, onEdit, onDuplicar, onDelete, onActivarMise, onSacarMise }: {
   menu: MenuConPreparaciones
   onEdit: () => void
+  onDuplicar: () => Promise<void>
   onDelete: () => void
   onActivarMise: () => Promise<void>
   onSacarMise: () => Promise<void>
 }) {
   const [miseSaving, setMiseSaving] = useState(false)
+  const [duplicando, setDuplicando] = useState(false)
+  async function handleDuplicar() {
+    setDuplicando(true)
+    try { await onDuplicar() } finally { setDuplicando(false) }
+  }
   const porSeccion = useMemo(() => {
     const m = new Map<string, number>()
     for (const p of menu.preparaciones) m.set(p.paso, (m.get(p.paso) ?? 0) + 1)
@@ -203,6 +213,10 @@ function MenuCard({ menu, onEdit, onDelete, onActivarMise, onSacarMise }: {
             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>playlist_add_check</span> Activar en el mise
           </button>
         )}
+        <button onClick={handleDuplicar} disabled={duplicando} title="Duplicar"
+          style={{ padding: '8px 12px', background: 'none', border: 'none', borderRight: '1px solid var(--border)', cursor: duplicando ? 'default' : 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--text-3)', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4, opacity: duplicando ? .6 : 1 }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{duplicando ? 'progress_activity' : 'content_copy'}</span>
+        </button>
         <button onClick={onDelete} style={{ padding: '8px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#ef4444', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
         </button>

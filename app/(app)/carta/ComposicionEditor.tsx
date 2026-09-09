@@ -507,8 +507,8 @@ function RecetaIAModal({ prefillNombre, productos, restauranteId, categoriasCart
 // COMPOSICION EDITOR — un solo editor para Plato / Menú / Evento
 // ════════════════════════════════════════════════════════════
 export default function ComposicionEditor({
-  inicial, recetas, productos, cartaItems, categoriasCarta, draftRecetaIds = new Set(), recipientesUsados = [], onSave, onCancel,
-  recetasFull, productosStock, onRecetaActualizada,
+  inicial: inicialProp, recetas, productos, cartaItems, categoriasCarta, draftRecetaIds = new Set(), recipientesUsados = [], onSave, onCancel,
+  recetasFull, productosStock, onRecetaActualizada, draftId,
 }: {
   inicial?: CompInicial
   recetas: RefConCosto[]
@@ -525,10 +525,36 @@ export default function ComposicionEditor({
   recetasFull?: RecetaConCosto[]
   productosStock?: ProductoConEstado[]
   onRecetaActualizada?: () => void
+  // Identidad estable de "qué se está editando" — el id real del menú/evento
+  // cuando ya existe. Sin esto (plato nuevo, menú nuevo) el borrador queda
+  // bajo una clave fija por modo — alcanza porque solo hay una sesión de alta
+  // abierta a la vez.
+  draftId?: string
 }) {
   useSheetOpen()
   const RESTAURANTE_ID = useRestauranteId()
   const { isAdmin } = usePermisos()
+
+  // ── Borrador local — autosave sin fricción (ver "Vamos con el 1"). El
+  // editor vivía 100% en memoria: la X o cerrar la pestaña borraba todo. Cada
+  // cambio se persiste a localStorage bajo esta clave; al reabrir la MISMA
+  // sesión (mismo plato/menú/evento, o el mismo hueco "nuevo X") se recupera
+  // sola. Se limpia recién cuando `onSave` resuelve sin error. ──
+  const draftKey = `kos-carta-draft-${draftId ?? 'nuevo-' + (inicialProp?.modo ?? 'plato')}`
+  const [draftRecuperado, setDraftRecuperado] = useState(false)
+  const inicial = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(draftKey)
+      if (raw) {
+        const draft = JSON.parse(raw) as CompInicial
+        setDraftRecuperado(true)
+        return draft
+      }
+    } catch { /* localStorage no disponible o JSON corrupto — sigue con el inicial real */ }
+    return inicialProp
+    // Solo al montar: es la sesión de edición que arrancó con este componente.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function crearIdeaReceta(nombre: string): Promise<string> {
     if (!RESTAURANTE_ID) throw new Error('Sin sesión')
@@ -686,6 +712,43 @@ export default function ComposicionEditor({
     }
   }
   function handleSecDragEnd() { setDraggingSec(null) }
+
+  // ── Drag & drop de ítems dentro de una sección — el menú se piensa en
+  // orden de servicio, no en orden de carga. Solo reordena dentro de la
+  // misma sección (cambiar de sección ya se hace desvinculando/creando). ──
+  const itemRefs = useRef<Record<number, HTMLDivElement | null>>({})
+  const [draggingItemUid, setDraggingItemUid] = useState<number | null>(null)
+  function handleItemDragStart(e: React.PointerEvent, uid_: number) {
+    e.preventDefault()
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    setDraggingItemUid(uid_)
+  }
+  function handleItemDragMove(e: React.PointerEvent) {
+    if (draggingItemUid == null) return
+    const dragged = items.find(it => it._uid === draggingItemUid)
+    if (!dragged) return
+    const y = e.clientY
+    for (const [uidStr, el] of Object.entries(itemRefs.current)) {
+      const targetUid = Number(uidStr)
+      if (!el || targetUid === draggingItemUid) continue
+      const target = items.find(it => it._uid === targetUid)
+      if (!target || target._seccion !== dragged._seccion) continue
+      const rect = el.getBoundingClientRect()
+      if (y >= rect.top && y <= rect.bottom) {
+        setItems(prev => {
+          const from = prev.findIndex(it => it._uid === draggingItemUid)
+          const to = prev.findIndex(it => it._uid === targetUid)
+          if (from === -1 || to === -1 || from === to) return prev
+          const next = [...prev]
+          const [moved] = next.splice(from, 1)
+          next.splice(to, 0, moved)
+          return next
+        })
+        break
+      }
+    }
+  }
+  function handleItemDragEnd() { setDraggingItemUid(null) }
 
   // ── Estado exclusivo para modo plato (UI simplificada) ──
   const [platoRecetas, setPlatoRecetas] = useState<PlatoItem[]>(() => {
@@ -891,8 +954,62 @@ export default function ComposicionEditor({
         variantes: esPlato ? [] : variantes,
         precio: precioN, categoria, tags, secciones: secs,
       })
-    } finally { setSaving(false) }
+      // Guardado con éxito — el borrador ya no hace falta. Si `onSave` lanza
+      // (error de red, RLS, etc.) no se llega acá: el borrador queda para
+      // reintentar en vez de perderse.
+      try { localStorage.removeItem(draftKey) } catch { /* localStorage no disponible */ }
+    } catch { /* el toast de error ya lo muestra la pantalla que llama a onSave */ }
+    finally { setSaving(false) }
   }
+
+  // ── Autosave del borrador — misma forma que CompInicial, pero SIN filtrar
+  // ítems sin nombre todavía (a diferencia de `secs` en handleSave): un
+  // ítem a medio completar es justo el caso que no se puede perder. ──
+  const puedeGuardar = !saving && !!nombre.trim() && (esPlato || !(vigenciaDesde && vigenciaHasta && vigenciaHasta < vigenciaDesde))
+  useEffect(() => {
+    const hayContenido = nombre.trim().length > 0 || (esPlato ? platoRecetas.length > 0 : items.some(it => it.nombre.trim()))
+    if (!hayContenido) return
+    const t = setTimeout(() => {
+      const draft: CompInicial = {
+        modo, nombre, descripcion, fechaEvento: fechaEvento || null,
+        vigenciaDesde: vigenciaDesde || null, vigenciaHasta: vigenciaHasta || null,
+        plazaControl: plazaControl || null, variantes, precio: precioN, categoria, tags,
+        secciones: esPlato
+          ? [{
+              nombre: 'Recetas',
+              items: platoRecetas.map(pr => ({
+                _uid: pr._uid, tipo: pr.tipo, ref_id: pr.ref_id, nombre: pr.nombre,
+                prioridad: 'media' as const, plaza: pr.opsPlaza ?? null, seccion_mise: pr.opsSeccion ?? null,
+                usuario_asignado: null, cantidad: pr.porciones, unidad: null, variante: null,
+                cantidad_ops: pr.opsCantidad ?? null, unidad_ops: pr.opsUnidad ?? null,
+                recipiente_nombre: pr.opsRecipienteNombre ?? null, recipiente_cantidad: pr.opsRecipienteCantidad ?? null,
+                peso_porcion: pr.opsPesoPorcion ?? null, peso_porcion_unidad: pr.opsPesoPorcionUnidad ?? null,
+              })),
+            }]
+          : secciones.map(nombreSec => ({
+              nombre: nombreSec,
+              items: items.filter(it => it._seccion === nombreSec).map(({ _seccion, ...rest }) => rest),
+            })),
+      }
+      try { localStorage.setItem(draftKey, JSON.stringify(draft)) } catch { /* localStorage lleno o no disponible — el borrador es una comodidad, no la fuente de verdad */ }
+    }, 400)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modo, nombre, descripcion, fechaEvento, vigenciaDesde, vigenciaHasta, plazaControl, variantes, precioN, categoria, tags, secciones, items, platoRecetas, esPlato, draftKey])
+
+  // Ctrl/Cmd+S — el chef que carga esto en notebook, entre otras pestañas,
+  // espera guardar con el teclado sin buscar el botón verde.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        if (puedeGuardar) handleSave()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [puedeGuardar])
 
   const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 14, color: 'var(--text-1)', fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }
 
@@ -923,6 +1040,28 @@ export default function ComposicionEditor({
           onChange={cambiarModo}
         />
       </div>
+
+      {/* Borrador recuperado — autosave silencioso, sin diálogo al cerrar
+          (ver "Vamos con el 1"): esto es lo único que avisa que lo que se ve
+          no es una sesión en blanco. */}
+      {draftRecuperado && (
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', background: 'rgba(217,119,6,.1)', borderBottom: '1px solid rgba(217,119,6,.25)' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 15, color: '#d97706', flexShrink: 0 }}>history</span>
+          <span style={{ flex: 1, fontSize: 11, color: '#92400e', fontWeight: 600 }}>Recuperamos cambios sin guardar de la vez anterior.</span>
+          <button
+            onClick={() => {
+              if (!confirm('¿Descartar el borrador y empezar de nuevo?')) return
+              try { localStorage.removeItem(draftKey) } catch { /* no disponible */ }
+              onCancel()
+            }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#92400e', textDecoration: 'underline', fontFamily: 'inherit', flexShrink: 0, padding: 0 }}>
+            Descartar
+          </button>
+          <button onClick={() => setDraftRecuperado(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#92400e', display: 'flex', padding: 0, flexShrink: 0 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>close</span>
+          </button>
+        </div>
+      )}
 
       {/* Resumen vivo */}
       <div style={{ flexShrink: 0, background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '6px 12px 8px' }}>
@@ -1181,20 +1320,36 @@ export default function ComposicionEditor({
                   </div>
 
                   {rows.map(it => (
-                    <ItemRowInline key={it._uid} item={it}
-                      expanded={expandedUid === it._uid}
-                      onToggle={() => setExpandedUid(expandedUid === it._uid ? null : it._uid)}
-                      onChange={patch => updateItem(it._uid, patch)}
-                      onRemove={() => removeItem(it._uid)}
-                      recetas={recetas} productos={productos} cartaItems={cartaItems}
-                      variantes={variantes}
-                      draftRecetaIds={allDraftIds}
-                      recipientesUsados={recipientesUsados}
-                      autoFocusCantidad={autoFocusCantidadUid === it._uid}
-                      onCantidadCommitted={() => { setAutoFocusCantidadUid(null); setTimeout(() => searchRef.current?.focus(), 60) }}
-                      plazaControl={plazaControl || undefined}
-                      onEditReceta={(id, nombre) => setEditRecetaSheet({ id, nombre })}
-                    />
+                    <div key={it._uid} ref={el => { itemRefs.current[it._uid] = el }}
+                      style={{ display: 'flex', alignItems: 'stretch', background: draggingItemUid === it._uid ? 'rgba(67,97,160,.06)' : 'transparent' }}>
+                      {/* Reordenar dentro de la sección — el menú se piensa en
+                          orden de servicio, no en orden de carga. */}
+                      <span
+                        onPointerDown={e => handleItemDragStart(e, it._uid)}
+                        onPointerMove={handleItemDragMove}
+                        onPointerUp={handleItemDragEnd}
+                        onPointerCancel={handleItemDragEnd}
+                        className="material-symbols-outlined"
+                        style={{ fontSize: 15, color: 'var(--text-3)', cursor: 'grab', touchAction: 'none', flexShrink: 0, padding: '0 2px 0 8px', display: 'flex', alignItems: 'center' }}>
+                        drag_indicator
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <ItemRowInline item={it}
+                          expanded={expandedUid === it._uid}
+                          onToggle={() => setExpandedUid(expandedUid === it._uid ? null : it._uid)}
+                          onChange={patch => updateItem(it._uid, patch)}
+                          onRemove={() => removeItem(it._uid)}
+                          recetas={recetas} productos={productos} cartaItems={cartaItems}
+                          variantes={variantes}
+                          draftRecetaIds={allDraftIds}
+                          recipientesUsados={recipientesUsados}
+                          autoFocusCantidad={autoFocusCantidadUid === it._uid}
+                          onCantidadCommitted={() => { setAutoFocusCantidadUid(null); setTimeout(() => searchRef.current?.focus(), 60) }}
+                          plazaControl={plazaControl || undefined}
+                          onEditReceta={(id, nombre) => setEditRecetaSheet({ id, nombre })}
+                        />
+                      </div>
+                    </div>
                   ))}
 
                   {activeSearch === sec ? (
@@ -1259,11 +1414,21 @@ export default function ComposicionEditor({
                       </div>
                     </div>
                   ) : (
-                    <button onClick={() => openSectionSearch(sec)}
-                      style={{ width: '100%', padding: '9px', background: 'none', border: 'none', borderTop: rows.length > 0 ? '1px solid var(--border)' : 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
-                      Agregar a {sec}
-                    </button>
+                    <div style={{ display: 'flex', borderTop: rows.length > 0 ? '1px solid var(--border)' : 'none' }}>
+                      <button onClick={() => openSectionSearch(sec)}
+                        style={{ flex: 1, padding: '9px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add</span>
+                        Agregar a {sec}
+                      </button>
+                      {/* Texto libre — para lo que no es receta ni producto de
+                          stock (ej. "pan de la panadería"): crea el ítem vacío
+                          y abre su editor, que ya deja escribir sin vincular. */}
+                      <button onClick={() => addItem(sec)} title="Anotar algo sin vincular a receta o stock"
+                        style={{ padding: '9px 12px', background: 'none', border: 'none', borderLeft: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 15 }}>edit_note</span>
+                        Texto libre
+                      </button>
+                    </div>
                   )}
                 </div>
               )
