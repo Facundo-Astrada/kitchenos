@@ -730,95 +730,106 @@ export default function ComposicionEditor({
   function handleSecDragEnd() { setDraggingSec(null) }
 
   // ── Drag & drop de ítems, dentro de una sección o entre secciones (ej:
-  // Entrada → Principal) — el menú se piensa en orden de servicio, no en
-  // orden de carga. Además de reordenar el array (handleItemDragMove de
-  // abajo), hay tres ayudas para que el gesto se sienta "agarrado" en vez de
-  // adivinado: un ícono flotante que sigue al cursor, la sección destino
-  // resaltada, y auto-scroll cuando el cursor se acerca al borde del body
-  // (las secciones lejos, arriba o abajo, antes eran inalcanzables sin
-  // soltar y scrollear a mano). ──
+  // Entrada → Principal). La primera versión reordenaba `items` (setState de
+  // TODO el array) y leía getBoundingClientRect de cada fila en el propio
+  // handler de pointermove — eso corre por evento nativo (mucho más seguido
+  // que 60fps con mouse/trackpad), así que cada pixel de movimiento
+  // re-renderizaba el editor completo. Se sentía trabado.
+  //
+  // Ahora: pointermove SOLO escribe la posición en una ref (gratis, sin
+  // render). Todo el trabajo caro — mover el preview flotante, auto-scroll,
+  // el hit-test de a qué ítem/sección corresponde — vive en un ÚNICO loop de
+  // requestAnimationFrame, acotado a una vez por frame. Y `items` recién se
+  // muta UNA vez, al soltar (antes se reordenaba en cada hover — además de
+  // caro, sumaba el "quirk" de posición de reordenarItems.ts cada vez que el
+  // cursor pasaba de largo por un ítem que no era el destino final). ──
   const itemRefs = useRef<Record<number, HTMLDivElement | null>>({})
   const bodyScrollRef = useRef<HTMLDivElement | null>(null)
+  const ghostRef = useRef<HTMLDivElement | null>(null)
   const [draggingItemUid, setDraggingItemUid] = useState<number | null>(null)
-  const [dragPointer, setDragPointer] = useState<{ x: number; y: number } | null>(null)
   const [dragOverSeccion, setDragOverSeccion] = useState<string | null>(null)
   const dragPointerRef = useRef<{ x: number; y: number } | null>(null)
-  const autoScrollRafRef = useRef<number | null>(null)
+  const dragTargetRef = useRef<{ seccion: string; itemUid: number | null } | null>(null)
+  const dragRafRef = useRef<number | null>(null)
 
-  function startAutoScroll() {
-    if (autoScrollRafRef.current != null) return
+  function stopItemDragLoop() {
+    if (dragRafRef.current != null) cancelAnimationFrame(dragRafRef.current)
+    dragRafRef.current = null
+  }
+  function startItemDragLoop(draggedUid: number) {
     const EDGE = 56
     const tick = () => {
       const p = dragPointerRef.current
-      const el = bodyScrollRef.current
-      if (p && el) {
-        const rect = el.getBoundingClientRect()
-        if (p.y < rect.top + EDGE && p.y > rect.top) el.scrollTop -= 12
-        else if (p.y > rect.bottom - EDGE && p.y < rect.bottom) el.scrollTop += 12
+      if (p) {
+        // Preview flotante — transform en vez de left/top: no dispara layout.
+        if (ghostRef.current) ghostRef.current.style.transform = `translate(${p.x + 16}px, ${p.y - 14}px)`
+        // Auto-scroll cerca de los bordes del body — antes una sección fuera
+        // de vista era inalcanzable sin soltar y scrollear a mano.
+        const bodyEl = bodyScrollRef.current
+        if (bodyEl) {
+          const rect = bodyEl.getBoundingClientRect()
+          if (p.y < rect.top + EDGE && p.y > rect.top) bodyEl.scrollTop -= 12
+          else if (p.y > rect.bottom - EDGE && p.y < rect.bottom) bodyEl.scrollTop += 12
+        }
+        // Hit-test — una vez por frame, no una vez por evento nativo.
+        let nuevoTarget: { seccion: string; itemUid: number | null } | null = null
+        for (const [uidStr, el] of Object.entries(itemRefs.current)) {
+          const targetUid = Number(uidStr)
+          if (!el || targetUid === draggedUid) continue
+          const target = items.find(it => it._uid === targetUid)
+          if (!target) continue
+          const r = el.getBoundingClientRect()
+          if (p.y >= r.top && p.y <= r.bottom) { nuevoTarget = { seccion: target._seccion, itemUid: targetUid }; break }
+        }
+        if (!nuevoTarget) {
+          for (const [secName, el] of Object.entries(seccionRefs.current)) {
+            if (!el) continue
+            const r = el.getBoundingClientRect()
+            if (p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom) { nuevoTarget = { seccion: secName, itemUid: null }; break }
+          }
+        }
+        const prevTarget = dragTargetRef.current
+        if (prevTarget?.seccion !== nuevoTarget?.seccion || prevTarget?.itemUid !== nuevoTarget?.itemUid) {
+          dragTargetRef.current = nuevoTarget
+          setDragOverSeccion(nuevoTarget?.seccion ?? null)
+        }
       }
-      autoScrollRafRef.current = requestAnimationFrame(tick)
+      dragRafRef.current = requestAnimationFrame(tick)
     }
-    autoScrollRafRef.current = requestAnimationFrame(tick)
-  }
-  function stopAutoScroll() {
-    if (autoScrollRafRef.current != null) cancelAnimationFrame(autoScrollRafRef.current)
-    autoScrollRafRef.current = null
+    dragRafRef.current = requestAnimationFrame(tick)
   }
 
   function handleItemDragStart(e: React.PointerEvent, uid_: number) {
     e.preventDefault()
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-    setDraggingItemUid(uid_)
+    // Colapsa el editor si estaba abierto — arrastrar un ítem expandido (con
+    // su textarea de nota, chips de prioridad, etc.) es mucho más pesado de
+    // repintar en cada frame, y el preview flotante termina superpuesto con
+    // sus propios campos.
+    setExpandedUid(prev => (prev === uid_ ? null : prev))
+    dragTargetRef.current = null
     dragPointerRef.current = { x: e.clientX, y: e.clientY }
-    setDragPointer(dragPointerRef.current)
-    startAutoScroll()
+    setDraggingItemUid(uid_)
+    startItemDragLoop(uid_)
   }
   function handleItemDragMove(e: React.PointerEvent) {
-    if (draggingItemUid == null) return
     dragPointerRef.current = { x: e.clientX, y: e.clientY }
-    setDragPointer(dragPointerRef.current)
-    const dragged = items.find(it => it._uid === draggingItemUid)
-    if (!dragged) return
-    const x = e.clientX
-    const y = e.clientY
-    // Se resetea y solo queda si alguno de los dos chequeos de abajo matchea
-    // — si no, el cursor está en un área sin destino válido (header, "Nueva
-    // sección"…) y no debe quedar una sección resaltada de forma colgada.
-    setDragOverSeccion(null)
-    // 1) ¿Sobre otro ítem? — se ubica en su lugar; si es de otra sección, migra
-    // también la sección (ver pedido: mover de Entrada a Principal arrastrando).
-    for (const [uidStr, el] of Object.entries(itemRefs.current)) {
-      const targetUid = Number(uidStr)
-      if (!el || targetUid === draggingItemUid) continue
-      const target = items.find(it => it._uid === targetUid)
-      if (!target) continue
-      const rect = el.getBoundingClientRect()
-      if (y >= rect.top && y <= rect.bottom) {
-        setDragOverSeccion(target._seccion)
-        setItems(prev => moverItemSobreItem(prev, draggingItemUid, targetUid))
-        return
-      }
-    }
-    // 2) Ningún ítem puntual debajo del cursor pero sí dentro de OTRA
-    // sección (área vacía, header, botón "Agregar") — lo manda al final de esa.
-    for (const [secName, el] of Object.entries(seccionRefs.current)) {
-      if (!el || secName === dragged._seccion) continue
-      const rect = el.getBoundingClientRect()
-      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-        setDragOverSeccion(secName)
-        setItems(prev => moverItemASeccion(prev, draggingItemUid, secName))
-        return
-      }
-    }
   }
   function handleItemDragEnd() {
+    if (draggingItemUid != null && dragTargetRef.current) {
+      const { seccion, itemUid } = dragTargetRef.current
+      const draggedUid = draggingItemUid
+      setItems(prev => itemUid != null
+        ? moverItemSobreItem(prev, draggedUid, itemUid)
+        : moverItemASeccion(prev, draggedUid, seccion))
+    }
     setDraggingItemUid(null)
-    setDragPointer(null)
     setDragOverSeccion(null)
     dragPointerRef.current = null
-    stopAutoScroll()
+    dragTargetRef.current = null
+    stopItemDragLoop()
   }
-  useEffect(() => () => stopAutoScroll(), [])
+  useEffect(() => () => stopItemDragLoop(), [])
 
   // ── Estado exclusivo para modo plato (UI simplificada) ──
   const [platoRecetas, setPlatoRecetas] = useState<PlatoItem[]>(() => {
@@ -1619,13 +1630,18 @@ export default function ComposicionEditor({
       )}
       {/* Preview flotante del ítem arrastrado — sigue al cursor/dedo para que
           el gesto se sienta "agarrado" en vez de adivinado, sobre todo
-          cruzando a otra sección que puede estar lejos en el scroll. */}
-      {draggingItemUid != null && dragPointer && (() => {
+          cruzando a otra sección que puede estar lejos en el scroll. La
+          posición la escribe directo el loop de rAF (`ghostRef.current.style.
+          transform`), no un re-render por frame — el `transform` inicial de
+          acá solo evita un parpadeo en (0,0) el primer instante. */}
+      {draggingItemUid != null && (() => {
         const dragged = items.find(it => it._uid === draggingItemUid)
         if (!dragged) return null
+        const p = dragPointerRef.current
         return (
-          <div style={{
-            position: 'fixed', left: dragPointer.x + 16, top: dragPointer.y - 14,
+          <div ref={ghostRef} style={{
+            position: 'fixed', left: 0, top: 0,
+            transform: p ? `translate(${p.x + 16}px, ${p.y - 14}px)` : 'translate(-9999px,-9999px)',
             zIndex: 2000, pointerEvents: 'none',
             display: 'flex', alignItems: 'center', gap: 6,
             maxWidth: 220, padding: '7px 12px', borderRadius: 10,
