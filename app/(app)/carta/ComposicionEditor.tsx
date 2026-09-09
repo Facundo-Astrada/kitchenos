@@ -2152,7 +2152,10 @@ function ItemRowInline({
   // Producción (prioridad/plaza/cantidad) colapsada por defecto en un ítem
   // recién creado ("Texto libre" no debería obligar a llenar todo esto para
   // poder terminar) — si ya tiene algo cargado, arranca abierta.
-  const [prodOpen, setProdOpen] = useState(() => !!(item.plaza || item.prioridad !== 'media' || item.cantidad != null || item.variante))
+  // `dias_antes` cuenta como "ya tiene algo cargado": si no, un ítem de evento
+  // al que solo se le puso la anticipación reabría con el bloque colapsado y
+  // parecía vacío.
+  const [prodOpen, setProdOpen] = useState(() => !!(item.plaza || item.prioridad !== 'media' || item.cantidad != null || item.variante || item.dias_antes))
   const [showPreview, setShowPreview] = useState(false)
   const [previewSearchResult, setPreviewSearchResult] = useState<{ nombre: string; ingredientes: { nombre: string; cantidad: number; unidad: string }[] } | null>(null)
   // Solo hace falta para el selector de plaza reducido en evento (ver esEvento).
