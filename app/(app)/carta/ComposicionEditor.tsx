@@ -10,6 +10,9 @@ import { createClient } from '@/lib/supabase/client'
 import OpsPanel, { type OpsResult } from '@/components/ops/OpsPanel'
 import { SegmentedTabs } from '@/components/ui'
 import { fileToBase64, callRecetaImport, type RecetaIAResult } from '@/lib/recetas/iaImport'
+import { RecetaEditSheet } from '@/components/recetas/RecetaEditSheet'
+import type { RecetaConCosto } from '@/lib/hooks/useRecetas'
+import type { ProductoConEstado } from '@/lib/hooks/useStock'
 
 // ── Tipos públicos ──────────────────────────────────────────
 export type CompModo = 'plato' | 'menu' | 'evento'
@@ -118,10 +121,12 @@ const uid = () => ++_u
 
 // ── Vista rápida de receta — modal centrado al tocar el ícono de recetario
 // en un ítem vinculado (producto + cantidad, sin salir del editor). ──
-function RecetaPreviewModal({ nombre, ingredientes, onClose }: {
+function RecetaPreviewModal({ nombre, ingredientes, onClose, onCrear }: {
   nombre: string
   ingredientes: { nombre: string; cantidad: number; unidad: string }[]
   onClose: () => void
+  /** Si se pasa, ofrece crear/cargar los ingredientes al toque cuando la receta está vacía — mismo editor que usa Carta en un plato específico. */
+  onCrear?: () => void
 }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -135,7 +140,15 @@ function RecetaPreviewModal({ nombre, ingredientes, onClose }: {
         </div>
         <div style={{ overflowY: 'auto' }}>
           {ingredientes.length === 0 ? (
-            <div style={{ padding: '20px 16px', fontSize: 13, color: 'var(--text-3)', textAlign: 'center' }}>Esta receta todavía no tiene ingredientes cargados en el recetario.</div>
+            <div style={{ padding: '20px 16px', textAlign: 'center' }}>
+              <div style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: onCrear ? 12 : 0 }}>Esta receta todavía no tiene ingredientes cargados en el recetario.</div>
+              {onCrear && (
+                <button onClick={onCrear} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, border: 'none', background: 'var(--navy)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add_circle</span>
+                  Crear receta
+                </button>
+              )}
+            </div>
           ) : ingredientes.map((ing, i) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '9px 16px', borderBottom: i < ingredientes.length - 1 ? '1px solid var(--border)' : 'none' }}>
               <span style={{ fontSize: 13, color: 'var(--text-1)' }}>{ing.nombre}</span>
@@ -495,6 +508,7 @@ function RecetaIAModal({ prefillNombre, productos, restauranteId, categoriasCart
 // ════════════════════════════════════════════════════════════
 export default function ComposicionEditor({
   inicial, recetas, productos, cartaItems, categoriasCarta, draftRecetaIds = new Set(), recipientesUsados = [], onSave, onCancel,
+  recetasFull, productosStock, onRecetaActualizada,
 }: {
   inicial?: CompInicial
   recetas: RefConCosto[]
@@ -505,6 +519,12 @@ export default function ComposicionEditor({
   recipientesUsados?: string[]
   onSave: (payload: CompPayload) => Promise<void>
   onCancel: () => void
+  // Datos completos (no el RefConCosto liviano de arriba) para poder abrir el
+  // editor de ingredientes de una receta (RecetaEditSheet) al vuelo — el mismo
+  // que usa Carta en un plato específico — sin salir de este editor.
+  recetasFull?: RecetaConCosto[]
+  productosStock?: ProductoConEstado[]
+  onRecetaActualizada?: () => void
 }) {
   useSheetOpen()
   const RESTAURANTE_ID = useRestauranteId()
@@ -521,6 +541,11 @@ export default function ComposicionEditor({
     if (!res.ok) throw new Error(json.error || 'Error al crear receta')
     return json.id as string
   }
+
+  // Editor de ingredientes de una receta ya vinculada (RecetaEditSheet) — se
+  // abre desde el botón "Crear receta" del preview cuando todavía no tiene
+  // ingredientes cargados, sin salir de este editor.
+  const [editRecetaSheet, setEditRecetaSheet] = useState<{ id: string; nombre: string } | null>(null)
 
   // Recetas-idea creadas en esta sesión del editor (draft) → se pintan en rojo
   // al instante, sin esperar el revalidate de useRecetas.
@@ -1168,6 +1193,7 @@ export default function ComposicionEditor({
                       autoFocusCantidad={autoFocusCantidadUid === it._uid}
                       onCantidadCommitted={() => { setAutoFocusCantidadUid(null); setTimeout(() => searchRef.current?.focus(), 60) }}
                       plazaControl={plazaControl || undefined}
+                      onEditReceta={(id, nombre) => setEditRecetaSheet({ id, nombre })}
                     />
                   ))}
 
@@ -1265,6 +1291,16 @@ export default function ComposicionEditor({
       )}
       {previewResult && (
         <RecetaPreviewModal nombre={previewResult.nombre} ingredientes={previewResult.ingredientes} onClose={() => setPreviewResult(null)} />
+      )}
+      {editRecetaSheet && (
+        <RecetaEditSheet
+          recetaId={editRecetaSheet.id}
+          recetaNombre={editRecetaSheet.nombre}
+          stockProductos={productosStock ?? []}
+          recetasDisponibles={recetasFull ?? []}
+          onClose={() => setEditRecetaSheet(null)}
+          onSaved={() => onRecetaActualizada?.()}
+        />
       )}
     </div>
   )
@@ -1629,7 +1665,7 @@ function PlatoRecetasEditor({
 // ════════════════════════════════════════════════════════════
 function ItemRowInline({
   item, expanded, onToggle, onChange, onRemove, recetas, productos, cartaItems, variantes, draftRecetaIds, recipientesUsados,
-  autoFocusCantidad, onCantidadCommitted, plazaControl,
+  autoFocusCantidad, onCantidadCommitted, plazaControl, onEditReceta,
 }: {
   item: ItemRow
   expanded: boolean
@@ -1647,6 +1683,9 @@ function ItemRowInline({
   // Plaza de control del menú (ver ComposicionEditor) — si está cargada, se
   // fuerza en el OpsPanel de este ítem en vez de dejar elegir plaza.
   plazaControl?: string
+  // Abre RecetaEditSheet para la receta vinculada — botón "Crear receta" del
+  // preview cuando todavía no tiene ingredientes.
+  onEditReceta?: (recetaId: string, nombre: string) => void
 }) {
   const [showResults, setShowResults] = useState(false)
   const [opsOpen, setOpsOpen] = useState(false)
@@ -1954,7 +1993,12 @@ function ItemRowInline({
         </div>
       )}
       {showPreview && recetaVinculada && (
-        <RecetaPreviewModal nombre={recetaVinculada.nombre} ingredientes={recetaVinculada.ingredientes ?? []} onClose={() => setShowPreview(false)} />
+        <RecetaPreviewModal
+          nombre={recetaVinculada.nombre}
+          ingredientes={recetaVinculada.ingredientes ?? []}
+          onClose={() => setShowPreview(false)}
+          onCrear={onEditReceta ? () => { setShowPreview(false); onEditReceta(recetaVinculada.id, recetaVinculada.nombre) } : undefined}
+        />
       )}
       {previewSearchResult && (
         <RecetaPreviewModal nombre={previewSearchResult.nombre} ingredientes={previewSearchResult.ingredientes} onClose={() => setPreviewSearchResult(null)} />

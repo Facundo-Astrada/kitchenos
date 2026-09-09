@@ -756,6 +756,9 @@ export default function CartaPage() {
           recipientesUsados={recipientesUsados}
           onSave={handleComposicionSave}
           onCancel={() => setComposing(null)}
+          recetasFull={recetas}
+          productosStock={productos}
+          onRecetaActualizada={refetchRecetas}
         />
         {toast && <Toast msg={toast} onDone={() => setToast('')} />}
       </>
