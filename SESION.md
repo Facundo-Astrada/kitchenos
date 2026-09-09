@@ -1,55 +1,56 @@
-# Sesión — 2026-09-08
+# Sesión — 2026-09-09
 
 ## Qué se cerró
-- Lluvia de ideas de Facundo sobre 10+ pantallas, ejecutada entera en 9 bloques (0 a 8),
-  9 commits (`282d327`…`1a184f9`) pusheados uno por uno con build+tsc+lint+verificación
-  visual real (Playwright, ambos temas) antes de cada push.
-- **Bloque 0**: Dashboard sin banners de plata, calendario al panel desktop, scrollbars
-  ocultas (6 pantallas), bug de datos real en Bros (`carta_categorias` duplicadas).
-- **Bloque 1**: modo oscuro roto por el doble rol de `--navy` — split en `--navy`/`--navy-ink`.
-- **Bloque 2**: Merma + 11 sheets más al `Modal` canónico.
-- **Bloque 3**: HACCP Limpieza rediseñada (multi-día, registro por fecha, sub-tabs) — de
-  paso corrigió un bug real de doble-registro por doble-tap (race condition, fix con SWR
-  `optimisticData`).
-- **Bloque 4**: Turnos de grilla de letras a planilla real (horas editables, bloques
-  coloreados, copiar semana anterior).
-- **Bloque 5**: Mesa de Trabajo con color real (`seccionTipoColor()` nuevo).
-- **Bloque 6**: tarjetas "¿Cómo se lee esto?" en Reportes (4 tabs) y Presupuesto (3 bloques).
-- **Bloque 7**: Calendario+Bitácora — Modal para el form de evento, shared-axis en cambio
-  de mes/semana, swipe con chevrons visibles, leyenda colapsable, rail de color + shadow
-  en Bitácora, botón archivar.
-- **Bloque 8**: modo oscuro etapa B — 4 pares de tokens pastel (`--red/-amber/-green/-blue-bg/-fg`),
-  354 reemplazos en 47 archivos vía script + 3 rondas de revisión manual (self-reference en
-  globals.css, texto translúcido en dos chips, 8 botones sólidos + 3 paletas de avatar que
-  no debían tokenizarse — todos revertidos a hex literal).
-- `PENDIENTES.md` podado (Modal: quedan 2 copias, no 3; sacado el ítem de contraste navy en
-  oscuro, ya resuelto por el Bloque 1). `.claude/docs/ui.md` § Variables de color reescrita
-  con la regla completa de cuándo NO tokenizar (botón sólido+texto blanco, `color`, paletas
-  categóricas).
+- Auditoría completa de carga de Plato/Menú/Evento en Carta (12 puntos) + drag 2D en
+  Mise, 9 commits (`1a56f70`…`8f571d2`) pusheados uno por uno con typecheck+Vitest+build
+  antes de cada push.
+- Botón "Crear receta" en el preview de un ítem de Menú/Evento sin ingredientes (pedido
+  inicial), después auditoría completa: borrador local + Ctrl/Cmd+S, pegar lista completa
+  de ítems (WhatsApp/notas), foto del plato al crearlo, drag para reordenar y migrar de
+  sección (con preview flotante + auto-scroll + rAF para que no se sienta trabado), "Texto
+  libre" expuesto, "Duplicar" menú/evento, nota libre por ítem (viaja al mise/tarea al
+  activar), comensales del evento (`menus.pax`), activar Producción directo al guardar un
+  evento con fecha, panel OPS recortado en modo Evento, IA en `RecetaEditSheet`.
+- Mismo drag llevado a Mise (pedido aparte, screenshot con la grilla de desktop): mouse
+  además de touch, hit-test 2D en la grilla — antes 1D y sin mouse, por eso la grilla se
+  limitaba a "donde no hay drag".
+- 4 rondas de ajuste sobre feedback real (Texto libre abría todo Producción, drag sin
+  feedback visual, drag trabado) resueltas en la misma sesión, no dejadas para después.
+- Migraciones: `menus.pax`, `menu_preparaciones.nota`, `plato_recetas.nota`, `tareas.nota`.
+  Extraído `lib/carta/reordenarItems.ts` y `lib/ops/miseReorder.ts` (con tests) para no
+  duplicar la geometría del drag ni seguir engordando `ClientView.tsx` (tiene techo de
+  líneas).
+- `PENDIENTES.md`, `ESTADO-ACTUAL.md`, `.claude/docs/rls.md`, `.claude/docs/ui.md`,
+  `.claude/docs/columnas.md` actualizados — detalle completo en `HISTORIAL.md`.
 
 ## Qué quedó a medias
-- **El swipe de Calendario (Bloque 7) usa `drag` de `motion/react` a mano**, no el patrón
-  de scroll-snap nativo que `ui.md` § "Tabs con swipe" recomienda — ese patrón asume N tabs
-  fijos, y un carrusel de fecha "infinita" necesitaría 3 paneles con recentrado tras cada
-  snap. No se resolvió esa reconciliación, y **el gesto de arrastre real no se probó con
-  Playwright** (solo el click de los chevrons y la animación resultante).
-- Bloque 8: el script tocó 47 archivos por coincidencia de hex, no por revisión ítem a
-  ítem — cubrí las 3 categorías de falso-positivo que encontré (self-reference, texto
-  translúcido, contraste de botón/paleta), pero no hay garantía de que sea el 100%; si
-  aparece un botón o chip que se ve "raro" en oscuro, es el primer sospechoso.
-- Verificación de Reportes (CMV/Fuga/Rendimiento/Food Cost) con datos reales quedó
-  parcial: El Rescoldo (demo) solo tiene ventas/facturas de mayo-junio, current date es
-  septiembre — se confirmó que el estado vacío se comporta bien, pero no se vio el
-  `ejemplo` con números reales poblado en esas 4 tarjetas.
+- **Sin verificación visual en browser real** — no había herramienta de automatización
+  disponible esta sesión. Todo lo de Carta y Mise se verificó por typecheck+tests+build,
+  no por uso real en pantalla. Es la sesión con más superficie UI/drag tocada sin ese
+  chequeo — prioridad para la próxima apertura.
+- **`plato_recetas.nota` sin UI en `DetailView.tsx`** — la nota por componente de un plato
+  solo se puede cargar al CREAR el plato desde `ComposicionEditor`; un plato ya existente
+  (el caso común, se edita desde el detalle) no tiene dónde escribirla. Puro UI, sin riesgo
+  de migración.
+- **Ítem #3 de la auditoría original, descartado a propósito**: importar el menú completo
+  desde una foto/PDF (como ya existe para la carta de platos) es una pieza de IA nueva
+  (parsear estructura de menú, no de plato) — el pegado de texto (#2) ya cubrió la mayor
+  parte de la urgencia real.
+- Mise en tablet táctil ancha sigue en columna única (`pointer:fine` en el media query,
+  a propósito) — el drag 2D ya existe, solo falta decidir si vale la pena sacarle esa
+  condición en CSS y JS.
 
 ## Probar primero mañana
-- Calendario en el celular real: swipe de mes/semana (el gesto que no se probó) y que el
-  chevron siga siendo la vía principal si el swipe se siente raro.
-- Modo oscuro en general, un recorrido de 5 minutos por Facturas/Stock/HACCP/Dashboard/
-  Pedidos — confirmar que ningún chip/botón quedó con contraste pobre tras el Bloque 8.
+- Carta → Evento/Menú: pegar una lista de WhatsApp en el buscador, arrastrar un ítem entre
+  secciones (Entrada→Principal) en mobile y en desktop con mouse, cerrar la pestaña a
+  mitad de carga y confirmar que el borrador se recupera solo al reabrir.
+- Mise: arrastrar un ítem con mouse en la grilla de desktop (antes no había forma) y
+  confirmar que sigue andando con touch en mobile como siempre.
+- Evento nuevo con fecha cargada → confirmar que aparece ya activado en Producción al
+  guardar, sin tener que ir a buscarlo a Planificación.
 
 ## Próximo paso concreto
-- Sin bloque siguiente definido en el plan (los 9 estaban completos). Retomar con
-  `PENDIENTES.md` 🟠 Alto — el candidato más viejo es SMTP propio para invitaciones
-  (bloqueado en dominio propio de Resend) o feature gating (`puedeUsar()` sin cablear
-  a ninguna pantalla todavía).
+- Verificar en vivo (dev server + celular/desktop reales) lo de esta sesión antes de seguir
+  agregando — es lo que quedó sin chequear. Si todo anda, retomar `PENDIENTES.md` 🟠 Alto:
+  SMTP propio para invitaciones (bloqueado en dominio propio de Resend) o feature gating
+  (`puedeUsar()` sin cablear a ninguna pantalla todavía).

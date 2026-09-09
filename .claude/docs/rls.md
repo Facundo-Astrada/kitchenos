@@ -102,6 +102,10 @@ listar, descargar, subir, borrar.
 ` al final — REST lo tolera pero el realtime devuelve 401 en el handshake del WS (ver `hooks.md` § Realtime). `lib/supabase/env.ts` hace `.trim()`.
 2. Sesión vieja en el browser → limpiar en DevTools → Application → Clear site data
 
+## Cambiar la firma de una función (agregar un parámetro) pierde `SET search_path`
+
+`CREATE OR REPLACE FUNCTION` con una lista de parámetros distinta (ej. agregar uno al final) no reemplaza la función vieja — en Postgres la identidad es nombre+tipos de argumentos, así que hace falta `DROP FUNCTION` explícito con la firma vieja antes del `CREATE`. Ese `CREATE` fresco **no hereda** el `SET search_path = public` que la firma anterior tenía (hardening estándar del proyecto, ver `mi_restaurante_id()` arriba) — hay que refijarlo a mano con `ALTER FUNCTION ... SET search_path = public` sobre la firma nueva, o `get_advisors`/`function_search_path_mutable` lo marca de nuevo. Pasó con `reemplazar_menu_preparaciones` al sumarle `p_pax` (sep 2026).
+
 ## Verificar columnas antes de aplicar políticas
 
 ```bash
