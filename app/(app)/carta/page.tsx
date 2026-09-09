@@ -453,6 +453,7 @@ export default function CartaPage() {
           precio_venta: payload.precio,
           categoria: payload.categoria as CategoriaCartaItem,
           receta_id: null,
+          foto_url: payload.fotoUrl,
         })
         if (payload.tags.length > 0) await actualizarTags(newId, payload.tags)
         const compItems = payload.secciones.flatMap(s => s.items)

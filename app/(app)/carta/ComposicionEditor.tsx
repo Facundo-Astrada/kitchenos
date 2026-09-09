@@ -9,6 +9,7 @@ import { usePermisos } from '@/lib/hooks/usePermisos'
 import { createClient } from '@/lib/supabase/client'
 import OpsPanel, { type OpsResult } from '@/components/ops/OpsPanel'
 import { SegmentedTabs } from '@/components/ui'
+import PhotoPicker from '@/components/ui/PhotoPicker'
 import { fileToBase64, callRecetaImport, type RecetaIAResult } from '@/lib/recetas/iaImport'
 import { RecetaEditSheet } from '@/components/recetas/RecetaEditSheet'
 import type { RecetaConCosto } from '@/lib/hooks/useRecetas'
@@ -51,6 +52,9 @@ export interface CompPayload {
   categoria: string
   tags: string[]
   secciones: { nombre: string; items: CompItemOut[] }[]
+  // Solo plato — antes solo se podía subir la foto DESPUÉS de crearlo, desde
+  // el detalle (ver DetailView), obligando a un segundo paso.
+  fotoUrl: string | null
 }
 
 // Fuente de datos con costo para el resumen vivo
@@ -80,6 +84,7 @@ export interface CompInicial {
   precio: number
   categoria: string
   tags: string[]
+  fotoUrl?: string | null
   secciones: { nombre: string; items: (CompItemOut & { _uid?: number })[] }[]
 }
 
@@ -579,6 +584,12 @@ export default function ComposicionEditor({
   const [creandoIdeaSec, setCreandoIdeaSec] = useState(false)
   const allDraftIds = useMemo(() => new Set<string>([...draftRecetaIds, ...localDraftIds]), [draftRecetaIds, localDraftIds])
 
+  // Pegado masivo en el buscador de sección — el chef que tiene la lista del
+  // menú en WhatsApp/Notas pega el bloque entero en vez de escribir ítem por
+  // ítem. Cada línea matchea contra recetas/productos ya cargados; lo que no
+  // matchea se crea como receta "a realizar", igual que "Crear como receta".
+  const [bulkPaste, setBulkPaste] = useState<{ total: number; hecho: number } | null>(null)
+
   // Modal de captura IA (foto/texto) — un solo estado en el editor, distintos
   // orígenes (búsqueda de sección en Menú/Evento, buscador de Plato) le pasan
   // su propio `onCreated` para saber dónde enganchar la receta resultante.
@@ -611,6 +622,11 @@ export default function ComposicionEditor({
   const [precio, setPrecio] = useState(inicial?.precio ? String(inicial.precio) : '')
   const [categoria, setCategoria] = useState(inicial?.categoria ?? categoriasCarta[0] ?? 'Principales')
   const [tags, setTags] = useState<string[]>(inicial?.tags ?? [])
+  // Foto del plato — antes solo se podía subir DESPUÉS de crearlo (ver
+  // DetailView), obligando a un segundo paso; acá ya sube al bucket real
+  // (bajo un path temporal, no el id final) apenas se elige.
+  const [fotoUrl, setFotoUrl] = useState<string | null>(inicial?.fotoUrl ?? null)
+  const [fotoTempId] = useState(() => crypto.randomUUID())
   const [fechaEvento, setFechaEvento] = useState(inicial?.fechaEvento ?? '')
   // Vigencia en el mise — cuánto dura activo un menú/evento (ver PLAN-MENUS-MISE).
   // En modo evento arranca igual a la fecha del evento (un evento de un día);
@@ -884,6 +900,38 @@ export default function ComposicionEditor({
     setSectionQuery('')
     setTimeout(() => searchRef.current?.focus(), 50)
   }
+
+  // Pegado masivo — una línea por ítem (lista de WhatsApp, notas, Excel
+  // pegado como texto). Bloquea el paste normal solo cuando hay más de una
+  // línea; una sola línea sigue el camino de siempre (completa el buscador).
+  async function handleSectionPaste(e: React.ClipboardEvent<HTMLInputElement>, sec: string) {
+    const texto = e.clipboardData.getData('text')
+    const lineas = texto.split(/\r?\n/)
+      .map(l => l.replace(/^[\s*•·▪-]+|^\d+[.)]\s*/, '').trim())
+      .filter(Boolean)
+    if (lineas.length < 2) return
+    e.preventDefault()
+    setSectionQuery('')
+    setBulkPaste({ total: lineas.length, hecho: 0 })
+    try {
+      for (const linea of lineas) {
+        const matchReceta = matchProducto(linea, recetas)
+        const matchProd = !matchReceta ? matchProducto(linea, productos) : null
+        if (matchReceta) {
+          addItemFromSearch(sec, 'receta', matchReceta.id, matchReceta.nombre)
+        } else if (matchProd) {
+          addItemFromSearch(sec, 'producto', matchProd.id, matchProd.nombre)
+        } else {
+          const idNueva = await crearIdeaReceta(linea)
+          setLocalDraftIds(prev => new Set(prev).add(idNueva))
+          addItemFromSearch(sec, 'receta', idNueva, linea)
+        }
+        setBulkPaste(prev => prev ? { ...prev, hecho: prev.hecho + 1 } : null)
+      }
+    } finally {
+      setTimeout(() => setBulkPaste(null), 900)
+    }
+  }
   function updateItem(u: number, patch: Partial<ItemRow>) {
     setItems(prev => prev.map(it => it._uid === u ? { ...it, ...patch } : it))
     if (patch.plaza && !plazas.includes(patch.plaza)) setPlazas(prev => [...prev, patch.plaza!])
@@ -953,6 +1001,7 @@ export default function ComposicionEditor({
         plazaControl: !esPlato ? (plazaControl || null) : null,
         variantes: esPlato ? [] : variantes,
         precio: precioN, categoria, tags, secciones: secs,
+        fotoUrl: esPlato ? fotoUrl : null,
       })
       // Guardado con éxito — el borrador ya no hace falta. Si `onSave` lanza
       // (error de red, RLS, etc.) no se llega acá: el borrador queda para
@@ -974,6 +1023,7 @@ export default function ComposicionEditor({
         modo, nombre, descripcion, fechaEvento: fechaEvento || null,
         vigenciaDesde: vigenciaDesde || null, vigenciaHasta: vigenciaHasta || null,
         plazaControl: plazaControl || null, variantes, precio: precioN, categoria, tags,
+        fotoUrl,
         secciones: esPlato
           ? [{
               nombre: 'Recetas',
@@ -995,7 +1045,7 @@ export default function ComposicionEditor({
     }, 400)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modo, nombre, descripcion, fechaEvento, vigenciaDesde, vigenciaHasta, plazaControl, variantes, precioN, categoria, tags, secciones, items, platoRecetas, esPlato, draftKey])
+  }, [modo, nombre, descripcion, fechaEvento, vigenciaDesde, vigenciaHasta, plazaControl, variantes, precioN, categoria, tags, fotoUrl, secciones, items, platoRecetas, esPlato, draftKey])
 
   // Ctrl/Cmd+S — el chef que carga esto en notebook, entre otras pestañas,
   // espera guardar con el teclado sin buscar el botón verde.
@@ -1108,6 +1158,16 @@ export default function ComposicionEditor({
           {/* Campos de Plato */}
           {esPlato && (
             <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                <PhotoPicker
+                  currentUrl={fotoUrl}
+                  path={`carta/nuevo-${fotoTempId}`}
+                  size={64}
+                  onUploaded={setFotoUrl}
+                  onRemoved={() => setFotoUrl(null)}
+                />
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Se muestra en la carta digital y en la lista — se puede cargar ahora o después.</div>
+              </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                 <div style={{ position: 'relative', flex: 1 }}>
                   <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', fontSize: 14 }}>$</span>
@@ -1357,16 +1417,25 @@ export default function ComposicionEditor({
                       <div style={{ position: 'relative', marginBottom: 4 }}>
                         <span className="material-symbols-outlined" style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: 'var(--text-3)', pointerEvents: 'none' }}>search</span>
                         <input ref={searchRef} value={sectionQuery} onChange={e => setSectionQuery(e.target.value)}
-                          placeholder="Buscar receta, producto o plato…"
+                          onPaste={e => handleSectionPaste(e, sec)}
+                          placeholder="Buscar, o pegá la lista completa…"
                           style={{ width: '100%', paddingLeft: 30, paddingRight: 8, paddingTop: 7, paddingBottom: 7, border: '1px solid var(--border)', borderRadius: 9, fontSize: 13, background: 'var(--bg)', color: 'var(--text-1)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
                         <button onClick={() => { setActiveSearch(null); setSectionQuery('') }}
                           style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', padding: 2 }}>
                           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
                         </button>
                       </div>
+                      {bulkPaste && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 4px', fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 14, animation: bulkPaste.hecho < bulkPaste.total ? 'spin 1s linear infinite' : undefined }}>
+                            {bulkPaste.hecho < bulkPaste.total ? 'progress_activity' : 'check_circle'}
+                          </span>
+                          Cargando lista: {bulkPaste.hecho}/{bulkPaste.total}
+                        </div>
+                      )}
                       <div style={{ maxHeight: 180, overflowY: 'auto' }}>
                         {sectionQuery.trim().length < 2 ? (
-                          <div style={{ padding: '8px 4px', fontSize: 12, color: 'var(--text-3)' }}>Escribí 2 letras para buscar…</div>
+                          <div style={{ padding: '8px 4px', fontSize: 12, color: 'var(--text-3)' }}>Escribí 2 letras para buscar, o pegá varias líneas para cargarlas todas juntas…</div>
                         ) : searchResults.length === 0 ? (
                           <button
                             onClick={async () => {
@@ -1589,6 +1658,39 @@ function PlatoRecetasEditor({
     }
   }
 
+  // Pegado masivo — mismo mecanismo que en Menú/Evento (ver
+  // handleSectionPaste): una línea por receta, matchea o crea idea.
+  const [bulkPaste, setBulkPaste] = useState<{ total: number; hecho: number } | null>(null)
+  async function handlePlatoPaste(e: React.ClipboardEvent<HTMLInputElement>) {
+    const texto = e.clipboardData.getData('text')
+    const lineas = texto.split(/\r?\n/)
+      .map(l => l.replace(/^[\s*•·▪-]+|^\d+[.)]\s*/, '').trim())
+      .filter(Boolean)
+    if (lineas.length < 2) return
+    e.preventDefault()
+    setPlatoSearch('')
+    setPlatoShowResults(false)
+    setBulkPaste({ total: lineas.length, hecho: 0 })
+    try {
+      const yaAgregados = new Set(linkedIds)
+      for (const linea of lineas) {
+        const disponibles = recetas.filter(r => !yaAgregados.has(r.id))
+        const match = matchProducto(linea, disponibles)
+        if (match) {
+          yaAgregados.add(match.id)
+          agregarItem({ tipo: 'receta', id: match.id, nombre: match.nombre, costo: match.costo })
+        } else {
+          const id = await onCrearIdea(linea)
+          const nuevoUid = uid()
+          setPlatoRecetas(prev => [...prev, { _uid: nuevoUid, ref_id: id, nombre: linea, porciones: 1, tipo: 'receta' }])
+        }
+        setBulkPaste(prev => prev ? { ...prev, hecho: prev.hecho + 1 } : null)
+      }
+    } finally {
+      setTimeout(() => setBulkPaste(null), 900)
+    }
+  }
+
   // Gramaje por plato: escribe opsCantidad + opsUnidad SIEMPRE en gramos ('g').
   // No toca `porciones` (que sigue en 1 para el cálculo de costo por porción).
   // Solo gramos: 'pax'/'u' rompen el total del plato en el recetario.
@@ -1749,10 +1851,19 @@ function PlatoRecetasEditor({
             onChange={e => { setPlatoSearch(e.target.value); setPlatoShowResults(true) }}
             onFocus={() => setPlatoShowResults(true)}
             onBlur={() => setTimeout(() => setPlatoShowResults(false), 150)}
-            placeholder="Buscar receta…"
+            onPaste={handlePlatoPaste}
+            placeholder="Buscar receta, o pegá la lista completa…"
             style={{ width: '100%', padding: '12px 12px 12px 40px', border: 'none', background: 'transparent', fontSize: 13, color: 'var(--text-1)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
           />
         </div>
+        {bulkPaste && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px 8px', fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 14, animation: bulkPaste.hecho < bulkPaste.total ? 'spin 1s linear infinite' : undefined }}>
+              {bulkPaste.hecho < bulkPaste.total ? 'progress_activity' : 'check_circle'}
+            </span>
+            Cargando lista: {bulkPaste.hecho}/{bulkPaste.total}
+          </div>
+        )}
         {!platoSearch.trim() && platoRecetas.length === 0 && recetas.length > 0 && (
           <div style={{ padding: '8px 14px 10px', fontSize: 11, color: 'var(--text-3)' }}>
             {recetas.length} recetas disponibles — escribí para buscar
