@@ -11,6 +11,7 @@ import OpsPanel, { type OpsResult } from '@/components/ops/OpsPanel'
 import { SegmentedTabs } from '@/components/ui'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import { fileToBase64, callRecetaImport, matchPorNombre, type RecetaIAResult } from '@/lib/recetas/iaImport'
+import { moverItemSobreItem, moverItemASeccion } from '@/lib/carta/reordenarItems'
 import { RecetaEditSheet } from '@/components/recetas/RecetaEditSheet'
 import type { RecetaConCosto } from '@/lib/hooks/useRecetas'
 import type { ProductoConEstado } from '@/lib/hooks/useStock'
@@ -728,22 +729,62 @@ export default function ComposicionEditor({
   }
   function handleSecDragEnd() { setDraggingSec(null) }
 
-  // ── Drag & drop de ítems dentro de una sección — el menú se piensa en
-  // orden de servicio, no en orden de carga. Solo reordena dentro de la
-  // misma sección (cambiar de sección ya se hace desvinculando/creando). ──
+  // ── Drag & drop de ítems, dentro de una sección o entre secciones (ej:
+  // Entrada → Principal) — el menú se piensa en orden de servicio, no en
+  // orden de carga. Además de reordenar el array (handleItemDragMove de
+  // abajo), hay tres ayudas para que el gesto se sienta "agarrado" en vez de
+  // adivinado: un ícono flotante que sigue al cursor, la sección destino
+  // resaltada, y auto-scroll cuando el cursor se acerca al borde del body
+  // (las secciones lejos, arriba o abajo, antes eran inalcanzables sin
+  // soltar y scrollear a mano). ──
   const itemRefs = useRef<Record<number, HTMLDivElement | null>>({})
+  const bodyScrollRef = useRef<HTMLDivElement | null>(null)
   const [draggingItemUid, setDraggingItemUid] = useState<number | null>(null)
+  const [dragPointer, setDragPointer] = useState<{ x: number; y: number } | null>(null)
+  const [dragOverSeccion, setDragOverSeccion] = useState<string | null>(null)
+  const dragPointerRef = useRef<{ x: number; y: number } | null>(null)
+  const autoScrollRafRef = useRef<number | null>(null)
+
+  function startAutoScroll() {
+    if (autoScrollRafRef.current != null) return
+    const EDGE = 56
+    const tick = () => {
+      const p = dragPointerRef.current
+      const el = bodyScrollRef.current
+      if (p && el) {
+        const rect = el.getBoundingClientRect()
+        if (p.y < rect.top + EDGE && p.y > rect.top) el.scrollTop -= 12
+        else if (p.y > rect.bottom - EDGE && p.y < rect.bottom) el.scrollTop += 12
+      }
+      autoScrollRafRef.current = requestAnimationFrame(tick)
+    }
+    autoScrollRafRef.current = requestAnimationFrame(tick)
+  }
+  function stopAutoScroll() {
+    if (autoScrollRafRef.current != null) cancelAnimationFrame(autoScrollRafRef.current)
+    autoScrollRafRef.current = null
+  }
+
   function handleItemDragStart(e: React.PointerEvent, uid_: number) {
     e.preventDefault()
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     setDraggingItemUid(uid_)
+    dragPointerRef.current = { x: e.clientX, y: e.clientY }
+    setDragPointer(dragPointerRef.current)
+    startAutoScroll()
   }
   function handleItemDragMove(e: React.PointerEvent) {
     if (draggingItemUid == null) return
+    dragPointerRef.current = { x: e.clientX, y: e.clientY }
+    setDragPointer(dragPointerRef.current)
     const dragged = items.find(it => it._uid === draggingItemUid)
     if (!dragged) return
     const x = e.clientX
     const y = e.clientY
+    // Se resetea y solo queda si alguno de los dos chequeos de abajo matchea
+    // — si no, el cursor está en un área sin destino válido (header, "Nueva
+    // sección"…) y no debe quedar una sección resaltada de forma colgada.
+    setDragOverSeccion(null)
     // 1) ¿Sobre otro ítem? — se ubica en su lugar; si es de otra sección, migra
     // también la sección (ver pedido: mover de Entrada a Principal arrastrando).
     for (const [uidStr, el] of Object.entries(itemRefs.current)) {
@@ -753,15 +794,8 @@ export default function ComposicionEditor({
       if (!target) continue
       const rect = el.getBoundingClientRect()
       if (y >= rect.top && y <= rect.bottom) {
-        setItems(prev => {
-          const from = prev.findIndex(it => it._uid === draggingItemUid)
-          const to = prev.findIndex(it => it._uid === targetUid)
-          if (from === -1 || to === -1 || from === to) return prev
-          const next = [...prev]
-          const [moved] = next.splice(from, 1)
-          next.splice(to, 0, { ...moved, _seccion: target._seccion })
-          return next
-        })
+        setDragOverSeccion(target._seccion)
+        setItems(prev => moverItemSobreItem(prev, draggingItemUid, targetUid))
         return
       }
     }
@@ -771,19 +805,20 @@ export default function ComposicionEditor({
       if (!el || secName === dragged._seccion) continue
       const rect = el.getBoundingClientRect()
       if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-        setItems(prev => {
-          const from = prev.findIndex(it => it._uid === draggingItemUid)
-          if (from === -1) return prev
-          const next = [...prev]
-          const [moved] = next.splice(from, 1)
-          next.push({ ...moved, _seccion: secName })
-          return next
-        })
+        setDragOverSeccion(secName)
+        setItems(prev => moverItemASeccion(prev, draggingItemUid, secName))
         return
       }
     }
   }
-  function handleItemDragEnd() { setDraggingItemUid(null) }
+  function handleItemDragEnd() {
+    setDraggingItemUid(null)
+    setDragPointer(null)
+    setDragOverSeccion(null)
+    dragPointerRef.current = null
+    stopAutoScroll()
+  }
+  useEffect(() => () => stopAutoScroll(), [])
 
   // ── Estado exclusivo para modo plato (UI simplificada) ──
   const [platoRecetas, setPlatoRecetas] = useState<PlatoItem[]>(() => {
@@ -1172,7 +1207,7 @@ export default function ComposicionEditor({
       </div>
 
       {/* Body */}
-      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '14px 14px 100px' }}>
+      <div ref={bodyScrollRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '14px 14px 100px' }}>
         {/* ── Bloque DATOS ── */}
         <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', margin: '0 2px 7px' }}>
           {esPlato ? 'Datos del plato' : modo === 'evento' ? 'Datos del evento' : 'Datos del menú'}
@@ -1383,15 +1418,21 @@ export default function ComposicionEditor({
               const rows = items.filter(it => it._seccion === sec)
               const isEditingSec = secEdit?.idx === secIdx
               const isDraggingThis = draggingSec === sec
+              // Destino resaltado mientras se arrastra un ítem por encima —
+              // es la señal de "acá lo suelto" que faltaba (ver pedido: el
+              // ícono de 6 puntos ahora "agarra" y arrastra un preview, esto
+              // es el otro lado, dónde va a caer).
+              const isItemDropTarget = draggingItemUid != null && dragOverSeccion === sec
               return (
                 <div key={`${sec}-${secIdx}`}
                   ref={el => { seccionRefs.current[sec] = el }}
                   style={{
-                    marginBottom: 12, background: 'var(--surface)',
-                    border: isDraggingThis ? '1.5px solid var(--accent)' : '1px solid var(--border)',
+                    marginBottom: 12, background: isItemDropTarget ? 'rgba(67,97,160,.05)' : 'var(--surface)',
+                    border: isDraggingThis || isItemDropTarget ? '1.5px solid var(--accent)' : '1px solid var(--border)',
                     borderRadius: 14, overflow: 'hidden',
                     opacity: isDraggingThis ? .6 : 1,
-                    boxShadow: isDraggingThis ? '0 4px 14px rgba(0,0,0,.12)' : 'none',
+                    boxShadow: isDraggingThis || isItemDropTarget ? '0 4px 14px rgba(0,0,0,.12)' : 'none',
+                    transition: 'border-color .1s, background .1s',
                   }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
                     <span
@@ -1576,6 +1617,28 @@ export default function ComposicionEditor({
           onSaved={() => onRecetaActualizada?.()}
         />
       )}
+      {/* Preview flotante del ítem arrastrado — sigue al cursor/dedo para que
+          el gesto se sienta "agarrado" en vez de adivinado, sobre todo
+          cruzando a otra sección que puede estar lejos en el scroll. */}
+      {draggingItemUid != null && dragPointer && (() => {
+        const dragged = items.find(it => it._uid === draggingItemUid)
+        if (!dragged) return null
+        return (
+          <div style={{
+            position: 'fixed', left: dragPointer.x + 16, top: dragPointer.y - 14,
+            zIndex: 2000, pointerEvents: 'none',
+            display: 'flex', alignItems: 'center', gap: 6,
+            maxWidth: 220, padding: '7px 12px', borderRadius: 10,
+            background: 'var(--surface)', border: '1.5px solid var(--accent)',
+            boxShadow: '0 8px 20px rgba(0,0,0,.25)',
+            fontSize: 12, fontWeight: 700, color: 'var(--text-1)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--accent)', flexShrink: 0 }}>drag_indicator</span>
+            {dragged.nombre.trim() || 'Ítem'}
+          </div>
+        )
+      })()}
     </div>
   )
 }
