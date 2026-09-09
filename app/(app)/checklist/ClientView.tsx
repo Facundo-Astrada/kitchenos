@@ -28,6 +28,7 @@ import { PrioridadPicker, type PrioOpcion } from '@/components/ops/PrioridadPick
 import { todasLasPlazas, plazaLabel, plazaIcon, plazaColor } from '@/lib/constants'
 import { hoyOperativo, sumarDias, turnoVigente, turnoAnterior, turnoSiguiente, encodeTurnoFase, cierreIncompleto, fechaEnTz } from '@/lib/ops/turnos'
 import { menuItemVisible } from '@/lib/ops/mise'
+import { hitTestSeccion, hitTestItem, calcularReordenSeccion } from '@/lib/ops/miseReorder'
 import { tareasAfectadasPorTilde } from '@/lib/ops/syncMise'
 import { tareaExistentePara } from '@/lib/ops/dedupeTareas'
 import { setOpsChromeCompact } from '@/lib/ops/chromeBus'
@@ -1130,17 +1131,46 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // ── Drag-to-move between sections + reorder dentro de la sección ─────
   // Posición fija por defecto (sort por `orden`, no por prioridad/estado —
   // ver `grouped` arriba); este gesto es la única forma de cambiarla.
-  const [dragging, setDragging] = useState<{ item: MisePlaceItem; y: number; overSecId: string | null; overItemId: string | null; insertAfter: boolean } | null>(null)
+  // `x`/`y` del puntero viven en `dragPointerRef` (una ref, no re-renderiza
+  // en cada pixel) — el ghost se posiciona con `style.transform`/`.top`
+  // directo desde el rAF de abajo; `dragging` solo cambia cuando el destino
+  // (sección/ítem) realmente cambia.
+  const [dragging, setDragging] = useState<{ item: MisePlaceItem; overSecId: string | null; overItemId: string | null; insertAfter: boolean } | null>(null)
   const draggingRef = useRef<typeof dragging>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const secElRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const itemElRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const ghostRef = useRef<HTMLDivElement | null>(null)
+  const dragPointerRef = useRef<{ x: number; y: number } | null>(null)
+  const dragTargetRef = useRef<{ overSecId: string | null; overItemId: string | null; insertAfter: boolean }>({ overSecId: null, overItemId: null, insertAfter: false })
   const actualizarItemRef = useRef(actualizarItem)
   const groupedRef = useRef(grouped)
   useEffect(() => { draggingRef.current = dragging }, [dragging])
   useEffect(() => { actualizarItemRef.current = actualizarItem }, [actualizarItem])
   useEffect(() => { groupedRef.current = grouped }, [grouped])
+
+  // Mismo media query que `.mise-items-grid` en globals.css (grilla de
+  // varias columnas, solo con puntero fino) — decide si el hit-test/ghost
+  // de abajo va en modo 2D o 1D (columna única).
+  const [isGridLayout, setIsGridLayout] = useState(false)
+  const isGridLayoutRef = useRef(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px) and (pointer: fine)')
+    const update = () => setIsGridLayout(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
+  useEffect(() => { isGridLayoutRef.current = isGridLayout }, [isGridLayout])
+
+  // Rastreo de mouse siempre activo (a diferencia de touch, no bloquea
+  // nada) — evita que la posición quede vieja durante el long-press.
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => { dragPointerRef.current = { x: e.clientX, y: e.clientY } }
+    window.addEventListener('mousemove', onMouseMove, { passive: true })
+    return () => window.removeEventListener('mousemove', onMouseMove)
+  }, [])
 
   // ── Chrome que se pliega al recorrer la lista ───────────────────────────
   // Bajando, el título y los tabs de OPS se pliegan y queda solo la fila de
@@ -1181,90 +1211,88 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
 
   useEffect(() => {
     if (!dragging) return
-    // Mutable current-Y so the RAF loop always reads the latest value
-    const currentY = { value: dragging.y }
+    const draggedId = dragging.item.id
     let rafId: number
 
-    // Continuous scroll loop — runs every frame while dragging
-    const scrollLoop = () => {
-      const sc = scrollContainerRef.current
-      if (sc) {
-        const r = sc.getBoundingClientRect()
-        const ZONE = 90  // px from edge that triggers auto-scroll
-        const y = currentY.value
-        if (y < r.top + ZONE && y > r.top) {
-          const intensity = 1 - (y - r.top) / ZONE
-          sc.scrollTop -= 3 + intensity * 10
-        } else if (y > r.bottom - ZONE && y < r.bottom) {
-          const intensity = 1 - (r.bottom - y) / ZONE
-          sc.scrollTop += 3 + intensity * 10
+    // Único loop de rAF — ghost, auto-scroll y hit-test, acotado a una vez
+    // por frame (antes corría entero en cada evento nativo de touchmove,
+    // por eso se sentía trabado). Geometría en lib/ops/miseReorder.ts (con
+    // tests) — este archivo ya tiene techo de líneas.
+    const tick = () => {
+      const p = dragPointerRef.current
+      if (p) {
+        if (ghostRef.current) {
+          if (isGridLayoutRef.current) ghostRef.current.style.transform = `translate(${p.x + 16}px, ${p.y - 14}px)`
+          else ghostRef.current.style.top = `${p.y - 28}px`
+        }
+        const sc = scrollContainerRef.current
+        if (sc) {
+          const r = sc.getBoundingClientRect()
+          const ZONE = 90
+          if (p.y < r.top + ZONE && p.y > r.top) sc.scrollTop -= 3 + (1 - (p.y - r.top) / ZONE) * 10
+          else if (p.y > r.bottom - ZONE && p.y < r.bottom) sc.scrollTop += 3 + (1 - (r.bottom - p.y) / ZONE) * 10
+        }
+        const grid = isGridLayoutRef.current
+        const secciones = Array.from(secElRefs.current, ([id, el]) => ({ id, rect: el.getBoundingClientRect() }))
+        const overSecId = hitTestSeccion(p.x, p.y, secciones, grid)
+        let overItemId: string | null = null
+        let insertAfter = false
+        if (overSecId) {
+          const secItemIds = new Set((groupedRef.current[overSecId] ?? []).map(i => i.id))
+          const candidatos = Array.from(itemElRefs.current, ([id, el]) => ({ id, rect: el.getBoundingClientRect() }))
+            .filter(c => c.id !== draggedId && secItemIds.has(c.id))
+          const hit = hitTestItem(p.x, p.y, candidatos, grid)
+          if (hit) { overItemId = hit.itemId; insertAfter = hit.insertAfter }
+        }
+        const prevTarget = dragTargetRef.current
+        if (prevTarget.overSecId !== overSecId || prevTarget.overItemId !== overItemId || prevTarget.insertAfter !== insertAfter) {
+          dragTargetRef.current = { overSecId, overItemId, insertAfter }
+          setDragging(prev => prev ? { ...prev, overSecId, overItemId, insertAfter } : null)
         }
       }
-      rafId = requestAnimationFrame(scrollLoop)
+      rafId = requestAnimationFrame(tick)
     }
-    rafId = requestAnimationFrame(scrollLoop)
+    rafId = requestAnimationFrame(tick)
 
-    const onMove = (e: TouchEvent) => {
+    // Solo actualiza la ref (gratis) — el trabajo caro vive en el tick de
+    // arriba. `preventDefault` sigue haciendo falta en touch (sin esto,
+    // arrastrar un ítem scrollea la página por debajo).
+    const onTouchMove = (e: TouchEvent) => {
       e.preventDefault()
       const t = e.touches[0]
-      currentY.value = t.clientY
-      let overSecId: string | null = null
-      secElRefs.current.forEach((el, secId) => {
-        const r = el.getBoundingClientRect()
-        if (t.clientY >= r.top && t.clientY <= r.bottom) overSecId = secId
-      })
-      // Ítem más cercano dentro de la sección sobrevolada — define dónde se
-      // inserta al soltar (antes/después según qué mitad del ítem se tocó).
-      let overItemId: string | null = null
-      let insertAfter = false
-      if (overSecId) {
-        const draggedId = draggingRef.current?.item.id
-        const secItemIds = new Set((groupedRef.current[overSecId] ?? []).map(i => i.id))
-        let closestDist = Infinity
-        itemElRefs.current.forEach((el, itemId) => {
-          if (itemId === draggedId || !secItemIds.has(itemId)) return
-          const r = el.getBoundingClientRect()
-          const mid = r.top + r.height / 2
-          const dist = Math.abs(t.clientY - mid)
-          if (dist < closestDist) { closestDist = dist; overItemId = itemId; insertAfter = t.clientY > mid }
-        })
-      }
-      setDragging(prev => prev ? { ...prev, y: t.clientY, overSecId, overItemId, insertAfter } : null)
+      dragPointerRef.current = { x: t.clientX, y: t.clientY }
     }
     const onEnd = () => {
       cancelAnimationFrame(rafId)
-      const d = draggingRef.current
-      if (d?.overSecId) {
-        const overSecId = d.overSecId
-        const targetItems = (groupedRef.current[overSecId] ?? []).filter(i => i.id !== d.item.id)
-        let insertIdx = targetItems.length
-        if (d.overItemId) {
-          const idx = targetItems.findIndex(i => i.id === d.overItemId)
-          if (idx !== -1) insertIdx = d.insertAfter ? idx + 1 : idx
-        }
-        targetItems.splice(insertIdx, 0, d.item)
-        targetItems.forEach((it, idx) => {
-          const needsSecUpdate = it.id === d.item.id && it.seccion_id !== overSecId
-          if ((it.orden ?? 0) !== idx || needsSecUpdate) {
-            actualizarItemRef.current(it.id, { orden: idx, ...(needsSecUpdate ? { seccion_id: overSecId } : {}) })
-          }
-        })
+      const target = dragTargetRef.current
+      const draggedItem = draggingRef.current?.item
+      if (target.overSecId && draggedItem) {
+        const overSecId = target.overSecId
+        const updates = calcularReordenSeccion(
+          groupedRef.current[overSecId] ?? [],
+          { id: draggedItem.id, orden: draggedItem.orden ?? null, seccion_id: draggedItem.seccion_id ?? null },
+          overSecId, target.overItemId, target.insertAfter,
+        )
+        updates.forEach(u => actualizarItemRef.current(u.id, u.seccion_id != null ? { orden: u.orden, seccion_id: u.seccion_id } : { orden: u.orden }))
       }
       setDragging(null)
     }
-    document.addEventListener('touchmove', onMove, { passive: false })
+    document.addEventListener('touchmove', onTouchMove, { passive: false })
     document.addEventListener('touchend', onEnd)
+    document.addEventListener('mouseup', onEnd)
     return () => {
       cancelAnimationFrame(rafId)
-      document.removeEventListener('touchmove', onMove)
+      document.removeEventListener('touchmove', onTouchMove)
       document.removeEventListener('touchend', onEnd)
+      document.removeEventListener('mouseup', onEnd)
     }
   }, [!!dragging]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const startLongPress = useCallback((item: MisePlaceItem, y: number) => {
+  const startLongPress = useCallback((item: MisePlaceItem) => {
     longPressTimer.current = setTimeout(() => {
       tap(30)
-      setDragging({ item, y, overSecId: item.seccion_id ?? null, overItemId: null, insertAfter: false })
+      dragTargetRef.current = { overSecId: item.seccion_id ?? null, overItemId: null, insertAfter: false }
+      setDragging({ item, overSecId: item.seccion_id ?? null, overItemId: null, insertAfter: false })
     }, 400)
   }, [])
 
@@ -1883,9 +1911,13 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
               <div
                 key={item.id}
                 ref={el => { if (el) itemElRefs.current.set(item.id, el); else itemElRefs.current.delete(item.id) }}
-                onTouchStart={modoControl ? undefined : e => startLongPress(item, e.touches[0].clientY)}
+                onTouchStart={modoControl ? undefined : e => { dragPointerRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; startLongPress(item) }}
                 onTouchMove={modoControl ? undefined : cancelLongPress}
                 onTouchEnd={modoControl ? undefined : cancelLongPress}
+                // Mouse — antes este gesto era solo táctil.
+                onMouseDown={modoControl ? undefined : e => { dragPointerRef.current = { x: e.clientX, y: e.clientY }; startLongPress(item) }}
+                onMouseUp={modoControl ? undefined : cancelLongPress}
+                onMouseLeave={modoControl ? undefined : cancelLongPress}
                 style={{
                   opacity: dragging?.item.id === item.id ? 0.35 : 1,
                   transition: 'opacity .15s',
@@ -2308,11 +2340,36 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         )}
       </div>
 
-      {/* Drag ghost */}
-      {dragging && (
-        <div style={{
+      {/* Drag ghost — posición escrita por el rAF de arriba, no por render.
+          Barra de ancho completo en columna única (mobile/tablet); etiqueta
+          compacta que sigue X e Y en la grilla de desktop (una barra ahí no
+          tiene sentido con columnas lado a lado). */}
+      {dragging && (isGridLayout ? (
+        <div ref={ghostRef} style={{
+          position: 'fixed', left: 0, top: 0,
+          transform: dragPointerRef.current ? `translate(${dragPointerRef.current.x + 16}px, ${dragPointerRef.current.y - 14}px)` : 'translate(-9999px,-9999px)',
+          zIndex: 500,
+          pointerEvents: 'none',
+          maxWidth: 240,
+          background: 'var(--navy)',
+          borderRadius: 10,
+          padding: '8px 14px',
+          display: 'flex', alignItems: 'center', gap: 6,
+          boxShadow: '0 12px 32px rgba(0,0,0,.4)',
+          overflow: 'hidden',
+        }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'rgba(255,255,255,.5)', flexShrink: 0 }}>drag_indicator</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dragging.item.nombre}</span>
+          {dragging.overSecId && dragging.overSecId !== dragging.item.seccion_id && (
+            <span style={{ fontSize: 10, color: 'rgba(255,255,255,.6)', fontWeight: 600, flexShrink: 0 }}>
+              → {plazaSecciones.find(s => s.id === dragging.overSecId)?.nombre}
+            </span>
+          )}
+        </div>
+      ) : (
+        <div ref={ghostRef} style={{
           position: 'fixed',
-          top: dragging.y - 28,
+          top: (dragPointerRef.current?.y ?? 0) - 28,
           left: 16, right: 16,
           zIndex: 500,
           pointerEvents: 'none',
@@ -2331,7 +2388,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
             </span>
           )}
         </div>
-      )}
+      ))}
 
       {/* Sheets */}
       {notaSheetItem && (
