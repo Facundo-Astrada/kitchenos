@@ -25,6 +25,7 @@ import { gramajeDesdeCantidadOps } from '@/lib/recetas/peso'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { clasificarIngenieriaMenu, buildVentasMap, mapaCuadrantePorId, QUAD_META } from '@/lib/carta/ingenieriaMenu'
 import { sincronizarMiseDeMenu } from '@/lib/ops/menuMise'
+import { activarMenuParaFechas } from '@/lib/menus/activarMenu'
 import { Toast, FlipCard } from '@/components/ui'
 import { fmtMoney, fcBadge, marginBadge, PlatoCard, PlatoCardBack, PlatoCardSkeleton } from './cards'
 import { exportCartaPDF, exportRentabilidadPDF } from './exportar'
@@ -466,10 +467,10 @@ export default function CartaPage() {
             // de este componente — se espeja a gramaje/gramaje_unidad (columna
             // dedicada al costeo) para que el food cost de Carta no dependa de
             // una columna que en otros casos guarda la demanda al mise (pax/porc/u).
-            if (it.plaza || it.cantidad_ops != null) {
+            if (it.plaza || it.cantidad_ops != null || it.nota) {
               const { gramaje, gramaje_unidad } = gramajeDesdeCantidadOps(it.cantidad_ops ?? null, it.unidad_ops ?? null)
               await supa.from('plato_recetas')
-                .update({ plaza: it.plaza ?? null, cantidad_ops: it.cantidad_ops ?? null, unidad_ops: it.unidad_ops ?? null, gramaje, gramaje_unidad })
+                .update({ plaza: it.plaza ?? null, cantidad_ops: it.cantidad_ops ?? null, unidad_ops: it.unidad_ops ?? null, gramaje, gramaje_unidad, nota: it.nota ?? null })
                 .eq('plato_id', newId).eq('receta_id', it.ref_id)
             }
             // Si tiene OPS configurado: upsert checklist_items (helper compartido)
@@ -515,6 +516,7 @@ export default function CartaPage() {
         recipiente_nombre: it.recipiente_nombre ?? null,
         peso_porcion: it.peso_porcion ?? null,
         peso_porcion_unidad: it.peso_porcion_unidad ?? null,
+        nota: it.nota ?? null,
       })))
       const data = {
         nombre: payload.nombre,
@@ -526,7 +528,9 @@ export default function CartaPage() {
         plaza_control: payload.plazaControl,
         variantes: payload.variantes,
         precio: payload.precio,
+        pax: payload.pax,
       }
+      let newEventoId: string | null = null
       if (composing?.menuEditId) {
         await actualizarMenu(composing.menuEditId, data, preps)
         // Si el menú ya estaba activo en el mise, re-sincronizar para que los
@@ -542,8 +546,19 @@ export default function CartaPage() {
       } else {
         const newId = await crearMenu(data, preps)
         if (!newId) throw new Error('No se pudo crear el menú (sin restaurante activo)')
+        newEventoId = newId
       }
-      setToast(payload.tipo === 'evento' ? 'Evento guardado' : 'Menú guardado')
+      // Evento nuevo con fecha cargada → ofrecer directo la activación en
+      // Producción en vez de dejar que el chef tenga que ir a buscarla a
+      // Planificación (antes el evento se guardaba "flotando", sin puerta
+      // de entrada visible desde Carta — ver adenda 2026-08-20).
+      if (newEventoId && payload.tipo === 'evento' && data.fecha_evento && RESTAURANTE_ID) {
+        const supaActivar = createClient()
+        await activarMenuParaFechas(supaActivar, RESTAURANTE_ID, { id: newEventoId, tipo: 'evento', nombre: data.nombre, preparaciones: preps }, [data.fecha_evento])
+        setToast(`Evento guardado y activado en Producción para el ${new Date(data.fecha_evento + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}`)
+      } else {
+        setToast(payload.tipo === 'evento' ? 'Evento guardado' : 'Menú guardado')
+      }
       setComposing(null)
     } catch (e) {
       console.error('[Carta] handleComposicionSave error:', e)
@@ -571,6 +586,7 @@ export default function CartaPage() {
       precio: menu.precio ?? 0,
       categoria: '',
       tags: [],
+      pax: menu.pax,
       secciones: secOrden.map(sec => ({
         nombre: sec,
         items: menu.preparaciones.filter(p => p.paso === sec).map(p => ({
@@ -589,6 +605,7 @@ export default function CartaPage() {
           recipiente_nombre: p.recipiente_nombre,
           peso_porcion: p.peso_porcion,
           peso_porcion_unidad: p.peso_porcion_unidad,
+          nota: p.nota,
         })),
       })),
     }

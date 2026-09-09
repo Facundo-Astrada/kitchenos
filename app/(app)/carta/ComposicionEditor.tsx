@@ -38,6 +38,10 @@ export interface CompItemOut {
   recipiente_cantidad?: number | null
   peso_porcion?: number | null
   peso_porcion_unidad?: string | null
+  // Anotación libre sobre ESTE componente ("freír en la freidora chica") —
+  // separada de la receta en sí: es una instrucción puntual para este
+  // plato/menú, no algo que valga para todas las veces que se usa la receta.
+  nota?: string | null
 }
 export interface CompPayload {
   tipo: CompModo
@@ -55,6 +59,9 @@ export interface CompPayload {
   // Solo plato — antes solo se podía subir la foto DESPUÉS de crearlo, desde
   // el detalle (ver DetailView), obligando a un segundo paso.
   fotoUrl: string | null
+  // Comensales estimados — solo menú/evento. Antes se escribía a mano en la
+  // descripción; sin esto no hay costo por cubierto ni forma de escalar.
+  pax: number | null
 }
 
 // Fuente de datos con costo para el resumen vivo
@@ -85,6 +92,7 @@ export interface CompInicial {
   categoria: string
   tags: string[]
   fotoUrl?: string | null
+  pax?: number | null
   secciones: { nombre: string; items: (CompItemOut & { _uid?: number })[] }[]
 }
 
@@ -627,6 +635,10 @@ export default function ComposicionEditor({
   // (bajo un path temporal, no el id final) apenas se elige.
   const [fotoUrl, setFotoUrl] = useState<string | null>(inicial?.fotoUrl ?? null)
   const [fotoTempId] = useState(() => crypto.randomUUID())
+  // Comensales estimados — solo menú/evento. Antes se escribía a mano en la
+  // descripción; sin esto no hay costo por cubierto ni forma de escalar
+  // cantidades (ver métricas del resumen vivo más abajo).
+  const [pax, setPax] = useState(inicial?.pax ? String(inicial.pax) : '')
   const [fechaEvento, setFechaEvento] = useState(inicial?.fechaEvento ?? '')
   // Vigencia en el mise — cuánto dura activo un menú/evento (ver PLAN-MENUS-MISE).
   // En modo evento arranca igual a la fecha del evento (un evento de un día);
@@ -782,6 +794,7 @@ export default function ComposicionEditor({
           opsSeccion: it.seccion_mise ?? null,
           opsCantidad: it.cantidad_ops ?? null,
           opsUnidad: it.unidad_ops ?? null,
+          nota: it.nota ?? null,
         }))
     )
   })
@@ -810,6 +823,7 @@ export default function ComposicionEditor({
           _uid: it._uid, ref_id: it.ref_id!, nombre: it.nombre, porciones: it.cantidad ?? 1, tipo: 'receta',
           opsPlaza: it.plaza ?? null, opsSeccion: it.seccion_mise ?? null, opsCantidad: it.cantidad_ops ?? null, opsUnidad: it.unidad_ops ?? null,
           opsRecipienteNombre: it.recipiente_nombre ?? null, opsRecipienteCantidad: it.recipiente_cantidad ?? null, opsPesoPorcion: it.peso_porcion ?? null, opsPesoPorcionUnidad: it.peso_porcion_unidad ?? null,
+          nota: it.nota ?? null,
         })))
       }
       setSecciones(['Componentes'])
@@ -824,6 +838,7 @@ export default function ComposicionEditor({
           cantidad: pr.porciones, unidad: null, variante: null,
           cantidad_ops: pr.opsCantidad ?? null, unidad_ops: pr.opsUnidad ?? null,
           recipiente_nombre: pr.opsRecipienteNombre ?? null, recipiente_cantidad: pr.opsRecipienteCantidad ?? null, peso_porcion: pr.opsPesoPorcion ?? null, peso_porcion_unidad: pr.opsPesoPorcionUnidad ?? null,
+          nota: pr.nota ?? null,
         })))
         setSecciones(['Componentes'])
       } else {
@@ -865,6 +880,10 @@ export default function ComposicionEditor({
   const precioN = parseFloat(precio.replace(',', '.')) || 0
   const fcPct = precioN > 0 && costoTotal > 0 ? (costoTotal / precioN) * 100 : null
   const fcColor = fcPct == null ? 'var(--text-3)' : fcPct < 30 ? '#16a34a' : fcPct <= 35 ? '#d97706' : 'var(--red-fg)'
+  // costoTotal en menú/evento se arma sumando gramos POR COMENSAL de cada
+  // componente (ver comentario de "Cantidad" en ItemRowInline) — con pax
+  // cargado, el costo real del evento entero es ese × pax.
+  const paxN = parseInt(pax, 10) || 0
 
   const searchResults = useMemo(() => {
     if (!sectionQuery.trim()) return []
@@ -984,6 +1003,7 @@ export default function ComposicionEditor({
           recipiente_cantidad: pr.opsRecipienteCantidad ?? null,
           peso_porcion: pr.opsPesoPorcion ?? null,
           peso_porcion_unidad: pr.opsPesoPorcionUnidad ?? null,
+          nota: pr.nota ?? null,
         })),
       }]
     } else {
@@ -1002,6 +1022,7 @@ export default function ComposicionEditor({
         variantes: esPlato ? [] : variantes,
         precio: precioN, categoria, tags, secciones: secs,
         fotoUrl: esPlato ? fotoUrl : null,
+        pax: !esPlato ? (paxN || null) : null,
       })
       // Guardado con éxito — el borrador ya no hace falta. Si `onSave` lanza
       // (error de red, RLS, etc.) no se llega acá: el borrador queda para
@@ -1023,7 +1044,7 @@ export default function ComposicionEditor({
         modo, nombre, descripcion, fechaEvento: fechaEvento || null,
         vigenciaDesde: vigenciaDesde || null, vigenciaHasta: vigenciaHasta || null,
         plazaControl: plazaControl || null, variantes, precio: precioN, categoria, tags,
-        fotoUrl,
+        fotoUrl, pax: !esPlato ? (paxN || null) : null,
         secciones: esPlato
           ? [{
               nombre: 'Recetas',
@@ -1034,6 +1055,7 @@ export default function ComposicionEditor({
                 cantidad_ops: pr.opsCantidad ?? null, unidad_ops: pr.opsUnidad ?? null,
                 recipiente_nombre: pr.opsRecipienteNombre ?? null, recipiente_cantidad: pr.opsRecipienteCantidad ?? null,
                 peso_porcion: pr.opsPesoPorcion ?? null, peso_porcion_unidad: pr.opsPesoPorcionUnidad ?? null,
+                nota: pr.nota ?? null,
               })),
             }]
           : secciones.map(nombreSec => ({
@@ -1045,7 +1067,7 @@ export default function ComposicionEditor({
     }, 400)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modo, nombre, descripcion, fechaEvento, vigenciaDesde, vigenciaHasta, plazaControl, variantes, precioN, categoria, tags, fotoUrl, secciones, items, platoRecetas, esPlato, draftKey])
+  }, [modo, nombre, descripcion, fechaEvento, vigenciaDesde, vigenciaHasta, plazaControl, variantes, precioN, paxN, categoria, tags, fotoUrl, secciones, items, platoRecetas, esPlato, draftKey])
 
   // Ctrl/Cmd+S — el chef que carga esto en notebook, entre otras pestañas,
   // espera guardar con el teclado sin buscar el botón verde.
@@ -1129,7 +1151,11 @@ export default function ComposicionEditor({
             return (
               <>
                 <Metric label="Ítems" value={String(esPlato ? platoRecetas.length : items.filter(i => i.nombre.trim()).length)} />
-                {isAdmin && <Metric label="Costo" value={fmtMoney(costoTotal)} />}
+                {/* Sin pax, "Costo" es por comensal (así se carga la cantidad
+                    de cada componente) — con pax, se aclara y se agrega el
+                    total real del evento/menú entero. */}
+                {isAdmin && <Metric label={!esPlato && paxN > 0 ? 'Costo/cub.' : 'Costo'} value={fmtMoney(costoTotal)} />}
+                {isAdmin && !esPlato && paxN > 0 && <Metric label={`Total × ${paxN}`} value={fmtMoney(costoTotal * paxN)} />}
                 {isAdmin && fcPct != null && <Metric label="Food cost" value={`${fcPct.toFixed(0)}%`} color={fcColor} big />}
                 {isAdmin && esPlato && precioN > 0 && <Metric label="Margen" value={fmtMoney(precioN - costoTotal)} color={precioN - costoTotal > 0 ? '#16a34a' : 'var(--red-fg)'} />}
               </>
@@ -1193,9 +1219,15 @@ export default function ComposicionEditor({
           )}
           {/* Fecha del evento — solo en modo evento */}
           {modo === 'evento' && (
-            <div style={{ marginBottom: 10 }}>
-              <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>Fecha del evento</label>
-              <input type="date" value={fechaEvento} onChange={e => handleFechaEventoChange(e.target.value)} style={{ ...inp }} />
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>Fecha del evento</label>
+                <input type="date" value={fechaEvento} onChange={e => handleFechaEventoChange(e.target.value)} style={{ ...inp }} />
+              </div>
+              <div style={{ width: 90 }}>
+                <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>Comensales</label>
+                <input value={pax} onChange={e => setPax(e.target.value.replace(/[^\d]/g, ''))} placeholder="40" inputMode="numeric" style={{ ...inp }} />
+              </div>
             </div>
           )}
           {/* Vigencia en el mise — cuándo entra y sale de la apertura/cierre.
@@ -1406,6 +1438,7 @@ export default function ComposicionEditor({
                           autoFocusCantidad={autoFocusCantidadUid === it._uid}
                           onCantidadCommitted={() => { setAutoFocusCantidadUid(null); setTimeout(() => searchRef.current?.focus(), 60) }}
                           plazaControl={plazaControl || undefined}
+                          esEvento={modo === 'evento'}
                           onEditReceta={(id, nombre) => setEditRecetaSheet({ id, nombre })}
                         />
                       </div>
@@ -1558,6 +1591,11 @@ export type PlatoItem = {
   opsRecipienteCantidad?: number | null
   opsPesoPorcion?: number | null
   opsPesoPorcionUnidad?: string | null
+  // Anotación libre sobre este componente en ESTE plato ("freír en la
+  // freidora chica") — no se propaga al mise fijo (checklist_items): esa
+  // fila puede sumar aporte de varios platos que compartan la misma
+  // receta+plaza, y no hay un dueño único para pisarle la nota.
+  nota?: string | null
 }
 
 function PlatoRecetasEditor({
@@ -1588,6 +1626,8 @@ function PlatoRecetasEditor({
   const [creandoIdea, setCreandoIdea] = useState(false)
   // OPS panel local — abre/cierra por _uid de la fila (el panel es OpsPanel compartido)
   const [opsPanelUid, setOpsPanelUid] = useState<number | null>(null)
+  // Nota libre por componente — abre/cierra por _uid, mismo patrón que OPS.
+  const [notaEditUid, setNotaEditUid] = useState<number | null>(null)
   // Vista rápida de receta — abre/cierra por _uid de la fila
   const [previewUid, setPreviewUid] = useState<number | null>(null)
   // Vistazo rápido de un resultado de búsqueda todavía sin elegir
@@ -1723,6 +1763,7 @@ function PlatoRecetasEditor({
             const fuente = pr.tipo === 'producto' ? productos : recetas
             const item = fuente.find(r => r.id === pr.ref_id)
             const opsActiva = opsPanelUid === pr._uid
+            const notaActiva = notaEditUid === pr._uid
             const opsConf = pr.opsPlaza && pr.opsSeccion
             const plazaCfg = PLAZAS_OPS.find(p => p.id === pr.opsPlaza)
             // Gramaje por plato: solo cuenta si está en gramos (pax/u rompen el total)
@@ -1731,7 +1772,7 @@ function PlatoRecetasEditor({
             return (
               <div key={pr._uid}>
                 {/* Fila principal */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px', borderBottom: (idx < platoRecetas.length - 1 || opsActiva) ? '1px solid var(--border)' : 'none', background: idx % 2 === 1 ? 'rgba(0,0,0,.01)' : 'transparent' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px', borderBottom: (idx < platoRecetas.length - 1 || opsActiva || notaActiva) ? '1px solid var(--border)' : 'none', background: idx % 2 === 1 ? 'rgba(0,0,0,.01)' : 'transparent' }}>
                   {pr.tipo === 'receta' ? (
                     <button onClick={() => setPreviewUid(prev => prev === pr._uid ? null : pr._uid)} title="Ver receta" aria-label="Ver receta"
                       style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', flexShrink: 0 }}>
@@ -1800,11 +1841,31 @@ function PlatoRecetasEditor({
                     <span style={{ fontSize: 8, fontWeight: 800, lineHeight: 1 }}>OPS</span>
                   </button>
 
+                  {/* Nota libre — instrucción puntual para este plato, distinta
+                      de la receta ("freír en la freidora chica"). Solo queda
+                      en plato_recetas: no viaja al mise fijo porque varios
+                      platos pueden compartir la misma receta+plaza. */}
+                  <button onClick={() => setNotaEditUid(prev => prev === pr._uid ? null : pr._uid)}
+                    title={pr.nota || 'Agregar nota'}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: pr.nota ? '#d97706' : 'var(--text-3)', flexShrink: 0, display: 'flex' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>sticky_note_2</span>
+                  </button>
+
                   <button onClick={() => setPlatoRecetas(prev => prev.filter(x => x._uid !== pr._uid))}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-3)', flexShrink: 0 }}>
                     <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
                   </button>
                 </div>
+
+                {/* Panel de nota inline */}
+                {notaActiva && (
+                  <div style={{ padding: '10px 14px', borderBottom: (idx < platoRecetas.length - 1 || opsActiva) ? '1px solid var(--border)' : 'none', background: 'var(--surface)' }}>
+                    <textarea autoFocus value={pr.nota ?? ''}
+                      onChange={e => setPlatoRecetas(prev => prev.map(x => x._uid === pr._uid ? { ...x, nota: e.target.value || null } : x))}
+                      placeholder="Ej: freír en la freidora chica" rows={2}
+                      style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 12, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
+                  </div>
+                )}
 
                 {/* Panel OPS inline (componente compartido) */}
                 {opsActiva && (
@@ -1941,7 +2002,7 @@ function PlatoRecetasEditor({
 // ════════════════════════════════════════════════════════════
 function ItemRowInline({
   item, expanded, onToggle, onChange, onRemove, recetas, productos, cartaItems, variantes, draftRecetaIds, recipientesUsados,
-  autoFocusCantidad, onCantidadCommitted, plazaControl, onEditReceta,
+  autoFocusCantidad, onCantidadCommitted, plazaControl, onEditReceta, esEvento,
 }: {
   item: ItemRow
   expanded: boolean
@@ -1962,11 +2023,18 @@ function ItemRowInline({
   // Abre RecetaEditSheet para la receta vinculada — botón "Crear receta" del
   // preview cuando todavía no tiene ingredientes.
   onEditReceta?: (recetaId: string, nombre: string) => void
+  // Un evento no pasa por el mise fijo (activarMenuParaFechas solo copia
+  // plaza+cantidad a la tarea) — sección/recipiente/peso por porción del
+  // panel OPS completo se perderían en silencio. Con esEvento, el panel se
+  // reduce a elegir plaza.
+  esEvento?: boolean
 }) {
   const [showResults, setShowResults] = useState(false)
   const [opsOpen, setOpsOpen] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const [previewSearchResult, setPreviewSearchResult] = useState<{ nombre: string; ingredientes: { nombre: string; cantidad: number; unidad: string }[] } | null>(null)
+  // Solo hace falta para el selector de plaza reducido en evento (ver esEvento).
+  const { plazasCustom: plazasCustomLocal } = usePlazasCustom()
   // Texto crudo del input de cantidad — desacoplado de item.cantidad (number)
   // para no perder la coma decimal ni el punto final mientras se escribe.
   const [cantidadText, setCantidadText] = useState(item.cantidad != null ? String(item.cantidad).replace('.', ',') : '')
@@ -2050,6 +2118,7 @@ function ItemRowInline({
               {item.nombre || 'Tocá para completar…'}
             </div>
             {isDraft && <span style={{ fontSize: 8, fontWeight: 800, padding: '1px 5px', borderRadius: 99, background: 'rgba(220,38,38,.1)', color: 'var(--red-fg)', textTransform: 'uppercase', letterSpacing: '.04em', flexShrink: 0 }}>a realizar</span>}
+            {item.nota && <span className="material-symbols-outlined" title={item.nota} style={{ fontSize: 13, color: '#d97706', flexShrink: 0 }}>sticky_note_2</span>}
           </div>
           {!expanded && (plazaEfectiva || item.seccion_mise || item.variante) && (
             <div style={{ display: 'flex', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
@@ -2176,7 +2245,27 @@ function ItemRowInline({
             })}
           </div>
 
-          {/* OPS / Mise — mismo panel compartido que ficha y plato */}
+          {/* OPS / Mise — mismo panel compartido que ficha y plato. Un evento
+              NO pasa por el mise fijo: activarMenuParaFechas solo copia
+              plaza+cantidad a la tarea, así que sección/recipiente/peso por
+              porción se perderían en silencio — se reduce a elegir plaza. */}
+          {esEvento ? (
+            <>
+              <label style={lbl}>Plaza <span style={{ textTransform: 'none', fontWeight: 500, color: 'var(--text-3)' }}>(para identificarla en Producción)</span></label>
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 10 }}>
+                {[...PLAZAS_OPS.filter(p => p.id !== 'general' && p.id !== 'menu'), ...plazasCustomLocal.map(c => ({ id: c.key, label: c.nombre, color: c.color }))].map(p => (
+                  <button key={p.id} type="button" onClick={() => onChange({ plaza: item.plaza === p.id ? null : p.id })}
+                    style={{ padding: '5px 11px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700,
+                      background: item.plaza === p.id ? `${p.color}18` : 'var(--bg)',
+                      color: item.plaza === p.id ? p.color : 'var(--text-3)',
+                      outline: item.plaza === p.id ? `1.5px solid ${p.color}50` : '1px solid var(--border)' }}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+          <>
           <label style={lbl}>OPS / Mise</label>
           {!opsOpen ? (
             <button onClick={() => setOpsOpen(true)}
@@ -2209,6 +2298,8 @@ function ItemRowInline({
                 onCancel={() => setOpsOpen(false)}
               />
             </div>
+          )}
+          </>
           )}
 
           {/* Variante — a qué opción del menú pertenece (Común = todas) */}
@@ -2243,7 +2334,7 @@ function ItemRowInline({
             </div>
           ) : (
             <div>
-              <label style={lbl}>Cantidad</label>
+              <label style={lbl}>Cantidad <span style={{ textTransform: 'none', fontWeight: 500, color: 'var(--text-3)' }}>(por comensal, en gramos)</span></label>
               <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
                 <input value={cantidadText}
                   onChange={e => {
@@ -2266,6 +2357,15 @@ function ItemRowInline({
               )}
             </div>
           )}
+
+          {/* Nota libre — instrucción puntual sobre este componente, distinta
+              de la receta en sí ("freír en la freidora chica"). Viaja al
+              mise (checklist_items.nota) y a la tarea (tareas.nota) al
+              activar, para que no se pierda entre la carga y la cocina. */}
+          <label style={{ ...lbl, marginTop: 10 }}>Nota <span style={{ textTransform: 'none', fontWeight: 500, color: 'var(--text-3)' }}>(opcional — para quien lo va a hacer)</span></label>
+          <textarea value={item.nota ?? ''} onChange={e => onChange({ nota: e.target.value || null })}
+            placeholder="Ej: freír en la freidora chica"
+            rows={2} style={{ ...fieldInp, resize: 'vertical', fontFamily: 'inherit' }} />
         </div>
       )}
       {showPreview && recetaVinculada && (

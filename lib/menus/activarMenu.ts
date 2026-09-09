@@ -1,6 +1,28 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { MenuConPreparaciones } from '@/lib/hooks/useMenus'
+import type { MenuTipo, PrepPrioridad, PrepTipo } from '@/lib/hooks/useMenus'
 import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
+
+// Subconjunto real de MenuConPreparaciones que esta función lee — permite
+// activar un menú/evento recién creado (page.tsx, "activar producción" al
+// guardar un evento con fecha) sin tener que armar el objeto completo con
+// campos que no importan acá (restaurante_id, activo, enMise...).
+interface PreparacionParaActivar {
+  nombre: string
+  prioridad: PrepPrioridad
+  paso: string
+  plaza: string | null
+  usuario_asignado: string | null
+  tipo: PrepTipo
+  ref_id: string | null
+  cantidad?: number | null
+  nota?: string | null
+}
+interface MenuParaActivar {
+  id: string
+  tipo: MenuTipo
+  nombre: string
+  preparaciones: PreparacionParaActivar[]
+}
 
 export interface ActivarMenuResultado {
   totalTareas: number
@@ -20,7 +42,7 @@ export interface ActivarMenuResultado {
 export async function activarMenuParaFechas(
   supabase: SupabaseClient,
   restauranteId: string,
-  menu: MenuConPreparaciones,
+  menu: MenuParaActivar,
   fechas: string[],
 ): Promise<ActivarMenuResultado> {
   const modoDestino = menu.tipo === 'evento' ? 'evento' : 'menu'
@@ -62,6 +84,7 @@ export async function activarMenuParaFechas(
       asignado_a: p.usuario_asignado,
       receta_id: p.tipo === 'receta' ? p.ref_id : null,
       cantidad: p.cantidad,
+      nota: p.nota ?? null,
       turno_fecha: f,
       menu_id: menu.id,
       orden: i,

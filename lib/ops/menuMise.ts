@@ -83,6 +83,7 @@ export async function sincronizarMiseDeMenu(params: {
       // checklist/ClientView.tsx) la tarea caiga en la columna real del plan
       // en vez de forzar 'general' y duplicarla.
       menu_paso: p.paso || null,
+      nota: p.nota ?? null,
     }
     const existenteId = existenteIdPorClave.get(clave)
     if (existenteId) {

@@ -29,6 +29,11 @@ export interface MenuPreparacion {
   peso_porcion: number | null
   peso_porcion_unidad: string | null
   orden: number
+  // Anotación libre del chef sobre ESTA preparación ("freír en la freidora
+  // chica") — sep 2026. Viaja a checklist_items.nota al activar en el mise
+  // (sincronizarMiseDeMenu) y a tareas.nota al activar por fecha
+  // (activarMenuParaFechas) — se carga acá, no después.
+  nota: string | null
 }
 
 export interface MenuConPreparaciones {
@@ -46,6 +51,10 @@ export interface MenuConPreparaciones {
   plaza_control: string | null
   variantes: string[] | null
   precio: number | null
+  // Comensales estimados — sep 2026. Antes se escribía a mano en
+  // `descripcion`; sin esto no hay costo por cubierto ni forma de escalar
+  // cantidades. Sigue siendo un ESTIMADO, no una reserva confirmada.
+  pax: number | null
   activo: boolean
   created_at: string
   preparaciones: MenuPreparacion[]
@@ -72,6 +81,7 @@ export interface PrepInput {
   recipiente_nombre?: string | null
   peso_porcion?: number | null
   peso_porcion_unidad?: string | null
+  nota?: string | null
 }
 
 async function fetchMenusData(key: string): Promise<MenuConPreparaciones[]> {
@@ -125,7 +135,7 @@ export function useMenus() {
 
   // ── Crear menú + sus preparaciones ──
   const crearMenu = useCallback(async (
-    data: { nombre: string; tipo: MenuTipo; descripcion?: string | null; fecha_evento?: string | null; vigencia_desde?: string | null; vigencia_hasta?: string | null; plaza_control?: string | null; variantes?: string[] | null; precio?: number | null },
+    data: { nombre: string; tipo: MenuTipo; descripcion?: string | null; fecha_evento?: string | null; vigencia_desde?: string | null; vigencia_hasta?: string | null; plaza_control?: string | null; variantes?: string[] | null; precio?: number | null; pax?: number | null },
     preps: PrepInput[],
   ): Promise<string | null> => {
     if (!RESTAURANTE_ID) return null
@@ -142,6 +152,7 @@ export function useMenus() {
         plaza_control: data.plaza_control ?? null,
         variantes: data.variantes && data.variantes.length > 0 ? data.variantes : null,
         precio: data.precio ?? null,
+        pax: data.pax ?? null,
       })
       .select('id')
       .single()
@@ -166,6 +177,7 @@ export function useMenus() {
         recipiente_nombre: p.recipiente_nombre ?? null,
         peso_porcion: p.peso_porcion ?? null,
         peso_porcion_unidad: p.peso_porcion_unidad ?? null,
+        nota: p.nota ?? null,
         orden: i,
       }))
       const { error: prepErr } = await supabase.from('menu_preparaciones').insert(rows)
@@ -182,7 +194,7 @@ export function useMenus() {
   // La función corre las tres operaciones en una única transacción de Postgres.
   const actualizarMenu = useCallback(async (
     id: string,
-    data: { nombre: string; tipo: MenuTipo; descripcion?: string | null; fecha_evento?: string | null; vigencia_desde?: string | null; vigencia_hasta?: string | null; plaza_control?: string | null; variantes?: string[] | null; precio?: number | null },
+    data: { nombre: string; tipo: MenuTipo; descripcion?: string | null; fecha_evento?: string | null; vigencia_desde?: string | null; vigencia_hasta?: string | null; plaza_control?: string | null; variantes?: string[] | null; precio?: number | null; pax?: number | null },
     preps: PrepInput[],
   ) => {
     const { error } = await supabase.rpc('reemplazar_menu_preparaciones', {
@@ -196,6 +208,7 @@ export function useMenus() {
       p_plaza_control: data.plaza_control ?? null,
       p_variantes: data.variantes && data.variantes.length > 0 ? data.variantes : null,
       p_precio: data.precio ?? null,
+      p_pax: data.pax ?? null,
       p_preparaciones: preps.map((p, i) => ({
         paso: p.paso,
         tipo: p.tipo,
@@ -213,6 +226,7 @@ export function useMenus() {
         recipiente_nombre: p.recipiente_nombre ?? null,
         peso_porcion: p.peso_porcion ?? null,
         peso_porcion_unidad: p.peso_porcion_unidad ?? null,
+        nota: p.nota ?? null,
         orden: i,
       })),
     })
@@ -252,6 +266,7 @@ export function useMenus() {
             asignado_a: p.usuario_asignado,
             receta_id: p.tipo === 'receta' ? p.ref_id : null,
             cantidad: p.cantidad ?? null,
+            nota: p.nota ?? null,
             turno_fecha: f,
             menu_id: id,
             orden: 1000 + i,
@@ -268,6 +283,7 @@ export function useMenus() {
               plaza: p.plaza,
               receta_id: p.tipo === 'receta' ? p.ref_id : null,
               cantidad: p.cantidad ?? null,
+              nota: p.nota ?? null,
             }).eq('id', t.id)
           } else if (t.estado === 'pendiente') {
             await supabase.from('tareas').delete().eq('id', t.id)
@@ -288,7 +304,7 @@ export function useMenus() {
       plaza: p.plaza, seccion_mise: p.seccion_mise, usuario_asignado: p.usuario_asignado,
       cantidad: p.cantidad, unidad: p.unidad, variante: p.variante,
       cantidad_ops: p.cantidad_ops, unidad_ops: p.unidad_ops, recipiente_nombre: p.recipiente_nombre,
-      peso_porcion: p.peso_porcion, peso_porcion_unidad: p.peso_porcion_unidad,
+      peso_porcion: p.peso_porcion, peso_porcion_unidad: p.peso_porcion_unidad, nota: p.nota,
     }))
     return await crearMenu({
       nombre: `Copia de ${menu.nombre}`,
@@ -300,6 +316,7 @@ export function useMenus() {
       plaza_control: menu.plaza_control,
       variantes: menu.variantes,
       precio: menu.precio,
+      pax: menu.pax,
     }, preps)
   }, [crearMenu])
 
