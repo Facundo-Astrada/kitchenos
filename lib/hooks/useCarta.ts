@@ -74,6 +74,12 @@ export interface PlatoRecetaEnriquecido extends PlatoRecetaDB {
   // cargado en el mise) — no se fabrica un costo asumiendo "una porción
   // entera del batch". Ver CartaItemEnriquecido.tieneComponentesSinEstandarizar.
   costo_calculado: number | null
+  // Mismo gramaje ya resuelto (mise > columna propia) que produce
+  // costo_calculado, pero expuesto solo — distinto de "hay costo/g": un
+  // componente puede tener gramaje conocido y aun así costo_calculado null
+  // (receta sin costoPorGramo). lib/recetas/estandarizacion.ts lo usa para
+  // el eje "¿se sabe cuánto entra de esto en este plato?".
+  gramaje_efectivo_g: number | null
 }
 
 export interface PlatoPackagingDB {
@@ -232,7 +238,7 @@ async function fetchCartaItemsData(key: string): Promise<CartaItemEnriquecido[]>
         const costoPorGramo = costoPorGramoDeReceta(r, costoTotalReceta)
         costo_calculado = costoPorGramo != null ? costoPorGramo * gramajeEnG : null
       }
-      platoRecetasMap[pr.plato_id].push({ ...pr, receta: r, costo_calculado })
+      platoRecetasMap[pr.plato_id].push({ ...pr, receta: r, costo_calculado, gramaje_efectivo_g: gramajeEnG })
     }
 
     // Fetch plato_packaging + productos

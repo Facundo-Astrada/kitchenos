@@ -12,6 +12,8 @@ import OpsPanel, { type OpsInitial, type OpsResult } from '@/components/ops/OpsP
 import { RecetaEditSheet } from '@/components/recetas/RecetaEditSheet'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import { fmtMoney, fcBadge, marginBadge } from './cards'
+import { NivelBadge } from './EstandarizacionView'
+import { nivelDePlato, nivelDeComponente } from '@/lib/recetas/estandarizacion'
 
 // ── Detail View ─────────────────────────────────────────
 const TAG_DEFS = [
@@ -275,6 +277,8 @@ export function DetailView({
   const linkedReceta = item.receta_id ? recetas.find(r => r.id === item.receta_id) : null
   const hasFc = item.food_cost_pct != null && item.food_cost_pct > 0
   const hasMrg = item.margen_pct_computed != null
+  // Nivel de estandarización — el mínimo de sus componentes manda. Ver lib/recetas/estandarizacion.ts.
+  const diagPlato = useMemo(() => nivelDePlato(item), [item])
 
   return (
     <div>
@@ -536,6 +540,14 @@ export function DetailView({
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
               Recetas del plato
             </span>
+            {diagPlato.componentes.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <NivelBadge nivel={diagPlato.nivel} title={diagPlato.faltantes.join(' · ') || undefined} />
+                {diagPlato.faltantes.length > 0 && (
+                  <span style={{ fontSize: 10, color: 'var(--text-3)' }}>Falta: {diagPlato.faltantes[0]}{diagPlato.faltantes.length > 1 ? ` +${diagPlato.faltantes.length - 1}` : ''}</span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Lista de recetas vinculadas */}
@@ -561,8 +573,14 @@ export function DetailView({
                     <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>menu_book</span>
                   </button>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {pr.receta?.nombre ?? pr.receta_id}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {pr.receta?.nombre ?? pr.receta_id}
+                      </span>
+                      {(() => {
+                        const diagComp = nivelDeComponente(pr)
+                        return <NivelBadge nivel={diagComp.nivel} title={diagComp.faltantes.join(' · ') || undefined} />
+                      })()}
                     </div>
                     <div style={{ display: 'flex', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
                       {pr.costo_calculado != null && pr.costo_calculado > 0 && (

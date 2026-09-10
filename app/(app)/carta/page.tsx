@@ -24,6 +24,7 @@ import {
 import { gramajeDesdeCantidadOps } from '@/lib/recetas/peso'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { clasificarIngenieriaMenu, buildVentasMap, mapaCuadrantePorId, QUAD_META } from '@/lib/carta/ingenieriaMenu'
+import { analizarCarta } from '@/lib/recetas/estandarizacion'
 import { sincronizarMiseDeMenu } from '@/lib/ops/menuMise'
 import { activarMenuParaFechas, resumenActivacion } from '@/lib/menus/activarMenu'
 import { Toast, FlipCard } from '@/components/ui'
@@ -32,6 +33,7 @@ import { exportCartaPDF, exportRentabilidadPDF } from './exportar'
 import { PackagingGruposDrawer } from './PackagingGruposDrawer'
 import { ImportCartaModal } from './ImportCartaModal'
 import { DetailView } from './DetailView'
+import { EstandarizacionView } from './EstandarizacionView'
 // ── Helpers ─────────────────────────────────────────────
 const CATEGORIAS: CategoriaCartaItem[] = [
   'Entradas', 'Principales', 'Postres', 'Bebidas', 'Guarniciones', 'Brunch', 'Cafetería',
@@ -314,7 +316,7 @@ function RentabilidadView({
 }
 
 // ── MAIN PAGE ───────────────────────────────────────────
-type View = 'list' | 'detail' | 'rentabilidad' | 'menus'
+type View = 'list' | 'detail' | 'rentabilidad' | 'menus' | 'estandarizacion'
 
 export default function CartaPage() {
   const { items, loading, fetchItems, crearItem, actualizarItem, actualizarTags, toggleDisponible, eliminarItem, duplicarItem, agregarPlatoReceta, actualizarPlatoRecetaOpsCompleta, actualizarPlatoRecetaGramaje, eliminarPlatoReceta, agregarPlatoPackaging, eliminarPlatoPackaging, categorias } = useCarta()
@@ -342,6 +344,9 @@ export default function CartaPage() {
   // cuadrante de ingeniería va por `verCostos`; esto es solo edición.
   const canEdit = isAdmin || puedeEditar('carta')
   const isDesktop = useIsDesktop()
+  // Resumen para el shortcut de Estandarización en el header de la lista —
+  // barata (~decenas de componentes), se recalcula solo cuando cambian los items.
+  const estandarizacion = useMemo(() => analizarCarta(items), [items])
 
   const [view, setView] = useState<View>('list')
   // Segundo cerrojo de Rentabilidad: ocultar el CTA no alcanza si el estado
@@ -350,6 +355,12 @@ export default function CartaPage() {
   useEffect(() => {
     if (view === 'rentabilidad' && !verCostos) setView('list')
   }, [view, verCostos])
+  // Mismo cerrojo para Estandarización, gateada por canEdit (no verCostos —
+  // ver arriba). canEdit se resuelve async (usePermisos): sin esto, un
+  // usuario sin permiso que entra directo por deep link queda en la vista.
+  useEffect(() => {
+    if (view === 'estandarizacion' && !canEdit) setView('list')
+  }, [view, canEdit])
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [filter, setFilter] = useState<string>('Todas')
   const [toast, setToast] = useState('')
@@ -754,6 +765,23 @@ export default function CartaPage() {
     )
   }
 
+  // ── Estandarización — trabajo de cocina, no de plata: el gate es canEdit,
+  // no verCostos (un sous chef tiene que poder ver qué le falta pesar sin
+  // ver precios). Ver PLAN-ESTANDARIZACION.md.
+  if (view === 'estandarizacion' && canEdit) {
+    return (
+      <>
+        <EstandarizacionView
+          items={items}
+          onBack={() => setView('list')}
+          onOpenPlato={(pid) => { setSelectedItemId(pid); setView('detail') }}
+          verCostos={verCostos}
+        />
+        {toast && <Toast msg={toast} onDone={() => setToast('')} />}
+      </>
+    )
+  }
+
   // ── Editor unificado (Plato / Menú / Evento) ──
   if (composing) {
     return (
@@ -1017,6 +1045,30 @@ export default function CartaPage() {
               </div>
             </div>
             <span className="material-symbols-outlined" style={{ fontSize: 18 }}>chevron_right</span>
+          </button>
+        </div>
+      )}
+
+      {/* Estandarización shortcut — trabajo de cocina (qué le falta pesar a
+          cada receta), no de plata: gate en canEdit, NO en verCostos (ver
+          EstandarizacionView). Estilo neutro a propósito, para no leerse
+          como "otra pantalla de plata" igual a la de arriba. */}
+      {canEdit && estandarizacion.totalComponentes > 0 && (
+        <div style={{ padding: '12px 16px 0' }}>
+          <button data-coach-target="carta-estandarizacion" onClick={() => setView('estandarizacion')} style={{
+            width: '100%', padding: '10px 14px', borderRadius: 10,
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', gap: 8,
+            cursor: 'pointer', color: 'var(--text-1)',
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-2)' }}>scale</span>
+            <div style={{ flex: 1, textAlign: 'left' }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Estandarización</div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                {estandarizacion.platosQueCostean} de {estandarizacion.totalPlatos} platos con food cost calculable
+              </div>
+            </div>
+            <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)' }}>chevron_right</span>
           </button>
         </div>
       )}
