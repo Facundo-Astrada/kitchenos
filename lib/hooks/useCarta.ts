@@ -142,7 +142,10 @@ async function fetchCartaCategoriasData(key: string): Promise<CartaCategoria[]> 
   return (seeded ?? []) as CartaCategoria[]
 }
 
-async function fetchCartaItemsData(key: string): Promise<CartaItemEnriquecido[]> {
+// Exportada para useRutaImplantacion.ts — la estación 2.3 necesita el árbol
+// completo (componentes + gramaje + costos) para saber de verdad cuántos
+// platos llegan a N3, no solo si tienen receta vinculada. Ver estandarizacion.ts.
+export async function fetchCartaItemsData(key: string): Promise<CartaItemEnriquecido[]> {
   const rid = key.slice('carta-items-'.length)
   const supabase = createClient()
 

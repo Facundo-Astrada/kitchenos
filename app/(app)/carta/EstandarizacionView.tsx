@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import type { Receta } from '@/types'
 import type { CartaItemEnriquecido } from '@/lib/hooks/useCarta'
 import { analizarCarta, nivelDePlato, type Nivel } from '@/lib/recetas/estandarizacion'
 import { fmtMoney } from './cards'
@@ -32,21 +33,25 @@ export function NivelBadge({ nivel, title }: { nivel: Nivel; title?: string }) {
 
 export function EstandarizacionView({
   items,
+  recetasPorId,
   onBack,
   onOpenPlato,
   verCostos = false,
 }: {
   items: CartaItemEnriquecido[]
+  // Recetario completo — resuelve ingredientes tipo "subreceta" a su propio
+  // nivel en vez de contarlos siempre como "sin costo". Ver estandarizacion.ts.
+  recetasPorId?: Map<string, Receta>
   onBack: () => void
   onOpenPlato: (id: string) => void
   verCostos?: boolean
 }) {
-  const analisis = useMemo(() => analizarCarta(items), [items])
+  const analisis = useMemo(() => analizarCarta(items, recetasPorId), [items, recetasPorId])
   const porPlato = useMemo(
     () => items
-      .map(item => ({ item, diag: nivelDePlato(item) }))
+      .map(item => ({ item, diag: nivelDePlato(item, recetasPorId) }))
       .sort((a, b) => a.diag.nivel - b.diag.nivel || a.item.nombre.localeCompare(b.item.nombre, 'es')),
-    [items],
+    [items, recetasPorId],
   )
 
   const { porNivel, totalComponentes, totalPlatos, platosQueCostean, cola } = analisis

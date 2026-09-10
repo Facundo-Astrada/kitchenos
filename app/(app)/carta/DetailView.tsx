@@ -278,7 +278,9 @@ export function DetailView({
   const hasFc = item.food_cost_pct != null && item.food_cost_pct > 0
   const hasMrg = item.margen_pct_computed != null
   // Nivel de estandarización — el mínimo de sus componentes manda. Ver lib/recetas/estandarizacion.ts.
-  const diagPlato = useMemo(() => nivelDePlato(item), [item])
+  // recetasPorId resuelve ingredientes tipo "subreceta" (sin producto_id propio) a su propio nivel.
+  const recetasPorId = useMemo(() => new Map(recetas.map(r => [r.id, r])), [recetas])
+  const diagPlato = useMemo(() => nivelDePlato(item, recetasPorId), [item, recetasPorId])
 
   return (
     <div>
@@ -578,7 +580,7 @@ export function DetailView({
                         {pr.receta?.nombre ?? pr.receta_id}
                       </span>
                       {(() => {
-                        const diagComp = nivelDeComponente(pr)
+                        const diagComp = nivelDeComponente(pr, recetasPorId)
                         return <NivelBadge nivel={diagComp.nivel} title={diagComp.faltantes.join(' · ') || undefined} />
                       })()}
                     </div>

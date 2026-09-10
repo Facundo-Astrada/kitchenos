@@ -346,7 +346,13 @@ export default function CartaPage() {
   const isDesktop = useIsDesktop()
   // Resumen para el shortcut de Estandarización en el header de la lista —
   // barata (~decenas de componentes), se recalcula solo cuando cambian los items.
-  const estandarizacion = useMemo(() => analizarCarta(items), [items])
+  // Mapa de recetario completo — resuelve ingredientes tipo "subreceta" (sin
+  // producto_id propio) a su propio nivel en vez de contarlos siempre como
+  // "sin costo". Carta solo trae las recetas linkeadas a un plato; el
+  // recetario completo (useRecetas) sí tiene la subreceta aunque no sea ella
+  // misma un plato. Ver lib/recetas/estandarizacion.ts.
+  const recetasPorId = useMemo(() => new Map(recetas.map(r => [r.id, r])), [recetas])
+  const estandarizacion = useMemo(() => analizarCarta(items, recetasPorId), [items, recetasPorId])
 
   const [view, setView] = useState<View>('list')
   // Segundo cerrojo de Rentabilidad: ocultar el CTA no alcanza si el estado
@@ -773,6 +779,7 @@ export default function CartaPage() {
       <>
         <EstandarizacionView
           items={items}
+          recetasPorId={recetasPorId}
           onBack={() => setView('list')}
           onOpenPlato={(pid) => { setSelectedItemId(pid); setView('detail') }}
           verCostos={verCostos}

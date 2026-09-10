@@ -43,9 +43,24 @@ function tieneCuerpo(r: Receta): boolean {
  * en qué plato se use. N3 exige que TODOS los ingredientes vengan de un
  * producto de stock con costo cargado (factura real, no un número tipeado
  * de memoria) — ver decisión de sesión 2026-09-10.
+ *
+ * `recetasPorId` (opcional) resuelve ingredientes tipo "subreceta": esos NO
+ * tienen producto_id propio (no son de stock, son otra receta) — sin el
+ * mapa, contarían siempre como "sin costo" aunque la subreceta esté
+ * perfecta. Con el mapa se recursa a su propio nivel. Solo 7 filas así en
+ * toda la base (sep 2026) — bajo volumen, pero sin esto el resultado es
+ * incorrecto, no solo impreciso. `visitados` corta un ciclo de subrecetas
+ * (dato corrupto) sin recursión infinita.
  */
-export function nivelDeReceta(r: Receta | undefined): DiagnosticoNivel {
+export function nivelDeReceta(
+  r: Receta | undefined,
+  recetasPorId?: Map<string, Receta>,
+  visitados?: Set<string>,
+): DiagnosticoNivel {
   if (!r) return { nivel: 0, faltantes: ['vincular una receta'], costoPorGramo: null, costoVerificado: false }
+  if (visitados?.has(r.id)) {
+    return { nivel: 1, faltantes: ['ciclo de subrecetas — revisar la carga'], costoPorGramo: null, costoVerificado: false }
+  }
 
   if (!tieneCuerpo(r)) {
     const faltantes: string[] = []
@@ -63,7 +78,15 @@ export function nivelDeReceta(r: Receta | undefined): DiagnosticoNivel {
   if (pesoG == null) faltantes.push('peso neto')
   else if (!costoVerificado) faltantes.push('pesar el resultado final (hoy se estima por el crudo)')
 
-  const sinCosto = ings.filter(i => !i.producto_id || !((i.costo_unitario ?? 0) > 0))
+  const sinCosto = ings.filter(i => {
+    if (i.producto_id && (i.costo_unitario ?? 0) > 0) return false
+    if (i.subreceta_id && recetasPorId) {
+      const sub = recetasPorId.get(i.subreceta_id)
+      const propios = new Set(visitados).add(r.id)
+      return nivelDeReceta(sub, recetasPorId, propios).nivel < 3
+    }
+    return true
+  })
   if (sinCosto.length > 0) {
     faltantes.push(sinCosto.length === 1
       ? `costo de 1 ingrediente (${sinCosto[0].nombre})`
@@ -89,8 +112,8 @@ export function nivelDeReceta(r: Receta | undefined): DiagnosticoNivel {
  * agrega información — se omite ese faltante para no repetir el mismo
  * bloqueo con otras palabras.
  */
-export function nivelDeComponente(pr: PlatoRecetaEnriquecido): DiagnosticoNivel {
-  const base = nivelDeReceta(pr.receta)
+export function nivelDeComponente(pr: PlatoRecetaEnriquecido, recetasPorId?: Map<string, Receta>): DiagnosticoNivel {
+  const base = nivelDeReceta(pr.receta, recetasPorId)
   if (base.nivel <= 1) return base
 
   if (pr.gramaje_efectivo_g == null) {
@@ -117,13 +140,13 @@ export interface DiagnosticoPlato extends DiagnosticoNivel {
  * gramaje: el food cost de ese caso ya usa porciones, no un gramaje
  * cargado, ver useCarta.ts).
  */
-export function nivelDePlato(item: CartaItemEnriquecido): DiagnosticoPlato {
+export function nivelDePlato(item: CartaItemEnriquecido, recetasPorId?: Map<string, Receta>): DiagnosticoPlato {
   const componentes: ComponenteDiagnostico[] = item.plato_recetas.length > 0
     ? item.plato_recetas.map(pr => ({
-        pr, nombre: pr.receta?.nombre ?? '(receta eliminada)', diag: nivelDeComponente(pr),
+        pr, nombre: pr.receta?.nombre ?? '(receta eliminada)', diag: nivelDeComponente(pr, recetasPorId),
       }))
     : item.receta
-      ? [{ pr: null, nombre: item.receta.nombre, diag: nivelDeReceta(item.receta) }]
+      ? [{ pr: null, nombre: item.receta.nombre, diag: nivelDeReceta(item.receta, recetasPorId) }]
       : []
 
   if (componentes.length === 0) {
@@ -167,7 +190,7 @@ const nivelVacio = (): Record<Nivel, number> => ({ 0: 0, 1: 0, 2: 0, 3: 0 })
  * si nunca se usan. La cola se ordena por cuántos platos distintos destraba
  * cada receta (misma receta en 6 platos pesa 6x más que una usada en 1).
  */
-export function analizarCarta(items: CartaItemEnriquecido[]): AnalisisCarta {
+export function analizarCarta(items: CartaItemEnriquecido[], recetasPorId?: Map<string, Receta>): AnalisisCarta {
   const porNivel = nivelVacio()
   const platosPorNivel = nivelVacio()
   let platosQueCostean = 0
@@ -178,7 +201,7 @@ export function analizarCarta(items: CartaItemEnriquecido[]): AnalisisCarta {
   const porReceta = new Map<string, { nombre: string; nivel: Nivel; platos: Set<string>; primerPlatoId: string; faltantes: Set<string> }>()
 
   for (const item of items) {
-    const diag = nivelDePlato(item)
+    const diag = nivelDePlato(item, recetasPorId)
     platosPorNivel[diag.nivel]++
     if (diag.nivel >= 2) platosQueCostean++
 

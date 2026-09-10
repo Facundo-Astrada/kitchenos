@@ -211,12 +211,37 @@ duplicada.
 
 ---
 
-## Fuera de alcance (v2, anotar en PENDIENTES.md al cerrar)
+## v2 — hecho (2026-09-10, misma sesión, después de shippear v1)
 
-- Escala N1/N2/N3 en las cards del Recetario (hoy hay un binario "SIN PESO NETO",
-  `recetario/page.tsx:2278`).
-- **Arreglar el número falso de la estación 2.3** de la ruta de implantación:
-  `cartaSinEstandarizar: c(6)` (`useRutaImplantacion.ts:177`) reusa el conteo de
-  "sin receta" — hoy miente. `analizarCarta` le da el dato real.
-- `producto_id` en `plato_recetas` para componentes comprados.
-- Recursión en subrecetas.
+- ✅ **Escala N1/N2/N3 en las cards del Recetario** — reemplazó el binario
+  "SIN PESO NETO". `RecetaCard` ahora usa `nivelDeReceta(r, recetasPorId)` +
+  `NivelBadge` (reexportado desde `carta/EstandarizacionView.tsx`, cross-import
+  de route segment — hay precedente en el repo, ver `facturas/page.tsx`).
+  Verificado en pantalla contra El Rescoldo: badges N1/N2 reales por card.
+- ✅ **Arreglado el número falso de la estación 2.3**: `cartaSinEstandarizar`
+  reusaba el conteo de "sin receta" (mentía). Ahora `useRutaImplantacion.ts`
+  exporta `fetchCartaItemsData` desde `useCarta.ts` y corre `analizarCarta`
+  sobre el árbol completo — la única consulta no-liviana del fetcher (el resto
+  son counts), corre en paralelo, degrada a 0 si falla (mismo patrón que el
+  resto). Costo aceptado porque esta pantalla abre ~1 vez por día
+  (`dedupingInterval: 300_000`).
+- ✅ **Recursión en subrecetas** — un ingrediente `tipo:'subreceta'` no tiene
+  `producto_id` propio; sin resolverlo, siempre contaba como "sin costo" aunque
+  la subreceta detrás estuviera perfecta. `nivelDeReceta` ahora acepta
+  `recetasPorId?: Map<string,Receta>` opcional y recursa (con guarda de ciclo).
+  Pasado en los 3 call sites que ya tienen el recetario completo en memoria
+  (Carta vía `useRecetas()`, DetailView, Recetario). `useRutaImplantacion` NO
+  lo recibe — 7 filas en toda la base, no vale una fetch más en ese hook.
+
+Tests: 427/427 (17→21 en `estandarizacion.test.ts`, +4 de subrecetas incluido
+un ciclo que no debe colgar). Build + typecheck limpios. Lint: mismo baseline
+pre-existente (22 problemas en `recetario/page.tsx`+`useRutaImplantacion.ts`,
+idéntico antes/después).
+
+## Fuera de alcance (quedó para v3)
+
+- `producto_id` en `plato_recetas` para componentes comprados (pan, limón,
+  vino) — deliberadamente NO se hizo esta sesión: toca schema (migración),
+  costeo, el buscador de `ComposicionEditor` y probablemente el mise (¿un
+  producto comprado genera tarea?). Tamaño distinto a los tres ítems de
+  arriba — amerita su propia sesión ("una sesión = un tema", CLAUDE.md).

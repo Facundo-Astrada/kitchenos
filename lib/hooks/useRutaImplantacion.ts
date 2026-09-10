@@ -15,6 +15,8 @@ import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
 import { useAuth } from '@/lib/auth/context'
+import { fetchCartaItemsData, type CartaItemEnriquecido } from './useCarta'
+import { analizarCarta } from '@/lib/recetas/estandarizacion'
 import {
   calcularProgreso, type ConfirmacionesManuales, SIN_CONFIRMACIONES,
 } from '@/lib/implantacion/progreso'
@@ -81,6 +83,15 @@ async function fetchRuta(key: string): Promise<RespuestaRuta> {
   const cuenta = (t: string) =>
     sb.from(t).select('*', { count: 'exact', head: true }).eq('restaurante_id', rid)
 
+  // Estación 2.3 ("Estandarizar") necesita el árbol completo de la carta
+  // (componentes + gramaje + costos) para saber de verdad qué platos llegan
+  // a N3 — un count no alcanza, el nivel es un mínimo sobre varios ejes (ver
+  // lib/recetas/estandarizacion.ts). Es la única consulta de este fetcher que
+  // no es un count/select liviano; se corre en paralelo al resto y no rompe
+  // la ruta si falla (misma lógica de degradación que el resto: 0 en esa
+  // estación, no pantalla en blanco).
+  const cartaTreePromise = fetchCartaItemsData(`carta-items-${rid}`).catch(() => [] as CartaItemEnriquecido[])
+
   const r = await Promise.allSettled([
     sb.from('restaurantes').select('created_at, configuracion, tipo').eq('id', rid).maybeSingle(),
     cuenta('facturas'),
@@ -115,6 +126,7 @@ async function fetchRuta(key: string): Promise<RespuestaRuta> {
     cuenta('clientes'),
     cuenta('cajas_turnos').eq('estado', 'cerrada'),
   ])
+  const cartaTree = await cartaTreePromise
 
   const c = (i: number): number => {
     const x = r[i]
@@ -155,6 +167,8 @@ async function fetchRuta(key: string): Promise<RespuestaRuta> {
     else break
   }
 
+  const analisisEstandarizacion = analizarCarta(cartaTree)
+
   const metricas: MetricasRuta = {
     tipoNegocioDefinido: !!rest?.tipo || Array.isArray(cfg.turnos_servicio),
     facturasTotal: c(1),
@@ -172,9 +186,11 @@ async function fetchRuta(key: string): Promise<RespuestaRuta> {
     competenciasNivel4: c(13),
     cartaItems: c(5),
     cartaSinReceta: c(6),
-    // "Sin estandarizar" se calcula por plato en Carta (gramaje por componente)
-    // y no hay una columna que lo diga: se confirma a mano. Ver ruta.ts.
-    cartaSinEstandarizar: c(6),
+    // Platos que NO llegan a N3 (peso pesado + costo de factura en todos sus
+    // componentes) — antes reusaba cartaSinReceta como proxy y mentía: un
+    // plato con receta vinculada pero sin gramaje/peso neto/costos contaba
+    // como "estandarizado" sin estarlo. Ver lib/recetas/estandarizacion.ts.
+    cartaSinEstandarizar: analisisEstandarizacion.totalPlatos - analisisEstandarizacion.platosPorNivel[3],
     margenObjetivoCargado: typeof cfg.food_cost_objetivo === 'number' || c(25) > 0,
     proveedores: c(14),
     productos: c(15),

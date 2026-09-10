@@ -17,6 +17,8 @@ import ImageCropModal from '@/components/ui/ImageCropModal'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import ImportadorFichasTecnicas from '@/components/importador/ImportadorFichasTecnicas'
 import { clasificarArchivo } from '@/lib/recetas/iaImport'
+import { nivelDeReceta } from '@/lib/recetas/estandarizacion'
+import { NivelBadge } from '@/app/(app)/carta/EstandarizacionView'
 import { HeaderAction, Skeleton, FilterChips, EmptyState, IAButton, IAPanel } from '@/components/ui'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import {
@@ -167,6 +169,10 @@ export default function RecetarioPage() {
   const { puedeEditar, isAdmin, verCostos } = usePermisos()
   const canEdit = isAdmin || puedeEditar('recetas')
   const isDesktop = useIsDesktop()
+  // Para resolver ingredientes tipo "subreceta" a su propio nivel en las
+  // cards (ver lib/recetas/estandarizacion.ts) — acá SÍ está el recetario
+  // completo (a diferencia de Carta, que solo trae las recetas linkeadas a un plato).
+  const recetasPorId = useMemo(() => new Map(recetas.map(r => [r.id, r])), [recetas])
 
   const [search, setSearch] = useState('')
   // Ideas no tiene chips de categoría propios, no necesita filtro.
@@ -620,7 +626,7 @@ export default function RecetarioPage() {
               >
                 {filteredRecetas.map(r => (
                   <motion.div key={r.id} variants={itemVariants}>
-                    <RecetaCard receta={r} />
+                    <RecetaCard receta={r} recetasPorId={recetasPorId} />
                   </motion.div>
                 ))}
               </motion.div>
@@ -2273,15 +2279,15 @@ function RecetaCardSkeleton() {
   )
 }
 
-// Una receta "falta estandarizar" si sigue siendo borrador o si nunca se le cargó
-// el peso neto/escurrido final (el que se toma recién al terminar de cocinarla).
-const faltaEstandarizar = (r: { status?: string; peso_escurrido_g?: number | null; peso_total_g?: number | null } | null | undefined): boolean =>
-  !r || r.status === 'draft' || (r.peso_escurrido_g == null && r.peso_total_g == null)
-
-function RecetaCard({ receta: r, isDraft, onPublish, onCompleteIA }: { receta: RecetaConCosto; isDraft?: boolean; onPublish?: () => void; onCompleteIA?: () => void }) {
+function RecetaCard({ receta: r, isDraft, onPublish, onCompleteIA, recetasPorId }: { receta: RecetaConCosto; isDraft?: boolean; onPublish?: () => void; onCompleteIA?: () => void; recetasPorId?: Map<string, RecetaConCosto> }) {
   const fc = r.food_cost
   const sinIngredientes = (r.ingredientes?.length ?? 0) === 0
-  const sinPesoNeto = !isDraft && faltaEstandarizar(r)
+  // Escala N0-N3 (lib/recetas/estandarizacion.ts) — reemplaza el binario
+  // "SIN PESO NETO" (sep 2026): una receta puede tener peso_total_g cargado
+  // y aun así no estar verificada si le faltan costos de ingredientes.
+  // No se muestra en drafts (ya tienen su propio badge BORRADOR, y siempre
+  // topean en N1 — mostrar N1 ahí sería redundante).
+  const diagReceta = useMemo(() => isDraft ? null : nivelDeReceta(r, recetasPorId), [r, recetasPorId, isDraft])
   return (
     <div style={{ position: 'relative' }}>
       <Link href={`/recetario/${r.id}`} style={{ textDecoration: 'none', display: 'block', background: r.es_plato && !isDraft ? 'rgba(67,97,160,.035)' : 'var(--surface)', border: isDraft ? '1px solid rgba(245,158,11,.3)' : r.es_plato ? '1px solid rgba(67,97,160,.35)' : '1px solid var(--border)', borderRadius: 14, padding: isDraft && onCompleteIA ? '14px 14px 44px' : '14px', cursor: 'pointer' }}>
@@ -2305,15 +2311,8 @@ function RecetaCard({ receta: r, isDraft, onPublish, onCompleteIA }: { receta: R
                   PLATO
                 </span>
               )}
-              {sinPesoNeto && (
-                <span title="Falta cargar el peso neto/escurrido al terminar la receta" style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 3,
-                  fontSize: 9, fontWeight: 700, color: '#f97316', background: 'rgba(249,115,22,.1)',
-                  border: '1px solid rgba(249,115,22,.28)', borderRadius: 4, padding: '1px 6px',
-                }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 11 }}>construction</span>
-                  SIN PESO NETO
-                </span>
+              {diagReceta && (
+                <NivelBadge nivel={diagReceta.nivel} title={diagReceta.faltantes.join(' · ') || 'Peso pesado y costo de factura verificados'} />
               )}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>

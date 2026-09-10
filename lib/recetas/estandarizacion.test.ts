@@ -239,3 +239,52 @@ describe('analizarCarta — cola ordenada por cuántos platos destraba, no alfab
     expect(a.platosQueCostean).toBe(0)
   })
 })
+
+// ── Subrecetas: un ingrediente subreceta no tiene producto_id propio ─────
+describe('nivelDeReceta — recursión en ingredientes tipo subreceta', () => {
+  it('sin recetasPorId, una subreceta cuenta como "sin costo" (comportamiento de hoy, sin recursar)', () => {
+    const sub = receta({ nombre: 'Fondo', procedimiento: 'Hervir', peso_total_g: 1000, ingredientes: [ing()] })
+    const padre = receta({
+      nombre: 'Salsa', procedimiento: 'Reducir', peso_total_g: 300,
+      ingredientes: [ing({ subreceta_id: sub.id, tipo: 'subreceta', producto_id: null, costo_unitario: null })],
+    })
+    const d = nivelDeReceta(padre)
+    expect(d.nivel).toBe(2)
+    expect(d.faltantes.some(f => f.includes('costo de 1 ingrediente'))).toBe(true)
+  })
+
+  it('con recetasPorId y la subreceta en N3, el ingrediente cuenta como resuelto → padre llega a N3', () => {
+    const sub = receta({ nombre: 'Fondo', procedimiento: 'Hervir', peso_total_g: 1000, ingredientes: [ing()] })
+    const padre = receta({
+      nombre: 'Salsa', procedimiento: 'Reducir', peso_total_g: 300,
+      ingredientes: [ing({ subreceta_id: sub.id, tipo: 'subreceta', producto_id: null, costo_unitario: null })],
+    })
+    const mapa = new Map([[sub.id, sub]])
+    const d = nivelDeReceta(padre, mapa)
+    expect(d.nivel).toBe(3)
+    expect(d.faltantes).toEqual([])
+  })
+
+  it('con recetasPorId pero la subreceta todavía en N1, el padre queda topeado en N2', () => {
+    const sub = receta({ nombre: 'Fondo', ingredientes: [], procedimiento: null }) // N1
+    const padre = receta({
+      nombre: 'Salsa', procedimiento: 'Reducir', peso_total_g: 300,
+      ingredientes: [ing({ subreceta_id: sub.id, tipo: 'subreceta', producto_id: null, costo_unitario: null })],
+    })
+    const mapa = new Map([[sub.id, sub]])
+    const d = nivelDeReceta(padre, mapa)
+    expect(d.nivel).toBe(2)
+    expect(d.faltantes.some(f => f.includes('costo de 1 ingrediente'))).toBe(true)
+  })
+
+  it('un ciclo de subrecetas (dato corrupto) no cuelga — corta en N1', () => {
+    const aId = nid()
+    const bId = nid()
+    const a = receta({ id: aId, nombre: 'A', procedimiento: 'x', peso_total_g: 100, ingredientes: [ing({ subreceta_id: bId, tipo: 'subreceta', producto_id: null, costo_unitario: null })] })
+    const b = receta({ id: bId, nombre: 'B', procedimiento: 'x', peso_total_g: 100, ingredientes: [ing({ subreceta_id: aId, tipo: 'subreceta', producto_id: null, costo_unitario: null })] })
+    const mapa = new Map([[aId, a], [bId, b]])
+    const d = nivelDeReceta(a, mapa)
+    // No debe colgarse (timeout del test sería la señal de un bug real acá) — y no puede llegar a N3 con un ciclo sin resolver.
+    expect(d.nivel).toBeLessThan(3)
+  })
+})
