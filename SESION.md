@@ -1,56 +1,56 @@
-# Sesión — 2026-09-09
+# Sesión — 2026-09-10
 
 ## Qué se cerró
-- Auditoría completa de carga de Plato/Menú/Evento en Carta (12 puntos) + drag 2D en
-  Mise, 9 commits (`1a56f70`…`8f571d2`) pusheados uno por uno con typecheck+Vitest+build
-  antes de cada push.
-- Botón "Crear receta" en el preview de un ítem de Menú/Evento sin ingredientes (pedido
-  inicial), después auditoría completa: borrador local + Ctrl/Cmd+S, pegar lista completa
-  de ítems (WhatsApp/notas), foto del plato al crearlo, drag para reordenar y migrar de
-  sección (con preview flotante + auto-scroll + rAF para que no se sienta trabado), "Texto
-  libre" expuesto, "Duplicar" menú/evento, nota libre por ítem (viaja al mise/tarea al
-  activar), comensales del evento (`menus.pax`), activar Producción directo al guardar un
-  evento con fecha, panel OPS recortado en modo Evento, IA en `RecetaEditSheet`.
-- Mismo drag llevado a Mise (pedido aparte, screenshot con la grilla de desktop): mouse
-  además de touch, hit-test 2D en la grilla — antes 1D y sin mouse, por eso la grilla se
-  limitaba a "donde no hay drag".
-- 4 rondas de ajuste sobre feedback real (Texto libre abría todo Producción, drag sin
-  feedback visual, drag trabado) resueltas en la misma sesión, no dejadas para después.
-- Migraciones: `menus.pax`, `menu_preparaciones.nota`, `plato_recetas.nota`, `tareas.nota`.
-  Extraído `lib/carta/reordenarItems.ts` y `lib/ops/miseReorder.ts` (con tests) para no
-  duplicar la geometría del drag ni seguir engordando `ClientView.tsx` (tiene techo de
-  líneas).
-- `PENDIENTES.md`, `ESTADO-ACTUAL.md`, `.claude/docs/rls.md`, `.claude/docs/ui.md`,
-  `.claude/docs/columnas.md` actualizados — detalle completo en `HISTORIAL.md`.
+- **Producción escalonada de eventos** (6 commits, `6d4011c`…`e30fefb`, cada uno
+  con typecheck+Vitest(406)+build antes de push): un evento se cocina desde
+  días antes y hasta hoy `activarMenuParaFechas` volcaba la lista completa en
+  cada fecha del rango, sin distinguir plazas del mise (una preparación de
+  evento no debía pasar por ahí — se tilda, no se cuenta).
+- `menu_preparaciones.dias_antes` (NOT NULL DEFAULT 0, migrada y verificada en
+  Supabase) + chips "Cuándo se produce" en `ComposicionEditor` + badge de
+  anticipación en la fila colapsada. `fechaProduccion()`/`cronogramaDeEvento()`
+  en `lib/menus/activarMenu.ts` (con tests) derivan el día de trabajo de
+  `fecha_evento − dias_antes` — con `dias_antes=0` (todo lo ya cargado) el
+  comportamiento es idéntico al de antes.
+- Arrastre de evento hasta el día D en vez de un solo día (`tareas/ClientView.tsx`);
+  el carryover que borra pendientes de ayer quedó SOLO para menú fijo (en
+  evento borraba trabajo real). Propagación al editar un menú ya activado
+  partida por tipo — la rama de evento sincroniza contra el cronograma, no
+  metía las 14 preparaciones en cada uno de los 4 días.
+- Banda EVENTO del board (`ProduccionBoard.tsx`): header con nombre + cuenta
+  regresiva ("en 3 días"/"mañana"/"hoy", derivada de las tareas ya cargadas,
+  sin fetch a `menus`) y badge "también en Menú/Evento" cuando el mismo
+  nombre normalizado aparece hoy en más de una banda (no fusiona filas, solo
+  avisa para hacerlas juntas).
+- Fake de Supabase con filtrado real extraído a `lib/test-utils/fakeSupabaseStore.ts`
+  (antes vivía embebido en `menuMise.test.ts`) para compartirlo con los tests
+  nuevos de `activarMenu.test.ts`.
+- `ESTADO-ACTUAL.md` (Carta, Producción/Planificación, OPS) y `.claude/docs/columnas.md`
+  actualizados con el comportamiento nuevo.
 
 ## Qué quedó a medias
-- **Sin verificación visual en browser real** — no había herramienta de automatización
-  disponible esta sesión. Todo lo de Carta y Mise se verificó por typecheck+tests+build,
-  no por uso real en pantalla. Es la sesión con más superficie UI/drag tocada sin ese
-  chequeo — prioridad para la próxima apertura.
-- **`plato_recetas.nota` sin UI en `DetailView.tsx`** — la nota por componente de un plato
-  solo se puede cargar al CREAR el plato desde `ComposicionEditor`; un plato ya existente
-  (el caso común, se edita desde el detalle) no tiene dónde escribirla. Puro UI, sin riesgo
-  de migración.
-- **Ítem #3 de la auditoría original, descartado a propósito**: importar el menú completo
-  desde una foto/PDF (como ya existe para la carta de platos) es una pieza de IA nueva
-  (parsear estructura de menú, no de plato) — el pegado de texto (#2) ya cubrió la mayor
-  parte de la urgencia real.
-- Mise en tablet táctil ancha sigue en columna única (`pointer:fine` en el media query,
-  a propósito) — el drag 2D ya existe, solo falta decidir si vale la pena sacarle esa
-  condición en CSS y JS.
+- **Dos eventos activos a la vez no tienen una cuenta regresiva propia** —
+  la banda EVENTO se sigue mostrando junta (columnas por paso, no por evento)
+  pero sin subtítulo si hay más de un `menu_id`. Anotado en `PENDIENTES.md`
+  como backlog chico, límite explícito no bug.
+- **Sin verificación visual del board** (header de banda, badge de duplicado):
+  se probó el cronograma en uso real (confirmado por Facundo), pero el header
+  nuevo de `ProduccionBoard` y el badge "también en..." solo pasaron por
+  typecheck+build, no por pantalla.
+- **`PENDIENTES.md` pasó los 38KB** (guideline del propio archivo: ~10KB) —
+  no se podó esta sesión porque no era el foco; sería su propia sesión de
+  limpieza dedicada, no algo para meter al cierre de otra.
 
 ## Probar primero mañana
-- Carta → Evento/Menú: pegar una lista de WhatsApp en el buscador, arrastrar un ítem entre
-  secciones (Entrada→Principal) en mobile y en desktop con mouse, cerrar la pestaña a
-  mitad de carga y confirmar que el borrador se recupera solo al reabrir.
-- Mise: arrastrar un ítem con mouse en la grilla de desktop (antes no había forma) y
-  confirmar que sigue andando con touch en mobile como siempre.
-- Evento nuevo con fecha cargada → confirmar que aparece ya activado en Producción al
-  guardar, sin tener que ir a buscarlo a Planificación.
+- Header de la banda Evento en un evento real con fecha próxima: confirmar
+  que dice "en N días"/"mañana" correctamente y que el badge de nombre
+  repetido aparece cuando el mismo ítem está en el mise fijo y en un evento
+  el mismo día.
+- Mover la fecha de un evento ya activado con preparaciones en distintos
+  `dias_antes` y confirmar que las pendientes se recalculan solas (las ya
+  empezadas/listas no se mueven).
 
 ## Próximo paso concreto
-- Verificar en vivo (dev server + celular/desktop reales) lo de esta sesión antes de seguir
-  agregando — es lo que quedó sin chequear. Si todo anda, retomar `PENDIENTES.md` 🟠 Alto:
-  SMTP propio para invitaciones (bloqueado en dominio propio de Resend) o feature gating
-  (`puedeUsar()` sin cablear a ninguna pantalla todavía).
+- Retomar `PENDIENTES.md` 🟠 Alto: SMTP propio para invitaciones, o "Nada
+  avisa cuando producción se rompe" (01/09). Si se abre sesión de limpieza de
+  backlog, `PENDIENTES.md` es el primer candidato (38KB, guideline ~10KB).
