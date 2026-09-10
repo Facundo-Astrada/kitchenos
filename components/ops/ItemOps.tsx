@@ -11,6 +11,8 @@ import { createClient } from '@/lib/supabase/client'
 import { hoyOperativo } from '@/lib/ops/turnos'
 import type { Tarea, OpsEstado, OpsModo, TareaPrioridad } from '@/types'
 
+const MODO_LABEL: Record<OpsModo, string> = { carta: 'Carta', menu: 'Menú', evento: 'Evento' }
+
 export function nextEstado(e: OpsEstado): OpsEstado {
   if (e === 'duda') return 'pendiente'
   const cycle: OpsEstado[] = ['pendiente', 'en_curso', 'listo']
@@ -64,9 +66,19 @@ interface ItemOpsProps {
   showSeccionChip?: boolean
   showPrioChip?: boolean
   densidad?: Densidad
+  /**
+   * Bandas (Carta/Menú/Evento) donde HOY aparece una tarea con el mismo
+   * nombre normalizado que esta — incluida la propia. Con 2+ elementos, es
+   * el mismo trabajo pedido dos veces por caminos distintos (ej. "Salsa
+   * criolla" en el mise fijo Y en un evento el mismo día): no se fusionan
+   * (son ollas distintas, ver lib/ops/dedupeTareas.ts), pero conviene
+   * hacerlas juntas. Solo lo arma ProduccionBoard (bandasPorNombre) — un
+   * ítem suelto de otra pantalla no tiene con qué compararse.
+   */
+  bandasDuplicadas?: Set<OpsModo>
 }
 
-function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, depth = 0, showSeccionChip, showPrioChip, densidad = 'comoda' }: ItemOpsProps) {
+function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, depth = 0, modo, showSeccionChip, showPrioChip, densidad = 'comoda', bandasDuplicadas }: ItemOpsProps) {
   const [expanded, setExpanded] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [prodSheetOpen, setProdSheetOpen] = useState(false)
@@ -234,6 +246,22 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
                   turno ant.
                 </span>
               )}
+              {depth === 0 && mostrarDetalle && bandasDuplicadas && bandasDuplicadas.size > 1 && (() => {
+                const otras = [...bandasDuplicadas].filter(m => m !== (modo ?? 'carta')).map(m => MODO_LABEL[m])
+                if (otras.length === 0) return null
+                return (
+                  <span
+                    title={`Mismo nombre hoy en ${otras.join(' y ')} — conviene hacerlo en una sola tanda`}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, padding: '1px 5px',
+                      borderRadius: 4, marginTop: 1, background: 'rgba(14,116,144,.14)', color: '#0e7490',
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 10 }}>content_copy</span>
+                    también en {otras.join(' y ')}
+                  </span>
+                )
+              })()}
               {depth === 0 && mostrarDetalle && item.categoria === 'pase_turno' && (
                 <span
                   title={item.descripcion ?? 'Pase de turno'}

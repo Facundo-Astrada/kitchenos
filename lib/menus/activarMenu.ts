@@ -158,6 +158,30 @@ export async function activarMenuParaFechas(
 }
 
 /**
+ * Días que faltan para el día del evento, visto desde `hoy`. Negativo si ya
+ * pasó (no debería mostrarse — ver etiquetaCuentaRegresiva — pero se calcula
+ * igual para no romper contratos aguas arriba).
+ */
+export function diasParaEvento(fechaEvento: string, hoy: string = hoyOperativo()): number {
+  const msPorDia = 24 * 60 * 60 * 1000
+  const a = new Date(fechaEvento + 'T12:00:00').getTime()
+  const b = new Date(hoy + 'T12:00:00').getTime()
+  return Math.round((a - b) / msPorDia)
+}
+
+/**
+ * Texto corto para el header de la banda EVENTO ("en 3 días", "mañana",
+ * "hoy"). Un evento vencido no debería llegar acá (sin tareas visibles no
+ * hay banda), pero por las dudas no dice "hace 2 días" — diría lo mismo
+ * que "hoy", que es más útil en el peor caso.
+ */
+export function etiquetaCuentaRegresiva(dias: number): string {
+  if (dias <= 0) return 'hoy'
+  if (dias === 1) return 'mañana'
+  return `en ${dias} días`
+}
+
+/**
  * Qué contar en el toast después de activar. Una sola frase para los tres
  * lugares que activan (Carta al guardar, Planificación y Calendario): con
  * cronograma, "activado para el sábado" ya no describe lo que pasó — el

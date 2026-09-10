@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { fakeSupabase, type Row } from '@/lib/test-utils/fakeSupabaseStore'
 import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
 import {
-  activarMenuParaFechas, cronogramaDeEvento, fechaProduccion, resumenActivacion,
+  activarMenuParaFechas, cronogramaDeEvento, diasParaEvento, etiquetaCuentaRegresiva,
+  fechaProduccion, resumenActivacion,
 } from './activarMenu'
 
 const RID = 'rest-1'
@@ -60,6 +61,28 @@ describe('cronogramaDeEvento', () => {
     expect(crono.map(c => c.fecha)).toEqual(['2026-09-09', '2026-09-11', '2026-09-12'])
     expect(crono[0].preparaciones.map(p => p.nombre)).toEqual(['Fondo', 'Curado'])
     expect(crono[2].preparaciones.map(p => p.nombre)).toEqual(['Terminación'])
+  })
+})
+
+describe('diasParaEvento', () => {
+  it('cuenta los días que faltan desde hoy', () => {
+    expect(diasParaEvento('2026-09-12', '2026-09-09')).toBe(3)
+    expect(diasParaEvento('2026-09-12', '2026-09-11')).toBe(1)
+    expect(diasParaEvento('2026-09-12', '2026-09-12')).toBe(0)
+  })
+  it('cruza el mes igual que fechaProduccion', () => {
+    expect(diasParaEvento('2026-09-02', '2026-08-30')).toBe(3)
+  })
+})
+
+describe('etiquetaCuentaRegresiva', () => {
+  it('mañana y hoy tienen texto propio, el resto es "en N días"', () => {
+    expect(etiquetaCuentaRegresiva(3)).toBe('en 3 días')
+    expect(etiquetaCuentaRegresiva(1)).toBe('mañana')
+    expect(etiquetaCuentaRegresiva(0)).toBe('hoy')
+  })
+  it('un evento que ya pasó no dice "hace N días" — cae a "hoy"', () => {
+    expect(etiquetaCuentaRegresiva(-2)).toBe('hoy')
   })
 })
 

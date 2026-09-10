@@ -14,6 +14,8 @@ import { useTareas } from '@/lib/hooks/useTareas'
 import { useAuth } from '@/lib/auth/context'
 import { plazaColor, plazaIcon, plazaLabel, todasLasPlazas } from '@/lib/constants'
 import { hoyOperativo, resolverTurnoDePlaza } from '@/lib/ops/turnos'
+import { diasParaEvento, etiquetaCuentaRegresiva } from '@/lib/menus/activarMenu'
+import { normalizarTitulo } from '@/lib/ops/dedupeTareas'
 import type { OpsEstado, OpsModo, PaseMensaje, Plaza, Tarea, TareaPrioridad } from '@/types'
 
 // ── Board de OPS Producción, vista "Todo" ────────────────────────────────────
@@ -84,6 +86,13 @@ interface BandaBoard {
   icono: string
   color: string
   columnas: ColumnaBoard[]
+  /**
+   * Nombre + día del evento, solo cuando la banda EVENTO tiene un único
+   * evento activo — con dos eventos superpuestos no hay una sola cuenta
+   * regresiva que mostrar, así que queda sin ella (el N/M combinado del
+   * header sigue andando igual).
+   */
+  evento?: { nombre: string; fechaEvento: string } | null
 }
 
 interface ProduccionBoardProps {
@@ -263,12 +272,49 @@ export function ProduccionBoard({
       // Mismo ámbar que PLAZA_COLORS.menu (lib/constants.ts) — mantener en espejo.
       out.push({ id: 'menu', titulo: 'Menú', icono: 'restaurant', color: 'var(--amber-fg)', columnas: colMenu })
     }
-    const colEvento = columnasPorPaso(porModo('evento'), 'evento')
+    const itemsEvento = porModo('evento')
+    const colEvento = columnasPorPaso(itemsEvento, 'evento')
     if (colEvento.length > 0) {
-      out.push({ id: 'evento', titulo: 'Evento', icono: 'celebration', color: '#f97316', columnas: colEvento })
+      // El nombre viaja en `descripcion` desde que se activa el evento
+      // (activarMenuParaFechas) — no hace falta ir a buscar `menus`. El día
+      // del evento se aproxima con el turno_fecha más lejano entre sus
+      // tareas: con al menos una preparación en dias_antes=0 (lo normal, la
+      // terminación) es exacto; si no, es el último día de trabajo cargado,
+      // que sigue siendo la referencia útil.
+      const porMenu = new Map<string, Tarea[]>()
+      for (const t of itemsEvento) {
+        if (!t.menu_id) continue
+        const g = porMenu.get(t.menu_id)
+        if (g) g.push(t); else porMenu.set(t.menu_id, [t])
+      }
+      let evento: BandaBoard['evento'] = null
+      if (porMenu.size === 1) {
+        const [, items] = [...porMenu.entries()][0]
+        const fechaEvento = items.reduce((max, t) => (t.turno_fecha && t.turno_fecha > max) ? t.turno_fecha : max, '')
+        const nombre = items.find(t => t.descripcion)?.descripcion ?? 'Evento'
+        if (fechaEvento) evento = { nombre, fechaEvento }
+      }
+      out.push({ id: 'evento', titulo: 'Evento', icono: 'celebration', color: '#f97316', columnas: colEvento, evento })
     }
     return out
   }, [tareas, plazasCustom, plazasExtra, vista])
+
+  // ── Mismo nombre en más de una banda (Carta/Menú/Evento) hoy ────────────
+  // No colapsa filas (son ollas distintas, ver menuMise.ts) — solo avisa para
+  // que se hagan juntas. `tareas` ya viene filtrada al día + carryover por el
+  // caller, así que "hoy" acá es exactamente lo que está en pantalla.
+  const bandasPorNombre = useMemo(() => {
+    const m = new Map<string, Set<OpsModo>>()
+    for (const t of tareas) {
+      if (!t.titulo) continue
+      const key = normalizarTitulo(t.titulo)
+      const modo = t.modo ?? 'carta'
+      const set = m.get(key)
+      if (set) set.add(modo); else m.set(key, new Set([modo]))
+    }
+    for (const [k, set] of m) if (set.size < 2) m.delete(k)
+    return m
+  }, [tareas])
 
   const plazasDisponibles = useMemo(() => {
     const usadas = new Set(bandas.find(b => b.id === 'carta')?.columnas.map(c => c.id) ?? [])
@@ -336,6 +382,7 @@ export function ProduccionBoard({
           corte={columnaFoco.plazaKey ? cortePorPlaza.get(columnaFoco.plazaKey) ?? null : null}
           enfocada
           onFocus={() => setFoco(null)}
+          bandasPorNombre={bandasPorNombre}
         />
       </div>
     )
@@ -363,6 +410,8 @@ export function ProduccionBoard({
                 sp={sp}
                 cerrada={cerrada}
                 onToggle={() => toggleBanda(banda.id)}
+                subtitulo={banda.evento?.nombre}
+                diasFaltan={banda.evento ? diasParaEvento(banda.evento.fechaEvento) : undefined}
               />
             )}
             {!cerrada && (
@@ -392,6 +441,7 @@ export function ProduccionBoard({
                       onEliminarNota={eliminarNota}
                       corte={col.plazaKey ? cortePorPlaza.get(col.plazaKey) ?? null : null}
                       onFocus={() => setFoco({ banda: banda.id, columna: col.id })}
+                      bandasPorNombre={bandasPorNombre}
                     />
                   ))}
                 </div>
@@ -468,7 +518,7 @@ function chipStyle(activo: boolean, color?: string): React.CSSProperties {
 
 // ── Header de banda ──────────────────────────────────────────────────────────
 function BandaHeader({
-  titulo, icono, color, listos, total, sp, cerrada, onToggle,
+  titulo, icono, color, listos, total, sp, cerrada, onToggle, subtitulo, diasFaltan,
 }: {
   titulo: string
   icono: string
@@ -478,6 +528,10 @@ function BandaHeader({
   sp?: number
   cerrada: boolean
   onToggle: () => void
+  /** Nombre del evento, cuando la banda es EVENTO y tiene uno solo activo. */
+  subtitulo?: string
+  /** Días para el evento — ver diasParaEvento. undefined = sin cuenta regresiva. */
+  diasFaltan?: number
 }) {
   return (
     <button
@@ -496,6 +550,22 @@ function BandaHeader({
       }}>
         {titulo}
       </span>
+      {subtitulo && (
+        <span style={{
+          fontSize: 12, fontWeight: 600, color: 'var(--text-3)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160,
+        }}>
+          · {subtitulo}
+        </span>
+      )}
+      {diasFaltan != null && (
+        <span style={{
+          fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 5, flexShrink: 0,
+          background: 'rgba(217,119,6,.14)', color: '#b45309',
+        }}>
+          {etiquetaCuentaRegresiva(diasFaltan)}
+        </span>
+      )}
       {total != null && total > 0 && (
         <span style={{ fontSize: 11, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', fontWeight: 700 }}>
           {listos}/{total}
@@ -524,7 +594,7 @@ function BandaHeader({
 function ColumnaOps({
   columna, subtareasByParent, onAddItem, onEstadoChange, onAddSubtarea,
   onPrioridadChange, onCrearTareaDesdeItem, recetas, onFocus, enfocada, coachTarget, densidad,
-  notasDe, onAgregarNota, onEliminarNota, corte,
+  notasDe, onAgregarNota, onEliminarNota, corte, bandasPorNombre,
 }: {
   columna: ColumnaBoard
   subtareasByParent: Record<string, Tarea[]>
@@ -543,6 +613,8 @@ function ColumnaOps({
   onEliminarNota: (id: string) => Promise<void>
   /** Hora de la última entrega de esta plaza hoy — corte del plegado. */
   corte?: string | null
+  /** Nombre normalizado → bandas que lo tienen hoy — ver bandasPorNombre arriba. */
+  bandasPorNombre: Map<string, Set<OpsModo>>
 }) {
   const [cerrada, setCerrada] = useState(false)
   const [verEntregadas, setVerEntregadas] = useState(false)
@@ -682,6 +754,7 @@ function ColumnaOps({
             // Con todo entregado la columna no está vacía, está terminada —
             // "Sin preparaciones aún" diría lo contrario de lo que pasó.
             silenciarVacio={entregadas.length > 0}
+            bandasPorNombre={bandasPorNombre}
           />
 
           {/* ── Lo terminado antes del pase ──
@@ -728,7 +801,7 @@ function ColumnaOps({
 // ── Ítems ordenados por prioridad, con REF/Check plegados ───────────────────
 function ItemsPorPrioridad({
   items, subtareasByParent, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, modo, densidad,
-  silenciarVacio,
+  silenciarVacio, bandasPorNombre,
 }: {
   items: Tarea[]
   subtareasByParent: Record<string, Tarea[]>
@@ -740,6 +813,7 @@ function ItemsPorPrioridad({
   densidad?: Densidad
   /** No mostrar el vacío: la columna está plegada, no sin trabajo. */
   silenciarVacio?: boolean
+  bandasPorNombre: Map<string, Set<OpsModo>>
 }) {
   const [verSecundarias, setVerSecundarias] = useState(false)
 
@@ -788,6 +862,7 @@ function ItemsPorPrioridad({
               showSeccionChip={false}
               showPrioChip
               densidad={densidad}
+              bandasDuplicadas={bandasPorNombre.get(normalizarTitulo(item.titulo))}
             />
           </div>
         ))}
