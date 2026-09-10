@@ -6,15 +6,24 @@
 //
 // Dos ejes que no se pueden colapsar en uno:
 //  - Eje RECETA: ¿tiene cuerpo, peso neto, costos de factura? (propiedad de
-//    la receta en sí, se comparte entre todos los platos que la usan)
-//  - Eje VÍNCULO: ¿se sabe cuánto de esa receta entra en ESTE plato?
-//    (propiedad de plato_recetas — el gramaje)
+//    la receta en sí, se comparte entre todos los platos/menús que la usan)
+//  - Eje VÍNCULO: ¿se sabe cuánto de esa receta entra en ESTE plato/menú?
+//    (propiedad de plato_recetas o menu_preparaciones — el gramaje)
 // Una mayonesa puede ser N3 en sí misma y el plato igual no costear porque
 // nadie cargó el gramaje. El nivel del COMPONENTE es el mínimo de los dos.
+//
+// Sep 2026 (misma sesión): se sumaron los Menús. Estandarización solo leía
+// carta_items/plato_recetas — un restaurante que trabaja mucho por menú fijo
+// (ej. un comedor) puede tener más recetas colgando de menu_preparaciones que
+// de la carta a la carta, y esas quedaban invisibles acá. nivelDeMenu()
+// analiza esa segunda fuente con la MISMA escala; analizarCarta() las suma a
+// la misma cola/lista cuando se le pasan (parámetro opcional — sin él, el
+// comportamiento es idéntico al de antes, lo que usa useRutaImplantacion.ts).
 
 import type { Receta } from '@/types'
 import type { CartaItemEnriquecido, PlatoRecetaEnriquecido } from '@/lib/hooks/useCarta'
-import { pesoTotalRecetaG, costoPorGramoDeReceta } from './peso'
+import type { MenuPreparacion } from '@/lib/hooks/useMenus'
+import { pesoTotalRecetaG, costoPorGramoDeReceta, gramajeDesdeCantidadOps } from './peso'
 import { calcFoodCost } from '@/lib/hooks/useRecetas'
 
 export type Nivel = 0 | 1 | 2 | 3
@@ -102,30 +111,43 @@ export function nivelDeReceta(
 }
 
 /**
- * Eje componente: nivelDeReceta acotado por si se sabe cuánto entra en ESTE
- * plato. Sin gramaje conocido el componente no puede pasar de N1 aunque la
- * receta detrás esté perfecta — el food cost del plato no se puede fabricar
- * asumiendo "una porción entera del batch" (mismo criterio que
- * tieneComponentesSinEstandarizar en useCarta.ts).
- *
- * Si la receta ya está tapada en N0/N1 por su propio eje, el gramaje no
- * agrega información — se omite ese faltante para no repetir el mismo
- * bloqueo con otras palabras.
+ * Aplica el eje vínculo sobre un diagnóstico de receta ya resuelto: sin
+ * gramaje conocido, el componente no puede pasar de N1 aunque la receta
+ * detrás esté perfecta — no se fabrica un food cost asumiendo "una porción
+ * entera del batch". Si la receta ya está tapada en N0/N1 por su propio eje,
+ * el gramaje no agrega información — se omite ese faltante para no repetir
+ * el mismo bloqueo con otras palabras. Compartido por plato_recetas
+ * (nivelDeComponente) y menu_preparaciones (nivelDeMenu).
  */
-export function nivelDeComponente(pr: PlatoRecetaEnriquecido, recetasPorId?: Map<string, Receta>): DiagnosticoNivel {
-  const base = nivelDeReceta(pr.receta, recetasPorId)
+function conGramajeCap(base: DiagnosticoNivel, gramajeEfectivoG: number | null, faltanteGramaje: string): DiagnosticoNivel {
   if (base.nivel <= 1) return base
-
-  if (pr.gramaje_efectivo_g == null) {
-    return { nivel: 1, faltantes: ['gramaje en este plato', ...base.faltantes], costoPorGramo: base.costoPorGramo, costoVerificado: false }
+  if (gramajeEfectivoG == null) {
+    return { nivel: 1, faltantes: [faltanteGramaje, ...base.faltantes], costoPorGramo: base.costoPorGramo, costoVerificado: false }
   }
   return base
 }
 
+/** Eje componente de un plato de Carta — ver conGramajeCap. */
+export function nivelDeComponente(pr: PlatoRecetaEnriquecido, recetasPorId?: Map<string, Receta>): DiagnosticoNivel {
+  return conGramajeCap(nivelDeReceta(pr.receta, recetasPorId), pr.gramaje_efectivo_g, 'gramaje en este plato')
+}
+
 export interface ComponenteDiagnostico {
-  pr: PlatoRecetaEnriquecido | null
+  // Agrupación en la cola de analizarCarta: receta_id cuando el componente
+  // resuelve a una (plato_recetas o menu_preparaciones tipo 'receta') —
+  // mismo espacio de ids en ambas fuentes, así que una receta usada en un
+  // plato Y en un menú se agrupa en UNA sola fila ("destraba 3 platos y 2
+  // menús"). Sintética cuando no hay receta_id que compartir (link directo
+  // plato=receta, o una preparación de menú sin vincular).
+  key: string
   nombre: string
   diag: DiagnosticoNivel
+  // Dónde arreglar ESTE componente, cuando es distinto de la entidad que lo
+  // contiene — el único caso hoy es un menú que reusa un plato entero
+  // (menu_preparaciones tipo 'plato'): el arreglo real es en el plato (su
+  // gramaje/procedimiento/costos), no en el menú. undefined = usar la
+  // entidad contenedora (el caso normal).
+  origen?: { id: string; tipo: 'plato' | 'menu' }
 }
 
 export interface DiagnosticoPlato extends DiagnosticoNivel {
@@ -143,14 +165,68 @@ export interface DiagnosticoPlato extends DiagnosticoNivel {
 export function nivelDePlato(item: CartaItemEnriquecido, recetasPorId?: Map<string, Receta>): DiagnosticoPlato {
   const componentes: ComponenteDiagnostico[] = item.plato_recetas.length > 0
     ? item.plato_recetas.map(pr => ({
-        pr, nombre: pr.receta?.nombre ?? '(receta eliminada)', diag: nivelDeComponente(pr, recetasPorId),
+        key: pr.receta_id, nombre: pr.receta?.nombre ?? '(receta eliminada)', diag: nivelDeComponente(pr, recetasPorId),
       }))
     : item.receta
-      ? [{ pr: null, nombre: item.receta.nombre, diag: nivelDeReceta(item.receta, recetasPorId) }]
+      ? [{ key: `directa:${item.id}`, nombre: item.receta.nombre, diag: nivelDeReceta(item.receta, recetasPorId) }]
       : []
 
   if (componentes.length === 0) {
     return { nivel: 0, faltantes: ['cargar componentes o vincular una receta'], costoPorGramo: null, costoVerificado: false, componentes: [] }
+  }
+
+  const peor = componentes.reduce((min, c) => (c.diag.nivel < min.diag.nivel ? c : min))
+  return { ...peor.diag, componentes }
+}
+
+// Gramaje efectivo de una preparación de menú. menu_preparaciones no tiene
+// columna `gramaje` propia (a diferencia de plato_recetas, que la sumó en
+// sep 2026) — prioriza `peso_porcion` (tamaño real confirmado en el mise,
+// misma idea que checklist_items.peso_porcion) y si no hay, deriva de
+// `cantidad`+`unidad` cuando están en peso/volumen (mismo criterio que
+// gramajeDesdeCantidadOps ya usa para plato_recetas.cantidad_ops).
+function gramajeEfectivoMenuPrep(mp: MenuPreparacion): number | null {
+  if (mp.peso_porcion != null) return gramajeDesdeCantidadOps(mp.peso_porcion, mp.peso_porcion_unidad).gramaje
+  return gramajeDesdeCantidadOps(mp.cantidad, mp.unidad).gramaje
+}
+
+/**
+ * Igual que nivelDePlato pero para un Menú: sus "componentes" son las
+ * menu_preparaciones. `tipo:'producto'` se excluye (mismo límite declarado
+ * que los productos comprados de un plato — no hay receta que estandarizar).
+ *
+ * `tipo:'plato'` (el menú reusa un plato entero de la carta, ej. "Noche de
+ * Asado" arma su menú con platos que también están en la carta a la carta)
+ * resuelve al nivel REAL de ese plato — `cartaItemsPorId` (opcional) trae el
+ * mapa. Sin él, o si el plato no aparece ahí, cae a "sin receta" (N0) en vez
+ * de fabricar un dato — más honesto que ocultarlo, aunque menos preciso que
+ * resolverlo. `tipo: null` (preparación nunca vinculada a nada) también cae
+ * a N0 — es información real, no ruido.
+ */
+export function nivelDeMenu(
+  menu: { id: string; nombre: string; preparaciones: MenuPreparacion[] },
+  recetasPorId?: Map<string, Receta>,
+  cartaItemsPorId?: Map<string, CartaItemEnriquecido>,
+): DiagnosticoPlato {
+  const relevantes = menu.preparaciones.filter(mp => mp.tipo !== 'producto')
+
+  const componentes: ComponenteDiagnostico[] = relevantes.map(mp => {
+    if (mp.tipo === 'plato' && mp.ref_id) {
+      const plato = cartaItemsPorId?.get(mp.ref_id)
+      if (plato) {
+        // El plato ya resuelve su propio gramaje/costo por sí solo (es un
+        // plato real de la carta) — no se le vuelve a aplicar conGramajeCap,
+        // eso ya está hecho dentro de nivelDePlato.
+        return { key: `plato:${mp.ref_id}`, nombre: plato.nombre, diag: nivelDePlato(plato, recetasPorId), origen: { id: plato.id, tipo: 'plato' } }
+      }
+    }
+    const receta = mp.tipo === 'receta' && mp.ref_id ? recetasPorId?.get(mp.ref_id) : undefined
+    const diag = conGramajeCap(nivelDeReceta(receta, recetasPorId), gramajeEfectivoMenuPrep(mp), 'gramaje en este menú')
+    return { key: mp.tipo === 'receta' && mp.ref_id ? mp.ref_id : `menuprep:${mp.id}`, nombre: mp.nombre, diag }
+  })
+
+  if (componentes.length === 0) {
+    return { nivel: 0, faltantes: ['cargar preparaciones'], costoPorGramo: null, costoVerificado: false, componentes: [] }
   }
 
   const peor = componentes.reduce((min, c) => (c.diag.nivel < min.diag.nivel ? c : min))
@@ -163,45 +239,63 @@ export interface ColaItem {
   nivel: Nivel
   platosQueDestraba: number
   platos: string[]
-  // Primer carta_item.id donde aparece — para saltar directo a arreglarlo
-  // (el gramaje se edita en Carta; desde ahí también se abre la receta).
-  primerPlatoId: string
+  // Dónde aparece primero — para saltar directo a arreglarlo. 'plato' abre
+  // el detalle de Carta (el gramaje se edita ahí, y desde ahí se abre la
+  // receta); 'menu' abre el editor de composición del menú.
+  primerId: string
+  primerTipo: 'plato' | 'menu'
   faltantes: string[]
 }
 
 export interface AnalisisCarta {
   totalPlatos: number
+  // 0 cuando analizarCarta se llama sin menús (comportamiento de siempre,
+  // el que sigue usando useRutaImplantacion.ts).
+  totalMenus: number
   totalComponentes: number
   porNivel: Record<Nivel, number>
+  // Cuenta ENTIDADES (platos + menús cuando se pasan) por nivel — el nombre
+  // quedó de cuando solo existían platos; no se separó para no romper el
+  // único consumidor externo (useRutaImplantacion.ts, que llama sin menús).
   platosPorNivel: Record<Nivel, number>
   // FC calculable = todos sus componentes llegan a N2 (gramaje + costo estimado o mejor)
   platosQueCostean: number
-  // Ordenada por impacto: la receta que, si sube, destraba más platos —
-  // no alfabético, no por antigüedad. Solo entran componentes de receta
-  // (pr !== null); una receta directa de un solo plato también cuenta.
+  // Ordenada por impacto: la receta que, si sube, destraba más platos y
+  // menús — no alfabético, no por antigüedad.
   cola: ColaItem[]
 }
 
 const nivelVacio = (): Record<Nivel, number> => ({ 0: 0, 1: 0, 2: 0, 3: 0 })
 
 /**
- * Agregado de toda la carta. El alcance es "lo que llega a un plato" — no
- * las 500+ recetas del recetario completo, que en la práctica no importan
- * si nunca se usan. La cola se ordena por cuántos platos distintos destraba
- * cada receta (misma receta en 6 platos pesa 6x más que una usada en 1).
+ * Agregado de toda la carta (y, si se pasan, los Menús — misma escala,
+ * misma cola: una receta que se usa en un plato Y en un menú fijo destraba
+ * ambos a la vez). El alcance sigue siendo "lo que se sirve" — no las 500+
+ * recetas del recetario completo que en la práctica no importan si nunca se
+ * usan. La cola se ordena por cuántos platos+menús distintos destraba cada
+ * receta (misma receta en 6 lugares pesa 6x más que una usada en 1).
  */
-export function analizarCarta(items: CartaItemEnriquecido[], recetasPorId?: Map<string, Receta>): AnalisisCarta {
+export function analizarCarta(
+  items: CartaItemEnriquecido[],
+  recetasPorId?: Map<string, Receta>,
+  menus?: { id: string; nombre: string; preparaciones: MenuPreparacion[] }[],
+  // Para que un menú que reusa un plato entero (menu_preparaciones tipo
+  // 'plato') resuelva al nivel real de ESE plato en vez de a "sin receta".
+  // Por defecto se arma de `items` — pero si `items` viene ya filtrado (ej.
+  // por categoría/plaza en la vista), un plato filtrado-afuera igual debe
+  // resolver bien: el caller puede pasar acá el mapa SIN filtrar.
+  cartaItemsPorId?: Map<string, CartaItemEnriquecido>,
+): AnalisisCarta {
   const porNivel = nivelVacio()
   const platosPorNivel = nivelVacio()
   let platosQueCostean = 0
   let totalComponentes = 0
 
-  // key = receta_id (componente vía plato_recetas) o carta_item.id (receta
-  // directa) — agrupa el mismo componente cuando aparece en varios platos.
-  const porReceta = new Map<string, { nombre: string; nivel: Nivel; platos: Set<string>; primerPlatoId: string; faltantes: Set<string> }>()
+  const resolverPlatosPorId = cartaItemsPorId ?? new Map(items.map(i => [i.id, i]))
 
-  for (const item of items) {
-    const diag = nivelDePlato(item, recetasPorId)
+  const porReceta = new Map<string, { nombre: string; nivel: Nivel; platos: Set<string>; primerId: string; primerTipo: 'plato' | 'menu'; faltantes: Set<string> }>()
+
+  function acumular(diag: DiagnosticoPlato, id: string, nombre: string, tipo: 'plato' | 'menu') {
     platosPorNivel[diag.nivel]++
     if (diag.nivel >= 2) platosQueCostean++
 
@@ -209,14 +303,23 @@ export function analizarCarta(items: CartaItemEnriquecido[], recetasPorId?: Map<
       totalComponentes++
       porNivel[c.diag.nivel]++
 
-      const key = c.pr?.receta_id ?? `directa:${item.id}`
-      const entry = porReceta.get(key) ?? { nombre: c.nombre, nivel: c.diag.nivel, platos: new Set<string>(), primerPlatoId: item.id, faltantes: new Set<string>() }
+      // Normalmente "dónde arreglar" es la entidad que se está recorriendo
+      // (el plato, el menú). El único caso distinto: un menú que reusa un
+      // plato entero — c.origen apunta al PLATO (ahí vive el arreglo real:
+      // su gramaje/procedimiento/costos), no al menú que lo referencia.
+      const origenId = c.origen?.id ?? id
+      const origenTipo = c.origen?.tipo ?? tipo
+
+      const entry = porReceta.get(c.key) ?? { nombre: c.nombre, nivel: c.diag.nivel, platos: new Set<string>(), primerId: origenId, primerTipo: origenTipo, faltantes: new Set<string>() }
       entry.nivel = Math.min(entry.nivel, c.diag.nivel) as Nivel
-      entry.platos.add(item.nombre)
+      entry.platos.add(nombre)
       for (const f of c.diag.faltantes) entry.faltantes.add(f)
-      porReceta.set(key, entry)
+      porReceta.set(c.key, entry)
     }
   }
+
+  for (const item of items) acumular(nivelDePlato(item, recetasPorId), item.id, item.nombre, 'plato')
+  for (const menu of menus ?? []) acumular(nivelDeMenu(menu, recetasPorId, resolverPlatosPorId), menu.id, menu.nombre, 'menu')
 
   const cola: ColaItem[] = [...porReceta.entries()]
     .filter(([, v]) => v.nivel < 3)
@@ -224,10 +327,11 @@ export function analizarCarta(items: CartaItemEnriquecido[], recetasPorId?: Map<
       key, nombre: v.nombre, nivel: v.nivel,
       platosQueDestraba: v.platos.size,
       platos: [...v.platos],
-      primerPlatoId: v.primerPlatoId,
+      primerId: v.primerId,
+      primerTipo: v.primerTipo,
       faltantes: [...v.faltantes],
     }))
     .sort((a, b) => b.platosQueDestraba - a.platosQueDestraba || a.nivel - b.nivel || a.nombre.localeCompare(b.nombre, 'es'))
 
-  return { totalPlatos: items.length, totalComponentes, porNivel, platosPorNivel, platosQueCostean, cola }
+  return { totalPlatos: items.length, totalMenus: (menus ?? []).length, totalComponentes, porNivel, platosPorNivel, platosQueCostean, cola }
 }

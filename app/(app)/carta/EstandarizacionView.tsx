@@ -3,7 +3,8 @@
 import { useMemo, useState } from 'react'
 import type { Receta } from '@/types'
 import type { CartaItemEnriquecido } from '@/lib/hooks/useCarta'
-import { analizarCarta, nivelDePlato, type Nivel } from '@/lib/recetas/estandarizacion'
+import type { MenuConPreparaciones } from '@/lib/hooks/useMenus'
+import { analizarCarta, nivelDePlato, nivelDeMenu, type Nivel, type DiagnosticoPlato } from '@/lib/recetas/estandarizacion'
 import { PLAZAS_OPS } from '@/lib/ops/mise'
 import { fmtMoney } from './cards'
 
@@ -34,19 +35,36 @@ export function NivelBadge({ nivel, title }: { nivel: Nivel; title?: string }) {
 
 const TODAS = 'Todas'
 
+// Fila combinada para "Por plato y menú" — un plato de Carta o un Menú,
+// tratados con la misma escala. El tipo decide qué callback dispara el click
+// (Carta abre DetailView; Menú abre el editor de composición) y qué ícono
+// lo distingue (sin ícono = plato, calendario = menú).
+type FilaEstandarizable =
+  | { tipo: 'plato'; id: string; nombre: string; diag: DiagnosticoPlato; item: CartaItemEnriquecido }
+  | { tipo: 'menu'; id: string; nombre: string; diag: DiagnosticoPlato; menu: MenuConPreparaciones }
+
 export function EstandarizacionView({
   items,
+  menus = [],
   recetasPorId,
   onBack,
   onOpenPlato,
+  onOpenMenu,
   verCostos = false,
 }: {
   items: CartaItemEnriquecido[]
+  // Menús fijos/eventos — segunda fuente de componentes (sep 2026): un
+  // restaurante que trabaja mucho por menú (ej. un comedor) puede tener más
+  // recetas colgando de acá que de la carta a la carta, y antes quedaban
+  // invisibles en esta pantalla. Opcional y con default [] — nada se rompe
+  // si algún caller todavía no las pasa.
+  menus?: MenuConPreparaciones[]
   // Recetario completo — resuelve ingredientes tipo "subreceta" a su propio
   // nivel en vez de contarlos siempre como "sin costo". Ver estandarizacion.ts.
   recetasPorId?: Map<string, Receta>
   onBack: () => void
   onOpenPlato: (id: string) => void
+  onOpenMenu: (menu: MenuConPreparaciones) => void
   verCostos?: boolean
 }) {
   const [categoriaFiltro, setCategoriaFiltro] = useState(TODAS)
@@ -54,22 +72,26 @@ export function EstandarizacionView({
 
   // Chips derivados de lo que realmente hay — nunca una plaza/categoría sin
   // un solo plato detrás. Orden: categorías tal cual vienen (ya ordenadas por
-  // fetchCartaItemsData), plazas en el orden canónico de PLAZAS_OPS.
+  // fetchCartaItemsData), plazas en el orden canónico de PLAZAS_OPS. Los
+  // Menús no tienen "categoría" (Entradas/Principales/...) — no aportan acá.
   const categoriasPresentes = useMemo(
     () => [...new Set(items.map(i => i.categoria).filter(Boolean))],
     [items],
   )
   const plazasPresentes = useMemo(() => {
-    const set = new Set(items.flatMap(i => i.plato_recetas).map(pr => pr.plaza).filter((p): p is string => !!p))
+    const set = new Set([
+      ...items.flatMap(i => i.plato_recetas).map(pr => pr.plaza),
+      ...menus.flatMap(m => m.preparaciones).map(mp => mp.plaza),
+    ].filter((p): p is string => !!p))
     return PLAZAS_OPS.filter(p => set.has(p.id))
-  }, [items])
+  }, [items, menus])
 
-  // El filtro de plaza es por COMPONENTE, no por plato entero: un plato de
-  // Parrilla+Guarnición solo debe mostrarle al de Fríos su guarnición, no el
-  // corte de carne. Un plato sin ningún componente en la plaza filtrada
-  // desaparece de la lista (no hay nada suyo que ese puesto tenga que mirar).
-  // Los platos con receta_id directa (sin plato_recetas) no tienen plaza
-  // propia — quedan afuera en cuanto se filtra por plaza.
+  // El filtro de plaza es por COMPONENTE, no por plato/menú entero: un plato
+  // de Parrilla+Guarnición solo debe mostrarle al de Fríos su guarnición, no
+  // el corte de carne. Uno sin ningún componente en la plaza filtrada
+  // desaparece de la lista (no hay nada suyo que ese puesto tenga que
+  // mirar). Los platos con receta_id directa (sin plato_recetas) no tienen
+  // plaza propia — quedan afuera en cuanto se filtra por plaza.
   const itemsFiltrados = useMemo(() => {
     return items
       .filter(item => categoriaFiltro === TODAS || item.categoria === categoriaFiltro)
@@ -77,18 +99,43 @@ export function EstandarizacionView({
       .filter(item => plazaFiltro === TODAS || item.plato_recetas.length > 0)
   }, [items, categoriaFiltro, plazaFiltro])
 
+  // Un filtro de categoría específico (no "Todas") excluye los Menús: no
+  // tienen ese dato, filtrarlos "adentro" de una categoría sería inventar
+  // una pertenencia que no existe. El de plaza sí les aplica (misma lógica
+  // que arriba, sobre preparaciones en vez de plato_recetas).
+  const menusFiltrados = useMemo(() => {
+    if (categoriaFiltro !== TODAS) return []
+    return menus
+      .map(m => plazaFiltro === TODAS ? m : { ...m, preparaciones: m.preparaciones.filter(mp => mp.plaza === plazaFiltro) })
+      .filter(m => plazaFiltro === TODAS || m.preparaciones.length > 0)
+  }, [menus, categoriaFiltro, plazaFiltro])
+
   const hayFiltrosActivos = categoriaFiltro !== TODAS || plazaFiltro !== TODAS
 
-  const analisis = useMemo(() => analizarCarta(itemsFiltrados, recetasPorId), [itemsFiltrados, recetasPorId])
-  const porPlato = useMemo(
-    () => itemsFiltrados
-      .map(item => ({ item, diag: nivelDePlato(item, recetasPorId) }))
-      .sort((a, b) => a.diag.nivel - b.diag.nivel || a.item.nombre.localeCompare(b.item.nombre, 'es')),
-    [itemsFiltrados, recetasPorId],
-  )
+  // SIN filtrar — un menú que reusa un plato entero (menu_preparaciones tipo
+  // 'plato') tiene que resolver bien aunque ese plato haya quedado afuera
+  // del filtro de categoría/plaza actual; el filtro decide qué se MUESTRA,
+  // no qué datos existen.
+  const cartaItemsPorId = useMemo(() => new Map(items.map(i => [i.id, i])), [items])
 
-  const { porNivel, totalComponentes, totalPlatos, platosQueCostean, cola } = analisis
+  const analisis = useMemo(
+    () => analizarCarta(itemsFiltrados, recetasPorId, menusFiltrados, cartaItemsPorId),
+    [itemsFiltrados, menusFiltrados, recetasPorId, cartaItemsPorId],
+  )
+  const filas = useMemo(() => {
+    const platos: FilaEstandarizable[] = itemsFiltrados.map(item => ({ tipo: 'plato', id: item.id, nombre: item.nombre, diag: nivelDePlato(item, recetasPorId), item }))
+    const menusD: FilaEstandarizable[] = menusFiltrados.map(m => ({ tipo: 'menu', id: m.id, nombre: m.nombre, diag: nivelDeMenu(m, recetasPorId, cartaItemsPorId), menu: m }))
+    return [...platos, ...menusD].sort((a, b) => a.diag.nivel - b.diag.nivel || a.nombre.localeCompare(b.nombre, 'es'))
+  }, [itemsFiltrados, menusFiltrados, recetasPorId, cartaItemsPorId])
+
+  const { porNivel, totalComponentes, totalPlatos, totalMenus, platosQueCostean, cola } = analisis
   const n3Verificados = porNivel[3]
+  const totalEntidades = totalPlatos + totalMenus
+
+  function abrir(fila: FilaEstandarizable) {
+    if (fila.tipo === 'plato') onOpenPlato(fila.id)
+    else onOpenMenu(fila.menu)
+  }
 
   return (
     <div>
@@ -120,7 +167,7 @@ export function EstandarizacionView({
         )}
 
         {/* Filtro de plaza — "mi corner": qué de esto es mío. Por componente,
-            no por plato entero (ver itemsFiltrados). */}
+            no por plato/menú entero (ver itemsFiltrados/menusFiltrados). */}
         {plazasPresentes.length > 1 && (
           <div className="hide-scrollbar" style={{ display: 'flex', gap: 6, marginTop: 8, overflowX: 'auto', paddingBottom: 2 }}>
             {[{ id: TODAS, label: 'Todas las plazas' }, ...plazasPresentes].map(p => (
@@ -143,14 +190,16 @@ export function EstandarizacionView({
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)', fontSize: 13 }}>
             {hayFiltrosActivos
               ? 'Nada acá con estos filtros — probá con otra categoría o plaza.'
-              : 'Todavía no hay componentes cargados en ningún plato.'}
+              : 'Todavía no hay componentes cargados en ningún plato o menú.'}
           </div>
         ) : (
           <>
             {/* ── Barra apilada — un solo elemento visual, no 4 alarmas ── */}
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 14 }}>
               <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 10 }}>
-                {totalPlatos} plato{totalPlatos !== 1 ? 's' : ''} · {totalComponentes} componente{totalComponentes !== 1 ? 's' : ''}
+                {totalPlatos} plato{totalPlatos !== 1 ? 's' : ''}
+                {totalMenus > 0 && <> · {totalMenus} menú{totalMenus !== 1 ? 's' : ''}</>}
+                {' '}· {totalComponentes} componente{totalComponentes !== 1 ? 's' : ''}
                 {hayFiltrosActivos && <span> · filtrado</span>}
               </div>
               <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden', background: 'var(--bg)' }}>
@@ -178,7 +227,7 @@ export function EstandarizacionView({
             <div style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.5 }}>
               <strong>{totalComponentes - porNivel[0] - porNivel[1]}</strong> de {totalComponentes} componentes ya costean (N2 o mejor) ·{' '}
               <strong>{n3Verificados}</strong> con peso pesado y costo verificado (N3) ·{' '}
-              <strong>{platosQueCostean}</strong> de {totalPlatos} platos con food cost calculable
+              <strong>{platosQueCostean}</strong> de {totalEntidades} {totalMenus > 0 ? 'platos/menús' : 'platos'} con food cost calculable
             </div>
 
             {/* ── Empezá por acá — cola ordenada por palanca, no alfabético ── */}
@@ -191,7 +240,10 @@ export function EstandarizacionView({
                   {cola.slice(0, 8).map((c, idx) => (
                     <button
                       key={c.key}
-                      onClick={() => onOpenPlato(c.primerPlatoId)}
+                      onClick={() => {
+                        if (c.primerTipo === 'plato') onOpenPlato(c.primerId)
+                        else { const m = menusFiltrados.find(x => x.id === c.primerId); if (m) onOpenMenu(m) }
+                      }}
                       style={{
                         width: '100%', textAlign: 'left', display: 'flex', alignItems: 'flex-start', gap: 10,
                         padding: '10px 12px', background: 'none', border: 'none', fontFamily: 'inherit', cursor: 'pointer',
@@ -203,7 +255,9 @@ export function EstandarizacionView({
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
                           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{c.nombre}</span>
                           <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>
-                            → destraba {c.platosQueDestraba} plato{c.platosQueDestraba !== 1 ? 's' : ''}
+                            → destraba {c.platosQueDestraba} {menus.length > 0
+                              ? (c.platosQueDestraba !== 1 ? 'lugares' : 'lugar')
+                              : `plato${c.platosQueDestraba !== 1 ? 's' : ''}`}
                           </span>
                         </div>
                         {c.faltantes.length > 0 && (
@@ -219,29 +273,32 @@ export function EstandarizacionView({
               </div>
             )}
 
-            {/* ── Por plato — mini-barra de segmentos, uno por componente ── */}
+            {/* ── Por plato y menú — mini-barra de segmentos, uno por componente ── */}
             <div>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
-                Por plato
+                {totalMenus > 0 ? 'Por plato y menú' : 'Por plato'}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {porPlato.map(({ item, diag }) => (
+                {filas.map(fila => (
                   <button
-                    key={item.id}
-                    onClick={() => onOpenPlato(item.id)}
+                    key={`${fila.tipo}-${fila.id}`}
+                    onClick={() => abrir(fila)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
                       background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10,
                       padding: '9px 12px', cursor: 'pointer', fontFamily: 'inherit',
                     }}
                   >
-                    <NivelBadge nivel={diag.nivel} />
+                    <NivelBadge nivel={fila.diag.nivel} />
+                    {fila.tipo === 'menu' && (
+                      <span className="material-symbols-outlined" title="Menú" style={{ fontSize: 14, color: 'var(--text-3)', flexShrink: 0 }}>event</span>
+                    )}
                     <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {item.nombre}
+                      {fila.nombre}
                     </span>
-                    {diag.componentes.length > 0 && (
+                    {fila.diag.componentes.length > 0 && (
                       <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
-                        {diag.componentes.map((c, i) => (
+                        {fila.diag.componentes.map((c, i) => (
                           <div
                             key={i}
                             title={`${c.nombre} — ${NIVEL_META[c.diag.nivel].nombre}${c.diag.faltantes.length ? ': falta ' + c.diag.faltantes.join(', ') : ''}`}
@@ -254,9 +311,9 @@ export function EstandarizacionView({
                         ))}
                       </div>
                     )}
-                    {verCostos && diag.costoPorGramo != null && (
+                    {verCostos && fila.diag.costoPorGramo != null && (
                       <span style={{ fontSize: 10, color: 'var(--text-3)', flexShrink: 0 }}>
-                        {fmtMoney(diag.costoPorGramo)}/g{!diag.costoVerificado ? ' est.' : ''}
+                        {fmtMoney(fila.diag.costoPorGramo)}/g{!fila.diag.costoVerificado ? ' est.' : ''}
                       </span>
                     )}
                   </button>
@@ -270,9 +327,9 @@ export function EstandarizacionView({
         <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px', background: 'var(--bg)', borderRadius: 10 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)', flexShrink: 0, marginTop: 1 }}>info</span>
           <span style={{ fontSize: 11, color: 'var(--text-3)', lineHeight: 1.5 }}>
-            No incluye productos comprados que van directo al plato (pan, limón) ni componentes de
-            Menús/Eventos (van por otra tabla) — hoy solo se puede cargar como componente una receta
-            o subreceta dentro de un plato de la carta.
+            No incluye productos comprados que van directo al plato o al menú (pan, limón) ni
+            preparaciones de menú que reusan un plato entero de la carta — hoy solo se cuentan
+            como componente las recetas y subrecetas.
           </span>
         </div>
       </div>

@@ -324,7 +324,7 @@ export default function CartaPage() {
   const { productos } = useStock()
   const { ventas } = useVentas()
   const { grupos, crearGrupo, eliminarGrupo, aplicarGrupoAPlatos } = usePackagingGrupos()
-  const { crearMenu, actualizarMenu } = useMenus()
+  const { menus, crearMenu, actualizarMenu } = useMenus()
   const { items: checklistItems, refetchConfig } = useChecklist()
   const supabase = useMemo(() => createClient(), [])
 
@@ -753,43 +753,12 @@ export default function CartaPage() {
     await aplicarGrupoAPlatos(grupoId, platoIds)
   }
 
-  // ── Rentabilidad ──
-  if (view === 'rentabilidad' && verCostos) {
-    return (
-      <>
-        <RentabilidadView
-          items={items}
-          ventas={ventas}
-          onBack={() => setView('list')}
-          verCostos={verCostos}
-          actualizarItem={actualizarItem}
-          onOpenPlato={(pid) => { setSelectedItemId(pid); setView('detail') }}
-          showToast={setToast}
-        />
-        {toast && <Toast msg={toast} onDone={() => setToast('')} />}
-      </>
-    )
-  }
-
-  // ── Estandarización — trabajo de cocina, no de plata: el gate es canEdit,
-  // no verCostos (un sous chef tiene que poder ver qué le falta pesar sin
-  // ver precios). Ver PLAN-ESTANDARIZACION.md.
-  if (view === 'estandarizacion' && canEdit) {
-    return (
-      <>
-        <EstandarizacionView
-          items={items}
-          recetasPorId={recetasPorId}
-          onBack={() => setView('list')}
-          onOpenPlato={(pid) => { setSelectedItemId(pid); setView('detail') }}
-          verCostos={verCostos}
-        />
-        {toast && <Toast msg={toast} onDone={() => setToast('')} />}
-      </>
-    )
-  }
-
-  // ── Editor unificado (Plato / Menú / Evento) ──
+  // ── Editor unificado (Plato / Menú / Evento) — va PRIMERO en esta cadena
+  // de returns: se puede abrir desde varias vistas sin que ninguna cambie su
+  // propio `view` (ej. EstandarizacionView.onOpenMenu solo setea `composing`,
+  // se queda en view==='estandarizacion'). Si este check fuera después del
+  // de Estandarización/Rentabilidad, esas vistas nunca lo verían — se
+  // quedarían mostrándose a sí mismas para siempre en vez de abrir el editor.
   if (composing) {
     return (
       <>
@@ -820,6 +789,44 @@ export default function CartaPage() {
           productosStock={productos}
           onRecetaActualizada={refetchRecetas}
           draftId={composing.menuEditId}
+        />
+        {toast && <Toast msg={toast} onDone={() => setToast('')} />}
+      </>
+    )
+  }
+
+  // ── Rentabilidad ──
+  if (view === 'rentabilidad' && verCostos) {
+    return (
+      <>
+        <RentabilidadView
+          items={items}
+          ventas={ventas}
+          onBack={() => setView('list')}
+          verCostos={verCostos}
+          actualizarItem={actualizarItem}
+          onOpenPlato={(pid) => { setSelectedItemId(pid); setView('detail') }}
+          showToast={setToast}
+        />
+        {toast && <Toast msg={toast} onDone={() => setToast('')} />}
+      </>
+    )
+  }
+
+  // ── Estandarización — trabajo de cocina, no de plata: el gate es canEdit,
+  // no verCostos (un sous chef tiene que poder ver qué le falta pesar sin
+  // ver precios). Ver PLAN-ESTANDARIZACION.md.
+  if (view === 'estandarizacion' && canEdit) {
+    return (
+      <>
+        <EstandarizacionView
+          items={items}
+          menus={menus}
+          recetasPorId={recetasPorId}
+          onBack={() => setView('list')}
+          onOpenPlato={(pid) => { setSelectedItemId(pid); setView('detail') }}
+          onOpenMenu={(menu) => setComposing({ inicial: menuToInicial(menu), menuEditId: menu.id })}
+          verCostos={verCostos}
         />
         {toast && <Toast msg={toast} onDone={() => setToast('')} />}
       </>
