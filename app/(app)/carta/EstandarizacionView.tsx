@@ -80,11 +80,25 @@ export function EstandarizacionView({
   )
   const plazasPresentes = useMemo(() => {
     const set = new Set([
-      ...items.flatMap(i => i.plato_recetas).map(pr => pr.plaza),
+      ...items.flatMap(i => i.plato_recetas).map(pr => pr.plaza_efectiva),
       ...menus.flatMap(m => m.preparaciones).map(mp => mp.plaza),
     ].filter((p): p is string => !!p))
     return PLAZAS_OPS.filter(p => set.has(p.id))
   }, [items, menus])
+
+  // Componentes sin plaza en NINGÚN lado (ni plato_recetas ni el mise) —
+  // sep 2026, hallazgo real: estos no aparecen bajo ningún filtro de plaza,
+  // y sin este aviso desaparecen en silencio ("¿por qué no veo nueces
+  // pecan caramelizadas en Calientes?" cuando en realidad nunca se le
+  // asignó una plaza a ese componente). Se calcula sobre TODA la carta,
+  // no sobre itemsFiltrados — el aviso vale exista o no un filtro activo.
+  const componentesSinPlaza = useMemo(() => {
+    return items.flatMap(item =>
+      item.plato_recetas
+        .filter(pr => pr.plaza_efectiva == null)
+        .map(pr => ({ platoId: item.id, platoNombre: item.nombre, nombre: pr.receta?.nombre ?? '(receta eliminada)' })),
+    )
+  }, [items])
 
   // El filtro de plaza es por COMPONENTE, no por plato/menú entero: un plato
   // de Parrilla+Guarnición solo debe mostrarle al de Fríos su guarnición, no
@@ -92,10 +106,16 @@ export function EstandarizacionView({
   // desaparece de la lista (no hay nada suyo que ese puesto tenga que
   // mirar). Los platos con receta_id directa (sin plato_recetas) no tienen
   // plaza propia — quedan afuera en cuanto se filtra por plaza.
+  //
+  // plaza_efectiva (no `plaza`): sep 2026, hallazgo real — un componente
+  // puede estar configurado en el mise (OPS) con una plaza sin que
+  // ComposicionEditor haya guardado esa plaza en plato_recetas. Filtrar por
+  // `plaza` a secas los hacía desaparecer del filtro aunque el mise supiera
+  // exactamente dónde van. Ver useCarta.ts.
   const itemsFiltrados = useMemo(() => {
     return items
       .filter(item => categoriaFiltro === TODAS || item.categoria === categoriaFiltro)
-      .map(item => plazaFiltro === TODAS ? item : { ...item, plato_recetas: item.plato_recetas.filter(pr => pr.plaza === plazaFiltro) })
+      .map(item => plazaFiltro === TODAS ? item : { ...item, plato_recetas: item.plato_recetas.filter(pr => pr.plaza_efectiva === plazaFiltro) })
       .filter(item => plazaFiltro === TODAS || item.plato_recetas.length > 0)
   }, [items, categoriaFiltro, plazaFiltro])
 
@@ -321,6 +341,37 @@ export function EstandarizacionView({
               </div>
             </div>
           </>
+        )}
+
+        {/* ── Sin plaza en ningún lado — no se filtran, no se fabrican: se avisan.
+            Distinto del aviso de más abajo (eso es un límite de la app; esto
+            es un dato que falta cargar y SÍ se puede arreglar acá mismo). ── */}
+        {componentesSinPlaza.length > 0 && (
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)' }}>help</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>
+                {componentesSinPlaza.length} componente{componentesSinPlaza.length !== 1 ? 's' : ''} sin plaza asignada
+              </span>
+            </div>
+            <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-3)' }}>
+              No aparecen en ningún filtro de plaza — ni en Carta ni en el mise se cargó dónde van. Tocá para abrir el plato y asignarla.
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 12px 12px' }}>
+              {componentesSinPlaza.slice(0, 12).map((c, i) => (
+                <button key={i} onClick={() => onOpenPlato(c.platoId)} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--bg)',
+                  border: '1px solid var(--border)', borderRadius: 999, padding: '4px 10px',
+                  fontSize: 11, fontWeight: 600, color: 'var(--text-1)', cursor: 'pointer', fontFamily: 'inherit',
+                }}>
+                  {c.nombre} <span style={{ color: 'var(--text-3)', fontWeight: 400 }}>· {c.platoNombre}</span>
+                </button>
+              ))}
+              {componentesSinPlaza.length > 12 && (
+                <span style={{ fontSize: 10, color: 'var(--text-3)', alignSelf: 'center' }}>+{componentesSinPlaza.length - 12} más</span>
+              )}
+            </div>
+          </div>
         )}
 
         {/* ── Límite declarado, no oculto ── */}

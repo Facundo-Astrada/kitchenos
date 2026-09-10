@@ -28,7 +28,7 @@ function receta(overrides: Partial<Receta> = {}): Receta {
 function platoReceta(overrides: Partial<PlatoRecetaEnriquecido> = {}): PlatoRecetaEnriquecido {
   return {
     id: nid(), plato_id: 'plato-1', receta_id: overrides.receta?.id ?? 'r', porciones: 1, orden: 0,
-    costo_calculado: null, gramaje_efectivo_g: null,
+    costo_calculado: null, gramaje_efectivo_g: null, plaza_efectiva: null,
     ...overrides,
   }
 }

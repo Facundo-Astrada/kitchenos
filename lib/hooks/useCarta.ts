@@ -80,6 +80,14 @@ export interface PlatoRecetaEnriquecido extends PlatoRecetaDB {
   // (receta sin costoPorGramo). lib/recetas/estandarizacion.ts lo usa para
   // el eje "¿se sabe cuánto entra de esto en este plato?".
   gramaje_efectivo_g: number | null
+  // Plaza efectiva: `plaza` (columna propia) si está cargada, si no la que
+  // el mise (checklist_items) ya conoce para esa receta — sep 2026,
+  // hallazgo real (Estandarización, filtro por plaza): un componente puede
+  // estar configurado en el mise sin que ComposicionEditor haya guardado
+  // esa plaza acá. null = de verdad no está en ningún lado. No confundir
+  // con `plaza`: esa sigue siendo el dato crudo de la columna, sin fallback
+  // — se usa para decidir si HAY que guardar algo, no para mostrar/filtrar.
+  plaza_efectiva: string | null
 }
 
 export interface PlatoPackagingDB {
@@ -208,17 +216,28 @@ export async function fetchCartaItemsData(key: string): Promise<CartaItemEnrique
     // como la fuente de verdad del gramaje real (puede cambiar sin tocar cada
     // plato_recetas). Sin esto, el costeo quedaría desincronizado del número
     // que esas dos pantallas ya muestran.
+    //
+    // La query trae TODOS los receta_id de prItems (no solo los que ya
+    // tienen pr.plaza) — sep 2026, hallazgo real: un componente puede
+    // haberse configurado en el mise (con plaza y hasta peso_porcion) sin
+    // que ComposicionEditor haya guardado esa plaza en plato_recetas. Sin
+    // esto, ese componente queda invisible en cualquier filtro por plaza
+    // (Carta › Estandarización) aunque el mise sí sepa dónde va.
     const misePesoMap: Record<string, { peso: number; unidad: string }> = {}
-    const prConPlaza = prItems.filter(pr => pr.plaza)
-    if (prConPlaza.length > 0) {
+    // Primera plaza vista en el mise por receta — fallback cuando
+    // plato_recetas.plaza nunca se cargó. No pisa el dato real; ver
+    // `plaza_efectiva` más abajo.
+    const misePlazaPorReceta: Record<string, string> = {}
+    const recetaIdsDePr = [...new Set(prItems.map(pr => pr.receta_id))]
+    if (recetaIdsDePr.length > 0) {
       const { data: ciData } = await supabase
         .from('checklist_items')
         .select('receta_id, plaza, peso_porcion, peso_porcion_unidad')
         .eq('restaurante_id', rid)
-        .in('receta_id', [...new Set(prConPlaza.map(pr => pr.receta_id))])
-        .not('peso_porcion', 'is', null)
-      for (const ci of (ciData ?? []) as { receta_id: string; plaza: string; peso_porcion: number; peso_porcion_unidad: string | null }[]) {
-        misePesoMap[`${ci.receta_id}|${ci.plaza}`] = { peso: ci.peso_porcion, unidad: ci.peso_porcion_unidad ?? 'g' }
+        .in('receta_id', recetaIdsDePr)
+      for (const ci of (ciData ?? []) as { receta_id: string; plaza: string; peso_porcion: number | null; peso_porcion_unidad: string | null }[]) {
+        if (ci.peso_porcion != null) misePesoMap[`${ci.receta_id}|${ci.plaza}`] = { peso: ci.peso_porcion, unidad: ci.peso_porcion_unidad ?? 'g' }
+        if (!misePlazaPorReceta[ci.receta_id]) misePlazaPorReceta[ci.receta_id] = ci.plaza
       }
     }
     const enGramos = (v: number, u: string) => (u === 'kg' || u === 'l' ? v * 1000 : v)
@@ -226,12 +245,16 @@ export async function fetchCartaItemsData(key: string): Promise<CartaItemEnrique
     for (const pr of prItems) {
       if (!platoRecetasMap[pr.plato_id]) platoRecetasMap[pr.plato_id] = []
       const r = recetaMap[pr.receta_id]
+      // Plaza efectiva: la de plato_recetas si está cargada, si no la del
+      // mise (misma idea que gramaje_efectivo_g). null = de verdad no está
+      // en ningún lado — sin fabricar una plaza que nadie asignó.
+      const plazaEfectiva = pr.plaza ?? misePlazaPorReceta[pr.receta_id] ?? null
       // Gramaje efectivo: tamaño por porción del mise si existe, si no la
       // columna dedicada. null = sin gramaje conocido — no se fabrica un
       // costo asumiendo "una porción entera del batch" (bug que costeaba
       // p.ej. un componente de un batch de 30 porciones como si el plato
       // se llevara el batch entero).
-      const mise = pr.plaza ? misePesoMap[`${pr.receta_id}|${pr.plaza}`] : undefined
+      const mise = plazaEfectiva ? misePesoMap[`${pr.receta_id}|${plazaEfectiva}`] : undefined
       const gramajeEnG = mise
         ? enGramos(mise.peso, mise.unidad)
         : pr.gramaje != null ? enGramos(pr.gramaje, pr.gramaje_unidad ?? 'g') : null
@@ -241,7 +264,7 @@ export async function fetchCartaItemsData(key: string): Promise<CartaItemEnrique
         const costoPorGramo = costoPorGramoDeReceta(r, costoTotalReceta)
         costo_calculado = costoPorGramo != null ? costoPorGramo * gramajeEnG : null
       }
-      platoRecetasMap[pr.plato_id].push({ ...pr, receta: r, costo_calculado, gramaje_efectivo_g: gramajeEnG })
+      platoRecetasMap[pr.plato_id].push({ ...pr, receta: r, costo_calculado, gramaje_efectivo_g: gramajeEnG, plaza_efectiva: plazaEfectiva })
     }
 
     // Fetch plato_packaging + productos
