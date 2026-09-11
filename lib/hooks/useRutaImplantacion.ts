@@ -10,7 +10,7 @@
  * en 0 y el resto de la ruta se sigue viendo. Un medidor incompleto sirve; una
  * pantalla en blanco no.
  */
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
@@ -267,6 +267,36 @@ export function useRutaImplantacion() {
     manual,
     { incluirSalon: data?.tieneSalon ?? false, diasDesdeAlta: dias },
   ), [data, manual, dias])
+
+  // Foto diaria del progreso, para que el reconocimiento semanal tenga contra
+  // qué comparar: "cuántas funciones quedaron funcionando solas esta semana" es
+  // una resta, y sin foto anterior no hay resta (ver la migración
+  // 20260911_implantacion_progreso.sql para por qué la escribe el cliente y no
+  // el cron).
+  //
+  // Los dos guards importan:
+  //  - `loading || !data` — sin él, el primer render escribe METRICAS_CERO y
+  //    deja una foto de 0% que después aparece como un salto falso de progreso.
+  //  - `yaFoto` — una vez por montaje; el upsert es idempotente por
+  //    (restaurante_id, fecha), pero no hace falta pegarle en cada revalidación.
+  const yaFoto = useRef(false)
+  useEffect(() => {
+    if (loading || !data || !RESTAURANTE_ID || yaFoto.current) return
+    yaFoto.current = true
+    const sb = createClient()
+    sb.from('implantacion_progreso')
+      .upsert({
+        restaurante_id: RESTAURANTE_ID,
+        fecha: ISO(new Date()),
+        insertadas: progreso.insertadas,
+        total: progreso.total,
+        pct: progreso.pct,
+      }, { onConflict: 'restaurante_id,fecha' })
+      // Best-effort: la pantalla tiene que funcionar aunque la foto falle.
+      .then(({ error }) => {
+        if (error) console.warn('[useRutaImplantacion] foto de progreso no guardada:', error.message)
+      })
+  }, [loading, data, RESTAURANTE_ID, progreso.insertadas, progreso.total, progreso.pct])
 
   return {
     progreso,

@@ -218,6 +218,9 @@ const ADMIN_CLIENT_SIN_HELPER_PERMITIDO = new Set([
   'cron/reset-demo/route.ts',        // auth por CRON_SECRET (Vercel), no hay sesión de usuario
   'cron/health/route.ts',            // idem: auth por CRON_SECRET. Además no lee datos de ningún
                                      // tenant — solo un count head:true para ver si la base contesta.
+  'cron/avisos/route.ts',            // idem: auth por CRON_SECRET. Recorre TODOS los restaurantes a
+                                     // propósito (el reconocimiento semanal es del ecosistema), como
+                                     // admin/overview — no hay un tenant que resolver.
   'invitar/route.ts',                // valida sesión + rol==='admin' a mano antes de usar el admin client
   'invitar/vincular/route.ts',       // valida sesión a mano, deriva restaurante_id de user_restaurantes propio
   'importador/fichas-tecnicas/route.ts', // valida sesión a mano antes de tocar el admin client
