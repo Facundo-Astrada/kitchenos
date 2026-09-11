@@ -17,7 +17,7 @@
 import { useMemo, useState } from 'react'
 import {
   NIVELES_COMPETENCIA, nivelCompetencia, todasLasPlazas, plazaLabel, plazaIcon,
-  NIVEL_AUTONOMO, NIVEL_REFERENTE, type NivelCompetencia,
+  esPlazaCustom, ICONOS_PLAZA_CUSTOM, NIVEL_AUTONOMO, NIVEL_REFERENTE, type NivelCompetencia,
 } from '@/lib/constants'
 import { useCompetencias } from '@/lib/hooks/useCompetencias'
 import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
@@ -39,9 +39,13 @@ export default function PolivalenciaPanel({
   isAdmin: boolean
   onToast: (msg: string) => void
 }) {
-  const { plazasCustom } = usePlazasCustom()
+  const { plazasCustom, agregarPlazaCustom, eliminarPlazaCustom } = usePlazasCustom()
   const { nivelDe, setNivel, riesgo, loading } = useCompetencias()
   const [editando, setEditando] = useState<{ miembroId: string; plaza: string } | null>(null)
+  const [showCrearPlaza, setShowCrearPlaza] = useState(false)
+  const [nuevaPlazaNombre, setNuevaPlazaNombre] = useState('')
+  const [nuevaPlazaIcono, setNuevaPlazaIcono] = useState(ICONOS_PLAZA_CUSTOM[0])
+  const [creandoPlaza, setCreandoPlaza] = useState(false)
   const isDesktop = useIsDesktop()
 
   // 'general' y 'menu' no son plazas físicas donde alguien se forme: no entran.
@@ -51,6 +55,24 @@ export default function PolivalenciaPanel({
   )
   const riesgos = useMemo(() => riesgo(plazas), [riesgo, plazas])
   const alertas = riesgos.filter(r => r.estado !== 'ok')
+
+  async function handleCrearPlaza() {
+    if (!nuevaPlazaNombre.trim()) return
+    setCreandoPlaza(true)
+    try {
+      await agregarPlazaCustom({ nombre: nuevaPlazaNombre.trim(), icono: nuevaPlazaIcono })
+      setNuevaPlazaNombre(''); setNuevaPlazaIcono(ICONOS_PLAZA_CUSTOM[0])
+      setShowCrearPlaza(false)
+    } finally {
+      setCreandoPlaza(false)
+    }
+  }
+
+  function handleEliminarPlaza(key: string, label: string) {
+    if (confirm(`¿Eliminar la plaza "${label}"? Se borra también su mise/producción y se desvincula de Mesa de Trabajo.`)) {
+      eliminarPlazaCustom(key)
+    }
+  }
 
   if (!loading && miembros.length === 0) {
     return (
@@ -105,6 +127,81 @@ export default function PolivalenciaPanel({
         cada plaza, y ver <b>qué plaza se cae</b> si falta una sola persona — hoy, y no el día que falte.
         Mide la cobertura del restaurante, no a la gente.
       </p>
+
+      {/* ── Alta/baja de plazas custom — misma fuente que Mesa de Trabajo
+          (usePlazasCustom): crear/eliminar acá se refleja también ahí. ── */}
+      {isAdmin && (
+        <div>
+          {!showCrearPlaza ? (
+            <button
+              type="button"
+              onClick={() => setShowCrearPlaza(true)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 10px',
+                borderRadius: 8, border: '1px dashed var(--border)', background: 'transparent',
+                color: 'var(--text-2)', fontSize: 12.5, cursor: 'pointer',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 15 }}>add</span>
+              Nueva plaza
+            </button>
+          ) : (
+            <div style={{
+              background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: 10,
+              display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 420,
+            }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {ICONOS_PLAZA_CUSTOM.map(ic => (
+                  <button
+                    key={ic} type="button"
+                    onClick={() => setNuevaPlazaIcono(ic)}
+                    title={ic}
+                    style={{
+                      background: nuevaPlazaIcono === ic ? 'var(--accent)' : 'var(--bg)',
+                      border: '1px solid var(--border)', borderRadius: 6,
+                      cursor: 'pointer', padding: 4, display: 'flex',
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 16, color: nuevaPlazaIcono === ic ? '#fff' : 'var(--text-2)' }}>{ic}</span>
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  autoFocus
+                  placeholder="Nombre de la plaza (ej: Plancha evento)"
+                  value={nuevaPlazaNombre}
+                  onChange={e => setNuevaPlazaNombre(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleCrearPlaza(); if (e.key === 'Escape') setShowCrearPlaza(false) }}
+                  style={{
+                    flex: 1, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border)',
+                    background: 'var(--bg)', color: 'var(--text-1)', fontSize: 13, fontFamily: 'inherit',
+                  }}
+                />
+                <button
+                  type="button" onClick={handleCrearPlaza} disabled={!nuevaPlazaNombre.trim() || creandoPlaza}
+                  style={{
+                    padding: '7px 12px', borderRadius: 8, border: 'none', background: 'var(--accent)',
+                    color: '#fff', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                    opacity: !nuevaPlazaNombre.trim() || creandoPlaza ? 0.6 : 1,
+                  }}
+                >
+                  {creandoPlaza ? 'Creando…' : 'Crear'}
+                </button>
+                <button
+                  type="button" onClick={() => { setShowCrearPlaza(false); setNuevaPlazaNombre('') }}
+                  style={{
+                    padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border)',
+                    background: 'transparent', color: 'var(--text-2)', fontSize: 12.5, cursor: 'pointer',
+                  }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Riesgo por plaza: lo primero, porque es lo accionable ── */}
       {alertas.length > 0 && (
@@ -179,7 +276,20 @@ export default function PolivalenciaPanel({
                     padding: '10px 8px', fontSize: 11, fontWeight: 700, color: 'var(--text-2)',
                     borderBottom: '1px solid var(--border)', minWidth: 92,
                   }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, position: 'relative' }}>
+                      {isAdmin && esPlazaCustom(p, plazasCustom) && (
+                        <button
+                          type="button"
+                          onClick={() => handleEliminarPlaza(p, plazaLabel(p, plazasCustom))}
+                          title="Eliminar plaza"
+                          style={{
+                            position: 'absolute', top: -8, right: -4, border: 'none', background: 'transparent',
+                            color: 'var(--text-3)', cursor: 'pointer', padding: 2, display: 'flex',
+                          }}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: 13 }}>close</span>
+                        </button>
+                      )}
                       <span className="material-symbols-outlined" style={{ fontSize: 17 }}>{plazaIcon(p, plazasCustom)}</span>
                       {plazaLabel(p, plazasCustom)}
                     </div>
@@ -267,9 +377,19 @@ export default function PolivalenciaPanel({
                     </span>
                     <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{plazaLabel(p, plazasCustom)}</span>
                   </div>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: cfg.color, flexShrink: 0 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: cfg.color, flexShrink: 0 }}>
                     <span className="material-symbols-outlined" style={{ fontSize: 14 }}>{cfg.icon}</span>
                     {cfg.label}
+                    {isAdmin && esPlazaCustom(p, plazasCustom) && (
+                      <button
+                        type="button"
+                        onClick={() => handleEliminarPlaza(p, plazaLabel(p, plazasCustom))}
+                        title="Eliminar plaza"
+                        style={{ border: 'none', background: 'transparent', color: 'var(--text-3)', cursor: 'pointer', padding: 0, display: 'flex' }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 15 }}>close</span>
+                      </button>
+                    )}
                   </span>
                 </div>
 

@@ -50,6 +50,11 @@ export function plazaColor(key: Plaza, custom: PlazaCustom[]): string {
 export function esPlazaCustom(key: Plaza, custom: PlazaCustom[]): boolean {
   return custom.some(c => c.key === key)
 }
+// Paleta de íconos para crear una plaza custom (Mesa de Trabajo, Organigrama)
+export const ICONOS_PLAZA_CUSTOM = [
+  'category', 'outdoor_grill', 'ac_unit', 'soup_kitchen', 'room_service',
+  'cake', 'bakery_dining', 'blender', 'local_bar', 'skillet', 'coffee_maker', 'countertops',
+]
 
 // ── Color por tipo de sección (Mesa de trabajo, S6/Bloque 5) ───────────────
 // 'produccion' (la más común, mise diario) queda sin tinte a propósito: no

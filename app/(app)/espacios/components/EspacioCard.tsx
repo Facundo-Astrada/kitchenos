@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { Espacio, EspacioPlaza, ChecklistSeccionConfig, MisePlaceItem, Plaza, PlazaCustom, MisePrioridad } from '@/types'
-import { PLAZAS_FIJAS, PLAZA_LABELS } from '@/lib/constants'
+import { PLAZAS_FIJAS, PLAZA_LABELS, ICONOS_PLAZA_CUSTOM } from '@/lib/constants'
 import PlazaRow from './PlazaRow'
 
 const ICONOS_ESPACIO = [
@@ -10,10 +10,7 @@ const ICONOS_ESPACIO = [
   'bakery_dining', 'local_bar', 'inventory_2', 'store', 'home',
 ]
 
-const ICONOS_PLAZA = [
-  'category', 'outdoor_grill', 'ac_unit', 'soup_kitchen', 'room_service',
-  'cake', 'bakery_dining', 'blender', 'local_bar', 'skillet', 'coffee_maker', 'countertops',
-]
+const ICONOS_PLAZA = ICONOS_PLAZA_CUSTOM
 
 interface Props {
   espacio: Espacio
