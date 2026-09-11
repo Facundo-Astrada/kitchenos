@@ -1,226 +1,316 @@
 # KitchenOS — Pendientes
 
-Lista priorizada de lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL.md`. Lo resuelto y el detalle de sesiones pasadas viven en `HISTORIAL.md` (no acumular acá).
+Lista priorizada de lo que falta. Mantenela sincronizada con `ESTADO-ACTUAL.md`.
 
-**Ítems de ingeniería (31/08):** el orden de ejecución, las dependencias y las fusiones viven en `.claude/docs/ingenieria/plan-consolidado.md` (los 10 días). Si este archivo y el plan difieren, manda el plan.
+**Este archivo es la lista corta, a propósito.** El detalle largo de cada ítem
+(cómo se encontró, qué se descartó y por qué) vive en `HISTORIAL.md` §
+"Detalle de ítems abiertos — archivado de PENDIENTES.md (11/09/2026)". Si un
+ítem de acá parece que le falta contexto, está allá completo. Guideline de
+tamaño: ~10 KB. Quedó en 17 KB tras la poda del 11/09 (venía de 38,6 KB) — bajar
+de ahí exigía sacar el criterio de decisión de cada ítem ("solo si molesta en uso
+real", "no apurar sin un cliente con plan"), que es justo lo que hace que la
+lista sirva. Cuando vuelva a crecer, podar mudando a `HISTORIAL.md`, nunca
+borrando.
+
+**Ítems de ingeniería (31/08):** el orden, las dependencias y las fusiones viven
+en `.claude/docs/ingenieria/plan-consolidado.md`. Si difieren, manda el plan.
+
+---
+
+## 🔴 Crítico
+
+### Candado de duplicados de Producción — falta el paso 0 y correr el SQL
+El código ya tolera el 23505 (`lib/ops/insertarTareas.ts`, 11/09) y el SQL está
+escrito en `supabase/migrations/pendientes/`. **Medido el 11/09: hay 14 grupos
+duplicados en producción (16 filas, peor caso 4 gemelas)**, así que el
+`CREATE UNIQUE INDEX` falla hasta limpiarlos. Leer
+`CANDADO_TAREAS_LEER_ANTES.md` antes de tocar nada: la columna generada toma
+`ACCESS EXCLUSIVE` sobre `tareas` y va **fuera de servicio**.
 
 ---
 
 ## 🟠 Alto
 
 ### Ruta de implantación — lo que quedó abierto (ejecutada el 07/09)
-Los 6 huecos, la matriz de polivalencia, la ficha de line-up, la cordillera y los avisos se
-construyeron y deployaron el 07/09 (`PLAN-IMPLANTACION-2026-09.md` § 0). Falta:
+1. ~~No hay scheduler~~ **resuelto 11/09**: `app/api/cron/avisos` corre el
+   reconocimiento semanal. **Falta prenderlo**: poner `AVISOS_ACTIVOS=1` en
+   Vercel y agregar el cron a `vercel.json` (hoy anda en modo seco — calcula y
+   reporta lo que mandaría, sin escribir notificaciones). Mirar una corrida seca
+   real antes de prenderlo.
+2. **Retirar `/onboarding`.** Convive con `/implantacion` a propósito
+   (estrangulamiento). Retirar la vieja cuando la nueva esté probada contra un
+   restaurante real.
+3. **Dos checkpoints se confirman a mano** porque no hay dato que los sostenga:
+   "se leyó el line-up en voz alta" y la estación 5.5.
+4. **Nadie verificó la ruta contra datos reales.** Los umbrales (3 semanas de
+   facturas, 5 días de pase, 20 tareas) son criterio, no medición: mirarlos
+   contra El Rescoldo y Bros y ajustarlos.
 
-1. **No hay scheduler.** El aviso al responsable se dispara a mano desde `/implantacion`.
-   El reconocimiento semanal está escrito y testeado (`lib/implantacion/avisos.ts`) pero no
-   cableado — necesita algo que corra solo. Es el mismo agujero que "nada avisa cuando
-   producción se rompe": una sola pieza resolvería los dos.
-2. **Retirar `/onboarding`.** La cordillera (`/implantacion`) convive con la guía de inicio a
-   propósito (estrangulamiento). Retirar la vieja recién cuando la nueva esté probada contra
-   un restaurante real.
-3. **Dos checkpoints siguen confirmándose a mano** porque no hay dato que los sostenga:
-   "se leyó el line-up en voz alta" y la estación 5.5 (un desvío del reporte cambió el
-   estándar). El tercero ("sin estandarizar" por plato) se resolvió el 11/09: la estación 2.3
-   ahora lee el nivel N0-N3 real (`lib/recetas/estandarizacion.ts`) en vez de reusar el conteo
-   de "sin receta" como proxy.
-4. **Nadie verificó la ruta contra datos reales todavía.** Los umbrales de inserción
-   (3 semanas de facturas, 5 días de pase, 20 tareas despachadas) son criterio, no medición:
-   hay que mirarlos contra El Rescoldo y Bros y ajustarlos.
-
-### Invitación por email falla a veces — falta SMTP propio en Supabase
-Auditoría 20/08 (chequeado contra la config viva vía management API): `site_url`, `uri_allow_list` y redirect a `/registro-invitado` ya están OK — ese ítem viejo estaba resuelto. El bloqueo real es otro: no hay SMTP propio configurado (`smtp_host` null) — Supabase manda con su mailer compartido, limitado a `rate_limit_email_sent: 2` (2 emails/hora) y con tendencia a caer en spam por no ser dominio propio. Si el dueño invita 3+ personas seguidas armando el equipo, la 3ra invitación falla. El frontend (`handleInvitar` en `app/(app)/turnos/page.tsx`) solo muestra el error crudo de Supabase en un toast, sin explicar el motivo ni sugerir reintentar más tarde. Fix: configurar SMTP propio (Resend recomendado, tier gratis generoso) en Supabase Auth → falta que Facundo cree la cuenta y pase la API key para conectarlo vía management API.
-
-**Decisión 21/08:** Facundo ya creó la cuenta en Resend pero frenó ahí — hace falta además un dominio propio verificado (el dominio de prueba de Resend solo manda a la propia casilla de quien se registró, no sirve para invitar gente real). Se queda así por ahora: el caso de uso típico (invitar de a una persona) funciona sin el fix; el límite de 2/hora solo pisa si se invitan 3+ personas seguidas. Retomar cuando eso moleste en uso real o cuando haya un dominio propio de KitchenOS por otro motivo (no vale la pena comprar uno solo para esto).
-
-### Nada avisa cuando producción se rompe (encontrado 01/09)
-El realtime estuvo caído en prod por un `
-` en una env var — pase, sync del mise entre dispositivos, bumps del KDS, Muro y campanita — y **no se detectó por ningún canal**: falla del lado del browser, con 401 en el handshake del WebSocket, sin error de servidor, sin alerta, sin test que lo cubra. Se descubrió de casualidad mirando la consola mientras se verificaba otra cosa.
-
-El agujero no es ese bug puntual (ya está arreglado y con `.trim()` de por medio): es que no hay **ninguna** señal de salud de producción. Hoy la única forma de saber si algo se rompió es que alguien lo note usando la app.
-
-**`/admin` (01/09) ya cubre el punto (c)** — dashboard de control del ecosistema con plan/actividad/costo de IA por cuenta (detalle en `HISTORIAL.md`). No es alerta: alguien tiene que abrirlo. Sigue faltando (a) o (b) para que algo avise solo, y el dashboard tampoco distingue "a quién se le rompió un import" de "no lo usó" — solo mide volumen, no fallos.
+### Invitación por email falla a veces — falta SMTP propio
+🔒 **Bloqueado, no es código.** Supabase manda con su mailer compartido (2
+emails/hora). Facundo ya creó la cuenta en Resend pero falta un **dominio propio
+verificado**. El caso típico (invitar de a uno) funciona; el límite solo pisa
+con 3+ seguidas. Retomar cuando moleste o cuando haya dominio por otro motivo.
 
 ### Fiscal ARCA — homologación end-to-end
-Código completo (`lib/fiscal/wsaa.ts`, `lib/fiscal/wsfev1.ts`, `app/api/fiscal/emitir/route.ts`). Falta: certificado real de ARCA del contribuyente, probar contra el servidor de testing de AFIP, URLs de prod en `config_fiscal`, cachear token/sign WSAA en Supabase.
+🔒 **Bloqueado:** falta el certificado real de ARCA del contribuyente. El código
+está completo (`lib/fiscal/wsaa.ts`, `wsfev1.ts`, `api/fiscal/emitir`). Después:
+probar contra el server de testing de AFIP y poner URLs de prod en
+`config_fiscal`.
 
 ### OPS Consolidación — diferido
-"Copiar a otro día" e "Ingredientes consolidados" (se sacaron con la planilla legacy) — reimplementar sobre `tareas` si el usuario los pide.
+"Copiar a otro día" e "Ingredientes consolidados" se sacaron con la planilla
+legacy. Reimplementar sobre `tareas` **solo si el usuario los pide**.
 
-### Migrar las copias viejas de "modal centrado" a `components/ui/Modal.tsx` — quedan 2
-El barrido de los Bloques 2 y 7 (08/09, `PLAN-PANTALLAS-2026-09-08.md`) migró 14 pantallas:
-las 12 de uso diario del Bloque 2 (Merma, CrearTareaSheet, ProduccionSheet, PaseSheet OPS,
-NotaItemSheet Mise, RutinaItemSheet, SugerenciaCompraSheet, SugerenciaProduccionSheet,
-LimpiezaPanel Espacios, IngredienteOpsSheet + RecetaOpsSheet Recetario, editar-fichaje de
-Turnos, los dos sheets de Dashboard) más `calendario/page.tsx` (form de evento y de
-planificar evento) en el Bloque 7. Quedan 2 copias a mano sin migrar: `stock/ClientView.tsx`
-(alta/edición de producto) y `checklist/ClientView.tsx` (selector de plaza+turno) — migrar la
-próxima vez que se toque esa pantalla, no antes.
+### Migrar las 2 copias viejas de "modal centrado" a `components/ui/Modal.tsx`
+El barrido del 08/09 migró 14 pantallas. Quedan `stock/ClientView.tsx` y
+`checklist/ClientView.tsx` — migrar **la próxima vez que se toque esa pantalla,
+no antes**.
 
 ---
 
-## 🟡 Medio — Roadmap: Planes y cobro
+## 🟡 Medio — Planes y cobro
 
-**Las decisiones de negocio de este bloque están tomadas (01/09/2026).** Viven en
-`~/Desktop/START UP KOS/00-decisiones/DECISIONES.md`, decisiones 004 a 008. Si este
-archivo y ese difieren, manda ese.
-
-**Stripe quedó descartado: no opera en Argentina** (46-47 países, en LatAm solo Brasil
-y México — una empresa argentina no puede abrir cuenta). El cobro automático va por
-**Mercado Pago Suscripciones** (API `preapproval`). Decisión 004.
-
-**Ya hecho (01/09, detalle en `HISTORIAL.md`):** tabla `ia_uso` con costo por llamada
-imputado a las 12 rutas de IA; `restaurantes.plan` + `lib/planes.ts` (mapeo plan→módulos)
-+ hook `usePlan()`. `puedeUsar(modulo)` existe pero no está cableado a ninguna pantalla
-todavía — es el siguiente ítem.
+Decisiones tomadas (01/09) en `~/Desktop/START UP KOS/00-decisiones/`, 004 a
+008. Si difieren, manda esa carpeta. **Stripe descartado: no opera en
+Argentina** — el cobro va por Mercado Pago `preapproval`.
+Ya hecho: tabla `ia_uso`, `restaurantes.plan`, `lib/planes.ts`, hook `usePlan()`.
 
 ### Feature gating (siguiente)
-Coach (con tope mensual), HACCP, Presupuesto/CMV y Reportes solo en Control; OPS/mise/pase
-desde Cocina. Cablear `puedeUsar('coach')` de `usePlan()` en las pantallas — probablemente
-en `RouteGuard`, mismo lugar que ya resuelve `moduloEnPerfil`. Depende del ítem anterior
-(hecho), no del cobro. **No apurar sin al menos un cliente con plan asignado** — hoy
-`restaurantes.plan` es NULL en las 5 cuentas y `puedeUsar` devuelve `true` siempre.
+Cablear `puedeUsar()` en las pantallas, probablemente en `RouteGuard`. Coach
+(con tope), HACCP, Presupuesto/CMV y Reportes solo en Control; OPS/mise/pase
+desde Cocina. **No apurar sin al menos un cliente con plan asignado** — hoy
+`restaurantes.plan` es NULL en las 5 cuentas y `puedeUsar` devuelve siempre true.
 
 ### Cobro automático (último)
-Mercado Pago `preapproval` + webhooks, UI en Configuración → Plan. **Recién cuando cobrar
-a mano moleste** (cliente 4-5). Con 1 cuenta y $0 facturados no compra nada.
-Prerrequisito que no es código: monotributo + facturación electrónica ARCA (decisión 001).
-Diseñar el dunning desde el día uno: 20-40% de las bajas en LatAm son involuntarias.
+Mercado Pago `preapproval` + webhooks, UI en Configuración → Plan. **Recién
+cuando cobrar a mano moleste** (cliente 4-5). Prerrequisito que no es código:
+monotributo + facturación ARCA. Diseñar el dunning desde el día uno (20-40% de
+las bajas en LatAm son involuntarias).
 
 ---
 
 ## 🟢 Bajo — Roadmap abierto
 
-### Presupuesto — fuera de alcance de la Fase 1 (`/presupuesto`, ago 2026)
-Detalle completo en `PLAN-PRESUPUESTO-CMV-2026-08.md` §11: partir venta comida/bebida (requiere mapear `ventas_items` contra `carta_items`, hoy solo matchea 13 de 272 nombres), merma con costo real (registros en $0 por falta de precio de producto), comparación mes contra mes, cubiertos/Q real (El Rescoldo y Bros no cargan `cantidad_cubiertos`), presupuesto de personal/alquiler/gastos generales desglosado por sub-categoría (mismo patrón que materia prima). Coach: sin tool de servidor propia todavía — candidatos anotados como TODO en `app/api/coach/route.ts`.
+### Presupuesto — fuera de alcance de la Fase 1
+Detalle en `PLAN-PRESUPUESTO-CMV-2026-08.md` §11: partir venta comida/bebida
+(hoy `ventas_items` matchea 13 de 272 nombres), merma con costo real,
+comparación mes contra mes, cubiertos/Q real, presupuesto de personal/alquiler
+desglosado.
 
 ### Kitchen Coach — memoria persistida
-Prompt caching y tool use agéntico ya resueltos. Falta tabla `coach_conversaciones` para historial cross-device (hoy es localStorage).
-
-### Fotos — falta completar
-`PhotoPicker` (bucket `fotos`) integrado en recetario, carta y equipo. Falta facturas, si se decide.
-
-### Notificaciones — falta más triggers, y push/email sin decidir
-In-app ya resuelto (tabla `notificaciones`, `useNotificaciones` con realtime, campanita+feed `NotificacionesBell`, `crearNotificacion()` reusable). **Dos triggers reales**: `useEquipo.asignarTurno` y el recordatorio al responsable de una estación de la ruta (`/implantacion`, sep 2026). Falta wireear más si se necesitan (stock crítico, vencimientos — cada uno es una decisión de producto aparte, no asumir).
-
-**Lo que sí está decidido** (`DECISIONES.md` § 25, implementado en `lib/implantacion/avisos.ts`): recordatorio máximo 1/día por persona chequeado contra lo ya enviado en DB y no contra un flag local; reconocimiento **semanal**, del equipo y sin nombres; a la tercera ignorada no se insiste, se sugiere reasignar. Ese código está testeado y sin cablear del todo — el reconocimiento semanal necesita algo que corra solo.
-
-**Lo que sigue abierto:** push web — `public/sw.js` (67 líneas) **no tiene handler de `push` ni de `notificationclick`**; faltan esos, claves VAPID, tabla de suscripciones y endpoint disparador. Sin eso el aviso solo llega si la persona abre la app, que es justo lo que no hace quien está abandonando. Email/WhatsApp para el que dejó de entrar sigue sin decisión.
-
-### PWA offline — completar fuera de Salón/KDS
-La vista de servicio (Salón/KDS) ya tiene offline completo (SW cachea GETs, bumps en cola IndexedDB, banner sin-conexión). El resto de la app (stock, facturas, etc.) queda pendiente.
-
-### Onboarding wizard guiado
-**Contexto nuevo (sep 2026):** existe `/implantacion`, la cordillera de 7 hitos / 31 estaciones que mide organización del restaurante y no termina (`PLAN-IMPLANTACION-2026-09.md`). **No reemplaza a este ítem**: mide al restaurante, no acompaña a una persona nueva. El gap de abajo sigue igual de abierto.
-
-`WelcomeDashboard` existe. Falta el flujo completo: datos del restaurante → plazas → stock inicial → equipo → permisos, persistiendo progreso en `restaurantes.configuracion.onboarding_step`.
-
-**Gap adicional (auditoría 20/08):** el wizard (`app/(app)/onboarding/page.tsx`, pasos por rol) solo se dispara vía redirect server-side cuando el restaurante tiene 0 productos, 0 facturas y 0 recetas (`app/(app)/page.tsx`). Un cocinero invitado a un restaurante ya operativo nunca cumple esa condición — cae directo al Dashboard sin ninguna guía, con el tour automático del Coach como único mecanismo de descubrimiento (y ese tiene su propio bug: el flag `kc_ops_welcomed`/`kc_app_welcomed` se marca en localStorage *antes* de que el tour termine de mostrarse, así que si el usuario navega rápido se pierde para siempre y no vuelve a aparecer). Fix: disparar el wizard (o una versión corta, solo los pasos del rol) por "primer login de este usuario", no solo por "restaurante vacío".
-
-### Objetivos de venta — falta editor del override por persona (B6, ago 2026)
-El modelo (`puestos.objetivos` + `equipo_miembros.objetivos` override, mezclados con `getObjetivosMiembro()`) y el editor del puesto (Turnos → Puestos) están completos y en uso en Reportes → Personal. Lo que falta: una UI para pisar un objetivo puntual por persona (hoy solo se puede vía SQL directo) — mismo patrón visual que ya existe para `modulos_extra`/`modulos_restringidos` en la ficha de miembro (`actualizarOverridesMiembro`). Bajo porque el caso común (objetivo por puesto) ya cubre la mayoría de los casos.
-
-### Permisos — falta vista matriz
-Clonar permisos entre puestos ya resuelto (select en `PuestoFormBody`, Turnos → Puestos). Sigue faltando la vista tipo matriz (puestos × módulos) para ver de un vistazo quién ve qué — no priorizada, el botón de clonar era lo que sacaba más fricción.
-
-### Capacitación — KDS/Muro sin mecanismo para mostrar su tour (encontrado 27/08)
-`configuracion`, `coach` y `bitacora` ya tienen tour. **`kds` y `muro` quedan con el contenido del tour escrito (`TOURS.kds`/`TOURS.muro` en `lib/coach/tours.ts`) pero inalcanzable**: las dos viven bajo `app/(servicio)/layout.tsx`, que deliberadamente NO monta `KitchenCoachFAB` ni corre `useTourAutomatico` — es el layout de "Registro Servicio" (DESIGN.md §2: fondo fijo, cero animación de entrada, "se diseña quitando, no agregando"). Sumarles el FAB naranja de chat es agregar justo lo que esa doctrina evita — decisión de diseño, no un bug. Alternativas a decidir con Facundo: (a) aceptar el FAB ahí igual, (b) un trigger mínimo propio (ícono "?" como el de Sidebar, sin todo el dock de chat), o (c) dejar esas dos pantallas sin tour a propósito (son tablet-first, casi siempre ya conocidas por el equipo antes de tocarlas).
-
-De hojas instructivas imprimibles (skill `hoja-instructiva`) solo existe la de OPS/Mise (`docs/ops-modo-control-una-hoja.pdf`), sin índice que las centralice. `docs/instructivo-carga-datos.md` cubre 11 módulos pero no HACCP, Turnos, Organigrama, Espacios, Calendario, Clientes, Proveedores ni Configuración. Priorizar según qué pantallas generan más preguntas en uso real.
-
-### Mise — container-transform diferido (`DESIGN.md`/`INVESTIGACION-DISENO-2026-08.md`, 24/08)
-La carta de plaza morfando literalmente al header de la lista (shared-element `layoutId`) quedó fuera del plan de superficie: `ChecklistPage` tiene dos `return` distintos (grilla de plazas / vista de una plaza) y fusionarlos en un solo árbol con `AnimatePresence` es una restructuración de control de flujo real en un componente de 2700 líneas — su propio bloque, no algo para forzar a ciegas. Hoy la transición es un fade+scale simple (`screenEnter` en `ClientView.tsx`), no el morph completo.
-
-### `confirm()` nativo — 21 en pantallas de gestión (recontado 31/08, antes se estimaba ~80)
-Los 5 ERROR de superficie de servicio ya se resolvieron (`ConfirmSheet` extraído a `components/ui/ConfirmSheet.tsx`, reusado en Producción y Salón/Config) — verificado 31/08 que la superficie de servicio (KDS) está limpia de verdad (el único match ahí era un comentario, no código). Los 21 restantes, en 17 archivos (Turnos, Clientes, HACCP, Carta, Stock, Espacios, `RutinaTurnoView`) son pantallas de gestión, no de servicio — el lint los marca WARN, no ERROR: ahí un confirm() nativo es debate de estilo, no el mismo bug (DESIGN.md §10 aplica a flujo de servicio).
-
-### `tareas`/`checklist`/`produccion` como permiso: gatea el sidebar pero no la ruta (encontrado al arreglar `MODULOS_ASIGNABLES`, 20/08 — revisado 27/08)
-`RUTA_A_MODULO` (`lib/constants.ts`) sigue mapeando las tres rutas al permiso `'operaciones'`, pero ahora `/tareas`, `/checklist` y `/produccion` son directamente stubs que redirigen a `/operaciones?tab=...` (consolidación de OPS) — el código ya trae un comentario explicando que es deliberado ("Mapeadas a 'operaciones' por consistencia de permisos"), no algo que se coló. Sigue siendo cierto que sacarle `checklist` a un puesto solo oculta el link, no la pestaña dentro de OPS. Bajar prioridad: parece una decisión ya tomada, no un bug pendiente — confirmar con Facundo si los tres checkboxes de sidebar deberían directamente desaparecer del editor de puesto en vez de seguir prometiendo un filtro que no aplica.
-
-### 4 hooks lista-al-montar sin SWR — migrar al tocarlos (auditoría 31/08, `arquitectura-kos.md` §7.7)
-`useUserRol`, `useOnboardingProgress`, `useProduccionRegistros`, `useCalendario` re-consultan en cada navegación. Costo chico y acotado (requests repetidos, no bugs). Patrón estándar de `hooks.md` §Cache-SWR, uno por vez cuando una sesión ya los toque — no hacer batch dedicado. Los otros 16 hooks sin SWR **no son deuda** (censo completo en `arquitectura-kos.md` §2.2): utilidades, derivados de la key compartida de config, por-demanda, o parametrizados donde SWR encaja mal a propósito.
-
-### Tests — Testing Library para hooks
-`@testing-library/react` + `jsdom` instalados, mock reusable en `lib/test-utils/mockSupabase.ts` (ver `.claude/docs/testing.md`), primeros dos hooks cubiertos: `useTareas` y `usePermisos`. El resto (`useEquipo`, `useChecklist`, `useCarta`, `useStock`, etc.) sigue sin tests — agregar el que se toque, no perseguir cobertura total de una sola vez.
-
-### OPS — seguir bajando el peso en celular (ago 2026)
-Entrar a Mise en mobile bajó de 2582 kB / 64 requests a 899 kB / 46 — el peso de `productos` (66 kB) bajó después vía RPC, falta remedir el total. Lo que queda:
-- **`tareas` 594 kB** — lo más pesado, sin tocar (riesgo real de romper Planificación). La ventana de 60 días de `useTareas` hoy recorta 11 filas (preventiva, no ahorro real). Apretarla a ~3 semanas daría el salto, pero rompe Planificación al navegar a un día viejo: antes hay que hacer que consulte por su cuenta las fechas fuera de la ventana. No es un cambio chico — evaluar en sesión propia.
-
-### Ingeniería de menú siempre lee todo el historial de ventas, no el período de `/ventas` (investigado 27/08)
-Causa confirmada — no son dos fuentes de datos distintas, es un filtro de fecha distinto: `/ventas` arranca en período **"mes"**, Carta → Rentabilidad → Ingeniería usa `useVentas()` pelado (todo el historial, equivalente al período **"todo"** que `/ventas` sí ofrece pero no es el default). Cartel aclaratorio ya agregado en la pestaña Ingeniería. Fix de fondo pendiente (decisión de producto, no bug): si Ingeniería debería scopear a un período razonable (¿mes? ¿90 días?) en vez de histórico completo — cambiaría qué platos caen en cada cuadrante.
-
-### Ocho funciones ya construidas que nadie encuentra (barrido 25/08)
-La tabla completa está en `PLAN-ACCESO-Y-USO-2026-08.md` § B5.3. Ya resueltas: el Muro (link desde el modo pantalla completa de Producción), Modo Control del mise (etiqueta "Control" en el ícono), escalar por ingrediente de referencia (pista de doble tap arriba de la lista) y "Sugerir producción" en Planificación (naranja sólido). Quedan sin tocar, menor prioridad: paleta de comandos (Ctrl/K sin indicación, solo desktop), swipe entre tabs de OPS (sin affordance), guía del Mise (dos niveles de profundidad), vincular ingredientes con stock (botón sin explicar qué hace).
-
-### Backlog chico — sin síntoma de usuario reportado, priorizar solo si molesta en uso real
-- **Cuenta regresiva de la banda Evento no soporta dos eventos activos a la vez** (sep 2026, límite explícito de la producción escalonada): el header muestra nombre+"en N días" solo si hay un único `menu_id` entre las tareas de la banda; con dos eventos superpuestos la banda sigue junta (las columnas no se agrupan por evento, solo por paso) pero sin subtítulo. Separar por evento solo si un restaurante lo pide en uso real.
-- **`puestos.nivel` no es confiable para decisiones automáticas** (encontrado 25/08 al backfillear `ver_costos`): "Chef Ejecutivo" y "Sous Chef" están cargados con `nivel='cocinero'`, no `sous_chef`. Solo "Dueño / Dirección" tiene `nivel='admin'` y "jefe de cocina" `sous_chef`. Cualquier migración o regla que segmente por `nivel` va a errarle — segmentar por el puesto concreto o pedirle al admin que lo corrija.
-- HACCP: 3 modales largos (limpieza/vencimientos/temperaturas) sin agrupar — mismo problema que tenía el modal de Stock (muchos campos heterogéneos sin secciones), candidato a la misma cura de fondo pero con otro tratamiento (no son checkboxes, no aplica `SwitchRow`).
-- OPS Producción: el orden de columnas (drag-and-drop) persiste en `localStorage` por dispositivo, no en DB — cada navegador recuerda su propio orden. Mover a una tabla nueva (ej. `ops_orden_columnas`) si se necesita compartido entre dispositivos del mismo restaurante.
-- Mise en tablet táctil ancha (iPad landscape, 1024px exactos): sigue en columna única porque la grilla de desktop sigue condicionada a `pointer: fine` a propósito. El drag ya es 2D (sep 2026, `lib/ops/miseReorder.ts`, ver `ui.md`) — lo único que falta para que una tablet ancha tenga grilla+drag es sacarle `pointer:fine` al media query en `globals.css` **y** a `isGridLayout` en `ClientView.tsx` (los dos, o quedan desincronizados). Solo si alguien usa el mise desde tablet.
-- **El acceso DDL volvió** (ago 2026), así que los dos workarounds "sin migración" ya podrían tener tabla/columna real: plazas custom (JSONB en `restaurantes.configuracion.plazas_custom`, `usePlazasCustom.ts`) y cantidad de recipientes (sufijo `" ×N"` en `checklist_items.recipiente_nombre`, `lib/ops/mise.ts`). Ninguno molesta en uso real y los dos degradan legible — no es urgente, pero ya no hay excusa técnica.
-- Carta / `ComposicionEditor`: la semántica de "Cantidad" es distinta en modo Plato (porciones, gramaje opcional que afecta costo) y en Menú/Evento (gramos para receta/producto, unidades para plato vinculado). Hoy es coherente pero son dos modelos que no se explican entre sí; evaluar converger solo si confunde en uso real.
-- ~~**`SidebarNav` vacío para roles fuera de `MODULOS_POR_ROL`**~~ **— resuelto 11/09.** El repro que decía este ítem (cuenta `cocina@broscomedor.com` con `rol='cocinero'`) ya no aplica: `mapRol()` se extrajo a `lib/permisos/roles.ts` el día 10 de `plan-consolidado.md` y traduce `cocinero`→plaza o `linea`. Censo real de la base (11/09): los 14 roles cargados mapean todos a un `Rol` dibujable. Lo que sí quedaba abierto era peor de lo descrito: el `default: return (dbRol as Rol)` casteaba cualquier TEXT de la base a `Rol`, y un rol nuevo no dejaba el sidebar vacío sino que lo tiraba con **TypeError** (`MODULOS_POR_ROL[rol]` undefined → `.includes()`). Cerrado con `esRolValido()` en el default + fallback en `SidebarNav`, con tests (`lib/permisos/roles.test.ts`).
-- El resumen OPS de una fila en `ComposicionEditor.tsx` (~línea 2168) arma `plaza · sección · cantidad_ops+unidad` sin mirar `peso_porcion` — con recipiente muestra las porciones del recipiente, no el gramaje. Es un subtítulo de la config del mise (defendible), pero es el mismo patrón que ya se corrigió en Carta → detalle (`DetailView.tsx`, sep 2026, ver `HISTORIAL.md`); revisar si en uso real confunde. Relacionado: `ComposicionEditor` todavía no tiene noción de `plato_recetas.gramaje` (columna de costeo separada de `cantidad_ops` desde sep 2026) — su costeo en vivo sigue leyendo `opsCantidad`/`opsUnidad==='g'`, correcto solo porque `handleComposicionSave` espeja ese valor a `gramaje` al guardar, no porque el editor lo sepa.
-- **Editor de "porciones" (multiplicador de batch de `fuga.ts`/`consumoTeorico.ts`) sin UI desde sep 2026** — se sacó de la fila de componente en Carta al reemplazarlo por el editor de gramaje (`DetailView.tsx`), y no se le buscó un lugar nuevo. La función que lo escribe (`actualizarPlatoReceta`, `useCarta.ts`) sigue viva, sin ningún caller. Si el consumo teórico empieza a verse raro, es el primer lugar para mirar; si no molesta, no hace falta control dedicado.
-- **`AudioRecorderModal` en `recetario/page.tsx` está en Tailwind puro con colores arbitrarios** (`bg-indigo-500`, `bg-white/10`), cero tokens de KitchenOS (encontrado 02/09 emparejando Recetario con OPS). Es el flujo de grabar audio para cargar una receta por voz. No se tocó porque repintarlo es una pantalla entera, no un ajuste — evaluar si vale la pena o si se reemplaza por el flujo de importación por texto/imagen que sí sigue el sistema de diseño.
-- **`FilterChips` no seguí el chip activo cuando cambia por scroll, no por tap** (nav de secciones de `recetario/[id]/page.tsx`, 02/09): el color del chip activo es correcto, pero si quedó fuera de la zona visible de la fila no hace auto-scroll para traerse a la vista — hay que deslizar la fila a mano para verlo. Arreglarlo es tocar el componente compartido por media docena de pantallas (stock, carta, pedidos, clientes...); no se tocó por el radio de impacto, no por dificultad.
-- **Organigrama — dos simplificaciones deliberadas de la Fase 1** (ago 2026): reasignar `reporta_a_puesto_id` en la Estructura es un `<select>`, no drag-and-drop (se priorizó robustez sobre tiempo); y el árbol de una área solo considera puestos con ese `area_key` — un puesto que reporta a otro de área distinta cae como raíz en vez de anidarse cruzado. Ninguna molesta en uso real todavía; tocar solo si alguien lo pide.
-- **Worktree viejo `.claude/worktrees/sleepy-jepsen` no se pudo borrar (31/08)**: auditoría confirmó que las 3 ramas huérfanas (`master`, `auditoria-antigravity`, `claude/sleepy-jepsen`, historia disjunta de `main` desde antes de un reset) y los cambios sin commitear del worktree están 100% superados por código actual — ya borradas las ramas. Solo falta borrar la carpeta física: algún proceso tiene un archivo bloqueado (`Permission denied` / "en uso" en Windows) y no se identificó cuál entre los ~35 `node.exe` corriendo, para no arriesgar matar una sesión en uso. Reintentar `git worktree remove .claude/worktrees/sleepy-jepsen --force` después de cerrar terminales/editores viejos o reiniciar.
-- **Evento con presencia heredada en el mise no tiene "Sacar del mise" en el picker de Planificación** (`produccion/page.tsx`, encontrado 22/08 arreglando `checklist_items` huérfanos de un evento con `plaza_control='general'`): `MenusView.tsx` (Carta → Menús) sí muestra el estado/`Sacar` para un evento que ya quedó con `checklist_items` (ver `DECISIONES.md` §21), pero el picker de Planificación solo ofrece el botón "activar por fecha" para eventos, sin importar `enMise`. Asimetría chica; sacar del mise hoy es por `MenusView` o SQL directo.
-- **Stock — celda de stock apretada en rango 480-1023px** (ago 2026): la celda muestra el número editable **y** el editor de mínimo lado a lado en una columna de ~84px — el análisis decía que no entran los dos. Ese rango **ya no es solo tablet**: desde que el `#shell` va full-width en celular (22/08), un Motorola (480 CSS px) y un Android con "Tamaño de pantalla" en chico (540) caen justo ahí. Capturas a 480 y 540 muestran la celda **legible en modo lectura** (número + `mín` lado a lado, sin desborde); falta verla en **modo edición**, que es el caso que el análisis marcaba. El breakpoint <480px y el de desktop (≥1024px) están verificados en pantalla real.
-- **Nota de ítem (sep 2026) no viaja a la tarea de Producción** que sale de ese ítem del mise — son mensajes de módulos distintos a propósito, por ahora. Tampoco se dropeó `checklist_items.observacion` (legacy, sin caller, no confundir con `nota`). Ninguno molesta en uso real todavía.
-- **Botón de plegar Kitchen Coach tapa contenido en desktop** (encontrado sep 2026 verificando Compras): el círculo fijo al 50% de la altura de pantalla (`DesktopShell.tsx`) queda pegado al borde del panel, y cualquier lista larga que caiga justo ahí (visto sobre un pedido, sobre un precio) queda parcialmente tapada. Afecta cualquier pantalla con el dock abierto, no es propio de un módulo — mover el botón a un punto que no compita con contenido real, o ligarlo al scroll.
-- **Compras — "Cargar factura" (POS/Lote/Cargar factura) es un patrón mobile sin adaptar a desktop** (encontrado ago-sep 2026, Bloque ancho completo): el botón central se estira con `flex:1` a lo que sobra entre los otros dos — en un monitor ancho queda un CTA gigante. Se dejó a propósito para no mezclarlo con el riesgo real de Facturas (`useFacturas.crearFactura`, ver `.claude/docs/ingenieria/refactor-kos.md`); repensar junto con esa revisión.
-
-### Mise / pase de turno — flecos de la tanda de agosto
-Todo lo grande quedó andando; esto es lo que se dejó explícitamente afuera.
-- **El plegado del pase no aplica a Menú/Evento.** Sus columnas son pasos del menú, no plazas, y no existe "entregar un paso" — inventarlo sería semántica falsa. Queda la asimetría visible (Carta plegada, Menú/Evento entera). Solo si molesta en uso real; ahí habría que decidir qué significa el pase para un menú.
-- **El rezagado.** Entregada la cena a la 01:20 la jornada rueda al día siguiente; si otro entra a las 02:00 y elige "Cena" en el selector del título cae en la cena futura, no en la que se acaba de cerrar. El selector cambia turno pero no fecha — el arreglo de fondo es navegación de fecha en el mise.
-- **La sugerencia de producción sobreestima si el cierre se hizo en Modo Control.** `lib/produccion/sugerencia.ts` filtra `cantidad_actual not null` y, sin registro numérico, asume `stockActual = 0` → sugiere el promedio entero. Es la contra conocida del pase por tarea (deliberada: nadie inventa un número que no se contó), pero si el equipo se acostumbra a cerrar así, "Sugerir producción" va a pedir de más. Salida posible: que la sugerencia descuente lo que ya está despachado como tarea de `pase_turno` en vez de asumir cero.
-- **La última rendija de los duplicados de Producción: dos dispositivos en el mismo segundo.** El guard de `useTareas.agregarTarea` (regla en `lib/ops/dedupeTareas.ts`) compara contra la cache local, así que dos tablets despachando el mismo ítem a la vez todavía crean una fila gemela. **No se ve** — el board fusiona por identidad —, pero queda en la base y con el tiempo distorsiona Reportes. Se cierra con una restricción real en Postgres: columna generada con la clave + índice único, NULL para lo que no es producción del día (así las anotaciones libres quedan libres). Antes de crearla hay que endurecer los 4 inserts en lote (`activarMenu.ts`, sugerencia de producción, `useMenus.ts`, Coach) con `ON CONFLICT DO NOTHING` — Postgres tumba el batch entero si una sola fila choca —, y atrapar el 23505 en las dos escrituras que tocan campos de la clave: renombrar una tarea (`TareasSimpleClientView`) y editar un menú activo (`useMenus.ts`, que mueve sus tareas de paso/plaza). **Hacerlo fuera de servicio**: la migración toma un lock exclusivo sobre `tareas`.
-- **Policies de `checklist_registros`**: podrían pasar del subquery a `checklist_items` a `restaurante_id = mi_restaurante_id()` ahora que la columna existe. Es más barato de evaluar (realtime chequea RLS por evento y por suscriptor), pero con 425 filas no hace falta y el blast radius es el mise de todas las cuentas.
-- **Producción — vista "más fácil de ver"** (pedido explícito de Facundo, 03/09, deliberadamente para el final): sin definir todavía qué es lo que no se ve bien — celular del cocinero, jefe barriendo la cocina entera, o la tablet colgada son tres remedios distintos y dos (modo foco, El Muro) ya existen. Definir el síntoma real antes de tocar el board.
-- **"Copiar pase" — bullets tipados (hecho/alerta/pendiente/ingreso)**, descartado por ahora (`DECISIONES.md` §24): evaluar tras ~2 semanas de uso real en Bros si las notas sin tipo (B2, ver `lib/ops/textoPase.ts`) alcanzan o si conviene la fricción extra de clasificar para poder convertir un pendiente en tarea real.
-
-### Muro — F4 del plan (MURO-PLAN.md)
-Solo después de una semana de uso real en servicio, y cada ítem es una hipótesis a validar, no un pendiente fijo: tomar/asignar una tarea desde el muro, sonido o parpadeo en una `duda` nueva, cronómetro por ítem en curso con umbral de color (como el KDS), foto del turno al entregar.
-
-### Calendario — F2 a F5 del plan de expansión
-F1 (grilla estilo Google Calendar, notas por día como ítems enviables a Producción, Planificar menú por rango) ya deployado. Falta, en orden, según `CALENDARIO-PLAN.md`: F2 motor de rutinas recurrentes (generalizar `haccp_limpieza` a una tabla `rutinas` compartida — decisión de Facundo: generalizar, no duplicar por dominio), F3 más reflejos de solo lectura (menús de Carta, turnos, HACCP, cuenta corriente), F4 Coach con contexto completo del calendario + tools de agenda, F5 extras (ICS, feriados, semana tipo).
-
-### Bitácora — F2 y F3 del plan (ago 2026)
-F1 deployado (13/08): `/bitacora`, tablas `bitacora_entradas`/`bitacora_items` con RLS+realtime, edición tipo-doc (Enter parte línea, Tab indenta, pegar multilínea desde Docs), participantes desde el día 1, solo admin/chef. Falta, en orden: F2 estados/tipos por ítem (tema/acuerdo/acción/pregunta) + convertir un ítem en tarea real de OPS (`tarea_id` en `bitacora_items`, hoy sin esa columna) + arrastrar a la reunión siguiente los ítems que quedaron abiertos. F3 plantillas de reunión recurrente, ítem→pase de turno, export PDF.
-
-### Rutina de turno — flecos de la pantalla nueva (ago 2026)
-La pantalla está deployada y verificada con datos reales de Bros. Lo que quedó afuera, en orden de valor:
-- **Validar el corte apertura/cierre con el equipo.** El límite lo puse en "servicio y produs chicas" (con "corta producción" ya del lado del cierre), deducido del papel — el papel corre de un tirón y no marca dónde termina una fase. Es la única decisión de la transcripción que no sale literal del original.
-- **No hay plantilla base para restaurantes nuevos.** Solo Bros tiene los 28 pasos cargados; cualquier otra cuenta abre el tab en `EmptyState` y arranca de cero. Sembrar una plantilla genérica (o un botón "cargar rutina base") si se usa fuera de Bros.
-- **El Coach no conoce la pantalla.** `operaciones/page.tsx` escribe `kc_screen_context` con `tab` pero sin insights de la rutina (cuántos pasos faltan, cuál está atrasado). Correr la skill `coach-screen` sobre el tab Turno.
-
-### Las guías viejas de OPS contradicen la app (encontrado ago 2026)
-`docs/ops-guia-rapida.html` y `docs/manual-ops.md`/`.html` describen el flujo anterior: cuentan el orden de tabs como Planificación→Producción→Mise (hoy es Producción/Mise/Planificación), dicen "Cerrar turno" donde hoy va **Entregar plaza** (que además no es fichar la salida), y explican el mise solo con carga de números, sin Modo Control. Se detectó al escribir la hoja instructiva nueva (`docs/ops-modo-control-una-hoja.html`), que documenta el flujo correcto: hoy los dos materiales juntos se contradicen. Decidir si el manual largo se actualiza o se reemplaza por hojas por pantalla (skill `hoja-instructiva`).
-
-### Marco "juego cercado" — F2/F3 (PLAN-JUEGO-CERCADO-2026-08.md)
-Fundamento conceptual externo (memoria de Claude Code: `project_fundamento_juego_cercado`) tradujo a 3 features scopeadas. **F1 pasos 1-2 shippeados (24/08)**: `cierres_turno.percepcion`/`notas_servicio` + `EntregaPlazaSheet` piden en 2-3 taps opcionales cómo salió el turno y qué debe saber el que entra. **Falta el paso 3**: mostrar esa lectura junto a un dato duro cuando exista (merma, devoluciones) en Reportes → Auditoría — la utilidad real está en la discrepancia entre percepción y dato, no en el campo aislado. Sin tocar: **F2** historial de cambios en fichas técnicas (autor/fecha, hoy `useRecetas` actualiza sin dejar rastro); **F3** bandeja de propuestas visible (depende de F2, más ambigua, scopear en la sesión).
+Falta tabla `coach_conversaciones` para historial cross-device (hoy localStorage).
 
 ### Kitchen Coach — asistir activamente en el editor de Carta
-Hoy el Coach solo responde preguntas de navegación; el pedido es que ayude a cargar el menú abierto en `ComposicionEditor`. El pipeline de tool-use ya funciona (`crear_evento` en `app/api/coach/route.ts` ~L409 crea un evento con pasos por dictado). **Recomendado: B** — extender ese patrón con `agregar_componentes_menu(menu_id, componentes[])` que escribe a DB y el editor refresca; exige guardar el menú (aunque sea vacío) antes de pedirle al Coach que lo complete. La alternativa A (operar en vivo sobre el estado de React sin guardar) necesita un puente chat↔form que hoy no existe. Sesión aparte.
+Hoy solo responde navegación. **Recomendado: B** — extender el patrón de
+`crear_evento` con `agregar_componentes_menu(menu_id, componentes[])` que
+escribe a DB y el editor refresca. Exige guardar el menú antes. Sesión aparte.
 
-### `factura_items.producto_id` / `merma.producto_id` casi nunca se completan (encontrado ago 2026, B5)
-`facturas-universal` ya resuelve `producto_id` al insertar (27/08, mismo matching que `useFacturas.ts`: exacto sin tildes, luego parcial de palabra completa) — solo matchea contra productos existentes, no crea nuevos (eso queda para el alta manual). Sigue faltando: backfill sobre lo histórico (~1% poblado hoy, el fix nuevo solo aplica hacia adelante) y `merma.producto_id`, que queda vacío seguido y no se tocó. `lib/reportes/fuga.ts` sigue con su fallback por nombre normalizado para lo que quede sin `producto_id`.
+### Fotos — falta completar
+`PhotoPicker` ya está en recetario, carta y equipo. Falta facturas, si se decide.
+
+### Notificaciones — faltan triggers, y push/email sin decidir
+In-app resuelto (tabla, hook con realtime, campanita, `crearNotificacion()`
+reusable). **Dos triggers reales**: `useEquipo.asignarTurno` y el recordatorio al
+responsable de una estación de `/implantacion`. Wirear más (stock crítico,
+vencimientos) es una decisión de producto por cada uno — no asumir.
+**`public/sw.js` no tiene
+handler de `push` ni de `notificationclick`**; faltan esos, claves VAPID, tabla
+de suscripciones y endpoint disparador. Sin eso el aviso solo llega si la
+persona abre la app — justo lo que no hace quien está abandonando.
+Email/WhatsApp para el que dejó de entrar: sin decisión.
+
+### PWA offline — completar fuera de Salón/KDS
+La vista de servicio ya tiene offline completo. El resto (stock, facturas) no.
+
+### Onboarding wizard guiado
+`/implantacion` **no reemplaza esto**: mide al restaurante, no acompaña a una
+persona nueva. Falta el flujo completo (datos → plazas → stock → equipo →
+permisos) persistiendo en `restaurantes.configuracion.onboarding_step`.
+**Gap concreto:** el wizard solo se dispara si el restaurante tiene 0 productos,
+0 facturas y 0 recetas — un cocinero invitado a un restaurante operativo nunca
+lo ve. Disparar por "primer login de este usuario". (Bug asociado: el flag
+`kc_ops_welcomed` se marca *antes* de que el tour termine, así que navegar
+rápido lo pierde para siempre.)
+
+### Objetivos de venta — falta editor del override por persona
+El modelo y el editor del puesto están completos. Falta UI para pisar un
+objetivo puntual por persona (hoy solo por SQL). Mismo patrón visual que
+`modulos_extra` en la ficha de miembro.
+
+### Permisos — falta vista matriz
+Clonar permisos entre puestos ya está. Falta la vista puestos × módulos.
+
+### Capacitación — KDS/Muro sin mecanismo para mostrar su tour
+`TOURS.kds`/`TOURS.muro` están escritos pero son inalcanzables: viven bajo
+`app/(servicio)/layout.tsx`, que deliberadamente no monta el FAB del Coach
+(DESIGN.md §2). **Decisión pendiente de Facundo**: (a) aceptar el FAB ahí,
+(b) un trigger mínimo tipo "?", o (c) dejarlas sin tour a propósito.
+De hojas instructivas solo existe la de OPS/Mise, sin índice.
+`docs/instructivo-carga-datos.md` no cubre HACCP, Turnos, Organigrama,
+Espacios, Calendario, Clientes, Proveedores ni Configuración.
+
+### Mise — container-transform diferido
+`ChecklistPage` tiene dos `return` distintos y fusionarlos en un árbol con
+`AnimatePresence` es reestructurar control de flujo en un componente de 2700
+líneas. Hoy es un fade+scale simple. Su propio bloque, no algo para forzar.
+
+### `confirm()` nativo — 21 en pantallas de gestión
+Los 5 de superficie de servicio ya se resolvieron (`ConfirmSheet`). Los 21
+restantes, en 17 archivos, son pantallas de gestión: el lint los marca WARN, no
+ERROR — ahí es debate de estilo, no el mismo bug.
+
+### `tareas`/`checklist`/`produccion` como permiso: gatea el sidebar, no la ruta
+Las tres rutas son stubs que redirigen a `/operaciones?tab=...`, y el código lo
+documenta como deliberado. Sacarle `checklist` a un puesto solo oculta el link.
+**Confirmar con Facundo** si esos 3 checkboxes deberían desaparecer del editor
+de puesto en vez de prometer un filtro que no aplica.
+
+### 4 hooks lista-al-montar sin SWR — migrar al tocarlos
+`useUserRol`, `useOnboardingProgress`, `useProduccionRegistros`, `useCalendario`.
+Costo chico (requests repetidos, no bugs). **Uno por vez cuando una sesión ya
+los toque — no hacer batch dedicado.** Los otros 16 sin SWR no son deuda
+(censo en `arquitectura-kos.md` §2.2).
+
+### Tests — Testing Library para hooks
+Cubiertos: `useTareas`, `usePermisos`, `useMesas`, `useComandas`. El resto
+(`useEquipo`, `useChecklist`, `useCarta`, `useStock`) sin tests. **Agregar el
+que se toque, no perseguir cobertura total.**
+
+### OPS — seguir bajando el peso en celular
+Mise en mobile bajó de 2582 kB a 899 kB. Queda **`tareas` 594 kB**, lo más
+pesado y sin tocar: apretar la ventana de 60 días de `useTareas` a ~3 semanas
+daría el salto pero rompe Planificación al navegar a un día viejo. Evaluar en
+sesión propia.
+
+### Ingeniería de menú lee todo el historial de ventas, no el período de `/ventas`
+Causa confirmada: `/ventas` arranca en "mes", Ingeniería usa `useVentas()` pelado
+(histórico completo). Cartel aclaratorio ya agregado. **Fix de fondo pendiente y
+es decisión de producto**: si debería scopear a un período (¿mes? ¿90 días?) —
+cambiaría qué platos caen en cada cuadrante.
+
+### Ocho funciones ya construidas que nadie encuentra
+Tabla completa en `PLAN-ACCESO-Y-USO-2026-08.md` §B5.3. Quedan 4 sin tocar:
+paleta de comandos (Ctrl/K sin indicación), swipe entre tabs de OPS (sin
+affordance), guía del Mise (dos niveles de profundidad), vincular ingredientes
+con stock (botón sin explicar qué hace).
+
+### Backlog chico — sin síntoma reportado, priorizar solo si molesta en uso real
+Lista completa con el detalle de cada uno en `HISTORIAL.md`. En una línea:
+
+- Cuenta regresiva de la banda Evento no soporta **dos eventos activos a la vez**.
+- **`puestos.nivel` no es confiable** para decisiones automáticas ("Chef
+  Ejecutivo" está cargado como `nivel='cocinero'`) — segmentar por puesto concreto.
+- HACCP: 3 modales largos sin agrupar.
+- OPS Producción: el orden de columnas persiste en `localStorage` por dispositivo,
+  no en DB.
+- Mise en tablet ancha sigue en columna única (`pointer:fine` a propósito) — hay
+  que sacarlo de `globals.css` **y** de `isGridLayout`, o quedan desincronizados.
+- Volvió el acceso DDL: plazas custom y cantidad de recipientes ya podrían tener
+  tabla/columna real en vez del workaround JSONB/sufijo.
+- Carta: "Cantidad" significa cosas distintas en modo Plato y en Menú/Evento.
+- El resumen OPS de `ComposicionEditor` no mira `peso_porcion`; y el editor
+  todavía no conoce `plato_recetas.gramaje` (funciona porque `handleComposicionSave`
+  espeja el valor al guardar, no porque lo sepa).
+- **Editor de "porciones" sin UI desde sep 2026** — `actualizarPlatoReceta` sigue
+  viva y sin callers. Primer lugar a mirar si el consumo teórico se ve raro.
+- `AudioRecorderModal` en Recetario está en Tailwind puro, cero tokens.
+- `FilterChips` no hace auto-scroll al chip activo cuando cambia por scroll
+  (componente compartido por media docena de pantallas — radio de impacto).
+- Organigrama: reasignar `reporta_a_puesto_id` es un `<select>`, no drag; y el
+  árbol de un área no anida puestos que reportan cruzado.
+- **Worktree viejo `.claude/worktrees/sleepy-jepsen` sin borrar** — las ramas ya
+  se borraron, falta la carpeta (un proceso la tiene bloqueada en Windows).
+  Reintentar `git worktree remove --force` tras reiniciar.
+- Evento con presencia heredada en el mise no tiene "Sacar del mise" en el picker
+  de Planificación (sí en `MenusView`).
+- Stock: celda apretada en 480-1023px — falta verla en **modo edición**.
+- Nota de ítem no viaja a la tarea de Producción (módulos distintos a propósito).
+- **Botón de plegar el Coach tapa contenido en desktop** — afecta cualquier
+  pantalla con el dock abierto.
+- Compras: "Cargar factura" es un patrón mobile sin adaptar a desktop (CTA
+  gigante en monitor ancho). Repensar junto con el refactor de Facturas.
+
+### Mise / pase de turno — flecos de la tanda de agosto
+Detalle completo en `HISTORIAL.md`. Lo que quedó afuera:
+- **El plegado del pase no aplica a Menú/Evento** (sus columnas son pasos, y no
+  existe "entregar un paso" — inventarlo sería semántica falsa).
+- **El rezagado**: el selector de turno cambia turno pero no fecha; el arreglo de
+  fondo es navegación de fecha en el mise.
+- **La sugerencia de producción sobreestima si el cierre fue en Modo Control**
+  (asume `stockActual = 0` sin registro numérico). Salida posible: descontar lo
+  ya despachado como `pase_turno` en vez de asumir cero.
+- **Policies de `checklist_registros`** podrían pasar del subquery a
+  `restaurante_id = mi_restaurante_id()`. Con 425 filas no hace falta, y el blast
+  radius es el mise de todas las cuentas.
+- **Producción "más fácil de ver"** (pedido de Facundo, 03/09): sin definir el
+  síntoma real todavía — celular, jefe barriendo la cocina y tablet colgada son
+  tres remedios distintos, y dos ya existen. **Definir el síntoma antes de tocar.**
+- **"Copiar pase" con bullets tipados**: descartado por ahora. Evaluar tras ~2
+  semanas de uso real en Bros.
+
+### Muro — F4 del plan (MURO-PLAN.md)
+Solo después de una semana de uso real en servicio, y cada ítem es hipótesis a
+validar: tomar/asignar desde el muro, sonido en una `duda` nueva, cronómetro por
+ítem, foto del turno al entregar.
+
+### Calendario — F2 a F5 del plan de expansión
+F1 deployado. En orden: F2 motor de rutinas recurrentes (generalizar
+`haccp_limpieza` a una tabla `rutinas` compartida — **decisión de Facundo:
+generalizar, no duplicar por dominio**), F3 más reflejos de solo lectura, F4
+Coach con contexto del calendario, F5 extras (ICS, feriados, semana tipo).
+
+### Bitácora — F2 y F3 del plan
+F1 deployado (13/08). F2: estados/tipos por ítem + convertir un ítem en tarea
+real de OPS (`tarea_id` en `bitacora_items`, hoy sin esa columna) + arrastrar los
+abiertos a la reunión siguiente. F3: plantillas, ítem→pase, export PDF.
+
+### Rutina de turno — flecos de la pantalla nueva
+- **Validar el corte apertura/cierre con el equipo** — es la única decisión de la
+  transcripción que no sale literal del papel.
+- **No hay plantilla base**: solo Bros tiene los 28 pasos; otra cuenta abre en
+  `EmptyState`. Sembrar una genérica si se usa fuera de Bros.
+- **El Coach no conoce la pantalla** — correr la skill `coach-screen` sobre el
+  tab Turno (falta escribir insights de la rutina en `kc_screen_context`).
+
+### Las guías viejas de OPS contradicen la app
+`docs/ops-guia-rapida.html` y `docs/manual-ops.md` describen el flujo anterior
+(orden de tabs viejo, "Cerrar turno" donde hoy va **Entregar plaza**, el mise sin
+Modo Control). **Decidir** si el manual largo se actualiza o se reemplaza por
+hojas por pantalla (skill `hoja-instructiva`).
+
+### Marco "juego cercado" — F2/F3
+F1 pasos 1-2 shippeados (24/08). **Falta el paso 3**: mostrar la percepción del
+turno junto a un dato duro (merma, devoluciones) en Reportes → Auditoría — la
+utilidad está en la discrepancia, no en el campo aislado. Sin tocar: **F2**
+historial de cambios en fichas técnicas, **F3** bandeja de propuestas.
+
+### `factura_items.producto_id` / `merma.producto_id` casi nunca se completan
+`facturas-universal` ya resuelve `producto_id` al insertar (27/08), pero solo
+hacia adelante. Falta: **backfill sobre lo histórico** (~1% poblado) y
+`merma.producto_id`, que sigue sin tocarse. `lib/reportes/fuga.ts` tiene fallback
+por nombre normalizado mientras tanto.
 
 ### Hardening de seguridad (`get_advisors`)
-Lo de agosto (extensión `unaccent` fuera de `public`, policy del bucket, los `REVOKE`) y el barrido de seguridad del 01/09 están cerrados — el detalle vive en `HISTORIAL.md`.
-
-**Bloqueado, no es código**: protección de contraseñas filtradas (HaveIBeenPwned) requiere plan Pro de Supabase (`PATCH .../config/auth` devuelve 402 "available on Pro Plans and up") — no se puede activar ni por dashboard ni por API en el plan actual. Retomar si se sube de plan.
-
-Queda pendiente:
-- ~~`fiscal_config`/`fiscal_tickets` sin policies~~ **— revisado 11/09: el pendiente estaba mal planteado, NO hay que agregarles policies.** Esas tablas guardan `key_pem` (la clave privada de AFIP) y los tokens WSAA; el patrón estándar de `rls.md` le daría esa clave a cualquier miembro logueado, leíble desde el browser. Y no están inutilizables: sus 3 accesos van por `createAdminClient()` desde API routes (`fiscal/config`, `fiscal/emitir`, `wsfe-directo.ts`). RLS sin policies es la postura correcta. Detalle y el REVOKE opcional (defensa en profundidad, sin correr, sin urgencia) en `supabase/migrations/pendientes/FISCAL_RLS_NO_ES_LO_QUE_PARECE.md`. **No confundir con `config_fiscal`**, tabla distinta de nombre invertido, que sí tiene sus 4 policies y sí es de lectura del cliente.
-- **Sacarle el `
-` a `NEXT_PUBLIC_SUPABASE_ANON_KEY` en Vercel** (01/09). `lib/supabase/env.ts` hace `.trim()` y la vuelve inofensiva, pero la variable sigue sucia: cualquier lectura que no pase por el helper reintroduce el bug. Es un cambio de dashboard, no de código.
-- **Los dos respaldos de la limpieza** (`restaurantes_basura_backup_20260901`, `voglio1_datos_backup_20260901`) — RLS activado sin policies, solo `service_role`. Borrables cuando se confirme que no hacía falta nada de esos 12 restaurantes.
+- 🔒 **Bloqueado, no es código:** protección de contraseñas filtradas (HIBP)
+  requiere plan Pro de Supabase (la API devuelve 402).
+- ~~`fiscal_config`/`fiscal_tickets` sin policies~~ **— revisado 11/09: el ítem
+  estaba mal planteado y NO hay que agregarles policies.** Guardan `key_pem` (la
+  clave privada de AFIP) y los tokens WSAA; el patrón estándar de `rls.md` le
+  daría esa clave a cualquier miembro logueado, leíble desde el browser. Y no
+  están inutilizables: sus 3 accesos van por `createAdminClient()` desde API
+  routes. RLS sin policies es la postura correcta. Detalle y el REVOKE opcional
+  (defensa en profundidad, sin correr, sin urgencia) en
+  `supabase/migrations/pendientes/FISCAL_RLS_NO_ES_LO_QUE_PARECE.md`. **No
+  confundir con `config_fiscal`**, tabla distinta de nombre invertido.
+- **Sacarle el salto de línea a `NEXT_PUBLIC_SUPABASE_ANON_KEY` en Vercel.**
+  Confirmado el 11/09 por el health-check nuevo, corrido contra producción: la
+  variable **sigue sucia**. `lib/supabase/env.ts` hace `.trim()` y la vuelve
+  inofensiva, pero cualquier lectura que no pase por el helper reintroduce el bug
+  del realtime caído. Es un cambio de dashboard, no de código.
+- **Los dos respaldos de la limpieza** (`restaurantes_basura_backup_20260901`,
+  `voglio1_datos_backup_20260901`) — borrables cuando se confirme que no hacía
+  falta nada de esos 12 restaurantes.
 
 ---
 
