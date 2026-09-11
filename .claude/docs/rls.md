@@ -83,6 +83,24 @@ FROM pg_proc WHERE pronamespace='public'::regnamespace AND proname='la_funcion';
 Las funciones de **trigger** no necesitan `EXECUTE` para nadie: las invoca el motor
 de triggers, no el usuario. Revocarles todo es seguro (verificado con un INSERT real).
 
+## RLS activado y CERO policies puede ser lo correcto — no lo "arregles"
+
+`fiscal_config` (guarda `cert_pem` y **`key_pem`**: la clave privada de AFIP) y
+`fiscal_tickets` (token+sign de WSAA) tienen RLS activado **sin ninguna policy**, a
+propósito. No es una tabla a medio configurar: es la postura correcta para datos que el
+browser nunca debe ver. `service_role` pasa igual (bypassea RLS) y esos son sus únicos
+consumidores — las API routes de `app/api/fiscal/*` y `lib/fiscal/wsfe-directo.ts`.
+
+Aplicarles el patrón estándar de más arriba le daría la clave privada de facturación a
+cualquier miembro logueado del restaurante, leíble con un GET a PostgREST.
+
+**Regla general:** antes de agregarle policies a una tabla que no las tiene, mirá quién la
+consume. Si todos sus accesos van por `createAdminClient()`, el estado correcto es el que
+ya tiene. Una tabla sin policies falla cerrado, que es el lado seguro del error.
+
+(No confundir `fiscal_config` con **`config_fiscal`** — nombre invertido, tabla distinta:
+esa sí es de lectura del cliente, guarda CUIT y puntos de venta, y sí tiene sus 4 policies.)
+
 ## Storage: el bucket se aísla por la primera carpeta del path
 
 Una policy de storage no puede filtrar por `restaurante_id` si el path no lo lleva.

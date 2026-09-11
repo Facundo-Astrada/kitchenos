@@ -308,6 +308,12 @@ Dónde se aplica:
 
 El candado contra el doble tap es un `Map<clave, Promise>` **de módulo** (no un ref por componente: el Mise y el board son componentes distintos que pueden despachar lo mismo a la vez). Guarda la promesa, no un booleano, así el segundo tap se cuelga del primero y recibe la misma tarea. **Falta**: dos dispositivos distintos en el mismo segundo siguen pudiendo crear una gemela — invisible en pantalla (el board fusiona), pero queda en la base. Se cierra con una restricción en Postgres, ver `PENDIENTES.md`.
 
+**Todo insert de tareas de producción va por `lib/ops/insertarTareas.ts`**, no por `.from('tareas').insert()` pelado. Motivo: Postgres tumba el **lote entero** si una sola fila choca contra una restricción única, así que el día que exista el candado, activar un menú de 14 preparaciones fallaría completo porque una ya estaba. El helper intenta el lote y, si recibe un 23505, reintenta fila por fila salvando las nuevas. Mientras la restricción no exista es un passthrough exacto (sin restricción no hay 23505).
+
+Para esto **no sirve** `.upsert(..., { ignoreDuplicates: true })`: necesita nombrar una restricción, y si todavía no existe PostgREST devuelve 42P10 y rompe el insert de hoy. Misma trampa para cualquier otra tabla donde se quiera preparar el código antes de crear el índice.
+
+Los dos caminos que **editan** campos de la clave (renombrar una tarea en `useTareas.actualizarTarea`, mover paso/plaza al editar un menú activo en `useMenus`) atrapan el 23505 con `esViolacionDeUnicidad()`: el rename devuelve un mensaje legible y el move saltea esa fila y sigue.
+
 ## Peso de la pantalla — el hook completo no siempre es el que va
 
 Antes de montar un hook en una pantalla, mirar qué baja realmente. Reglas:

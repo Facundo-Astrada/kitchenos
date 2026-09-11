@@ -1,50 +1,71 @@
-# Sesión — 2026-09-11
+# Sesión — 2026-09-11 (noche, desatendida)
+
+Sesión corrida sola mientras Facundo dormía, con cola aprobada de antemano.
+7 commits (`a191798`…`5c2a493`), cada uno con typecheck + Vitest + build verdes
+antes de pushear. 441 tests al arrancar, **504 al cerrar**. Producción verificada
+después de los 7 deploys: health OK, app respondiendo.
 
 ## Qué se cerró
-- **Panel de Estandarización** (8 commits, `ac1762e`…`a284c7a`, cada uno con
-  typecheck+Vitest(441)+build antes de push): escala N0-N3 por componente
-  (`lib/recetas/estandarizacion.ts`) derivada de datos ya cargados — Carta →
-  Estandarización nueva (gate `canEdit`, no `verCostos`), badge en Recetario
-  (reemplazó el binario "SIN PESO NETO") y en `DetailView`, número real en la
-  estación 2.3 de `/implantacion` (antes reusaba "sin receta" como proxy).
-- Recursión en subrecetas (un ingrediente `tipo:'subreceta'` resuelve a su
-  propio nivel, no siempre "sin costo") y Menús integrados a la misma
-  cola/lista (`menu_preparaciones`, incluidas las que reusan un plato entero
-  de la carta — resuelven al nivel real de ESE plato).
-- Filtros de categoría y plaza — el de plaza es por COMPONENTE, no por plato
-  entero, y lee `plaza_efectiva` (fallback al mise cuando `plato_recetas.plaza`
-  nunca se guardó — bug real encontrado y confirmado con SQL directo contra
-  Bros, no solo en la cuenta demo).
-- **Dos bugs reales encontrados en la propia verificación en pantalla** (no en
-  código): el editor de composición quedaba trabado al abrir un menú desde
-  Estandarización (orden de `if (composing)` vs `if (view===...)` en
-  `carta/page.tsx`) y "Empezá por acá" mostraba 8 ítems fijos aunque hubiera
-  un filtro activo (en Bros/Calientes: 8 de 41 reales) — ambos arreglados y
-  reverificados.
-- `BROS_PASSWORD` agregado a `.env.local` (gitignorado) — primera vez que se
-  verifica una feature en pantalla contra la cuenta Bros real, no solo la demo.
-- `.claude/docs/columnas.md` actualizado (`plaza_efectiva`, `menu_preparaciones`
-  sin columna `gramaje` propia) y `PENDIENTES.md`/`ESTADO-ACTUAL.md` podados.
+- **Algo avisa cuando producción se rompe** (`a191798`). `/api/cron/health`,
+  diario. El canal de alerta es el código HTTP: devuelve **503** si algo está
+  roto, así la corrida fallida se ve en Vercel sin que nadie abra un dashboard.
+  Revisa claves (falta / cruzada / sucia), el handshake del realtime y la base.
+  El handshake se mide con un GET pelado: verificado contra el proyecto real que
+  `/realtime/v1/websocket` da **500 con clave válida** y **401 con inválida**.
+- **Reconocimiento semanal corriendo solo** (`89b6d1a`), en **modo seco**.
+  No se portó `fetchRuta` al servidor (dos trampas: `ingredientes` no tiene
+  `restaurante_id` y el admin client sumaría todos los tenants; y el árbol de la
+  carta vive en un módulo `'use client'`). En vez: la foto la escribe el cliente
+  (tabla `implantacion_progreso`), el cron solo lee y resta.
+- **Inserts de tareas endurecidos** contra el candado (`c0f7d6a`).
+  `lib/ops/insertarTareas.ts` reintenta fila por fila si el lote choca.
+- **Un rol desconocido ya no tira la navegación abajo** (`871b328`).
+- **`PENDIENTES.md` podado de 38,6 KB a 17,9 KB** (`4fe1c45`), como mudanza:
+  el archivo completo quedó archivado en `HISTORIAL.md`. 36/36 secciones
+  verificadas programáticamente.
+- **Bug real encontrado corriendo la app** (`a55b8dc`): `fetchRuta` pedía
+  `restaurantes.tipo`, columna que **no existe** → 400 en cada carga de
+  `/implantacion`, `rest` null, y el subtítulo "Día N de la implantación"
+  **nunca se mostró desde que existe la pantalla**. Arreglado y verificado:
+  antes 1 request fallida y sin día, después 0 fallidas y "DÍA 176".
+- **22 tests de lógica pura** de `useStock` y `useEquipo` (`5c2a493`).
 
-## Qué quedó a medias
-- **`plaza_efectiva` solo se calculó para `plato_recetas`**, no para
-  `menu_preparaciones.plaza` — si el mismo desfasaje (mise sabe la plaza,
-  la tabla no) existe también ahí, hoy sigue sin recuperarse.
-- **`producto_id` en `plato_recetas`** (componentes comprados: pan, limón, un
-  vino) — declarado como límite, deliberadamente NO tomado esta sesión: toca
-  schema+costeo+editor+mise, tamaño de su propia sesión.
-- **`PENDIENTES.md` sigue en 38KB** (guideline ~10KB) — no se podó a fondo,
-  solo se cerró el ítem que tocaba esta sesión (checkpoint de implantación).
+## Lo que te toca a vos (tres cosas, ninguna es código)
+1. **El SQL del candado espera aprobación.** `supabase/migrations/pendientes/` —
+   leer `CANDADO_TAREAS_LEER_ANTES.md`. **Hay 14 grupos duplicados en prod hoy
+   (16 filas, peor caso 4 gemelas)**: el `CREATE UNIQUE INDEX` falla hasta
+   limpiarlos, un paso que el plan original no contemplaba. El DELETE no se
+   escribió a propósito. Va **fuera de servicio**: toma `ACCESS EXCLUSIVE`.
+2. **Prender los avisos**, cuando quieras: `AVISOS_ACTIVOS=1` en Vercel + la
+   entrada del cron en `vercel.json`. Hoy corre en seco. Mirá una corrida seca
+   antes (`curl -H "Authorization: Bearer $CRON_SECRET" .../api/cron/avisos`).
+3. **Limpiar la anon key en el dashboard de Vercel.** El health-check lo
+   confirmó contra producción: **sigue sucia**. Hoy la salva el `.trim()` de
+   `env.ts`, pero cualquier lectura que no pase por el helper reintroduce el bug
+   del realtime caído.
+
+## Qué quedó a medias / sin hacer
+- **`coach-screen` sobre el tab Turno: saltado.** Necesita anclas visuales
+  (`data-coach-target`) que no se pueden ubicar sin ver la pantalla.
+- **Policies fiscales: NO se hacen, y el ítem estaba mal planteado.**
+  `fiscal_config` guarda `key_pem` — la clave privada de AFIP. El "arreglo" que
+  pedía el backlog habría abierto un agujero real. Documentado en
+  `FISCAL_RLS_NO_ES_LO_QUE_PARECE.md` + regla nueva en `rls.md`.
+- **El Coach no se tocó** más allá de lo anterior.
 
 ## Probar primero mañana
-- Verificar si `menu_preparaciones.plaza` tiene el mismo desfasaje que
-  `plato_recetas.plaza` tenía contra el mise (mismo patrón de SQL usado hoy).
-- En Bros: asignarle plaza a alguno de los 11 "componentes sin plaza asignada"
-  desde el botón OPS del plato y confirmar que desaparece de esa lista al
-  recargar Estandarización (cerrar el loop completo, hoy solo se verificó que
-  el click abre el lugar correcto).
+- **Mirar `/implantacion` en pantalla**: ahora debería decir "DÍA N DE LA
+  IMPLANTACIÓN" en el header (estuvo muerto desde siempre). Verificado con
+  Playwright contra El Rescoldo, pero no por ojo humano.
+- **El Rescoldo marca 1 de 34 (3%)** pese a estar seedeado en todos los módulos.
+  **No es un bug nuevo**: los umbrales piden actividad *sostenida* (3 semanas
+  seguidas de facturas, 5 días seguidos de pase), no datos cargados. Es
+  exactamente el ítem 4 de la ruta ("nadie la verificó contra datos reales").
+  Ahora hay una medición para ajustarlos.
+- El sidebar con una cuenta no-admin, tras el cambio de `mapRol`.
 
 ## Próximo paso concreto
-- Si sigue el mismo tema: `producto_id` en `plato_recetas` (sesión propia,
-  ver arriba). Si no: retomar `PENDIENTES.md` 🟠 Alto — SMTP propio para
-  invitaciones, o "Nada avisa cuando producción se rompe" (01/09).
+- Si querés cerrar lo de esta noche: el **candado** (🔴 en `PENDIENTES.md`) —
+  limpiar los 14 grupos y correr el SQL fuera de servicio.
+- Si arrancás tema nuevo: `producto_id` en `plato_recetas` (quedó declarado como
+  límite el 10/09, toca schema+costeo+editor+mise, sesión propia).
