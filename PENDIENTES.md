@@ -28,10 +28,13 @@ corrió en prod el 11/09 — detalle en `HISTORIAL.md`.
 
 ### Ruta de implantación — lo que quedó abierto (ejecutada el 07/09)
 1. ~~No hay scheduler~~ **resuelto 11/09**: `app/api/cron/avisos` corre el
-   reconocimiento semanal. **Falta prenderlo**: poner `AVISOS_ACTIVOS=1` en
-   Vercel y agregar el cron a `vercel.json` (hoy anda en modo seco — calcula y
-   reporta lo que mandaría, sin escribir notificaciones). Mirar una corrida seca
-   real antes de prenderlo.
+   reconocimiento semanal, ahora agendado en `vercel.json` (diario 08:00 UTC —
+   el gate de una vez por semana por restaurante vive en la DB, no en el cron).
+   Corrida seca real contra prod (11/09): los 5 restaurantes en `sin-fotos`
+   (nadie lleva todavía dos fotos de progreso separadas por una semana — la
+   ruta se ejecutó el 07/09), sin errores. **Solo falta `AVISOS_ACTIVOS=1` en
+   Vercel** — no tengo acceso (CLI sin sesión, MCP de Vercel sin autorizar):
+   Facundo tiene que sumarla a mano en Settings → Environment Variables.
 2. **Retirar `/onboarding`.** Convive con `/implantacion` a propósito
    (estrangulamiento). Retirar la vieja cuando la nueva esté probada contra un
    restaurante real.
