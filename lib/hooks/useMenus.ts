@@ -2,6 +2,7 @@
 import { useCallback, useMemo } from 'react'
 import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
+import { insertarTareas, esViolacionDeUnicidad } from '@/lib/ops/insertarTareas'
 import { useRestauranteId } from './useRestauranteId'
 import { sincronizarMiseDeMenu, desactivarMiseDeMenu, type SincronizarMiseResultado } from '@/lib/ops/menuMise'
 // Import de valor hacia activarMenu, que a su vez importa SOLO tipos de acá
@@ -308,10 +309,19 @@ export function useMenus() {
           ...(mueve ? { turno_fecha: destino } : {}),
         } })
       })
+      // Estos patches mueven la tarea de paso/plaza/fecha — o sea, tocan la
+      // clave de "una preparación, una fila". Con el candado creado, mover una
+      // encima de otra que ya está ahí devuelve 23505: se saltea esa y sigue
+      // con el resto. Quedarse donde estaba es el resultado correcto (el lugar
+      // destino ya está ocupado por el mismo trabajo), y tumbar el resto de la
+      // edición del menú por eso sería peor.
       for (const u of actualizaciones) {
-        await supabase.from('tareas').update(u.patch).eq('id', u.id)
+        const { error } = await supabase.from('tareas').update(u.patch).eq('id', u.id)
+        if (error && !esViolacionDeUnicidad(error)) {
+          console.warn('[useMenus] no se pudo mover la tarea', u.id, error.message)
+        }
       }
-      if (nuevas.length > 0) await supabase.from('tareas').insert(nuevas)
+      await insertarTareas(supabase, nuevas)
 
       // Sacadas del menú: se borran solo si nadie las empezó.
       const aBorrar = activadas.filter(t => !vivos.has(clave(t.titulo)) && t.estado === 'pendiente').map(t => t.id)
@@ -349,12 +359,13 @@ export function useMenus() {
             orden: 1000 + i,
             restaurante_id: RESTAURANTE_ID,
           }))
-        if (nuevas.length > 0) await supabase.from('tareas').insert(nuevas)
+        await insertarTareas(supabase, nuevas)
         // ACTUALIZAR las existentes / SACAR las borradas que no se empezaron
         for (const t of existentes) {
           const p = prepByName.get(t.titulo)
           if (p) {
-            await supabase.from('tareas').update({
+            // Mismo caso que arriba: `seccion`/`plaza` son parte de la clave.
+            const { error } = await supabase.from('tareas').update({
               prioridad: p.prioridad,
               seccion: p.paso || 'general',
               plaza: p.plaza,
@@ -362,6 +373,9 @@ export function useMenus() {
               cantidad: p.cantidad ?? null,
               nota: p.nota ?? null,
             }).eq('id', t.id)
+            if (error && !esViolacionDeUnicidad(error)) {
+              console.warn('[useMenus] no se pudo actualizar la tarea', t.id, error.message)
+            }
           } else if (t.estado === 'pendiente') {
             await supabase.from('tareas').delete().eq('id', t.id)
           }

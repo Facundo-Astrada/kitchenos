@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { insertarTareas } from '@/lib/ops/insertarTareas'
 import type { MenuTipo, PrepPrioridad, PrepTipo } from '@/lib/hooks/useMenus'
 import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
 
@@ -144,9 +145,9 @@ export async function activarMenuParaFechas(
         orden,
         restaurante_id: restauranteId,
       }))
-      const { error } = await supabase.from('tareas').insert(rows)
+      const { insertadas, error } = await insertarTareas(supabase, rows)
       if (error) throw error
-      totalTareas += rows.length
+      totalTareas += insertadas
       diasDeProduccionTocados.add(fProd)
       algoNuevoEsteDia = true
     }

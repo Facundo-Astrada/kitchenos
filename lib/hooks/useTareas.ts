@@ -7,6 +7,7 @@ import type { Tarea, ChecklistItemTarea, OpsEstado } from '@/types'
 import { useRestauranteId } from './useRestauranteId'
 import { useAuth } from '@/lib/auth/context'
 import { claveTarea, tareaExistentePara, esProduccionDelDia } from '@/lib/ops/dedupeTareas'
+import { esViolacionDeUnicidad } from '@/lib/ops/insertarTareas'
 
 function parseTarea(t: Record<string, unknown>): Tarea {
   return {
@@ -211,6 +212,13 @@ export function useTareas(opts?: { soloEscritura?: boolean }) {
         const updateData: Record<string, unknown> = { ...datos }
         if (datos.checklist) updateData.checklist = JSON.stringify(datos.checklist)
         const { error } = await supabase.from('tareas').update(updateData).eq('id', id)
+        // El candado de "una preparación, una fila" (dedupeTareas.ts): renombrar
+        // una tarea puede hacerla chocar contra otra que ya ocupa esa fila del
+        // board. El 23505 crudo de Postgres no le dice nada a un cocinero, y sin
+        // esto la pantalla mostraría un error ilegible en vez del motivo real.
+        if (esViolacionDeUnicidad(error)) {
+          throw new Error('Ya hay una tarea con ese nombre en esa columna, para ese día.')
+        }
         if (error) throw error
         return optimistic(current)
       },

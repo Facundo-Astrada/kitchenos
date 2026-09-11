@@ -17,6 +17,7 @@ import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
 import { activarMenuParaFechas, resumenActivacion } from '@/lib/menus/activarMenu'
 import { estadoMiseMenu } from '@/lib/ops/menuMise'
 import { tareaExistentePara } from '@/lib/ops/dedupeTareas'
+import { insertarTareas } from '@/lib/ops/insertarTareas'
 
 // ── Helpers ─────────────────────────────────────────────────
 // fmtDate formatea un Date arbitrario de navegación de calendario (siempre
@@ -233,16 +234,16 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
         restaurante_id: RESTAURANTE_ID,
       })).filter(r => !tareaExistentePara(existentes, r))
 
-      if (rows.length > 0) {
-        const { error } = await supabase.from('tareas').insert(rows)
-        if (error) throw error
-      }
+      const { insertadas, error } = await insertarTareas(supabase, rows)
+      if (error) throw error
       refetchTareas()
       setShowSugerencia(false)
-      const omitidas = items.length - rows.length
-      showToast(rows.length === 0
+      // `omitidas` junta las dos formas de "ya estaba": las que filtró el guard
+      // local de arriba y las que reboten contra el candado de Postgres.
+      const omitidas = items.length - insertadas
+      showToast(insertadas === 0
         ? `Todo eso ya estaba cargado para ${diaLabel}`
-        : `${rows.length} ${rows.length === 1 ? 'tarea creada' : 'tareas creadas'} para ${diaLabel}${omitidas > 0 ? ` · ${omitidas} ya estaban` : ''}`)
+        : `${insertadas} ${insertadas === 1 ? 'tarea creada' : 'tareas creadas'} para ${diaLabel}${omitidas > 0 ? ` · ${omitidas} ya estaban` : ''}`)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message
         : (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message)
