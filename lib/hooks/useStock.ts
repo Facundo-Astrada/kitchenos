@@ -13,11 +13,11 @@ export type ProductoConEstado = Producto & {
 
 // Stock de seguridad: mínimo + 25% de protección contra incertidumbre de
 // demanda o retrasos de proveedores. No es columna — se calcula acá.
-function calcStockSeguridad(p: Producto): number {
+export function calcStockSeguridad(p: Producto): number {
   return p.stock_minimo * 1.25
 }
 
-function calcEstado(p: Producto): 'ok' | 'bajo' | 'critico' | 'alto' {
+export function calcEstado(p: Producto): 'ok' | 'bajo' | 'critico' | 'alto' {
   // Fuera de uso nunca genera alertas — sigue existiendo (vale capital) pero no se opera.
   if (p.fuera_de_uso) return 'ok'
   if (p.stock_actual <= p.stock_critico) return 'critico'

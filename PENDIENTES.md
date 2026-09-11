@@ -173,9 +173,13 @@ los toque — no hacer batch dedicado.** Los otros 16 sin SWR no son deuda
 (censo en `arquitectura-kos.md` §2.2).
 
 ### Tests — Testing Library para hooks
-Cubiertos: `useTareas`, `usePermisos`, `useMesas`, `useComandas`. El resto
-(`useEquipo`, `useChecklist`, `useCarta`, `useStock`) sin tests. **Agregar el
-que se toque, no perseguir cobertura total.**
+Cubiertos con Testing Library: `useTareas`, `usePermisos`, `useMesas`,
+`useComandas`. Cubierta su **lógica pura** (11/09, sin renderizar el hook):
+`useStock` (`calcEstado`/`calcStockSeguridad` — los bordes de bajo/crítico/alto)
+y `useEquipo` (`construirArbolPuestos`/`idsDescendientes` — huérfanos, ciclos y
+orden del organigrama). Sin tests: `useChecklist` y `useCarta`, los dos grandes.
+**Agregar el que se toque, no perseguir cobertura total** — un hook que solo
+hace `select` + `insert` sin reglas propias no aporta como test.
 
 ### OPS — seguir bajando el peso en celular
 Mise en mobile bajó de 2582 kB a 899 kB. Queda **`tareas` 594 kB**, lo más
