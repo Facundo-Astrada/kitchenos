@@ -243,15 +243,10 @@ Lista completa con el detalle de cada uno en `HISTORIAL.md`. En una línea:
   (componente compartido por media docena de pantallas — radio de impacto).
 - Organigrama: reasignar `reporta_a_puesto_id` es un `<select>`, no drag; y el
   árbol de un área no anida puestos que reportan cruzado.
-- **Worktree viejo `.claude/worktrees/sleepy-jepsen` sin borrar** — las ramas ya
-  se borraron, falta la carpeta (un proceso la tiene bloqueada en Windows).
-  Reintentar `git worktree remove --force` tras reiniciar.
 - Evento con presencia heredada en el mise no tiene "Sacar del mise" en el picker
   de Planificación (sí en `MenusView`).
 - Stock: celda apretada en 480-1023px — falta verla en **modo edición**.
 - Nota de ítem no viaja a la tarea de Producción (módulos distintos a propósito).
-- **Botón de plegar el Coach tapa contenido en desktop** — afecta cualquier
-  pantalla con el dock abierto.
 - Compras: "Cargar factura" es un patrón mobile sin adaptar a desktop (CTA
   gigante en monitor ancho). Repensar junto con el refactor de Facturas.
 

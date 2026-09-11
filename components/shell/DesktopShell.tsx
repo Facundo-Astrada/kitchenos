@@ -88,34 +88,42 @@ export default function DesktopShell({ children, sidePanel }: { children: React.
         {children}
       </main>
 
-      {/* ── Panel lateral fijo (Kitchen Coach) — empuja el contenido, no lo tapa ── */}
+      {/* ── Panel lateral fijo (Kitchen Coach) — empuja el contenido, no lo tapa.
+          El botón de plegar vive en un carril propio, siempre presente en el
+          flex row — no en `position:fixed` sobre el viewport (tapaba lo que
+          hubiera a media altura de cualquier pantalla) ni pegado al borde de
+          `main` (cada pantalla arma su propio header ahí, sin uno compartido:
+          en Reportes tapaba el botón "Personal"). Con un carril propio,
+          `main` nunca se extiende debajo del botón — no hay con qué chocar,
+          en ninguna pantalla, sin tener que adivinar la altura de cada header. ── */}
+      {sidePanel && (
+        <div style={{ width: 60, flexShrink: 0, height: '100%', position: 'relative' }}>
+          <button
+            onClick={toggleDock}
+            title={dockCollapsed ? 'Mostrar Kitchen Coach' : 'Ocultar Kitchen Coach'}
+            style={{
+              position: 'absolute', top: '50%', left: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 30, width: dockCollapsed ? 52 : 36, height: dockCollapsed ? 52 : 36,
+              borderRadius: '50%', cursor: 'pointer',
+              background: dockCollapsed ? '#f97316' : 'var(--surface)',
+              border: dockCollapsed ? 'none' : '1px solid var(--border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: dockCollapsed ? '0 4px 16px rgba(249,115,22,.4)' : '0 2px 10px rgba(0,0,0,.15)',
+              transition: 'width .2s ease, height .2s ease',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: dockCollapsed ? 22 : 18, color: dockCollapsed ? '#fff' : 'var(--text-2)' }}>
+              {dockCollapsed ? 'chef_hat' : 'chevron_right'}
+            </span>
+          </button>
+        </div>
+      )}
+
       {sidePanel && !dockCollapsed && (
         <div style={{ width: DOCK_WIDTH, flexShrink: 0, height: '100%', borderLeft: '1px solid var(--border)', overflow: 'hidden' }}>
           {sidePanel}
         </div>
-      )}
-
-      {/* Botón para ocultar/mostrar el panel — se acomoda al borde según el estado */}
-      {sidePanel && (
-        <button
-          onClick={toggleDock}
-          title={dockCollapsed ? 'Mostrar Kitchen Coach' : 'Ocultar Kitchen Coach'}
-          style={{
-            position: 'fixed', top: '50%', transform: 'translateY(-50%)',
-            right: dockCollapsed ? 16 : DOCK_WIDTH + 16,
-            zIndex: 1001, width: dockCollapsed ? 52 : 36, height: dockCollapsed ? 52 : 36,
-            borderRadius: '50%', cursor: 'pointer',
-            background: dockCollapsed ? '#f97316' : 'var(--surface)',
-            border: dockCollapsed ? 'none' : '1px solid var(--border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: dockCollapsed ? '0 4px 16px rgba(249,115,22,.4)' : '0 2px 10px rgba(0,0,0,.15)',
-            transition: 'right .2s ease, width .2s ease, height .2s ease',
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: dockCollapsed ? 22 : 18, color: dockCollapsed ? '#fff' : 'var(--text-2)' }}>
-            {dockCollapsed ? 'chef_hat' : 'chevron_right'}
-          </span>
-        </button>
       )}
 
       {showImportador && (
