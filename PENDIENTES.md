@@ -36,13 +36,37 @@ corrió en prod el 11/09 — detalle en `HISTORIAL.md`.
    semana — la ruta se ejecutó el 07/09) — primera notificación real saldrá
    sola cuando alguno junte esa segunda foto.
 2. **Retirar `/onboarding`.** Convive con `/implantacion` a propósito
-   (estrangulamiento). Retirar la vieja cuando la nueva esté probada contra un
-   restaurante real.
-3. **Dos checkpoints se confirman a mano** porque no hay dato que los sostenga:
-   "se leyó el line-up en voz alta" y la estación 5.5.
-4. **Nadie verificó la ruta contra datos reales.** Los umbrales (3 semanas de
-   facturas, 5 días de pase, 20 tareas) son criterio, no medición: mirarlos
-   contra El Rescoldo y Bros y ajustarlos.
+   (estrangulamiento). **Sigue sin poder probarse** (11/09): la ruta lleva 4
+   días corriendo y los 5 restaurantes están en `sin-fotos` (ni Bros ni El
+   Rescoldo juntaron todavía dos fotos de progreso separadas por una semana).
+   Retomar en un par de semanas, no antes.
+3. ~~Dos checkpoints se confirman a mano~~ **verificado 11/09, no es un gap**:
+   el propio comentario de `ruta.ts` (líneas 20-22) lo declara a propósito —
+   "preferible a inventar una métrica que mienta". No hay predicado que
+   detecte "se leyó el line-up en voz alta" ni la estación 5.5 sin inventar
+   una señal falsa. Cerrado, no se toca.
+4. **Medido el 11/09 contra Bros (real, 3499 facturas) y El Rescoldo (real
+   pero con uso bajo — 17 facturas, última del 12/06).** Dos de los tres
+   umbrales se ven bien calibrados:
+   - **20 tareas** (estación 4.5): Bros ya tiene 505 — se cruza rápido con
+     uso real, sin ser trivial (El Rescoldo, con uso bajo, está en 15). Sin
+     cambios.
+   - **5 días de pase seguidos** (estación 4.6): el patrón real de Bros es
+     "cierra 2 días por semana" — su racha máxima histórica es exactamente 5
+     (lograda dos veces en agosto), y hoy está en 3 reconstruyendo la semana.
+     El umbral pide "toda la semana operativa sin faltar una", ni regalado ni
+     imposible. Sin cambios.
+   - **⚠️ 3 semanas de facturas seguidas (estación 3.2) — hoy da 0 en Bros
+     pese a ~3 meses de carga casi diaria.** La ventana es móvil (últimos 7
+     días desde HOY, no semana calendario) y el último `fecha_factura`
+     cargado es del 03/09 — 8 días sin uno nuevo alcanzan para resetear a 0
+     una racha que venía perfecta. **No lo toqué**: no puedo distinguir desde
+     los datos si es un bache real de carga o solo el algoritmo siendo
+     demasiado estricto con el "hoy" — y esta estación es `clave: true`
+     (hunde el resto del hito si no pasa), así que tocar su cálculo cambia lo
+     que ve un cliente real. Decisión de Facundo: dejarlo así (mide lo que
+     mide) o darle algo de gracia (ej. "3 de las últimas 4 semanas" en vez de
+     3 consecutivas estrictas).
 
 ### Invitación por email falla a veces — falta SMTP propio
 🔒 **Bloqueado, no es código.** Supabase manda con su mailer compartido (2
