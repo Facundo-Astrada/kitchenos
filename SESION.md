@@ -1,56 +1,50 @@
-# Sesión — 2026-09-10
+# Sesión — 2026-09-11
 
 ## Qué se cerró
-- **Producción escalonada de eventos** (6 commits, `6d4011c`…`e30fefb`, cada uno
-  con typecheck+Vitest(406)+build antes de push): un evento se cocina desde
-  días antes y hasta hoy `activarMenuParaFechas` volcaba la lista completa en
-  cada fecha del rango, sin distinguir plazas del mise (una preparación de
-  evento no debía pasar por ahí — se tilda, no se cuenta).
-- `menu_preparaciones.dias_antes` (NOT NULL DEFAULT 0, migrada y verificada en
-  Supabase) + chips "Cuándo se produce" en `ComposicionEditor` + badge de
-  anticipación en la fila colapsada. `fechaProduccion()`/`cronogramaDeEvento()`
-  en `lib/menus/activarMenu.ts` (con tests) derivan el día de trabajo de
-  `fecha_evento − dias_antes` — con `dias_antes=0` (todo lo ya cargado) el
-  comportamiento es idéntico al de antes.
-- Arrastre de evento hasta el día D en vez de un solo día (`tareas/ClientView.tsx`);
-  el carryover que borra pendientes de ayer quedó SOLO para menú fijo (en
-  evento borraba trabajo real). Propagación al editar un menú ya activado
-  partida por tipo — la rama de evento sincroniza contra el cronograma, no
-  metía las 14 preparaciones en cada uno de los 4 días.
-- Banda EVENTO del board (`ProduccionBoard.tsx`): header con nombre + cuenta
-  regresiva ("en 3 días"/"mañana"/"hoy", derivada de las tareas ya cargadas,
-  sin fetch a `menus`) y badge "también en Menú/Evento" cuando el mismo
-  nombre normalizado aparece hoy en más de una banda (no fusiona filas, solo
-  avisa para hacerlas juntas).
-- Fake de Supabase con filtrado real extraído a `lib/test-utils/fakeSupabaseStore.ts`
-  (antes vivía embebido en `menuMise.test.ts`) para compartirlo con los tests
-  nuevos de `activarMenu.test.ts`.
-- `ESTADO-ACTUAL.md` (Carta, Producción/Planificación, OPS) y `.claude/docs/columnas.md`
-  actualizados con el comportamiento nuevo.
+- **Panel de Estandarización** (8 commits, `ac1762e`…`a284c7a`, cada uno con
+  typecheck+Vitest(441)+build antes de push): escala N0-N3 por componente
+  (`lib/recetas/estandarizacion.ts`) derivada de datos ya cargados — Carta →
+  Estandarización nueva (gate `canEdit`, no `verCostos`), badge en Recetario
+  (reemplazó el binario "SIN PESO NETO") y en `DetailView`, número real en la
+  estación 2.3 de `/implantacion` (antes reusaba "sin receta" como proxy).
+- Recursión en subrecetas (un ingrediente `tipo:'subreceta'` resuelve a su
+  propio nivel, no siempre "sin costo") y Menús integrados a la misma
+  cola/lista (`menu_preparaciones`, incluidas las que reusan un plato entero
+  de la carta — resuelven al nivel real de ESE plato).
+- Filtros de categoría y plaza — el de plaza es por COMPONENTE, no por plato
+  entero, y lee `plaza_efectiva` (fallback al mise cuando `plato_recetas.plaza`
+  nunca se guardó — bug real encontrado y confirmado con SQL directo contra
+  Bros, no solo en la cuenta demo).
+- **Dos bugs reales encontrados en la propia verificación en pantalla** (no en
+  código): el editor de composición quedaba trabado al abrir un menú desde
+  Estandarización (orden de `if (composing)` vs `if (view===...)` en
+  `carta/page.tsx`) y "Empezá por acá" mostraba 8 ítems fijos aunque hubiera
+  un filtro activo (en Bros/Calientes: 8 de 41 reales) — ambos arreglados y
+  reverificados.
+- `BROS_PASSWORD` agregado a `.env.local` (gitignorado) — primera vez que se
+  verifica una feature en pantalla contra la cuenta Bros real, no solo la demo.
+- `.claude/docs/columnas.md` actualizado (`plaza_efectiva`, `menu_preparaciones`
+  sin columna `gramaje` propia) y `PENDIENTES.md`/`ESTADO-ACTUAL.md` podados.
 
 ## Qué quedó a medias
-- **Dos eventos activos a la vez no tienen una cuenta regresiva propia** —
-  la banda EVENTO se sigue mostrando junta (columnas por paso, no por evento)
-  pero sin subtítulo si hay más de un `menu_id`. Anotado en `PENDIENTES.md`
-  como backlog chico, límite explícito no bug.
-- **Sin verificación visual del board** (header de banda, badge de duplicado):
-  se probó el cronograma en uso real (confirmado por Facundo), pero el header
-  nuevo de `ProduccionBoard` y el badge "también en..." solo pasaron por
-  typecheck+build, no por pantalla.
-- **`PENDIENTES.md` pasó los 38KB** (guideline del propio archivo: ~10KB) —
-  no se podó esta sesión porque no era el foco; sería su propia sesión de
-  limpieza dedicada, no algo para meter al cierre de otra.
+- **`plaza_efectiva` solo se calculó para `plato_recetas`**, no para
+  `menu_preparaciones.plaza` — si el mismo desfasaje (mise sabe la plaza,
+  la tabla no) existe también ahí, hoy sigue sin recuperarse.
+- **`producto_id` en `plato_recetas`** (componentes comprados: pan, limón, un
+  vino) — declarado como límite, deliberadamente NO tomado esta sesión: toca
+  schema+costeo+editor+mise, tamaño de su propia sesión.
+- **`PENDIENTES.md` sigue en 38KB** (guideline ~10KB) — no se podó a fondo,
+  solo se cerró el ítem que tocaba esta sesión (checkpoint de implantación).
 
 ## Probar primero mañana
-- Header de la banda Evento en un evento real con fecha próxima: confirmar
-  que dice "en N días"/"mañana" correctamente y que el badge de nombre
-  repetido aparece cuando el mismo ítem está en el mise fijo y en un evento
-  el mismo día.
-- Mover la fecha de un evento ya activado con preparaciones en distintos
-  `dias_antes` y confirmar que las pendientes se recalculan solas (las ya
-  empezadas/listas no se mueven).
+- Verificar si `menu_preparaciones.plaza` tiene el mismo desfasaje que
+  `plato_recetas.plaza` tenía contra el mise (mismo patrón de SQL usado hoy).
+- En Bros: asignarle plaza a alguno de los 11 "componentes sin plaza asignada"
+  desde el botón OPS del plato y confirmar que desaparece de esa lista al
+  recargar Estandarización (cerrar el loop completo, hoy solo se verificó que
+  el click abre el lugar correcto).
 
 ## Próximo paso concreto
-- Retomar `PENDIENTES.md` 🟠 Alto: SMTP propio para invitaciones, o "Nada
-  avisa cuando producción se rompe" (01/09). Si se abre sesión de limpieza de
-  backlog, `PENDIENTES.md` es el primer candidato (38KB, guideline ~10KB).
+- Si sigue el mismo tema: `producto_id` en `plato_recetas` (sesión propia,
+  ver arriba). Si no: retomar `PENDIENTES.md` 🟠 Alto — SMTP propio para
+  invitaciones, o "Nada avisa cuando producción se rompe" (01/09).

@@ -19,9 +19,11 @@ construyeron y deployaron el 07/09 (`PLAN-IMPLANTACION-2026-09.md` § 0). Falta:
 2. **Retirar `/onboarding`.** La cordillera (`/implantacion`) convive con la guía de inicio a
    propósito (estrangulamiento). Retirar la vieja recién cuando la nueva esté probada contra
    un restaurante real.
-3. **Tres checkpoints se confirman a mano** porque no hay dato que los sostenga: "sin
-   estandarizar" por plato (se calcula por componente en Carta, no hay columna), "se leyó el
-   line-up en voz alta", y la estación 5.5 (un desvío del reporte cambió el estándar).
+3. **Dos checkpoints siguen confirmándose a mano** porque no hay dato que los sostenga:
+   "se leyó el line-up en voz alta" y la estación 5.5 (un desvío del reporte cambió el
+   estándar). El tercero ("sin estandarizar" por plato) se resolvió el 11/09: la estación 2.3
+   ahora lee el nivel N0-N3 real (`lib/recetas/estandarizacion.ts`) en vez de reusar el conteo
+   de "sin receta" como proxy.
 4. **Nadie verificó la ruta contra datos reales todavía.** Los umbrales de inserción
    (3 semanas de facturas, 5 días de pase, 20 tareas despachadas) son criterio, no medición:
    hay que mirarlos contra El Rescoldo y Bros y ajustarlos.
