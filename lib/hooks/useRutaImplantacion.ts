@@ -93,7 +93,12 @@ async function fetchRuta(key: string): Promise<RespuestaRuta> {
   const cartaTreePromise = fetchCartaItemsData(`carta-items-${rid}`).catch(() => [] as CartaItemEnriquecido[])
 
   const r = await Promise.allSettled([
-    sb.from('restaurantes').select('created_at, configuracion, tipo').eq('id', rid).maybeSingle(),
+    // Ojo: `restaurantes` NO tiene columna `tipo` (verificado contra el schema
+    // el 11/09). Pedirla hacía que TODA esta fila devolviera 400, con lo cual
+    // `rest` quedaba null para cualquier cuenta y se perdía `created_at` —
+    // o sea, el contador "Día N de la implantación" nunca se mostró. El tipo de
+    // negocio vive en `configuracion`, no en una columna propia.
+    sb.from('restaurantes').select('created_at, configuracion').eq('id', rid).maybeSingle(),
     cuenta('facturas'),
     cuenta('facturas').gte('fecha_factura', inicioMes),
     sb.from('facturas').select('fecha_factura').eq('restaurante_id', rid).gte('fecha_factura', ISO(hace90)),
@@ -138,7 +143,7 @@ async function fetchRuta(key: string): Promise<RespuestaRuta> {
   }
 
   const rest = r[0].status === 'fulfilled'
-    ? (r[0].value as { data: { created_at: string; configuracion: Record<string, unknown> | null; tipo: string | null } | null }).data
+    ? (r[0].value as { data: { created_at: string; configuracion: Record<string, unknown> | null } | null }).data
     : null
   const cfg = (rest?.configuracion ?? {}) as Record<string, unknown>
 
@@ -170,7 +175,9 @@ async function fetchRuta(key: string): Promise<RespuestaRuta> {
   const analisisEstandarizacion = analizarCarta(cartaTree)
 
   const metricas: MetricasRuta = {
-    tipoNegocioDefinido: !!rest?.tipo || Array.isArray(cfg.turnos_servicio),
+    // `tipo`/`perfil` salen de `configuracion` (ver arriba: no hay columna).
+    tipoNegocioDefinido: typeof cfg.tipo === 'string' || typeof cfg.perfil === 'string'
+      || Array.isArray(cfg.turnos_servicio),
     facturasTotal: c(1),
     facturasMesActual: c(2),
     facturasSemanasSeguidas: semanasSeguidasConFactura(fechasFactura, hoy),
