@@ -7,6 +7,26 @@ import type { Rol } from '@/types'
 // lib/permisos/resolver.ts (ver su comentario: dos copias sincronizadas a
 // mano no alcanzó, terminaron con los mismos dos bugs). Día 10 de
 // plan-consolidado.md §2.
+/**
+ * Los `Rol` que la app sabe dibujar. Existe para que el `default` de `mapRol`
+ * no pueda inventar uno.
+ *
+ * El casteo `dbRol as Rol` que había antes era una promesa que la base no
+ * cumple: `equipo_miembros.rol` y `user_restaurantes.rol` son TEXT libre, y
+ * cualquier valor fuera de esta lista llegaba igual hasta `MODULOS_POR_ROL[rol]`
+ * — que devuelve `undefined` y hace reventar el `.includes()` de `SidebarNav`
+ * con un TypeError, no con un sidebar vacío. Hoy los 14 roles cargados en la
+ * base mapean todos bien; esto es para el día que alguien agregue el 15º.
+ */
+const ROLES_VALIDOS: ReadonlySet<string> = new Set<Rol>([
+  'admin', 'chef', 'parrilla', 'frios', 'calientes', 'pase',
+  'pasteleria', 'panaderia', 'linea', 'ayudante',
+])
+
+export function esRolValido(r: string): r is Rol {
+  return ROLES_VALIDOS.has(r)
+}
+
 export function mapRol(dbRol: string, plaza?: string | null): Rol {
   const plazaMap: Record<string, Rol> = {
     parrilla: 'parrilla', frios: 'frios', calientes: 'calientes', pase: 'pase',
@@ -22,6 +42,8 @@ export function mapRol(dbRol: string, plaza?: string | null): Rol {
     case 'cocinero': return (primaryPlaza && plazaMap[primaryPlaza]) || 'linea'
     case 'staff': return (primaryPlaza && plazaMap[primaryPlaza]) || 'ayudante'
     case 'bachero': return 'ayudante'
-    default: return (dbRol as Rol) || 'ayudante'
+    // Un rol que la base tiene y la app no conoce cae al más restrictivo, no
+    // a un valor inventado: ver mejor de menos que romper la navegación.
+    default: return esRolValido(dbRol) ? dbRol : 'ayudante'
   }
 }

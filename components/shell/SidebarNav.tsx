@@ -55,7 +55,10 @@ export default function SidebarNav({ onImportarClick, dark = false, collapsed = 
   const { puedeVer, isAdmin, moduloEnPerfil, perfilRestaurante } = usePermisos()
 
   const rol = perfil?.rol ?? 'ayudante'
-  const modulosDelRol = MODULOS_POR_ROL[rol]
+  // Segundo cinturón, por si un rol se escapa de mapRol(): sin el fallback,
+  // `modulosDelRol` queda undefined y el .includes() de abajo tira TypeError —
+  // la navegación entera desaparece, no solo los módulos de ese rol.
+  const modulosDelRol = MODULOS_POR_ROL[rol] ?? MODULOS_POR_ROL.ayudante
   const rolConfig = perfil ? ROL_CONFIG[perfil.rol] : null
   const SECCIONES = seccionesNav(perfilRestaurante === 'emprendimiento')
 
