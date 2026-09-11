@@ -1,6 +1,13 @@
--- ⛔ NO CORRER EN SERVICIO. Toma ACCESS EXCLUSIVE sobre `tareas` (la columna
--- generada reescribe la tabla entera). Leer CANDADO_TAREAS_LEER_ANTES.md.
--- Requisito: `duplicados_actuales.sql` tiene que devolver 0 filas.
+-- ✅ CORRIDO en prod el 11/09/2026 (Bros). Se deja el script tal cual quedó
+-- aplicado, como referencia — no hace falta volver a correrlo.
+--
+-- Historial: la primera versión usaba `turno_fecha::text` y Postgres la
+-- rechazó — `date_out` es STABLE (depende del `DateStyle` de la sesión), no
+-- IMMUTABLE, y una columna generada exige IMMUTABLE. Se reemplazó por
+-- `kos_fecha_iso()`, que arma el ISO a mano con extract()+lpad() (ambos
+-- IMMUTABLE). Antes de correr esto en otro entorno, verificar con
+-- `SELECT provolatile FROM pg_proc WHERE proname='date_out'` — si algún día
+-- Postgres lo vuelve IMMUTABLE, esta vuelta ya no hace falta.
 
 -- 1. La normalización, replicando normalizarTitulo() de dedupeTareas.ts.
 --    IMMUTABLE es obligatorio: una columna generada no acepta STABLE (por eso
@@ -10,6 +17,14 @@ RETURNS TEXT LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$
   SELECT btrim(regexp_replace(lower(translate(t,
     'áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ',
     'aaaaaeeeeiiiiooooouuuuncAAAAAEEEEIIIIOOOOOUUUUNC')), '\s+', ' ', 'g'))
+$$;
+
+-- 1b. Fecha ISO IMMUTABLE — ver nota de arriba.
+CREATE OR REPLACE FUNCTION public.kos_fecha_iso(d DATE)
+RETURNS TEXT LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE AS $$
+  SELECT lpad(EXTRACT(YEAR FROM d)::text, 4, '0') || '-'
+    || lpad(EXTRACT(MONTH FROM d)::text, 2, '0') || '-'
+    || lpad(EXTRACT(DAY FROM d)::text, 2, '0')
 $$;
 
 -- 2. La clave, como columna generada. NULL para todo lo que no es producción
@@ -23,7 +38,7 @@ ALTER TABLE public.tareas
       WHEN parent_id IS NULL
        AND turno_fecha IS NOT NULL
        AND categoria IN ('produccion', 'pase_turno')
-      THEN turno_fecha::text
+      THEN public.kos_fecha_iso(turno_fecha)
         || '::' || COALESCE(modo, 'carta')
         || '::' || lower(btrim(COALESCE(
              CASE WHEN COALESCE(modo, 'carta') = 'carta' THEN plaza ELSE seccion END, '')))

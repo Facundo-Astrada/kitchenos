@@ -19,13 +19,8 @@ en `.claude/docs/ingenieria/plan-consolidado.md`. Si difieren, manda el plan.
 
 ## 🔴 Crítico
 
-### Candado de duplicados de Producción — falta el paso 0 y correr el SQL
-El código ya tolera el 23505 (`lib/ops/insertarTareas.ts`, 11/09) y el SQL está
-escrito en `supabase/migrations/pendientes/`. **Medido el 11/09: hay 14 grupos
-duplicados en producción (16 filas, peor caso 4 gemelas)**, así que el
-`CREATE UNIQUE INDEX` falla hasta limpiarlos. Leer
-`CANDADO_TAREAS_LEER_ANTES.md` antes de tocar nada: la columna generada toma
-`ACCESS EXCLUSIVE` sobre `tareas` y va **fuera de servicio**.
+Ninguno abierto. El candado de duplicados de Producción (paso 0 + SQL) se
+corrió en prod el 11/09 — detalle en `HISTORIAL.md`.
 
 ---
 

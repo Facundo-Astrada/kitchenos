@@ -1,7 +1,13 @@
-# Candado "una preparación, una fila" — pendiente de aprobación
+# Candado "una preparación, una fila" — ya corrido
 
-**Estado: escrito y NO corrido.** Necesita aprobación de Facundo y ventana fuera
-de servicio.
+**Estado: ✅ corrido en prod el 11/09/2026** (Bros, con aprobación de Facundo).
+Índice único `tareas_una_preparacion_una_fila` activo. Se deja este doc como
+referencia de por qué se hizo así — no hace falta repetir los pasos.
+
+**Nota del paso 1**: `turno_fecha::text` no es IMMUTABLE (`date_out` es
+STABLE), así que la primera corrida falló con `generation expression is not
+immutable`. `candado_tareas.sql` quedó actualizado con el fix real
+(`kos_fecha_iso()` via `extract()`+`lpad()`) — es el que corrió.
 
 ## Qué cierra
 
