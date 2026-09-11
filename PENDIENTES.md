@@ -26,45 +26,13 @@ corrió en prod el 11/09 — detalle en `HISTORIAL.md`.
 
 ## 🟠 Alto
 
-### Ruta de implantación — lo que quedó abierto (ejecutada el 07/09)
-1. ~~No hay scheduler~~ **resuelto 11/09**: `app/api/cron/avisos` corre el
-   reconocimiento semanal, agendado en `vercel.json` (diario 08:00 UTC — el
-   gate de una vez por semana por restaurante vive en la DB, no en el cron).
-   `AVISOS_ACTIVOS=1` puesto en Vercel (Production) y confirmado con una
-   corrida real contra prod: `"modo":"activo"`. Los 5 restaurantes siguen en
-   `sin-fotos` (nadie lleva todavía dos fotos de progreso separadas por una
-   semana — la ruta se ejecutó el 07/09) — primera notificación real saldrá
-   sola cuando alguno junte esa segunda foto.
-2. **Retirar `/onboarding`.** Convive con `/implantacion` a propósito
-   (estrangulamiento). **Sigue sin poder probarse** (11/09): la ruta lleva 4
-   días corriendo y los 5 restaurantes están en `sin-fotos` (ni Bros ni El
-   Rescoldo juntaron todavía dos fotos de progreso separadas por una semana).
-   Retomar en un par de semanas, no antes.
-3. ~~Dos checkpoints se confirman a mano~~ **verificado 11/09, no es un gap**:
-   el propio comentario de `ruta.ts` (líneas 20-22) lo declara a propósito —
-   "preferible a inventar una métrica que mienta". No hay predicado que
-   detecte "se leyó el line-up en voz alta" ni la estación 5.5 sin inventar
-   una señal falsa. Cerrado, no se toca.
-4. **Medido el 11/09 contra Bros (real, 3499 facturas) y El Rescoldo (real
-   pero con uso bajo — 17 facturas, última del 12/06).** Dos de los tres
-   umbrales se ven bien calibrados:
-   - **20 tareas** (estación 4.5): Bros ya tiene 505 — se cruza rápido con
-     uso real, sin ser trivial (El Rescoldo, con uso bajo, está en 15). Sin
-     cambios.
-   - **5 días de pase seguidos** (estación 4.6): el patrón real de Bros es
-     "cierra 2 días por semana" — su racha máxima histórica es exactamente 5
-     (lograda dos veces en agosto), y hoy está en 3 reconstruyendo la semana.
-     El umbral pide "toda la semana operativa sin faltar una", ni regalado ni
-     imposible. Sin cambios.
-   - ~~3 semanas de facturas seguidas (estación 3.2) daba 0 en Bros pese a ~3
-     meses de carga casi diaria~~ **resuelto 11/09, con OK de Facundo**: la
-     racha estricta (0 si faltaba la de esta semana) se cambió a "cuántas de
-     las últimas 4 semanas tuvieron al menos una factura" — tolera un bache
-     de carga sin resetear meses de hábito a cero, pero decae solo si el
-     hábito realmente murió (`lib/implantacion/facturas.ts`, extraída de
-     `useRutaImplantacion.ts` con 6 tests nuevos, incluido el caso real de
-     Bros como regresión). Label de la estación actualizado para no prometer
-     "sin un hueco". Vitest 510/510, build limpio.
+### Retirar `/onboarding`
+Convive con `/implantacion` a propósito (estrangulamiento). **Sigue sin poder
+probarse** (11/09): la ruta lleva 4 días corriendo y los 5 restaurantes están
+en `sin-fotos` (ni Bros ni El Rescoldo juntaron todavía dos fotos de progreso
+separadas por una semana). Retomar en un par de semanas, no antes. El resto de
+lo que había quedado abierto de la ruta (scheduler, checkpoints manuales,
+umbrales) se resolvió el 11/09 — detalle en `HISTORIAL.md`.
 
 ### Invitación por email falla a veces — falta SMTP propio
 🔒 **Bloqueado, no es código.** Supabase manda con su mailer compartido (2

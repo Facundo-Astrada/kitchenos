@@ -1,25 +1,35 @@
-# Sesión — 2026-09-11 (mediodía)
+# Sesión — 2026-09-11 (tarde)
 
 ## Qué se cerró
-- **Crear y eliminar plazas custom desde Organigrama → Polivalencia** (`820a145`),
-  antes solo posible desde Mesa de Trabajo. Mismo hook `usePlazasCustom`
-  (`restaurantes.configuracion.plazas_custom`), así que se refleja en Mesa de
-  Trabajo, Mise, OPS Panel, Pase y Reportes sin duplicar datos. De paso,
-  `ICONOS_PLAZA` pasó a `lib/constants.ts` (`ICONOS_PLAZA_CUSTOM`) como fuente
-  única en vez de vivir solo en `EspacioCard.tsx`.
-- Verificado con Playwright contra el dev server (login real, crear/ver/eliminar
-  una plaza de prueba). Typecheck y lint limpios. Pusheado a main.
+- **Candado de duplicados de Producción** (`8be1d94`): 11 grupos duplicados en
+  Bros limpiados con el criterio de `mejorRepresentante`, índice único
+  `tareas_una_preparacion_una_fila` corrido en prod. Encontrado en el camino:
+  `date::text` no es IMMUTABLE — gotcha nuevo en `rls.md`.
+- **Ruta de implantación** (`a9460ac`…`836d023`): cron de reconocimiento
+  agendado y `AVISOS_ACTIVOS=1` activo en prod; umbrales medidos contra Bros y
+  El Rescoldo (20 tareas y 5 días de pase bien calibrados); racha de facturas
+  cambiada de "consecutiva estricta" a "3 de las últimas 4 semanas" (daba 0 en
+  Bros pese a ~3 meses de uso real) — con OK de Facundo.
+- **Bug del botón de plegar el Coach en desktop** (`1fc2c0b`): tapaba
+  contenido en cualquier pantalla. Fix real fue darle un carril propio en el
+  flex layout (el primer intento, anclarlo arriba, todavía tapaba el header
+  de Reportes — se descartó verificando con capturas). Documentado en `ui.md`.
+- Worktree viejo `sleepy-jepsen` — ya no existía, se resolvió solo.
 
 ## Qué quedó a medias
-- Nada — sesión chica, un solo pedido, cerrado de punta a punta.
+- Nada a medias — todo lo tocado quedó verificado (Vitest 510/510, tsc, build)
+  y pusheado.
 
 ## Probar primero mañana
-- Nada puntual de esta sesión. Lo que quedó pendiente de la sesión de anoche
-  (candado de tareas, avisos, anon key sucia en Vercel) sigue igual — ver
-  🔴 Crítico en `PENDIENTES.md`.
+- Mirar si el cron de avisos mandó algo real cuando algún restaurante junte
+  su segunda foto de progreso semanal.
+- Confirmar con Facundo si la racha de facturas con gracia (4 semanas) se
+  siente bien en uso real, no solo en el dato medido hoy.
 
 ## Próximo paso concreto
-- El **candado** (`supabase/migrations/pendientes/`, 🔴 en `PENDIENTES.md`):
-  limpiar los 14 grupos duplicados en prod y correr el SQL fuera de servicio.
-- Si arrancás tema nuevo: `producto_id` en `plato_recetas` (declarado como
-  límite el 10/09, toca schema+costeo+editor+mise, sesión propia).
+- `/onboarding` sigue sin poder retirarse — la ruta lleva 4 días, hace falta
+  más tiempo de uso real antes de decidir.
+- Backlog 🟢 sin ítems obvios "hacer y listo" que queden — lo que sigue
+  necesita una decisión de producto de Facundo (ver los "Confirmar con
+  Facundo" y "Decisión pendiente" en `PENDIENTES.md`) o explorar a fondo una
+  pantalla grande antes de tocarla.

@@ -218,6 +218,21 @@ Si cada campo persiste solo al perder foco (patrón "editar sin botón Guardar",
 
 `BottomNav` ocupa ~76px. FABs en `bottom: 110` mínimo para no quedar tapados: `<button style={{position:'fixed', bottom:110, right:16}}>`.
 
+## Un botón flotante de shell (no de una pantalla) necesita su propio carril, no una posición adivinada
+
+`position:fixed` con `top:'50%'` tapaba lo que hubiera a media altura de
+cualquier pantalla de escritorio (el toggle del dock del Coach, `DesktopShell.tsx`
+— vivía sobre TODA la app vía `layout.tsx`). El arreglo obvio, anclarlo cerca del
+borde superior tipo `position:absolute` (mismo patrón que el toggle de la
+sidebar), **también falla**: en desktop no hay un `Header` compartido — cada
+pantalla arma el suyo dentro de `main`, con su propia altura y sus propios
+botones a la derecha (ej. "Personal" en Reportes) — así que cualquier offset
+fijo adivinado choca en alguna pantalla tarde o temprano. Solución real: un
+carril propio, siempre presente como hermano flex de `main` (ancho fijo, mismo
+mecanismo que ya reserva espacio la sidebar) — `main` nunca se extiende debajo
+de ese carril, así que no hay con qué chocar en ninguna pantalla, sin tener que
+auditar la altura de cada header una por una.
+
 ## Botón "Guardar" en forms full-screen — NUNCA `position: fixed; bottom: 0`
 
 Queda detrás del `BottomNav` (`z-[100]`). Usar botón **inline** al final del contenido, dentro del scroll de `main` — como `main` va antes del nav en el flex, su contenido ya queda por encima automáticamente:

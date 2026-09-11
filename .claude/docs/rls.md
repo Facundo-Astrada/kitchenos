@@ -124,6 +124,20 @@ listar, descargar, subir, borrar.
 
 `CREATE OR REPLACE FUNCTION` con una lista de parámetros distinta (ej. agregar uno al final) no reemplaza la función vieja — en Postgres la identidad es nombre+tipos de argumentos, así que hace falta `DROP FUNCTION` explícito con la firma vieja antes del `CREATE`. Ese `CREATE` fresco **no hereda** el `SET search_path = public` que la firma anterior tenía (hardening estándar del proyecto, ver `mi_restaurante_id()` arriba) — hay que refijarlo a mano con `ALTER FUNCTION ... SET search_path = public` sobre la firma nueva, o `get_advisors`/`function_search_path_mutable` lo marca de nuevo. Pasó con `reemplazar_menu_preparaciones` al sumarle `p_pax` (sep 2026).
 
+## Una columna generada (`GENERATED ALWAYS AS ... STORED`) rechaza `date::text`
+
+`date::text` no es IMMUTABLE — pasa por `date_out()`, que Postgres marca STABLE
+porque el formato de salida depende del `DateStyle` de la sesión (aunque el
+patrón real que uses, tipo `YYYY-MM-DD`, no dependa de nada). Una columna
+generada exige que toda la expresión sea IMMUTABLE, así que el `ALTER TABLE`
+falla con `generation expression is not immutable` — no es un error de sintaxis,
+es real. Mismo problema con cualquier cast implícito a `text` de un tipo cuya
+función de salida sea STABLE (revisar con `SELECT provolatile FROM pg_proc
+WHERE proname = 'xxx_out'`). Arreglo: armar la fecha a mano con
+`extract(year/month/day FROM d)::text` + `lpad()` (ambos IMMUTABLE) en vez del
+cast directo. Pasó armando la clave del candado de duplicados de `tareas`
+(`kos_fecha_iso()` en `supabase/migrations/pendientes/candado_tareas.sql`).
+
 ## Verificar columnas antes de aplicar políticas
 
 ```bash
