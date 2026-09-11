@@ -250,14 +250,21 @@ export function EstandarizacionView({
               <strong>{platosQueCostean}</strong> de {totalEntidades} {totalMenus > 0 ? 'platos/menús' : 'platos'} con food cost calculable
             </div>
 
-            {/* ── Empezá por acá — cola ordenada por palanca, no alfabético ── */}
+            {/* ── Empezá por acá — cola ordenada por palanca, no alfabético.
+                Con un filtro activo (plaza/categoría) se muestra COMPLETA:
+                caparla ahí es lo que generaba "¿por qué no veo todo lo de
+                Calientes?" — el usuario ya acotó el universo, no hace falta
+                acotarlo de nuevo. Solo se recorta en la vista sin filtrar
+                (puede haber decenas de componentes pendientes en toda la
+                carta), y ahí se avisa cuántos quedan afuera en vez de
+                cortarlos en silencio. ── */}
             {cola.length > 0 && (
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
                   Empezá por acá
                 </div>
                 <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
-                  {cola.slice(0, 8).map((c, idx) => (
+                  {(hayFiltrosActivos ? cola : cola.slice(0, 8)).map((c, idx) => (
                     <button
                       key={c.key}
                       onClick={() => {
@@ -290,6 +297,11 @@ export function EstandarizacionView({
                     </button>
                   ))}
                 </div>
+                {!hayFiltrosActivos && cola.length > 8 && (
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', padding: '6px 2px 0', textAlign: 'center' }}>
+                    +{cola.length - 8} más — filtrá por plaza o categoría para verlos todos
+                  </div>
+                )}
               </div>
             )}
 
