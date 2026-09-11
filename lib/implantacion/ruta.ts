@@ -58,7 +58,10 @@ export interface MetricasRuta {
   tipoNegocioDefinido: boolean
   facturasTotal: number
   facturasMesActual: number
-  /** Semanas consecutivas (hacia atrás desde hoy) con al menos una factura. */
+  /** De las últimas 4 semanas (ventana móvil, no calendario), cuántas
+   *  tuvieron al menos una factura. No exige que sean consecutivas ni que la
+   *  de esta semana ya esté cargada — ver `semanasSeguidasConFactura()` en
+   *  `lib/implantacion/facturas.ts`. */
   facturasSemanasSeguidas: number
   recetasConRendimiento: number
   platosConFoodCost: number
@@ -259,7 +262,7 @@ export const ESTACIONES: Estacion[] = [
     titulo: 'Facturas al día',
     apaga: 'La caja de zapatos con los remitos',
     cargaLabel: 'Las facturas del mes en curso, cargadas',
-    insercionLabel: '3 semanas seguidas sin un hueco',
+    insercionLabel: '3 de las últimas 4 semanas con facturas cargadas',
     carga: m => m.facturasMesActual > 0,
     insercion: m => m.facturasSemanasSeguidas >= 3,
   },

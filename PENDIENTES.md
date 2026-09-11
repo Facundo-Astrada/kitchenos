@@ -56,17 +56,15 @@ corrió en prod el 11/09 — detalle en `HISTORIAL.md`.
      (lograda dos veces en agosto), y hoy está en 3 reconstruyendo la semana.
      El umbral pide "toda la semana operativa sin faltar una", ni regalado ni
      imposible. Sin cambios.
-   - **⚠️ 3 semanas de facturas seguidas (estación 3.2) — hoy da 0 en Bros
-     pese a ~3 meses de carga casi diaria.** La ventana es móvil (últimos 7
-     días desde HOY, no semana calendario) y el último `fecha_factura`
-     cargado es del 03/09 — 8 días sin uno nuevo alcanzan para resetear a 0
-     una racha que venía perfecta. **No lo toqué**: no puedo distinguir desde
-     los datos si es un bache real de carga o solo el algoritmo siendo
-     demasiado estricto con el "hoy" — y esta estación es `clave: true`
-     (hunde el resto del hito si no pasa), así que tocar su cálculo cambia lo
-     que ve un cliente real. Decisión de Facundo: dejarlo así (mide lo que
-     mide) o darle algo de gracia (ej. "3 de las últimas 4 semanas" en vez de
-     3 consecutivas estrictas).
+   - ~~3 semanas de facturas seguidas (estación 3.2) daba 0 en Bros pese a ~3
+     meses de carga casi diaria~~ **resuelto 11/09, con OK de Facundo**: la
+     racha estricta (0 si faltaba la de esta semana) se cambió a "cuántas de
+     las últimas 4 semanas tuvieron al menos una factura" — tolera un bache
+     de carga sin resetear meses de hábito a cero, pero decae solo si el
+     hábito realmente murió (`lib/implantacion/facturas.ts`, extraída de
+     `useRutaImplantacion.ts` con 6 tests nuevos, incluido el caso real de
+     Bros como regresión). Label de la estación actualizado para no prometer
+     "sin un hueco". Vitest 510/510, build limpio.
 
 ### Invitación por email falla a veces — falta SMTP propio
 🔒 **Bloqueado, no es código.** Supabase manda con su mailer compartido (2

@@ -21,6 +21,7 @@ import {
   calcularProgreso, type ConfirmacionesManuales, SIN_CONFIRMACIONES,
 } from '@/lib/implantacion/progreso'
 import type { MetricasRuta } from '@/lib/implantacion/ruta'
+import { semanasSeguidasConFactura } from '@/lib/implantacion/facturas'
 
 const METRICAS_CERO: MetricasRuta = {
   tipoNegocioDefinido: false, facturasTotal: 0, facturasMesActual: 0,
@@ -51,27 +52,6 @@ interface RespuestaRuta {
 
 const ISO = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-
-/**
- * Semanas consecutivas hacia atrás con al menos una factura.
- *
- * Es el checkpoint más importante de la ruta (estación 3.2) y por eso se calcula
- * de verdad y no con un `count > N`: "cargó 40 facturas de golpe una vez" y
- * "carga todas las semanas" son situaciones opuestas que un total no distingue.
- */
-export function semanasSeguidasConFactura(fechas: string[], hoy = new Date()): number {
-  if (fechas.length === 0) return 0
-  const set = new Set(fechas)
-  let semanas = 0
-  for (let s = 0; s < 52; s++) {
-    const desde = new Date(hoy); desde.setDate(desde.getDate() - (s + 1) * 7)
-    const hasta = new Date(hoy); hasta.setDate(hasta.getDate() - s * 7)
-    const hayEnLaSemana = [...set].some(f => f > ISO(desde) && f <= ISO(hasta))
-    if (!hayEnLaSemana) break
-    semanas++
-  }
-  return semanas
-}
 
 async function fetchRuta(key: string): Promise<RespuestaRuta> {
   const rid = key.slice('ruta-'.length)
