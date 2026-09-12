@@ -160,12 +160,18 @@ export function CargaRapidaIngredientes({ filas, onChange, stockProductos, recet
 
   return (
     <div>
-      <div style={{ background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
+      {/* `overflow: visible` (no `hidden`) — el desplegable de sugerencias de
+          cada fila se posiciona `absolute` debajo de ella; con `hidden` la
+          última fila (la única, en una receta recién creada) lo recortaba
+          por completo y la búsqueda quedaba invisible aunque sí encontraba
+          coincidencias. */}
+      <div style={{ background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)', overflow: 'visible' }}>
         {filas.map((fila, idx) => (
           <FilaRapidaRow
             key={fila.id} fila={fila} idx={idx}
             stockProductos={stockProductos} recetasDisponibles={recetasDisponibles}
             autoFocus={!!autoFocus && idx === 0}
+            isLast={idx === filas.length - 1}
             nombreRefs={nombreRefs} cantidadRefs={cantidadRefs}
             onUpdate={updateFila} onRemove={removeFila} onConfirm={confirmarYSiguiente}
           />
@@ -183,12 +189,17 @@ export function CargaRapidaIngredientes({ filas, onChange, stockProductos, recet
   )
 }
 
-function FilaRapidaRow({ fila, idx, stockProductos, recetasDisponibles, autoFocus, nombreRefs, cantidadRefs, onUpdate, onRemove, onConfirm }: {
+function FilaRapidaRow({ fila, idx, stockProductos, recetasDisponibles, autoFocus, isLast, nombreRefs, cantidadRefs, onUpdate, onRemove, onConfirm }: {
   fila: FilaIngredienteRapido
   idx: number
   stockProductos: StockItem[]
   recetasDisponibles: RecetaConCosto[]
   autoFocus: boolean
+  // Ahora que el contenedor es `overflow: visible` (ver arriba), la última
+  // fila ya no puede apoyarse en el recorte del padre para esconder este
+  // borde — sin esta condición se veía una línea de más sobresaliendo por
+  // debajo de la esquina redondeada del contenedor.
+  isLast: boolean
   nombreRefs: React.MutableRefObject<Map<number, HTMLInputElement>>
   cantidadRefs: React.MutableRefObject<Map<number, HTMLInputElement>>
   onUpdate: (id: number, patch: Partial<FilaIngredienteRapido>) => void
@@ -246,7 +257,7 @@ function FilaRapidaRow({ fila, idx, stockProductos, recetasDisponibles, autoFocu
     <div style={{ position: 'relative' }}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 0,
-        borderBottom: '1px solid var(--border)',
+        borderBottom: isLast ? 'none' : '1px solid var(--border)',
       }}>
         <span className="material-symbols-outlined" style={{ fontSize: 14, color: esSubreceta ? 'var(--accent)' : 'var(--text-3)', flexShrink: 0, marginLeft: 8 }}>
           {esSubreceta ? 'menu_book' : 'inventory_2'}
