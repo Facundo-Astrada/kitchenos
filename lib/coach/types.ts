@@ -21,3 +21,13 @@ export interface PendingAction {
   campos: CampoUI[]
   warnings: string[]
 }
+
+/**
+ * Acceso directo a una pantalla, ofrecido por el server tras ejecutar una tool.
+ * No lo decide el modelo: sale del id real que la herramienta encontró.
+ */
+export interface CoachLink {
+  label: string
+  href: string
+  icono?: string
+}

@@ -2,8 +2,8 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { COACH_HIGHLIGHT_IDS as _COACH_HIGHLIGHT_IDS } from '@/lib/coach/highlights'
-import { COACH_ERROR_MARK, COACH_PENDING_MARK } from '@/lib/coach/stream'
-import type { PendingAction } from '@/lib/coach/types'
+import { COACH_ERROR_MARK, COACH_PENDING_MARK, COACH_LINKS_MARK } from '@/lib/coach/stream'
+import type { PendingAction, CoachLink } from '@/lib/coach/types'
 
 export { _COACH_HIGHLIGHT_IDS as COACH_HIGHLIGHT_IDS }
 
@@ -13,6 +13,8 @@ export interface CoachMessage {
   content: string
   timestamp: Date
   options?: string[]
+  /** Accesos directos a una pantalla, armados por el server con ids reales. */
+  links?: CoachLink[]
 }
 
 interface CoachContext {
@@ -24,6 +26,27 @@ interface CoachOptions {
   // Si se define, la conversación activa se persiste en localStorage bajo esta key
   // (sobrevive recargas). El historial de conversaciones se maneja aparte (lib/coach/history).
   storageKey?: string | null
+}
+
+/** Dónde termina el texto visible: en el primer marker de metadata que aparezca. */
+function corteDeMetadata(buffer: string): number {
+  const idx = [COACH_PENDING_MARK, COACH_LINKS_MARK]
+    .map(m => buffer.indexOf(m))
+    .filter(i => i >= 0)
+  return idx.length ? Math.min(...idx) : buffer.length
+}
+
+/** Parsea el JSON que sigue a un marker. Cada marker va hasta el siguiente (o al final). */
+function extraerMark<T>(buffer: string, mark: string): T | null {
+  const i = buffer.indexOf(mark)
+  if (i < 0) return null
+  const desde = i + mark.length
+  const otros = [COACH_PENDING_MARK, COACH_LINKS_MARK]
+    .filter(m => m !== mark)
+    .map(m => buffer.indexOf(m, desde))
+    .filter(j => j >= 0)
+  const hasta = otros.length ? Math.min(...otros) : buffer.length
+  try { return JSON.parse(buffer.slice(desde, hasta)) as T } catch { return null }
 }
 
 export function useKitchenCoach(opts?: CoachOptions) {
@@ -57,7 +80,7 @@ export function useKitchenCoach(opts?: CoachOptions) {
     try {
       const raw = localStorage.getItem(storageKey)
       if (raw) {
-        const parsed = JSON.parse(raw) as Array<{ id: string; role: 'user' | 'assistant'; content: string; timestamp: string; options?: string[] }>
+        const parsed = JSON.parse(raw) as Array<{ id: string; role: 'user' | 'assistant'; content: string; timestamp: string; options?: string[]; links?: CoachLink[] }>
         setMessages(parsed.map(m => ({ ...m, timestamp: new Date(m.timestamp) })))
       }
     } catch { /* ignore */ }
@@ -154,10 +177,10 @@ export function useKitchenCoach(opts?: CoachOptions) {
           break
         }
 
-        // El marker de acción pendiente (si lo hay) va SIEMPRE al final del stream —
-        // no mostrar el marker+JSON como texto visible mientras se recibe.
-        const pendIdx = buffer.indexOf(COACH_PENDING_MARK)
-        const visibleBuffer = pendIdx >= 0 ? buffer.slice(0, pendIdx) : buffer
+        // Los markers de metadata (acción pendiente, accesos directos) van SIEMPRE
+        // al final del stream — el texto visible termina en el PRIMERO que aparezca,
+        // para no pintar el marker+JSON mientras se recibe.
+        const visibleBuffer = buffer.slice(0, corteDeMetadata(buffer))
 
         // Respuestas estructuradas (JSON con highlight/options) no se muestran en vivo:
         // se dejan los puntos suspensivos hasta parsear al final. El resto se streamea.
@@ -168,13 +191,10 @@ export function useKitchenCoach(opts?: CoachOptions) {
 
       if (streamErr) throw new Error(streamErr)
 
-      // ── Stream completo — extraer acción pendiente (si la hay) antes de parsear el texto ──
-      let pendingActionParsed: PendingAction | null = null
-      const pendIdxFinal = buffer.indexOf(COACH_PENDING_MARK)
-      const rawText = pendIdxFinal >= 0 ? buffer.slice(0, pendIdxFinal) : buffer
-      if (pendIdxFinal >= 0) {
-        try { pendingActionParsed = JSON.parse(buffer.slice(pendIdxFinal + COACH_PENDING_MARK.length)) } catch { /* ignore */ }
-      }
+      // ── Stream completo — extraer la metadata del final antes de parsear el texto ──
+      const rawText = buffer.slice(0, corteDeMetadata(buffer))
+      const pendingActionParsed = extraerMark<PendingAction>(buffer, COACH_PENDING_MARK)
+      const linksParsed = extraerMark<CoachLink[]>(buffer, COACH_LINKS_MARK)
 
       // ── Parsear respuesta estructurada si la hay ──
       let text = rawText
@@ -205,6 +225,7 @@ export function useKitchenCoach(opts?: CoachOptions) {
           content: text || 'Sin respuesta',
           timestamp: new Date(),
           options: opts && opts.length > 0 ? opts : undefined,
+          links: linksParsed && linksParsed.length > 0 ? linksParsed : undefined,
         } : m)
       )
     } catch (e: unknown) {

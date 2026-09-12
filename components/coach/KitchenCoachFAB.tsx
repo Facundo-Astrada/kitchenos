@@ -6,6 +6,7 @@ import { useKitchenCoach } from '@/lib/hooks/useKitchenCoach'
 import { useMerma } from '@/lib/hooks/useMerma'
 import MermaBottomSheet from '@/components/merma/MermaBottomSheet'
 import { CoachActionCard } from '@/components/coach/CoachActionCard'
+import { CoachLinks } from '@/components/coach/CoachLinks'
 import { type TourStep, TOURS } from '@/lib/coach/tours'
 import { useSheetCount } from '@/lib/ui/chrome'
 
@@ -753,6 +754,8 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
                         {m.content === '' ? <div className="kc-typing"><span /><span /><span /></div> : m.content}
                       </div>
                     </div>
+                    {/* Navegar cierra el panel flotante: si no, tapa la pantalla a la que se acaba de ir. */}
+                    {m.links && !loading && <CoachLinks links={m.links} marginLeft={30} onNavigate={close} />}
                     {isLastAssistant && m.options && !loading && (
                       <div style={{ marginLeft: 30, marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                         {m.options.map((opt, oi) => (

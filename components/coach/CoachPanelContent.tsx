@@ -6,6 +6,7 @@ import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
 import { listConvos, archiveConvo, deleteConvo, toMessages, type ArchivedConvo } from '@/lib/coach/history'
 import { CoachActionCard } from '@/components/coach/CoachActionCard'
+import { CoachLinks } from '@/components/coach/CoachLinks'
 
 const NARANJA = '#f97316'
 
@@ -312,6 +313,7 @@ export function CoachPanelContent({ variant = 'page', writesScreenContext = fals
                       {m.content === '' ? <TypingDots /> : m.content}
                     </div>
                   </div>
+                  {m.links && !loading && <CoachLinks links={m.links} />}
                   {isLastAssistant && m.options && !loading && (
                     <div style={{ marginLeft: 36, marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {m.options.map((opt, oi) => (

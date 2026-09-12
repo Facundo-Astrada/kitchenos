@@ -3,17 +3,17 @@ import { createClient } from '@/lib/supabase/server'
 import { COACH_HIGHLIGHT_IDS } from '@/lib/coach/highlights'
 import { calcularSugerenciaProduccion } from '@/lib/produccion/sugerencia'
 import { fetchAllRows } from '@/lib/supabase/paginate'
-import { COACH_ERROR_MARK, COACH_PENDING_MARK } from '@/lib/coach/stream'
+import { COACH_ERROR_MARK, COACH_PENDING_MARK, COACH_LINKS_MARK } from '@/lib/coach/stream'
 import { clasificarErrorIA, errorSinApiKey, respuestaErrorIA, statusErrorIA } from '@/lib/ia/errores'
 import { registrarUsoIA } from '@/lib/ia/costos'
 import { getRestauranteId } from '@/lib/coach/restaurante'
 import { getPermisosServer, puedeEjecutarTool } from '@/lib/permisos/server'
 import { COACH_COST_TOOLS } from '@/lib/coach/tools/registry'
 import { ganadorClaro, etiquetaDesambiguacion, puntuar } from '@/lib/coach/busqueda'
-import { buscarProductos, buscarRecetas, nombresCandidatos, type ProductoCoach } from '@/lib/coach/catalogo'
-import { calcFoodCost } from '@/lib/hooks/useRecetas'
+import { buscarProductos, buscarRecetas, nombresCandidatos, recetaMasCompleta, type ProductoCoach } from '@/lib/coach/catalogo'
+import { calcFoodCost } from '@/lib/recetas/costo'
 import { proposeAction, COACH_MUTATING_TOOLS } from '@/lib/coach/tools/propose'
-import type { PendingAction } from '@/lib/coach/types'
+import type { PendingAction, CoachLink } from '@/lib/coach/types'
 import type { Ingrediente } from '@/types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -542,7 +542,15 @@ const COACH_TOOLS = [
 
 type ToolInput = Record<string, unknown>
 
-async function executeTool(name: string, input: ToolInput, supabase: SupabaseClient, restauranteId: string | null, verCostos: boolean = true): Promise<string> {
+/**
+ * Ejecuta una herramienta y devuelve el texto que ve el modelo.
+ *
+ * `links` es un colector de salida: las tools que resuelven UNA entidad
+ * concreta (la ficha de una receta) empujan ahí el acceso a su pantalla. Va por
+ * afuera del texto porque el chat se renderiza plano y porque el href tiene que
+ * salir del id que la tool resolvió, no de que el modelo copie bien un UUID.
+ */
+async function executeTool(name: string, input: ToolInput, supabase: SupabaseClient, restauranteId: string | null, verCostos: boolean = true, links: CoachLink[] = []): Promise<string> {
   if (!restauranteId) return 'Error: no pude identificar tu restaurante. No ejecuté la acción.'
   const hoy = new Date().toISOString().split('T')[0]
 
@@ -577,8 +585,12 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
         return `Encontré varias recetas que coinciden con "${query}":\n${lista}\n\nDecime cuál te interesa para ver la ficha completa.`
       }
 
-      const duplicadas = coincidencias.filter(c => c.item.nombre === ganador.nombre).length
-      const r = ganador
+      // Entre homónimas hay que elegir la que tenga ingredientes cargados, no
+      // la primera que devuelva la base: en Bros una de las dos "Mbeju" está
+      // vacía y era justo la que se estaba contestando.
+      const homonimas = coincidencias.filter(c => c.item.nombre === ganador.nombre).map(c => c.item)
+      const duplicadas = homonimas.length
+      const r = duplicadas > 1 ? await recetaMasCompleta(supabase, homonimas) : ganador
       const { data: ingsData, error: errIngs } = await supabase.from('ingredientes')
         .select('id, receta_id, nombre, cantidad, unidad, costo_unitario, unidad_costo')
         .eq('receta_id', r.id)
@@ -595,6 +607,12 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
       // Misma fórmula que usa el Recetario, para que el Coach no diga un número
       // distinto al de la pantalla.
       const { costo_porcion, food_cost_pct } = calcFoodCost(ings, Number(r.porciones) || 1, precio)
+      // Un solo ingrediente sin costo ya invalida el total: el número que sale
+      // no es "aproximado", es otro número. En Bros, 279 de 341 recetas con
+      // ingredientes tienen alguno sin costear (sep 2026), así que informarlo
+      // igual seria dar un dato inventado la mayoria de las veces.
+      const sinCosto = ings.filter(i => !i.costo_unitario).length
+      const costeada = ings.length > 0 && sinCosto === 0
 
       let result = `Ficha técnica: ${r.nombre}\n`
       if (r.categoria) result += `Categoría: ${r.categoria}\n`
@@ -604,19 +622,16 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
       // el modelo no puede decir un número que nunca recibió. Esconder un chip
       // en la UI no serviría de nada — la respuesta se arma de este lado.
       if (verCostos && precio > 0) result += `Precio venta: ${fmtARS(precio)}\n`
-      if (verCostos && costo_porcion > 0) result += `Costo por porción: ${fmtARS(costo_porcion)}\n`
-      if (verCostos && food_cost_pct > 0) result += `Food cost: ${Math.round(food_cost_pct)}%\n`
+      if (verCostos && costeada && costo_porcion > 0) result += `Costo por porción: ${fmtARS(costo_porcion)}\n`
+      if (verCostos && costeada && food_cost_pct > 0) result += `Food cost: ${Math.round(food_cost_pct)}%\n`
 
       if (ings.length > 0) {
-        result += `\nIngredientes:\n`
+        result += `\nIngredientes (${ings.length}):\n`
         for (const ing of ings) {
           result += `- ${ing.nombre}: ${ing.cantidad} ${ing.unidad ?? ''}\n`
         }
-        // Sin esto el food cost miente por abajo y nadie se entera — es el
-        // eslabón roto que describe la cadena del food cost en el prompt.
-        const sinCosto = ings.filter(i => !i.costo_unitario).length
         if (verCostos && sinCosto > 0) {
-          result += `(${sinCosto} de ${ings.length} ingredientes no tienen costo vinculado, así que el food cost real es más alto que el calculado.)\n`
+          result += `\nCosto: NO calculable. ${sinCosto} de ${ings.length} ingredientes no tienen precio vinculado al stock. NO informes un costo ni un food cost de esta receta — decí que falta vincular esos ingredientes en el Recetario.\n`
         }
       } else {
         result += `\n(Esta receta no tiene ingredientes cargados.)\n`
@@ -626,6 +641,9 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
         const proc = String(r.procedimiento)
         result += `\nPreparación:\n${proc.length > 600 ? proc.slice(0, 600) + '...' : proc}`
       }
+
+      // Acceso a la ficha completa. Sale del id resuelto, no del modelo.
+      links.push({ label: `Abrir ${r.nombre} en Recetario`, href: `/recetario/${r.id}`, icono: 'menu_book' })
 
       // Los duplicados de recetario son frecuentes (Bros tiene "Mbejú" x4).
       // Decirlo evita que el usuario crea que el Coach eligió al azar.
@@ -1091,6 +1109,9 @@ Reglas:
       // Cap de 1 draft por request completo (puede abarcar varias rondas): si el modelo pide
       // una segunda tool mutante en el mismo mensaje, se le pide esperar a que se resuelva la primera.
       let pendingActionForResponse: PendingAction | null = null
+      // Accesos directos que junten las tools de este turno (ej. la ficha de la
+      // receta que se consultó). Se emiten al cerrar, junto con la acción pendiente.
+      const linksDelTurno: CoachLink[] = []
       // Consumo acumulado de TODAS las rondas del loop agéntico: un turno del Coach
       // puede ser 3-4 llamadas a la API, y el costo del turno es la suma. Se asienta
       // una sola fila en `ia_uso` al cerrar el stream (ver finally).
@@ -1207,7 +1228,7 @@ Reglas:
                 toolResults.push({ type: 'tool_result', tool_use_id: toolUses[i].id, content: toolResultText })
                 if (pendingAction) pendingActionForResponse = pendingAction
               } else {
-                const result = await executeTool(name, parsedInputs[i], supabase, restauranteId, permisos?.verCostos ?? false)
+                const result = await executeTool(name, parsedInputs[i], supabase, restauranteId, permisos?.verCostos ?? false, linksDelTurno)
                 toolResults.push({ type: 'tool_result', tool_use_id: toolUses[i].id, content: result })
               }
             }
@@ -1225,6 +1246,12 @@ Reglas:
         // límite de 4 rondas sin que el modelo cerrara con texto — la tarjeta igual llega.
         if (pendingActionForResponse) {
           try { send(COACH_PENDING_MARK + JSON.stringify(pendingActionForResponse)) } catch { /* stream ya cerrado */ }
+        }
+        if (linksDelTurno.length > 0) {
+          // Dedup por href: si el modelo consultó la misma receta dos veces en
+          // el turno, el botón tiene que aparecer una sola vez.
+          const unicos = [...new Map(linksDelTurno.map(l => [l.href, l])).values()].slice(0, 4)
+          try { send(COACH_LINKS_MARK + JSON.stringify(unicos)) } catch { /* stream ya cerrado */ }
         }
         // Un asiento por turno del Coach, aunque el turno haya fallado a mitad:
         // los tokens ya consumidos se pagan igual y tienen que contar para el tope.

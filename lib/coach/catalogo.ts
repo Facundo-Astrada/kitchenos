@@ -95,6 +95,38 @@ export async function buscarCartaItems(
 }
 
 /**
+ * Entre recetas que se llaman IGUAL, la que tiene contenido.
+ *
+ * El caso real: Bros tiene dos "Mbeju" — una con 6 ingredientes, 18 porciones y
+ * procedimiento, y una cáscara vacía sin nada. La búsqueda las puntúa idéntico
+ * (mismo nombre) y devolvía la que viniera primero, que era la vacía: el
+ * usuario preguntaba la ficha técnica y recibía una receta sin ingredientes.
+ *
+ * Cuenta ingredientes de todas las candidatas en UNA query y se queda con la
+ * más completa. Solo se llama cuando hay empate de nombre.
+ */
+export async function recetaMasCompleta(
+  supabase: SupabaseClient,
+  candidatas: RecetaCoach[],
+): Promise<RecetaCoach> {
+  if (candidatas.length <= 1) return candidatas[0]
+  const { data, error } = await supabase.from('ingredientes')
+    .select('receta_id')
+    .in('receta_id', candidatas.map(r => r.id))
+    .limit(1000)
+  if (error) console.error('[coach/catalogo] recetaMasCompleta:', error.message)
+
+  const conteo = new Map<string, number>()
+  for (const row of (data ?? []) as Array<{ receta_id: string }>) {
+    conteo.set(row.receta_id, (conteo.get(row.receta_id) ?? 0) + 1)
+  }
+  // Ingredientes primero (es lo que se fue a buscar), después procedimiento.
+  const puntajeDe = (r: RecetaCoach) =>
+    (conteo.get(r.id) ?? 0) * 100 + (r.procedimiento ? 10 : 0) + (r.precio_venta ? 1 : 0)
+  return [...candidatas].sort((a, b) => puntajeDe(b) - puntajeDe(a))[0]
+}
+
+/**
  * El producto que el usuario quiso decir, o null si no hay uno claro.
  * Para las tools que actúan sobre UN producto (ajustar stock, registrar merma).
  */

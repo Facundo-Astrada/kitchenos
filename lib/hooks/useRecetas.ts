@@ -25,26 +25,16 @@ export type RecetaConCosto = Receta & {
 // para no tocar a los consumidores existentes (mismo criterio que
 // PLAZAS_OPS/SECCIONES_OPS en carta/ComposicionEditor.tsx).
 export { canonUnit, unitConversionFactor }
+// calcFoodCost se mudó a lib/recetas/costo.ts (lógica pura, usable desde API
+// routes). Se re-exporta para no tocar los imports que ya la traen de acá.
+import { calcFoodCost } from '@/lib/recetas/costo'
+export { calcFoodCost }
 
 // Ventana durante la cual un evento de realtime con un id que acabamos de
 // escribir se considera el eco de nuestra propia escritura y se ignora —
 // mismo criterio que useTareas.ts. Sin esto, cada mutación optimista de acá
 // abajo queda pisada por el refetch completo que dispara su propio eco.
 const ECO_REALTIME_MS = 5_000
-
-export function calcFoodCost(ingredientes: Ingrediente[], porciones: number, precioVenta: number): FoodCostCalc {
-  // `cantidad` es la cantidad bruta (lo que se compra). El costo = bruta × precio.
-  // merma_pct no se re-aplica acá porque ya está incorporado en la cantidad bruta ingresada.
-  // unitConversionFactor corrige cuando unidad del ingrediente ≠ unidad del precio (ej: g vs kg).
-  const costo_total = ingredientes.reduce((sum, i) => {
-    const factor = unitConversionFactor(i.unidad ?? '', i.unidad_costo ?? i.unidad ?? '')
-    return sum + i.cantidad * factor * (i.costo_unitario ?? 0)
-  }, 0)
-  const costo_porcion = porciones > 0 ? costo_total / porciones : 0
-  const food_cost_pct = precioVenta > 0 ? (costo_porcion / precioVenta) * 100 : 0
-  const margen_bruto = precioVenta - costo_porcion
-  return { costo_total, costo_porcion, food_cost_pct, margen_bruto }
-}
 
 function mapReceta(r: Record<string, unknown>): RecetaConCosto {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

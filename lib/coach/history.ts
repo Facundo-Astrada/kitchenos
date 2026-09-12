@@ -4,8 +4,9 @@
 // viven acá bajo `kc_convos_<rid>`. Sin DB: es historial por dispositivo, suficiente
 // para no perder el hilo al recargar y poder volver a chats recientes.
 import type { CoachMessage } from '@/lib/hooks/useKitchenCoach'
+import type { CoachLink } from '@/lib/coach/types'
 
-interface SerMsg { id: string; role: 'user' | 'assistant'; content: string; timestamp: string; options?: string[] }
+interface SerMsg { id: string; role: 'user' | 'assistant'; content: string; timestamp: string; options?: string[]; links?: CoachLink[] }
 
 export interface ArchivedConvo {
   id: string
@@ -46,7 +47,7 @@ export function archiveConvo(rid: string, messages: CoachMessage[]): void {
     id: crypto.randomUUID(),
     title: tituloDe(utiles),
     updatedAt: new Date().toISOString(),
-    messages: utiles.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp.toISOString(), options: m.options })),
+    messages: utiles.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp.toISOString(), options: m.options, links: m.links })),
   }
   saveConvos(rid, [convo, ...listConvos(rid)])
 }
@@ -57,5 +58,5 @@ export function deleteConvo(rid: string, id: string): void {
 }
 
 export function toMessages(convo: ArchivedConvo): CoachMessage[] {
-  return convo.messages.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: new Date(m.timestamp), options: m.options }))
+  return convo.messages.map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: new Date(m.timestamp), options: m.options, links: m.links }))
 }
