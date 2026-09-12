@@ -11,6 +11,9 @@ import type { RecetaConCosto } from '@/lib/hooks/useRecetas'
 import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
 
 const UNIDADES_PRODUCTO = ['kg', 'g', 'l', 'ml', 'u']
+// Una subreceta usada como ingrediente solo se costea por peso — nunca litros
+// ni "unidad" (ver seleccionar()/buscar() más abajo, siempre $/g por debajo).
+const UNIDADES_SUBRECETA = ['g', 'kg']
 
 export interface FilaIngredienteRapido {
   id: number
@@ -63,7 +66,9 @@ export function calcularTotalesRapido(filas: FilaIngredienteRapido[], porciones:
   for (const f of filas) {
     const cant = parseFloat(f.cantidad.replace(',', '.')) || 0
     costoTotal += cant * f.costoUnitario
-    if (f.tipo === 'producto') pesoBrutoG += pesoEnGramos(cant, f.unidad)
+    // Antes solo contaba productos — una subreceta cargada por gramaje (ver
+    // buscar()/seleccionar() más abajo) también es peso real del plato.
+    pesoBrutoG += pesoEnGramos(cant, f.unidad)
   }
   const porcionesN = porciones > 0 ? porciones : 1
   const costoPorcion = costoTotal / porcionesN
@@ -229,12 +234,19 @@ function FilaRapidaRow({ fila, idx, stockProductos, recetasDisponibles, autoFocu
         tipo: 'producto', nombre: p.nombre, unidad: p.unidad, costoUnitario: p.precio_unitario || 0,
         detalle: p.precio_unitario > 0 ? `$${p.precio_unitario.toLocaleString('es-AR')}/${p.unidad}` : p.unidad,
       }))
+    // Subreceta como ingrediente: siempre por gramaje, nunca por porción — el
+    // costo_porcion asume "se usa una porción entera del batch", que rara vez
+    // es el caso real (ver plato_recetas.gramaje). r.costoPorGramo ya prioriza
+    // peso_escurrido_g (neto post-cocción) sobre peso_total_g (bruto) sobre
+    // la suma cruda de ingredientes (lib/recetas/peso.ts). Sin ningún peso
+    // cargado en la subreceta, no hay de dónde sacar un $/g real — se deja en
+    // 0 en vez de inventar uno con costo_porcion, para que se note el hueco.
     const recs: Sugerencia[] = recetasDisponibles
       .filter(r => r.nombre.toLowerCase().includes(query))
       .slice(0, 5)
       .map(r => ({
-        tipo: 'subreceta', nombre: r.nombre, unidad: 'unidad', costoUnitario: r.food_cost.costo_porcion, subrecetaId: r.id,
-        detalle: `receta · $${r.food_cost.costo_porcion.toFixed(0)}/porc.`,
+        tipo: 'subreceta', nombre: r.nombre, unidad: 'g', costoUnitario: r.costoPorGramo ?? 0, subrecetaId: r.id,
+        detalle: r.costoPorGramo ? `receta · $${(r.costoPorGramo * 1000).toLocaleString('es-AR', { maximumFractionDigits: 0 })}/kg` : 'receta · falta peso neto',
       }))
     const combinadas = [...prods, ...recs].slice(0, 8)
     setSugerencias(combinadas)
@@ -245,7 +257,7 @@ function FilaRapidaRow({ fila, idx, stockProductos, recetasDisponibles, autoFocu
     onUpdate(fila.id, {
       nombre: s.nombre, tipo: s.tipo, unidad: s.unidad, costoUnitario: s.costoUnitario,
       subrecetaId: s.tipo === 'subreceta' ? s.subrecetaId : null,
-      cantidad: fila.cantidad || (s.tipo === 'subreceta' ? '1' : ''),
+      cantidad: fila.cantidad || (s.tipo === 'subreceta' ? '100' : ''),
     })
     setShowSug(false)
     setTimeout(() => cantidadRefs.current.get(fila.id)?.focus(), 50)
@@ -285,19 +297,15 @@ function FilaRapidaRow({ fila, idx, stockProductos, recetasDisponibles, autoFocu
           enterKeyHint="done"
           style={{ width: 44, border: 'none', background: 'transparent', outline: 'none', padding: '9px 2px 9px 6px', fontSize: 13, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: 'var(--text-1)', textAlign: 'right' }}
         />
-        {esSubreceta ? (
-          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', padding: '9px 4px', minWidth: 30 }}>porc.</span>
-        ) : (
-          <button onClick={() => setShowUnitPicker(!showUnitPicker)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '9px 2px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', fontFamily: 'inherit', minWidth: 22, textAlign: 'left' }}>
-            {fila.unidad}
-          </button>
-        )}
+        <button onClick={() => setShowUnitPicker(!showUnitPicker)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '9px 2px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', fontFamily: 'inherit', minWidth: 22, textAlign: 'left' }}>
+          {fila.unidad}
+        </button>
         <input
           type="text" inputMode="decimal"
           value={fila.costoUnitario || ''}
           onChange={e => onUpdate(fila.id, { costoUnitario: parseFloat(e.target.value.replace(',', '.')) || 0 })}
           placeholder="$0"
-          title={esSubreceta ? 'Costo por porción' : 'Costo por unidad'}
+          title="Costo por unidad"
           style={{ width: 44, border: 'none', background: 'transparent', outline: 'none', padding: '9px 2px', fontSize: 11, fontWeight: 600, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', textAlign: 'right' }}
         />
         <button onClick={() => onRemove(fila.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px 8px 8px 2px', opacity: .3, flexShrink: 0, display: 'flex' }}>
@@ -305,10 +313,22 @@ function FilaRapidaRow({ fila, idx, stockProductos, recetasDisponibles, autoFocu
         </button>
       </div>
 
-      {showUnitPicker && !esSubreceta && (
+      {showUnitPicker && (
         <div style={{ position: 'absolute', right: 0, top: '100%', zIndex: 30, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,.15)', display: 'flex', overflow: 'hidden' }}>
-          {UNIDADES_PRODUCTO.map(u => (
-            <button key={u} onClick={() => { onUpdate(fila.id, { unidad: u }); setShowUnitPicker(false) }}
+          {/* Subreceta: solo peso (g/kg) — costoUnitario siempre vive en $/g
+              por debajo (ver seleccionar()/buscar()), así que al cambiar de
+              unidad hay que reescalarlo o cantidad×costoUnitario queda mal
+              por un factor de 1000. */}
+          {(esSubreceta ? UNIDADES_SUBRECETA : UNIDADES_PRODUCTO).map(u => (
+            <button key={u} onClick={() => {
+              if (esSubreceta && u !== fila.unidad) {
+                const factor = u === 'kg' && fila.unidad === 'g' ? 1000 : u === 'g' && fila.unidad === 'kg' ? 1 / 1000 : 1
+                onUpdate(fila.id, { unidad: u, costoUnitario: fila.costoUnitario * factor })
+              } else {
+                onUpdate(fila.id, { unidad: u })
+              }
+              setShowUnitPicker(false)
+            }}
               style={{ padding: '8px 12px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: u === fila.unidad ? 700 : 500, background: u === fila.unidad ? 'var(--navy)' : 'transparent', color: u === fila.unidad ? '#fff' : 'var(--text-2)' }}
             >{u}</button>
           ))}

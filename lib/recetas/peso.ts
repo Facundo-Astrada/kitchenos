@@ -73,12 +73,14 @@ export function smartQty(qty: number, unit: string): { qty: string; unit: string
   return { qty: fmtQty, unit }
 }
 
-// Peso total (bruto) de una receta, en gramos — preferí el dato cargado a
-// mano (peso_total_g, el que se pesa al terminar de cocinar) porque es el
-// real; sin eso, se deriva de la suma de ingredientes (lo que ya se usa para
-// mostrar "Peso/porción" en el recetario). null = ninguna de las dos fuentes
-// alcanza (ni peso cargado, ni ingredientes con unidad de peso/volumen).
-export function pesoTotalRecetaG(receta: { peso_total_g?: number | null; ingredientes?: IngredientePeso[] }): number | null {
+// Peso total de una receta, en gramos — preferí el dato pesado a mano, del
+// más al menos preciso: peso_escurrido_g (neto, post-cocción, descontando lo
+// que se evapora/derrite/se escurre — lo más parecido a lo que realmente
+// termina en el plato) > peso_total_g (bruto tal como sale de la olla) >
+// suma cruda de ingredientes (estimación, ni pesa la merma de cocción). null
+// = ninguna de las tres fuentes alcanza.
+export function pesoTotalRecetaG(receta: { peso_total_g?: number | null; peso_escurrido_g?: number | null; ingredientes?: IngredientePeso[] }): number | null {
+  if (receta.peso_escurrido_g != null && receta.peso_escurrido_g > 0) return receta.peso_escurrido_g
   if (receta.peso_total_g != null && receta.peso_total_g > 0) return receta.peso_total_g
   const ings = receta.ingredientes ?? []
   if (ings.length === 0) return null
@@ -87,9 +89,11 @@ export function pesoTotalRecetaG(receta: { peso_total_g?: number | null; ingredi
 }
 
 // Costo por gramo de una receta — costoTotal (el del batch completo) ÷ su
-// peso total. Es lo que permite costear un plato por el gramaje real de un
-// componente en vez de asumir "una porción entera" (ver plato_recetas.gramaje).
-export function costoPorGramoDeReceta(receta: { peso_total_g?: number | null; ingredientes?: IngredientePeso[] }, costoTotal: number): number | null {
+// peso total (ver pesoTotalRecetaG). Es lo que permite costear un plato por
+// el gramaje real de un componente en vez de asumir "una porción entera"
+// (ver plato_recetas.gramaje), y usarla como subreceta-ingrediente de OTRA
+// receta con la misma precisión en vez de su costo_porcion.
+export function costoPorGramoDeReceta(receta: { peso_total_g?: number | null; peso_escurrido_g?: number | null; ingredientes?: IngredientePeso[] }, costoTotal: number): number | null {
   const pesoG = pesoTotalRecetaG(receta)
   return pesoG && pesoG > 0 ? costoTotal / pesoG : null
 }

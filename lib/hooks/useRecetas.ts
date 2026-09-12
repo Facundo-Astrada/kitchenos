@@ -45,7 +45,7 @@ function mapReceta(r: Record<string, unknown>): RecetaConCosto {
     status: (r.status as string) || 'published',
     ingredientes: ings,
     food_cost,
-    costoPorGramo: costoPorGramoDeReceta({ peso_total_g: r.peso_total_g as number | null, ingredientes: ings }, food_cost.costo_total),
+    costoPorGramo: costoPorGramoDeReceta({ peso_total_g: r.peso_total_g as number | null, peso_escurrido_g: r.peso_escurrido_g as number | null, ingredientes: ings }, food_cost.costo_total),
   }
 }
 
@@ -54,7 +54,7 @@ function mapReceta(r: Record<string, unknown>): RecetaConCosto {
 // optimistas de acá abajo, no solo por el fetch inicial.
 function conFoodCostRecalculado(r: RecetaConCosto): RecetaConCosto {
   const food_cost = calcFoodCost(r.ingredientes ?? [], r.porciones ?? 1, r.precio_venta ?? 0)
-  return { ...r, food_cost, costoPorGramo: costoPorGramoDeReceta({ peso_total_g: r.peso_total_g, ingredientes: r.ingredientes ?? [] }, food_cost.costo_total) }
+  return { ...r, food_cost, costoPorGramo: costoPorGramoDeReceta({ peso_total_g: r.peso_total_g, peso_escurrido_g: r.peso_escurrido_g, ingredientes: r.ingredientes ?? [] }, food_cost.costo_total) }
 }
 
 async function fetchRecetasData(key: string): Promise<RecetaConCosto[]> {
@@ -170,7 +170,7 @@ export function useRecetas() {
         created_at: new Date().toISOString(),
         ingredientes: ings,
         food_cost,
-        costoPorGramo: costoPorGramoDeReceta({ peso_total_g: datos.peso_total_g, ingredientes: ings }, food_cost.costo_total),
+        costoPorGramo: costoPorGramoDeReceta({ peso_total_g: datos.peso_total_g, peso_escurrido_g: datos.peso_escurrido_g, ingredientes: ings }, food_cost.costo_total),
         status: datos.status || 'published',
         activa: true,
       }

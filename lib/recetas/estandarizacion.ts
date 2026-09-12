@@ -83,7 +83,7 @@ export function nivelDeReceta(
   const faltantes: string[] = []
 
   const pesoG = pesoTotalRecetaG(r)
-  const costoVerificado = r.peso_total_g != null && r.peso_total_g > 0
+  const costoVerificado = (r.peso_escurrido_g != null && r.peso_escurrido_g > 0) || (r.peso_total_g != null && r.peso_total_g > 0)
   if (pesoG == null) faltantes.push('peso neto')
   else if (!costoVerificado) faltantes.push('pesar el resultado final (hoy se estima por el crudo)')
 

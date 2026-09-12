@@ -287,18 +287,18 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
     }
   }, [editingIngId])
 
-  // Corrige el costo de ingredientes que son sub-recetas: usa datos live en vez del costo_unitario guardado
+  // Corrige el costo de ingredientes que son sub-recetas: usa datos live en
+  // vez del costo_unitario guardado. `subR.costoPorGramo` (useRecetas.ts) ya
+  // prioriza peso_escurrido_g (neto post-cocción) sobre peso_total_g (bruto)
+  // sobre la suma cruda de ingredientes — antes esta función recalculaba con
+  // esa suma cruda directo, ignorando el peso realmente pesado.
   function corregirSubreceta(i: Ingrediente): Ingrediente {
     if (i.tipo !== 'subreceta' || !i.subreceta_id) return i
     const subR = recetas.find(r => r.id === i.subreceta_id)
     if (!subR) return i
-    const { netoG } = calcPesoNetos(subR.ingredientes ?? [])
-    const porciones = subR.porciones ?? 1
-    const pesoNetoPorcionG = porciones > 0 && netoG > 0 ? netoG / porciones : 0
-    if (pesoNetoPorcionG > 0 && subR.food_cost.costo_porcion > 0) {
-      const costoGNeto = subR.food_cost.costo_porcion / pesoNetoPorcionG
+    if (subR.costoPorGramo && subR.costoPorGramo > 0) {
       const cantidadG = toGramos(i.cantidad, i.unidad)
-      if (cantidadG > 0) return { ...i, cantidad: cantidadG, unidad: 'g', unidad_costo: 'g', costo_unitario: costoGNeto }
+      if (cantidadG > 0) return { ...i, cantidad: cantidadG, unidad: 'g', unidad_costo: 'g', costo_unitario: subR.costoPorGramo }
     }
     // Fallback por porción si no tiene peso medible
     return { ...i, costo_unitario: subR.food_cost.costo_porcion, unidad: 'unidad', unidad_costo: 'unidad' }
@@ -1380,11 +1380,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                       )
                       .slice(0, 8)
                       .map(r => {
-                        const { netoG } = calcPesoNetos(r.ingredientes ?? [])
-                        const porciones = r.porciones ?? 1
-                        const pesoNetoPorcionG = porciones > 0 && netoG > 0 ? netoG / porciones : 0
-                        const costoGNeto = pesoNetoPorcionG > 0 && r.food_cost.costo_porcion > 0
-                          ? r.food_cost.costo_porcion / pesoNetoPorcionG : null
+                        const costoGNeto = r.costoPorGramo && r.costoPorGramo > 0 ? r.costoPorGramo : null
                         const costoKgNeto = costoGNeto ? costoGNeto * 1000 : null
                         return (
                           <button
