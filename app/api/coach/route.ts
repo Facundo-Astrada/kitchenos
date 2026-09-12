@@ -9,8 +9,12 @@ import { registrarUsoIA } from '@/lib/ia/costos'
 import { getRestauranteId } from '@/lib/coach/restaurante'
 import { getPermisosServer, puedeEjecutarTool } from '@/lib/permisos/server'
 import { COACH_COST_TOOLS } from '@/lib/coach/tools/registry'
+import { ganadorClaro, etiquetaDesambiguacion, puntuar } from '@/lib/coach/busqueda'
+import { buscarProductos, buscarRecetas, nombresCandidatos, type ProductoCoach } from '@/lib/coach/catalogo'
+import { calcFoodCost } from '@/lib/hooks/useRecetas'
 import { proposeAction, COACH_MUTATING_TOOLS } from '@/lib/coach/tools/propose'
 import type { PendingAction } from '@/lib/coach/types'
+import type { Ingrediente } from '@/types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 const fmtARS = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
@@ -158,6 +162,13 @@ Un desvío que señalás (food cost alto, un vencimiento, un faltante) no tiene 
 La mise en place ya es trabajo que cuenta antes de que abra el restaurante: si preguntan por qué importa completarla temprano, esa es la razón.
 
 El estándar de cada casa (qué food cost es aceptable, cuánto pesa la velocidad vs. la terminación) lo define esta cocina, no un promedio del rubro. Compará contra el propio histórico del restaurante, no contra "lo normal", salvo que el usuario lo pida.
+
+## Sos cocinero, no solo el manual de la app
+Te van a preguntar cosas de oficio que no están en ninguna tabla: temperaturas seguras de cocción, tiempos, cortes, conservación, fermentación, sustituciones, por qué se cortó una salsa. Contestalas con tu conocimiento, directo y con números concretos cuando los haya (ej. cerdo: 63 °C al centro con 3 minutos de reposo, o 71 °C si va bien cocido; pollo 74 °C; cadena de frío por debajo de 5 °C). NO desvíes a una pantalla de la app: HACCP sirve para REGISTRAR temperaturas, no para saber cuál corresponde. Esa distinción importa — si preguntan a qué temperatura se cocina algo y los mandás a HACCP, no respondiste.
+
+Dos aclaraciones cuando apliquen, en una línea, sin sermón:
+- Si es una norma de seguridad alimentaria, decilo (es lo que un inspector espera ver).
+- Si la casa tiene su propio estándar cargado (una ficha técnica, un rango de equipo en HACCP), ese manda sobre el número general: mencionalo y, si hace falta, buscalo con la herramienta.
 
 ## La aplicación: KitchenOS
 KitchenOS es el sistema con el que esta cocina se gestiona. El usuario puede estar recién aprendiendo a usarlo: explicáselo con claridad y, si pregunta dónde está algo, mostráselo con highlight. Sé breve y operativo, con jerga de cocina.
@@ -416,6 +427,41 @@ const COACH_TOOLS = [
     },
   },
   {
+    name: 'consultar_agenda',
+    description: 'Devuelve los eventos del calendario del restaurante en un rango de fechas (reservas, eventos, feriados, notas con fecha). Usar cuando el usuario pregunta "¿qué tengo el sábado?", "¿qué eventos hay esta semana?", "¿tenemos algo mañana?", "¿cuándo es el próximo evento?". Si no se pasa rango, devuelve los próximos 14 días.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        desde: { type: 'string', description: 'Fecha de inicio (inclusive) en formato YYYY-MM-DD. Si no se especifica, hoy.' },
+        hasta: { type: 'string', description: 'Fecha de fin (inclusive) en formato YYYY-MM-DD. Si no se especifica, 14 días después de "desde".' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'consultar_haccp',
+    description: 'Consulta el estado de HACCP del restaurante: productos por vencer o vencidos, últimas temperaturas registradas de los equipos (con los que quedaron fuera de rango) y tareas de limpieza según su frecuencia. Usar cuando el usuario pregunta "¿qué se vence?", "¿cómo están las heladeras?", "¿qué limpieza toca hoy?", "¿hay algo fuera de rango?".',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        que: { type: 'string', enum: ['vencimientos', 'temperaturas', 'limpieza', 'todo'], description: 'Qué parte consultar. Default "todo".' },
+        dias: { type: 'number', description: 'Para vencimientos: ventana en días hacia adelante. Default 7.' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'consultar_turnos',
+    description: 'Devuelve quién trabaja en una fecha, con su horario, puesto y plaza asignada. Usar cuando el usuario pregunta "¿quién entra hoy?", "¿quién está mañana a la noche?", "¿quién cubre parrilla el sábado?", "¿cuántos somos hoy?".',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        fecha: { type: 'string', description: 'Fecha en formato YYYY-MM-DD. Si no se especifica, hoy.' },
+      },
+      required: [],
+    },
+  },
+  {
     name: 'cargar_producto',
     description: 'Da de alta un producto nuevo en el stock. Usar cuando el usuario quiere cargar/crear un producto que todavía no existe ("cargá un producto nuevo…", "agregá X al stock"). Si el producto ya podría existir, conviene primero consultar_stock. Preguntá los datos que falten (unidad, precio) antes de crear.',
     input_schema: {
@@ -511,31 +557,44 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
       const query = String(input.query ?? '').trim()
       if (!query) return 'Error: falta el nombre de la receta a buscar.'
 
-      const { data: coincidencias } = await supabase.from('recetas')
-        .select('id, nombre, categoria, porciones, tiempo_min, food_cost, precio_venta, procedimiento')
-        .eq('restaurante_id', restauranteId)
-        .eq('activa', true)
-        .ilike('nombre', `%${query}%`)
-        .limit(4)
+      // Búsqueda normalizada: sin tildes, tolerante al plural y también por
+      // categoría. El `ilike` que había acá no encontraba "Mbejú" si el usuario
+      // escribía "mbeju" — Postgres ignora mayúsculas, no diacríticos.
+      // Ver lib/coach/busqueda.ts.
+      const coincidencias = await buscarRecetas(supabase, restauranteId, query, 6)
 
-      if (!coincidencias || coincidencias.length === 0)
+      if (coincidencias.length === 0)
         return `No encontré ninguna receta que coincida con "${query}". Puede que todavía no esté cargada en el recetario.`
 
-      if (coincidencias.length > 1) {
-        const lista = coincidencias.map((r: Record<string, unknown>) => `- ${r.nombre} (${r.categoria ?? 'sin categoría'})`).join('\n')
-        return `Encontré ${coincidencias.length} recetas que coinciden con "${query}":\n${lista}\n\nDecime cuál te interesa para ver la ficha completa.`
+      const ganador = ganadorClaro(coincidencias)
+      if (!ganador) {
+        // Solo se desambigua cuando las opciones son DISTINGUIBLES entre sí.
+        // Antes se listaban los nombres pelados, y en Bros salían cuatro
+        // líneas que decían "Mbejú" — imposible elegir.
+        const lista = coincidencias.slice(0, 5)
+          .map(({ item }) => `- ${etiquetaDesambiguacion(item, item.porciones ? `${item.porciones} porciones` : undefined)}`)
+          .join('\n')
+        return `Encontré varias recetas que coinciden con "${query}":\n${lista}\n\nDecime cuál te interesa para ver la ficha completa.`
       }
 
-      // Una sola coincidencia — devolver la ficha completa
-      const r = coincidencias[0] as Record<string, unknown>
-      const { data: ings } = await supabase.from('ingredientes')
-        .select('nombre, cantidad, unidad, costo_unitario')
+      const duplicadas = coincidencias.filter(c => c.item.nombre === ganador.nombre).length
+      const r = ganador
+      const { data: ingsData, error: errIngs } = await supabase.from('ingredientes')
+        .select('id, receta_id, nombre, cantidad, unidad, costo_unitario, unidad_costo')
         .eq('receta_id', r.id)
-        .limit(30)
+        .limit(60)
+      if (errIngs) console.error('[/api/coach] buscar_receta ingredientes:', errIngs.message)
+      const ings: Ingrediente[] = ((ingsData ?? []) as Array<Partial<Ingrediente>>).map(i => ({
+        id: i.id ?? '', receta_id: i.receta_id ?? '', nombre: i.nombre ?? '',
+        cantidad: Number(i.cantidad) || 0, unidad: i.unidad ?? '',
+        costo_unitario: i.costo_unitario ?? null, unidad_costo: i.unidad_costo ?? null,
+      }))
 
-      const fmtARS = (n: number) => `$${Math.round(n).toLocaleString('es-AR')}`
-      const fc = Number(r.food_cost) || 0
       const precio = Number(r.precio_venta) || 0
+      // El food cost se CALCULA desde los ingredientes — `recetas` no lo guarda.
+      // Misma fórmula que usa el Recetario, para que el Coach no diga un número
+      // distinto al de la pantalla.
+      const { costo_porcion, food_cost_pct } = calcFoodCost(ings, Number(r.porciones) || 1, precio)
 
       let result = `Ficha técnica: ${r.nombre}\n`
       if (r.categoria) result += `Categoría: ${r.categoria}\n`
@@ -545,18 +604,33 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
       // el modelo no puede decir un número que nunca recibió. Esconder un chip
       // en la UI no serviría de nada — la respuesta se arma de este lado.
       if (verCostos && precio > 0) result += `Precio venta: ${fmtARS(precio)}\n`
-      if (verCostos && fc > 0) result += `Food cost: ${Math.round(fc)}%\n`
+      if (verCostos && costo_porcion > 0) result += `Costo por porción: ${fmtARS(costo_porcion)}\n`
+      if (verCostos && food_cost_pct > 0) result += `Food cost: ${Math.round(food_cost_pct)}%\n`
 
-      if (ings && ings.length > 0) {
+      if (ings.length > 0) {
         result += `\nIngredientes:\n`
-        for (const ing of ings as Array<{ nombre: string; cantidad: number; unidad: string; costo_unitario: number | null }>) {
-          result += `- ${ing.nombre}: ${ing.cantidad} ${ing.unidad}\n`
+        for (const ing of ings) {
+          result += `- ${ing.nombre}: ${ing.cantidad} ${ing.unidad ?? ''}\n`
         }
+        // Sin esto el food cost miente por abajo y nadie se entera — es el
+        // eslabón roto que describe la cadena del food cost en el prompt.
+        const sinCosto = ings.filter(i => !i.costo_unitario).length
+        if (verCostos && sinCosto > 0) {
+          result += `(${sinCosto} de ${ings.length} ingredientes no tienen costo vinculado, así que el food cost real es más alto que el calculado.)\n`
+        }
+      } else {
+        result += `\n(Esta receta no tiene ingredientes cargados.)\n`
       }
 
       if (r.procedimiento) {
         const proc = String(r.procedimiento)
         result += `\nPreparación:\n${proc.length > 600 ? proc.slice(0, 600) + '...' : proc}`
+      }
+
+      // Los duplicados de recetario son frecuentes (Bros tiene "Mbejú" x4).
+      // Decirlo evita que el usuario crea que el Coach eligió al azar.
+      if (duplicadas > 1) {
+        result += `\n\n(Ojo: "${r.nombre}" está cargada ${duplicadas} veces en el recetario. Esta es una de ellas — conviene unificarlas.)`
       }
 
       return result
@@ -582,35 +656,52 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
     if (name === 'consultar_stock') {
       const producto = String(input.producto ?? '').trim()
       if (!producto) return 'Error: falta el nombre del producto a consultar.'
-      const { data } = await supabase.from('productos')
-        .select('nombre, stock_actual, unidad, stock_minimo, stock_critico, categoria')
-        .eq('restaurante_id', restauranteId)
-        .eq('activo', true)
-        .ilike('nombre', `%${producto}%`)
-        .order('stock_actual', { ascending: true })
-        .limit(15)
-      const rows = (data ?? []) as Array<{ nombre: string; stock_actual: number; unidad: string | null; stock_minimo: number | null; stock_critico: number | null; categoria: string | null }>
-      if (rows.length === 0) return `No encontré ningún producto que coincida con "${producto}" en el stock. Puede que no esté cargado o tenga otro nombre.`
-      const estado = (p: typeof rows[number]) =>
+      // Busca por nombre Y por categoría. El `ilike` que había acá contestaba
+      // "¿cuánta carne hay?" con los 3 productos que tienen la palabra "carne"
+      // en el nombre, ignorando los 47 de la categoría Carnes (vacío, asado,
+      // lomo...). Ver lib/coach/busqueda.ts.
+      const encontrados = await buscarProductos(supabase, restauranteId, producto, 40)
+      if (encontrados.length === 0) return `No encontré ningún producto que coincida con "${producto}" en el stock. Puede que no esté cargado o tenga otro nombre.`
+
+      const rows = encontrados.map(r => r.item)
+      const estado = (p: ProductoCoach) =>
         p.stock_actual <= (p.stock_critico ?? 0) ? 'CRÍTICO'
         : p.stock_actual <= (p.stock_minimo ?? 0) ? 'bajo' : 'ok'
-      const lineas = rows.map(p =>
+      const linea = (p: ProductoCoach) =>
         `- ${p.nombre}: ${p.stock_actual} ${p.unidad ?? ''} (${estado(p)}${p.stock_minimo ? `, mínimo ${p.stock_minimo}` : ''})`
-      ).join('\n')
-      return `Stock de "${producto}":\n${lineas}`
+
+      // Una consulta genérica ("carne", "verduras") puede traer decenas. Se
+      // muestran los más relevantes y se resume el resto en vez de cortar y
+      // dejar al modelo creyendo que eso es todo lo que hay.
+      const MOSTRAR = 15
+      const visibles = rows.slice(0, MOSTRAR)
+      let out = `Stock de "${producto}" (${rows.length} producto${rows.length !== 1 ? 's' : ''}):\n` + visibles.map(linea).join('\n')
+      if (rows.length > MOSTRAR) {
+        out += `\n…y ${rows.length - MOSTRAR} más. Se listaron los de mayor coincidencia; pedí uno puntual para verlo en detalle.`
+      }
+      const criticos = rows.filter(p => estado(p) === 'CRÍTICO').length
+      if (criticos > 0) out += `\n\nDe esos, ${criticos} está${criticos !== 1 ? 'n' : ''} en crítico.`
+      return out
     }
 
     if (name === 'ultimo_precio') {
       const producto = String(input.producto ?? '').trim()
       if (!producto) return 'Error: falta el nombre del producto.'
+      type FacRef = { fecha_factura: string | null; created_at: string | null; proveedor_nombre: string | null }
+      type Row = { producto_nombre: string; precio_unitario: number | string; unidad: string | null; facturas: FacRef | FacRef[] }
+
+      // `factura_items` no se puede traer entero (10.464 filas en Bros), así
+      // que el filtro sigue siendo del lado de PostgREST. Lo que se arregla es
+      // CONTRA QUÉ se filtra: el término del usuario más los nombres canónicos
+      // del catálogo que le coinciden, para que "vacio" llegue a "Vacío".
+      const candidatos = await nombresCandidatos(supabase, restauranteId, producto)
+      const patron = candidatos.map(n => `producto_nombre.ilike.%${n.replace(/[,()]/g, ' ').trim()}%`).join(',')
       const { data } = await supabase.from('factura_items')
         .select('producto_nombre, precio_unitario, unidad, facturas!inner(fecha_factura, created_at, proveedor_nombre, restaurante_id)')
         .eq('facturas.restaurante_id', restauranteId)
-        .ilike('producto_nombre', `%${producto}%`)
+        .or(patron)
         .gt('precio_unitario', 0)
         .limit(400)
-      type FacRef = { fecha_factura: string | null; created_at: string | null; proveedor_nombre: string | null }
-      type Row = { producto_nombre: string; precio_unitario: number | string; unidad: string | null; facturas: FacRef | FacRef[] }
       const raw = (data ?? []) as Row[]
       if (raw.length === 0) return `No encontré compras de "${producto}" en las facturas. Puede que todavía no se haya cargado ninguna factura con ese producto.`
       const items = raw.map(r => {
@@ -619,14 +710,146 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
         return { nombre: r.producto_nombre, precio: Number(r.precio_unitario), unidad: r.unidad, proveedor: f?.proveedor_nombre ?? null, fecha }
       }).filter(r => r.fecha && r.precio > 0).sort((a, b) => b.fecha.localeCompare(a.fecha))
       if (items.length === 0) return `No encontré precios válidos de "${producto}" en las facturas.`
-      const ultimo = items[0]
+
+      // El `.or()` de arriba trae varios productos parecidos, así que ordenar
+      // solo por fecha devolvería el último que se compró, no el que se pidió.
+      // Se elige primero el nombre más relevante y recién ahí el más reciente.
+      const mejorNombre = items
+        .map(r => ({ nombre: r.nombre, puntaje: puntuar({ nombre: r.nombre }, producto) }))
+        .sort((a, b) => b.puntaje - a.puntaje)[0]?.nombre ?? items[0].nombre
+      const delProducto = items.filter(r => r.nombre === mejorNombre)
+      const ultimo = delProducto[0]
+
       let txt = `Último precio de ${ultimo.nombre}: ${fmtARS(ultimo.precio)} por ${ultimo.unidad ?? 'unidad'} (${ultimo.fecha}${ultimo.proveedor ? `, ${ultimo.proveedor}` : ''}).`
-      const anterior = items.find(r => r.fecha < ultimo.fecha && r.precio !== ultimo.precio)
+      const anterior = delProducto.find(r => r.fecha < ultimo.fecha && r.precio !== ultimo.precio)
       if (anterior) {
         const varPct = ((ultimo.precio - anterior.precio) / anterior.precio) * 100
         txt += ` Antes lo pagabas ${fmtARS(anterior.precio)} (${anterior.fecha}) → ${varPct >= 0 ? 'subió' : 'bajó'} ${Math.abs(Math.round(varPct))}%.`
       }
       return txt
+    }
+
+    if (name === 'consultar_agenda') {
+      const desde = String(input.desde ?? '').trim() || hoy
+      const hasta = String(input.hasta ?? '').trim()
+        || new Date(new Date(desde + 'T00:00:00Z').getTime() + 14 * 86_400_000).toISOString().slice(0, 10)
+
+      // Un evento cuenta si su rango se SOLAPA con la ventana, no solo si
+      // arranca adentro: un evento de 3 días que empezó ayer sigue siendo "lo
+      // que tengo hoy".
+      const { data } = await supabase.from('eventos')
+        .select('titulo, descripcion, tipo, fecha_inicio, fecha_fin, hora_inicio, hora_fin')
+        .eq('restaurante_id', restauranteId)
+        .lte('fecha_inicio', hasta)
+        .or(`fecha_fin.gte.${desde},fecha_fin.is.null`)
+        .order('fecha_inicio', { ascending: true })
+        .limit(60)
+
+      const evs = (data ?? []) as Array<{ titulo: string; descripcion: string | null; tipo: string | null; fecha_inicio: string; fecha_fin: string | null; hora_inicio: string | null; hora_fin: string | null }>
+      if (evs.length === 0) return `No hay nada agendado entre el ${desde} y el ${hasta}. El calendario está vacío en esa ventana (no es un error: puede que no se haya cargado nada).`
+
+      const lineas = evs.map(e => {
+        const rango = e.fecha_fin && e.fecha_fin !== e.fecha_inicio ? `${e.fecha_inicio} al ${e.fecha_fin}` : e.fecha_inicio
+        const hora = e.hora_inicio ? ` ${e.hora_inicio.slice(0, 5)}${e.hora_fin ? `-${e.hora_fin.slice(0, 5)}` : ''}` : ''
+        const det = e.descripcion ? ` — ${e.descripcion.slice(0, 120)}` : ''
+        return `- ${rango}${hora}: ${e.titulo}${e.tipo ? ` (${e.tipo})` : ''}${det}`
+      }).join('\n')
+      return `Agenda del ${desde} al ${hasta} (${evs.length}):\n${lineas}`
+    }
+
+    if (name === 'consultar_haccp') {
+      const que = String(input.que ?? 'todo').trim() || 'todo'
+      const dias = Number(input.dias) > 0 ? Number(input.dias) : 7
+      const limite = new Date(Date.now() + dias * 86_400_000).toISOString().slice(0, 10)
+      const partes: string[] = []
+
+      if (que === 'vencimientos' || que === 'todo') {
+        const { data } = await supabase.from('haccp_vencimientos')
+          .select('producto_nombre, fecha_vencimiento, ubicacion, lote, status')
+          .eq('restaurante_id', restauranteId)
+          .in('status', ['vigente', 'por_vencer'])
+          .lte('fecha_vencimiento', limite)
+          .order('fecha_vencimiento', { ascending: true })
+          .limit(30)
+        const v = (data ?? []) as Array<{ producto_nombre: string; fecha_vencimiento: string; ubicacion: string | null; lote: string | null }>
+        partes.push(v.length === 0
+          ? `Vencimientos: nada vence en los próximos ${dias} días.`
+          : `Vencimientos (${v.length} en ${dias} días):\n` + v.map(x => {
+              const vencido = x.fecha_vencimiento < hoy
+              return `- ${x.producto_nombre}: ${vencido ? 'VENCIDO el' : 'vence'} ${x.fecha_vencimiento}${x.ubicacion ? ` (${x.ubicacion})` : ''}${x.lote ? `, lote ${x.lote}` : ''}`
+            }).join('\n'))
+      }
+
+      if (que === 'temperaturas' || que === 'todo') {
+        const { data: equipos } = await supabase.from('haccp_equipos')
+          .select('id, nombre, temp_min, temp_max, ubicacion')
+          .eq('restaurante_id', restauranteId).eq('activo', true).limit(40)
+        const eqs = (equipos ?? []) as Array<{ id: string; nombre: string; temp_min: number | null; temp_max: number | null; ubicacion: string | null }>
+        if (eqs.length === 0) {
+          partes.push('Temperaturas: no hay equipos cargados en HACCP.')
+        } else {
+          const { data: regs } = await supabase.from('haccp_temperaturas')
+            .select('equipo_id, temperatura, dentro_rango, created_at')
+            .eq('restaurante_id', restauranteId)
+            .order('created_at', { ascending: false })
+            .limit(300)
+          // Última lectura por equipo: se ordena por fecha y se toma la primera
+          // que aparece de cada uno.
+          const ultima = new Map<string, { temperatura: number; dentro_rango: boolean | null; created_at: string }>()
+          for (const r of (regs ?? []) as Array<{ equipo_id: string; temperatura: number; dentro_rango: boolean | null; created_at: string }>) {
+            if (!ultima.has(r.equipo_id)) ultima.set(r.equipo_id, r)
+          }
+          const lineas = eqs.map(e => {
+            const u = ultima.get(e.id)
+            const rango = e.temp_min !== null && e.temp_max !== null ? ` [rango ${e.temp_min}° a ${e.temp_max}°]` : ''
+            if (!u) return `- ${e.nombre}: sin registros${rango}`
+            const fuera = u.dentro_rango === false ? ' FUERA DE RANGO' : ''
+            return `- ${e.nombre}: ${u.temperatura}°${fuera}${rango} (${u.created_at.slice(0, 10)})`
+          }).join('\n')
+          const fuera = eqs.filter(e => ultima.get(e.id)?.dentro_rango === false).length
+          const sinRegistro = eqs.filter(e => !ultima.has(e.id)).length
+          partes.push(`Temperaturas (última lectura de cada equipo):\n${lineas}` +
+            (fuera > 0 ? `\n${fuera} equipo${fuera !== 1 ? 's' : ''} fuera de rango.` : '') +
+            (sinRegistro > 0 ? `\n${sinRegistro} sin ningún registro.` : ''))
+        }
+      }
+
+      if (que === 'limpieza' || que === 'todo') {
+        const { data } = await supabase.from('haccp_limpieza')
+          .select('area, tarea_limpieza, frecuencia, ultimo_registro')
+          .eq('restaurante_id', restauranteId).limit(40)
+        const l = (data ?? []) as Array<{ area: string | null; tarea_limpieza: string; frecuencia: string | null; ultimo_registro: string | null }>
+        partes.push(l.length === 0
+          ? 'Limpieza: no hay tareas cargadas en HACCP.'
+          : `Limpieza (${l.length} tareas):\n` + l.slice(0, 20).map(x =>
+              `- ${x.area ? x.area + ': ' : ''}${x.tarea_limpieza} (${x.frecuencia ?? 'sin frecuencia'}) — última vez: ${x.ultimo_registro ? x.ultimo_registro.slice(0, 10) : 'nunca'}`
+            ).join('\n'))
+      }
+
+      return partes.join('\n\n') || 'No encontré datos de HACCP.'
+    }
+
+    if (name === 'consultar_turnos') {
+      const fecha = String(input.fecha ?? '').trim() || hoy
+      const { data } = await supabase.from('turnos')
+        .select('turno_tipo, hora_entrada, hora_salida, notas, equipo_miembros!inner(nombre, apellido, plaza_asignada, activo, puestos(nombre))')
+        .eq('restaurante_id', restauranteId)
+        .eq('fecha', fecha)
+        .limit(60)
+
+      type Miembro = { nombre: string | null; apellido: string | null; plaza_asignada: string | null; activo: boolean | null; puestos: { nombre: string | null } | { nombre: string | null }[] | null }
+      const rows = (data ?? []) as Array<{ turno_tipo: string | null; hora_entrada: string | null; hora_salida: string | null; notas: string | null; equipo_miembros: Miembro | Miembro[] }>
+      if (rows.length === 0) return `No hay turnos cargados para el ${fecha}. Puede que la planilla de esa semana todavía no se haya armado (Turnos), no que no trabaje nadie.`
+
+      const lineas = rows.map(r => {
+        const m = Array.isArray(r.equipo_miembros) ? r.equipo_miembros[0] : r.equipo_miembros
+        const p = Array.isArray(m?.puestos) ? m?.puestos[0] : m?.puestos
+        const quien = [m?.nombre, m?.apellido].filter(Boolean).join(' ') || 'Sin nombre'
+        const horario = r.hora_entrada ? `${r.hora_entrada.slice(0, 5)}${r.hora_salida ? ` a ${r.hora_salida.slice(0, 5)}` : ''}` : (r.turno_tipo ?? 'sin horario')
+        const rol = [p?.nombre, m?.plaza_asignada].filter(Boolean).join(', ')
+        return `- ${quien}: ${horario}${r.turno_tipo && r.hora_entrada ? ` (${r.turno_tipo})` : ''}${rol ? ` — ${rol}` : ''}${r.notas ? ` · ${r.notas}` : ''}`
+      }).join('\n')
+      return `Turnos del ${fecha} (${rows.length} persona${rows.length !== 1 ? 's' : ''}):\n${lineas}`
     }
 
     if (name === 'gasto_periodo') {
@@ -795,6 +1018,9 @@ Consultas de solo lectura — usalas para responder con NÚMEROS REALES en vez d
 - consultar_ventas: ventas y cubiertos en un rango ("¿cuánto vendí esta semana?").
 - consultar_deudores: saldo de cuenta corriente, general o de un cliente puntual ("¿quién me debe plata?", "¿cuánto me debe Juan?").
 - buscar_receta: ficha técnica de una receta. sugerir_produccion: qué producir un día (solo lectura).
+- consultar_agenda: eventos del calendario en un rango ("¿qué tengo el sábado?", "¿hay algo esta semana?").
+- consultar_haccp: vencimientos, últimas temperaturas de los equipos y tareas de limpieza ("¿qué se vence?", "¿cómo están las heladeras?").
+- consultar_turnos: quién trabaja una fecha, con horario y plaza ("¿quién entra hoy?", "¿quién cubre parrilla el sábado?").
 
 Acciones que MODIFICAN datos — usalas SOLO cuando el usuario lo pide explícitamente:
 - crear_tarea ("creá una tarea…"), marcar_86 ("se acabó el…"), registrar_merma ("se tiraron 2 kg de…").
@@ -803,7 +1029,8 @@ Acciones que MODIFICAN datos — usalas SOLO cuando el usuario lo pide explícit
 - IMPORTANTE: estas herramientas NO ejecutan el cambio al llamarlas — dejan la acción PROPUESTA. El usuario va a ver una tarjeta editable en el chat y tiene que confirmarla ahí. No digas "ya lo hice", "listo, cargado" ni nada que dé a entender que el cambio ya ocurrió — decí algo como "te dejo esto para que confirmes" y cerrá corto.
 
 Reglas:
-- Cuando el usuario pregunta por un dato (stock, precio, gasto, ventas), llamá la herramienta correspondiente en vez de responder de memoria o decir que no sabés.
+- Cuando el usuario pregunta por un dato del restaurante (stock, precio, gasto, ventas, agenda, turnos, vencimientos), llamá la herramienta correspondiente en vez de responder de memoria o decir que no sabés.
+- Si una herramienta no encuentra nada, decí exactamente eso ("no hay X cargado") en vez de dar por hecho que no existe. No cargado y no existente no son lo mismo, y la diferencia le importa al usuario.
 - Si faltan datos para una acción (ej. la unidad al cargar un producto, la cantidad de la merma), preguntá antes de llamar la herramienta. No inventes precios ni cantidades.
 - sugerir_produccion no crea nada — si el usuario quiere convertir la sugerencia en tareas, decile que use el botón "Sugerir producción" en OPS → Planificación.`
 
@@ -832,7 +1059,10 @@ Reglas:
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
+      // 1024 cortaba respuestas que cruzaban dos o tres datos (ej. stock de una
+      // categoría entera + qué producir). El prompt igual lo empuja a ser
+      // breve; esto es el techo, no el objetivo.
+      max_tokens: 2048,
       stream: true,
       system: [
         { type: 'text', text: COACH_STATIC_PROMPT, cache_control: { type: 'ephemeral' } },
@@ -866,7 +1096,10 @@ Reglas:
       // una sola fila en `ia_uso` al cerrar el stream (ver finally).
       const consumo = { entrada: 0, salida: 0, cacheLectura: 0, cacheEscritura: 0 }
       try {
-        for (let round = 0; round < 4; round++) {
+        // 6 rondas, no 4: con las tools de agenda/HACCP/turnos sumadas, una
+        // pregunta normal ("¿qué preparo para el evento del sábado?") encadena
+        // agenda → receta → stock y antes se quedaba sin vueltas a mitad.
+        for (let round = 0; round < 6; round++) {
           if (!anthropicRes.ok || !anthropicRes.body) {
             const mensaje = anthropicRes.ok
               ? 'Sin respuesta del asistente'

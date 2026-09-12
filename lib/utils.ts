@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import { sinAcentos } from '@/lib/texto'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -7,11 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 
 /** Slug ascii en minúsculas, sin diacríticos — usado como key estable (plaza custom, turno de servicio, etc). */
 export function slugify(s: string, fallback = 'item'): string {
-  const sinDiacriticos = s.normalize('NFD').split('').filter(ch => {
-    const code = ch.codePointAt(0)!
-    return code < 0x300 || code > 0x36f
-  }).join('')
-  return sinDiacriticos.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || fallback
+  return sinAcentos(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || fallback
 }
 
 export function formatCurrency(value: number): string {

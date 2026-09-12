@@ -3,6 +3,11 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ModuloId } from '@/lib/constants'
 import type { CampoUI } from '@/lib/coach/types'
 import { hoyOperativo, horaEnTz } from '@/lib/ops/turnos'
+import type { ResultadoBusqueda } from '@/lib/coach/busqueda'
+import {
+  buscarCartaItems, resolverProducto, productoPorNombreExacto,
+  type CartaItemCoach,
+} from '@/lib/coach/catalogo'
 
 const fmtARS = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 
@@ -23,6 +28,18 @@ export interface ToolRegistryEntry<T = Record<string, unknown>> {
   campos: (input: T) => CampoUI[]
   warnings?: (input: T, ctx: { supabase: SupabaseClient; restauranteId: string }) => Promise<string[]>
   execute: (supabase: SupabaseClient, restauranteId: string, input: T) => Promise<{ ok: boolean; message: string }>
+}
+
+/**
+ * Qué platos toca un 86. Solo los de MEJOR coincidencia, no todo lo que se
+ * parezca: si hay cuatro filas "Mbejú" duplicadas son el mismo plato y van las
+ * cuatro, pero un término suelto no debe barrer media carta. Lo que quede por
+ * debajo del puntaje máximo se descarta, y `warnings` avisa cuántos son.
+ */
+function platosAMarcar(res: ResultadoBusqueda<CartaItemCoach>[]): CartaItemCoach[] {
+  if (res.length === 0) return []
+  const max = res[0].puntaje
+  return res.filter(r => r.puntaje === max).map(r => r.item)
 }
 
 const crearTareaSchema = z.object({
@@ -120,21 +137,27 @@ export const COACH_TOOL_REGISTRY: Record<string, ToolRegistryEntry<any>> = {
       { key: 'plato', label: 'Plato (nombre o parte)', tipo: 'texto', requerido: true },
     ],
     warnings: async (input: z.infer<typeof marcar86Schema>, { supabase, restauranteId }) => {
-      const { data } = await supabase.from('carta_items').select('nombre')
-        .eq('restaurante_id', restauranteId).ilike('nombre', `%${input.plato}%`)
-      if (!data || data.length === 0) return [`No encontré ningún plato que coincida con "${input.plato}". Si confirmás, no va a afectar nada.`]
-      if (data.length > 1) return [`Esto va a afectar ${data.length} platos: ${data.map(d => d.nombre).join(', ')}`]
+      const res = await buscarCartaItems(supabase, restauranteId, input.plato)
+      if (res.length === 0) return [`No encontré ningún plato que coincida con "${input.plato}". Si confirmás, no va a afectar nada.`]
+      const afectados = platosAMarcar(res)
+      if (afectados.length > 1) return [`Esto va a afectar ${afectados.length} platos: ${afectados.map(p => p.nombre).join(', ')}`]
       return []
     },
     execute: async (supabase, restauranteId, input: z.infer<typeof marcar86Schema>) => {
+      // Antes esto era un UPDATE con `ilike '%plato%'`, o sea que marcaba 86
+      // todo lo que contuviera el texto. Ahora se resuelven ids concretos con
+      // la búsqueda normalizada (encuentra tildes) y se actualizan esos.
+      const res = await buscarCartaItems(supabase, restauranteId, input.plato)
+      if (res.length === 0) return { ok: false, message: `No encontré ningún plato que coincida con "${input.plato}". No marqué nada.` }
+      const afectados = platosAMarcar(res)
       const { data, error } = await supabase.from('carta_items')
         .update({ disponible: false })
         .eq('restaurante_id', restauranteId)
-        .ilike('nombre', `%${input.plato}%`)
+        .in('id', afectados.map(p => p.id))
         .select('nombre')
       if (error) return { ok: false, message: `Error al marcar 86: ${error.message}` }
       if (!data || data.length === 0) return { ok: false, message: `No encontré ningún plato que coincida con "${input.plato}". No marqué nada.` }
-      return { ok: true, message: `Marcado como 86 (no disponible): ${data.map(d => d.nombre).join(', ')}.` }
+      return { ok: true, message: `Marcado como 86 (no disponible): ${[...new Set(data.map(d => d.nombre))].join(', ')}.` }
     },
   },
 
@@ -152,11 +175,12 @@ export const COACH_TOOL_REGISTRY: Record<string, ToolRegistryEntry<any>> = {
     ],
     execute: async (supabase, restauranteId, input: z.infer<typeof registrarMermaSchema>) => {
       const hoy = hoyOperativo()
-      const { data: prod } = await supabase.from('productos')
-        .select('id, precio_unitario, stock_actual')
-        .eq('restaurante_id', restauranteId)
-        .ilike('nombre', `%${input.producto}%`)
-        .limit(1).maybeSingle()
+      // `ilike ... limit(1)` agarraba el primer producto que contuviera el
+      // texto, sin criterio de cuál era el más parecido y sin encontrar tildes.
+      const match = await resolverProducto(supabase, restauranteId, input.producto)
+      const prod = match
+        ? await supabase.from('productos').select('id, precio_unitario, stock_actual').eq('id', match.id).maybeSingle().then(r => r.data)
+        : null
 
       const costo = prod?.precio_unitario ? Number(prod.precio_unitario) * input.cantidad : 0
       const { error } = await supabase.from('merma').insert({
@@ -199,8 +223,9 @@ export const COACH_TOOL_REGISTRY: Record<string, ToolRegistryEntry<any>> = {
       { key: 'categoria', label: 'Categoría', tipo: 'texto' },
     ],
     execute: async (supabase, restauranteId, input: z.infer<typeof cargarProductoSchema>) => {
-      const { data: existe } = await supabase.from('productos')
-        .select('nombre').eq('restaurante_id', restauranteId).ilike('nombre', input.nombre).limit(1).maybeSingle()
+      // Guard anti-duplicado. El `ilike` exacto no veía "Puré" al cargar
+      // "pure", así que dejaba entrar el duplicado que justo quería evitar.
+      const existe = await productoPorNombreExacto(supabase, restauranteId, input.nombre)
       if (existe) return { ok: false, message: `Ya existe un producto llamado "${existe.nombre}". Si querés cambiar su stock, usá ajustar_stock.` }
 
       const stockActual = input.stock_actual ?? 0
@@ -236,10 +261,10 @@ export const COACH_TOOL_REGISTRY: Record<string, ToolRegistryEntry<any>> = {
       { key: 'operacion', label: 'Operación', tipo: 'select', opciones: ['set', 'sumar', 'restar'] },
     ],
     execute: async (supabase, restauranteId, input: z.infer<typeof ajustarStockSchema>) => {
-      const { data: prod } = await supabase.from('productos')
-        .select('id, nombre, stock_actual, unidad')
-        .eq('restaurante_id', restauranteId).ilike('nombre', `%${input.producto}%`).limit(1).maybeSingle()
-      if (!prod) return { ok: false, message: `No encontré ningún producto que coincida con "${input.producto}" en el stock.` }
+      // Resolución normalizada: el `ilike ... limit(1)` anterior agarraba el
+      // primero que contuviera el texto (sin ranking) y no encontraba tildes.
+      const prod = await resolverProducto(supabase, restauranteId, input.producto)
+      if (!prod) return { ok: false, message: `No encontré ningún producto que coincida con "${input.producto}" en el stock. Si hay varios parecidos, decime el nombre exacto.` }
       const actual = Number(prod.stock_actual) || 0
       const nuevo = input.operacion === 'sumar' ? actual + input.cantidad
         : input.operacion === 'restar' ? Math.max(0, actual - input.cantidad)
