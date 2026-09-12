@@ -15,7 +15,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useSheetOpen } from '@/lib/ui/chrome'
 import type { RecetaConCosto } from '@/lib/hooks/useRecetas'
-import { fileToBase64, callRecetaImport, matchPorNombre, type RecetaIAResult } from '@/lib/recetas/iaImport'
+import { fileToBase64, callRecetaImport, matchPorNombre, parseProcedimiento, formatProcedimiento, type RecetaIAResult } from '@/lib/recetas/iaImport'
 import {
   CargaRapidaIngredientes, TotalesRapidosBar, filasToIngredientesData,
   nuevaFilaRapida, type FilaIngredienteRapido,
@@ -57,6 +57,7 @@ export function RecetaEditSheet({
   const [error, setError] = useState('')
   const [filas, setFilas] = useState<FilaIngredienteRapido[]>([])
   const [porciones, setPorciones] = useState(1)
+  const [pasos, setPasos] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
 
   // Cargar ingredientes con IA (foto/texto) — antes solo se podía tipear fila
@@ -79,6 +80,9 @@ export function RecetaEditSheet({
       })
     }
     if (r.porciones && r.porciones > 0) setPorciones(r.porciones)
+    if (r.procedimiento && r.procedimiento.length > 0) {
+      setPasos(prev => [...prev.filter(p => p.trim()), ...r.procedimiento.filter(p => p.trim())])
+    }
   }
 
   async function runIaImage(file: File) {
@@ -112,7 +116,7 @@ export function RecetaEditSheet({
     let cancel = false
     Promise.all([
       supabase.from('ingredientes').select('*').eq('receta_id', recetaId).order('created_at'),
-      supabase.from('recetas').select('porciones').eq('id', recetaId).maybeSingle(),
+      supabase.from('recetas').select('porciones, procedimiento').eq('id', recetaId).maybeSingle(),
     ]).then(([{ data: ings, error: ingErr }, { data: rec }]) => {
       if (cancel) return
       if (ingErr) { setError(ingErr.message); setLoading(false); return }
@@ -127,6 +131,8 @@ export function RecetaEditSheet({
       }))
       setFilas(rows.length > 0 ? rows : [nuevaFilaRapida()])
       setPorciones((rec?.porciones as number) || 1)
+      const pasosExistentes = parseProcedimiento(rec?.procedimiento as string | null)
+      setPasos(pasosExistentes.length > 0 ? pasosExistentes : [''])
       setLoading(false)
     })
     return () => { cancel = true }
@@ -139,7 +145,11 @@ export function RecetaEditSheet({
       const res = await fetch('/api/recetas/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enrichRecetaId: recetaId, ingredientes: filasToIngredientesData(filas) }),
+        body: JSON.stringify({
+          enrichRecetaId: recetaId,
+          ingredientes: filasToIngredientesData(filas),
+          receta: { procedimiento: formatProcedimiento(pasos) },
+        }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Error al guardar')
@@ -159,7 +169,7 @@ export function RecetaEditSheet({
           <span className="material-symbols-outlined" style={{ color: 'var(--accent)', fontSize: 20 }}>menu_book</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{recetaNombre}</div>
-            <div style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em' }}>Ingredientes de la receta</div>
+            <div style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em' }}>Ingredientes y procedimiento</div>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', padding: 2 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 20 }}>close</span>
@@ -217,6 +227,33 @@ export function RecetaEditSheet({
                 stockProductos={stockProductos}
                 recetasDisponibles={recetasDisponibles}
               />
+
+              <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', margin: '14px 0 6px' }}>
+                Procedimiento
+              </label>
+              {pasos.length > 0 && (
+                <div style={{ border: '1px solid var(--border)', borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
+                  {pasos.map((paso, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 8, padding: '8px 10px', borderBottom: i < pasos.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-3)', flexShrink: 0, paddingTop: 6 }}>{i + 1}.</span>
+                      <textarea value={paso} onChange={e => setPasos(prev => prev.map((p, pi) => pi === i ? e.target.value : p))}
+                        placeholder="Describí este paso…" rows={1}
+                        style={{ flex: 1, padding: '6px 8px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 12, color: 'var(--text-1)', fontFamily: 'inherit', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
+                      <button onClick={() => setPasos(prev => { const next = prev.filter((_, pi) => pi !== i); return next.length > 0 ? next : [''] })}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, opacity: .4, flexShrink: 0, display: 'flex', alignSelf: 'flex-start' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#ef4444' }}>close</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button onClick={() => setPasos(prev => [...prev, ''])} style={{
+                width: '100%', background: 'transparent', border: '1px dashed var(--border)',
+                borderRadius: 10, padding: 9, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                gap: 6, cursor: 'pointer', fontFamily: 'inherit' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 15, color: 'var(--text-3)' }}>add</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)' }}>Agregar paso</span>
+              </button>
             </>
           )}
         </div>

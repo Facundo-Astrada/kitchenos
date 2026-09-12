@@ -84,6 +84,20 @@ export function matchPorNombre<T extends { nombre: string }>(nombre: string, can
   return contains ?? null
 }
 
+// Procedimiento se guarda como texto plano, una línea numerada por paso
+// ("1. Cortar la cebolla") — mismo formato que ya escribía ComposicionEditor
+// al confirmar un import IA. Acá queda compartido para que RecetaEditSheet
+// pueda editar el procedimiento de una receta existente con el mismo
+// round-trip (parsear al abrir, formatear al guardar) sin duplicar el regex.
+export function parseProcedimiento(texto: string | null | undefined): string[] {
+  if (!texto?.trim()) return []
+  return texto.split('\n').map(l => l.replace(/^\d+[.)]\s*/, '').trim()).filter(Boolean)
+}
+
+export function formatProcedimiento(pasos: string[]): string {
+  return pasos.filter(p => p.trim()).map((p, i) => `${i + 1}. ${p.trim()}`).join('\n')
+}
+
 export async function callRecetaImport(
   mode: 'image' | 'text',
   /**

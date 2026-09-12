@@ -10,7 +10,7 @@ import { createClient } from '@/lib/supabase/client'
 import OpsPanel, { type OpsResult } from '@/components/ops/OpsPanel'
 import { SegmentedTabs } from '@/components/ui'
 import PhotoPicker from '@/components/ui/PhotoPicker'
-import { fileToBase64, callRecetaImport, matchPorNombre, type RecetaIAResult } from '@/lib/recetas/iaImport'
+import { fileToBase64, callRecetaImport, matchPorNombre, formatProcedimiento, type RecetaIAResult } from '@/lib/recetas/iaImport'
 import { moverItemSobreItem, moverItemASeccion } from '@/lib/carta/reordenarItems'
 import { fechaProduccion } from '@/lib/menus/activarMenu'
 import { RecetaEditSheet } from '@/components/recetas/RecetaEditSheet'
@@ -336,7 +336,7 @@ function RecetaIAModal({ prefillNombre, productos, restauranteId, categoriasCart
           grupo: null,
         }
       })
-      const procedimiento = pasos.filter(p => p.trim()).map((p, i) => `${i + 1}. ${p.trim()}`).join('\n')
+      const procedimiento = formatProcedimiento(pasos)
       const res = await fetch('/api/recetas/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -610,6 +610,19 @@ export default function ComposicionEditor({
   // orígenes (búsqueda de sección en Menú/Evento, buscador de Plato) le pasan
   // su propio `onCreated` para saber dónde enganchar la receta resultante.
   const [iaImport, setIaImport] = useState<{ prefillNombre: string; onCreated: (id: string, nombre: string) => void } | null>(null)
+  // "Crear receta acá mismo" — a diferencia de "crear idea" (nombre solo) y
+  // del import IA (extrae de una foto/texto), esta arranca vacía pero abre
+  // directo el editor de ingredientes+procedimiento (RecetaEditSheet, con food
+  // cost en vivo) sin pasar por Recetario ni por una foto.
+  async function crearManualParaPlato(nombreCrudo: string) {
+    const nombre = nombreCrudo.trim()
+    if (!nombre) return
+    const id = await crearIdeaReceta(nombre)
+    setLocalDraftIds(prev => new Set(prev).add(id))
+    const nuevoUid = uid()
+    setPlatoRecetas(prev => [...prev, { _uid: nuevoUid, ref_id: id, nombre, porciones: 1, tipo: 'receta' }])
+    setEditRecetaSheet({ id, nombre })
+  }
   function openIaImportForPlato(prefillNombre: string) {
     setIaImport({
       prefillNombre,
@@ -1421,6 +1434,7 @@ export default function ComposicionEditor({
             recipientesUsados={recipientesUsados}
             onCrearIdea={async (n) => { const idNueva = await crearIdeaReceta(n); setLocalDraftIds(prev => new Set(prev).add(idNueva)); return idNueva }}
             onCrearIdeaIA={openIaImportForPlato}
+            onCrearManual={crearManualParaPlato}
           />
         ) : (
           <>
@@ -1569,6 +1583,25 @@ export default function ComposicionEditor({
                         ) : null}
                         {sectionQuery.trim().length >= 2 && searchResults.length === 0 && (
                           <button
+                            onClick={async () => {
+                              const nombreManual = sectionQuery.trim()
+                              if (!nombreManual || creandoIdeaSec) return
+                              setCreandoIdeaSec(true)
+                              try {
+                                const idNueva = await crearIdeaReceta(nombreManual)
+                                setLocalDraftIds(prev => new Set(prev).add(idNueva))
+                                addItemFromSearch(sec, 'receta', idNueva, nombreManual)
+                                setEditRecetaSheet({ id: idNueva, nombre: nombreManual })
+                              } finally { setCreandoIdeaSec(false) }
+                            }}
+                            disabled={creandoIdeaSec}
+                            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 10px', borderRadius: 9, border: 'none', marginTop: 6, background: 'rgba(67,97,160,.1)', color: 'var(--accent)', fontSize: 12, fontWeight: 700, cursor: creandoIdeaSec ? 'default' : 'pointer', fontFamily: 'inherit', opacity: creandoIdeaSec ? .6 : 1 }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit_note</span>
+                            Crear receta acá mismo
+                          </button>
+                        )}
+                        {sectionQuery.trim().length >= 2 && searchResults.length === 0 && (
+                          <button
                             onClick={() => openIaImportForSeccion(sec, sectionQuery.trim())}
                             style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 10px', borderRadius: 9, border: 'none', marginTop: 6, background: 'rgba(67,97,160,.1)', color: 'var(--accent)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>auto_awesome</span>
@@ -1709,7 +1742,7 @@ function PlatoRecetasEditor({
   recetas, productos, platoRecetas, setPlatoRecetas, costoTotal,
   platoSearch, setPlatoSearch, platoShowResults, setPlatoShowResults,
   editingPorcionUid, setEditingPorcionUid, editingPorcionVal, setEditingPorcionVal, uid,
-  draftRecetaIds, recipientesUsados, onCrearIdea, onCrearIdeaIA,
+  draftRecetaIds, recipientesUsados, onCrearIdea, onCrearIdeaIA, onCrearManual,
 }: {
   recetas: RefConCosto[]
   productos: RefConCosto[]
@@ -1729,8 +1762,10 @@ function PlatoRecetasEditor({
   recipientesUsados: string[]
   onCrearIdea: (nombre: string) => Promise<string>
   onCrearIdeaIA: (nombre: string) => void
+  onCrearManual: (nombre: string) => Promise<void>
 }) {
   const [creandoIdea, setCreandoIdea] = useState(false)
+  const [creandoManual, setCreandoManual] = useState(false)
   // OPS panel local — abre/cierra por _uid de la fila (el panel es OpsPanel compartido)
   const [opsPanelUid, setOpsPanelUid] = useState<number | null>(null)
   // Nota libre por componente — abre/cierra por _uid, mismo patrón que OPS.
@@ -1802,6 +1837,19 @@ function PlatoRecetasEditor({
       setEditingPorcionVal('')
     } finally {
       setCreandoIdea(false)
+    }
+  }
+
+  async function crearAcaMismo() {
+    const nombre = platoSearch.trim()
+    if (!nombre || creandoManual) return
+    setCreandoManual(true)
+    try {
+      await onCrearManual(nombre)
+      setPlatoSearch('')
+      setPlatoShowResults(false)
+    } finally {
+      setCreandoManual(false)
     }
   }
 
@@ -2083,6 +2131,18 @@ function PlatoRecetasEditor({
                 {creandoIdea ? 'progress_activity' : 'add_circle'}
               </span>
               {creandoIdea ? 'Creando…' : `Crear "${platoSearch}" como idea en recetario`}
+            </button>
+            <button
+              onMouseDown={e => { e.preventDefault(); crearAcaMismo() }}
+              disabled={creandoManual}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                padding: '9px 14px', borderRadius: 10, border: 'none', marginTop: 6,
+                background: 'rgba(67,97,160,.1)', color: 'var(--accent)', fontSize: 12, fontWeight: 700,
+                cursor: creandoManual ? 'default' : 'pointer', fontFamily: 'inherit', opacity: creandoManual ? .6 : 1 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                {creandoManual ? 'progress_activity' : 'edit_note'}
+              </span>
+              {creandoManual ? 'Creando…' : 'Crear receta acá mismo'}
             </button>
             <button
               onMouseDown={e => { e.preventDefault(); onCrearIdeaIA(platoSearch.trim()) }}
