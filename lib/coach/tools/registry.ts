@@ -87,6 +87,13 @@ const registrarVentaSchema = z.object({
 const pasoMenuSchema = z.object({
   paso: z.string().trim().min(1),    // ej. "Entrada", "Principal", "Prepostre", "Postre"
   nombre: z.string().trim().min(1),  // ej. "Tamal", "Bondiola ahumada con puré"
+  // Antes crear_evento no escribía ninguno de los dos: el evento quedaba en
+  // Planificación con prioridad NULL y plaza NULL, distinto de lo que arma
+  // ComposicionEditor a mano (default prioridad 'media', ver page.tsx). Sin
+  // enum de plaza a propósito: cada restaurante tiene las suyas (fijas +
+  // custom vía lib/constants.ts), mismo criterio que crear_tarea.
+  plaza: z.string().trim().optional(),
+  prioridad: z.enum(['critica', 'alta', 'media', 'baja']).default('media'),
 })
 
 const crearEventoSchema = z.object({
@@ -329,6 +336,8 @@ export const COACH_TOOL_REGISTRY: Record<string, ToolRegistryEntry<any>> = {
         paso: p.paso,
         nombre: p.nombre,
         orden: idx,
+        plaza: p.plaza ?? null,
+        prioridad: p.prioridad,
       }))
       const { error: errPasos } = await supabase.from('menu_preparaciones').insert(rows)
       if (errPasos) return { ok: false, message: `El evento se creó pero hubo un error al cargar el menú: ${errPasos.message}` }

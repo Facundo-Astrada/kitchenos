@@ -31,7 +31,12 @@ function formatReadonly(v: unknown): string {
   if (Array.isArray(v)) {
     return v.map(item => {
       if (item && typeof item === 'object' && 'paso' in item && 'nombre' in item) {
-        return `${(item as { paso: string }).paso}: ${(item as { nombre: string }).nombre}`
+        const p = item as { paso: string; nombre: string; plaza?: string; prioridad?: string }
+        // plaza/prioridad son opcionales (crear_evento las completa con
+        // default 'media' si el usuario no las dijo) — solo se muestran si
+        // hay algo que decir, para no ensuciar la tarjeta con "media" en cada línea.
+        const extra = [p.plaza, p.prioridad && p.prioridad !== 'media' ? p.prioridad : null].filter(Boolean).join(', ')
+        return `${p.paso}: ${p.nombre}${extra ? ` (${extra})` : ''}`
       }
       return String(item)
     }).join('\n')

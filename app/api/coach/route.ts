@@ -530,7 +530,7 @@ const COACH_TOOLS = [
   },
   {
     name: 'crear_evento',
-    description: 'Crea un evento con su menú de pasos (entrada, principal, prepostre, postre, etc). Usar cuando el usuario dicta un evento completo con su menú ("armá un evento para el sábado con...", "creá el evento de tal fecha, entrada X, principal Y..."). Cada paso del menú es un objeto {paso, nombre} — "paso" es la categoría (Entrada, Principal, Prepostre, Postre, o la que corresponda) y "nombre" es la preparación. Si falta la fecha o algún paso no queda claro, preguntá antes de llamar la herramienta — no inventes platos.',
+    description: 'Crea un evento con su menú de pasos (entrada, principal, prepostre, postre, etc). Usar cuando el usuario dicta un evento completo con su menú ("armá un evento para el sábado con...", "creá el evento de tal fecha, entrada X, principal Y..."). Cada paso del menú es un objeto {paso, nombre, plaza?, prioridad?} — "paso" es la categoría (Entrada, Principal, Prepostre, Postre, o la que corresponda) y "nombre" es la preparación. "plaza" y "prioridad" son opcionales: completalos SOLO si el usuario los dijo ("el postre lo hace pastelería", "la entrada es urgente/crítica") — si no dijo nada, dejalos sin poner y quedan con el default (prioridad media, sin plaza asignada), no inventes una plaza al azar. Si falta la fecha o algún paso no queda claro, preguntá antes de llamar la herramienta — no inventes platos.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -544,6 +544,8 @@ const COACH_TOOLS = [
             properties: {
               paso: { type: 'string', description: 'Categoría del paso: Entrada, Principal, Prepostre, Postre, etc.' },
               nombre: { type: 'string', description: 'Preparación de ese paso.' },
+              plaza: { type: 'string', description: 'Opcional. Plaza/estación que la prepara, solo si el usuario la mencionó. Ej: parrilla, frios, pasteleria.' },
+              prioridad: { type: 'string', enum: ['critica', 'alta', 'media', 'baja'], description: 'Opcional. Default media — poner otra solo si el usuario marcó ese paso como más o menos urgente.' },
             },
             required: ['paso', 'nombre'],
           },
