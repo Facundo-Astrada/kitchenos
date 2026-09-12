@@ -78,6 +78,9 @@ export interface CartaItemCoach {
   id: string
   nombre: string
   categoria: string | null
+  precio_venta?: number | null
+  receta_id?: string | null
+  alias?: string | null
 }
 
 export async function buscarCartaItems(
@@ -87,11 +90,89 @@ export async function buscarCartaItems(
   limite = 15,
 ): Promise<ResultadoBusqueda<CartaItemCoach>[]> {
   const { data, error } = await supabase.from('carta_items')
-    .select('id, nombre, categoria')
+    .select('id, nombre, categoria, precio_venta, receta_id')
     .eq('restaurante_id', restauranteId)
     .limit(TECHO_CATALOGO)
   if (error) console.error('[coach/catalogo] buscarCartaItems:', error.message)
   return buscar((data ?? []) as CartaItemCoach[], consulta, limite)
+}
+
+/** Una receta dentro de un plato, con cuánto va de ella. */
+export interface ComponentePlato {
+  receta_id: string
+  nombre: string
+  gramaje: number | null
+  gramaje_unidad: string | null
+  porciones: number | null
+  plaza: string | null
+  nota: string | null
+}
+
+/**
+ * Los platos de la carta con los nombres de sus recetas como texto buscable.
+ *
+ * El caso que lo motiva: el plato de Bros se llama "Mbejú" a secas, pero lleva
+ * gírgolas asadas, salsa tatemada y cilantro. Preguntar "el mbeju de gírgolas"
+ * o "el plato de gírgolas" no llegaba a nada buscando solo por nombre.
+ */
+export async function buscarPlatos(
+  supabase: SupabaseClient,
+  restauranteId: string,
+  consulta: string,
+  limite = 10,
+): Promise<ResultadoBusqueda<CartaItemCoach>[]> {
+  const { data, error } = await supabase.from('carta_items')
+    .select('id, nombre, categoria, precio_venta, receta_id, plato_recetas(recetas(nombre))')
+    .eq('restaurante_id', restauranteId)
+    .limit(TECHO_CATALOGO)
+  if (error) {
+    // Si el embed falla (relación renombrada, etc) la búsqueda por nombre sigue
+    // sirviendo — degradar es mejor que contestar "no encontré el plato".
+    console.error('[coach/catalogo] buscarPlatos:', error.message)
+    return buscarCartaItems(supabase, restauranteId, consulta, limite)
+  }
+
+  type Fila = CartaItemCoach & { plato_recetas?: Array<{ recetas: { nombre: string } | { nombre: string }[] | null }> | null }
+  const filas = ((data ?? []) as Fila[]).map(f => {
+    const nombres = (f.plato_recetas ?? []).map(pr => {
+      const r = Array.isArray(pr.recetas) ? pr.recetas[0] : pr.recetas
+      return r?.nombre ?? ''
+    }).filter(Boolean)
+    return { ...f, alias: nombres.join(' ') }
+  })
+  return buscar(filas, consulta, limite)
+}
+
+/**
+ * Qué recetas componen un plato y cuánto va de cada una.
+ *
+ * `gramaje` es la cantidad que va en el PLATO (costeo). No confundir con
+ * `cantidad_ops`, que es cuánto se produce para el mise — son dos números
+ * distintos a propósito (ver glosario: gramaje vs cantidad_ops).
+ */
+export async function composicionDePlato(
+  supabase: SupabaseClient,
+  platoId: string,
+): Promise<ComponentePlato[]> {
+  const { data, error } = await supabase.from('plato_recetas')
+    .select('receta_id, gramaje, gramaje_unidad, porciones, plaza, nota, orden, recetas(nombre)')
+    .eq('plato_id', platoId)
+    .order('orden', { ascending: true })
+    .limit(60)
+  if (error) {
+    console.error('[coach/catalogo] composicionDePlato:', error.message)
+    return []
+  }
+  type Fila = { receta_id: string; gramaje: number | null; gramaje_unidad: string | null; porciones: number | null; plaza: string | null; nota: string | null; recetas: { nombre: string } | { nombre: string }[] | null }
+  return ((data ?? []) as Fila[]).map(f => {
+    const r = Array.isArray(f.recetas) ? f.recetas[0] : f.recetas
+    return {
+      receta_id: f.receta_id, nombre: r?.nombre ?? 'Receta sin nombre',
+      gramaje: f.gramaje === null ? null : Number(f.gramaje),
+      gramaje_unidad: f.gramaje_unidad, porciones: f.porciones === null ? null : Number(f.porciones),
+      plaza: f.plaza, nota: f.nota,
+    }
+  })
 }
 
 /**

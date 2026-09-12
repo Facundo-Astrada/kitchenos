@@ -117,3 +117,32 @@ describe('etiquetaDesambiguacion', () => {
     expect(etiquetaDesambiguacion({ nombre: 'Mbeju', categoria: null })).toBe('Mbeju (sin categoría)')
   })
 })
+
+describe('puntuar - alias (composicion de un plato de la carta)', () => {
+  // El plato de Bros se llama "Mbeju" a secas pero lleva girgolas asadas.
+  const plato = { nombre: 'Mbeju', categoria: 'Entradas', alias: 'Cebolla encurtida Mbeju Ajies encurtidos Cilantro osmosis Salsa tatemada Girgolas asadas' }
+
+  it('lo encuentra por un componente que no esta en el nombre', () => {
+    expect(puntuar(plato, 'girgolas')).toBeGreaterThan(0)
+  })
+
+  it('encuentra "mbeju de girgolas", que no es el nombre de nada', () => {
+    expect(puntuar(plato, 'mbeju de girgolas')).toBeGreaterThan(0)
+  })
+
+  it('el nombre sigue pesando mas que un componente', () => {
+    expect(puntuar(plato, 'mbeju')).toBeGreaterThan(puntuar(plato, 'girgolas'))
+  })
+
+  it('encuentra "el de girgolas": las palabras vacias no pueden tapar la util', () => {
+    expect(puntuar(plato, 'el de girgolas')).toBeGreaterThan(0)
+  })
+
+  it('no arrastra platos que no lo llevan', () => {
+    expect(puntuar({ nombre: 'Provoleta', categoria: 'Entradas', alias: 'Provolone Oregano' }, 'girgolas')).toBe(0)
+  })
+
+  it('sin alias se comporta igual que antes', () => {
+    expect(puntuar({ nombre: 'Mbeju', categoria: 'Entradas' }, 'girgolas')).toBe(0)
+  })
+})

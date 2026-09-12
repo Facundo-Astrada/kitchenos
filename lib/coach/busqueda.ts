@@ -20,6 +20,13 @@ import { normalizarBusqueda, raiz } from '@/lib/texto'
 export interface Candidato {
   nombre: string
   categoria?: string | null
+  /**
+   * Texto extra buscable que no es el nombre ni la categoría. Se usa para los
+   * platos de la carta, donde el nombre no dice de qué está hecho: el plato
+   * "Mbejú" lleva gírgolas asadas, y quien pregunta por "el de gírgolas" no
+   * tiene forma de llegar buscando por nombre. Puntúa como la categoría.
+   */
+  alias?: string | null
 }
 
 /** Puntajes por tipo de coincidencia. Más alto = mejor. */
@@ -71,14 +78,20 @@ export function puntuar(c: Candidato, consulta: string): number {
   if (!q) return 0
   const nombre = normalizarBusqueda(c.nombre ?? '')
   const categoria = normalizarBusqueda(c.categoria ?? '')
+  const alias = normalizarBusqueda(c.alias ?? '')
+  const secundario = (t: string) => Math.max(puntuarCampo(categoria, t, false), puntuarCampo(alias, t, false))
 
   // La consulta entera como una sola pieza: lo que mejor identifica un match fuerte.
-  const entera = Math.max(puntuarCampo(nombre, q, true), puntuarCampo(categoria, q, false))
+  const entera = Math.max(puntuarCampo(nombre, q, true), secundario(q))
 
   const tokens = q.split(' ').filter(t => t.length > 1 && !VACIAS.has(t))
-  if (tokens.length <= 1) return entera
+  if (tokens.length === 0) return entera
+  // Un solo token útil: hay que puntuarlo A ÉL, no la frase entera. Si no,
+  // "el de gírgolas" se compara literal contra el nombre del plato y da 0,
+  // aunque "gírgolas" sea justo lo que lo identifica.
+  if (tokens.length === 1) return Math.max(entera, puntuarCampo(nombre, tokens[0], true), secundario(tokens[0]))
 
-  const puntajes = tokens.map(t => Math.max(puntuarCampo(nombre, t, true), puntuarCampo(categoria, t, false)))
+  const puntajes = tokens.map(t => Math.max(puntuarCampo(nombre, t, true), secundario(t)))
   const pegaron = puntajes.filter(p => p > 0)
   if (pegaron.length === 0) return entera
 

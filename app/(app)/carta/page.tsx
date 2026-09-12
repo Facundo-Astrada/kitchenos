@@ -1,7 +1,7 @@
 'use client'
 
 import PageTransition from '@/components/PageTransition'
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { useCarta, type CategoriaCartaItem, type CartaItemEnriquecido, type PlatoRecetaEnriquecido } from '@/lib/hooks/useCarta'
 import type { OpsResult } from '@/components/ops/OpsPanel'
@@ -385,6 +385,23 @@ export default function CartaPage() {
     () => items.find(i => i.id === selectedItemId) ?? null,
     [items, selectedItemId]
   )
+
+  // Deep link `?plato=<id>` — lo usa el botón "Abrir en Carta" del Kitchen
+  // Coach, que resuelve el plato del que se estaba hablando. Corre una sola vez
+  // (cuando los items ya cargaron) para no reabrir el detalle si el usuario
+  // volvió a la lista a mano. Sin ruta propia por plato: la Carta es una sola
+  // pantalla con vistas, así que el estado vive acá.
+  const deepLinkAplicado = useRef(false)
+  useEffect(() => {
+    if (deepLinkAplicado.current || items.length === 0) return
+    const id = new URLSearchParams(window.location.search).get('plato')
+    if (!id) { deepLinkAplicado.current = true; return }
+    deepLinkAplicado.current = true
+    if (items.some(i => i.id === id)) setSelectedItemId(id)
+    // Se limpia la query para que recargar o compartir la URL no vuelva a forzar
+    // el detalle, y para que el botón Atrás no quede en un bucle.
+    window.history.replaceState(null, '', window.location.pathname)
+  }, [items])
 
   const filtered = useMemo(() => {
     if (filter === 'Todas') return items

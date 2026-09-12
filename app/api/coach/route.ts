@@ -10,7 +10,10 @@ import { getRestauranteId } from '@/lib/coach/restaurante'
 import { getPermisosServer, puedeEjecutarTool } from '@/lib/permisos/server'
 import { COACH_COST_TOOLS } from '@/lib/coach/tools/registry'
 import { ganadorClaro, etiquetaDesambiguacion, puntuar } from '@/lib/coach/busqueda'
-import { buscarProductos, buscarRecetas, nombresCandidatos, recetaMasCompleta, type ProductoCoach } from '@/lib/coach/catalogo'
+import {
+  buscarProductos, buscarRecetas, buscarPlatos, composicionDePlato,
+  nombresCandidatos, recetaMasCompleta, type ProductoCoach,
+} from '@/lib/coach/catalogo'
 import { calcFoodCost } from '@/lib/recetas/costo'
 import { proposeAction, COACH_MUTATING_TOOLS } from '@/lib/coach/tools/propose'
 import type { PendingAction, CoachLink } from '@/lib/coach/types'
@@ -427,6 +430,17 @@ const COACH_TOOLS = [
     },
   },
   {
+    name: 'composicion_plato',
+    description: 'Devuelve de qué recetas está compuesto un PLATO DE LA CARTA y cuánto va de cada una (el gramaje del emplatado), con su plaza. Usar cuando el usuario pregunta "¿cuánto va de cada cosa en el plato X?", "¿qué lleva el X?", "¿cuál es el gramaje del X?", "¿cómo se monta el X?". OJO: un plato de la carta NO es lo mismo que una receta — el plato es lo que se vende y suele componerse de varias recetas. Si el usuario pregunta por la ficha técnica (ingredientes y procedimiento de UNA preparación), esa es buscar_receta. Encuentra el plato también por el nombre de sus componentes: "el de gírgolas" llega a un plato que en la carta se llama de otra forma.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        plato: { type: 'string', description: 'Nombre del plato de la carta, o de algo que lleve adentro. Ej: "mbeju", "el de gírgolas", "provoleta".' },
+      },
+      required: ['plato'],
+    },
+  },
+  {
     name: 'consultar_agenda',
     description: 'Devuelve los eventos del calendario del restaurante en un rango de fechas (reservas, eventos, feriados, notas con fecha). Usar cuando el usuario pregunta "¿qué tengo el sábado?", "¿qué eventos hay esta semana?", "¿tenemos algo mañana?", "¿cuándo es el próximo evento?". Si no se pasa rango, devuelve los próximos 14 días.',
     input_schema: {
@@ -747,6 +761,56 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
       return txt
     }
 
+    if (name === 'composicion_plato') {
+      const query = String(input.plato ?? '').trim()
+      if (!query) return 'Error: falta el nombre del plato.'
+
+      const res = await buscarPlatos(supabase, restauranteId, query, 8)
+      if (res.length === 0) return `No encontré ningún plato en la carta que coincida con "${query}". Puede que esté cargado con otro nombre, o que sea una receta del recetario y no un plato de la carta (probá buscar_receta).`
+
+      const elegido = ganadorClaro(res)
+      if (!elegido) {
+        const lista = res.slice(0, 5).map(({ item }) => `- ${etiquetaDesambiguacion(item)}`).join('\n')
+        return `Hay varios platos que coinciden con "${query}":\n${lista}\n\n¿Cuál de esos?`
+      }
+
+      const comps = await composicionDePlato(supabase, elegido.id)
+      links.push({ label: `Abrir ${elegido.nombre} en Carta`, href: `/carta?plato=${elegido.id}`, icono: 'restaurant_menu' })
+
+      let out = `Plato de la carta: ${elegido.nombre}`
+      if (elegido.categoria) out += ` (${elegido.categoria})`
+      out += '\n'
+      if (verCostos && elegido.precio_venta) out += `Precio de venta: ${fmtARS(Number(elegido.precio_venta))}\n`
+
+      if (comps.length === 0) {
+        // Tres situaciones distintas que el usuario vive igual ("no me dice qué
+        // lleva"), pero se arreglan en lugares distintos.
+        if (elegido.receta_id) return out + `\nEste plato está vinculado a una sola receta, no a una composición de varias. Para ver sus ingredientes y gramajes, usá buscar_receta con "${elegido.nombre}".`
+        return out + `\nEste plato todavía no tiene composición cargada: no hay recetas vinculadas con su gramaje. Se carga en Carta, abriendo el plato y agregando cada preparación con cuánto va.`
+      }
+
+      out += `\nLleva ${comps.length} preparacion${comps.length !== 1 ? 'es' : ''}, con el gramaje de cada una en el plato:\n`
+      for (const c of comps) {
+        const cuanto = c.gramaje !== null ? `${c.gramaje} ${c.gramaje_unidad ?? 'g'}` : 'sin gramaje cargado'
+        out += `- ${c.nombre}: ${cuanto}${c.plaza ? ` — plaza ${c.plaza}` : ''}${c.nota ? ` (${c.nota})` : ''}\n`
+      }
+
+      // El total solo tiene sentido si todos comparten unidad — sumar 130 g con
+      // 2 unidades daría un número inventado.
+      const conGramaje = comps.filter(c => c.gramaje !== null)
+      const unidades = new Set(conGramaje.map(c => (c.gramaje_unidad ?? 'g').toLowerCase()))
+      if (conGramaje.length === comps.length && unidades.size === 1) {
+        const total = conGramaje.reduce((s, c) => s + (c.gramaje ?? 0), 0)
+        out += `Peso total del plato: ${Math.round(total * 100) / 100} ${[...unidades][0]}.\n`
+      } else if (conGramaje.length < comps.length) {
+        out += `(${comps.length - conGramaje.length} preparacion${comps.length - conGramaje.length !== 1 ? 'es' : ''} sin gramaje cargado, así que no hay peso total.)\n`
+      }
+
+      const plazas = [...new Set(comps.map(c => c.plaza).filter(Boolean))]
+      if (plazas.length > 1) out += `Se arma entre ${plazas.length} plazas: ${plazas.join(', ')}.\n`
+      return out
+    }
+
     if (name === 'consultar_agenda') {
       const desde = String(input.desde ?? '').trim() || hoy
       const hasta = String(input.hasta ?? '').trim()
@@ -1035,7 +1099,9 @@ Consultas de solo lectura — usalas para responder con NÚMEROS REALES en vez d
 - gasto_periodo: cuánto se gastó en mercadería en un rango ("¿cuánto gasté los últimos 2 días?", "¿cuánto le pagué a tal proveedor este mes?").
 - consultar_ventas: ventas y cubiertos en un rango ("¿cuánto vendí esta semana?").
 - consultar_deudores: saldo de cuenta corriente, general o de un cliente puntual ("¿quién me debe plata?", "¿cuánto me debe Juan?").
-- buscar_receta: ficha técnica de una receta. sugerir_produccion: qué producir un día (solo lectura).
+- buscar_receta: ficha técnica de UNA preparación (ingredientes, cantidades, procedimiento).
+- composicion_plato: de qué recetas se compone un PLATO DE LA CARTA y cuánto va de cada una (gramaje del emplatado). Un plato de la carta no es una receta: "¿qué lleva el X?" o "¿cuál es el gramaje del X?" va por acá, no por buscar_receta. Si una no encuentra, probá la otra antes de decir que no existe.
+- sugerir_produccion: qué producir un día (solo lectura).
 - consultar_agenda: eventos del calendario en un rango ("¿qué tengo el sábado?", "¿hay algo esta semana?").
 - consultar_haccp: vencimientos, últimas temperaturas de los equipos y tareas de limpieza ("¿qué se vence?", "¿cómo están las heladeras?").
 - consultar_turnos: quién trabaja una fecha, con horario y plaza ("¿quién entra hoy?", "¿quién cubre parrilla el sábado?").
