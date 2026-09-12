@@ -159,9 +159,14 @@ function RecetaPreviewModal({ nombre, ingredientes, onClose, onCrear }: {
   nombre: string
   ingredientes: { nombre: string; cantidad: number; unidad: string }[]
   onClose: () => void
-  /** Si se pasa, ofrece crear/cargar los ingredientes al toque cuando la receta está vacía — mismo editor que usa Carta en un plato específico. */
+  /** Si se pasa, ofrece crear/editar los ingredientes al toque — mismo editor
+      (RecetaEditSheet) que usa Carta en un plato específico. Antes solo se
+      ofrecía cuando la receta estaba vacía ("Crear receta"); con ingredientes
+      ya cargados este preview era un callejón sin salida — había que ir a
+      Recetario para corregir un detalle rápido. */
   onCrear?: () => void
 }) {
+  const vacia = ingredientes.length === 0
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: 16, maxWidth: 420, width: '100%', maxHeight: '75vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 32px rgba(0,0,0,.25)' }}>
@@ -173,15 +178,9 @@ function RecetaPreviewModal({ nombre, ingredientes, onClose, onCrear }: {
           </button>
         </div>
         <div style={{ overflowY: 'auto' }}>
-          {ingredientes.length === 0 ? (
+          {vacia ? (
             <div style={{ padding: '20px 16px', textAlign: 'center' }}>
-              <div style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: onCrear ? 12 : 0 }}>Esta receta todavía no tiene ingredientes cargados en el recetario.</div>
-              {onCrear && (
-                <button onClick={onCrear} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, border: 'none', background: 'var(--navy)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add_circle</span>
-                  Crear receta
-                </button>
-              )}
+              <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Esta receta todavía no tiene ingredientes cargados en el recetario.</div>
             </div>
           ) : ingredientes.map((ing, i) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '9px 16px', borderBottom: i < ingredientes.length - 1 ? '1px solid var(--border)' : 'none' }}>
@@ -190,6 +189,14 @@ function RecetaPreviewModal({ nombre, ingredientes, onClose, onCrear }: {
             </div>
           ))}
         </div>
+        {onCrear && (
+          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+            <button onClick={onCrear} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', borderRadius: 10, border: 'none', background: 'var(--navy)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{vacia ? 'add_circle' : 'edit'}</span>
+              {vacia ? 'Crear receta' : 'Editar receta'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -1435,6 +1442,7 @@ export default function ComposicionEditor({
             onCrearIdea={async (n) => { const idNueva = await crearIdeaReceta(n); setLocalDraftIds(prev => new Set(prev).add(idNueva)); return idNueva }}
             onCrearIdeaIA={openIaImportForPlato}
             onCrearManual={crearManualParaPlato}
+            onEditReceta={(recetaId, recNombre) => setEditRecetaSheet({ id: recetaId, nombre: recNombre })}
           />
         ) : (
           <>
@@ -1742,7 +1750,7 @@ function PlatoRecetasEditor({
   recetas, productos, platoRecetas, setPlatoRecetas, costoTotal,
   platoSearch, setPlatoSearch, platoShowResults, setPlatoShowResults,
   editingPorcionUid, setEditingPorcionUid, editingPorcionVal, setEditingPorcionVal, uid,
-  draftRecetaIds, recipientesUsados, onCrearIdea, onCrearIdeaIA, onCrearManual,
+  draftRecetaIds, recipientesUsados, onCrearIdea, onCrearIdeaIA, onCrearManual, onEditReceta,
 }: {
   recetas: RefConCosto[]
   productos: RefConCosto[]
@@ -1763,6 +1771,7 @@ function PlatoRecetasEditor({
   onCrearIdea: (nombre: string) => Promise<string>
   onCrearIdeaIA: (nombre: string) => void
   onCrearManual: (nombre: string) => Promise<void>
+  onEditReceta: (recetaId: string, nombre: string) => void
 }) {
   const [creandoIdea, setCreandoIdea] = useState(false)
   const [creandoManual, setCreandoManual] = useState(false)
@@ -2160,7 +2169,14 @@ function PlatoRecetasEditor({
         const pr = platoRecetas.find(x => x._uid === previewUid)
         if (!pr || pr.tipo !== 'receta') return null
         const receta = recetas.find(r => r.id === pr.ref_id)
-        return <RecetaPreviewModal nombre={pr.nombre} ingredientes={receta?.ingredientes ?? []} onClose={() => setPreviewUid(null)} />
+        return (
+          <RecetaPreviewModal
+            nombre={pr.nombre}
+            ingredientes={receta?.ingredientes ?? []}
+            onClose={() => setPreviewUid(null)}
+            onCrear={() => { setPreviewUid(null); onEditReceta(pr.ref_id, pr.nombre) }}
+          />
+        )
       })()}
       {previewSearchId && (() => {
         const receta = recetas.find(r => r.id === previewSearchId)
