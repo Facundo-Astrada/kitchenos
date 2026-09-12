@@ -32,9 +32,6 @@ interface ProximosDiasProps {
 export default function ProximosDias({ variant = 'strip' }: ProximosDiasProps) {
   const { dias, loading } = useProximosDias(variant === 'panel' ? 7 : 5)
 
-  // Nada que mostrar y ya cargó: no vale la pena el espacio de una card vacía.
-  if (!loading && dias.every(d => d.items.length === 0)) return null
-
   const hoy = dias[0]?.fecha ?? ''
 
   if (variant === 'panel') {
