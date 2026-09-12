@@ -134,6 +134,8 @@ motivación completa: `.claude/docs/ingenieria/arquitectura-marco.md` §2.2.
 update/delete de 10 líneas cada uno) no gana nada con la extracción — se paga
 cuando la lógica se comparte o se testea, no antes.
 
+**Si una API route importa un cálculo puro desde un archivo `'use client'`, el build pasa y el runtime explota.** Pasó con `calcFoodCost`: vivía en `useRecetas.ts` (`'use client'`) y una tool del Coach lo llamaba desde `app/api/coach/route.ts`. `tsc`/`next build` no se quejan — el error solo aparece al ejecutar esa ruta en producción. Se resuelve moviendo la función a `lib/<dominio>/` sin `'use client'` (fila 1 de la tabla de arriba) y re-exportándola desde el hook para no tocar los imports existentes (mismo patrón ya usado para `canonUnit`/`unitConversionFactor`, que viven en `lib/unidades.ts`). Sospechar de esto ante cualquier función que "funciona en la pantalla pero tira error solo en una API route".
+
 ## Estructura estándar
 
 ```ts
@@ -234,7 +236,13 @@ Trampas: `useEffect` antes de un `useMemo` que referencia (TS2448); `useEffect` 
 
 ## Kitchen Coach — datos reales + acciones server-side
 
-`app/api/coach/route.ts` usa el **server client** (RLS por sesión), no el admin client. **Snapshot**: stock crítico/bajo, vencimientos próximos, facturas pendientes en vivo, inyectado al prompt, `try/catch` por sección (falla seguro). **Tool use**: loop agéntico (modelo→tool_use→ejecutar→tool_result→modelo, tope de vueltas). Tools: `crear_tarea`, `marcar_86`, `registrar_merma`. `restaurante_id` siempre de la sesión (`user_restaurantes`), nunca del body — RLS lo enforcea igual en el WITH CHECK.
+`app/api/coach/route.ts` usa el **server client** (RLS por sesión), no el admin client. **Snapshot**: stock crítico/bajo, vencimientos próximos, facturas pendientes en vivo, inyectado al prompt, `try/catch` por sección (falla seguro). **Tool use**: loop agéntico (modelo→tool_use→ejecutar→tool_result→modelo, tope de 6 vueltas, `max_tokens: 2048`). Tools de solo lectura (`consultar_stock`, `buscar_receta`, `composicion_plato`, `ultimo_precio`, `gasto_periodo`, `consultar_ventas`, `consultar_deudores`, `consultar_agenda`, `consultar_haccp`, `consultar_turnos`, `sugerir_produccion`) responden directo en `executeTool`; las que mutan (`crear_tarea`, `marcar_86`, `registrar_merma`, `cargar_producto`, `ajustar_stock`, `registrar_venta`, `crear_evento`) van por `proposeAction` → tarjeta editable en el chat → `/api/coach/confirm` revalida permisos de cero recién ahí. `restaurante_id` siempre de la sesión (`user_restaurantes`), nunca del body — RLS lo enforcea igual en el WITH CHECK.
+
+**Ninguna tool busca con `ilike '%texto%'` directo — todas pasan por `lib/coach/catalogo.ts` + `lib/coach/busqueda.ts`.** `ilike` no matchea diacríticos (buscar "mbeju" no encontraba "Mbejú") y filtrar solo por `nombre` deja afuera lo que solo coincide por categoría ("¿cuánta carne hay?" con `ilike` daba 3 productos que dicen "carne" en el nombre, ignorando los otros 44 de la categoría Carnes). El catálogo trae productos/recetas/carta_items enteros del restaurante (barato: <600 filas en la cuenta más grande) y puntúa en memoria — sin tildes, tolerando plural, nombre y categoría. Umbral: si una tabla puede tener miles de filas por restaurante (`factura_items`: 10k+ en una cuenta), no se trae entera — se resuelve el nombre contra el catálogo chico primero (`nombresCandidatos()`) y se filtra la tabla grande con esos candidatos.
+
+**Un error de PostgREST que se descarta sin loguear se ve igual que "no hay resultados".** `buscar_receta` estuvo devolviendo `[]` a CUALQUIER consulta durante toda una sesión porque su `select` pedía `recetas.food_cost` (columna que no existe, ver `columnas.md`) y el código hacía `const { data } = await supabase...` sin mirar `error`. Todo fetch de `lib/coach/catalogo.ts` loguea el error con `console.error` por esto — un `data: []` silencioso ahí es indistinguible de una consulta legítima sin resultados.
+
+**Los links del chat los arma el server con el id que la tool ya resolvió, nunca el modelo.** El texto del Coach se renderiza plano (sin markdown, por diseño), así que una URL no puede viajar adentro de la respuesta ni depender de que el modelo copie bien un UUID. `executeTool` recibe un colector `links: CoachLink[]` y las tools que resuelven una entidad concreta (`buscar_receta` → `/recetario/[id]`, `composicion_plato` → `/carta?plato=[id]`) lo llenan; el server los emite al final del stream con el marcador `COACH_LINKS_MARK` (mismo mecanismo que `COACH_PENDING_MARK` para la acción propuesta) y el cliente los pinta como botón.
 
 ## usePermisos — resolución de módulos efectivos
 
