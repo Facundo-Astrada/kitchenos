@@ -318,6 +318,20 @@ Un contenedor que scrollea necesita altura **definida en cada eslabón** hasta l
 1. Un wrapper intermedio en `display:block` (típico: envolver algo para posicionar un botón absoluto encima) que un ancestro flex sí estira vía `align-items:stretch`, pero no le pasa esa altura a SU hijo — un `<div>` en bloque no hereda la altura estirada de su padre solo porque el padre la tenga; hace falta `height:'100%'` explícito en el wrapper para que el hijo pueda apoyarse en él.
 2. El contenedor que finalmente scrollea (`overflow-y:auto`) tiene `flex:1` pero le falta `minHeight:0` — sin eso no se achica, empuja al padre a desbordarse en vez de scrollear (mismo gotcha de Boards Kanban, abajo, confirmado ahora en más lugares).
 
+## Dropdown de sugerencias recortado por el `overflow:hidden` del contenedor
+
+Un contenedor con `overflow:hidden` (típico para redondear esquinas de una
+lista de filas) recorta también cualquier hijo `position:absolute` que se
+posicione fuera de su caja — un desplegable de autocomplete que cuelga
+`top:100%` de la ÚLTIMA fila (o de la única, en una lista recién creada) queda
+invisible aunque encuentre coincidencias reales. Pasó en
+`CargaRapidaIngredientes.tsx` (sep 2026): la búsqueda de stock/recetas
+funcionaba, el resultado nunca se veía. Si un dropdown "no aparece" en una
+lista de filas y hay pocas filas (sobre todo una sola), sospechar esto antes
+que datos faltantes. Fix: `overflow:visible` en el contenedor + mover el
+redondeo de esquina a la fila (`border-radius` condicional en la primera/
+última) o a un borde que ya no necesite recortarse.
+
 ## `SidebarNav` (desktop) no deriva su lista — hay que actualizarla a mano
 
 `components/shell/SidebarNav.tsx` agrupa los módulos en un array `SECCIONES` escrito a mano, a diferencia de `MoreMenu.tsx` (el "MÁS" de mobile) que arma su lista dinámico desde `MODULOS_POR_ROL`. Un `ModuloId` nuevo aparece solo en mobile — en desktop hay que sumarlo a mano a `SECCIONES` en la sección que corresponda, o queda con ruta/permiso/ícono completos pero invisible en la sidebar (pasó con `organigrama`). Al agregar un módulo, comparar `SECCIONES` aplanado contra `ModuloId` completo — deberían coincidir salvo `'coach'` (tiene su propio panel, no va en la sidebar).

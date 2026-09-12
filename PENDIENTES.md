@@ -94,10 +94,11 @@ Sigue sin poder escribir en un plato/menú (sep 2026: ahora sí *lee* su
 composición — `composicion_plato`, gramaje por receta — pero no la arma). **Recomendado: B** — extender el patrón de
 `crear_evento` con `agregar_componentes_menu(menu_id, componentes[])` que
 escribe a DB y el editor refresca. Exige guardar el menú antes. **Chequear
-antes de arrancar:** `ComposicionEditor.tsx`/`RecetaEditSheet.tsx` tuvieron 3
-commits el 12/09 (crear receta al vuelo con procedimiento, fix de subreceta
-por gramaje) — releer esos diffs, no asumir la forma de hace una semana.
-Sesión aparte.
+antes de arrancar:** `ComposicionEditor.tsx`/`RecetaEditSheet.tsx` tuvieron 4
+commits el 12/09 (crear receta al vuelo con procedimiento, fix de dropdown de
+sugerencias tapado, subreceta-como-ingrediente por gramaje, preview de receta
+vinculada siempre editable) — releer esos diffs, no asumir la forma de hace
+una semana. Sesión aparte.
 
 ### Fotos — falta completar
 `PhotoPicker` ya está en recetario, carta y equipo. Falta facturas, si se decide.
