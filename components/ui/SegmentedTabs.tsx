@@ -37,14 +37,22 @@ export function SegmentedTabs<T extends string>({
         background: 'rgba(255,255,255,0.1)',
         borderRadius: 13,
         padding: 4,
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
       }
     : {
         display: 'flex',
         background: 'var(--bg)',
         borderRadius: 10,
         padding: 3,
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
       }
 
+  // whiteSpace:nowrap — con muchos tabs (5+) en pantallas angostas, un label
+  // como "Polivalencia" no puede partirse en dos líneas sin verse roto; mejor
+  // mantener su ancho mínimo e ir a scroll horizontal (wrapper de arriba) que
+  // cortarlo contra el borde de pantalla o partirlo a la mitad.
   const btnBase: CSSProperties = {
     flex: 1,
     display: 'flex',
@@ -58,6 +66,7 @@ export function SegmentedTabs<T extends string>({
     fontFamily: 'inherit',
     transition: 'all .15s',
     padding: '8px 8px',
+    whiteSpace: 'nowrap',
   }
 
   function btnStyle(isActive: boolean): CSSProperties {
@@ -83,7 +92,7 @@ export function SegmentedTabs<T extends string>({
   }
 
   return (
-    <div style={{ ...wrapperStyle, ...style }}>
+    <div className="hide-scrollbar" style={{ ...wrapperStyle, ...style }}>
       {tabs.map(t => (
         <button key={t.id} onClick={() => onChange(t.id)} style={btnStyle(t.id === active)}>
           {t.icon && (
