@@ -32,8 +32,8 @@ const TECHOS_LINEAS: Record<string, number> = {
   // /facturas?tab=X pero la página nunca leía ese query param, así que
   // siempre aterrizaba en Gastos. Le faltaba el mismo efecto que ya tiene
   // operaciones/page.tsx (URLSearchParams sobre window.location.search).
-  'app/(app)/stock/ClientView.tsx': 3410,
-  'app/(app)/checklist/ClientView.tsx': 3160,
+  'app/(app)/stock/ClientView.tsx': 3385, // sesión 15/09: modal de alta/edición de producto migrado a components/ui/Modal.tsx — 3405 → 3378
+  'app/(app)/checklist/ClientView.tsx': 3145, // sesión 15/09: selector de plaza+turno migrado a components/ui/Modal.tsx — 3159 → 3139
 }
 
 describe('Ratchets — techos de líneas (refactor-kos.md §4)', () => {

@@ -38,7 +38,7 @@ import { tap, DURATION, EASE_OUT, useReducedMotion } from '@/lib/ui/motion'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import SectionEditor from '@/components/checklist/SectionEditor'
 import { CopiarPaseBoton } from '@/components/ops/CopiarPaseBoton'
-import { FlipCard, ConfirmSheet } from '@/components/ui'
+import { FlipCard, ConfirmSheet, Modal } from '@/components/ui'
 import type { Plaza, PlazaCustom, MisePlaceItem, MisePrioridad, ChecklistSeccionConfig, RutinaFrecuencia, ChecklistRutina, ChecklistRutinaRegistro, RutinaCondicion, CierreTurno, PaseMensaje } from '@/types'
 
 // ── Constants ──
@@ -2490,30 +2490,11 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         </>,
         document.body,
       )}
-      {showPlazaSheet && createPortal(
-        <SheetChrome>
-        {/* Ventana centrada, no bottom sheet: abajo chocaba con el BottomNav
-            (que es z-100) y con el FAB del Coach, y el selector de turno quedaba
-            tapado justo cuando hay dos turnos. zIndex 2000 y useSheetOpen() por
-            SheetChrome — el FAB se esconde solo mientras esté abierta.
-            Portal a body por lo mismo que MiseGuiaSheet: montada en el árbol de
-            la pantalla, el panel lateral del Coach se le pone encima en desktop. */}
-        <div
-          onClick={() => setShowPlazaSheet(false)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 2000,
-            background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
-          }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              width: '100%', maxWidth: 460, maxHeight: 'calc(100dvh - 48px)', overflowY: 'auto',
-              background: 'var(--bg)', borderRadius: 18, padding: '16px 16px 18px',
-              boxShadow: '0 20px 50px rgba(0,0,0,.35)',
-            }}
-          >
+      {createPortal(
+        // Portal a body por lo mismo que MiseGuiaSheet: montada en el árbol de
+        // la pantalla, el panel lateral del Coach se le pone encima en desktop.
+        <Modal open={showPlazaSheet} onClose={() => setShowPlazaSheet(false)} maxWidth={460}>
+          <div style={{ padding: '16px 16px 18px' }}>
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
               <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>
                 Cambiar de plaza
@@ -2592,8 +2573,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
               </>
             )}
           </div>
-        </div>
-        </SheetChrome>,
+        </Modal>,
         document.body,
       )}
       {showSectionEditor && (

@@ -2,7 +2,7 @@
 
 import PageTransition from '@/components/PageTransition'
 import { SheetChrome } from '@/lib/ui/chrome'
-import { SegmentedTabs, SwitchRow, Skeleton } from '@/components/ui'
+import { SegmentedTabs, SwitchRow, Skeleton, Modal } from '@/components/ui'
 import type { SegmentedTab } from '@/components/ui'
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -1903,33 +1903,9 @@ export default function StockPage() {
       </div>
 
       {/* ── Add/Edit modal ── */}
-      {modalOpen && (
-        <SheetChrome>
-        <div
-          style={{
-            position: 'absolute', inset: 0, zIndex: 50, display: 'flex', flexDirection: 'column',
-            justifyContent: isDesktop ? 'center' : 'flex-end',
-            alignItems: 'center',
-            padding: isDesktop ? 24 : 0,
-          }}
-          onClick={e => { if (e.target === e.currentTarget) setModalOpen(false) }}
-        >
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,.32)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }} onClick={() => setModalOpen(false)} />
-          <div
-            style={{
-              position: 'relative', background: 'var(--surface)',
-              borderRadius: isDesktop ? 16 : '16px 16px 0 0',
-              width: isDesktop ? 'min(560px, 92vw)' : '100%',
-              maxHeight: isDesktop ? '86vh' : '92%',
-              display: 'flex', flexDirection: 'column',
-              boxShadow: isDesktop ? '0 20px 60px rgba(0,0,0,.35)' : '0 -8px 40px rgba(0,0,0,.3)',
-              border: isDesktop ? '1px solid var(--border)' : 'none',
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Header fijo — separado del contenido scrolleable por un hairline, no por una caja */}
-            <div style={{ flexShrink: 0, padding: '20px 16px 14px', borderBottom: '1px solid var(--border)' }}>
-              {!isDesktop && <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 16px' }} />}
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)}>
+            {/* Header fijo — sticky, separado del contenido scrolleable por un hairline, no por una caja */}
+            <div style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--surface)', padding: '20px 16px 14px', borderBottom: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-1)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {editingProducto ? editingProducto.nombre : 'Nuevo producto'}
@@ -1946,8 +1922,8 @@ export default function StockPage() {
               </div>
             </div>
 
-            {/* Body scrolleable */}
-            <div style={{ overflowY: 'auto', padding: '16px 16px calc(env(safe-area-inset-bottom) + 16px)', display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {/* Body */}
+            <div style={{ padding: '16px 16px calc(env(safe-area-inset-bottom) + 16px)', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
               {formError && (
                 <div style={{ background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 8, padding: '8px 12px', fontSize: 12, color: '#ef4444' }}>
@@ -2258,10 +2234,7 @@ export default function StockPage() {
                 {saving ? 'Guardando…' : editingProducto ? 'Guardar cambios' : 'Agregar producto'}
               </button>
             </div>
-          </div>
-        </div>
-        </SheetChrome>
-      )}
+      </Modal>
 
       {/* ── Nueva categoría modal ── */}
       {newCatModal && (
