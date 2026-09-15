@@ -1,26 +1,33 @@
-# Sesión — 15/09/2026
+# Sesión — 15/09/2026 (2)
 
 ## Qué se cerró
-- **Organigrama en mobile**: la fila de 5 tabs (Plantel/Puestos/Estructura/
-  Cobertura/Polivalencia) no entraba en pantallas angostas — `Cobertura` y
-  `Polivalencia` quedaban cortadas contra el borde, sin forma de llegar a
-  ellas. Reportado por Facundo con captura. Causa: `SegmentedTabs` (tabs
-  canónicos, compartido por media docena de pantallas) no tenía scroll
-  horizontal propio — el overflow se perdía contra el borde en vez de poder
-  deslizarse, a diferencia de `FilterChips` que ya resolvía este mismo
-  problema. Fix: `overflowX:auto` + `.hide-scrollbar` en el wrapper,
-  `whiteSpace:nowrap` en cada tab para que no se parta a la mitad. No cambia
-  el look cuando los tabs entran (2-4, el caso de casi todas las pantallas).
-  Commit `ab507ae`. Deploy a prod vía `git push` (build local limpio antes).
-- Doc actualizado: `ui.md` (nota en la entrada de `SegmentedTabs`).
+- **Modal centrado**: las 2 últimas copias a mano (`stock/ClientView.tsx`,
+  `checklist/ClientView.tsx`) migradas a `components/ui/Modal.tsx`. Techos
+  del ratchet bajados.
+- **Onboarding — gate por persona, no por restaurante vacío**: nueva
+  columna `equipo_miembros.onboarding_wizard_visto_at` (backfileada para
+  todo el personal existente). Un cocinero invitado a un restaurante que
+  ya opera ahora sí ve el wizard.
+- **Bug real encontrado y arreglado**: `app/(app)/page.tsx` tenía el
+  `redirect()` del gate adentro de un `try/catch` que se lo comía —
+  ni el gate viejo (restaurante vacío) disparó nunca. El gate ahora vive
+  fuera del `try`.
+- Commits `d9dd83b`, `51debc2`, pusheados. Deploy a prod vía `git push`
+  (typecheck+536 tests+build limpios antes de cada uno).
 
 ## Qué quedó a medias
-Nada.
+Nada — las dos primeras sesiones del lote de 6 planificado cerraron
+completas. Quedan 4 sesiones del lote: Coach (memoria persistida +
+`agregar_componentes_menu`), notificaciones push, motor de rutinas
+(Calendario F2), y Calendario F3/F4/F5 + Bitácora F2/F3.
 
 ## Probar primero mañana
-- Organigrama en el celular real: swipe en la fila de tabs hasta Cobertura y
-  Polivalencia.
+- Confirmar en prod que un usuario nuevo invitado ve `/onboarding` en su
+  primer login (el gate se verificó en dev, no contra Vercel).
 
 ## Próximo paso concreto
-Sin tema abierto — retomar de `PENDIENTES.md` según prioridad (sección 🟠
-Alto).
+Sesión 3 del lote: **Coach — memoria persistida (`coach_conversaciones`)
++ `agregar_componentes_menu`** (tool nueva siguiendo el patrón exacto de
+`crear_evento`, con el gotcha del CHECK constraint de
+`coach_acciones.tool_name`). Detalle completo en el plan de la
+conversación (Sesión 2 del lote de 6).

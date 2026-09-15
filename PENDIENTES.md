@@ -50,11 +50,6 @@ probar contra el server de testing de AFIP y poner URLs de prod en
 "Copiar a otro día" e "Ingredientes consolidados" se sacaron con la planilla
 legacy. Reimplementar sobre `tareas` **solo si el usuario los pide**.
 
-### Migrar las 2 copias viejas de "modal centrado" a `components/ui/Modal.tsx`
-El barrido del 08/09 migró 14 pantallas. Quedan `stock/ClientView.tsx` y
-`checklist/ClientView.tsx` — migrar **la próxima vez que se toque esa pantalla,
-no antes**.
-
 ---
 
 ## 🟡 Medio — Planes y cobro
@@ -116,16 +111,6 @@ Email/WhatsApp para el que dejó de entrar: sin decisión.
 
 ### PWA offline — completar fuera de Salón/KDS
 La vista de servicio ya tiene offline completo. El resto (stock, facturas) no.
-
-### Onboarding wizard guiado
-`/implantacion` **no reemplaza esto**: mide al restaurante, no acompaña a una
-persona nueva. Falta el flujo completo (datos → plazas → stock → equipo →
-permisos) persistiendo en `restaurantes.configuracion.onboarding_step`.
-**Gap concreto:** el wizard solo se dispara si el restaurante tiene 0 productos,
-0 facturas y 0 recetas — un cocinero invitado a un restaurante operativo nunca
-lo ve. Disparar por "primer login de este usuario". (Bug asociado: el flag
-`kc_ops_welcomed` se marca *antes* de que el tour termine, así que navegar
-rápido lo pierde para siempre.)
 
 ### Objetivos de venta — falta editor del override por persona
 El modelo y el editor del puesto están completos. Falta UI para pisar un
