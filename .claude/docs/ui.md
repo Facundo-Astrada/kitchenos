@@ -9,7 +9,7 @@ import { SegmentedTabs, FilterChips, EmptyState, HeaderAction, Avatar, Num } fro
 import type { SegmentedTab, FilterChip } from '@/components/ui'
 ```
 
-- **`SegmentedTabs`** — tabs pill. `variant="onDark"` (default, pill blanco sobre navy, usar dentro de `background: var(--navy)`) o `"onLight"` (pill card, sub-tabs). Props: `tabs: {id,label,icon?}[]`, `active`, `onChange`.
+- **`SegmentedTabs`** — tabs pill. `variant="onDark"` (default, pill blanco sobre navy, usar dentro de `background: var(--navy)`) o `"onLight"` (pill card, sub-tabs). Props: `tabs: {id,label,icon?}[]`, `active`, `onChange`. Con 5+ tabs no entran parejos en mobile (`flex:1` no se achica bajo el contenido de la etiqueta) — el propio wrapper hace scroll horizontal (`overflowX:auto` + `.hide-scrollbar`), no hace falta nada extra al usarlo.
 - **`FilterChips`** — chips con scroll horizontal + fade. `context="onLight"` (default, activo navy sólido) o `"onDark"` (activo pill **blanco** con texto navy, igual que `SegmentedTabs` onDark — navy sobre navy es invisible y deja al inactivo pareciendo el seleccionado). Props: `chips: {value,label}[]`, `active`, `onChange`.
 - **`EmptyState`** — único estado vacío de la app. Props: `icon` (Material Symbol), `title`, `subtitle?`, `cta?: {label, onClick}`.
 - **`HeaderAction`** — botón de acción primaria, siempre dentro del header navy. Props: `label` (default `'Nuevo'`), `icon` (default `'add'`), `onClick`, `disabled?`.
