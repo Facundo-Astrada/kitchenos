@@ -84,31 +84,19 @@ desglosado.
 ### Fotos — falta completar
 `PhotoPicker` ya está en recetario, carta y equipo. Falta facturas, si se decide.
 
-### Notificaciones — push resuelto, faltan triggers nuevos y el canal para "dejó de entrar"
-In-app + push resueltos (sep 2026, sesión 4 del lote): tabla `notificaciones`
-+ tabla `push_subscripciones` (RLS propia), campanita con realtime,
-`crearNotificacion()` sigue siendo el único punto de entrada — ahora además
-del insert in-app dispara `POST /api/notificaciones/push` (best-effort,
-`lib/push/enviar.ts` con `web-push` + claves VAPID) que busca los dispositivos
-suscriptos del destinatario y les manda el push. `public/sw.js` ya tiene los
-handlers de `push` y `notificationclick`. Opt-in por dispositivo en
-`/perfil` (`usePushSubscripcion`) — cada persona activa el push en su propio
-celu/compu, no es automático. VAPID en `.env.local`; **falta sumar las
-mismas 3 vars en Vercel (Production + Preview) para que ande en prod**:
-`NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`.
-
-**Dos triggers reales** siguen siendo los mismos: `useEquipo.asignarTurno` y
-el recordatorio al responsable de una estación de `/implantacion` — como los
-dos pasan por `crearNotificacion()`, ya salen por push sin tocarlos. Wirear
-uno nuevo (stock crítico, vencimientos HACCP) sigue siendo decisión de
-producto por cada uno — no asumir. `/api/cron/avisos` (reconocimiento semanal)
-sigue escribiendo `notificaciones` directo con el admin client, no por
-`crearNotificacion()` — mientras esté en modo seco (`AVISOS_ACTIVOS` no en
-`1`) no importa; si se activa, no dispara push hasta que se decida sumarlo.
-
-Email para el que dejó de entrar: sigue sin decidir el destinatario/copy/cadencia,
-pero ya no está bloqueado por infraestructura — Resend sigue esperando el
-dominio propio verificado (ver "Invitación por email falla a veces" abajo).
+### Notificaciones — falta cargar VAPID en Vercel, wirear triggers nuevos, y el canal email
+In-app + push resueltos (sep 2026, `crearNotificacion()` dispara los dos —
+ver `HISTORIAL.md` sesión 2026-09-15 (4) para el detalle). Queda:
+- **Sumar `NEXT_PUBLIC_VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`
+  en Vercel (Production + Preview)** — están en `.env.local`, no se pudieron
+  cargar por CLI (`VERCEL_TOKEN` guardado vencido). Sin esto el toggle de
+  `/perfil` se auto-oculta (no rompe nada, pero el push no sale en prod).
+- Wirear un trigger nuevo (stock crítico, vencimientos HACCP) es decisión de
+  producto por cada uno — no asumir. Los dos triggers reales siguen siendo
+  `useEquipo.asignarTurno` y el recordatorio de `/implantacion`.
+- Email para el que dejó de entrar: destinatario/copy/cadencia sin decidir.
+  Ya no está bloqueado por infraestructura — Resend sigue esperando el
+  dominio propio verificado (ver "Invitación por email falla a veces" abajo).
 
 ### PWA offline — completar fuera de Salón/KDS
 La vista de servicio ya tiene offline completo. El resto (stock, facturas) no.

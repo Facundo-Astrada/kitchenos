@@ -1,39 +1,36 @@
-# Sesión — 15/09/2026 (3)
+# Sesión — 15/09/2026 (4)
 
 ## Qué se cerró
-- **Coach — memoria persistida cross-device**: tabla `coach_conversaciones`
-  (RLS por usuario+restaurante, una activa por vez) reemplaza el
-  `localStorage` de `lib/coach/history.ts`. `useKitchenCoach` carga/guarda
-  contra la DB; el historial (drawer) lista y reabre conversaciones reales.
-- **Coach — tool `agregar_componentes_menu`**: suma componentes a un
-  menú/evento ya existente (resuelto por nombre) sin pisar los que tiene,
-  mismo patrón propose→confirm de `crear_evento`.
-- **Bug real encontrado y arreglado**: el guard del efecto que carga la
-  conversación activa usaba un flag `cancel` de cleanup — StrictMode (dev)
-  lo rompía al doble-invocar el efecto y el resultado del fetch nunca se
-  aplicaba (conversación no sobrevivía a un reload). Fix + regla nueva en
-  `.claude/docs/hooks.md` ("fetch/create una vez por key").
-- Verificado end-to-end en dev con Playwright (login real): mensaje → reload
-  → sobrevive; nueva conversación → historial la lista → la reabre con
-  contenido intacto; `crear_evento` + `agregar_componentes_menu` encadenados,
-  las dos tarjetas confirman sin error, componente nuevo en el `orden`
-  correcto en la base. Datos de prueba borrados de la cuenta demo.
-- 2 migraciones aplicadas a prod (`coach_conversaciones`, CHECK de
-  `coach_acciones.tool_name`). Commit `cac2456`, pusheado — typecheck, lint,
-  536 tests y build limpios antes del push.
+- **Notificaciones push web** (sesión 4 del lote de 6). Decisión de canal
+  pedida antes de tocar código: push ahora, email después (Resend bloqueado
+  por dominio sin verificar, no por código). `crearNotificacion()` sigue
+  siendo el único punto de entrada — ahora dispara push best-effort además
+  del insert in-app. Tabla `push_subscripciones` (RLS propia), `lib/push/enviar.ts`
+  (`web-push` + VAPID, limpia suscripciones vencidas), `/api/push/subscribe`,
+  `/api/push/unsubscribe`, `/api/notificaciones/push`, handlers `push`/
+  `notificationclick` en `public/sw.js`, opt-in por dispositivo en `/perfil`.
+- Verificado con Playwright (login real): rama "permiso denegado" de la UI,
+  y las 3 rutas server-side directo contra la sesión real (insert, upsert
+  sin duplicar, best-effort sin 500, delete). Fila de prueba borrada.
+- 1 commit (`edaecbf`), pusheado. Typecheck, 539 tests, build limpios.
+- Migración aplicada a prod. Dos gotchas nuevos documentados en `hooks.md`
+  (#30 dev server único de Next 16, #31 `NEXT_PUBLIC_*` sin recarga en caliente)
+  y uno en `testing.md` (Notification.permission en Chromium headless).
 
 ## Qué quedó a medias
-Nada. Quedan 3 sesiones del lote de 6: notificaciones push, motor de
-rutinas (Calendario F2), y Calendario F3/F4/F5 + Bitácora F2/F3.
+- **Falta cargar las 3 env vars VAPID en Vercel** (Production + Preview) —
+  están en `.env.local`, no se pudieron subir por CLI porque el `VERCEL_TOKEN`
+  guardado está vencido. Sin esto el toggle de `/perfil` se auto-oculta en
+  prod (no rompe nada, pero el push no sale). Valores ya en el chat de esta
+  sesión si hace falta volver a pegarlos.
 
 ## Probar primero mañana
-- Nada puntual — lo nuevo del Coach ya se verificó en vivo (dev, no prod).
-  Si hay ratos, confirmar una vez en prod que el historial cruza de
-  celular a escritorio con la misma cuenta.
+- Una vez cargadas las env vars en Vercel: activar el toggle en `/perfil`
+  desde un celular real, asignar un turno desde otra cuenta y confirmar que
+  llega la notificación push con la app cerrada.
 
 ## Próximo paso concreto
-Sesión 4 del lote: **notificaciones push/email** — hoy solo hay in-app
-(tabla `notificaciones`, campanita, dos triggers: `asignarTurno` y el
-recordatorio de `/implantacion`). Definir canal (push web, email, o ambos)
-y wirear más triggers reales (stock crítico, vencimientos HACCP) antes de
-sumar canales nuevos.
+Quedan 2 sesiones del lote de 6: motor de rutinas (Calendario F2), y
+Calendario F3/F4/F5 + Bitácora F2/F3. Wirear un trigger de push nuevo
+(stock crítico, HACCP) y decidir el canal email siguen siendo decisiones de
+producto aparte, no asumir que entran solas.
