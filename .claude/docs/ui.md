@@ -424,6 +424,8 @@ Y una métrica de "falta algo" (cuántos ítems no se pueden costear, cuántas r
 
 ## Registro "Arcade": qué transfiere del game feel y qué no — prototipo en `/lab` (sep 2026)
 
+> **Veredicto: NO se adopta** (ver `DECISIONES.md` § 26). `DESIGN.md` queda sin cambios — siguen valiendo §4 y §10. Esto no es una propuesta abierta: es el registro de una prueba cerrada, para no rediscutirla desde cero. Lo único señalado como candidato independiente es **remarcar palabras clave**, que anda sin nada del skin.
+
 `app/(app)/lab/page.tsx` es un **laboratorio, no producto**: la misma pantalla (apertura de una plaza) con un toggle **Calma / Arcade** sobre los mismos datos. Sin la comparación lado a lado una prueba visual no decide nada — se mira linda sola y no se sabe contra qué. Todo lo que choca con `DESIGN.md` (§4 segunda familia, §10 neón/sombras fuera de token) vive ahí adentro y no en los tokens: la constitución se cambia discutiéndola (§11), no esquivándola en un componente.
 
 **El orden manda (Swink: control → espacio predecible → juice).** El juice amplifica lo que ya funciona, no lo rescata. Práctica: el feedback de presión (`whileTap` scale .975, 120ms) va en los **dos** modos — es respuesta, no adorno. Lo que se prende y se apaga con el toggle es la capa de arriba (destello, glow, partículas).

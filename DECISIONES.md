@@ -341,3 +341,17 @@ Registro de decisiones tomadas con Facundo durante el diseño y construcción de
 - **Responsable ≠ referente.** Cada estación de la ruta nombra dos personas: quien responde (se designa, sale de Organigrama → Cobertura) y a quien le preguntan (se detecta, sale de la matriz de polivalencia). Nombrar un grupo en vez de una persona produce difusión de responsabilidad de forma predecible; y el personal de línea le pregunta a un par de confianza antes que a soporte.
 - **"Qué se apaga" es la definición de insertado.** Una función no está adoptada hasta que muere la costumbre vieja que reemplaza — el pizarrón, el cuaderno, el audio de WhatsApp. Correr lo viejo y lo nuevo en paralelo demasiado tiempo es la falla de rollout más común. Es el mismo principio que la § 24.
 - **Recordatorio y reconocimiento van a cadencias distintas:** recordatorio máximo 1/día y muere solo; reconocimiento semanal y del equipo. El reconocimiento diario baja 12% la confianza en la dirección.
+
+---
+
+## 26. El registro "Arcade" se probó y NO se adopta (sep 2026)
+
+**Decisión:** K-OS no pasa a una estética de videojuego. Se construyó el prototipo completo (segunda tipografía, fondo oscuro, brasa, glow, partículas, racha, transiciones con overshoot) en `app/(app)/lab/page.tsx`, se miró contra la pantalla actual con un toggle **Calma / Arcade** sobre los mismos datos, y la respuesta fue **"de momento no lo implementamos"**. `DESIGN.md` queda **sin cambios**: sigue valiendo §4 (una sola familia tipográfica) y §10 (prohibido neón/glassmorphism, sombras y duraciones fuera de token).
+
+**Por qué se probó igual:** el §11 dice que una regla que molesta se discute y se cambia ahí, no se esquiva en un componente. Discutirla con una pantalla real adelante cuesta una tarde; discutirla en abstracto no termina nunca. El prototipo vive en una ruta propia y **no toca tokens, ni la fuente global, ni un componente compartido** — por eso "no adoptar" no requirió revertir nada.
+
+**Cómo se aplica:**
+- **No abrir esto de nuevo sin una razón nueva.** Si vuelve el tema, se parte del prototipo, no de cero: `/lab` sigue en el repo, no está en el sidebar (`SECCIONES`) ni en el menú MÁS (`MODULOS_POR_ROL`), así que solo se llega escribiendo la URL.
+- **Lo único separable y con valor propio quedó identificado: remarcar palabras clave.** Guardar el ítem partido (`verbo` / `cantidad` / `qué` / `detalle`) en vez de una frase hace que el resaltado sea estructura y no un regex adivinando — y **funciona igual en el registro Calma, sin nada del skin**. Es un candidato independiente para el mise real; si algún día se toma, se toma solo, sin arrastrar el resto.
+- **El límite era de ruta, no de gusto.** Aun adoptándolo, el juice nunca podía entrar en KDS/Muro (registro Servicio, dial 2, cero animación de entrada — §2/§6). Eso no cambia.
+- El detalle técnico de qué transfiere y qué no está en `.claude/docs/ui.md` § "Registro Arcade".
