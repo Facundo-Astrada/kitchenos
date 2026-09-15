@@ -421,3 +421,20 @@ Un layout de una sola columna pensado para 390px, montado tal cual en `DesktopSh
 Corolario del 3: cuando un total ya se calcula sumando ítems, exponer **el término además de la suma** (un `Map` por `_uid` que alimenta el `reduce`) — así la fila y el KPI salen de la misma fórmula y no pueden discrepar. Es también la forma barata de convertir una lista en algo que se lee como tablero.
 
 Y una métrica de "falta algo" (cuántos ítems no se pueden costear, cuántas recetas están todavía "a realizar") vale más que una métrica más de volumen: se muestra **solo cuando hay algo que arreglar**, así una ficha terminada no acumula ruido. Ojo con lo que destapa: en Carta, "Sin costear 7 de 9" dejó a la vista que el costo que se mostraba salía de 2 ítems.
+
+## Registro "Arcade": qué transfiere del game feel y qué no — prototipo en `/lab` (sep 2026)
+
+`app/(app)/lab/page.tsx` es un **laboratorio, no producto**: la misma pantalla (apertura de una plaza) con un toggle **Calma / Arcade** sobre los mismos datos. Sin la comparación lado a lado una prueba visual no decide nada — se mira linda sola y no se sabe contra qué. Todo lo que choca con `DESIGN.md` (§4 segunda familia, §10 neón/sombras fuera de token) vive ahí adentro y no en los tokens: la constitución se cambia discutiéndola (§11), no esquivándola en un componente.
+
+**El orden manda (Swink: control → espacio predecible → juice).** El juice amplifica lo que ya funciona, no lo rescata. Práctica: el feedback de presión (`whileTap` scale .975, 120ms) va en los **dos** modos — es respuesta, no adorno. Lo que se prende y se apaga con el toggle es la capa de arriba (destello, glow, partículas).
+
+**Lo que transfiere bien a K-OS, con o sin skin de juego:**
+- **Palabras clave remarcadas.** Guardar el ítem partido (`verbo` / `cantidad` / `qué` / `detalle`) en vez de una frase: el resaltado pasa a ser estructura, no un regex que adivina. El cocinero no lee la frase, busca el número y el producto — el resaltado es el orden de lectura, no decoración. Anda igual en Calma.
+- **Número que sube en vez de saltar** (`useCountUp`, ease-out cúbico ~500ms). Un número que aparece de golpe no se lee como logro.
+- **Sombra en capas.** La profundidad de UI de juego sale de apilar tres — contacto (`0 2px 4px`), difusa (`0 10px 26px`) y luz de color (`0 0 22px <acento>`) — no de subir una sola. Si se adopta, van como `--shadow-4` (o `--glow-*`), no sueltas.
+- **La luz necesita una fuente.** Elegí brasa (naranja→blanco incandescente) contra el cian/violeta de todo dashboard "gamer": con neón la pantalla deja de ser K-OS y pasa a ser una plantilla — que es exactamente lo que prohíbe §10. Y la luz sale **del objeto que cambió** (destello dentro de la fila), no de un overlay global — §5, "el estado vive en el objeto".
+- **Racha por turno, nunca por persona** (§9). La racha mide la corrida, no compara cocineros. Es la pieza que más fácil se convierte en presión: si se adopta, se adopta con esa restricción escrita.
+
+**Lo que NO transfiere:**
+- **El registro Servicio no se toca.** KDS/Muro son dial 2 y cero animación de entrada (§2/§6). El mise es Preparación (dial 7) y por eso admite juice — la mitad arcade de la app tiene un límite de ruta, no de gusto.
+- **La segunda familia tipográfica es la decisión cara.** Es lo que más hace el efecto "tablero" (más que el color: un número ancho y pesado, tipo marcador de cancha — `Archivo` con eje `wdth` al 125%), pero §4 la cierra y adoptarla es un compromiso permanente de toda la app. En el prototipo se carga con un `<link>` **solo en esa ruta**, para no sumarle una fuente a las otras 28 pantallas mientras se decide.
