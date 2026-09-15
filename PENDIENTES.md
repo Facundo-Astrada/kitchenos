@@ -46,6 +46,17 @@ está completo (`lib/fiscal/wsaa.ts`, `wsfev1.ts`, `api/fiscal/emitir`). Despué
 probar contra el server de testing de AFIP y poner URLs de prod en
 `config_fiscal`.
 
+### Carta — el costo de un componente sin costo por gramo se calcula mal
+`ComposicionEditor` costea cada ítem con `costoPorGramo * cantidad`; cuando la
+receta o el producto no tiene costo por gramo derivable, cae a `costo * cantidad`,
+que interpreta "240u" como **240 porciones enteras**. En el evento demo del
+Rescoldo eso da $1.403.880 de un solo ítem y arrastra el total y el food cost.
+Salió a la luz al sumar el KPI "Sin costear" (sep 2026): mostró 7 de 9 componentes
+sin costear, o sea que el costo grande que se ve sale de 2 ítems, uno con este
+fallback. **No es regresión** — el fallback es viejo, lo nuevo es que se ve.
+Antes de tocarlo hay que decidir qué significa `cantidad` cuando no hay gramaje
+(se cruza con "Cantidad significa cosas distintas en Plato y Menú/Evento", abajo).
+
 ### OPS Consolidación — diferido
 "Copiar a otro día" e "Ingredientes consolidados" se sacaron con la planilla
 legacy. Reimplementar sobre `tareas` **solo si el usuario los pide**.
@@ -196,7 +207,13 @@ Lista completa con el detalle de cada uno en `HISTORIAL.md`. En una línea:
 - Stock: celda apretada en 480-1023px — falta verla en **modo edición**.
 - Nota de ítem no viaja a la tarea de Producción (módulos distintos a propósito).
 - Compras: "Cargar factura" es un patrón mobile sin adaptar a desktop (CTA
-  gigante en monitor ancho). Repensar junto con el refactor de Facturas.
+  gigante en monitor ancho). Repensar junto con el refactor de Facturas — la
+  receta para este tipo de arreglo ya está escrita en `.claude/docs/ui.md`
+  § "Pantalla mobile-first estirada a escritorio".
+- Mise: **remarcar palabras clave** — guardar el ítem partido (verbo / cantidad /
+  qué) en vez de una frase, para que el resaltado sea estructura y no un regex
+  adivinando. Único hallazgo separable del prototipo arcade descartado; anda sin
+  nada del skin. Ver `DECISIONES.md` § 26.
 
 ### Mise / pase de turno — flecos de la tanda de agosto
 Detalle completo en `HISTORIAL.md`. Lo que quedó afuera:
