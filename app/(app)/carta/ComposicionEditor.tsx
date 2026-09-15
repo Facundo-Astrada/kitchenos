@@ -6,9 +6,10 @@ import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
 import { PLAZAS_OPS, SECCIONES_OPS } from '@/lib/ops/mise'
 import { useSheetOpen } from '@/lib/ui/chrome'
 import { usePermisos } from '@/lib/hooks/usePermisos'
+import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { createClient } from '@/lib/supabase/client'
 import OpsPanel, { type OpsResult } from '@/components/ops/OpsPanel'
-import { SegmentedTabs } from '@/components/ui'
+import { SegmentedTabs, Num } from '@/components/ui'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import { fileToBase64, callRecetaImport, matchPorNombre, formatProcedimiento, type RecetaIAResult } from '@/lib/recetas/iaImport'
 import { moverItemSobreItem, moverItemASeccion } from '@/lib/carta/reordenarItems'
@@ -562,6 +563,7 @@ export default function ComposicionEditor({
   useSheetOpen()
   const RESTAURANTE_ID = useRestauranteId()
   const { isAdmin } = usePermisos()
+  const isDesktop = useIsDesktop()
 
   // ── Borrador local — autosave sin fricción (ver "Vamos con el 1"). El
   // editor vivía 100% en memoria: la X o cerrar la pestaña borraba todo. Cada
@@ -941,6 +943,27 @@ export default function ComposicionEditor({
     setModo(m)
   }
 
+  // Costo POR ítem — misma fórmula que alimenta el total, pero indexada por
+  // ítem para poder mostrarla en la fila. Antes el costo solo existía sumado:
+  // la fila no decía cuánto aportaba cada componente y el ancho de escritorio
+  // se iba en blanco al lado de un nombre corto.
+  const costoPorItem = useMemo(() => {
+    const m = new Map<number, number>()
+    for (const it of items) {
+      const fuente = it.tipo === 'receta' ? recetas : it.tipo === 'producto' ? productos : it.tipo === 'plato' ? cartaItems : null
+      const ref = fuente && it.ref_id ? fuente.find(f => f.id === it.ref_id) : null
+      if (!ref) continue
+      // Cantidad se carga en gramos: si la receta/producto tiene costo por gramo
+      // derivable, usarlo (coincide con el costeo real del recetario). Si no
+      // (ej: receta sin peso_total_g cargado), fallback a costo por porción/unidad
+      // para no romper el food cost ya calculado.
+      m.set(it._uid, ref.costoPorGramo != null && it.cantidad != null
+        ? ref.costoPorGramo * it.cantidad
+        : ref.costo * (it.cantidad ?? 1))
+    }
+    return m
+  }, [items, recetas, productos, cartaItems])
+
   // Costo total vivo
   const costoTotal = useMemo(() => {
     if (esPlato) {
@@ -957,18 +980,8 @@ export default function ComposicionEditor({
         return s + ref.costo * pr.porciones
       }, 0)
     }
-    return items.reduce((s, it) => {
-      const fuente = it.tipo === 'receta' ? recetas : it.tipo === 'producto' ? productos : it.tipo === 'plato' ? cartaItems : null
-      const ref = fuente && it.ref_id ? fuente.find(f => f.id === it.ref_id) : null
-      if (!ref) return s
-      // Cantidad se carga en gramos: si la receta/producto tiene costo por gramo
-      // derivable, usarlo (coincide con el costeo real del recetario). Si no
-      // (ej: receta sin peso_total_g cargado), fallback a costo por porción/unidad
-      // para no romper el food cost ya calculado.
-      if (ref.costoPorGramo != null && it.cantidad != null) return s + ref.costoPorGramo * it.cantidad
-      return s + ref.costo * (it.cantidad ?? 1)
-    }, 0)
-  }, [esPlato, platoRecetas, items, recetas, productos, cartaItems])
+    return items.reduce((s, it) => s + (costoPorItem.get(it._uid) ?? 0), 0)
+  }, [esPlato, platoRecetas, items, recetas, productos, costoPorItem])
 
   const precioN = parseFloat(precio.replace(',', '.')) || 0
   const fcPct = precioN > 0 && costoTotal > 0 ? (costoTotal / precioN) * 100 : null
@@ -977,6 +990,20 @@ export default function ComposicionEditor({
   // componente (ver comentario de "Cantidad" en ItemRowInline) — con pax
   // cargado, el costo real del evento entero es ese × pax.
   const paxN = parseInt(pax, 10) || 0
+
+  // Números del resumen: cuántos componentes faltan cocinar por primera vez
+  // (receta todavía "a realizar") y cuántos no se pueden costear. Las dos
+  // cosas solo se veían bajando la lista ítem por ítem; arriba son el dato
+  // que dice si esta ficha está terminada o no.
+  const itemsCargados = useMemo(() => items.filter(i => i.nombre.trim()), [items])
+  const nDraft = useMemo(
+    () => itemsCargados.filter(i => i.tipo === 'receta' && i.ref_id && allDraftIds.has(i.ref_id)).length,
+    [itemsCargados, allDraftIds]
+  )
+  const nSinCosto = useMemo(
+    () => itemsCargados.filter(i => !(costoPorItem.get(i._uid) ?? 0)).length,
+    [itemsCargados, costoPorItem]
+  )
 
   const searchResults = useMemo(() => {
     if (!sectionQuery.trim()) return []
@@ -1228,29 +1255,49 @@ export default function ComposicionEditor({
         </div>
       )}
 
-      {/* Resumen vivo */}
-      <div style={{ flexShrink: 0, background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '6px 12px 8px' }}>
-        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 5 }}>
+      {/* Resumen vivo — fila de KPIs.
+          En escritorio las tarjetas NO se estiran a lo ancho de la pantalla:
+          un número de 13px centrado en una caja de 700px es aire, no
+          jerarquía. Ancho propio por tarjeta, valor grande y alineado a la
+          izquierda (el ojo barre la columna de números, no busca cada centro),
+          y las que no entran scrollean en vez de aplastarse. */}
+      <div style={{ flexShrink: 0, background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: isDesktop ? '10px 20px 12px' : '6px 12px 8px' }}>
+        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: isDesktop ? 8 : 5 }}>
           {esPlato ? 'Este plato' : modo === 'evento' ? 'Este evento' : 'Este menú'}
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+        <div className="hide-scrollbar" style={{ display: 'flex', gap: isDesktop ? 10 : 8, alignItems: 'stretch', overflowX: 'auto' }}>
           {(() => {
-            const Metric = ({ label, value, color, big }: { label: string; value: string; color?: string; big?: boolean }) => (
-              <div style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 9, padding: '5px 8px', textAlign: 'center' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
-                <div style={{ fontSize: big ? 15 : 13, fontWeight: 800, color: color ?? 'var(--text-1)', fontFamily: 'monospace' }}>{value}</div>
+            const Metric = ({ label, value, color }: { label: string; value: string; color?: string }) => (
+              <div style={{
+                // Todas del mismo ancho (reparten el espacio) pero con techo:
+                // estiradas sin límite vuelven a ser cajas con aire adentro.
+                // El contenido va pegado a la izquierda — el ojo baja por una
+                // columna de números, no busca el centro de cada caja.
+                flex: '1 1 0', minWidth: isDesktop ? 146 : 72, maxWidth: isDesktop ? 260 : undefined,
+                background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10,
+                padding: isDesktop ? '9px 14px 10px' : '5px 8px',
+                textAlign: isDesktop ? 'left' : 'center',
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em', whiteSpace: 'nowrap' }}>{label}</div>
+                <Num style={{ display: 'block', fontSize: isDesktop ? 26 : 13, lineHeight: 1.15, fontWeight: 800, color: color ?? 'var(--text-1)', marginTop: isDesktop ? 3 : 0 }}>{value}</Num>
               </div>
             )
             return (
               <>
-                <Metric label="Ítems" value={String(esPlato ? platoRecetas.length : items.filter(i => i.nombre.trim()).length)} />
+                <Metric label="Ítems" value={String(esPlato ? platoRecetas.length : itemsCargados.length)} />
+                {!esPlato && <Metric label="Secciones" value={String(secciones.length)} />}
                 {/* Sin pax, "Costo" es por comensal (así se carga la cantidad
                     de cada componente) — con pax, se aclara y se agrega el
                     total real del evento/menú entero. */}
                 {isAdmin && <Metric label={!esPlato && paxN > 0 ? 'Costo/cub.' : 'Costo'} value={fmtMoney(costoTotal)} />}
                 {isAdmin && !esPlato && paxN > 0 && <Metric label={`Total × ${paxN}`} value={fmtMoney(costoTotal * paxN)} />}
-                {isAdmin && fcPct != null && <Metric label="Food cost" value={`${fcPct.toFixed(0)}%`} color={fcColor} big />}
-                {isAdmin && esPlato && precioN > 0 && <Metric label="Margen" value={fmtMoney(precioN - costoTotal)} color={precioN - costoTotal > 0 ? '#16a34a' : 'var(--red-fg)'} />}
+                {isAdmin && fcPct != null && <Metric label="Food cost" value={`${fcPct.toFixed(0)}%`} color={fcColor} />}
+                {isAdmin && precioN > 0 && <Metric label="Margen" value={fmtMoney(precioN - costoTotal)} color={precioN - costoTotal > 0 ? 'var(--green-fg)' : 'var(--red-fg)'} />}
+                {/* Las dos métricas de "falta algo" van al final y solo
+                    aparecen cuando hay algo que arreglar: en una ficha
+                    terminada la fila no tiene ruido. */}
+                {!esPlato && nDraft > 0 && <Metric label="A realizar" value={String(nDraft)} color="var(--red-fg)" />}
+                {isAdmin && !esPlato && nSinCosto > 0 && <Metric label="Sin costear" value={String(nSinCosto)} color="var(--amber-fg)" />}
               </>
             )
           })()}
@@ -1258,7 +1305,19 @@ export default function ComposicionEditor({
       </div>
 
       {/* Body */}
-      <div ref={bodyScrollRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '14px 14px 100px' }}>
+      <div ref={bodyScrollRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: isDesktop ? '18px 20px 100px' : '14px 14px 100px' }}>
+        {/* En escritorio el editor es de dos columnas: la ficha (datos +
+            variantes) a la izquierda con ancho de formulario, la composición a
+            la derecha ocupando el resto. En una sola columna a 1400px el
+            formulario estiraba cada input a lo ancho de la pantalla y la lista
+            quedaba con el nombre pegado a la izquierda y el gramaje al otro
+            extremo, con medio metro de blanco en el medio.
+            En mobile los wrappers son `display:contents`: el flujo de una
+            columna queda exactamente como estaba. */}
+        <div style={isDesktop
+          ? { display: 'grid', gridTemplateColumns: 'minmax(320px, 400px) minmax(0, 1fr)', gap: 22, alignItems: 'start', maxWidth: 1500, margin: '0 auto' }
+          : undefined}>
+        <div style={isDesktop ? undefined : { display: 'contents' }}>
         {/* ── Bloque DATOS ── */}
         <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', margin: '0 2px 7px' }}>
           {esPlato ? 'Datos del plato' : modo === 'evento' ? 'Datos del evento' : 'Datos del menú'}
@@ -1419,6 +1478,9 @@ export default function ComposicionEditor({
           </>
         )}
 
+        </div>{/* /columna izquierda — ficha */}
+
+        <div style={isDesktop ? undefined : { display: 'contents' }}>
         {/* ── Bloque COMPOSICIÓN ── */}
         {esPlato ? (
           // ── UI simplificada para modo Plato (igual que la vista de detalle) ──
@@ -1528,6 +1590,7 @@ export default function ComposicionEditor({
                       </span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <ItemRowInline item={it}
+                          costo={isAdmin ? (costoPorItem.get(it._uid) ?? null) : null}
                           expanded={expandedUid === it._uid}
                           onToggle={() => setExpandedUid(expandedUid === it._uid ? null : it._uid)}
                           onChange={patch => updateItem(it._uid, patch)}
@@ -1666,6 +1729,8 @@ export default function ComposicionEditor({
             </div>
           </>
         )}
+        </div>{/* /columna derecha — composición */}
+        </div>{/* /grilla de dos columnas */}
       </div>
       {iaImport && (
         <RecetaIAModal
@@ -2191,10 +2256,14 @@ function PlatoRecetasEditor({
 // ITEM ROW — fila colapsada + editor inline expandible
 // ════════════════════════════════════════════════════════════
 function ItemRowInline({
-  item, expanded, onToggle, onChange, onRemove, recetas, productos, cartaItems, variantes, draftRecetaIds, recipientesUsados,
+  item, costo, expanded, onToggle, onChange, onRemove, recetas, productos, cartaItems, variantes, draftRecetaIds, recipientesUsados,
   autoFocusCantidad, onCantidadCommitted, plazaControl, onEditReceta, esEvento, fechaEvento,
 }: {
   item: ItemRow
+  // Cuánto aporta ESTE componente al costo de la ficha (null = no se puede
+  // costear todavía, o el que mira no ve plata). Se calcula arriba, con la
+  // misma fórmula que el total, para que la fila y el KPI nunca discrepen.
+  costo: number | null
   expanded: boolean
   onToggle: () => void
   onChange: (patch: Partial<ItemRow>) => void
@@ -2339,6 +2408,13 @@ function ItemRowInline({
             </div>
           )}
         </div>
+        {/* Lo que cuesta este componente — el dato que hasta ahora había que
+            abrir el ítem (o sacar de la cabeza) para saber por qué el total
+            da lo que da. Solo cuando ya hay un número real: un "$—" en cada
+            fila sería ruido. */}
+        {costo != null && costo > 0 && (
+          <Num style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)', flexShrink: 0 }}>{fmtMoney(costo)}</Num>
+        )}
         {/* Cantidad — editable con un tap directo acá, sin expandir el ítem
             entero (antes había que abrir todo el editor y bajar hasta el
             final para tocar este campo). */}
