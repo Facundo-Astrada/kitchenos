@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useKitchenCoach } from '@/lib/hooks/useKitchenCoach'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
+import { useAuth } from '@/lib/auth/context'
 import { createClient } from '@/lib/supabase/client'
-import { listConvos, archiveConvo, deleteConvo, toMessages, type ArchivedConvo } from '@/lib/coach/history'
+import { listArchivadas, eliminarConversacion, type ConvoRow } from '@/lib/coach/conversaciones'
 import { CoachActionCard } from '@/components/coach/CoachActionCard'
 import { CoachLinks } from '@/components/coach/CoachLinks'
 
@@ -86,16 +87,19 @@ interface CoachPanelContentProps {
 
 export function CoachPanelContent({ variant = 'page', writesScreenContext = false }: CoachPanelContentProps) {
   const RESTAURANTE_ID = useRestauranteId()
-  const storageKey = RESTAURANTE_ID ? `kc_active_${RESTAURANTE_ID}` : null
+  const { user } = useAuth()
+  const supabase = useMemo(() => createClient(), [])
   const {
-    messages, loading, error, sendMessage, clearMessages, replaceMessages,
+    messages, loading, error, sendMessage,
     pendingAction, confirmingDraftId, confirmAction, cancelAction,
-  } = useKitchenCoach({ storageKey })
+    startNewConversation, openConversation,
+  } = useKitchenCoach({ restauranteId: RESTAURANTE_ID || null })
   const datos = useDatosClave()
 
   const [input, setInput] = useState('')
   const [historialOpen, setHistorialOpen] = useState(false)
-  const [convos, setConvos] = useState<ArchivedConvo[]>([])
+  const [convos, setConvos] = useState<ConvoRow[]>([])
+  const [convosLoading, setConvosLoading] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
 
@@ -105,25 +109,24 @@ export function CoachPanelContent({ variant = 'page', writesScreenContext = fals
     return () => localStorage.removeItem('kc_screen_context')
   }, [writesScreenContext])
 
-  const refreshConvos = useCallback(() => {
-    if (RESTAURANTE_ID) setConvos(listConvos(RESTAURANTE_ID))
-  }, [RESTAURANTE_ID])
+  const refreshConvos = useCallback(async () => {
+    if (!RESTAURANTE_ID || !user?.id) return
+    setConvosLoading(true)
+    try { setConvos(await listArchivadas(supabase, RESTAURANTE_ID, user.id)) }
+    finally { setConvosLoading(false) }
+  }, [RESTAURANTE_ID, user?.id, supabase])
 
-  // Nueva conversación: archiva la actual (si tiene contenido) y limpia.
-  const nuevaConversacion = useCallback(() => {
-    if (RESTAURANTE_ID) archiveConvo(RESTAURANTE_ID, messages)
-    clearMessages()
+  // Nueva conversación: archiva la actual (si tiene contenido) y abre una en blanco.
+  const nuevaConversacion = useCallback(async () => {
+    await startNewConversation()
     setHistorialOpen(false)
-  }, [RESTAURANTE_ID, messages, clearMessages])
+  }, [startNewConversation])
 
   // Abre una conversación archivada: guarda la actual y carga la elegida.
-  const abrirConvo = useCallback((c: ArchivedConvo) => {
-    if (!RESTAURANTE_ID) return
-    archiveConvo(RESTAURANTE_ID, messages)   // no perder la actual
-    deleteConvo(RESTAURANTE_ID, c.id)        // la elegida pasa a ser la activa
-    replaceMessages(toMessages(c))
+  const abrirConvo = useCallback(async (c: ConvoRow) => {
+    await openConversation(c)
     setHistorialOpen(false)
-  }, [RESTAURANTE_ID, messages, replaceMessages])
+  }, [openConversation])
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
@@ -161,7 +164,7 @@ export function CoachPanelContent({ variant = 'page', writesScreenContext = fals
           <div style={{ color: 'rgba(255,255,255,.6)', fontSize: 12 }}>Tu asistente de cocina con IA</div>
         </div>
         <button
-          onClick={() => { refreshConvos(); setHistorialOpen(true) }}
+          onClick={() => { void refreshConvos(); setHistorialOpen(true) }}
           title="Historial"
           style={{ background: 'rgba(255,255,255,.12)', border: 'none', borderRadius: 10, width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
         >
@@ -203,7 +206,11 @@ export function CoachPanelContent({ variant = 'page', writesScreenContext = fals
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
                 Nueva conversación
               </button>
-              {convos.length === 0 ? (
+              {convosLoading ? (
+                <div style={{ textAlign: 'center', color: 'var(--text-3)', fontSize: 13, padding: '32px 12px' }}>
+                  Cargando…
+                </div>
+              ) : convos.length === 0 ? (
                 <div style={{ textAlign: 'center', color: 'var(--text-3)', fontSize: 13, padding: '32px 12px' }}>
                   Todavía no hay conversaciones guardadas.
                 </div>
@@ -215,11 +222,11 @@ export function CoachPanelContent({ variant = 'page', writesScreenContext = fals
                         onClick={() => abrirConvo(c)}
                         style={{ flex: 1, minWidth: 0, textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '8px 0' }}
                       >
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.titulo}</div>
                         <div style={{ fontSize: 10.5, color: 'var(--text-3)' }}>{new Date(c.updatedAt).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })} · {c.messages.length} mensajes</div>
                       </button>
                       <button
-                        onClick={() => { if (RESTAURANTE_ID) { deleteConvo(RESTAURANTE_ID, c.id); refreshConvos() } }}
+                        onClick={() => { eliminarConversacion(supabase, c.id).then(refreshConvos) }}
                         title="Eliminar"
                         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 8, display: 'flex', flexShrink: 0 }}
                       >

@@ -240,6 +240,37 @@ export async function productoPorNombreExacto(
   return ((data ?? []) as ProductoCoach[]).find(p => normalizarBusqueda(p.nombre) === objetivo) ?? null
 }
 
+export interface MenuCoach {
+  id: string
+  nombre: string
+  tipo: 'fijo' | 'evento'
+  fecha_evento: string | null
+}
+
+export async function buscarMenus(
+  supabase: SupabaseClient,
+  restauranteId: string,
+  consulta: string,
+  limite = 10,
+): Promise<ResultadoBusqueda<MenuCoach>[]> {
+  const { data, error } = await supabase.from('menus')
+    .select('id, nombre, tipo, fecha_evento')
+    .eq('restaurante_id', restauranteId)
+    .eq('activo', true)
+    .limit(TECHO_CATALOGO)
+  if (error) console.error('[coach/catalogo] buscarMenus:', error.message)
+  return buscar((data ?? []) as MenuCoach[], consulta, limite)
+}
+
+/** El menú o evento que el usuario quiso decir, o null si no hay uno claro. */
+export async function resolverMenu(
+  supabase: SupabaseClient,
+  restauranteId: string,
+  consulta: string,
+): Promise<MenuCoach | null> {
+  return ganadorClaro(await buscarMenus(supabase, restauranteId, consulta, 5))
+}
+
 /**
  * Nombres candidatos para buscar en tablas grandes (`factura_items`), donde no
  * se puede traer todo y filtrar en memoria. Devuelve el término del usuario

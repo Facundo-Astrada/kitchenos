@@ -1,9 +1,15 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { COACH_HIGHLIGHT_IDS as _COACH_HIGHLIGHT_IDS } from '@/lib/coach/highlights'
 import { COACH_ERROR_MARK, COACH_PENDING_MARK, COACH_LINKS_MARK } from '@/lib/coach/stream'
 import type { PendingAction, CoachLink } from '@/lib/coach/types'
+import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/lib/auth/context'
+import {
+  fetchOActivaConvo, guardarActiva, archivarYCrearNueva, archivarYAbrir, toMessages as convoToMessages,
+  type ConvoRow,
+} from '@/lib/coach/conversaciones'
 
 export { _COACH_HIGHLIGHT_IDS as COACH_HIGHLIGHT_IDS }
 
@@ -23,9 +29,11 @@ interface CoachContext {
 }
 
 interface CoachOptions {
-  // Si se define, la conversación activa se persiste en localStorage bajo esta key
-  // (sobrevive recargas). El historial de conversaciones se maneja aparte (lib/coach/history).
-  storageKey?: string | null
+  // Si se define, la conversación activa se persiste en coach_conversaciones (DB,
+  // RLS por restaurante+usuario) — sigue al usuario entre dispositivos, no solo
+  // entre recargas. El historial archivado se maneja aparte (lib/coach/conversaciones).
+  // Sin esto (el FAB efímero) la conversación no se persiste en ningún lado.
+  restauranteId?: string | null
 }
 
 /** Dónde termina el texto visible: en el primer marker de metadata que aparezca. */
@@ -50,7 +58,10 @@ function extraerMark<T>(buffer: string, mark: string): T | null {
 }
 
 export function useKitchenCoach(opts?: CoachOptions) {
-  const storageKey = opts?.storageKey ?? null
+  const restauranteId = opts?.restauranteId ?? null
+  const { user } = useAuth()
+  const usuarioId = user?.id ?? null
+  const supabase = useMemo(() => createClient(), [])
   const [messages, setMessages] = useState<CoachMessage[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -59,6 +70,7 @@ export function useKitchenCoach(opts?: CoachOptions) {
   const [overlayText, setOverlayText] = useState<string | null>(null)
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
   const [confirmingDraftId, setConfirmingDraftId] = useState<string | null>(null)
+  const [activeConvoId, setActiveConvoId] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const messagesRef = useRef<CoachMessage[]>([])
   messagesRef.current = messages
@@ -71,31 +83,62 @@ export function useKitchenCoach(opts?: CoachOptions) {
   const clearOverlayText = useCallback(() => setOverlayText(null), [])
   const replaceMessages = useCallback((msgs: CoachMessage[]) => setMessages(msgs), [])
 
-  // ── Persistencia de la conversación activa ────────────────────
+  // ── Persistencia de la conversación activa (coach_conversaciones) ──────
+  // El guard vive en el ref, no en un flag de cleanup: en dev, StrictMode
+  // invoca este efecto dos veces (monta → limpia → monta). Un flag `cancel`
+  // por invocación tira el resultado de la PRIMERA promesa (la que de verdad
+  // se pidió) sin que la segunda invocación vuelva a pedirla — el ref ya
+  // "ganó" la carrera y corta antes de llamar a fetch. Chequear contra el
+  // ref dentro del .then() en cambio sobrevive las dos invocaciones: solo
+  // una pide el fetch, y su resultado se aplica igual.
   const loadedKeyRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!storageKey) return
-    if (loadedKeyRef.current === storageKey) return
-    loadedKeyRef.current = storageKey
-    try {
-      const raw = localStorage.getItem(storageKey)
-      if (raw) {
-        const parsed = JSON.parse(raw) as Array<{ id: string; role: 'user' | 'assistant'; content: string; timestamp: string; options?: string[]; links?: CoachLink[] }>
-        setMessages(parsed.map(m => ({ ...m, timestamp: new Date(m.timestamp) })))
-      }
-    } catch { /* ignore */ }
-  }, [storageKey])
+    if (!restauranteId || !usuarioId) return
+    const key = `${restauranteId}:${usuarioId}`
+    if (loadedKeyRef.current === key) return
+    loadedKeyRef.current = key
+    fetchOActivaConvo(supabase, restauranteId, usuarioId).then(convo => {
+      if (loadedKeyRef.current !== key) return
+      setActiveConvoId(convo.id)
+      // Si ya se escribió algo local antes de que esto resolviera (carrera rara,
+      // mensaje enviado en el instante del mount) no lo pisamos — el próximo
+      // guardado cae igual sobre esta misma fila.
+      if (messagesRef.current.length === 0) setMessages(convoToMessages(convo))
+    }).catch(e => console.error('[useKitchenCoach] no se pudo cargar la conversación activa:', e))
+  }, [restauranteId, usuarioId, supabase])
 
-  // Guarda al terminar cada respuesta (no en cada token para no thrashear localStorage).
+  // Guarda al terminar cada respuesta (no en cada token, para no ametrallar la DB).
   useEffect(() => {
-    if (!storageKey || loading) return
-    if (loadedKeyRef.current !== storageKey) return
+    if (!activeConvoId || loading) return
+    if (loadedKeyRef.current !== `${restauranteId}:${usuarioId}`) return
+    guardarActiva(supabase, activeConvoId, messages).catch(e => console.error('[useKitchenCoach] no se pudo guardar la conversación:', e))
+  }, [messages, activeConvoId, restauranteId, usuarioId, loading, supabase])
+
+  // "Nueva conversación": archiva la actual (si tiene contenido) y abre una en blanco.
+  const startNewConversation = useCallback(async () => {
+    if (!restauranteId || !usuarioId || !activeConvoId) return
     try {
-      const toSave = messages.filter(m => m.content !== '')
-      if (toSave.length) localStorage.setItem(storageKey, JSON.stringify(toSave))
-      else localStorage.removeItem(storageKey)
-    } catch { /* ignore */ }
-  }, [messages, storageKey, loading])
+      const nueva = await archivarYCrearNueva(supabase, restauranteId, usuarioId, activeConvoId, messagesRef.current)
+      setActiveConvoId(nueva.id)
+      setMessages(convoToMessages(nueva))
+      setPendingAction(null)
+    } catch (e) {
+      console.error('[useKitchenCoach] no se pudo iniciar una conversación nueva:', e)
+    }
+  }, [restauranteId, usuarioId, activeConvoId, supabase])
+
+  // Abre un chat del historial: archiva el actual (no se pierde) y carga el elegido.
+  const openConversation = useCallback(async (convo: ConvoRow) => {
+    if (!restauranteId || !usuarioId || !activeConvoId) return
+    try {
+      await archivarYAbrir(supabase, activeConvoId, messagesRef.current, convo.id)
+      setActiveConvoId(convo.id)
+      setMessages(convoToMessages(convo))
+      setPendingAction(null)
+    } catch (e) {
+      console.error('[useKitchenCoach] no se pudo abrir la conversación:', e)
+    }
+  }, [restauranteId, usuarioId, activeConvoId, supabase])
 
   // Auto-clear highlight + overlayText after 8s (user may need time to read)
   useEffect(() => {
@@ -279,5 +322,6 @@ export function useKitchenCoach(opts?: CoachOptions) {
     pendingAction, confirmingDraftId,
     open, close, toggle, sendMessage, clearMessages, replaceMessages,
     clearHighlight, clearOverlayText, cancelRequest, confirmAction, cancelAction,
+    startNewConversation, openConversation,
   }
 }

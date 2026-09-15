@@ -554,6 +554,31 @@ const COACH_TOOLS = [
       required: ['nombre', 'fecha_evento', 'pasos'],
     },
   },
+  {
+    name: 'agregar_componentes_menu',
+    description: 'Agrega componentes nuevos a un menú o evento QUE YA EXISTE, sin tocar los que ya tiene. Usar cuando el usuario pide sumar algo a un menú/evento ya creado ("al evento del sábado agregale un postre de X", "sumale una entrada al menú de bodas"). Si el usuario en cambio quiere armar un evento desde cero, usá crear_evento. Cada componente es un objeto {paso, nombre, plaza?, prioridad?}, mismo formato que crear_evento — "plaza" y "prioridad" solo si el usuario las dijo. Si no queda claro a qué menú/evento se refiere o falta el nombre de algún componente, preguntá antes de llamar la herramienta.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        menu: { type: 'string', description: 'Nombre (o parte) del menú o evento ya existente al que hay que agregarle componentes.' },
+        componentes: {
+          type: 'array',
+          description: 'Componentes nuevos a agregar, en orden.',
+          items: {
+            type: 'object',
+            properties: {
+              paso: { type: 'string', description: 'Categoría del paso: Entrada, Principal, Prepostre, Postre, etc.' },
+              nombre: { type: 'string', description: 'Preparación de ese paso.' },
+              plaza: { type: 'string', description: 'Opcional. Plaza/estación que la prepara, solo si el usuario la mencionó. Ej: parrilla, frios, pasteleria.' },
+              prioridad: { type: 'string', enum: ['critica', 'alta', 'media', 'baja'], description: 'Opcional. Default media — poner otra solo si el usuario marcó ese componente como más o menos urgente.' },
+            },
+            required: ['paso', 'nombre'],
+          },
+        },
+      },
+      required: ['menu', 'componentes'],
+    },
+  },
 ]
 
 type ToolInput = Record<string, unknown>
@@ -1112,6 +1137,7 @@ Acciones que MODIFICAN datos — usalas SOLO cuando el usuario lo pide explícit
 - crear_tarea ("creá una tarea…"), marcar_86 ("se acabó el…"), registrar_merma ("se tiraron 2 kg de…").
 - cargar_producto ("cargá un producto nuevo…"), ajustar_stock ("quedan 3 kg de…", "entraron 10 de…"), registrar_venta ("hoy vendimos 450 mil con 60 cubiertos").
 - crear_evento ("armá un evento para el sábado con menú de…", "creá el evento de tal fecha con entrada X, principal Y…") — pedile la fecha si no la dio, y confirmá cada paso del menú antes de llamar la herramienta si algo quedó ambiguo.
+- agregar_componentes_menu ("al evento del sábado agregale un postre de…", "sumale una entrada al menú de bodas") — para un menú/evento QUE YA EXISTE, no crea uno nuevo (eso es crear_evento). Si no está claro a cuál te referís, preguntá.
 - IMPORTANTE: estas herramientas NO ejecutan el cambio al llamarlas — dejan la acción PROPUESTA. El usuario va a ver una tarjeta editable en el chat y tiene que confirmarla ahí. No digas "ya lo hice", "listo, cargado" ni nada que dé a entender que el cambio ya ocurrió — decí algo como "te dejo esto para que confirmes" y cerrá corto.
 
 Reglas:

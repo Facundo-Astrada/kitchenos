@@ -5,9 +5,10 @@ import type { CampoUI } from '@/lib/coach/types'
 import { hoyOperativo, horaEnTz } from '@/lib/ops/turnos'
 import type { ResultadoBusqueda } from '@/lib/coach/busqueda'
 import {
-  buscarCartaItems, resolverProducto, productoPorNombreExacto,
+  buscarCartaItems, resolverProducto, productoPorNombreExacto, buscarMenus, resolverMenu,
   type CartaItemCoach,
 } from '@/lib/coach/catalogo'
+import { ganadorClaro } from '@/lib/coach/busqueda'
 
 const fmtARS = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 
@@ -100,6 +101,13 @@ const crearEventoSchema = z.object({
   nombre: z.string().trim().min(1),
   fecha_evento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   pasos: z.array(pasoMenuSchema).min(1),
+})
+
+// Reusa la forma de un paso de crear_evento — mismo criterio: paso+nombre
+// obligatorios, plaza/prioridad opcionales con el default de siempre.
+const agregarComponentesMenuSchema = z.object({
+  menu: z.string().trim().min(1),
+  componentes: z.array(pasoMenuSchema).min(1),
 })
 
 export const COACH_TOOL_REGISTRY: Record<string, ToolRegistryEntry<any>> = {
@@ -343,6 +351,51 @@ export const COACH_TOOL_REGISTRY: Record<string, ToolRegistryEntry<any>> = {
       if (errPasos) return { ok: false, message: `El evento se creó pero hubo un error al cargar el menú: ${errPasos.message}` }
 
       return { ok: true, message: `Evento "${input.nombre}" creado para el ${input.fecha_evento} con ${input.pasos.length} paso${input.pasos.length !== 1 ? 's' : ''}. Lo vas a ver en Operaciones → Planificación → Eventos.` }
+    },
+  },
+
+  agregar_componentes_menu: {
+    moduloId: 'operaciones',
+    schema: agregarComponentesMenuSchema,
+    tituloHumano: 'Agregar al menú',
+    resumen: i => `${i.componentes.length} componente${i.componentes.length !== 1 ? 's' : ''} a "${i.menu}"`,
+    campos: () => [
+      { key: 'menu', label: 'Menú o evento', tipo: 'texto', requerido: true },
+      { key: 'componentes', label: 'Componentes a agregar', tipo: 'readonly' },
+    ],
+    warnings: async (input: z.infer<typeof agregarComponentesMenuSchema>, { supabase, restauranteId }) => {
+      const res = await buscarMenus(supabase, restauranteId, input.menu)
+      if (res.length === 0) return [`No encontré ningún menú o evento que coincida con "${input.menu}". Si confirmás, no se va a agregar nada.`]
+      if (!ganadorClaro(res)) return [`Hay varios menús/eventos parecidos a "${input.menu}": ${res.slice(0, 5).map(r => r.item.nombre).join(', ')}. Corregí el nombre para que quede claro a cuál agregarlo.`]
+      return []
+    },
+    execute: async (supabase, restauranteId, input: z.infer<typeof agregarComponentesMenuSchema>) => {
+      const menu = await resolverMenu(supabase, restauranteId, input.menu)
+      if (!menu) return { ok: false, message: `No encontré ningún menú o evento que coincida con "${input.menu}". No agregué nada.` }
+
+      // Sigue el orden de los que ya tiene — insertar arranca donde terminó
+      // la lista existente, no pisa nada (a diferencia de "editar el menú"
+      // en Carta, que reemplaza la lista entera vía reemplazar_menu_preparaciones).
+      const { count } = await supabase.from('menu_preparaciones')
+        .select('id', { count: 'exact', head: true })
+        .eq('menu_id', menu.id)
+      const desde = count ?? 0
+
+      const rows = input.componentes.map((c, idx) => ({
+        menu_id: menu.id,
+        paso: c.paso,
+        nombre: c.nombre,
+        orden: desde + idx,
+        plaza: c.plaza ?? null,
+        prioridad: c.prioridad,
+      }))
+      const { error } = await supabase.from('menu_preparaciones').insert(rows)
+      if (error) return { ok: false, message: `Error al agregar los componentes: ${error.message}` }
+
+      return {
+        ok: true,
+        message: `Agregado${input.componentes.length !== 1 ? 's' : ''} ${input.componentes.length} componente${input.componentes.length !== 1 ? 's' : ''} a "${menu.nombre}". Lo vas a ver en Carta → Menús. Si "${menu.nombre}" ya está activo en el mise, volvé a abrirlo y guardarlo para que los nuevos ítems se sincronicen.`,
+      }
     },
   },
 }
