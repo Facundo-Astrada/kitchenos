@@ -65,3 +65,49 @@ self.addEventListener('fetch', (event) => {
     })
   )
 })
+
+// Notificaciones push — payload lo manda lib/push/enviar.ts como JSON
+// { tipo, titulo, cuerpo, link }, mismo shape que la fila de `notificaciones`.
+self.addEventListener('push', (event) => {
+  let datos = {}
+  try {
+    datos = event.data ? event.data.json() : {}
+  } catch {
+    datos = { titulo: 'KitchenOS', cuerpo: event.data ? event.data.text() : '' }
+  }
+
+  const titulo = datos.titulo || 'KitchenOS'
+  const opciones = {
+    body: datos.cuerpo || '',
+    icon: '/icons/icon-192.svg',
+    badge: '/icons/icon-192.svg',
+    tag: datos.tipo || undefined,
+    data: { link: datos.link || '/' },
+  }
+
+  event.waitUntil(self.registration.showNotification(titulo, opciones))
+})
+
+// Tap en la notificación: enfoca una pestaña ya abierta en ese link, o la
+// navega ahí si está abierta en otro, o abre una nueva.
+self.addEventListener('notificationclick', (event) => {
+  const link = (event.notification.data && event.notification.data.link) || '/'
+  event.notification.close()
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((listaClientes) => {
+      const destino = new URL(link, self.location.origin).href
+      const yaAbierto = listaClientes.find((c) => c.url === destino)
+      if (yaAbierto) return yaAbierto.focus()
+
+      const cualquiera = listaClientes[0]
+      if (cualquiera) {
+        return cualquiera.focus().then(() => {
+          if ('navigate' in cualquiera) return cualquiera.navigate(destino)
+        })
+      }
+
+      if (self.clients.openWindow) return self.clients.openWindow(destino)
+    })
+  )
+})

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth/context'
 import { createClient } from '@/lib/supabase/client'
 import { useOnboardingPersonal } from '@/lib/hooks/useOnboardingPersonal'
+import { usePushSubscripcion } from '@/lib/hooks/usePushSubscripcion'
 
 const MAX_SIZE_MB = 2
 
@@ -18,6 +19,7 @@ export default function PerfilPage() {
   const [changingPassword, setChangingPassword] = useState(false)
   const { resetTours } = useOnboardingPersonal()
   const [reseteandoTours, setReseteandoTours] = useState(false)
+  const { estado: estadoPush, trabajando: pushTrabajando, activar: activarPush, desactivar: desactivarPush } = usePushSubscripcion()
 
   async function handleResetTours() {
     await resetTours()
@@ -268,6 +270,44 @@ export default function PerfilPage() {
               {changingPassword ? 'Actualizando...' : 'Actualizar contraseña'}
             </button>
           </div>
+
+          {/* Notificaciones push — toggle por dispositivo, no por cuenta */}
+          {estadoPush !== 'no-soportado' && (
+            <>
+              <div className="w-full h-px my-2" style={{ background: 'var(--border)' }} />
+              <div className="w-full flex flex-col gap-3">
+                <h3 className="text-[15px] font-semibold" style={{ color: 'var(--text-1)' }}>
+                  Notificaciones push
+                </h3>
+                <p className="text-[13px]" style={{ color: 'var(--text-3)' }}>
+                  Avisos en este dispositivo (turno asignado, recordatorios) aunque tengas la app cerrada.
+                </p>
+                {estadoPush === 'denegado' ? (
+                  <p className="text-[13px] font-medium" style={{ color: '#ef4444' }}>
+                    Bloqueaste los avisos del navegador para KitchenOS — activalos desde la configuración del sitio para recibirlos.
+                  </p>
+                ) : (
+                  <button
+                    onClick={estadoPush === 'activo' ? desactivarPush : activarPush}
+                    disabled={pushTrabajando || estadoPush === 'cargando'}
+                    className="w-full flex items-center justify-center gap-2 rounded-[14px] py-[12px] text-[14px] font-semibold"
+                    style={{
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      color: 'var(--text-1)',
+                      cursor: 'pointer',
+                      opacity: pushTrabajando || estadoPush === 'cargando' ? 0.5 : 1,
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-[18px]">
+                      {estadoPush === 'activo' ? 'notifications_active' : 'notifications'}
+                    </span>
+                    {estadoPush === 'activo' ? 'Notificaciones activadas — Desactivar' : 'Activar notificaciones en este dispositivo'}
+                  </button>
+                )}
+              </div>
+            </>
+          )}
 
           {/* Divider */}
           <div className="w-full h-px my-2" style={{ background: 'var(--border)' }} />

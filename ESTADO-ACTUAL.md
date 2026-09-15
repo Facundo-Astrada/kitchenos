@@ -98,7 +98,7 @@ Auth: proxy.ts (NO middleware.ts — breaking change Next 16)
 
 **Desktop — paleta de comandos:** `Ctrl/Cmd+K` (`components/desktop/CommandPalette.tsx`, montada en `DesktopShell`) — ir a cualquier módulo permitido, registrar merma (abre el `MermaBottomSheet` real), crear tarea al vuelo. Listada en `ShortcutsHelp` junto al resto de los atajos de desktop.
 
-**Notificaciones in-app** (ago 2026): campanita con feed (`NotificacionesBell` — sidebar en desktop, flotante en mobile) sobre tabla `notificaciones` + Supabase realtime (`useNotificaciones`). Solo in-app, sin push/email/WhatsApp. `crearNotificacion()` (`lib/notificaciones/crear.ts`) es el helper para que cualquier hook notifique a otra persona del restaurante — hoy solo lo usa `useEquipo.asignarTurno`.
+**Notificaciones in-app + push** (ago-sep 2026): campanita con feed (`NotificacionesBell` — sidebar en desktop, flotante en mobile) sobre tabla `notificaciones` + Supabase realtime (`useNotificaciones`). `crearNotificacion()` (`lib/notificaciones/crear.ts`) es el único punto de entrada — usado por `useEquipo.asignarTurno` y el recordatorio de `/implantacion` — e insertar ahí ya dispara además un push (`web-push` + VAPID, tabla `push_subscripciones`, handlers en `public/sw.js`) a los dispositivos que la persona activó en `/perfil` (`usePushSubscripcion`, opt-in por dispositivo). Email/WhatsApp para quien dejó de entrar: sin decidir.
 
 ```
 app/

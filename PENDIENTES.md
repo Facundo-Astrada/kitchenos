@@ -84,16 +84,31 @@ desglosado.
 ### Fotos — falta completar
 `PhotoPicker` ya está en recetario, carta y equipo. Falta facturas, si se decide.
 
-### Notificaciones — faltan triggers, y push/email sin decidir
-In-app resuelto (tabla, hook con realtime, campanita, `crearNotificacion()`
-reusable). **Dos triggers reales**: `useEquipo.asignarTurno` y el recordatorio al
-responsable de una estación de `/implantacion`. Wirear más (stock crítico,
-vencimientos) es una decisión de producto por cada uno — no asumir.
-**`public/sw.js` no tiene
-handler de `push` ni de `notificationclick`**; faltan esos, claves VAPID, tabla
-de suscripciones y endpoint disparador. Sin eso el aviso solo llega si la
-persona abre la app — justo lo que no hace quien está abandonando.
-Email/WhatsApp para el que dejó de entrar: sin decisión.
+### Notificaciones — push resuelto, faltan triggers nuevos y el canal para "dejó de entrar"
+In-app + push resueltos (sep 2026, sesión 4 del lote): tabla `notificaciones`
++ tabla `push_subscripciones` (RLS propia), campanita con realtime,
+`crearNotificacion()` sigue siendo el único punto de entrada — ahora además
+del insert in-app dispara `POST /api/notificaciones/push` (best-effort,
+`lib/push/enviar.ts` con `web-push` + claves VAPID) que busca los dispositivos
+suscriptos del destinatario y les manda el push. `public/sw.js` ya tiene los
+handlers de `push` y `notificationclick`. Opt-in por dispositivo en
+`/perfil` (`usePushSubscripcion`) — cada persona activa el push en su propio
+celu/compu, no es automático. VAPID en `.env.local`; **falta sumar las
+mismas 3 vars en Vercel (Production + Preview) para que ande en prod**:
+`NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`.
+
+**Dos triggers reales** siguen siendo los mismos: `useEquipo.asignarTurno` y
+el recordatorio al responsable de una estación de `/implantacion` — como los
+dos pasan por `crearNotificacion()`, ya salen por push sin tocarlos. Wirear
+uno nuevo (stock crítico, vencimientos HACCP) sigue siendo decisión de
+producto por cada uno — no asumir. `/api/cron/avisos` (reconocimiento semanal)
+sigue escribiendo `notificaciones` directo con el admin client, no por
+`crearNotificacion()` — mientras esté en modo seco (`AVISOS_ACTIVOS` no en
+`1`) no importa; si se activa, no dispara push hasta que se decida sumarlo.
+
+Email para el que dejó de entrar: sigue sin decidir el destinatario/copy/cadencia,
+pero ya no está bloqueado por infraestructura — Resend sigue esperando el
+dominio propio verificado (ver "Invitación por email falla a veces" abajo).
 
 ### PWA offline — completar fuera de Salón/KDS
 La vista de servicio ya tiene offline completo. El resto (stock, facturas) no.

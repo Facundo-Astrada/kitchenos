@@ -21,7 +21,7 @@ interface Props {
   variant?: 'sidebar' | 'floating'
 }
 
-/** Campanita + feed de notificaciones in-app (solo in-app: sin push/email/WhatsApp). */
+/** Campanita + feed de notificaciones in-app (el push, sep 2026, se activa por separado en /perfil). */
 export function NotificacionesBell({ variant = 'floating' }: Props) {
   const router = useRouter()
   const { notificaciones, noLeidas, marcarLeida, marcarTodasLeidas } = useNotificaciones()

@@ -23,7 +23,7 @@ async function fetchNotificacionesData(key: string): Promise<Notificacion[]> {
   return (data ?? []) as Notificacion[]
 }
 
-/** Feed in-app de notificaciones del usuario logueado — solo in-app, sin push/email/WhatsApp. */
+/** Feed in-app de notificaciones del usuario logueado — el push (sep 2026) sale por separado desde crearNotificacion(), acá solo se lee/marca el feed. */
 export function useNotificaciones() {
   const RESTAURANTE_ID = useRestauranteId()
   const { user } = useAuth()
