@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback } from 'react'
+import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/auth/context'
 import { useRestauranteId } from './useRestauranteId'
@@ -36,121 +37,93 @@ const STATS_VACIAS: OnboardingStats = {
   rutinas: 0, miseConfigurados: 0, turnosConfigurados: false,
 }
 
-/**
- * ── Persistencia ──────────────────────────────────────────────
- * Enfoque simple para empezar: localStorage por usuario.
- *
- * CAMINO DE MIGRACIÓN a server-side (ver supabase/migrations/onboarding_completed_at.sql):
- *   1. Correr la migración (agrega user_restaurantes.onboarding_completed_at + NOTIFY pgrst).
- *   2. En markDone(): además del localStorage, hacer
- *        await supabase.from('user_restaurantes')
- *          .update({ onboarding_completed_at: new Date().toISOString() })
- *          .eq('user_id', userId).eq('restaurante_id', RESTAURANTE_ID)
- *   3. En isDone(): leer la columna en vez del localStorage (con localStorage como cache opcional).
- */
-function doneKey(userId: string) {
-  return `onboarding_done_${userId}`
-}
+const SWR_OPTS = {
+  revalidateOnFocus: false,
+  revalidateOnReconnect: false,
+  dedupingInterval: 15_000,
+} as const
 
-export function isOnboardingDone(userId: string | undefined | null): boolean {
-  if (!userId || typeof window === 'undefined') return false
-  return window.localStorage.getItem(doneKey(userId)) === '1'
-}
+async function fetchStats(key: string): Promise<OnboardingStats> {
+  const restauranteId = key.slice('onboarding-progress-'.length)
+  const supabase = createClient()
+  const eq = (q: ReturnType<typeof supabase.from>) =>
+    q.select('*', { count: 'exact', head: true }).eq('restaurante_id', restauranteId)
 
-export function markOnboardingDone(userId: string | undefined | null) {
-  if (!userId || typeof window === 'undefined') return
-  window.localStorage.setItem(doneKey(userId), '1')
-}
+  const [
+    cartaRes,
+    recetasRes,
+    miembrosRes,
+    rutinasRes,
+    productosRes,
+    productosPrecioRes,
+    seccionesRes,
+    recetasCostoRes,
+    miseRes,
+    restauranteRes,
+  ] = await Promise.all([
+    eq(supabase.from('carta_items')),
+    supabase.from('recetas').select('*', { count: 'exact', head: true }).eq('restaurante_id', restauranteId).eq('activa', true),
+    supabase.from('equipo_miembros').select('*', { count: 'exact', head: true }).eq('restaurante_id', restauranteId).eq('activo', true),
+    eq(supabase.from('checklist_rutina')),
+    supabase.from('productos').select('*', { count: 'exact', head: true }).eq('restaurante_id', restauranteId).eq('activo', true),
+    supabase.from('productos').select('*', { count: 'exact', head: true }).eq('restaurante_id', restauranteId).eq('activo', true).gt('precio_unitario', 0),
+    // Plazas reales: distinct plaza desde checklist_secciones
+    supabase.from('checklist_secciones').select('plaza').eq('restaurante_id', restauranteId),
+    // Food cost promedio: recetas con precio_venta > 0 (aprox liviana)
+    supabase.from('recetas').select('precio_venta').eq('restaurante_id', restauranteId).eq('activa', true).gt('precio_venta', 0),
+    // Mise configurado: items con cantidad cargada
+    supabase.from('checklist_items').select('*', { count: 'exact', head: true }).eq('restaurante_id', restauranteId).gt('cantidad', 0),
+    // Turnos de servicio: confirmados cuando la clave existe en configuracion (ver useTurnosServicio)
+    supabase.from('restaurantes').select('configuracion').eq('id', restauranteId).single(),
+  ])
 
-export function resetOnboardingDone(userId: string | undefined | null) {
-  if (!userId || typeof window === 'undefined') return
-  window.localStorage.removeItem(doneKey(userId))
+  const plazasSet = new Set<string>()
+  for (const row of (seccionesRes.data ?? [])) {
+    const p = (row as { plaza?: string | null }).plaza
+    if (p) plazasSet.add(p)
+  }
+
+  // Food cost promedio: el cálculo fino (costo de ingredientes vs precio_venta)
+  // vive en /recetario. Acá solo orientamos: dejamos null para no mostrar un
+  // número que pueda confundir durante el setup. Hook listo para llenarlo si
+  // se quiere computar el promedio real más adelante.
+  void recetasCostoRes
+  const foodCostPromedio: number | null = null
+
+  const productos = productosRes.count ?? 0
+  const productosConPrecio = productosPrecioRes.count ?? 0
+  const cfg = (restauranteRes.data?.configuracion ?? {}) as { turnos_servicio?: unknown }
+
+  return {
+    carta: cartaRes.count ?? 0,
+    recetas: recetasRes.count ?? 0,
+    foodCostPromedio,
+    plazas: plazasSet.size,
+    miembros: miembrosRes.count ?? 0,
+    productos,
+    productosConPrecio,
+    pctProductosConPrecio: productos > 0 ? Math.round((productosConPrecio / productos) * 100) : 0,
+    rutinas: rutinasRes.count ?? 0,
+    miseConfigurados: miseRes.count ?? 0,
+    turnosConfigurados: Array.isArray(cfg.turnos_servicio),
+  }
 }
 
 export function useOnboardingProgress() {
   const RESTAURANTE_ID = useRestauranteId()
   const { user } = useAuth()
-  const [supabase] = useState(() => createClient())
-  const [stats, setStats] = useState<OnboardingStats>(STATS_VACIAS)
-  const [loading, setLoading] = useState(true)
 
-  const refresh = useCallback(async () => {
-    if (!RESTAURANTE_ID) return
-    setLoading(true)
-    try {
-      const eq = (q: ReturnType<typeof supabase.from>) =>
-        q.select('*', { count: 'exact', head: true }).eq('restaurante_id', RESTAURANTE_ID)
+  const { data, isLoading, mutate } = useSWR(
+    RESTAURANTE_ID ? `onboarding-progress-${RESTAURANTE_ID}` : null,
+    fetchStats,
+    SWR_OPTS,
+  )
 
-      const [
-        cartaRes,
-        recetasRes,
-        miembrosRes,
-        rutinasRes,
-        productosRes,
-        productosPrecioRes,
-        seccionesRes,
-        recetasCostoRes,
-        miseRes,
-        restauranteRes,
-      ] = await Promise.all([
-        eq(supabase.from('carta_items')),
-        supabase.from('recetas').select('*', { count: 'exact', head: true }).eq('restaurante_id', RESTAURANTE_ID).eq('activa', true),
-        supabase.from('equipo_miembros').select('*', { count: 'exact', head: true }).eq('restaurante_id', RESTAURANTE_ID).eq('activo', true),
-        eq(supabase.from('checklist_rutina')),
-        supabase.from('productos').select('*', { count: 'exact', head: true }).eq('restaurante_id', RESTAURANTE_ID).eq('activo', true),
-        supabase.from('productos').select('*', { count: 'exact', head: true }).eq('restaurante_id', RESTAURANTE_ID).eq('activo', true).gt('precio_unitario', 0),
-        // Plazas reales: distinct plaza desde checklist_secciones
-        supabase.from('checklist_secciones').select('plaza').eq('restaurante_id', RESTAURANTE_ID),
-        // Food cost promedio: recetas con precio_venta > 0 (aprox liviana)
-        supabase.from('recetas').select('precio_venta').eq('restaurante_id', RESTAURANTE_ID).eq('activa', true).gt('precio_venta', 0),
-        // Mise configurado: items con cantidad cargada
-        supabase.from('checklist_items').select('*', { count: 'exact', head: true }).eq('restaurante_id', RESTAURANTE_ID).gt('cantidad', 0),
-        // Turnos de servicio: confirmados cuando la clave existe en configuracion (ver useTurnosServicio)
-        supabase.from('restaurantes').select('configuracion').eq('id', RESTAURANTE_ID).single(),
-      ])
-
-      const plazasSet = new Set<string>()
-      for (const row of (seccionesRes.data ?? [])) {
-        const p = (row as { plaza?: string | null }).plaza
-        if (p) plazasSet.add(p)
-      }
-
-      // Food cost promedio: el cálculo fino (costo de ingredientes vs precio_venta)
-      // vive en /recetario. Acá solo orientamos: dejamos null para no mostrar un
-      // número que pueda confundir durante el setup. Hook listo para llenarlo si
-      // se quiere computar el promedio real más adelante.
-      void recetasCostoRes
-      const foodCostPromedio: number | null = null
-
-      const productos = productosRes.count ?? 0
-      const productosConPrecio = productosPrecioRes.count ?? 0
-      const cfg = (restauranteRes.data?.configuracion ?? {}) as { turnos_servicio?: unknown }
-
-      setStats({
-        carta: cartaRes.count ?? 0,
-        recetas: recetasRes.count ?? 0,
-        foodCostPromedio,
-        plazas: plazasSet.size,
-        miembros: miembrosRes.count ?? 0,
-        productos,
-        productosConPrecio,
-        pctProductosConPrecio: productos > 0 ? Math.round((productosConPrecio / productos) * 100) : 0,
-        rutinas: rutinasRes.count ?? 0,
-        miseConfigurados: miseRes.count ?? 0,
-        turnosConfigurados: Array.isArray(cfg.turnos_servicio),
-      })
-    } catch {
-      setStats(STATS_VACIAS)
-    } finally {
-      setLoading(false)
-    }
-  }, [RESTAURANTE_ID, supabase])
-
-  useEffect(() => { refresh() }, [refresh])
+  const refresh = useCallback(async () => { await mutate() }, [mutate])
 
   return {
-    stats,
-    loading,
+    stats: data ?? STATS_VACIAS,
+    loading: isLoading,
     refresh,
     userId: user?.id ?? null,
   }

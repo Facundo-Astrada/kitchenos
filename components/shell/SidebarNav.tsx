@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useAuth } from '@/lib/auth/context'
 import { usePermisos } from '@/lib/hooks/usePermisos'
-import { resetOnboardingDone } from '@/lib/hooks/useOnboardingProgress'
 import { MODULO_CONFIG, MODULOS_POR_ROL, ROL_CONFIG, RUTA_A_MODULO } from '@/lib/constants'
 import type { ModuloId } from '@/lib/constants'
 import { NotificacionesBell } from '@/components/notificaciones/NotificacionesBell'
@@ -51,7 +50,7 @@ export const SIDEBAR_ANCHO_COLAPSADO = 68
 
 export default function SidebarNav({ onImportarClick, dark = false, collapsed = false }: Props) {
   const pathname = usePathname()
-  const { perfil, user } = useAuth()
+  const { perfil } = useAuth()
   const { puedeVer, isAdmin, moduloEnPerfil, perfilRestaurante } = usePermisos()
 
   const rol = perfil?.rol ?? 'ayudante'
@@ -218,7 +217,6 @@ export default function SidebarNav({ onImportarClick, dark = false, collapsed = 
             <Link
               href="/onboarding"
               title={collapsed ? 'Guía de inicio' : undefined}
-              onClick={() => resetOnboardingDone(user?.id)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 justifyContent: collapsed ? 'center' : 'flex-start',

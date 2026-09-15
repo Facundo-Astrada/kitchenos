@@ -27,6 +27,7 @@ const SWR_OPTS = {
 
 interface OnboardingRow {
   onboarding_visto_at: string | null
+  onboarding_wizard_visto_at: string | null
   tours_vistos: string[] | null
 }
 
@@ -37,12 +38,13 @@ async function fetchOnboarding(key: string): Promise<OnboardingRow> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('equipo_miembros')
-    .select('onboarding_visto_at, tours_vistos')
+    .select('onboarding_visto_at, onboarding_wizard_visto_at, tours_vistos')
     .eq('id', miembroId)
     .maybeSingle()
   if (error) throw error
   return {
     onboarding_visto_at: data?.onboarding_visto_at ?? null,
+    onboarding_wizard_visto_at: data?.onboarding_wizard_visto_at ?? null,
     tours_vistos: data?.tours_vistos ?? [],
   }
 }
@@ -57,6 +59,9 @@ export interface OnboardingPersonal {
   marcarTourVisto: (tour: string) => Promise<void>
   /** Borra los recorridos vistos (botón "ver de nuevo" en Perfil). */
   resetTours: () => Promise<void>
+  /** true = esta persona todavía no completó/saltó la guía de inicio (/onboarding). */
+  onboardingWizardPendiente: boolean
+  marcarOnboardingWizardVisto: () => Promise<void>
 }
 
 export function useOnboardingPersonal(): OnboardingPersonal {
@@ -122,6 +127,21 @@ export function useOnboardingPersonal(): OnboardingPersonal {
     })
   }, [miembroId, mutate])
 
+  const marcarOnboardingWizardVisto = useCallback(async () => {
+    if (!miembroId) return
+    const ahora = new Date().toISOString()
+    await mutate(async prev => {
+      const supabase = createClient()
+      await supabase.from('equipo_miembros')
+        .update({ onboarding_wizard_visto_at: ahora }).eq('id', miembroId)
+      return { ...(prev ?? { tours_vistos: [] }), onboarding_wizard_visto_at: ahora } as OnboardingRow
+    }, {
+      optimisticData: (prev?: OnboardingRow) =>
+        ({ ...(prev ?? { tours_vistos: [] }), onboarding_wizard_visto_at: ahora }) as OnboardingRow,
+      revalidate: false,
+    })
+  }, [miembroId, mutate])
+
   return {
     loading: isLoading,
     // Sin miembro_id nunca está pendiente: no hay puesto del que hablar.
@@ -131,5 +151,7 @@ export function useOnboardingPersonal(): OnboardingPersonal {
     marcarBienvenidaVista,
     marcarTourVisto,
     resetTours,
+    onboardingWizardPendiente: !!miembroId && !isLoading && !data?.onboarding_wizard_visto_at,
+    marcarOnboardingWizardVisto,
   }
 }

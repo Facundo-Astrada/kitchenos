@@ -7,8 +7,6 @@ import { MODULO_CONFIG, MODULOS_POR_ROL, NAV_ITEMS } from '@/lib/constants'
 import type { ModuloId } from '@/lib/constants'
 import type { Rol } from '@/types'
 import { usePermisos } from '@/lib/hooks/usePermisos'
-import { useAuth } from '@/lib/auth/context'
-import { resetOnboardingDone } from '@/lib/hooks/useOnboardingProgress'
 import ImportadorUniversal from '@/components/importador/ImportadorUniversal'
 
 interface MoreMenuProps {
@@ -18,11 +16,9 @@ interface MoreMenuProps {
 
 export default function MoreMenu({ rol, onClose }: MoreMenuProps) {
   const { puedeVer, loading, moduloEnPerfil, isAdmin } = usePermisos()
-  const { user } = useAuth()
   const [showImportador, setShowImportador] = useState(false)
 
   function abrirGuiaInicio() {
-    resetOnboardingDone(user?.id)
     onClose()
   }
 

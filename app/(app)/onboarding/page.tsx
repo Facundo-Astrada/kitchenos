@@ -6,7 +6,8 @@ import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/auth/context'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { useUserRol, type FlujoOnboarding } from '@/lib/hooks/useUserRol'
-import { useOnboardingProgress, markOnboardingDone, type OnboardingStats, type StepState } from '@/lib/hooks/useOnboardingProgress'
+import { useOnboardingProgress, type OnboardingStats, type StepState } from '@/lib/hooks/useOnboardingProgress'
+import { useOnboardingPersonal } from '@/lib/hooks/useOnboardingPersonal'
 import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
 import StepCard, { type StepGroup } from '@/components/onboarding/StepCard'
 import RoleBadge from '@/components/onboarding/RoleBadge'
@@ -172,6 +173,7 @@ export default function OnboardingPage() {
 
   const { flujo, plazaDefault, loading: rolLoading } = useUserRol()
   const { stats, loading: statsLoading, refresh } = useOnboardingProgress()
+  const { marcarOnboardingWizardVisto } = useOnboardingPersonal()
   const { turnos: turnosOnboarding, confirmarDefaults: confirmarDefaultsTurnos } = useTurnosServicio()
   const [confirmandoTurnos, setConfirmandoTurnos] = useState(false)
 
@@ -265,8 +267,10 @@ export default function OnboardingPage() {
     window.dispatchEvent(new CustomEvent('kc-prefill', { detail: { text: prompt } }))
   }
 
-  function completar() {
-    markOnboardingDone(user?.id)
+  async function completar() {
+    // equipo_miembros.onboarding_wizard_visto_at — lo lee app/(app)/page.tsx
+    // antes de redirigir acá (gate por persona, no por restaurante vacío).
+    await marcarOnboardingWizardVisto()
     router.push('/')
   }
 

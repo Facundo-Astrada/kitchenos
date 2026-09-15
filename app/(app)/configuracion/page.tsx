@@ -6,7 +6,6 @@ import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { useAuth } from '@/lib/auth/context'
-import { resetOnboardingDone } from '@/lib/hooks/useOnboardingProgress'
 import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
 import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
 import { SwitchRow } from '@/components/ui'
@@ -17,12 +16,10 @@ export default function ConfiguracionPage() {
   const router = useRouter()
   const RESTAURANTE_ID = useRestauranteId()
   const { isAdmin } = usePermisos()
-  const { perfil, user } = useAuth()
+  const { perfil } = useAuth()
   const [supabase] = useState(() => createClient())
 
   function abrirGuiaInicio() {
-    // Reabrir el onboarding aunque ya esté marcado como completado
-    resetOnboardingDone(user?.id)
     router.push('/onboarding')
   }
 
