@@ -422,11 +422,11 @@ Corolario del 3: cuando un total ya se calcula sumando ítems, exponer **el tér
 
 Y una métrica de "falta algo" (cuántos ítems no se pueden costear, cuántas recetas están todavía "a realizar") vale más que una métrica más de volumen: se muestra **solo cuando hay algo que arreglar**, así una ficha terminada no acumula ruido. Ojo con lo que destapa: en Carta, "Sin costear 7 de 9" dejó a la vista que el costo que se mostraba salía de 2 ítems.
 
-## Registro "Arcade": qué transfiere del game feel y qué no — prototipo en `/lab` (sep 2026)
+## Registro "Arcade": qué transfiere del game feel y qué no — prototipo descartado (sep 2026)
 
 > **Veredicto: NO se adopta** (ver `DECISIONES.md` § 26). `DESIGN.md` queda sin cambios — siguen valiendo §4 y §10. Esto no es una propuesta abierta: es el registro de una prueba cerrada, para no rediscutirla desde cero. Lo único señalado como candidato independiente es **remarcar palabras clave**, que anda sin nada del skin.
 
-`app/(app)/lab/page.tsx` es un **laboratorio, no producto**: la misma pantalla (apertura de una plaza) con un toggle **Calma / Arcade** sobre los mismos datos. Sin la comparación lado a lado una prueba visual no decide nada — se mira linda sola y no se sabe contra qué. Todo lo que choca con `DESIGN.md` (§4 segunda familia, §10 neón/sombras fuera de token) vive ahí adentro y no en los tokens: la constitución se cambia discutiéndola (§11), no esquivándola en un componente.
+El prototipo fue un **laboratorio, no producto**, y ya **no está en el árbol**: se borró para que no viviera en producción (ver `DECISIONES.md` § 26 para recuperarlo). Era la misma pantalla (apertura de una plaza) con un toggle **Calma / Arcade** sobre los mismos datos. Sin la comparación lado a lado una prueba visual no decide nada — se mira linda sola y no se sabe contra qué. Todo lo que choca con `DESIGN.md` (§4 segunda familia, §10 neón/sombras fuera de token) vive ahí adentro y no en los tokens: la constitución se cambia discutiéndola (§11), no esquivándola en un componente.
 
 **El orden manda (Swink: control → espacio predecible → juice).** El juice amplifica lo que ya funciona, no lo rescata. Práctica: el feedback de presión (`whileTap` scale .975, 120ms) va en los **dos** modos — es respuesta, no adorno. Lo que se prende y se apaga con el toggle es la capa de arriba (destello, glow, partículas).
 
