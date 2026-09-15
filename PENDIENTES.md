@@ -81,20 +81,6 @@ Detalle en `PLAN-PRESUPUESTO-CMV-2026-08.md` §11: partir venta comida/bebida
 comparación mes contra mes, cubiertos/Q real, presupuesto de personal/alquiler
 desglosado.
 
-### Kitchen Coach — memoria persistida
-Falta tabla `coach_conversaciones` para historial cross-device (hoy localStorage).
-
-### Kitchen Coach — asistir activamente en el editor de Carta
-Sigue sin poder escribir en un plato/menú (sep 2026: ahora sí *lee* su
-composición — `composicion_plato`, gramaje por receta — pero no la arma). **Recomendado: B** — extender el patrón de
-`crear_evento` con `agregar_componentes_menu(menu_id, componentes[])` que
-escribe a DB y el editor refresca. Exige guardar el menú antes. **Chequear
-antes de arrancar:** `ComposicionEditor.tsx`/`RecetaEditSheet.tsx` tuvieron 4
-commits el 12/09 (crear receta al vuelo con procedimiento, fix de dropdown de
-sugerencias tapado, subreceta-como-ingrediente por gramaje, preview de receta
-vinculada siempre editable) — releer esos diffs, no asumir la forma de hace
-una semana. Sesión aparte.
-
 ### Fotos — falta completar
 `PhotoPicker` ya está en recetario, carta y equipo. Falta facturas, si se decide.
 

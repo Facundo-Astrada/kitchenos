@@ -199,6 +199,10 @@ export function useX() {
 4. Reemplazar caches manuales (Map ad hoc) por SWR.
 5. **El `= []`/`?? []` de arriba es una trampa si ese array alimenta el `deps` de OTRO efecto** (propio o de quien consume el hook): mientras `data` no resuelve, cada render produce un array nuevo, ese efecto se re-dispara solo, y si el efecto llama a `setState` es un loop — "Maximum update depth exceeded" (visto en `useChecklist`, ago 2026). Ahí no alcanza con inline: usar una constante a nivel de módulo (`const SIN_X: X[] = []`) como fallback, para que la identidad sea estable entre renders.
 
+## Efecto "fetch/create una vez por key" — el guard tiene que sobrevivir el doble-invoke de StrictMode
+
+Un efecto que hace `if (ref.current === key) return; ref.current = key; fetchOCreate(...).then(setState)` para no repetir un GET-o-INSERT al remontar, **no puede** cortar el resultado con un flag `cancel` de cleanup (`let cancel=false; ...; return () => {cancel=true}`). En dev, StrictMode invoca el efecto dos veces (monta→limpia→monta): la promesa de la PRIMERA invocación (la única que de verdad llamó al fetch) se resuelve después de que su cleanup ya puso `cancel=true`, y la SEGUNDA invocación no vuelve a pedirla porque el `ref` ya "ganó" la carrera — el resultado nunca se aplica, en ningún estado. Chequear contra el `ref` (no un flag por invocación) dentro del `.then()` sobrevive el doble-invoke: solo una invocación pide el fetch, y su resultado se aplica igual sin importar cuántas veces se montó el efecto. Si el hook alimenta un `useSWR` esto no aplica (SWR ya deduplica); es para el caso "necesito crear la fila si no existe y quedarme con su id", que no encaja en SWR puro.
+
 ## Doble-tap / "hay que apretar dos veces" — causas reales
 
 1. **Server Component async** (`export default async function Page()` con `await`) sale `ƒ (Dynamic)` en el build → round-trip al server antes de transicionar en cada tap. Si el hook ya cachea con SWR, hacer la página client estática (sin `await`) → ruta `○` → navega instantáneo.
