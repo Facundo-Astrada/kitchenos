@@ -11,8 +11,16 @@
 // mobile": backdrop position:fixed,inset:0,zIndex:2000 con blur, card
 // centrada (borderRadius:18, maxWidth configurable, maxHeight:'calc(100dvh -
 // 48px)', overflowY:'auto'), cierre por click en backdrop + Escape.
-
-import { useEffect, type ReactNode } from 'react'
+//
+// Se porta a document.body (sep 2026, encontrado probando PaseSheet.tsx):
+// `position:fixed` deja de anclar contra el viewport si un ANCESTRO tiene un
+// `transform` calculado, aunque sea la identidad — y una animación CSS con
+// `forwards` (ej. `.toast-enter`, ver globals.css) deja ese transform puesto
+// para siempre incluso después de terminar. Cualquier Modal montado dentro de
+// una barra animada así quedaba encogido al tamaño de esa barra en vez de
+// cubrir la pantalla. El portal lo saca del todo de esa cadena de ancestros.
+import { useEffect, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { useSheetOpenWhen } from '@/lib/ui/chrome'
@@ -24,12 +32,23 @@ interface ModalProps {
   children: ReactNode
   /** Ancho máximo en desktop, en px. Default 560 (el estándar de ui.md). */
   maxWidth?: number
+  /**
+   * Centrado como en desktop, incluso en mobile — para un paso que pide
+   * revisión (ej. el texto del pase antes de mandarlo) y no es un drawer
+   * casual que se descarta con un swipe hacia abajo.
+   */
+  center?: boolean
 }
 
-export function Modal({ open, onClose, children, maxWidth = 560 }: ModalProps) {
+export function Modal({ open, onClose, children, maxWidth = 560, center = false }: ModalProps) {
   useSheetOpenWhen(open)
   const isDesktop = useIsDesktop()
+  const centrado = isDesktop || center
   const reducedMotion = useReducedMotion()
+  // document no existe en SSR — el portal solo puede armarse del lado del
+  // cliente, ya montado.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
   useEffect(() => {
     if (!open) return
@@ -40,14 +59,16 @@ export function Modal({ open, onClose, children, maxWidth = 560 }: ModalProps) {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [open, onClose])
 
-  return (
+  if (!mounted) return null
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <div
           style={{
             position: 'fixed', inset: 0, zIndex: 2000, display: 'flex', flexDirection: 'column',
-            justifyContent: isDesktop ? 'center' : 'flex-end', alignItems: 'center',
-            padding: isDesktop ? 24 : 0,
+            justifyContent: centrado ? 'center' : 'flex-end', alignItems: 'center',
+            padding: centrado ? 24 : 0,
           }}
           onClick={e => { if (e.target === e.currentTarget) onClose() }}
         >
@@ -63,28 +84,29 @@ export function Modal({ open, onClose, children, maxWidth = 560 }: ModalProps) {
             onClick={onClose}
           />
           <motion.div
-            initial={isDesktop ? { opacity: 0, scale: 0.96 } : { y: '100%' }}
-            animate={isDesktop ? { opacity: 1, scale: 1 } : { y: 0 }}
-            exit={isDesktop ? { opacity: 0, scale: 0.96 } : { y: '100%' }}
-            transition={reducedMotion ? { duration: 0 } : isDesktop ? { duration: DURATION.enter, ease: EASE_OUT } : SPRING_SHEET}
+            initial={centrado ? { opacity: 0, scale: 0.96 } : { y: '100%' }}
+            animate={centrado ? { opacity: 1, scale: 1 } : { y: 0 }}
+            exit={centrado ? { opacity: 0, scale: 0.96 } : { y: '100%' }}
+            transition={reducedMotion ? { duration: 0 } : centrado ? { duration: DURATION.enter, ease: EASE_OUT } : SPRING_SHEET}
             style={{
               position: 'relative', background: 'var(--surface)',
-              borderRadius: isDesktop ? 18 : '18px 18px 0 0',
-              width: isDesktop ? `min(${maxWidth}px, 92vw)` : '100%',
-              maxHeight: isDesktop ? 'calc(100dvh - 48px)' : '92dvh',
+              borderRadius: centrado ? 18 : '18px 18px 0 0',
+              width: centrado ? `min(${maxWidth}px, 92vw)` : '100%',
+              maxHeight: centrado ? 'calc(100dvh - 48px)' : '92dvh',
               overflowY: 'auto',
-              boxShadow: isDesktop ? '0 20px 60px rgba(0,0,0,.35)' : '0 -8px 40px rgba(0,0,0,.3)',
-              border: isDesktop ? '1px solid var(--border)' : 'none',
+              boxShadow: centrado ? '0 20px 60px rgba(0,0,0,.35)' : '0 -8px 40px rgba(0,0,0,.3)',
+              border: centrado ? '1px solid var(--border)' : 'none',
             }}
             onClick={e => e.stopPropagation()}
           >
-            {!isDesktop && (
+            {!centrado && (
               <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 2, margin: '10px auto 0' }} />
             )}
             {children}
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   )
 }

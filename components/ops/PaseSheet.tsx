@@ -6,13 +6,19 @@ import { tap } from '@/lib/ui/motion'
 
 // ── Hoja "Copiar pase" ───────────────────────────────────────────────────
 //
-// Al lado de "Entregar plaza". Muestra el texto que hoy el equipo tipea a
-// mano en WhatsApp (ver lib/ops/textoPase.ts — la lista sale de las tareas
-// reales, no de nada inventado acá) y lo manda por Web Share si el navegador
-// lo soporta (un tap, WhatsApp incluido en el picker) o lo copia al portapapeles.
+// Se abre sola al confirmar "Entregar plaza" (y también a mano, desde el
+// ícono al lado, para revisar/reenviar después). Muestra el texto que hoy el
+// equipo tipea a mano en WhatsApp (ver lib/ops/textoPase.ts — la lista sale
+// de las tareas reales, no de nada inventado acá) y lo manda por Web Share si
+// el navegador lo soporta (un tap, WhatsApp incluido en el picker) o lo copia
+// al portapapeles.
 //
 // El texto queda editable a propósito: es la red de contención para lo que la
 // app todavía no captura estructurado. No se manda a ciegas.
+//
+// Centrado (`center` en Modal) en vez del bottom-sheet estándar: es un paso
+// de revisión antes de mandar el pase, no un drawer casual — confundirlo con
+// "ya se mandó solo" es justo el bug que este sheet existe para evitar.
 
 const btnReset: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer', padding: 0,
@@ -82,7 +88,7 @@ export function PaseSheet({ titulo, textoInicial, onClose }: PaseSheetProps) {
   }
 
   return (
-    <Modal open onClose={onClose} maxWidth={420}>
+    <Modal open onClose={onClose} maxWidth={420} center>
         <div
           style={{
             padding: '20px 20px max(18px, env(safe-area-inset-bottom, 18px))',

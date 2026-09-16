@@ -527,6 +527,9 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // justo en el único momento por turno que el sistema de movimiento marca
   // como celebración real, ver DESIGN.md §6). Sheet propio en vez de eso.
   const [confirmAccion, setConfirmAccion] = useState<'entregar' | 'cerrar' | null>(null)
+  // El pase se abre solo al entregar (no es un paso aparte que se pueda
+  // copiar-pegar en WhatsApp y olvidarse de cerrar) — ver doEntregarPlaza.
+  const [showPaseSheet, setShowPaseSheet] = useState(false)
 
   useEffect(() => {
     setModoControl(localStorage.getItem('checklist_modo_control') === 'true')
@@ -1088,6 +1091,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       })
       tap(20)
       setToast(`Plaza entregada — el turno pasa a ${nombreProximo}`)
+      setShowPaseSheet(true)
     } catch (e: unknown) {
       setToast('Error al entregar: ' + (e instanceof Error ? e.message : 'desconocido'))
     } finally {
@@ -2674,6 +2678,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
             notasHoy={notasHoyPlaza} plazasCustom={plazasCustom} turnoNombre={turnoActual?.nombre ?? null}
             autor={[authPerfil?.nombre, authPerfil?.apellido].filter(Boolean).join(' ').trim() || null}
             entregadoAt={entregaActual?.cerrado_at ?? null}
+            open={showPaseSheet} onOpenChange={setShowPaseSheet}
           />
           {/* Entregar primero; una vez entregada, la barra ofrece deshacer (por si
               fue un error de tap) y la salida personal (solo si hay fichaje

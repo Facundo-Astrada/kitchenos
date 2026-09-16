@@ -20,7 +20,7 @@ function nota(over: Partial<PaseMensaje> = {}): PaseMensaje {
 function base(over: Partial<DatosPase> = {}): DatosPase {
   return {
     plazaNombre: 'Parrilla', turnoNombre: 'Cena', jornada: JORNADA,
-    pendientes: [], hecho: [], notas: [], ...over,
+    pendientes: [], notas: [], ...over,
   }
 }
 
@@ -49,15 +49,10 @@ describe('construirTextoPase', () => {
     expect(lineas).toEqual(['cebolla fugazza SP', 'queso fugazza P', 'coliflor REF'])
   })
 
-  it('lista lo hecho con bullet simple, sin código', () => {
+  it('no incluye lo que ya se resolvió en el turno — solo lo que queda para el próximo', () => {
     const texto = construirTextoPase(base({
-      hecho: [tarea({ id: 't1', titulo: 'se marchó todo el pollo' })],
+      pendientes: [tarea({ id: 't1', titulo: 'cebolla fugazza' })],
     }))
-    expect(texto).toContain('Hecho\n· se marchó todo el pollo')
-  })
-
-  it('sin pendientes ni hecho, esas secciones no aparecen', () => {
-    const texto = construirTextoPase(base())
     expect(texto).not.toContain('Hecho')
   })
 
@@ -120,7 +115,7 @@ describe('construirTextoPase', () => {
 })
 
 describe('paseTieneContenido', () => {
-  it('false cuando no hay pendientes, hecho ni notas', () => {
+  it('false cuando no hay pendientes ni notas', () => {
     expect(paseTieneContenido(base())).toBe(false)
   })
 

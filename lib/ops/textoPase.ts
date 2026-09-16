@@ -12,13 +12,14 @@ import type { PaseMensaje, Tarea, TareaPrioridad } from '@/types'
 //
 // La lista no hay que inventarla: es lo que el cierre en Modo Control ya deja
 // en `tareas` con categoria='pase_turno' (ver ClientView.handleCrearTarea), con
-// la prioridad mapeada desde el mise por MISE_PRIO_TO_TAREA. Y lo que en el
-// mensaje va como "se marchó todo el pollo" son las tareas que quedaron en
-// `listo` durante el turno. Esta función serializa las dos cosas + las notas
-// libres, y nada más: no consulta, no formatea fechas del sistema, no toca
-// React. Todo entra por parámetro para que el texto sea testeable línea a línea
-// y para que la misma salida sirva al botón "Copiar pase" y a cualquier vista
-// que quiera mostrar el pase en pantalla.
+// la prioridad mapeada desde el mise por MISE_PRIO_TO_TAREA. El mensaje solo
+// lleva lo que el turno siguiente necesita — lo que ya se resolvió en este
+// turno no entra: es ruido para el que recibe el pase, que lo único que
+// necesita leer es qué queda por hacer. Esta función serializa esa lista + las
+// notas libres, y nada más: no consulta, no formatea fechas del sistema, no
+// toca React. Todo entra por parámetro para que el texto sea testeable línea a
+// línea y para que la misma salida sirva al botón "Copiar pase" y a cualquier
+// vista que quiera mostrar el pase en pantalla.
 //
 // Los códigos son los del mise, no los de la DB: el que lee el mensaje es el
 // mismo cocinero que escribe "SP" en la tarjeta, y "critica" no significa nada
@@ -52,8 +53,6 @@ export interface DatosPase {
   jornada: string
   /** Lo que queda para el turno siguiente — tareas categoria='pase_turno'. */
   pendientes: Tarea[]
-  /** Lo que se resolvió en el turno — tareas en estado 'listo'. */
-  hecho: Tarea[]
   /** Notas libres de la plaza (pase_mensajes), más nuevas primero. */
   notas: PaseMensaje[]
   /** Quién entrega. */
@@ -122,9 +121,6 @@ export function construirTextoPase(d: DatosPase): string {
   const pendientes = lineasDeTareas(d.pendientes, true)
   if (pendientes.length > 0) bloques.push(pendientes.join('\n'))
 
-  const hecho = lineasDeTareas(d.hecho, false)
-  if (hecho.length > 0) bloques.push(['Hecho', ...hecho].join('\n'))
-
   const notas = d.notas
     .map(n => limpiar(n.texto ?? ''))
     .filter(Boolean)
@@ -149,25 +145,21 @@ export function construirTextoPase(d: DatosPase): string {
 export function paseTieneContenido(d: DatosPase): boolean {
   return (
     d.pendientes.some(t => limpiar(t.titulo ?? '')) ||
-    d.hecho.some(t => limpiar(t.titulo ?? '')) ||
     d.notas.some(n => limpiar(n.texto ?? ''))
   )
 }
 
 /**
  * Recorta `tareas` a lo que le corresponde al pase de una plaza: lo que queda
- * para el turno siguiente (categoria='pase_turno' agendado a jornadaProxima) y
- * lo que se resolvió en este turno (listo, hoy). Aparte de construirTextoPase
- * para no acoplar el filtrado de `tareas` a la pantalla que lo llama.
+ * para el turno siguiente (categoria='pase_turno' agendado a jornadaProxima).
+ * Aparte de construirTextoPase para no acoplar el filtrado de `tareas` a la
+ * pantalla que lo llama.
  */
 export function datosPaseDeTareas(
-  tareas: Tarea[], plaza: string, fecha: string, jornadaProxima: string,
-): Pick<DatosPase, 'pendientes' | 'hecho'> {
+  tareas: Tarea[], plaza: string, jornadaProxima: string,
+): Pick<DatosPase, 'pendientes'> {
   return {
     pendientes: tareas.filter(t =>
       t.categoria === 'pase_turno' && t.turno_fecha === jornadaProxima && t.plaza === plaza && t.estado !== 'listo'),
-    hecho: tareas.filter(t =>
-      !t.parent_id && t.categoria !== 'pedido_nota' && t.plaza === plaza &&
-      t.turno_fecha === fecha && t.estado === 'listo'),
   }
 }

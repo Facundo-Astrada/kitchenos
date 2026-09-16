@@ -9,6 +9,12 @@ import type { Plaza, PlazaCustom, Tarea, PaseMensaje } from '@/types'
 // Botón "Copiar pase" de la barra de cierre del Mise — arma el texto (ver
 // lib/ops/textoPase.ts) solo al abrir el sheet, no en cada render: `tareas`
 // cambia con cada tilde de toda la cocina.
+//
+// `open`/`onOpenChange` son opcionales: sin ellos el botón maneja su propio
+// estado (uso en ProduccionBoard.tsx). ClientView (Mise) los pasa controlados
+// para poder abrir el sheet solo al confirmar "Entregar plaza" — el pase se
+// revisa y se manda como consecuencia de entregar, no como un paso aparte que
+// el usuario puede copiar-pegar en WhatsApp y no volver a cerrar.
 interface CopiarPaseBotonProps {
   plaza: Plaza
   fecha: string
@@ -19,19 +25,24 @@ interface CopiarPaseBotonProps {
   turnoNombre: string | null
   autor: string | null
   entregadoAt: string | null
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 export function CopiarPaseBoton({
   plaza, fecha, jornadaProxima, tareas, notasHoy, plazasCustom, turnoNombre, autor, entregadoAt,
+  open: openProp, onOpenChange,
 }: CopiarPaseBotonProps) {
-  const [open, setOpen] = useState(false)
+  const [openState, setOpenState] = useState(false)
+  const open = openProp ?? openState
+  const setOpen = onOpenChange ?? setOpenState
 
   const texto = useMemo(() => {
     if (!open) return ''
     return construirTextoPase({
       plazaNombre: plazaLabel(plaza, plazasCustom),
       turnoNombre, jornada: fecha,
-      ...datosPaseDeTareas(tareas, plaza, fecha, jornadaProxima),
+      ...datosPaseDeTareas(tareas, plaza, jornadaProxima),
       notas: notasHoy, autor, entregadoAt,
     })
   }, [open, plaza, fecha, jornadaProxima, tareas, notasHoy, plazasCustom, turnoNombre, autor, entregadoAt])
