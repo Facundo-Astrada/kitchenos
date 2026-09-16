@@ -108,7 +108,7 @@ export function parseRecipienteNombre(raw: string | null | undefined): { nombre:
 // Busca una checklist_seccion por nombre dentro de una plaza, o la crea si
 // no existe. `orden` nuevo = cantidad de secciones raíz que ya tiene esa
 // plaza (mismo criterio que OpsPanel.handleCrearSeccion).
-async function resolverSeccionPorNombre(
+export async function resolverSeccionPorNombre(
   supabase: SupabaseClient, restauranteId: string, plaza: string, nombre: string, icono: string
 ): Promise<{ seccionId: string | null; secNombre: string }> {
   const { data: secExistente } = await supabase.from('checklist_secciones').select('id')

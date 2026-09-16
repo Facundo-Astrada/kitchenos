@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { PrepInput } from '@/lib/hooks/useMenus'
-import { resolverSeccionMise, encodeRecipienteNombre, TAREA_PRIO_TO_MISE } from './mise'
+import { resolverSeccionMise, resolverSeccionPorNombre, encodeRecipienteNombre, TAREA_PRIO_TO_MISE } from './mise'
 import { hoyOperativo, sumarDias } from './turnos'
 
 // ════════════════════════════════════════════════════════════
@@ -16,11 +16,12 @@ export interface SincronizarMiseResultado {
   sinOps: number
 }
 
-// Sección por defecto cuando plaza_control está activo y la preparación no
-// eligió una propia — con plaza_control el objetivo es "activar el menú
-// entero sin configurar OPS ítem por ítem", así que la sección deja de ser
-// obligatoria (a diferencia del mise fijo): cae acá en vez de quedar afuera.
-const SECCION_CONTROL_DEFAULT = 'estacion'
+// Sección por defecto cuando plaza_control está activo, la preparación no
+// eligió una propia Y tampoco tiene paso (no debería pasar, el editor lo
+// pide) — con plaza_control el objetivo es "activar el menú entero sin
+// configurar OPS ítem por ítem", así que la sección deja de ser obligatoria
+// (a diferencia del mise fijo): cae acá en vez de quedar afuera.
+const SECCION_CONTROL_DEFAULT = 'Estación'
 
 /**
  * Upsert idempotente de checklist_items para un menú, keyed por
@@ -45,9 +46,12 @@ export async function sincronizarMiseDeMenu(params: {
 }): Promise<SincronizarMiseResultado> {
   const { supabase, restauranteId, menu } = params
   const preparaciones = menu.plazaControl
-    ? menu.preparaciones.map(p => ({ ...p, plaza: menu.plazaControl!, seccion_mise: p.seccion_mise || SECCION_CONTROL_DEFAULT }))
+    ? menu.preparaciones.map(p => ({ ...p, plaza: menu.plazaControl! }))
     : menu.preparaciones
-  const candidatas = preparaciones.filter(p => p.plaza && p.seccion_mise)
+  // Con plaza_control, una preparación sin seccion_mise propia igual entra
+  // (se agrupa por su paso más abajo) — sin plaza_control, sigue haciendo
+  // falta haberla configurado a mano en OPS.
+  const candidatas = preparaciones.filter(p => p.plaza && (p.seccion_mise || menu.plazaControl))
   const sinOps = preparaciones.length - candidatas.length
 
   const { data: existentesData } = await supabase.from('checklist_items')
@@ -65,7 +69,13 @@ export async function sincronizarMiseDeMenu(params: {
     // el que acaba de crear la primera en esta misma pasada.
     if (claveVivas.has(clave)) continue
     claveVivas.add(clave)
-    const { seccionId, secNombre } = await resolverSeccionMise(supabase, restauranteId, p.plaza!, p.seccion_mise!)
+    // Con seccion_mise propia (configurada a mano en OPS) se respeta esa
+    // sección. Sin ella (plaza_control), se agrupa por el paso del menú
+    // (Entradas/Proteína/Pasta/...) en vez de todo en un balde único — es
+    // la misma etiqueta que ya se usa para agrupar en Producción.
+    const { seccionId, secNombre } = p.seccion_mise
+      ? await resolverSeccionMise(supabase, restauranteId, p.plaza!, p.seccion_mise)
+      : await resolverSeccionPorNombre(supabase, restauranteId, p.plaza!, p.paso || SECCION_CONTROL_DEFAULT, 'countertops')
     // menu_preparaciones no tiene recipiente_cantidad (solo la rama plato) —
     // se asume 1 recipiente; si hiciera falta más, se codifica con el mismo
     // sufijo " ×N" que ya usa encodeRecipienteNombre/parseRecipienteNombre.

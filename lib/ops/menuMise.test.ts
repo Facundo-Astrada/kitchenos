@@ -78,7 +78,7 @@ describe('sincronizarMiseDeMenu — plazaControl (una sola persona controla el m
     expect(store.checklist_items.every(r => r.plaza === 'control')).toBe(true)
   })
 
-  it('con plazaControl, una preparación SIN plaza ni sección propias igual se sincroniza — la sección cae en el default', async () => {
+  it('con plazaControl, una preparación SIN plaza ni sección propias igual se sincroniza — la sección cae en su paso', async () => {
     const { supabase, store } = fakeSupabase()
     const res = await sincronizarMiseDeMenu({
       supabase, restauranteId: RID,
@@ -88,7 +88,29 @@ describe('sincronizarMiseDeMenu — plazaControl (una sola persona controla el m
     })
     expect(res).toEqual({ creados: 1, sinOps: 0 })
     expect(store.checklist_items).toHaveLength(1)
-    expect(store.checklist_items[0]).toMatchObject({ plaza: 'general', seccion: 'Estación' })
+    expect(store.checklist_items[0]).toMatchObject({ plaza: 'general', seccion: 'Entrada' })
+  })
+
+  it('con plazaControl, dos preparaciones sin sección propia pero con paso distinto quedan en secciones separadas', async () => {
+    const { supabase, store } = fakeSupabase()
+    const entrada: PrepInput = { ...PREP_SIN_OPS, nombre: 'Pan casero' }
+    const postre: PrepInput = { ...PREP_SIN_OPS, paso: 'Postre', nombre: 'Flan casero' }
+    await sincronizarMiseDeMenu({
+      supabase, restauranteId: RID,
+      menu: { id: MENU_ID, plazaControl: 'general', preparaciones: [entrada, postre] },
+    })
+    const secciones = store.checklist_items.map(r => r.seccion).sort()
+    expect(secciones).toEqual(['Entrada', 'Postre'])
+  })
+
+  it('con plazaControl, una preparación sin paso ni sección cae en el default "Estación"', async () => {
+    const { supabase, store } = fakeSupabase()
+    const sinPaso: PrepInput = { ...PREP_SIN_OPS, paso: '' }
+    await sincronizarMiseDeMenu({
+      supabase, restauranteId: RID,
+      menu: { id: MENU_ID, plazaControl: 'general', preparaciones: [sinPaso] },
+    })
+    expect(store.checklist_items[0]).toMatchObject({ seccion: 'Estación' })
   })
 
   it('con plazaControl, si la preparación SÍ eligió sección, se respeta esa en vez del default', async () => {
