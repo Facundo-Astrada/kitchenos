@@ -5,8 +5,10 @@
 `ejemplos descripcion de puesto/` + cruce con `SINTESIS-ORGANIZACION-GASTRONOMICA.md`,
 `PLAN-IMPLANTACION-2026-09.md` y lo que `puestos` ya tiene cargado.
 
-**Decisión pendiente antes de tocar código:** esto entra o no bajo la moratoria de la
-decisión 012 (`.claude/docs/negocio.md` § 7). Ver § 9.
+**Decisión de moratoria — resuelta el 18/09/2026:** excepción nombrada de forma cerrada,
+decisión 014 (`~/Desktop/START UP KOS/00-decisiones/DECISIONES.md`, destilada en
+`.claude/docs/negocio.md` § 7). Cubre Fases 1, 2 y 4. La Fase 3 (acuse de lectura) sigue
+condicionada a la consulta legal — ver § 10.1 B. Ver § 9.
 
 ---
 
@@ -571,6 +573,9 @@ veces sobre la misma respuesta es el camino al abandono.
 ---
 
 ## 9. La moratoria — decidir antes de escribir código
+
+**Resuelto el 18/09/2026 — decisión 014.** Facundo aprobó la excepción. Queda el
+razonamiento de abajo como registro de por qué.
 
 La decisión 012 prohíbe módulos nuevos hasta 3 cuentas pagando, y obliga a decirlo **antes**.
 

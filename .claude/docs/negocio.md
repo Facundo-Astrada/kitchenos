@@ -110,6 +110,15 @@ contra 1 cuenta viva es el riesgo más grande del proyecto.
   la calculadora de octógonos — son razones de compra identificadas por el research. Pero
   entran recién cuando el perfil que las necesita sea el objetivo (decisión 005: hoy el
   objetivo es restaurante, no producción).
+- **Excepción vigente (decisión 014, 18/09/2026):** el resto de
+  `PLAN-DESCRIPCION-PUESTO-2026-09.md` (repo) — tabla `puesto_descripciones` + cuestionario
+  de 6 tandas + editor + PDF completo (Fase 1), carta de la casa (Fase 2), dictado por voz +
+  Haiku (Fase 4) — se aprobó fuera de la moratoria, mismo argumento que 013: profundiza
+  `puestos` y el export PDF que ya existen, no vende superficie nueva. **La Fase 3 (acuse de
+  lectura, firma electrónica) queda afuera hasta la consulta con el abogado laboral** — no
+  bloquea el resto, pero el botón "leí y entiendo" no se construye antes de esa consulta.
+  Fase 5 (ficha de partida) sigue diferida. Condición de salida: si a las dos semanas de
+  shippear la Fase 1 no hay ninguna descripción `vigente` en la cuenta viva, se revierte.
 
 ## 8. Marca: no poner nombre en nada de cobro
 
