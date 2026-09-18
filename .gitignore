@@ -68,3 +68,8 @@ graphify-out/
 
 # Hojas instructivas — la simulación de impresión que deja scripts/hoja-check.mjs
 docs/*.print.png
+
+# Ejemplos de descripción de puesto — manuales internos de otra empresa (Standard 69),
+# 3,6 MB de PDF. Misma regla que el material de research de terceros: se consulta, no se
+# versiona. El destilado que sí afecta al código vive en PLAN-DESCRIPCION-PUESTO-2026-09.md.
+ejemplos descripcion de puesto/
