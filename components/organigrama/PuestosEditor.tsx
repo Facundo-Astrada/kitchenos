@@ -9,12 +9,14 @@ import {
   PUESTO_TEMPLATES, idsDescendientes, type Puesto, type Miembro, type PuestoTemplate,
 } from '@/lib/hooks/useEquipo'
 import { NIVELES_ACCESO } from '@/lib/hooks/useEquipo'
+import { usePuestoDescripcion } from '@/lib/hooks/usePuestoDescripcion'
 import {
   PLAZAS_OPS, MODULOS_ASIGNABLES, getInitials, nivelLabel, nivelColor,
   fieldStyle, labelStyle, btnPrimary, btnSecondary, btnDanger,
   type PuestoForm, EMPTY_PUESTO_FORM, objetivosDeForm,
 } from './equipoShared'
 import { PermisosPorRolPanel } from './PermisosPorRolPanel'
+import { DescripcionPuestoWizard } from './DescripcionPuestoWizard'
 
 // ══════════════════════════════════════════════════════════════
 // FORM — fuera del panel para identidad estable
@@ -270,6 +272,8 @@ export function PuestosEditorPanel({
   const [editingPuesto, setEditingPuesto] = useState(false)
   const [puestoForm, setPuestoForm] = useState<PuestoForm>(EMPTY_PUESTO_FORM)
   const [saving, setSaving] = useState(false)
+  const [wizardPuesto, setWizardPuesto] = useState<Puesto | null>(null)
+  const { descripcionDe } = usePuestoDescripcion()
 
   const miembroCountByPuesto: Record<string, number> = {}
   for (const mi of miembros) {
@@ -388,6 +392,31 @@ export function PuestosEditorPanel({
           </span>
         </div>
 
+        {(() => {
+          const desc = descripcionDe(p.id)
+          const estado = desc?.estado === 'vigente' ? `Vigente · v${desc.version}` : desc ? 'Borrador sin terminar' : 'Sin empezar'
+          return (
+            <button
+              onClick={() => setWizardPuesto(p)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, width: '100%', textAlign: 'left',
+                padding: 14, borderRadius: 14, marginBottom: 14, cursor: 'pointer', fontFamily: 'inherit',
+                border: desc?.estado === 'vigente' ? '1px solid rgba(16,185,129,.35)' : '1px dashed var(--border)',
+                background: desc?.estado === 'vigente' ? 'rgba(16,185,129,.08)' : 'var(--surface)',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: desc?.estado === 'vigente' ? '#0a8f5f' : 'var(--accent)' }}>
+                {desc?.estado === 'vigente' ? 'task_alt' : 'auto_stories'}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-1)' }}>Descripción de puesto</div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 1 }}>{estado}</div>
+              </div>
+              <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)' }}>chevron_right</span>
+            </button>
+          )
+        })()}
+
         <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', padding: 16, display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 14 }}>
           {p.descripcion && (
             <div>
@@ -499,6 +528,15 @@ export function PuestosEditorPanel({
             </button>
           )}
         </div>
+
+        {wizardPuesto && (
+          <DescripcionPuestoWizard
+            puesto={wizardPuesto}
+            open={!!wizardPuesto}
+            onClose={() => setWizardPuesto(null)}
+            onToast={onToast}
+          />
+        )}
       </div>
     )
   }

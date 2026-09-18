@@ -247,16 +247,29 @@ export async function exportOrganigramaPDF(areas: AreaEstado[], puestos: Puesto[
   let referentes: { miembro_id: string; plaza: string }[] = []
   let checklistSecciones: { id: string; nombre: string; orden: number; plaza: string }[] = []
   let checklistItemsRows: { nombre: string; plaza: string; seccion: string; seccion_id: string | null; orden: number }[] = []
+  // Fase 1: el documento completo, cuando el puesto tiene una descripción
+  // vigente (PLAN-DESCRIPCION-PUESTO-2026-09 § 5.1). Un puesto sin fila acá
+  // sigue viendo solo lo de Fase 0 — nada obligatorio (plan § 11).
+  let descripciones: {
+    puesto_id: string; estado: string; mision: string | null
+    responsabilidades: { titulo: string; items: string[] }[]
+    dia_tipo: { momento: string; hora: string | null; que_hace: string }[]
+    expectativas: string[]; no_negociables: string[]
+    indicadores: { nombre: string; meta: string; modulo?: string | null }[]
+    condiciones: { beneficios?: string[]; capacitacion?: string; carrera?: string } | null
+  }[] = []
   if (restauranteId) {
     const supabase = createClient()
-    const [compRes, secRes, itemRes] = await Promise.all([
+    const [compRes, secRes, itemRes, descRes] = await Promise.all([
       supabase.from('competencias').select('miembro_id, plaza').eq('restaurante_id', restauranteId).gte('nivel', NIVEL_REFERENTE),
       supabase.from('checklist_secciones').select('id, nombre, orden, plaza').eq('restaurante_id', restauranteId),
       supabase.from('checklist_items').select('nombre, plaza, seccion, seccion_id, orden').eq('restaurante_id', restauranteId),
+      supabase.from('puesto_descripciones').select('puesto_id, estado, mision, responsabilidades, dia_tipo, expectativas, no_negociables, indicadores, condiciones').eq('restaurante_id', restauranteId).eq('estado', 'vigente'),
     ])
     referentes = compRes.data ?? []
     checklistSecciones = secRes.data ?? []
     checklistItemsRows = itemRes.data ?? []
+    descripciones = descRes.data ?? []
   }
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
@@ -443,6 +456,11 @@ export async function exportOrganigramaPDF(areas: AreaEstado[], puestos: Puesto[
     doc.line(margin, y, pageW - margin, y)
     y += 10
 
+    // Documento completo (Fase 1) — solo si el puesto tiene una descripción
+    // vigente. Sin ella, la carilla se queda exactamente como en Fase 0.
+    const descripcion = descripciones.find(d => d.puesto_id === puesto.id)
+    printLinea('MISIÓN', descripcion?.mision ?? '', 'Manual de puesto')
+
     const padre = puesto.reporta_a_puesto_id ? puestos.find(p => p.id === puesto.reporta_a_puesto_id) : undefined
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
@@ -480,13 +498,37 @@ export async function exportOrganigramaPDF(areas: AreaEstado[], puestos: Puesto[
       printLinea('A QUIÉN LE PREGUNTÁS', referentesNombres.join(', '), 'Manual de puesto')
     }
 
+    // Responsabilidades: si hay descripción vigente con bloques cargados, esos
+    // bloques reemplazan a la lista plana de `tareas_funciones` (nacieron de
+    // ahí — plan § 5.2 — y el usuario ya los tachó/reagrupó en el
+    // cuestionario). Sin descripción, se ve exactamente como en Fase 0.
+    const bloquesResp = (descripcion?.responsabilidades ?? []).filter(b => b.items.length > 0)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
     doc.setTextColor(...accent)
-    doc.text('TAREAS Y FUNCIONES', margin, y)
+    doc.text('RESPONSABILIDADES', margin, y)
     y += 6
 
-    if (puesto.tareas_funciones.length === 0) {
+    if (bloquesResp.length > 0) {
+      for (const b of bloquesResp) {
+        ensureSpace(10, 'Manual de puesto')
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(9)
+        doc.setTextColor(...textDark)
+        doc.text(b.titulo, margin, y)
+        y += 5
+        for (const t of b.items) {
+          const lines = doc.splitTextToSize(`•  ${t}`, contentW - 6)
+          ensureSpace(lines.length * 5 + 1.5, 'Manual de puesto')
+          doc.setFont('helvetica', 'normal')
+          doc.setFontSize(9.5)
+          doc.setTextColor(...textDark)
+          doc.text(lines, margin + 4, y)
+          y += lines.length * 5 + 1.5
+        }
+        y += 3
+      }
+    } else if (puesto.tareas_funciones.length === 0) {
       doc.setFont('helvetica', 'italic')
       doc.setFontSize(10)
       doc.setTextColor(...gray)
@@ -504,6 +546,9 @@ export async function exportOrganigramaPDF(areas: AreaEstado[], puestos: Puesto[
       }
     }
     y += 6
+
+    // El día — de la tanda 2 del cuestionario.
+    printBullets('EL DÍA', (descripcion?.dia_tipo ?? []).map(d => `${d.momento}: ${d.que_hace}`), 'Manual de puesto')
 
     // Tareas de apertura y cierre de la plaza — el mise que ya se completa
     // dos veces por turno, agrupado igual que en /checklist.
@@ -538,6 +583,10 @@ export async function exportOrganigramaPDF(areas: AreaEstado[], puestos: Puesto[
       }
     }
 
+    // Qué esperamos / no negociables — tanda 5 del cuestionario.
+    printBullets('QUÉ ESPERAMOS', descripcion?.expectativas ?? [], 'Manual de puesto')
+    printBullets('NO NEGOCIABLES', descripcion?.no_negociables ?? [], 'Manual de puesto')
+
     // Objetivos de venta del puesto — solo las claves que estén cargadas.
     const objetivosLineas: string[] = []
     if (puesto.objetivos.pct_comandas_con_postre != null) {
@@ -550,6 +599,14 @@ export async function exportOrganigramaPDF(areas: AreaEstado[], puestos: Puesto[
       objetivosLineas.push(`Ticket promedio objetivo: $${puesto.objetivos.ticket_promedio.toLocaleString('es-AR')}`)
     }
     printBullets('OBJETIVOS DE VENTA', objetivosLineas, 'Manual de puesto')
+
+    // Cómo se mide — tanda 6 del cuestionario. Distinto de "Objetivos de
+    // venta" de arriba: acá entran merma, food cost, mise, HACCP.
+    printBullets(
+      'CÓMO SE MIDE',
+      (descripcion?.indicadores ?? []).map(i => `${i.nombre}: meta ${i.meta}`),
+      'Manual de puesto',
+    )
 
     // Responsable(s) del área a la que pertenece el puesto.
     const areaDelPuesto = areas.find(a => a.key === puesto.area_key)
@@ -570,6 +627,14 @@ export async function exportOrganigramaPDF(areas: AreaEstado[], puestos: Puesto[
       }
     }
     printBullets('LA CASA TE ENTREGA', [...prendas], 'Manual de puesto')
+
+    // Qué ofrece la casa — beneficios, capacitación, crecimiento (tanda 6).
+    // Sin sueldo nunca (PLAN-DESCRIPCION-PUESTO-2026-09 § 5.3): el PDF se
+    // cuelga en la cocina y expondría un número que no corresponde mostrar.
+    const condicionesLineas: string[] = [...(descripcion?.condiciones?.beneficios ?? [])]
+    if (descripcion?.condiciones?.capacitacion) condicionesLineas.push(`Capacitación: ${descripcion.condiciones.capacitacion}`)
+    if (descripcion?.condiciones?.carrera) condicionesLineas.push(`Crecimiento: ${descripcion.condiciones.carrera}`)
+    printBullets('QUÉ OFRECE LA CASA', condicionesLineas, 'Manual de puesto')
 
     ensureSpace(20, 'Manual de puesto')
     doc.setFont('helvetica', 'bold')
