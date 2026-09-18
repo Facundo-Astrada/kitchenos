@@ -199,14 +199,65 @@ import {
   construirArbolPuestos, NIVELES_ACCESO,
   type Puesto, type Miembro, type AreaEstado, type PuestoNode,
 } from '@/lib/hooks/useEquipo'
-import { MODULO_CONFIG, type ModuloId } from '@/lib/constants'
+import { MODULO_CONFIG, NIVEL_REFERENTE, type ModuloId } from '@/lib/constants'
+import { createClient } from '@/lib/supabase/client'
 
 function nivelLabelPDF(nivel: string): string {
   return NIVELES_ACCESO.find(n => n.value === nivel)?.label ?? nivel
 }
 
+// Agrupa los ítems de mise de una plaza por sección — misma estructura que ve
+// el cocinero en /checklist, no una lista plana sin orden. Ítems cuyo
+// `seccion_id` no resuelve a ninguna sección viva de la plaza (filas legacy)
+// se agrupan por el texto libre que tengan, para no perderlos del manual.
+function agruparItemsPorSeccion(
+  plaza: string,
+  secciones: { id: string; nombre: string; orden: number; plaza: string }[],
+  items: { nombre: string; plaza: string; seccion: string; seccion_id: string | null; orden: number }[],
+): { titulo: string; items: string[] }[] {
+  const itemsPlaza = items.filter(i => i.plaza === plaza)
+  const seccionesPlaza = [...secciones.filter(s => s.plaza === plaza)].sort((a, b) => a.orden - b.orden)
+  const grupos: { titulo: string; items: string[] }[] = []
+
+  for (const s of seccionesPlaza) {
+    const propios = itemsPlaza.filter(i => i.seccion_id === s.id).sort((a, b) => a.orden - b.orden).map(i => i.nombre)
+    if (propios.length > 0) grupos.push({ titulo: s.nombre, items: propios })
+  }
+
+  const idsConocidos = new Set(seccionesPlaza.map(s => s.id))
+  const porTitulo = new Map<string, string[]>()
+  for (const i of itemsPlaza) {
+    if (i.seccion_id && idsConocidos.has(i.seccion_id)) continue
+    const titulo = i.seccion || 'Otros'
+    porTitulo.set(titulo, [...(porTitulo.get(titulo) ?? []), i.nombre])
+  }
+  for (const [titulo, nombres] of porTitulo) grupos.push({ titulo, items: nombres })
+
+  return grupos
+}
+
 export async function exportOrganigramaPDF(areas: AreaEstado[], puestos: Puesto[], miembros: Miembro[]) {
   const { default: jsPDF } = await import('jspdf')
+
+  // Fase 0 (PLAN-DESCRIPCION-PUESTO-2026-09 § 10): datos que ya están en la
+  // base y no llegan por parámetro — se buscan solo al exportar, para no
+  // inflar el fetch caliente de `useEquipo` con columnas que un PDF
+  // ocasional necesita y una pantalla no.
+  const restauranteId = puestos[0]?.restaurante_id ?? miembros[0]?.restaurante_id ?? null
+  let referentes: { miembro_id: string; plaza: string }[] = []
+  let checklistSecciones: { id: string; nombre: string; orden: number; plaza: string }[] = []
+  let checklistItemsRows: { nombre: string; plaza: string; seccion: string; seccion_id: string | null; orden: number }[] = []
+  if (restauranteId) {
+    const supabase = createClient()
+    const [compRes, secRes, itemRes] = await Promise.all([
+      supabase.from('competencias').select('miembro_id, plaza').eq('restaurante_id', restauranteId).gte('nivel', NIVEL_REFERENTE),
+      supabase.from('checklist_secciones').select('id, nombre, orden, plaza').eq('restaurante_id', restauranteId),
+      supabase.from('checklist_items').select('nombre, plaza, seccion, seccion_id, orden').eq('restaurante_id', restauranteId),
+    ])
+    referentes = compRes.data ?? []
+    checklistSecciones = secRes.data ?? []
+    checklistItemsRows = itemRes.data ?? []
+  }
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
@@ -257,6 +308,45 @@ export async function exportOrganigramaPDF(areas: AreaEstado[], puestos: Puesto[
       drawHeader(subtitle)
       y = 38
     }
+  }
+
+  // Las secciones de Fase 0 son opcionales: si el dato no está cargado, la
+  // sección no se imprime — nunca "Sin datos" ni un hueco en la carilla
+  // (PLAN-DESCRIPCION-PUESTO-2026-09 § 10, regla de redacción).
+  function printLinea(titulo: string, texto: string, subtitle: string) {
+    if (!texto) return
+    ensureSpace(16, subtitle)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(...accent)
+    doc.text(titulo, margin, y)
+    y += 5
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    doc.setTextColor(...textDark)
+    const lines = doc.splitTextToSize(texto, contentW)
+    doc.text(lines, margin, y)
+    y += lines.length * 5 + 10
+  }
+
+  function printBullets(titulo: string, items: string[], subtitle: string) {
+    if (items.length === 0) return
+    ensureSpace(14, subtitle)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(...accent)
+    doc.text(titulo, margin, y)
+    y += 6
+    for (const t of items) {
+      const lines = doc.splitTextToSize(`•  ${t}`, contentW - 4)
+      ensureSpace(lines.length * 5 + 1.5, subtitle)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(10)
+      doc.setTextColor(...textDark)
+      doc.text(lines, margin, y)
+      y += lines.length * 5 + 1.5
+    }
+    y += 6
   }
 
   // ── Organigrama completo, por área ──
@@ -365,7 +455,8 @@ export async function exportOrganigramaPDF(areas: AreaEstado[], puestos: Puesto[
     doc.text(padre ? padre.nombre : 'Nadie — raíz del organigrama', margin, y)
     y += 10
 
-    const ocupantes = miembros.filter(m => m.puesto_id === puesto.id).map(m => `${m.nombre} ${m.apellido}`)
+    const ocupantesMiembros = miembros.filter(m => m.puesto_id === puesto.id)
+    const ocupantes = ocupantesMiembros.map(m => `${m.nombre} ${m.apellido}`)
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
     doc.setTextColor(...accent)
@@ -376,6 +467,18 @@ export async function exportOrganigramaPDF(areas: AreaEstado[], puestos: Puesto[
     doc.setTextColor(...textDark)
     doc.text(ocupantes.length ? ocupantes.join(', ') : 'Vacante', margin, y)
     y += 10
+
+    // A quién le preguntás — nivel 4 en la matriz de polivalencia para la
+    // plaza del puesto. El dato de más valor de los siete: el dueño nunca lo
+    // escribió, sale solo de la matriz (PLAN-DESCRIPCION-PUESTO-2026-09 § 3).
+    if (puesto.plaza_default) {
+      const referentesNombres = referentes
+        .filter(r => r.plaza === puesto.plaza_default)
+        .map(r => miembros.find(m => m.id === r.miembro_id))
+        .filter((m): m is Miembro => !!m)
+        .map(m => `${m.nombre} ${m.apellido}`)
+      printLinea('A QUIÉN LE PREGUNTÁS', referentesNombres.join(', '), 'Manual de puesto')
+    }
 
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
@@ -401,6 +504,72 @@ export async function exportOrganigramaPDF(areas: AreaEstado[], puestos: Puesto[
       }
     }
     y += 6
+
+    // Tareas de apertura y cierre de la plaza — el mise que ya se completa
+    // dos veces por turno, agrupado igual que en /checklist.
+    if (puesto.plaza_default) {
+      const grupos = agruparItemsPorSeccion(puesto.plaza_default, checklistSecciones, checklistItemsRows)
+      if (grupos.length > 0) {
+        ensureSpace(14, 'Manual de puesto')
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(9)
+        doc.setTextColor(...accent)
+        doc.text('TAREAS DE APERTURA Y CIERRE DE LA PLAZA', margin, y)
+        y += 6
+        for (const g of grupos) {
+          ensureSpace(10, 'Manual de puesto')
+          doc.setFont('helvetica', 'bold')
+          doc.setFontSize(9)
+          doc.setTextColor(...textDark)
+          doc.text(g.titulo, margin, y)
+          y += 5
+          for (const nombre of g.items) {
+            const lines = doc.splitTextToSize(`•  ${nombre}`, contentW - 6)
+            ensureSpace(lines.length * 5 + 1.5, 'Manual de puesto')
+            doc.setFont('helvetica', 'normal')
+            doc.setFontSize(9.5)
+            doc.setTextColor(...textDark)
+            doc.text(lines, margin + 4, y)
+            y += lines.length * 5 + 1.5
+          }
+          y += 3
+        }
+        y += 3
+      }
+    }
+
+    // Objetivos de venta del puesto — solo las claves que estén cargadas.
+    const objetivosLineas: string[] = []
+    if (puesto.objetivos.pct_comandas_con_postre != null) {
+      objetivosLineas.push(`Postre en la comanda: objetivo ${puesto.objetivos.pct_comandas_con_postre}% de las comandas`)
+    }
+    if (puesto.objetivos.pct_comandas_con_cafe != null) {
+      objetivosLineas.push(`Café en la comanda: objetivo ${puesto.objetivos.pct_comandas_con_cafe}% de las comandas`)
+    }
+    if (puesto.objetivos.ticket_promedio != null) {
+      objetivosLineas.push(`Ticket promedio objetivo: $${puesto.objetivos.ticket_promedio.toLocaleString('es-AR')}`)
+    }
+    printBullets('OBJETIVOS DE VENTA', objetivosLineas, 'Manual de puesto')
+
+    // Responsable(s) del área a la que pertenece el puesto.
+    const areaDelPuesto = areas.find(a => a.key === puesto.area_key)
+    const responsablesArea = (areaDelPuesto?.responsables ?? [])
+      .map(id => miembros.find(m => m.id === id))
+      .filter((m): m is Miembro => !!m)
+      .map(m => `${m.nombre} ${m.apellido}`)
+    printLinea('RESPONSABLE DEL ÁREA', responsablesArea.join(', '), 'Manual de puesto')
+
+    // Uniforme que entrega la casa — unión de las prendas cargadas a quienes
+    // ocupan hoy el puesto. NULL en `uniforme` es "nunca se cargó", distinto
+    // de `{}` ("revisado, sin nada prestado") — .claude/docs/columnas.md.
+    const prendas = new Set<string>()
+    for (const m of ocupantesMiembros) {
+      if (!m.uniforme) continue
+      for (const [prenda, cantidad] of Object.entries(m.uniforme)) {
+        if (cantidad > 0) prendas.add(prenda)
+      }
+    }
+    printBullets('LA CASA TE ENTREGA', [...prendas], 'Manual de puesto')
 
     ensureSpace(20, 'Manual de puesto')
     doc.setFont('helvetica', 'bold')
