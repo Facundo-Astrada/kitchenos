@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
+import { mapRol, puedeInvitar, puedeAsignarNivel } from '@/lib/permisos/roles'
 
 export async function POST(req: NextRequest) {
   try {
@@ -20,8 +21,14 @@ export async function POST(req: NextRequest) {
       .eq('user_id', user.id)
       .single()
 
-    if (!urData || urData.rol !== 'admin') {
-      return NextResponse.json({ error: 'Solo admins pueden invitar' }, { status: 403 })
+    // mapRol y no el rol crudo: owner/compras son admin y sous_chef es chef
+    // para toda la app, también acá.
+    const rolInvitador = urData ? mapRol(urData.rol) : null
+    if (!urData || !rolInvitador || !puedeInvitar(rolInvitador)) {
+      return NextResponse.json({ error: 'Solo un admin o el jefe de cocina pueden invitar' }, { status: 403 })
+    }
+    if (!puedeAsignarNivel(rolInvitador, rol)) {
+      return NextResponse.json({ error: 'Solo un admin puede invitar a alguien como administrador' }, { status: 403 })
     }
 
     const restauranteId = urData.restaurante_id

@@ -14,6 +14,8 @@ import {
   type Miembro, type Puesto, type PuestoNode, type AreaEstado,
 } from '@/lib/hooks/useEquipo'
 import { usePermisos } from '@/lib/hooks/usePermisos'
+import { useAuth } from '@/lib/auth/context'
+import { puedeInvitar, puedeAsignarNivel } from '@/lib/permisos/roles'
 import { MODULO_CONFIG, CAPAS, type ModuloId, type AreaKey, type Capa } from '@/lib/constants'
 import { SegmentedTabs, FilterChips, EmptyState, HeaderAction, Modal } from '@/components/ui'
 import { MiembroCard } from '@/components/organigrama/MiembroCard'
@@ -43,6 +45,12 @@ export default function OrganigramaPage() {
     crearPuesto, eliminarPuesto,
   } = useEquipo()
   const { isAdmin } = usePermisos()
+  const { perfil } = useAuth()
+  const puedeInvitarAca = perfil ? puedeInvitar(perfil.rol) : false
+  const nivelesInvitables = useMemo(
+    () => NIVELES_ACCESO.filter(n => perfil && puedeAsignarNivel(perfil.rol, n.value)),
+    [perfil]
+  )
 
   const [tab, setTab] = useState<Tab>('plantel')
   const [areaFiltro, setAreaFiltro] = useState<string>('todas')
@@ -299,13 +307,15 @@ export default function OrganigramaPage() {
                     <span className="material-symbols-outlined" style={{ fontSize: 18 }}>person_add</span>
                     Agregar
                   </button>
-                  <button
-                    onClick={() => setShowInvitar(true)}
-                    style={{ ...btnPrimary, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'var(--accent)' }}
-                  >
-                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>mail</span>
-                    Invitar
-                  </button>
+                  {puedeInvitarAca && (
+                    <button
+                      onClick={() => setShowInvitar(true)}
+                      style={{ ...btnPrimary, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'var(--accent)' }}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>mail</span>
+                      Invitar
+                    </button>
+                  )}
                 </div>
               )}
             </>
@@ -465,7 +475,7 @@ export default function OrganigramaPage() {
           <div>
             <label style={labelStyle}>Nivel de acceso</label>
             <select value={invRol} onChange={e => setInvRol(e.target.value)} style={fieldStyle}>
-              {NIVELES_ACCESO.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
+              {nivelesInvitables.map(n => <option key={n.value} value={n.value}>{n.label}</option>)}
             </select>
           </div>
           <div>

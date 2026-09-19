@@ -47,3 +47,24 @@ export function mapRol(dbRol: string, plaza?: string | null): Rol {
     default: return esRolValido(dbRol) ? dbRol : 'ayudante'
   }
 }
+
+/**
+ * Quién puede invitar gente al equipo: admin y chef (jefe de cocina / sous
+ * chef). Antes `/api/invitar` pedía `rol === 'admin'` crudo mientras
+ * Organigrama le mostraba el botón a cualquiera: un chef completaba el modal y
+ * recibía "Solo admins pueden invitar" (caso Bros, 19/09/2026). Lo usan los
+ * dos lados — el endpoint para decidir y la pantalla para no ofrecer lo que
+ * después se rechaza.
+ */
+export function puedeInvitar(rol: Rol): boolean {
+  return rol === 'admin' || rol === 'chef'
+}
+
+/**
+ * Un chef no reparte más acceso del que tiene: no puede invitar a nadie con un
+ * nivel que la app lee como admin (admin, owner, compras). El admin, cualquiera.
+ */
+export function puedeAsignarNivel(invitador: Rol, nivelInvitado: string): boolean {
+  if (!puedeInvitar(invitador)) return false
+  return invitador === 'admin' || mapRol(nivelInvitado) !== 'admin'
+}

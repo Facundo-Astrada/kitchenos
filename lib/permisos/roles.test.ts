@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mapRol, esRolValido } from './roles'
+import { mapRol, esRolValido, puedeInvitar, puedeAsignarNivel } from './roles'
 import { MODULOS_POR_ROL } from '@/lib/constants'
 
 describe('esRolValido', () => {
@@ -77,5 +77,30 @@ describe('mapRol', () => {
     for (const r of enLaBase) {
       expect(MODULOS_POR_ROL[mapRol(r)]?.length, `rol "${r}"`).toBeGreaterThan(0)
     }
+  })
+})
+
+describe('invitar al equipo', () => {
+  it('pueden invitar admin y chef — owner y sous_chef por su mapeo', () => {
+    expect(puedeInvitar(mapRol('admin'))).toBe(true)
+    expect(puedeInvitar(mapRol('owner'))).toBe(true)
+    expect(puedeInvitar(mapRol('chef'))).toBe(true)
+    expect(puedeInvitar(mapRol('sous_chef'))).toBe(true)
+  })
+  it('el resto de la brigada no', () => {
+    expect(puedeInvitar(mapRol('cocinero'))).toBe(false)
+    expect(puedeInvitar(mapRol('bachero'))).toBe(false)
+    expect(puedeInvitar(mapRol('staff'))).toBe(false)
+  })
+  it('un chef no invita a nadie como admin, ni por la puerta de owner/compras', () => {
+    expect(puedeAsignarNivel('chef', 'admin')).toBe(false)
+    expect(puedeAsignarNivel('chef', 'owner')).toBe(false)
+    expect(puedeAsignarNivel('chef', 'compras')).toBe(false)
+    expect(puedeAsignarNivel('chef', 'sous_chef')).toBe(true)
+    expect(puedeAsignarNivel('chef', 'cocinero')).toBe(true)
+  })
+  it('el admin asigna cualquier nivel; quien no puede invitar, ninguno', () => {
+    expect(puedeAsignarNivel('admin', 'admin')).toBe(true)
+    expect(puedeAsignarNivel('linea', 'cocinero')).toBe(false)
   })
 })
