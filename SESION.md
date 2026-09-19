@@ -1,19 +1,17 @@
-# Sesión — 18/09/2026
+# Sesión — 19/09/2026
 
 ## Qué se cerró
-- **Decisión 014**: excepción a la moratoria (012) para el resto de `PLAN-DESCRIPCION-PUESTO-2026-09.md`, escrita en `DECISIONES.md` de START UP KOS antes de tocar código. Fase 3 queda afuera hasta la consulta legal.
-- **Fases 0, 1, 2 y 4 (punto 2) de Descripción de puesto**, shippeadas y en prod: export PDF con lo que ya sabía la base, tabla `puesto_descripciones` + wizard de 6 tandas con dictado por voz y "Pulir con IA", Carta de la casa, modo rápido desde el segundo puesto, borrador de tareas con IA para puestos sin plantilla. Detalle completo en `HISTORIAL.md`.
-- Corrección de proceso: se dejó de usar El Rescoldo para verificar (sin backfill de Organigrama desde jun 2026) — de acá en más, Bros.
+- **Ficha del puesto** (`FichaPuesto.tsx`, commit `b69403e`, en prod): el detalle de un puesto pasó de tarjetas sueltas a una pantalla CV + tablero. Dueño: un lápiz por sección que abre la tanda del cuestionario. Cocinero: la misma ficha en lectura desde Perfil → **Mi puesto** (`/perfil/puesto`).
+- **Formación por plaza (opción A)**: nivel de cada ocupante en la plaza del puesto + padrino opcional (`competencias.ensena_miembro_id`, migración aplicada a prod; null = el referente de la plaza).
+- Decisiones de Facundo: dirección visual del mockup, formación A (no por tarea), entrada del cocinero desde Perfil.
 
 ## Qué quedó a medias
-- Nada de código sin cerrar. Lo que falta es explícitamente ajeno a esta sesión: Fase 3 (bloqueada por consulta legal) y Fase 5 (diferida).
-- **No se probó el flujo completo en el navegador** — sin credenciales de login de Bros. Se validó con build/lint limpios, RLS confirmada, y la lógica de agrupamiento contra datos reales de Bros vía SQL.
+- El camino **"puesto con plaza"** (Cobertura, "A quién le preguntan", `<select>` "Le enseña") no se vio en navegador: El Rescoldo no tiene puestos con plaza y no hay credenciales de dueño de Bros. Build/lint/typecheck limpios; lo demás se capturó.
 
 ## Probar primero mañana
-- Entrar a Bros, abrir un puesto en Organigrama → Puestos, correr las 6 tandas completas (probar el micrófono y "Pulir con IA"), y revisar la carilla completa del PDF.
-- Probar "Carta de la casa" (botón nuevo en el header, ícono de libro) y confirmar que sale como página en el PDF.
-- Probar el borrador de IA en un puesto sin plantilla (tanda 4, sin tareas sembradas).
+- Con la cuenta de dueño de Bros: Organigrama → Puestos → **Parrillero** (único con plaza). Revisar la ficha y asignar un "Le enseña" a alguien en formación.
+- Tablet de Bros (`cocina@broscomedor.com`): Perfil → Mi puesto.
 
 ## Próximo paso concreto
-- Si el pase real en Bros sale bien: nada urgente — la función queda esperando adopción real (condición de salida de la 014: 2 semanas sin ninguna descripción `vigente` y se revierte). Si algo falla, es el primer lugar a mirar.
-- La consulta al abogado laboral (5 preguntas ya redactadas en `INVESTIGACION-PUESTOS-LEGAL-2026-09.md` § 2) sigue siendo el paso de negocio pendiente antes de la Fase 3.
+- La condición de salida de la decisión 014 sigue corriendo: **0 descripciones vigentes en Bros** (vence ~02/10). La ficha ahora muestra el documento: el próximo paso es que Franco complete al menos Parrillero.
+- Formación por tarea (opción B) y valores vivos de los indicadores quedan en `PENDIENTES.md`; B necesita decisión de moratoria antes de código.

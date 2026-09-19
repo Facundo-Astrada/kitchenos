@@ -6,6 +6,17 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-09-19 — Ficha del puesto (CV + tablero), Mi puesto y formación por plaza.** 1 commit (`b69403e`), pusheado.
+
+- **Diagnóstico:** la descripción de puesto se escribía (cuestionario) y se imprimía (PDF) pero no se veía en ninguna pantalla, y el cocinero no llegaba (los roles de cocina no tienen `organigrama`). Bros al 19/09: 6 puestos, 0 descripciones, 5 de 6 puestos con `plaza_default = null`.
+- **Mockup primero** (artifact "Ficha del Parrillero", vista dueño/cocinero), aprobado por Facundo con tres decisiones: dirección visual del mockup, formación **opción A por plaza** (no por tarea), entrada del cocinero **desde Perfil**.
+- **`FichaPuesto.tsx`** reemplaza la vista detalle de `PuestosEditor`: modo edición con lápiz por sección → `DescripcionPuestoWizard` con `tandaInicial`; modo lectura sin controles ni secciones vacías. Layout por ancho del contenedor (ResizeObserver), no `useIsDesktop()`: con sidebar + Coach abierto a la ficha le quedan ~580 px. Checklist de la plaza con un fetch SWR liviano propio (`useChecklist` trae todo el mise y abre 2 canales realtime).
+- **Formación A:** columna `competencias.ensena_miembro_id` (migración `20260919_competencias_ensena.sql`, aplicada a prod); `useCompetencias` suma `quienEnsena`/`setEnsena`/`competenciasDe`. Sin %, sin orden por nivel, nunca un "0" suelto sobre la persona.
+- **Mi puesto:** tarjeta en `/perfil` + ruta `/perfil/puesto`. Sin `ModuloId` nuevo a propósito — evita backfillear `permisos_app` de los puestos existentes.
+- `ESTADO_RIESGO_PLAZA` y `NORMA_PISO_NACIONAL` a `lib/constants.ts`; `iconoDePuesto()` en `equipoShared.ts`.
+- **Verificación:** build + lint + typecheck limpios. Capturas del modo edición (El Rescoldo, puestos sin plaza) y lectura (tablet de Bros). El camino "con plaza" no se vio en navegador — queda en `PENDIENTES.md`.
+- Ejecución delegada a un agente Sonnet con el plan escrito; revisión y dos arreglos (ancho por contenedor, KPI del cocinero sin niveles) antes del commit.
+
 **Sesión 2026-09-18 — Descripción de puesto: Fases 0, 1, 2 y 4 (decisión 014, excepción a la moratoria).** 6 commits (`af860dd`, `1ce71ae`, `b4d65a1`, `a11fda3`, `6cb5729`, `6da1ebc`), pusheados.
 
 - **Decisión de negocio primero, escrita antes de tocar código.** Facundo aprobó la excepción 014 a la moratoria de módulos nuevos (012) para el resto de `PLAN-DESCRIPCION-PUESTO-2026-09.md` — tabla nueva, cuestionario, carta de la casa y borrador con IA — mismo criterio que la 013 (polivalencia): no vende superficie nueva, profundiza `puestos` y el export PDF que ya existían. Escrita en `~/Desktop/START UP KOS/00-decisiones/DECISIONES.md`, destilada en `.claude/docs/negocio.md` § 7. **La Fase 3 (acuse de lectura) queda afuera** hasta la consulta con el abogado laboral, que Facundo decidió dejar para el final — no bloquea el resto.

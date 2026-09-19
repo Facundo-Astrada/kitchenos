@@ -86,9 +86,9 @@ las bajas en LatAm son involuntarias).
 
 ## 🟢 Bajo — Roadmap abierto
 
-### Descripción de puesto (Organigrama) — Fases 0/1/2/4 shippeadas, falta el acuse
+### Descripción de puesto (Organigrama) — Fases 0/1/2/4 + Ficha del puesto shippeadas, falta el acuse
 `PLAN-DESCRIPCION-PUESTO-2026-09.md`. Decisión 014 (18/09) sacó el resto del plan de la
-moratoria; detalle de lo shippeado en `HISTORIAL.md` sesión 2026-09-18. Queda:
+moratoria; detalle de lo shippeado en `HISTORIAL.md` sesiones 2026-09-18 y 2026-09-19. Queda:
 - **Fase 3 (acuse de lectura) — bloqueada, no es código.** Consulta a un abogado laboral
   primero (5 preguntas redactadas en `INVESTIGACION-PUESTOS-LEGAL-2026-09.md` § 2). El acuse
   es firma electrónica (ley 25.506) y la carga de la prueba cae en el empleador — de ahí el
@@ -96,6 +96,17 @@ moratoria; detalle de lo shippeado en `HISTORIAL.md` sesión 2026-09-18. Queda:
 - **Fase 5 (ficha de partida)** — diferida, sin fecha.
 - **Probar el flujo completo en vivo** contra Bros — no se pudo esta sesión por falta de
   credenciales de login.
+- **Ficha del puesto — el camino "puesto con plaza" no se vio en navegador.** El Rescoldo no
+  tiene ningún puesto con `plaza_default` y en Bros solo Parrillero; sin credenciales de dueño
+  de Bros no se pudo abrir. Mirar: tarjeta Cobertura, "A quién le preguntan" y el `<select>`
+  "Le enseña" (`competencias.ensena_miembro_id`) en Bros → Parrillero.
+- **Ficha del puesto — fuera de la v1, a propósito:** valores vivos de los indicadores (hoy
+  muestra la meta, no la merma real del mes de la plaza) y PDF de un solo puesto para el
+  cocinero (`exportOrganigramaPDF` exporta el organigrama entero).
+- **Formación por tarea (opción B)** — cada tarea del puesto con *falta → te lo mostraron →
+  lo hace solo*. Descartada por ahora: tabla nueva + IDs estables en `responsabilidades`, cae
+  bajo la moratoria 012 y necesita decisión escrita antes de código. La opción A (por plaza)
+  está shippeada.
 
 ### Presupuesto — fuera de alcance de la Fase 1
 Detalle en `PLAN-PRESUPUESTO-CMV-2026-08.md` §11: partir venta comida/bebida
