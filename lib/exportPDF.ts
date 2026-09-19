@@ -258,18 +258,27 @@ export async function exportOrganigramaPDF(areas: AreaEstado[], puestos: Puesto[
     indicadores: { nombre: string; meta: string; modulo?: string | null }[]
     condiciones: { beneficios?: string[]; capacitacion?: string; carrera?: string } | null
   }[] = []
+  // Fase 2: carta de la casa — una por restaurante, en
+  // restaurantes.configuracion.carta_de_la_casa (plan § 6.1), sin tabla nueva.
+  type CartaDeLaCasaExport = {
+    cultura?: string; politicas?: string[]; uniforme?: string
+    dia_tipo?: { hora: string; que_hace: string }[]; no_negociables?: string[]
+  }
+  let cartaDeLaCasa: CartaDeLaCasaExport | null = null
   if (restauranteId) {
     const supabase = createClient()
-    const [compRes, secRes, itemRes, descRes] = await Promise.all([
+    const [compRes, secRes, itemRes, descRes, restRes] = await Promise.all([
       supabase.from('competencias').select('miembro_id, plaza').eq('restaurante_id', restauranteId).gte('nivel', NIVEL_REFERENTE),
       supabase.from('checklist_secciones').select('id, nombre, orden, plaza').eq('restaurante_id', restauranteId),
       supabase.from('checklist_items').select('nombre, plaza, seccion, seccion_id, orden').eq('restaurante_id', restauranteId),
       supabase.from('puesto_descripciones').select('puesto_id, estado, mision, responsabilidades, dia_tipo, expectativas, no_negociables, indicadores, condiciones').eq('restaurante_id', restauranteId).eq('estado', 'vigente'),
+      supabase.from('restaurantes').select('configuracion').eq('id', restauranteId).maybeSingle(),
     ])
     referentes = compRes.data ?? []
     checklistSecciones = secRes.data ?? []
     checklistItemsRows = itemRes.data ?? []
     descripciones = descRes.data ?? []
+    cartaDeLaCasa = ((restRes.data?.configuracion as Record<string, unknown> | null)?.carta_de_la_casa as CartaDeLaCasaExport | undefined) ?? null
   }
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
@@ -429,6 +438,40 @@ export async function exportOrganigramaPDF(areas: AreaEstado[], puestos: Puesto[
     }
     construirArbolPuestos(puestosArea).forEach(n => printNode(n, 0))
     y += 6
+  }
+
+  // ── Carta de la casa (Fase 2) — página compartida antes de los puestos.
+  // Se escribe una vez y vale para los 14 puestos (plan § 6.1) — no tiene
+  // sentido repetirla en cada carilla, así que va como portada del bloque.
+  const hayCartaDeLaCasa = !!(
+    cartaDeLaCasa?.cultura || cartaDeLaCasa?.uniforme
+    || cartaDeLaCasa?.politicas?.length || cartaDeLaCasa?.dia_tipo?.length || cartaDeLaCasa?.no_negociables?.length
+  )
+  if (hayCartaDeLaCasa) {
+    doc.addPage()
+    drawHeader('Carta de la casa')
+    y = 40
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(20)
+    doc.setTextColor(...textDark)
+    doc.text('Carta de la casa', margin, y)
+    y += 10
+    doc.setDrawColor(...lightGray)
+    doc.setLineWidth(0.4)
+    doc.line(margin, y, pageW - margin, y)
+    y += 10
+
+    printLinea('CULTURA Y VALORES', cartaDeLaCasa?.cultura ?? '', 'Carta de la casa')
+    printBullets('POLÍTICAS DE LA CASA', cartaDeLaCasa?.politicas ?? [], 'Carta de la casa')
+    printLinea('UNIFORME', cartaDeLaCasa?.uniforme ?? '', 'Carta de la casa')
+    printBullets(
+      'EL DÍA DE LA CASA',
+      (cartaDeLaCasa?.dia_tipo ?? []).map(d => (d.hora ? `${d.hora} — ${d.que_hace}` : d.que_hace)),
+      'Carta de la casa',
+    )
+    printBullets('NO NEGOCIABLES DE LA CASA', cartaDeLaCasa?.no_negociables ?? [], 'Carta de la casa')
+
+    drawFooter('Carta de la casa')
   }
 
   // ── Una carilla por puesto — el mini manual de puesto ──

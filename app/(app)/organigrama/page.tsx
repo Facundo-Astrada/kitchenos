@@ -26,6 +26,7 @@ import { OrganigramaWizardSheet } from '@/components/organigrama/OrganigramaWiza
 import { ResponsablesPicker } from '@/components/organigrama/ResponsablesPicker'
 import { exportOrganigramaPDF } from '@/lib/exportPDF'
 import PolivalenciaPanel from '@/components/organigrama/PolivalenciaPanel'
+import { CartaDeLaCasaModal } from '@/components/organigrama/CartaDeLaCasaModal'
 
 type Tab = 'plantel' | 'puestos' | 'estructura' | 'cobertura' | 'polivalencia'
 const TAB_IDS: Tab[] = ['plantel', 'puestos', 'estructura', 'cobertura', 'polivalencia']
@@ -54,6 +55,7 @@ export default function OrganigramaPage() {
   }
   const [wizardOpen, setWizardOpen] = useState(false)
   const [exportando, setExportando] = useState(false)
+  const [cartaCasaOpen, setCartaCasaOpen] = useState(false)
 
   // ── Plantel: ficha/alta (movido de Turnos → Equipo, S6 sep 2026) ──
   const [plantelMode, setPlantelMode] = useState<'grid' | 'ficha' | 'nuevo'>('grid')
@@ -217,6 +219,20 @@ export default function OrganigramaPage() {
                   {exportando ? 'progress_activity' : 'picture_as_pdf'}
                 </span>
               </button>
+              {isAdmin && (
+                <button
+                  data-coach-target="organigrama-carta-casa"
+                  onClick={() => setCartaCasaOpen(true)}
+                  title="Carta de la casa"
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36,
+                    background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,.25)', borderRadius: 10,
+                    color: '#fff', cursor: 'pointer',
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>menu_book</span>
+                </button>
+              )}
               {isAdmin && (
                 <div data-coach-target="organigrama-configurar">
                   <HeaderAction label="Configurar" icon="auto_fix_high" onClick={() => setWizardOpen(true)} />
@@ -474,6 +490,8 @@ export default function OrganigramaPage() {
           </p>
         </div>
       </Modal>
+
+      <CartaDeLaCasaModal open={cartaCasaOpen} onClose={() => setCartaCasaOpen(false)} onToast={showToast} />
 
       {/* Toast */}
       {toast && (
