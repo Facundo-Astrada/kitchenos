@@ -2,7 +2,8 @@
 // PuestosEditor.tsx (movido de turnos/page.tsx, S6 sep 2026 — la ficha del
 // equipo y el editor de puestos migraron de Turnos a Organigrama).
 
-import { NIVELES_ACCESO, type ObjetivosVenta } from '@/lib/hooks/useEquipo'
+import { NIVELES_ACCESO, PUESTO_TEMPLATES, type ObjetivosVenta, type Puesto } from '@/lib/hooks/useEquipo'
+import { AREA_CATALOGO } from '@/lib/constants'
 
 export const PLAZAS_OPS = ['parrilla', 'frios', 'calientes', 'pase', 'pasteleria', 'panaderia', 'linea']
 
@@ -19,6 +20,14 @@ export const MODULOS_ASIGNABLES = [
 
 export function getInitials(nombre: string, apellido: string) {
   return ((nombre?.[0] ?? '') + (apellido?.[0] ?? '')).toUpperCase()
+}
+
+/** Ícono de un puesto: el de su plantilla si coincide el nombre, si no el de su área. */
+export function iconoDePuesto(puesto: Pick<Puesto, 'nombre' | 'area_key'>): string {
+  const nombre = puesto.nombre.trim().toLowerCase()
+  return PUESTO_TEMPLATES.find(t => t.nombre.trim().toLowerCase() === nombre)?.icon
+    ?? AREA_CATALOGO.find(a => a.key === puesto.area_key)?.icon
+    ?? 'badge'
 }
 
 export function nivelLabel(nivel: string) {

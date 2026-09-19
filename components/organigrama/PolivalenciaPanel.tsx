@@ -17,20 +17,14 @@
 import { useMemo, useState } from 'react'
 import {
   NIVELES_COMPETENCIA, nivelCompetencia, todasLasPlazas, plazaLabel, plazaIcon,
-  esPlazaCustom, ICONOS_PLAZA_CUSTOM, NIVEL_AUTONOMO, NIVEL_REFERENTE, type NivelCompetencia,
+  esPlazaCustom, ICONOS_PLAZA_CUSTOM, NIVEL_AUTONOMO, NIVEL_REFERENTE, ESTADO_RIESGO_PLAZA,
+  type NivelCompetencia,
 } from '@/lib/constants'
 import { useCompetencias } from '@/lib/hooks/useCompetencias'
 import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import type { Miembro } from '@/lib/hooks/useEquipo'
 import { EmptyState } from '@/components/ui/EmptyState'
-
-const ESTADO_RIESGO = {
-  critico:      { label: 'Sin nadie que la cubra', color: '#ef4444', icon: 'error' },
-  fragil:       { label: 'Depende de una persona', color: '#f97316', icon: 'warning' },
-  'sin-relevo': { label: 'Nadie la enseña',        color: '#f59e0b', icon: 'school' },
-  ok:           { label: 'Cubierta',               color: '#10b981', icon: 'check_circle' },
-} as const
 
 export default function PolivalenciaPanel({
   miembros, isAdmin, onToast,
@@ -207,7 +201,7 @@ export default function PolivalenciaPanel({
       {alertas.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 8 }}>
           {alertas.map(r => {
-            const cfg = ESTADO_RIESGO[r.estado]
+            const cfg = ESTADO_RIESGO_PLAZA[r.estado]
             return (
               <div key={r.plaza} style={{
                 background: 'var(--surface)', border: `1px solid ${cfg.color}55`,
@@ -357,7 +351,7 @@ export default function PolivalenciaPanel({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {plazas.map(p => {
             const r = riesgos.find(x => x.plaza === p)
-            const cfg = r ? ESTADO_RIESGO[r.estado] : ESTADO_RIESGO.ok
+            const cfg = r ? ESTADO_RIESGO_PLAZA[r.estado] : ESTADO_RIESGO_PLAZA.ok
             const entradas = miembros.map(m => ({ m, nivel: nivelDe(m.id, p) }))
             const formados = entradas
               .filter(e => e.nivel > 0)

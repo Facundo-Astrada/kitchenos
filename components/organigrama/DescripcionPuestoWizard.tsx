@@ -29,7 +29,7 @@ import {
 } from '@/lib/hooks/usePuestoDescripcion'
 import { fieldStyle, labelStyle, btnPrimary, btnSecondary } from './equipoShared'
 
-type Tanda = 1 | 2 | 3 | 4 | 5 | 6
+export type Tanda = 1 | 2 | 3 | 4 | 5 | 6
 
 const NO_NEGOCIABLES_SUGERIDOS = [
   'Avisar el faltante antes de que se corte',
@@ -203,12 +203,15 @@ interface DescripcionPuestoWizardProps {
   open: boolean
   onClose: () => void
   onToast: (msg: string) => void
+  /** Tanda con la que arranca el cuestionario — el lápiz de cada sección de
+   *  la Ficha del puesto abre directo en la tanda que corresponde. Default 1. */
+  tandaInicial?: Tanda
 }
 
-export function DescripcionPuestoWizard({ puesto, open, onClose, onToast }: DescripcionPuestoWizardProps) {
+export function DescripcionPuestoWizard({ puesto, open, onClose, onToast, tandaInicial }: DescripcionPuestoWizardProps) {
   return (
     <Modal open={open} onClose={onClose} maxWidth={640}>
-      {open && <WizardBody puesto={puesto} onClose={onClose} onToast={onToast} />}
+      {open && <WizardBody puesto={puesto} onClose={onClose} onToast={onToast} tandaInicial={tandaInicial} />}
     </Modal>
   )
 }
@@ -216,7 +219,7 @@ export function DescripcionPuestoWizard({ puesto, open, onClose, onToast }: Desc
 // Cuerpo separado del wrapper para que se desmonte al cerrar — así cada
 // apertura arranca de nuevo desde la tanda 1 con los valores guardados
 // frescos, en vez de arrastrar el estado local de la vez anterior.
-function WizardBody({ puesto, onClose, onToast }: { puesto: Puesto; onClose: () => void; onToast: (msg: string) => void }) {
+function WizardBody({ puesto, onClose, onToast, tandaInicial }: { puesto: Puesto; onClose: () => void; onToast: (msg: string) => void; tandaInicial?: Tanda }) {
   const { perfil } = useAuth()
   const { puestos, areas, miembros } = useEquipo()
   const { referentesDePlaza } = useCompetencias()
@@ -237,7 +240,7 @@ function WizardBody({ puesto, onClose, onToast }: { puesto: Puesto; onClose: () 
   )
   const modoRapido = !existente && !!otraDescripcion
 
-  const [tanda, setTanda] = useState<Tanda>(1)
+  const [tanda, setTanda] = useState<Tanda>(tandaInicial ?? 1)
   const [saving, setSaving] = useState(false)
   const [puliendo, setPuliendo] = useState<string | null>(null)
   const [generandoBorrador, setGenerandoBorrador] = useState(false)

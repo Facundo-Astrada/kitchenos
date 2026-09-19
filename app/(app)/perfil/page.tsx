@@ -6,6 +6,10 @@ import { useAuth } from '@/lib/auth/context'
 import { createClient } from '@/lib/supabase/client'
 import { useOnboardingPersonal } from '@/lib/hooks/useOnboardingPersonal'
 import { usePushSubscripcion } from '@/lib/hooks/usePushSubscripcion'
+import { useEquipo } from '@/lib/hooks/useEquipo'
+import { plazaLabel } from '@/lib/constants'
+import { iconoDePuesto } from '@/components/organigrama/equipoShared'
+import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
 
 const MAX_SIZE_MB = 2
 
@@ -20,6 +24,10 @@ export default function PerfilPage() {
   const { resetTours } = useOnboardingPersonal()
   const [reseteandoTours, setReseteandoTours] = useState(false)
   const { estado: estadoPush, trabajando: pushTrabajando, activar: activarPush, desactivar: desactivarPush } = usePushSubscripcion()
+  const { miembros, puestos } = useEquipo()
+  const { plazasCustom } = usePlazasCustom()
+  const miembroPropio = miembros.find(m => m.id === perfil?.miembro_id)
+  const miPuesto = puestos.find(p => p.id === miembroPropio?.puesto_id)
 
   async function handleResetTours() {
     await resetTours()
@@ -230,6 +238,37 @@ export default function PerfilPage() {
             >
               {rolLabels[perfil.rol] ?? perfil.rol}
             </span>
+          )}
+
+          {/* Mi puesto — qué hace el puesto, a quién preguntarle, cómo va aprendiendo.
+              Solo si el perfil resuelve a un miembro con puesto asignado. */}
+          {miPuesto && (
+            <button
+              onClick={() => router.push('/perfil/puesto')}
+              className="w-full flex items-center gap-3 rounded-[14px] p-[14px]"
+              style={{
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              <div style={{
+                width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+                background: 'var(--blue-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--accent)' }}>{iconoDePuesto(miPuesto)}</span>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{miPuesto.nombre}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+                  {miPuesto.plaza_default ? plazaLabel(miPuesto.plaza_default, plazasCustom) : 'Rota entre plazas'}
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
+                  Qué hace el puesto, a quién preguntarle y cómo vas aprendiendo
+                </div>
+              </div>
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-3)', flexShrink: 0 }}>chevron_right</span>
+            </button>
           )}
 
           {/* Divider */}

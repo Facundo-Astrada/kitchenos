@@ -506,6 +506,26 @@ export const NIVEL_AUTONOMO: NivelCompetencia = 3
 /** El nivel que convierte a alguien en referente (sabe y enseña). */
 export const NIVEL_REFERENTE: NivelCompetencia = 4
 
+// Estado de riesgo por plaza (Organigrama → Polivalencia + Ficha del puesto,
+// ver useCompetencias().riesgo()). Mudado de PolivalenciaPanel.tsx (19/09/2026)
+// para que la Ficha del puesto lo use sin duplicar el mapa.
+export const ESTADO_RIESGO_PLAZA = {
+  critico:      { label: 'Sin nadie que la cubra', color: '#ef4444', icon: 'error' },
+  fragil:       { label: 'Depende de una persona', color: '#f97316', icon: 'warning' },
+  'sin-relevo': { label: 'Nadie la enseña',        color: '#f59e0b', icon: 'school' },
+  ok:           { label: 'Cubierta',               color: '#10b981', icon: 'check_circle' },
+} as const
+
+// Piso nacional de requisitos de norma (no de la casa) que aplica a todo
+// puesto que no sea 'admin' — ver PLAN-DESCRIPCION-PUESTO-2026-09.md § 4.5.
+// K-OS no afirma cumplimiento: es un piso, el municipio puede pedir más.
+export const NORMA_PISO_NACIONAL: string[] = [
+  'Carnet de manipulador vigente',
+  'Buenas prácticas (BPM)',
+  'Cadena de frío y rotulado',
+  'Higiene y lavado de manos',
+]
+
 // ── Colores de prioridad ─────────────────────────────────────
 export const PRIORIDAD_CONFIG = {
   SP: { label: 'S/P', bgClass: 'bg-red-100', textClass: 'text-red-500' },

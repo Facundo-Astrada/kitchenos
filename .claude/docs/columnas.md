@@ -118,12 +118,15 @@ sin el embed `!inner`, y sin caer en el gotcha #8 de `hooks.md`. Cuidado con lo 
 ## Matriz de polivalencia — `competencias`
 
 `competencias (restaurante_id, miembro_id → equipo_miembros CASCADE, plaza TEXT, nivel SMALLINT 0-4,
-evidencia_url, nota, actualizado_por, updated_at)`, `UNIQUE(restaurante_id, miembro_id, plaza)`.
+evidencia_url, nota, actualizado_por, updated_at, ensena_miembro_id → equipo_miembros SET NULL)`,
+`UNIQUE(restaurante_id, miembro_id, plaza)`.
 `plaza` es TEXT y no enum a propósito: las plazas custom viven en `restaurantes.configuracion`, no
 en el schema. **Una fila ausente no es un error: es nivel 0** — la grilla se dibuja completa aunque
 la tabla esté vacía. Nivel 4 = referente (sabe y enseña); de ahí salen los referentes de la ruta de
 implantación, no de una designación a dedo. Índice `(restaurante_id, plaza, nivel DESC)` para
-"¿quién es el referente de esta plaza?".
+"¿quién es el referente de esta plaza?". `ensena_miembro_id` (migración `20260919`, Ficha del
+puesto): quién le enseña esa plaza a esa persona — null = se deduce el/los referente(s) de la
+plaza, se asigna explícito solo cuando el chef quiere un padrino distinto.
 
 ## Descripción de puesto — `puesto_descripciones` (sep 2026)
 
