@@ -6,6 +6,13 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-09-19 (2) — Invitar al equipo fallaba para el chef (Bros).** 1 commit (`03c5817`), pusheado.
+
+- **Síntoma:** Facundo no pudo invitar a una integrante nueva en Bros. Los logs de auth mostraban `GET /user` a las 12:09 UTC y ningún `POST /invite`: el pedido moría en `/api/invitar` antes de llamar a Supabase. Su cuenta `facu@broscomedor.com` era `chef` en `user_restaurantes` y el endpoint exigía `rol === 'admin'` crudo, mientras Organigrama le mostraba el botón a cualquiera.
+- **Datos:** `facu@broscomedor.com` pasó a `admin` en Bros (`user_restaurantes` y su ficha de `equipo_miembros`), por decisión de Facundo.
+- **Código:** `puedeInvitar`/`puedeAsignarNivel` en `lib/permisos/roles.ts`, usadas por el endpoint y por la pantalla. Invitan admin y chef (vía `mapRol`, así que también owner/compras/sous_chef); un chef no puede invitar como admin y esa opción no le aparece en el modal. Tests en `roles.test.ts`.
+- **Hallazgo abierto:** la ficha "Paula Frezza" se creó con Agregar y email `pauf2378` — ver `PENDIENTES.md` (backlog chico).
+
 **Sesión 2026-09-19 — Ficha del puesto (CV + tablero), Mi puesto y formación por plaza.** 1 commit (`b69403e`), pusheado.
 
 - **Diagnóstico:** la descripción de puesto se escribía (cuestionario) y se imprimía (PDF) pero no se veía en ninguna pantalla, y el cocinero no llegaba (los roles de cocina no tienen `organigrama`). Bros al 19/09: 6 puestos, 0 descripciones, 5 de 6 puestos con `plaza_default = null`.

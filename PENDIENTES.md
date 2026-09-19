@@ -224,6 +224,10 @@ Lista completa con el detalle de cada uno en `HISTORIAL.md`. En una línea:
   (componente compartido por media docena de pantallas — radio de impacto).
 - Organigrama: reasignar `reporta_a_puesto_id` es un `<select>`, no drag; y el
   árbol de un área no anida puestos que reportan cruzado.
+- Organigrama → **Agregar acepta cualquier texto como email** (el `type="email"`
+  no valida fuera de un `<form>`). Caso Bros 19/09: Paula Frezza con `pauf2378`.
+  Una ficha así no se vincula nunca (`vincular` matchea por email), y si después
+  se invita a la persona con el mail real, `/api/invitar` crea una segunda ficha.
 - Evento con presencia heredada en el mise no tiene "Sacar del mise" en el picker
   de Planificación (sí en `MenusView`).
 - Stock: celda apretada en 480-1023px — falta verla en **modo edición**.

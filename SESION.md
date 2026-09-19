@@ -1,17 +1,17 @@
-# Sesión — 19/09/2026
+# Sesión — 19/09/2026 (2)
 
 ## Qué se cerró
-- **Ficha del puesto** (`FichaPuesto.tsx`, commit `b69403e`, en prod): el detalle de un puesto pasó de tarjetas sueltas a una pantalla CV + tablero. Dueño: un lápiz por sección que abre la tanda del cuestionario. Cocinero: la misma ficha en lectura desde Perfil → **Mi puesto** (`/perfil/puesto`).
-- **Formación por plaza (opción A)**: nivel de cada ocupante en la plaza del puesto + padrino opcional (`competencias.ensena_miembro_id`, migración aplicada a prod; null = el referente de la plaza).
-- Decisiones de Facundo: dirección visual del mockup, formación A (no por tarea), entrada del cocinero desde Perfil.
+- **Invitar al equipo** (commit `03c5817`, en prod): fallaba para el chef porque `/api/invitar` pedía `admin` crudo y la pantalla mostraba el botón a todos. Ahora invitan admin y chef (regla compartida en `lib/permisos/roles.ts`); un chef no puede invitar como admin.
+- `facu@broscomedor.com` pasó de `chef` a **admin** en Bros (decisión de Facundo).
+- Sesión anterior del mismo día: Ficha del puesto + Mi puesto + formación por plaza (`b69403e`) — ver `HISTORIAL.md`.
 
 ## Qué quedó a medias
-- El camino **"puesto con plaza"** (Cobertura, "A quién le preguntan", `<select>` "Le enseña") no se vio en navegador: El Rescoldo no tiene puestos con plaza y no hay credenciales de dueño de Bros. Build/lint/typecheck limpios; lo demás se capturó.
+- **Paula (Bros) sigue sin entrar.** Su ficha "Paula Frezza" tiene email `pauf2378` (inválido). Falta el mail real; no confirmamos si es la misma "Paula Chavez" que Facundo quería invitar.
+- El camino "puesto con plaza" de la Ficha del puesto sigue sin verse en navegador.
 
 ## Probar primero mañana
-- Con la cuenta de dueño de Bros: Organigrama → Puestos → **Parrillero** (único con plaza). Revisar la ficha y asignar un "Le enseña" a alguien en formación.
-- Tablet de Bros (`cocina@broscomedor.com`): Perfil → Mi puesto.
+- Con `facu@broscomedor.com` (ya admin): corregir el email en la ficha de Paula → Invitar con ese mismo mail → que no aparezca una segunda Paula.
+- Con la misma cuenta: Organigrama → Puestos → **Parrillero** (único con plaza) — revisar la ficha y asignar un "Le enseña".
 
 ## Próximo paso concreto
-- La condición de salida de la decisión 014 sigue corriendo: **0 descripciones vigentes en Bros** (vence ~02/10). La ficha ahora muestra el documento: el próximo paso es que Franco complete al menos Parrillero.
-- Formación por tarea (opción B) y valores vivos de los indicadores quedan en `PENDIENTES.md`; B necesita decisión de moratoria antes de código.
+- Decisión 014: **0 descripciones vigentes en Bros** (vence ~02/10) — que Franco complete al menos Parrillero.
