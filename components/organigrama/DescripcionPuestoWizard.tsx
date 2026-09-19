@@ -23,6 +23,7 @@ import { useAuth } from '@/lib/auth/context'
 import { useEquipo, type Puesto } from '@/lib/hooks/useEquipo'
 import { useCompetencias } from '@/lib/hooks/useCompetencias'
 import { useChecklist } from '@/lib/hooks/useChecklist'
+import { useCartaDeLaCasa } from '@/lib/hooks/useCartaDeLaCasa'
 import {
   usePuestoDescripcion, type IndicadorItem, type PuestoDescripcion,
 } from '@/lib/hooks/usePuestoDescripcion'
@@ -220,9 +221,22 @@ function WizardBody({ puesto, onClose, onToast }: { puesto: Puesto; onClose: () 
   const { puestos, areas, miembros } = useEquipo()
   const { referentesDePlaza } = useCompetencias()
   const { items: checklistItems } = useChecklist()
-  const { descripcionDe, guardarBorrador, publicar } = usePuestoDescripcion()
+  const { carta: cartaDeLaCasa } = useCartaDeLaCasa()
+  const { descripciones, descripcionDe, guardarBorrador, publicar } = usePuestoDescripcion()
 
   const existente = descripcionDe(puesto.id)
+  // Modo rápido (plan § 10.1 A): a partir del segundo puesto, beneficios y
+  // crecimiento se copian de otro puesto en vez de volver a dictarlos, y la
+  // tanda del incidente se puede saltear — lo único de verdad nuevo por
+  // puesto es misión, el día, responsabilidades e indicadores.
+  const otraDescripcion = useMemo(
+    () => descripciones.find(d => d.puesto_id !== puesto.id && (
+      d.condiciones?.beneficios?.length || d.condiciones?.capacitacion || d.condiciones?.carrera
+    )),
+    [descripciones, puesto.id],
+  )
+  const modoRapido = !existente && !!otraDescripcion
+
   const [tanda, setTanda] = useState<Tanda>(1)
   const [saving, setSaving] = useState(false)
   const [puliendo, setPuliendo] = useState<string | null>(null)
@@ -256,10 +270,14 @@ function WizardBody({ puesto, onClose, onToast }: { puesto: Puesto; onClose: () 
     for (const i of existente?.indicadores ?? []) out[i.nombre] = i.meta
     return out
   })
-  const [beneficios, setBeneficios] = useState<string[]>(existente?.condiciones?.beneficios ?? [])
-  const [capacitacion, setCapacitacion] = useState(existente?.condiciones?.capacitacion ?? '')
-  const [carrera, setCarrera] = useState(existente?.condiciones?.carrera ?? '')
+  const [beneficios, setBeneficios] = useState<string[]>(existente?.condiciones?.beneficios ?? otraDescripcion?.condiciones?.beneficios ?? [])
+  const [capacitacion, setCapacitacion] = useState(existente?.condiciones?.capacitacion ?? otraDescripcion?.condiciones?.capacitacion ?? '')
+  const [carrera, setCarrera] = useState(existente?.condiciones?.carrera ?? otraDescripcion?.condiciones?.carrera ?? '')
 
+  const otroPuestoNombre = useMemo(
+    () => puestos.find(p => p.id === otraDescripcion?.puesto_id)?.nombre,
+    [puestos, otraDescripcion],
+  )
   const areaDelPuesto = useMemo(() => areas.find(a => a.key === puesto.area_key), [areas, puesto.area_key])
   const padre = useMemo(() => puestos.find(p => p.id === puesto.reporta_a_puesto_id), [puestos, puesto.reporta_a_puesto_id])
   const ocupantes = useMemo(() => miembros.filter(m => m.puesto_id === puesto.id), [miembros, puesto.id])
@@ -343,6 +361,14 @@ function WizardBody({ puesto, onClose, onToast }: { puesto: Puesto; onClose: () 
             <Renglon label="Lo ocupan hoy" valor={ocupantes.length ? ocupantes.map(m => `${m.nombre} ${m.apellido}`).join(', ') : 'Vacante'} />
             <Renglon label="A quién le preguntan" valor={referentesNombres.length ? referentesNombres.join(', ') : 'Nadie es referente todavía (matriz de polivalencia)'} />
           </div>
+          {modoRapido && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '9px 12px', borderRadius: 10, background: 'rgba(16,185,129,.1)' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#0a8f5f' }}>bolt</span>
+              <span style={{ fontSize: 11.5, color: 'var(--text-1)', lineHeight: 1.4 }}>
+                Vas más rápido: los beneficios se copian de {otroPuestoNombre ?? 'otro puesto'} y podés saltear el incidente. Solo falta lo de este puesto.
+              </span>
+            </div>
+          )}
           <button onClick={() => setTanda(2)} style={{ ...btnPrimary, marginTop: 18 }}>Está bien →</button>
         </div>
       )}
@@ -438,6 +464,11 @@ function WizardBody({ puesto, onClose, onToast }: { puesto: Puesto; onClose: () 
       {/* ── Tanda 5 · Expectativas y límites ── */}
       {tanda === 5 && (
         <div>
+          {(cartaDeLaCasa.no_negociables?.length ?? 0) > 0 && (
+            <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 14px', lineHeight: 1.5, padding: '8px 10px', borderRadius: 10, background: 'var(--bg)' }}>
+              Ya valen para toda la casa (no hace falta repetirlas acá): {cartaDeLaCasa.no_negociables!.join(' · ')}
+            </p>
+          )}
           <label style={qLabel}>5 · ¿Cómo te das cuenta que hoy anduvo bien?</label>
           <div style={{ marginTop: 8, marginBottom: 18 }}>
             <ListaDeFrases items={expectativas} onChange={setExpectativas} placeholder="Ej: la carne sale igual siempre" />
@@ -490,6 +521,9 @@ function WizardBody({ puesto, onClose, onToast }: { puesto: Puesto; onClose: () 
 
           <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
             <button onClick={() => setTanda(4)} style={btnSecondary}>Atrás</button>
+            {modoRapido && (
+              <button disabled={saving} onClick={() => avanzar(null, 6)} style={btnSecondary}>Saltar</button>
+            )}
             <button disabled={saving} onClick={() => avanzar({ expectativas, no_negociables: [...noNegociables] }, 6)} style={btnPrimary}>Siguiente →</button>
           </div>
         </div>
@@ -531,6 +565,11 @@ function WizardBody({ puesto, onClose, onToast }: { puesto: Puesto; onClose: () 
           </div>
 
           <label style={qLabel}>Qué ofrece la casa</label>
+          {modoRapido && (
+            <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '4px 0 8px' }}>
+              Copiado de {otroPuestoNombre ?? 'otro puesto'} — confirmá o ajustá.
+            </p>
+          )}
           <div style={{ marginTop: 8, marginBottom: 12 }}>
             <ListaDeFrases items={beneficios} onChange={setBeneficios} placeholder="Ej: propinas en blanco, comida incluida" />
           </div>
