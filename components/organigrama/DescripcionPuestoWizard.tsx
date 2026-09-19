@@ -240,6 +240,7 @@ function WizardBody({ puesto, onClose, onToast }: { puesto: Puesto; onClose: () 
   const [tanda, setTanda] = useState<Tanda>(1)
   const [saving, setSaving] = useState(false)
   const [puliendo, setPuliendo] = useState<string | null>(null)
+  const [generandoBorrador, setGenerandoBorrador] = useState(false)
 
   // ── Tanda 2 — el día ──
   const [diaRaw, setDiaRaw] = useState<Record<string, string>>(() => {
@@ -302,6 +303,27 @@ function WizardBody({ puesto, onClose, onToast }: { puesto: Puesto; onClose: () 
       onToast(e instanceof Error ? e.message : 'No se pudo pulir el texto')
     } finally {
       setPuliendo(null)
+    }
+  }
+
+  // Fase 4, punto 2: borrador de tareas para un puesto sin plantilla — la
+  // única parte de la función donde la IA inventa en vez de redactar (plan
+  // § 8). Solo tiene sentido ofrecerlo cuando no hay nada sembrado.
+  async function generarBorradorTareas() {
+    setGenerandoBorrador(true)
+    try {
+      const res = await fetch('/api/organigrama/borrador-tareas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ puestoNombre: puesto.nombre, areaNombre: areaDelPuesto?.nombre, plaza: puesto.plaza_default }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'No se pudo generar el borrador')
+      setTareas(json.tareas as string[])
+    } catch (e: unknown) {
+      onToast(e instanceof Error ? e.message : 'No se pudo generar el borrador')
+    } finally {
+      setGenerandoBorrador(false)
     }
   }
 
@@ -436,6 +458,15 @@ function WizardBody({ puesto, onClose, onToast }: { puesto: Puesto; onClose: () 
         <div>
           <label style={qLabel}>4 · Responsabilidades</label>
           <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '6px 0 12px' }}>Tocá para sacar. Escribí para agregar.</p>
+          {tareas.length === 0 && (
+            <button
+              type="button" onClick={generarBorradorTareas} disabled={generandoBorrador}
+              style={{ ...btnPulir(generandoBorrador), marginBottom: 12 }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>auto_awesome</span>
+              {generandoBorrador ? 'Generando…' : 'Este puesto no tiene plantilla — generar un borrador'}
+            </button>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
             {tareas.map((t, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 10, background: 'var(--bg)' }}>
