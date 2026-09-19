@@ -1,44 +1,19 @@
-# Sesión — 17-18/09/2026
-
-> Sesión de diseño, **sin código**. Todo lo de abajo son documentos.
+# Sesión — 18/09/2026
 
 ## Qué se cerró
-- **Plan completo de Descripción de puesto** (`PLAN-DESCRIPCION-PUESTO-2026-09.md`, 12 §).
-  El hallazgo que lo ordena: los 3 ejemplos de Standard 69 son **tres objetos distintos**
-  (la casa / el puesto / la partida), y K-OS ya tiene ~60% del documento cargado sin usarlo
-  (referente de la plaza vía `competencias`, checklist por plaza, objetivos, uniforme).
-  Cuestionario de 6 tandas, schema, recorrido de usuario y fases.
-- **Dos investigaciones de Gemini Deep Research, pedidas, auditadas e incorporadas**
-  (`INVESTIGACION-PUESTOS-METODOLOGIA-2026-09.md` y `-LEGAL-`). La 1ª refutó bien la
-  hipótesis de las preguntas en negativo → se rehizo la tanda 5 con incidente crítico
-  episódico + lista cerrada, y se dio vuelta el orden (el día antes que la misión).
-- **Corrección de schema por hallazgo legal.** El acuse de lectura es **firma electrónica**
-  (ley 25.506 arts. 5-6): si el trabajador la desconoce, la carga de la prueba cae en el
-  empleador. El diseño original (`version int` contra una fila mutable) no sobrevivía una
-  pericia — la versión firmada desaparecía al editar. Rehecho como versión inmutable con
-  snapshot + hash y acuses append-only (§ 5.1.b).
-- Los PDF de ejemplo de Standard 69 quedaron **gitignoreados**: son manuales internos de otra
-  empresa, misma regla que el material de research de terceros.
+- **Decisión 014**: excepción a la moratoria (012) para el resto de `PLAN-DESCRIPCION-PUESTO-2026-09.md`, escrita en `DECISIONES.md` de START UP KOS antes de tocar código. Fase 3 queda afuera hasta la consulta legal.
+- **Fases 0, 1, 2 y 4 (punto 2) de Descripción de puesto**, shippeadas y en prod: export PDF con lo que ya sabía la base, tabla `puesto_descripciones` + wizard de 6 tandas con dictado por voz y "Pulir con IA", Carta de la casa, modo rápido desde el segundo puesto, borrador de tareas con IA para puestos sin plantilla. Detalle completo en `HISTORIAL.md`.
+- Corrección de proceso: se dejó de usar El Rescoldo para verificar (sin backfill de Organigrama desde jun 2026) — de acá en más, Bros.
 
 ## Qué quedó a medias
-- Nada a medias de esta sesión: el plan está cerrado y esperando **una decisión de negocio**,
-  no más trabajo de diseño.
-- **Dos commits de mise (`44d3758`, `7fac7af`, 15-16/09) nunca se cerraron con `/update-status`.**
-  No están reflejados en ningún `SESION.md`. Si hace falta el rationale, está en el diff.
+- Nada de código sin cerrar. Lo que falta es explícitamente ajeno a esta sesión: Fase 3 (bloqueada por consulta legal) y Fase 5 (diferida).
+- **No se probó el flujo completo en el navegador** — sin credenciales de login de Bros. Se validó con build/lint limpios, RLS confirmada, y la lógica de agrupamiento contra datos reales de Bros vía SQL.
 
 ## Probar primero mañana
-- Nada que probar — no se tocó código.
+- Entrar a Bros, abrir un puesto en Organigrama → Puestos, correr las 6 tandas completas (probar el micrófono y "Pulir con IA"), y revisar la carilla completa del PDF.
+- Probar "Carta de la casa" (botón nuevo en el header, ícono de libro) y confirmar que sale como página en el PDF.
+- Probar el borrador de IA en un puesto sin plantilla (tanda 4, sin tareas sembradas).
 
 ## Próximo paso concreto
-**Fase 0 del plan**, que es lo único no trabado por la moratoria: extender el export PDF de
-Organigrama (`lib/exportPDF.ts:331`) con los 7 datos que ya están en la base. Cero schema,
-2-3 h. El prompt de arranque para esa sesión está al final de la conversación del 18/09.
-
-En paralelo, dos cosas que no son de código:
-1. **Decidir la moratoria** — excepción nombrada tipo 013 en el `DECISIONES.md` de START UP
-   KOS, o el plan no avanza más allá de la fase 0 (§ 9 del plan).
-2. **Consulta a abogado laboral** antes de la fase 3. Las 5 preguntas ya están redactadas en
-   `INVESTIGACION-PUESTOS-LEGAL-2026-09.md` § 2.
-
-Sigue abierto de antes: el costeo de componentes sin costo por gramo en `ComposicionEditor`
-(`PENDIENTES.md` 🟠) y las VAPID en Vercel (🟢).
+- Si el pase real en Bros sale bien: nada urgente — la función queda esperando adopción real (condición de salida de la 014: 2 semanas sin ninguna descripción `vigente` y se revierte). Si algo falla, es el primer lugar a mirar.
+- La consulta al abogado laboral (5 preguntas ya redactadas en `INVESTIGACION-PUESTOS-LEGAL-2026-09.md` § 2) sigue siendo el paso de negocio pendiente antes de la Fase 3.

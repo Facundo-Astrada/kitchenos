@@ -86,20 +86,16 @@ las bajas en LatAm son involuntarias).
 
 ## 🟢 Bajo — Roadmap abierto
 
-### Descripción de puesto (Organigrama) — plan cerrado, esperando decisión de negocio
-`PLAN-DESCRIPCION-PUESTO-2026-09.md`, con las dos investigaciones en
-`INVESTIGACION-PUESTOS-METODOLOGIA-2026-09.md` y `INVESTIGACION-PUESTOS-LEGAL-2026-09.md`.
-El cuestionario, el schema y el recorrido están
-especificados. **Trabado en la moratoria (decisión 012):** son 3 tablas nuevas, hace falta
-una excepción nombrada tipo 013 escrita en el `DECISIONES.md` de START UP KOS antes de
-tocar código (§ 9 del plan).
-- **Fase 0 NO está trabada** — extender el export PDF de Organigrama con los 7 datos que ya
-  existen en la base (referente de la plaza, checklist de apertura/cierre, objetivos del
-  puesto, responsable del área, uniforme). Cero schema, 2-3 h, `lib/exportPDF.ts:331`.
-- **Antes de la fase 3 (acuse de lectura): consulta a un abogado laboral.** Las 5 preguntas
-  ya están redactadas en `research-2-latam-legal.md` § 2. El acuse es firma electrónica
-  (ley 25.506) y la carga de la prueba cae en el empleador — de ahí el schema append-only
-  con versión inmutable del § 5.1.b.
+### Descripción de puesto (Organigrama) — Fases 0/1/2/4 shippeadas, falta el acuse
+`PLAN-DESCRIPCION-PUESTO-2026-09.md`. Decisión 014 (18/09) sacó el resto del plan de la
+moratoria; detalle de lo shippeado en `HISTORIAL.md` sesión 2026-09-18. Queda:
+- **Fase 3 (acuse de lectura) — bloqueada, no es código.** Consulta a un abogado laboral
+  primero (5 preguntas redactadas en `INVESTIGACION-PUESTOS-LEGAL-2026-09.md` § 2). El acuse
+  es firma electrónica (ley 25.506) y la carga de la prueba cae en el empleador — de ahí el
+  schema append-only con versión inmutable del § 5.1.b, todavía sin crear.
+- **Fase 5 (ficha de partida)** — diferida, sin fecha.
+- **Probar el flujo completo en vivo** contra Bros — no se pudo esta sesión por falta de
+  credenciales de login.
 
 ### Presupuesto — fuera de alcance de la Fase 1
 Detalle en `PLAN-PRESUPUESTO-CMV-2026-08.md` §11: partir venta comida/bebida

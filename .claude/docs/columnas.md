@@ -125,6 +125,22 @@ la tabla esté vacía. Nivel 4 = referente (sabe y enseña); de ahí salen los r
 implantación, no de una designación a dedo. Índice `(restaurante_id, plaza, nivel DESC)` para
 "¿quién es el referente de esta plaza?".
 
+## Descripción de puesto — `puesto_descripciones` (sep 2026)
+
+`puesto_descripciones (restaurante_id, puesto_id UNIQUE, mision, responsabilidades jsonb,
+dia_tipo jsonb, jornada jsonb, expectativas text[], no_negociables text[], indicadores jsonb,
+capacidades_requeridas jsonb, requisitos jsonb, condiciones jsonb, estado, version,
+revisado_por, revisado_at)`. El JSONB de competencias técnicas/blandas del puesto se llama
+**`capacidades_requeridas`, nunca `competencias`** — ese nombre ya está tomado por la matriz de
+polivalencia de arriba y son conceptos distintos. `estado` en `'borrador'|'vigente'|'archivado'`;
+`version`/`revisado_por`/`revisado_at` son metadata del borrador, no tienen valor probatorio
+todavía (el acuse de lectura con versión inmutable es Fase 3, tablas aparte, sin construir).
+
+`restaurantes.configuracion.carta_de_la_casa` (JSONB, sin tabla nueva, mismo patrón que
+`plazas_custom`): `{ cultura, politicas: string[], uniforme, dia_tipo: {hora,que_hace}[],
+no_negociables: string[] }` — cultura/políticas/no-negociables **del restaurante entero**, no
+confundir con los campos homónimos de `puesto_descripciones` (esos son por puesto).
+
 ## Unidades de ingredientes — trampas de conversión
 
 `ingredientes.unidad`/`unidad_costo` llegan con variantes no estándar desde importaciones: `gr/grs/gramo→g`, `lt/lts/litro→l`, `cc/mililitro→ml`, `unidad/unidades/un→u`. `canonUnit()` en `lib/hooks/useRecetas.ts` canoniza antes de calcular el factor; `supabase/migrations/normalizar_unidades_ingredientes.sql` corrige en DB.
