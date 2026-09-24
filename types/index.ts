@@ -728,6 +728,9 @@ export interface MisePlaceItem {
   nota?: string | null
   nota_por?: string | null
   nota_at?: string | null
+  // Grupo físico dentro de la sección (sep 2026) — mismo número = mismo lugar
+  // (bandeja/estante), contiguos por `orden`. Ver lib/ops/grupoUbicacion.ts.
+  grupo_ubicacion?: number | null
 }
 
 // ── Espacios físicos (mesa de trabajo) ───────────────────────

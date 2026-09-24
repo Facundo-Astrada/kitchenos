@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import type { DropHint } from './ProduccionRow'
 import type { Espacio, EspacioPlaza, ChecklistSeccionConfig, MisePlaceItem, Plaza, PlazaCustom, MisePrioridad } from '@/types'
 import { PLAZAS_FIJAS, PLAZA_LABELS, ICONOS_PLAZA_CUSTOM } from '@/lib/constants'
 import PlazaRow from './PlazaRow'
@@ -22,8 +23,10 @@ interface Props {
   overSecId: string | null
   registerDropZone: (secId: string, el: HTMLElement | null, plaza: Plaza) => void
   draggingId: string | null
+  dropHint: { itemId: string; hint: DropHint } | null
+  registerItemEl: (id: string, el: HTMLElement | null) => void
   onDragStart: (item: MisePlaceItem) => void
-  onDragMove: (x: number, y: number) => void
+  onDragMove: (x: number, y: number, agrupar: boolean) => void
   onDragEnd: () => void
   onActualizar: (id: string, datos: { nombre?: string; icono?: string }) => void
   onEliminar: (id: string) => void
@@ -44,7 +47,7 @@ interface Props {
 export default function EspacioCard(props: Props) {
   const {
     espacio, plazasDelEspacio, plazasUsadas, plazasCustom, secciones, items,
-    overSecId, registerDropZone, draggingId,
+    overSecId, registerDropZone, draggingId, dropHint, registerItemEl,
     onDragStart, onDragMove, onDragEnd,
     onActualizar, onEliminar, onAsignarPlaza, onQuitarPlaza,
     onCrearPlaza, onEliminarPlazaCustom, onReordenarPlazas,
@@ -286,6 +289,8 @@ export default function EspacioCard(props: Props) {
                   overSecId={overSecId}
                   registerDropZone={registerDropZone}
                   draggingId={draggingId}
+                  dropHint={dropHint}
+                  registerItemEl={registerItemEl}
                   onDragStart={onDragStart}
                   onDragMove={onDragMove}
                   onDragEnd={onDragEnd}

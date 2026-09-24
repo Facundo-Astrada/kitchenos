@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import type { DropHint } from './ProduccionRow'
 import type { ChecklistSeccionConfig, MisePlaceItem, Plaza, PlazaCustom } from '@/types'
 import { plazaLabel, plazaIcon, plazaColor, esPlazaCustom } from '@/lib/constants'
 import SeccionRow from './SeccionRow'
@@ -14,8 +15,10 @@ interface Props {
   overSecId: string | null
   registerDropZone: (secId: string, el: HTMLElement | null, plaza: Plaza) => void
   draggingId: string | null
+  dropHint: { itemId: string; hint: DropHint } | null
+  registerItemEl: (id: string, el: HTMLElement | null) => void
   onDragStart: (item: MisePlaceItem) => void
-  onDragMove: (x: number, y: number) => void
+  onDragMove: (x: number, y: number, agrupar: boolean) => void
   onDragEnd: () => void
   onPlazaDragStart: () => void
   onQuitarPlaza: (id: string) => void
@@ -31,7 +34,7 @@ interface Props {
 
 export default function PlazaRow(props: Props) {
   const { plaza, espacioPlazaId, plazasCustom, secciones, items, overSecId, registerDropZone,
-    draggingId, onDragStart, onDragMove, onDragEnd, onPlazaDragStart,
+    draggingId, dropHint, registerItemEl, onDragStart, onDragMove, onDragEnd, onPlazaDragStart,
     onQuitarPlaza, onEliminarPlazaCustom, onAddSeccion, onSeedSecciones, onAddItem, onDeleteSeccion, onDeleteItem, onEditItem, onLimpieza } = props
   const [open, setOpen] = useState(true)
   const label = plazaLabel(plaza, plazasCustom)
@@ -119,6 +122,8 @@ export default function PlazaRow(props: Props) {
               overSecId={overSecId}
               registerDropZone={registerDropZone}
               draggingId={draggingId}
+              dropHint={dropHint}
+              registerItemEl={registerItemEl}
               onDragStart={onDragStart}
               onDragMove={onDragMove}
               onDragEnd={onDragEnd}
@@ -139,6 +144,8 @@ export default function PlazaRow(props: Props) {
               overSecId={overSecId}
               registerDropZone={registerDropZone}
               draggingId={draggingId}
+              dropHint={dropHint}
+              registerItemEl={registerItemEl}
               onDragStart={onDragStart}
               onDragMove={onDragMove}
               onDragEnd={onDragEnd}

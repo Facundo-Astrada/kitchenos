@@ -1277,7 +1277,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           { id: draggedItem.id, orden: draggedItem.orden ?? null, seccion_id: draggedItem.seccion_id ?? null },
           overSecId, target.overItemId, target.insertAfter,
         )
-        updates.forEach(u => actualizarItemRef.current(u.id, u.seccion_id != null ? { orden: u.orden, seccion_id: u.seccion_id } : { orden: u.orden }))
+        updates.forEach(u => actualizarItemRef.current(u.id, u.seccion_id != null ? { orden: u.orden, seccion_id: u.seccion_id, grupo_ubicacion: null } : { orden: u.orden }))
       }
       setDragging(null)
     }

@@ -5,6 +5,8 @@ import type { ChecklistSeccionConfig, MisePlaceItem, Plaza } from '@/types'
 import { seccionTieneContenido } from '@/lib/checklist/secciones'
 import { seccionTipoColor } from '@/lib/constants'
 import ProduccionRow from './ProduccionRow'
+import type { DropHint } from './ProduccionRow'
+import { tramosDeGrupo, colorGrupoUbicacion } from '@/lib/ops/grupoUbicacion'
 import StockearSeccionOverlay from './StockearSeccionOverlay'
 import HaccpSeccionLink from './HaccpSeccionLink'
 
@@ -17,8 +19,10 @@ interface Props {
   overSecId: string | null                 // id de la sección sobre la que se está arrastrando (o null)
   registerDropZone: (secId: string, el: HTMLElement | null, plaza: Plaza) => void
   draggingId: string | null
+  dropHint: { itemId: string; hint: DropHint } | null
+  registerItemEl: (id: string, el: HTMLElement | null) => void
   onDragStart: (item: MisePlaceItem) => void
-  onDragMove: (x: number, y: number) => void
+  onDragMove: (x: number, y: number, agrupar: boolean) => void
   onDragEnd: () => void
   onAddItem: (seccion: ChecklistSeccionConfig) => void
   onDeleteSeccion: (id: string) => void
@@ -29,7 +33,7 @@ interface Props {
 
 export default function SeccionRow({
   seccion, plaza, allSecciones, allItems, depth = 0, overSecId, registerDropZone,
-  draggingId, onDragStart, onDragMove, onDragEnd,
+  draggingId, dropHint, registerItemEl, onDragStart, onDragMove, onDragEnd,
   onAddItem, onDeleteSeccion, onDeleteItem, onEditItem, onLimpieza,
 }: Props) {
   const [open, setOpen] = useState(true)
@@ -39,7 +43,11 @@ export default function SeccionRow({
 
   // El bucket "Sin sección" recibe allItems ya filtrado por el padre; una
   // sección real filtra los suyos propios de la lista completa de la plaza.
-  const myItems = seccion ? allItems.filter(i => i.seccion_id === seccion.id) : allItems
+  // Por `orden` — el mismo recorrido del mise. Los updates optimistas del
+  // hook no reordenan la lista, por eso se ordena acá y no se confía en ella.
+  const myItems = (seccion ? allItems.filter(i => i.seccion_id === seccion.id) : allItems)
+    .slice().sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
+  const tramos = tramosDeGrupo(myItems)
   // v1: solo 1 nivel de profundidad — una sub-sección (depth=1) nunca calcula
   // ni renderiza sus propios hijos.
   const children = seccion && depth === 0
@@ -109,18 +117,33 @@ export default function SeccionRow({
           {myItems.length === 0 && children.length === 0 && (
             <p style={{ fontSize: 11, color: 'var(--text-3)', padding: '4px 8px' }}>Sin producciones</p>
           )}
-          {myItems.map(item => (
-            <ProduccionRow
-              key={item.id}
-              item={item}
-              isDragging={draggingId === item.id}
-              onDragStart={onDragStart}
-              onDragMove={onDragMove}
-              onDragEnd={onDragEnd}
-              onDelete={onDeleteItem}
-              onEdit={onEditItem}
-            />
-          ))}
+          {tramos.map(tramo => {
+            const filas = tramo.items.map(item => (
+              <ProduccionRow
+                key={item.id}
+                item={item}
+                isDragging={draggingId === item.id}
+                hint={dropHint?.itemId === item.id ? dropHint.hint : null}
+                registerEl={registerItemEl}
+                onDragStart={onDragStart}
+                onDragMove={onDragMove}
+                onDragEnd={onDragEnd}
+                onDelete={onDeleteItem}
+                onEdit={onEditItem}
+              />
+            ))
+            if (tramo.grupo == null) return filas
+            // Grupo físico: barra de color a la izquierda que abraza el tramo.
+            return (
+              <div
+                key={`g-${tramo.items[0].id}`}
+                title="Están juntos en el mismo lugar"
+                style={{ display: 'flex', flexDirection: 'column', gap: 5, borderLeft: `3px solid ${colorGrupoUbicacion(tramo.grupo)}`, borderRadius: 4, paddingLeft: 5, marginLeft: -2 }}
+              >
+                {filas}
+              </div>
+            )
+          })}
 
           {children.map(child => (
             <div key={child.id} style={{ marginLeft: 10, marginTop: 6, paddingLeft: 10, borderLeft: '2px solid var(--border)' }}>
@@ -133,6 +156,8 @@ export default function SeccionRow({
                 overSecId={overSecId}
                 registerDropZone={registerDropZone}
                 draggingId={draggingId}
+                dropHint={dropHint}
+                registerItemEl={registerItemEl}
                 onDragStart={onDragStart}
                 onDragMove={onDragMove}
                 onDragEnd={onDragEnd}

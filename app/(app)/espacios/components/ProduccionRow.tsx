@@ -10,17 +10,23 @@ const PRIO_CFG: Record<string, { label: string; color: string; bg: string }> = {
   chk: { label: 'OK',  color: '#22c55e', bg: 'rgba(34,197,94,.13)' },
 }
 
+// Pista de dónde cae el arrastre sobre esta fila: una línea arriba/abajo
+// (reordenar) o un contorno del color del grupo (agrupar con Ctrl/⌘).
+export type DropHint = { tipo: 'antes' | 'despues' } | { tipo: 'agrupar'; color: string }
+
 interface Props {
   item: MisePlaceItem
   isDragging: boolean
+  hint?: DropHint | null
+  registerEl: (id: string, el: HTMLElement | null) => void
   onDragStart: (item: MisePlaceItem) => void
-  onDragMove: (x: number, y: number) => void
+  onDragMove: (x: number, y: number, agrupar: boolean) => void
   onDragEnd: () => void
   onDelete: (id: string) => void
   onEdit: (item: MisePlaceItem) => void
 }
 
-export default function ProduccionRow({ item, isDragging, onDragStart, onDragMove, onDragEnd, onDelete, onEdit }: Props) {
+export default function ProduccionRow({ item, isDragging, hint, registerEl, onDragStart, onDragMove, onDragEnd, onDelete, onEdit }: Props) {
   const start = useRef<{ x: number; y: number } | null>(null)
   const active = useRef(false)
   const prio = PRIO_CFG[item.prioridad] ?? PRIO_CFG.chk
@@ -41,7 +47,7 @@ export default function ProduccionRow({ item, isDragging, onDragStart, onDragMov
       active.current = true
       onDragStart(item)
     }
-    onDragMove(e.clientX, e.clientY)
+    onDragMove(e.clientX, e.clientY, e.ctrlKey || e.metaKey)
   }
 
   function endDrag(e: React.PointerEvent) {
@@ -56,8 +62,14 @@ export default function ProduccionRow({ item, isDragging, onDragStart, onDragMov
     if (!wasDragging) onEdit(item)
   }
 
+  const hintShadow = !hint ? undefined
+    : hint.tipo === 'agrupar' ? `0 0 0 2px ${hint.color}`
+    : hint.tipo === 'antes' ? '0 -3px 0 0 var(--accent)'
+    : '0 3px 0 0 var(--accent)'
+
   return (
     <div
+      ref={(el) => registerEl(item.id, el)}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
@@ -70,6 +82,7 @@ export default function ProduccionRow({ item, isDragging, onDragStart, onDragMov
         border: '1px solid var(--border)',
         cursor: isDragging ? 'grabbing' : 'pointer',
         opacity: isDragging ? 0.35 : 1,
+        boxShadow: hintShadow,
         touchAction: 'none', userSelect: 'none',
         transition: 'background .1s, border-color .1s, box-shadow .1s',
       }}

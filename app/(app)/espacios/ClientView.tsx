@@ -15,6 +15,9 @@ import ItemEditPanel from './components/ItemEditPanel'
 import SectionEditor from '@/components/checklist/SectionEditor'
 import StockBoard from './components/StockBoard'
 import CartaBoard from './components/CartaBoard'
+import type { DropHint } from './components/ProduccionRow'
+import { hitTestItem } from '@/lib/ops/miseReorder'
+import { calcularMovimiento, colorGrupoUbicacion, siguienteGrupoLibre } from '@/lib/ops/grupoUbicacion'
 import { SegmentedTabs } from '@/components/ui'
 import type { SegmentedTab } from '@/components/ui'
 
@@ -73,7 +76,19 @@ export default function EspaciosClientView() {
   const [draggingItem, setDraggingItem] = useState<MisePlaceItem | null>(null)
   const [ghostPos, setGhostPos] = useState<{ x: number; y: number } | null>(null)
   const [overSecId, setOverSecId] = useState<string | null>(null)
+  const [overItem, setOverItem] = useState<{ id: string; insertAfter: boolean } | null>(null)
   const dropZonesRef = useRef<Map<string, { el: HTMLElement; plaza: Plaza }>>(new Map())
+  const itemElsRef = useRef<Map<string, HTMLElement>>(new Map())
+  const itemsRef = useRef(items)
+  useEffect(() => { itemsRef.current = items }, [items])
+  const draggingRef = useRef<MisePlaceItem | null>(null)
+
+  // Agrupar (grupos físicos, ver lib/ops/grupoUbicacion.ts): arrastrar con
+  // Ctrl/⌘ apretado, o con el botón "Agrupar" activo (pantallas táctiles,
+  // donde no hay tecla), suma el ítem al grupo del ítem sobre el que cae.
+  const [modoAgrupar, setModoAgrupar] = useState(false)
+  const [teclaAgrupar, setTeclaAgrupar] = useState(false)
+  const agrupando = modoAgrupar || teclaAgrupar
 
   // ── Limpieza panel ──
   const [limpiezaScope, setLimpiezaScope] = useState<LimpiezaScope | null>(null)
@@ -89,7 +104,11 @@ export default function EspaciosClientView() {
     nombre: string; plaza: Plaza; seccion_id: string; cantidad: number; unidad: string; prioridad: MisePrioridad
     recipiente_nombre: string | null; recipiente_capacidad: number | null; peso_porcion: number | null; peso_porcion_unidad: string | null
   }) => {
-    await actualizarItem(id, datos)
+    // Cambiar de sección desde el panel lo saca de su grupo físico — el
+    // número de grupo es local a la sección.
+    const antes = itemsRef.current.find(i => i.id === id)
+    const cambiaSeccion = !!antes && antes.seccion_id !== datos.seccion_id
+    await actualizarItem(id, cambiaSeccion ? { ...datos, grupo_ubicacion: null } : datos)
   }, [actualizarItem])
 
   // ── Agregar espacio ──
@@ -112,12 +131,19 @@ export default function EspaciosClientView() {
     else dropZonesRef.current.delete(secId)
   }, [])
 
+  const registerItemEl = useCallback((id: string, el: HTMLElement | null) => {
+    if (el) itemElsRef.current.set(id, el)
+    else itemElsRef.current.delete(id)
+  }, [])
+
   const onDragStart = useCallback((item: MisePlaceItem) => {
+    draggingRef.current = item
     setDraggingItem(item)
   }, [])
 
-  const onDragMove = useCallback((x: number, y: number) => {
+  const onDragMove = useCallback((x: number, y: number, tecla: boolean) => {
     setGhostPos({ x, y })
+    setTeclaAgrupar(tecla)
     // Hit-test drop zones
     let found: string | null = null
     for (const [secId, { el }] of dropZonesRef.current.entries()) {
@@ -127,21 +153,69 @@ export default function EspaciosClientView() {
       }
     }
     setOverSecId(found)
+    // Ítem más cercano dentro de la sección — dónde se inserta o con quién
+    // se agrupa. Columna única: alcanza con la Y (misma geometría que el mise).
+    let hit: { id: string; insertAfter: boolean } | null = null
+    const draggedId = draggingRef.current?.id
+    if (found) {
+      const candidatos = itemsRef.current
+        .filter(i => i.seccion_id === found && i.id !== draggedId)
+        .flatMap(i => {
+          const el = itemElsRef.current.get(i.id)
+          return el ? [{ id: i.id, rect: el.getBoundingClientRect() }] : []
+        })
+      const r = hitTestItem(x, y, candidatos, false)
+      if (r) hit = { id: r.itemId, insertAfter: r.insertAfter }
+    }
+    setOverItem(prev => (prev?.id === hit?.id && prev?.insertAfter === hit?.insertAfter ? prev : hit))
+  }, [])
+
+  // Ctrl/⌘ apretado o soltado sin mover el mouse también cuenta.
+  useEffect(() => {
+    if (!draggingItem) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Control' || e.key === 'Meta') setTeclaAgrupar(e.type === 'keydown') }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('keyup', onKey)
+    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey) }
+  }, [draggingItem])
+
+  const resetDrag = useCallback(() => {
+    draggingRef.current = null
+    setDraggingItem(null); setGhostPos(null); setOverSecId(null); setOverItem(null); setTeclaAgrupar(false)
   }, [])
 
   const onDragEnd = useCallback(async () => {
-    if (!draggingItem || !overSecId) { setDraggingItem(null); setGhostPos(null); setOverSecId(null); return }
-    const zone = dropZonesRef.current.get(overSecId)
-    if (!zone || (overSecId === draggingItem.seccion_id && zone.plaza === draggingItem.plaza)) {
-      setDraggingItem(null); setGhostPos(null); setOverSecId(null); return
-    }
+    const zone = overSecId ? dropZonesRef.current.get(overSecId) : null
+    if (!draggingItem || !overSecId || !zone) { resetDrag(); return }
+    const cambios = calcularMovimiento({
+      destino: items.filter(i => i.seccion_id === overSecId),
+      origen: items.filter(i => i.seccion_id === draggingItem.seccion_id),
+      dragged: draggingItem,
+      overSecId,
+      overItemId: overItem?.id ?? null,
+      insertAfter: overItem?.insertAfter ?? false,
+      agrupar: agrupando,
+    })
+    resetDrag()
     try {
-      await actualizarItem(draggingItem.id, { seccion_id: overSecId, plaza: zone.plaza })
+      await Promise.all(cambios.map(({ id, ...datos }) =>
+        actualizarItem(id, datos.seccion_id ? { ...datos, plaza: zone.plaza } : datos)
+      ))
     } catch (e) {
       console.error('[Espacios] drag error', e)
     }
-    setDraggingItem(null); setGhostPos(null); setOverSecId(null)
-  }, [draggingItem, overSecId, actualizarItem])
+  }, [draggingItem, overSecId, overItem, agrupando, items, actualizarItem, resetDrag])
+
+  // Pista sobre la fila destino: línea de inserción, o contorno del color del
+  // grupo al que se va a sumar (el existente o el próximo libre).
+  const dropHint = useMemo((): { itemId: string; hint: DropHint } | null => {
+    if (!draggingItem || !overSecId || !overItem) return null
+    if (!agrupando) return { itemId: overItem.id, hint: { tipo: overItem.insertAfter ? 'despues' : 'antes' } }
+    const deLaSeccion = items.filter(i => i.seccion_id === overSecId && i.id !== draggingItem.id)
+    const over = deLaSeccion.find(i => i.id === overItem.id)
+    const g = over?.grupo_ubicacion ?? siguienteGrupoLibre(deLaSeccion)
+    return { itemId: overItem.id, hint: { tipo: 'agrupar', color: colorGrupoUbicacion(g) } }
+  }, [draggingItem, overSecId, overItem, agrupando, items])
 
   // ── Seed secciones base para una plaza ──
   const seedingRef = useRef<Set<Plaza>>(new Set())
@@ -211,7 +285,22 @@ export default function EspaciosClientView() {
             </p>
           </div>
           {effectiveTab === 'produccion' && (
-            <div data-coach-target="espacios-nuevo" style={{ marginLeft: 'auto' }}>
+            <div data-coach-target="espacios-nuevo" style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setModoAgrupar(m => !m)}
+                aria-pressed={modoAgrupar}
+                title="Agrupar: arrastrá un ítem sobre otro para marcar que están juntos en el mismo lugar. También se puede manteniendo Ctrl (⌘ en Mac) al arrastrar."
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  background: modoAgrupar ? 'white' : 'rgba(255,255,255,0.12)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  color: modoAgrupar ? 'var(--navy)' : 'white', borderRadius: 10, padding: '8px 14px',
+                  cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>link</span>
+                Agrupar
+              </button>
               <button
                 onClick={() => setShowNuevoEspacio(true)}
                 style={{
@@ -279,6 +368,8 @@ export default function EspaciosClientView() {
                 overSecId={overSecId}
                 registerDropZone={registerDropZone}
                 draggingId={draggingItem?.id ?? null}
+                dropHint={dropHint}
+                registerItemEl={registerItemEl}
                 onDragStart={onDragStart}
                 onDragMove={onDragMove}
                 onDragEnd={onDragEnd}
@@ -312,15 +403,17 @@ export default function EspaciosClientView() {
           zIndex: 999,
           pointerEvents: 'none',
           background: 'var(--surface)',
-          border: '2px solid var(--accent)',
+          border: `2px solid ${dropHint?.hint.tipo === 'agrupar' ? dropHint.hint.color : 'var(--accent)'}`,
           borderRadius: 10, padding: '6px 12px',
           fontSize: 13, fontWeight: 600, color: 'var(--text-1)',
           boxShadow: '0 8px 24px rgba(0,0,0,.18)',
           maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 15, verticalAlign: 'middle', marginRight: 6 }}>drag_indicator</span>
+          <span className="material-symbols-outlined" style={{ fontSize: 15, verticalAlign: 'middle', marginRight: 6 }}>{agrupando ? 'link' : 'drag_indicator'}</span>
           {draggingItem.nombre}
-          {overSecId && <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 8 }}>↓ mover acá</span>}
+          {dropHint?.hint.tipo === 'agrupar'
+            ? <span style={{ fontSize: 11, color: dropHint.hint.color, marginLeft: 8 }}>agrupar</span>
+            : overSecId && <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 8 }}>↓ mover acá</span>}
         </div>
       )}
 
