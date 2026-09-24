@@ -151,6 +151,13 @@ De hojas instructivas solo existe la de OPS/Mise, sin índice.
 `docs/instructivo-carga-datos.md` no cubre HACCP, Turnos, Organigrama,
 Espacios, Calendario, Clientes, Proveedores ni Configuración.
 
+### Mise — no conoce los grupos físicos de Mesa de trabajo
+El mise respeta el orden (grupos contiguos por `orden`) pero no dibuja la
+barra de color, y su long-press puede meter un ítem en el medio de un grupo:
+el board lo muestra entonces como dos barras del mismo color hasta el próximo
+arrastre ahí. Si molesta, hacer el reorden del mise group-aware con
+`lib/ops/grupoUbicacion.ts`.
+
 ### Mise — container-transform diferido
 `ChecklistPage` tiene dos `return` distintos y fusionarlos en un árbol con
 `AnimatePresence` es reestructurar control de flujo en un componente de 2700

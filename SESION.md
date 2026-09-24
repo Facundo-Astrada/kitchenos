@@ -1,17 +1,14 @@
-# Sesión — 19/09/2026 (2)
+# Sesión — 23/09/2026
 
 ## Qué se cerró
-- **Invitar al equipo** (commit `03c5817`, en prod): fallaba para el chef porque `/api/invitar` pedía `admin` crudo y la pantalla mostraba el botón a todos. Ahora invitan admin y chef (regla compartida en `lib/permisos/roles.ts`); un chef no puede invitar como admin.
-- `facu@broscomedor.com` pasó de `chef` a **admin** en Bros (decisión de Facundo).
-- Sesión anterior del mismo día: Ficha del puesto + Mi puesto + formación por plaza (`b69403e`) — ver `HISTORIAL.md`.
+- **Mesa de trabajo → Producción: grupos físicos** (commit `2d86bd8`, en prod): Ctrl/⌘ + arrastrar (o botón "Agrupar") junta producciones que están en el mismo lugar; barra de color por grupo, contiguos por `orden` → el mise sigue el mismo orden. El arrastre normal ahora también reordena dentro de la sección. Columna `checklist_items.grupo_ubicacion`, lógica en `lib/ops/grupoUbicacion.ts`.
 
 ## Qué quedó a medias
-- **Paula (Bros) sigue sin entrar.** Su ficha "Paula Frezza" tiene email `pauf2378` (inválido). Falta el mail real; no confirmamos si es la misma "Paula Chavez" que Facundo quería invitar.
-- El camino "puesto con plaza" de la Ficha del puesto sigue sin verse en navegador.
+- El mise no dibuja los grupos y su long-press puede partir uno (ver `PENDIENTES.md` 🟢).
+- Sigue abierto lo de la sesión anterior: el email de Paula en Bros (`pauf2378`) y ver en el navegador la Ficha del puesto con plaza (Parrillero).
 
 ## Probar primero mañana
-- Con `facu@broscomedor.com` (ya admin): corregir el email en la ficha de Paula → Invitar con ese mismo mail → que no aparezca una segunda Paula.
-- Con la misma cuenta: Organigrama → Puestos → **Parrillero** (único con plaza) — revisar la ficha y asignar un "Le enseña".
+- En prod con Bros: Mesa de trabajo → Fríos → Heladera, armar los grupos reales (como en la captura) y abrir el mise de Fríos para confirmar el orden.
 
 ## Próximo paso concreto
 - Decisión 014: **0 descripciones vigentes en Bros** (vence ~02/10) — que Franco complete al menos Parrillero.

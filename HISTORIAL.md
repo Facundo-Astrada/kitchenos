@@ -6,6 +6,12 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-09-23 — Mesa de trabajo: grupos físicos por Ctrl/⌘ + arrastrar.** 1 commit (`2d86bd8`), pusheado.
+
+- Ctrl/⌘ + arrastrar (o botón "Agrupar") suma una producción al grupo del ítem destino o crea uno nuevo; barra de color por grupo; el arrastre normal ahora reordena dentro de la sección y saca del grupo si cae fuera del tramo; un ítem suelto que cae en medio de un grupo ajeno va al final del grupo.
+- Columna `checklist_items.grupo_ubicacion SMALLINT` (local a la sección), migración `20260923_checklist_items_grupo_ubicacion.sql`. Lógica pura + 12 tests en `lib/ops/grupoUbicacion.ts`. Panel de edición y reorden del mise ponen el grupo en null al cambiar de sección.
+- Verificado con Playwright en dev contra El Rescoldo (datos restaurados después).
+
 **Sesión 2026-09-19 (2) — Invitar al equipo fallaba para el chef (Bros).** 1 commit (`03c5817`), pusheado.
 
 - **Síntoma:** Facundo no pudo invitar a una integrante nueva en Bros. Los logs de auth mostraban `GET /user` a las 12:09 UTC y ningún `POST /invite`: el pedido moría en `/api/invitar` antes de llamar a Supabase. Su cuenta `facu@broscomedor.com` era `chef` en `user_restaurantes` y el endpoint exigía `rol === 'admin'` crudo, mientras Organigrama le mostraba el botón a cualquiera.
