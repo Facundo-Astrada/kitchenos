@@ -1,14 +1,17 @@
-# Sesión — 23/09/2026
+# Sesión — 28/09/2026
 
 ## Qué se cerró
-- **Mesa de trabajo → Producción: grupos físicos** (commit `2d86bd8`, en prod): Ctrl/⌘ + arrastrar (o botón "Agrupar") junta producciones que están en el mismo lugar; barra de color por grupo, contiguos por `orden` → el mise sigue el mismo orden. El arrastre normal ahora también reordena dentro de la sección. Columna `checklist_items.grupo_ubicacion`, lógica en `lib/ops/grupoUbicacion.ts`.
+- **Plan del asistente** (`PLAN-ASISTENTE-2026-10.md`): el Coach pasa a ser el inicio (asistente + lienzo) y avisa solo según el puesto. Dos rondas de investigación (tandas de avisos, fatiga de alarmas, ayuda no pedida). Métrica rectora: cosas resueltas desde un aviso, no tiempo en la app.
+- **Prototipo `/centro`** (local): Coach real a la izquierda, lienzo a la derecha con lo que devolvieron las tools (`COACH_VISTAS_MARK`, solo con `vistas: true`), núcleo con el estado de la cocina.
+- **`consultar_stock` por sector** ("¿qué hay en el freezer?"), probado por Facundo con Bros.
+- Vidrio líquido probado y **descartado** (trababa la página, no convenció). Anotado en el plan.
 
 ## Qué quedó a medias
-- El mise no dibuja los grupos y su long-press puede partir uno (ver `PENDIENTES.md` 🟢).
-- Sigue abierto lo de la sesión anterior: el email de Paula en Bros (`pauf2378`) y ver en el navegador la Ficha del puesto con plaza (Parrillero).
+- **Nada commiteado.** 8 archivos modificados + `/centro`, `components/centro/`, `lib/hooks/useDatosClave.ts`, el plan. Decidir si se commitea el prototipo (el arreglo del freezer va mezclado en `route.ts`).
+- "Crítico" cuenta 100 en el contador y 8 en el Coach (ver `PENDIENTES.md`).
 
 ## Probar primero mañana
-- En prod con Bros: Mesa de trabajo → Fríos → Heladera, armar los grupos reales (como en la captura) y abrir el mise de Fríos para confirmar el orden.
+- `/centro` con Bros: preguntar por freezer, carnes, turnos; ver que el lienzo muestre la tabla.
 
 ## Próximo paso concreto
-- Decisión 014: **0 descripciones vigentes en Bros** (vence ~02/10) — que Franco complete al menos Parrillero.
+- Commitear (al menos el arreglo de sector) → F0 del plan: cargar VAPID en Vercel → F1 popup de avisos.

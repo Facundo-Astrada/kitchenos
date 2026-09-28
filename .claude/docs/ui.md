@@ -374,6 +374,7 @@ En realidad el problema es más general: es `html, body { height:100%; overflow:
 Route group propio (`app/(servicio)/`), sin BottomNav, UX radicalmente distinta al dashboard de gestión.
 
 - **Botones masivos** (≥64px alto) y **swipe amplio** para acciones principales — se toca con guantes y urgencia.
+- **`data-theme="dark"` en un subárbol no alcanza para `--text-1`**: es un alias (`var(--text)`) que `:root` ya resolvió con el valor claro y se hereda así; el bloque dark redefine `--text` pero no el alias. Para oscurecer solo una parte de la pantalla, poner también `--text-1: var(--text)` en ese contenedor.
 - **KDS y Muro**: fondo oscuro fijo (`#111`, texto blanco) por luz ambiental de cocina y pantallas grasientas — únicos lugares de tema oscuro fijo. **Salón sigue el tema de la app** (`var(--bg)`/`var(--surface)`/`var(--text-1)`).
 - **Cero menús desplegables durante el despacho** — nada de `<select>`/dropdown/modal con opciones en KDS, Muro o mapa activo; todo 1 tap o 1 swipe.
 - Fuente grande (≥18px labels, ≥24px nombres de plato/plaza). Sin animaciones de entrada costosas (KDS y Muro reciben updates realtime, bloquearían taps). Tablet-first (768-1024px horizontal), desktop funciona, celular secundario.

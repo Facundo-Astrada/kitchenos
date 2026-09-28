@@ -63,6 +63,24 @@ legacy. Reimplementar sobre `tareas` **solo si el usuario los pide**.
 
 ---
 
+### Asistente al centro — prototipo `/centro` sin commitear
+Plan completo en `PLAN-ASISTENTE-2026-10.md` (fases F0-F5, reglas de aviso con evidencia,
+métrica rectora: cosas resueltas desde un aviso, no tiempo en la app). Hay un prototipo local en
+`/centro` (Coach a la izquierda, lienzo a la derecha con lo que devolvieron las tools vía
+`COACH_VISTAS_MARK`, pedido solo con `vistas: true`) y `consultar_stock` por sector físico. **Todo sin
+commitear** — decidir si se commitea el prototipo antes de seguir. Próximo: F0 (VAPID) → F1 (popup de
+avisos + `/avisos`) → F2 (informe de stock a Compras al cerrar el conteo).
+Flecos del prototipo: el lienzo interpreta texto de las tools (pasar a `vista` estructurada si se
+queda), las vistas no se guardan con la conversación, mobile sin sheet.
+
+### "Crítico" cuenta distinto en el contador y en el Coach
+`productos_criticos_count` (el número del hero del Coach y del núcleo de `/centro`) dio 100 en El
+Rescoldo; el Coach, desde el snapshot, listó 8. Dos definiciones de crítico con `stock_critico` en 0
+en casi todas las filas (ver memoria de Stock ago 2026, que ya sacó "crítico" de la pantalla Stock).
+Unificar o reemplazar por "bajo mínimo" antes de mostrar ese número en serio.
+
+---
+
 ## 🟡 Medio — Planes y cobro
 
 Decisiones tomadas (01/09) en `~/Desktop/START UP KOS/00-decisiones/`, 004 a
