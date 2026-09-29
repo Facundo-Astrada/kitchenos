@@ -60,8 +60,11 @@ export async function sincronizarMiseDeMenu(params: {
   const existentes = (existentesData ?? []) as { id: string; nombre: string; plaza: string }[]
   const existenteIdPorClave = new Map(existentes.map(e => [`${e.plaza}::${e.nombre}`, e.id]))
   const claveVivas = new Set<string>()
+  // Secciones-paso en el orden en que aparecen en el menú, para que el mise
+  // muestre Entradas → Principal → Postres igual que Carta → Menús.
+  const seccionesPasoEnOrden: string[] = []
 
-  for (const p of candidatas) {
+  for (const [idx, p] of candidatas.entries()) {
     const clave = `${p.plaza}::${p.nombre}`
     // Dos preparaciones con el mismo nombre pueden caer en la misma clave
     // cuando plazaControl las junta a todas en una plaza — sin esto, la
@@ -76,6 +79,7 @@ export async function sincronizarMiseDeMenu(params: {
     const { seccionId, secNombre } = p.seccion_mise
       ? await resolverSeccionMise(supabase, restauranteId, p.plaza!, p.seccion_mise)
       : await resolverSeccionPorNombre(supabase, restauranteId, p.plaza!, p.paso || SECCION_CONTROL_DEFAULT, 'countertops')
+    if (!p.seccion_mise && seccionId && !seccionesPasoEnOrden.includes(seccionId)) seccionesPasoEnOrden.push(seccionId)
     // menu_preparaciones no tiene recipiente_cantidad (solo la rama plato) —
     // se asume 1 recipiente; si hiciera falta más, se codifica con el mismo
     // sufijo " ×N" que ya usa encodeRecipienteNombre/parseRecipienteNombre.
@@ -83,6 +87,9 @@ export async function sincronizarMiseDeMenu(params: {
     const cantidad = p.cantidad_ops ?? p.cantidad ?? 1
     const recipCapacidad = recipienteNombre ? cantidad : null
     const payload = {
+      // Orden del menú (menu_preparaciones.orden) — sin esto todos quedaban
+      // en 0 y dentro de cada paso salían en cualquier orden.
+      orden: idx,
       cantidad, unidad: p.unidad_ops ?? 'u', seccion_id: seccionId, seccion: secNombre,
       prioridad: TAREA_PRIO_TO_MISE[p.prioridad] ?? 'ref',
       recipiente_nombre: recipienteNombre, recipiente_capacidad: recipCapacidad,
@@ -100,10 +107,14 @@ export async function sincronizarMiseDeMenu(params: {
       await supabase.from('checklist_items').update(payload).eq('id', existenteId)
     } else {
       await supabase.from('checklist_items').insert({
-        nombre: p.nombre, plaza: p.plaza, menu_id: menu.id, orden: 0,
+        nombre: p.nombre, plaza: p.plaza, menu_id: menu.id,
         restaurante_id: restauranteId, ...payload,
       })
     }
+  }
+
+  for (const [i, secId] of seccionesPasoEnOrden.entries()) {
+    await supabase.from('checklist_secciones').update({ orden: i }).eq('id', secId)
   }
 
   const idsABorrar = existentes.filter(e => !claveVivas.has(`${e.plaza}::${e.nombre}`)).map(e => e.id)

@@ -2118,6 +2118,9 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           const isCollapsed = collapsed[sec.id] ?? false
           const secColor = getSeccionColor(sec.nombre)
           const secPct = allItemsInCard.length > 0 ? secDone / allItemsInCard.length : 0
+          // La plaza virtual 'menu' acumula secciones de menús viejos (ya no
+          // vigentes): si quedaron vacías hoy, no se muestran.
+          if (plaza === 'menu' && allItemsInCard.length === 0) return null
 
           const isDragTarget = dragging !== null && dragging.overSecId === sec.id && dragging.item.seccion_id !== sec.id
           return (
