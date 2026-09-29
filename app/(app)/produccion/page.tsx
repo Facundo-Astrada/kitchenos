@@ -339,6 +339,18 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
   function irAProduccion() {
     window.dispatchEvent(new CustomEvent('kc-set-tab', { detail: { tab: 'produccion' } }))
   }
+  function irAMise() {
+    window.dispatchEvent(new CustomEvent('kc-set-tab', { detail: { tab: 'mise' } }))
+  }
+
+  // Menús fijos vigentes en el mise para el día mirado. Un fijo no se activa
+  // por fecha acá (adenda 2026-08-20): sus tareas llegan cuando se despacha
+  // desde el mise. Sin esto, el estado vacío invitaba a "activar un menú" que
+  // ya estaba activo y no explicaba por qué Planificación seguía vacía.
+  const fijosEnMise = useMemo(
+    () => catalogoMenus.filter(m => m.tipo !== 'evento' && m.enMise && estadoMiseMenu(m, fecha).vigente),
+    [catalogoMenus, fecha],
+  )
 
   // ── Date navigation ───────────────────────────────────────
   function shiftDate(days: number) {
@@ -497,9 +509,31 @@ export function ProduccionView({ embedded }: { embedded?: boolean } = {}) {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 24px', gap: 10 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 48, color: 'var(--text-3)' }}>restaurant_menu</span>
           <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-2)', margin: 0, textAlign: 'center' }}>
-            Sin menú cargado para este día
+            {fijosEnMise.length > 0 ? 'Todavía no se despachó nada del mise' : 'Sin menú cargado para este día'}
           </p>
-          {catalogoMenus.length > 0 ? (
+          {fijosEnMise.length > 0 ? (
+            <>
+              <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0, textAlign: 'center', maxWidth: 360 }}>
+                <b>{fijosEnMise.map(m => m.nombre).join(', ')}</b> {fijosEnMise.length === 1 ? 'está' : 'están'} en el mise.
+                Lo que marques SP o P en la apertura llega acá como tarea de producción.
+              </p>
+              <button
+                onClick={irAMise}
+                style={{ marginTop: 6, padding: '13px 26px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, var(--navy), #4361a0)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 16px rgba(28,45,74,.35)' }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 20 }}>playlist_add_check</span>
+                Ir al mise
+              </button>
+              {hayEventosEnCatalogo && (
+                <button
+                  onClick={() => setShowMenuPicker(true)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: 'var(--accent)', textDecoration: 'underline', padding: 0 }}
+                >
+                  o activar un evento para este día
+                </button>
+              )}
+            </>
+          ) : catalogoMenus.length > 0 ? (
             <>
               <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0, textAlign: 'center' }}>
                 Tenés {catalogoMenus.length} {catalogoMenus.length === 1 ? 'menú' : 'menús'} en el catálogo. Activá uno para crear sus tareas en Producción.

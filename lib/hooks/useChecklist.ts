@@ -85,9 +85,12 @@ export function useChecklist() {
     swrKey,
     fetchChecklistConfig,
     {
-      revalidateOnFocus: false,
+      // Volver a la app (celular en segundo plano) tiene que traer lo que se
+      // cargó mientras tanto — ej. un menú recién activado desde Carta: el
+      // realtime se corta en background y `menus.vigencia_*` no tiene canal.
+      revalidateOnFocus: true,
       revalidateOnReconnect: true,
-      dedupingInterval: 300_000,
+      dedupingInterval: 30_000,
       keepPreviousData: true,
     }
   )
