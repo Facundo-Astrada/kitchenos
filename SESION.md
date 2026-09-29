@@ -1,17 +1,16 @@
-# Sesión — 28/09/2026
+# Sesión — 29/09/2026
 
 ## Qué se cerró
-- **Plan del asistente** (`PLAN-ASISTENTE-2026-10.md`): el Coach pasa a ser el inicio (asistente + lienzo) y avisa solo según el puesto. Dos rondas de investigación (tandas de avisos, fatiga de alarmas, ayuda no pedida). Métrica rectora: cosas resueltas desde un aviso, no tiempo en la app.
-- **Prototipo `/centro`** (local): Coach real a la izquierda, lienzo a la derecha con lo que devolvieron las tools (`COACH_VISTAS_MARK`, solo con `vistas: true`), núcleo con el estado de la cocina.
-- **`consultar_stock` por sector** ("¿qué hay en el freezer?"), probado por Facundo con Bros.
-- Vidrio líquido probado y **descartado** (trababa la página, no convenció). Anotado en el plan.
+- **Menú en el mise ordenado por paso** (`75d0b27`): una sección por paso, en el orden de Carta → Menús; en la plaza Menú se ocultan las secciones vacías. Datos de "Cotidiano 16 al 29/09" (Bros) corregidos a mano.
+- **Mise se refresca al volver a la app** (`0b1cbe2`): `useChecklist` con `revalidateOnFocus` (dedupe 30s).
+- **Planificación vacía con un menú fijo en el mise**: explica que las tareas llegan al despachar SP/P y lleva al mise. Verificado en prod: el menú nuevo ya muestra 13 tareas despachadas.
 
 ## Qué quedó a medias
-- **Nada commiteado.** 8 archivos modificados + `/centro`, `components/centro/`, `lib/hooks/useDatosClave.ts`, el plan. Decidir si se commitea el prototipo (el arreglo del freezer va mezclado en `route.ts`).
-- "Crítico" cuenta 100 en el contador y 8 en el Coach (ver `PENDIENTES.md`).
+- Planificación ordena los pasos distinto que el menú (Postre → Pasta → Proteina). Anotado en `PENDIENTES.md` 🟠.
+- Sigue sin commitear el prototipo `/centro` de la sesión anterior (8 archivos del Coach + carpetas nuevas).
 
 ## Probar primero mañana
-- `/centro` con Bros: preguntar por freezer, carnes, turnos; ver que el lienzo muestre la tabla.
+- En el celular: activar/editar un menú en Carta con el mise abierto en segundo plano, volver a la app y ver que aparezca sin recargar.
 
 ## Próximo paso concreto
-- Commitear (al menos el arreglo de sector) → F0 del plan: cargar VAPID en Vercel → F1 popup de avisos.
+- Ordenar los pasos en Planificación por `menu_preparaciones.orden` → después, commitear el arreglo de sector de `/centro` y seguir con F0 del plan del asistente (VAPID en Vercel).

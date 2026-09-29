@@ -202,6 +202,7 @@ export function useX() {
 3. Fetchers parametrizados por fecha/mes/rango no encajan bien — base en SWR + filtro imperativo (`mutate(dataFiltrada, {revalidate:false})`), o no migrar ese hook.
 4. Reemplazar caches manuales (Map ad hoc) por SWR.
 5. **El `= []`/`?? []` de arriba es una trampa si ese array alimenta el `deps` de OTRO efecto** (propio o de quien consume el hook): mientras `data` no resuelve, cada render produce un array nuevo, ese efecto se re-dispara solo, y si el efecto llama a `setState` es un loop — "Maximum update depth exceeded" (visto en `useChecklist`, ago 2026). Ahí no alcanza con inline: usar una constante a nivel de módulo (`const SIN_X: X[] = []`) como fallback, para que la identidad sea estable entre renders.
+6. **`revalidateOnFocus: false` no sirve para pantallas que se usan en el celular y reciben cambios hechos en otra** (mise, cierres, notas de plaza): el realtime se corta con la app en segundo plano y al volver se ve el cache viejo. Ahí `revalidateOnFocus: true` + `dedupingInterval: 30_000`.
 
 ## Efecto "fetch/create una vez por key" — el guard tiene que sobrevivir el doble-invoke de StrictMode
 

@@ -6,6 +6,12 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-09-29 — Menú en el mise ordenado por paso + Planificación explica el menú fijo.** 2 commits (`75d0b27`, `0b1cbe2`), pusheados.
+
+- `sincronizarMiseDeMenu` guarda `orden` = índice de la preparación y reordena las secciones-paso en el orden del menú (antes todo quedaba en `orden 0`). Se corrigieron a mano los datos de "Cotidiano 16 al 29/09" (Bros), que se había activado antes del fix del 16/09 y tenía las 23 preparaciones en "Estación". En la plaza `menu` se ocultan las secciones vacías.
+- `useChecklist`: `revalidateOnFocus: true`, dedupe 30s — un menú activado desde Carta con el celular en segundo plano no aparecía en el mise hasta recargar.
+- Planificación: con un menú fijo vigente en el mise, el estado vacío dice "Todavía no se despachó nada del mise" y lleva al mise, en vez de invitar a activar un menú (un fijo no se activa por fecha, adenda 2026-08-20).
+
 **Sesión 2026-09-23 — Mesa de trabajo: grupos físicos por Ctrl/⌘ + arrastrar.** 1 commit (`2d86bd8`), pusheado.
 
 - Ctrl/⌘ + arrastrar (o botón "Agrupar") suma una producción al grupo del ítem destino o crea uno nuevo; barra de color por grupo; el arrastre normal ahora reordena dentro de la sección y saca del grupo si cae fuera del tramo; un ítem suelto que cae en medio de un grupo ajeno va al final del grupo.

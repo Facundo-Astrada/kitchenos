@@ -81,6 +81,9 @@ Unificar o reemplazar por "bajo mínimo" antes de mostrar ese número en serio.
 
 ---
 
+### Planificación — los pasos del menú no siguen el orden de Carta
+En Planificación, "Cotidiano 29/9 a 9/10" (Bros) sale Postre → Pasta → Proteina, cuando en el menú es ape → entrada → proteina → pasta → postre. El mise ya respeta ese orden (`sincronizarMiseDeMenu`); falta que `MenuActivoView` (`produccion/page.tsx`) ordene los grupos por `menu_preparaciones.orden` en vez de por llegada o nombre.
+
 ## 🟡 Medio — Planes y cobro
 
 Decisiones tomadas (01/09) en `~/Desktop/START UP KOS/00-decisiones/`, 004 a
