@@ -111,13 +111,24 @@ export function useCierresTurno() {
       items_completados: args.itemsCompletados ?? null,
       percepcion: args.percepcion ?? null,
     }
+    // Optimista: la entrega aparece en el cache antes del viaje a la base, así
+    // la barra y el pase (que lee cerrado_at) responden al instante en vez de
+    // esperar upsert + refetch. Si ya estaba entregada no se pisa (idempotente).
+    const clave = claveCierre(fila.jornada, fila.turno_id, fila.plaza)
+    mutate(prev => {
+      const lista = prev ?? []
+      if (lista.some(c => claveCierre(c.jornada, c.turno_id, c.plaza) === clave)) return lista
+      return [{ id: `tmp-${clave}`, ...fila } as unknown as CierreTurno, ...lista]
+    }, { revalidate: false })
     try {
       const { error } = await supabase
         .from('cierres_turno')
         .upsert(fila, { onConflict: 'restaurante_id,jornada,turno_id,plaza', ignoreDuplicates: true })
       if (error) throw error
-      await mutate()
+      // Reconciliar con la fila real sin bloquear al que entregó.
+      void mutate()
     } catch (e) {
+      void mutate()
       const msg = errMsg(e, 'Error al entregar la plaza')
       console.error('[useCierresTurno] entregarPlaza Error:', msg)
       throw new Error(msg)

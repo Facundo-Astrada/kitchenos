@@ -27,11 +27,13 @@ interface CopiarPaseBotonProps {
   entregadoAt: string | null
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /** Sin botón visible: el sheet se abre solo desde afuera (Mise, al entregar). */
+  sinBoton?: boolean
 }
 
 export function CopiarPaseBoton({
   plaza, fecha, jornadaProxima, tareas, notasHoy, plazasCustom, turnoNombre, autor, entregadoAt,
-  open: openProp, onOpenChange,
+  open: openProp, onOpenChange, sinBoton = false,
 }: CopiarPaseBotonProps) {
   const [openState, setOpenState] = useState(false)
   const open = openProp ?? openState
@@ -49,7 +51,7 @@ export function CopiarPaseBoton({
 
   return (
     <>
-      <button
+      {!sinBoton && <button
         onClick={() => setOpen(true)}
         title="Copiar pase"
         aria-label="Copiar pase"
@@ -61,7 +63,7 @@ export function CopiarPaseBoton({
         }}
       >
         <span className="material-symbols-outlined" style={{ fontSize: 18 }}>content_copy</span>
-      </button>
+      </button>}
       {open && (
         <PaseSheet
           titulo={`Pase — ${plazaLabel(plaza, plazasCustom)}`}

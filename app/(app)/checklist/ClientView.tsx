@@ -1083,16 +1083,20 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       // cocina el resolutor ya apunta al siguiente, pero al que entregó no se
       // le puede vaciar la pantalla en la cara.
       setTurnoManual(turnoServicioId)
-      await entregarPlaza({
+      // El pase se abre ya: la entrega entra optimista al cache (useCierresTurno)
+      // y no hay por qué hacer esperar al cocinero el viaje a la base.
+      const pendiente = entregarPlaza({
         jornada: fecha, turnoId: turnoServicioId, plaza,
         cerradoPor: authPerfil?.miembro_id ?? null,
         itemsTotal: total, itemsCompletados: done,
         percepcion,
       })
       tap(20)
-      setToast(`Plaza entregada — el turno pasa a ${nombreProximo}`)
       setShowPaseSheet(true)
+      await pendiente
+      setToast(`Plaza entregada — el turno pasa a ${nombreProximo}`)
     } catch (e: unknown) {
+      setShowPaseSheet(false)
       setToast('Error al entregar: ' + (e instanceof Error ? e.message : 'desconocido'))
     } finally {
       setEntregando(false)
@@ -1519,11 +1523,19 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // tarea es el pase de turno: viaja al TURNO SIGUIENTE (la cena de hoy si se
   // está cerrando el almuerzo; mañana solo si este era el último del día), y por
   // eso la jornada se calcula con turnoSiguiente en vez de sumar un día a ciegas.
+  // Feedback inmediato: el insert de la tarea tarda (y en 4G, segundos), y sin
+  // esto la fila seguía viva hasta que volvía el refetch — el cocinero creía que
+  // el tap no había entrado y volvía a tocar. Se marca como despachada en el
+  // acto y se suelta cuando la tarea real ya está en la lista (o si falla).
+  const [despachandoIds, setDespachandoIds] = useState<Set<string>>(() => new Set())
   const handleCrearTareaControl = useCallback(async (item: MisePlaceItem) => {
     tap()
+    setDespachandoIds(prev => new Set(prev).add(item.id))
+    const soltar = () => setDespachandoIds(prev => { const n = new Set(prev); n.delete(item.id); return n })
     const plazasItem = item.receta_id ? (platoPlazoMap[item.receta_id] ?? SIN_PLAZAS) : SIN_PLAZAS
     const primaryPlaza = plazasItem.length > 0 ? plazasItem[0].plaza : item.plaza
     const esCierre = fase === 'cierre'
+    try {
     await handleCrearTarea({
       titulo: item.nombre,
       seccion: PLAZA_TO_SECCION[primaryPlaza] ?? 'general',
@@ -1537,6 +1549,12 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       plazas: plazasItem,
       checklist_item_id: item.id,
     })
+    } catch (e: unknown) {
+      setToast('No se pudo mandar: ' + (e instanceof Error ? e.message : 'error'))
+      return
+    } finally {
+      soltar()
+    }
     setToast(esCierre ? `Pasa al turno siguiente: ${item.nombre}` : `A producción: ${item.nombre}`)
   }, [handleCrearTarea, platoPlazoMap, fase, jornadaProxima])
 
@@ -1953,7 +1971,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                   // cosas distintas.
                   const tildado = regMap[item.id]?.completado ?? false
                   const esCierre = fase === 'cierre'
-                  const enviada = (esCierre ? tareasPaseDespachadasSet : tareasHoySet).has(item.id)
+                  const enviada = despachandoIds.has(item.id) || (esCierre ? tareasPaseDespachadasSet : tareasHoySet).has(item.id)
                   const prioCfg = PRIO_CFG[item.prioridad] ?? PRIO_CFG.ref
                   const resuelto = tildado || enviada
                   // El tilde gana sobre el despacho: si alguien tildó un ítem que
@@ -2675,8 +2693,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                 : proximoTurno ? `Entregala para pasar a ${proximoTurno.nombre}` : 'Entregala para pasar el turno'}
             </div>
           </div>
-          {/* Fuera del if/else: el pase se manda después de entregar tanto como antes */}
-          <CopiarPaseBoton
+          {/* Sin botón propio: el pase se abre al confirmar "Entregar plaza" */}
+          <CopiarPaseBoton sinBoton
             plaza={plaza} fecha={fecha} jornadaProxima={jornadaProxima} tareas={tareas}
             notasHoy={notasHoyPlaza} plazasCustom={plazasCustom} turnoNombre={turnoActual?.nombre ?? null}
             autor={[authPerfil?.nombre, authPerfil?.apellido].filter(Boolean).join(' ').trim() || null}
