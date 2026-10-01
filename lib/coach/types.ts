@@ -31,3 +31,10 @@ export interface CoachLink {
   href: string
   icono?: string
 }
+
+/** Resultado crudo de una tool de lectura, para el lienzo de /centro. */
+export interface CoachVista {
+  tool: string
+  input: Record<string, unknown>
+  resultado: string
+}

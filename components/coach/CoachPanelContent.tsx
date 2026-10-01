@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import { listArchivadas, eliminarConversacion, type ConvoRow } from '@/lib/coach/conversaciones'
 import { CoachActionCard } from '@/components/coach/CoachActionCard'
 import { CoachLinks } from '@/components/coach/CoachLinks'
+import { useDatosClave } from '@/lib/hooks/useDatosClave'
 
 const NARANJA = '#f97316'
 
@@ -17,7 +18,7 @@ const NARANJA = '#f97316'
 const SUGERENCIAS: string[] = [
   '¿Cuánto gasté en mercadería los últimos 2 días?',
   '¿Cuál fue el último precio de la carne?',
-  '¿Qué productos están en crítico?',
+  '¿Qué productos están bajo el mínimo?',
   '¿Cuánto vendí esta semana?',
   '¿Qué me conviene producir mañana?',
   '¿Por dónde empiezo a cargar mi restaurante?',
@@ -25,51 +26,6 @@ const SUGERENCIAS: string[] = [
 
 function fmtARS(n: number) {
   return '$' + Math.round(n).toLocaleString('es-AR')
-}
-
-// ── Datos clave del día (cards del hero) ────────────────────────
-interface DatosClave {
-  criticos: number
-  vencen: number
-  gastoHoy: number
-}
-
-function useDatosClave(): DatosClave | null {
-  const RESTAURANTE_ID = useRestauranteId()
-  const [datos, setDatos] = useState<DatosClave | null>(null)
-
-  useEffect(() => {
-    if (!RESTAURANTE_ID) return
-    let cancel = false
-    const supabase = createClient()
-    const hoy = new Date().toISOString().split('T')[0]
-    const en3 = new Date(Date.now() + 3 * 86_400_000).toISOString().split('T')[0]
-
-    ;(async () => {
-      const [criticosRes, vencRes, factRes] = await Promise.all([
-        // Count server-side (RPC): stock_actual <= stock_critico compara dos
-        // columnas, PostgREST no lo soporta como filtro — antes bajaba hasta
-        // 1000 filas de productos solo para contar en el cliente.
-        supabase.rpc('productos_criticos_count', { p_restaurante_id: RESTAURANTE_ID }),
-        supabase.from('haccp_vencimientos')
-          .select('id', { count: 'exact', head: true })
-          .eq('restaurante_id', RESTAURANTE_ID)
-          .in('status', ['vigente', 'por_vencer'])
-          .lte('fecha_vencimiento', en3),
-        supabase.from('facturas')
-          .select('total')
-          .eq('restaurante_id', RESTAURANTE_ID)
-          .eq('fecha_factura', hoy),
-      ])
-      if (cancel) return
-      const gastoHoy = ((factRes.data ?? []) as Array<{ total: number | null }>)
-        .reduce((s, f) => s + (Number(f.total) || 0), 0)
-      setDatos({ criticos: (criticosRes.data as number | null) ?? 0, vencen: vencRes.count ?? 0, gastoHoy })
-    })()
-    return () => { cancel = true }
-  }, [RESTAURANTE_ID])
-
-  return datos
 }
 
 function formatTime(d: Date) {
@@ -257,12 +213,12 @@ export function CoachPanelContent({ variant = 'page', writesScreenContext = fals
             </div>
 
             {/* Datos clave del día */}
-            {datos && (datos.criticos > 0 || datos.vencen > 0 || datos.gastoHoy > 0) && (
+            {datos && (datos.bajoMinimo > 0 || datos.vencen > 0 || datos.gastoHoy > 0) && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 20 }}>
                 <DatoCard
                   icon="warning" color="var(--red-fg)"
-                  valor={String(datos.criticos)} label="en crítico"
-                  onClick={() => doSend('¿Qué productos están en crítico y qué me conviene reponer primero?')}
+                  valor={String(datos.bajoMinimo)} label="bajo mínimo"
+                  onClick={() => doSend('¿Qué productos están bajo el mínimo y qué me conviene reponer primero?')}
                 />
                 <DatoCard
                   icon="schedule" color="#d97706"

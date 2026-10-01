@@ -20,6 +20,7 @@ import { useOnboardingPersonal } from '@/lib/hooks/useOnboardingPersonal'
 import { useTourAutomatico } from '@/lib/hooks/useTourAutomatico'
 import { UiChromeProvider } from '@/lib/ui/chrome'
 import { hoyOperativo } from '@/lib/ops/turnos'
+import { bajoMinimo } from '@/lib/stock/alerta'
 import { DURATION, EASE_OUT, useReducedMotion } from '@/lib/ui/motion'
 
 type StockCriticoItem = { nombre: string; cantidad: number; minimo: number }
@@ -53,9 +54,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       const [stockRes, tareasRes] = await Promise.all([
         supabase
           .from('productos')
-          .select('nombre, stock_actual, stock_minimo')
+          .select('nombre, stock_actual, stock_minimo, fuera_de_uso')
           .eq('restaurante_id', restauranteId)
-          .limit(50),
+          .eq('activo', true)
+          .gt('stock_minimo', 0)
+          .limit(1000),
         supabase
           .from('tareas')
           .select('titulo, prioridad, plaza')
@@ -69,7 +72,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       if (stockRes.data) {
         setStockCritico(
           stockRes.data
-            .filter((p: { nombre: string; stock_actual: number; stock_minimo: number }) => p.stock_actual <= p.stock_minimo)
+            .filter(bajoMinimo)
             .slice(0, 10)
             .map((p: { nombre: string; stock_actual: number; stock_minimo: number }) => ({
               nombre: p.nombre,
@@ -128,7 +131,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return (
       <UiChromeProvider>
         <DesktopShell
-          sidePanel={pathname !== '/coach' ? <CoachPanelContent variant="dock" /> : null}
+          sidePanel={pathname !== '/coach' && pathname !== '/centro' ? <CoachPanelContent variant="dock" /> : null}
         >
           {pageContent}
         </DesktopShell>

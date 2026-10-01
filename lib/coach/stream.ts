@@ -19,3 +19,9 @@ export const COACH_PENDING_MARK = '␞__COACH_PENDING_ACTION__␞'
 // hacerlo dependería de que copie bien un UUID. Los arma el SERVER con el id que
 // ya resolvió la tool, y el cliente los pinta como botones.
 export const COACH_LINKS_MARK = '␞__COACH_LINKS__␞'
+
+// Cuarto marcador, mismo mecanismo: lo que consultó cada tool de lectura en el
+// turno (nombre, input, texto devuelto), para que el lienzo de /centro lo pinte
+// como dato al lado del chat. Solo se emite si el cliente lo pide (`vistas: true`
+// en el body) — el Coach del FAB no lo recibe.
+export const COACH_VISTAS_MARK = '␞__COACH_VISTAS__␞'

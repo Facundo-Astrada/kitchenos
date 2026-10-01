@@ -2,8 +2,8 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { COACH_HIGHLIGHT_IDS as _COACH_HIGHLIGHT_IDS } from '@/lib/coach/highlights'
-import { COACH_ERROR_MARK, COACH_PENDING_MARK, COACH_LINKS_MARK } from '@/lib/coach/stream'
-import type { PendingAction, CoachLink } from '@/lib/coach/types'
+import { COACH_ERROR_MARK, COACH_PENDING_MARK, COACH_LINKS_MARK, COACH_VISTAS_MARK } from '@/lib/coach/stream'
+import type { PendingAction, CoachLink, CoachVista } from '@/lib/coach/types'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/auth/context'
 import {
@@ -21,6 +21,8 @@ export interface CoachMessage {
   options?: string[]
   /** Accesos directos a una pantalla, armados por el server con ids reales. */
   links?: CoachLink[]
+  /** Lo que consultaron las tools del turno — solo con `vistas: true` (lienzo de /centro). */
+  vistas?: CoachVista[]
 }
 
 interface CoachContext {
@@ -34,11 +36,13 @@ interface CoachOptions {
   // entre recargas. El historial archivado se maneja aparte (lib/coach/conversaciones).
   // Sin esto (el FAB efímero) la conversación no se persiste en ningún lado.
   restauranteId?: string | null
+  // Pide al server el resultado crudo de cada tool (lo pinta el lienzo de /centro).
+  vistas?: boolean
 }
 
 /** Dónde termina el texto visible: en el primer marker de metadata que aparezca. */
 function corteDeMetadata(buffer: string): number {
-  const idx = [COACH_PENDING_MARK, COACH_LINKS_MARK]
+  const idx = [COACH_PENDING_MARK, COACH_LINKS_MARK, COACH_VISTAS_MARK]
     .map(m => buffer.indexOf(m))
     .filter(i => i >= 0)
   return idx.length ? Math.min(...idx) : buffer.length
@@ -49,7 +53,7 @@ function extraerMark<T>(buffer: string, mark: string): T | null {
   const i = buffer.indexOf(mark)
   if (i < 0) return null
   const desde = i + mark.length
-  const otros = [COACH_PENDING_MARK, COACH_LINKS_MARK]
+  const otros = [COACH_PENDING_MARK, COACH_LINKS_MARK, COACH_VISTAS_MARK]
     .filter(m => m !== mark)
     .map(m => buffer.indexOf(m, desde))
     .filter(j => j >= 0)
@@ -59,6 +63,7 @@ function extraerMark<T>(buffer: string, mark: string): T | null {
 
 export function useKitchenCoach(opts?: CoachOptions) {
   const restauranteId = opts?.restauranteId ?? null
+  const pideVistas = opts?.vistas === true
   const { user } = useAuth()
   const usuarioId = user?.id ?? null
   const supabase = useMemo(() => createClient(), [])
@@ -190,7 +195,7 @@ export function useKitchenCoach(opts?: CoachOptions) {
       const res = await fetch('/api/coach', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiMessages, screenContext, ctx }),
+        body: JSON.stringify({ messages: apiMessages, screenContext, ctx, ...(pideVistas ? { vistas: true } : {}) }),
         signal: controller.signal,
       })
 
@@ -238,6 +243,7 @@ export function useKitchenCoach(opts?: CoachOptions) {
       const rawText = buffer.slice(0, corteDeMetadata(buffer))
       const pendingActionParsed = extraerMark<PendingAction>(buffer, COACH_PENDING_MARK)
       const linksParsed = extraerMark<CoachLink[]>(buffer, COACH_LINKS_MARK)
+      const vistasParsed = extraerMark<CoachVista[]>(buffer, COACH_VISTAS_MARK)
 
       // ── Parsear respuesta estructurada si la hay ──
       let text = rawText
@@ -269,6 +275,7 @@ export function useKitchenCoach(opts?: CoachOptions) {
           timestamp: new Date(),
           options: opts && opts.length > 0 ? opts : undefined,
           links: linksParsed && linksParsed.length > 0 ? linksParsed : undefined,
+          vistas: vistasParsed && vistasParsed.length > 0 ? vistasParsed : undefined,
         } : m)
       )
     } catch (e: unknown) {
@@ -280,7 +287,7 @@ export function useKitchenCoach(opts?: CoachOptions) {
       setLoading(false)
       abortRef.current = null
     }
-  }, [])
+  }, [pideVistas])
 
   const confirmAction = useCallback(async (draftId: string, payload: Record<string, unknown>) => {
     setConfirmingDraftId(draftId)

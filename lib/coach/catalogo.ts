@@ -24,7 +24,7 @@ export interface ProductoCoach {
   stock_actual: number
   unidad: string | null
   stock_minimo: number | null
-  stock_critico: number | null
+  fuera_de_uso: boolean | null
 }
 
 /**
@@ -51,12 +51,61 @@ export async function buscarProductos(
   limite = 15,
 ): Promise<ResultadoBusqueda<ProductoCoach>[]> {
   const { data, error } = await supabase.from('productos')
-    .select('id, nombre, categoria, stock_actual, unidad, stock_minimo, stock_critico')
+    .select('id, nombre, categoria, stock_actual, unidad, stock_minimo, fuera_de_uso')
     .eq('restaurante_id', restauranteId)
     .eq('activo', true)
     .limit(TECHO_CATALOGO)
   if (error) console.error('[coach/catalogo] buscarProductos:', error.message)
   return buscar((data ?? []) as ProductoCoach[], consulta, limite)
+}
+
+export interface SectorCoach {
+  id: string
+  nombre: string
+  ultimo_conteo_at: string | null
+}
+
+/**
+ * Productos de un sector físico del stock (freezer, heladera, depósito…),
+ * resuelto por nombre con la misma búsqueda tolerante a tildes. Devuelve los
+ * sectores parecidos si no hay uno claro, para que el modelo pregunte.
+ */
+export async function productosDeSector(
+  supabase: SupabaseClient,
+  restauranteId: string,
+  consulta: string,
+): Promise<
+  | { sector: SectorCoach; productos: (ProductoCoach & { estante: string | null })[] }
+  | { sector: null; parecidos: string[]; todos: string[] }
+> {
+  const { data: sectores, error } = await supabase.from('stock_sectores')
+    .select('id, nombre, ultimo_conteo_at')
+    .eq('restaurante_id', restauranteId)
+    .order('orden')
+  if (error) console.error('[coach/catalogo] productosDeSector sectores:', error.message)
+  const lista = (sectores ?? []) as SectorCoach[]
+  const res = buscar(lista, consulta, 5)
+  const sector = ganadorClaro(res)
+  if (!sector) return { sector: null, parecidos: res.map(r => r.item.nombre), todos: lista.map(x => x.nombre) }
+
+  const [{ data: prods, error: errP }, { data: estantes }] = await Promise.all([
+    supabase.from('productos')
+      .select('id, nombre, categoria, stock_actual, unidad, stock_minimo, fuera_de_uso, estante_id, orden_sector')
+      .eq('restaurante_id', restauranteId)
+      .eq('activo', true)
+      .eq('sector_id', sector.id)
+      .order('orden_sector', { ascending: true, nullsFirst: false })
+      .limit(TECHO_CATALOGO),
+    supabase.from('stock_estantes')
+      .select('id, nombre')
+      .eq('restaurante_id', restauranteId)
+      .eq('sector_id', sector.id),
+  ])
+  if (errP) console.error('[coach/catalogo] productosDeSector productos:', errP.message)
+  const nombreEstante = new Map(((estantes ?? []) as { id: string; nombre: string }[]).map(e => [e.id, e.nombre]))
+  const productos = ((prods ?? []) as (ProductoCoach & { estante_id: string | null })[])
+    .map(({ estante_id, ...p }) => ({ ...p, estante: estante_id ? nombreEstante.get(estante_id) ?? null : null }))
+  return { sector, productos }
 }
 
 export async function buscarRecetas(
@@ -231,7 +280,7 @@ export async function productoPorNombreExacto(
   nombre: string,
 ): Promise<ProductoCoach | null> {
   const { data, error } = await supabase.from('productos')
-    .select('id, nombre, categoria, stock_actual, unidad, stock_minimo, stock_critico')
+    .select('id, nombre, categoria, stock_actual, unidad, stock_minimo, fuera_de_uso')
     .eq('restaurante_id', restauranteId)
     .eq('activo', true)
     .limit(TECHO_CATALOGO)

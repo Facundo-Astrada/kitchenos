@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { COACH_HIGHLIGHT_IDS } from '@/lib/coach/highlights'
 import { calcularSugerenciaProduccion } from '@/lib/produccion/sugerencia'
 import { fetchAllRows } from '@/lib/supabase/paginate'
-import { COACH_ERROR_MARK, COACH_PENDING_MARK, COACH_LINKS_MARK } from '@/lib/coach/stream'
+import { COACH_ERROR_MARK, COACH_PENDING_MARK, COACH_LINKS_MARK, COACH_VISTAS_MARK } from '@/lib/coach/stream'
 import { clasificarErrorIA, errorSinApiKey, respuestaErrorIA, statusErrorIA } from '@/lib/ia/errores'
 import { registrarUsoIA } from '@/lib/ia/costos'
 import { getRestauranteId } from '@/lib/coach/restaurante'
@@ -11,12 +11,14 @@ import { getPermisosServer, puedeEjecutarTool } from '@/lib/permisos/server'
 import { COACH_COST_TOOLS } from '@/lib/coach/tools/registry'
 import { ganadorClaro, etiquetaDesambiguacion, puntuar } from '@/lib/coach/busqueda'
 import {
-  buscarProductos, buscarRecetas, buscarPlatos, composicionDePlato,
+  buscarProductos, productosDeSector, buscarRecetas, buscarPlatos, composicionDePlato,
   nombresCandidatos, recetaMasCompleta, type ProductoCoach,
 } from '@/lib/coach/catalogo'
+import { normalizarBusqueda } from '@/lib/texto'
 import { calcFoodCost } from '@/lib/recetas/costo'
+import { bajoMinimo, estadoAlerta } from '@/lib/stock/alerta'
 import { proposeAction, COACH_MUTATING_TOOLS } from '@/lib/coach/tools/propose'
-import type { PendingAction, CoachLink } from '@/lib/coach/types'
+import type { PendingAction, CoachLink, CoachVista } from '@/lib/coach/types'
 import type { Ingrediente } from '@/types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -40,11 +42,12 @@ async function buildSnapshot(supabase: SupabaseClient, screen?: string, verCosto
   const wants = (screens: string[]) => !screen || screens.includes(screen)
 
   const [prodRes, vencRes, factRes] = await Promise.all([
+    // Solo los que tienen mínimo: sin umbral no hay alerta (lib/stock/alerta.ts).
     supabase.from('productos')
-      .select('nombre, stock_actual, stock_critico, stock_minimo, unidad')
+      .select('nombre, stock_actual, stock_minimo, fuera_de_uso, unidad')
       .eq('activo', true)
-      .order('stock_actual', { ascending: true })
-      .limit(120),
+      .gt('stock_minimo', 0)
+      .limit(1000),
     supabase.from('haccp_vencimientos')
       .select('nombre, fecha_vencimiento')
       .in('status', ['vigente', 'por_vencer'])
@@ -60,15 +63,14 @@ async function buildSnapshot(supabase: SupabaseClient, screen?: string, verCosto
 
   const lines: string[] = []
 
-  const productos = (prodRes.data ?? []) as Array<{ nombre: string; stock_actual: number; stock_critico: number | null; stock_minimo: number | null; unidad: string | null }>
-  const criticos = productos.filter(p => p.stock_actual <= (p.stock_critico ?? 0))
-  const bajos = productos.filter(p => p.stock_actual > (p.stock_critico ?? 0) && p.stock_actual <= (p.stock_minimo ?? 0))
-  if (criticos.length) {
-    lines.push(`Stock CRÍTICO (${criticos.length}): ` + criticos.slice(0, 8)
-      .map(p => `${p.nombre} (${p.stock_actual} ${p.unidad ?? ''}, umbral ${p.stock_critico})`).join('; '))
-  }
+  const productos = (prodRes.data ?? []) as Array<{ nombre: string; stock_actual: number; stock_minimo: number | null; fuera_de_uso: boolean | null; unidad: string | null }>
+  // Los más lejos de su mínimo primero (proporción, no cantidad: 2 kg sobre 20
+  // es peor que 2 l sobre 3).
+  const bajos = productos.filter(bajoMinimo)
+    .sort((a, b) => a.stock_actual / (a.stock_minimo || 1) - b.stock_actual / (b.stock_minimo || 1))
   if (bajos.length) {
-    lines.push(`Stock bajo (${bajos.length}): ` + bajos.slice(0, 6).map(p => p.nombre).join(', '))
+    lines.push(`Stock bajo el mínimo (${bajos.length} en total; estos son los más lejos de su mínimo): ` + bajos.slice(0, 8)
+      .map(p => `${p.nombre} (${p.stock_actual} ${p.unidad ?? ''}, mínimo ${p.stock_minimo})`).join('; '))
   }
 
   const venc = (vencRes.data ?? []) as Array<{ nombre: string; fecha_vencimiento: string }>
@@ -181,7 +183,7 @@ Qué hace cada módulo:
 - Operaciones (OPS): el workspace diario. Tres tabs: Producción (qué cocinar hoy, ordenado por prioridad SP/Prioridad/Refuerzo/Check), Mise (mise en place por plaza, con el stock del cierre vs el objetivo del turno) y Planificación (armar el menú del día y eventos, y activar menús del catálogo — con dos botones por menú: "Activar" crea las tareas de producción del día, "Activar en el mise" lo suma al mise en place, ver más abajo).
 - Carta: los platos que se venden, con precio, food cost y disponibilidad (86 = agotado). Se puede importar con IA desde foto, PDF o Excel. El mismo editor arma Menús fijos y Eventos (Carta → Menús): preparaciones por curso, con plaza, prioridad y vigencia.
 - Recetario: las fichas técnicas (ingredientes, pasos, costo y porciones). El food cost real sale de vincular cada ingrediente al stock.
-- Stock (Inventario): productos con cantidad, precio y mínimos; estados crítico/bajo. Rebuild reconstruye el stock y los precios desde las facturas.
+- Stock (Inventario): productos con cantidad, precio y mínimos; estado bajo mínimo (solo productos con mínimo cargado; sin mínimo no hay alerta). Rebuild reconstruye el stock y los precios desde las facturas.
 - Facturas: historial de compras (OCR de foto/PDF/texto o import de Excel del POS), listas de precios acordados y proveedores.
 - Proveedores: directorio con contacto, días de entrega y condiciones de pago.
 - Pedidos: órdenes a proveedores (borrador → enviado → recibido).
@@ -293,7 +295,7 @@ Ejemplo para costo de merma:
 {"text":"El costo total de merma de la semana fue $12.400. El motivo más frecuente es vencimiento (5 registros) y el producto que más aparece es Albahaca fresca. Te recomiendo revisar la cantidad que se compra vs la que se usa.","highlight":"merma-stats","overlay_text":"Costo, motivo top y producto top del período","options":["¿Cómo reduzco la merma de verduras?","¿Cuánto es normal de merma?"]}
 
 Ejemplo para riesgo de stock:
-{"text":"Tenés 3 productos en crítico: Crema (2 l, umbral 5), Manteca (1 kg, umbral 4) y Levadura (0,2 kg, umbral 1). Conviene reponerlos antes del próximo servicio. Tocá el indicador para filtrar solo los críticos.","highlight":"stock-kpis","overlay_text":"Críticos, bajos y pendientes: tocá para filtrar","options":["¿Qué pido primero?","Mostrame los que no tienen precio"]}
+{"text":"Tenés 3 productos bajo el mínimo: Crema (2 l, mínimo 5), Manteca (1 kg, mínimo 4) y Levadura (0,2 kg, mínimo 1). Conviene reponerlos antes del próximo servicio.","highlight":"stock-kpis","overlay_text":"Bajo mínimo y pendientes: tocá para filtrar","options":["¿Qué pido primero?","Mostrame los que no tienen precio"]}
 
 Ejemplo para productos sin precio (subvalúan food cost):
 {"text":"Hay productos sin precio cargado. Eso subvalúa el food cost de las recetas que los usan, porque el sistema los cuenta como costo cero. Podés reconstruir el stock desde tus facturas para traer los precios reales automáticamente (botón Funciones → Rebuild).","highlight":"stock-funciones","overlay_text":"Importar, Rebuild, sugerir mínimos y más","options":["¿Cómo funciona el rebuild?","¿Qué recetas están mal calculadas?"]}
@@ -384,13 +386,13 @@ const COACH_TOOLS = [
   },
   {
     name: 'consultar_stock',
-    description: 'Consulta cuánto hay en stock de un producto (o de todos los que coincidan con un nombre). Devuelve cantidad, unidad y estado (crítico/bajo/ok). Usar cuando el usuario pregunta "¿cuánto tengo de X?", "¿me queda Y?", "¿cómo está el stock de Z?".',
+    description: 'Consulta cuánto hay en stock de un producto (o de todos los que coincidan con un nombre), o de todo lo que está guardado en un sector físico (freezer, heladera, depósito, cámara). Devuelve cantidad, unidad y estado (bajo mínimo / ok / sin mínimo cargado). Usar cuando el usuario pregunta "¿cuánto tengo de X?", "¿me queda Y?", "¿cómo está el stock de Z?", "¿qué hay en el freezer?".',
     input_schema: {
       type: 'object' as const,
       properties: {
-        producto: { type: 'string', description: 'Nombre o parte del nombre del producto. Ej: "carne", "tomate", "aceite de oliva".' },
+        producto: { type: 'string', description: 'Nombre o parte del nombre del producto. Ej: "carne", "tomate", "aceite de oliva". Opcional si se pasa sector.' },
+        sector: { type: 'string', description: 'Sector físico del stock donde está guardado. Ej: "freezer", "heladera lácteos", "depósito". Si se pasa junto con producto, filtra ese producto dentro del sector.' },
       },
-      required: ['producto'],
     },
   },
   {
@@ -714,7 +716,32 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
 
     if (name === 'consultar_stock') {
       const producto = String(input.producto ?? '').trim()
-      if (!producto) return 'Error: falta el nombre del producto a consultar.'
+      const sectorQ = String(input.sector ?? '').trim()
+      if (!producto && !sectorQ) return 'Error: falta el nombre del producto o del sector a consultar.'
+
+      // Por sector físico (freezer, heladera…): la pregunta es "qué hay guardado
+      // ahí", no un nombre de producto — la búsqueda por nombre no lo ve.
+      if (sectorQ) {
+        const r = await productosDeSector(supabase, restauranteId, sectorQ)
+        if (!r.sector) {
+          if (r.todos.length === 0) return 'Este restaurante no tiene sectores físicos cargados en Stock.'
+          return r.parecidos.length > 0
+            ? `No tengo claro a qué sector te referís con "${sectorQ}". Los parecidos son: ${r.parecidos.join(', ')}.`
+            : `No hay ningún sector llamado "${sectorQ}". Los sectores cargados son: ${r.todos.join(', ')}.`
+        }
+        const q = producto ? normalizarBusqueda(producto) : ''
+        const prods = q ? r.productos.filter(p => normalizarBusqueda(p.nombre).includes(q) || normalizarBusqueda(p.categoria ?? '').includes(q)) : r.productos
+        if (prods.length === 0) return `No hay productos${producto ? ` que coincidan con "${producto}"` : ''} asignados al sector ${r.sector.nombre}.`
+        const MOSTRAR_S = 40
+        const conteo = r.sector.ultimo_conteo_at
+          ? `\nÚltimo conteo de este sector: ${new Date(r.sector.ultimo_conteo_at).toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}.`
+          : '\nEste sector todavía no se contó con Stockear: las cantidades pueden no estar al día.'
+        let outS = `${r.sector.nombre} (${prods.length} producto${prods.length !== 1 ? 's' : ''}):\n` + prods.slice(0, MOSTRAR_S)
+          .map(p => `- ${p.nombre}: ${p.stock_actual} ${p.unidad ?? ''} (${estadoAlerta(p)}${p.estante ? `, ${p.estante}` : ''})`).join('\n')
+        if (prods.length > MOSTRAR_S) outS += `\n…y ${prods.length - MOSTRAR_S} más.`
+        return outS + conteo
+      }
+
       // Busca por nombre Y por categoría. El `ilike` que había acá contestaba
       // "¿cuánta carne hay?" con los 3 productos que tienen la palabra "carne"
       // en el nombre, ignorando los 47 de la categoría Carnes (vacío, asado,
@@ -723,11 +750,8 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
       if (encontrados.length === 0) return `No encontré ningún producto que coincida con "${producto}" en el stock. Puede que no esté cargado o tenga otro nombre.`
 
       const rows = encontrados.map(r => r.item)
-      const estado = (p: ProductoCoach) =>
-        p.stock_actual <= (p.stock_critico ?? 0) ? 'CRÍTICO'
-        : p.stock_actual <= (p.stock_minimo ?? 0) ? 'bajo' : 'ok'
       const linea = (p: ProductoCoach) =>
-        `- ${p.nombre}: ${p.stock_actual} ${p.unidad ?? ''} (${estado(p)}${p.stock_minimo ? `, mínimo ${p.stock_minimo}` : ''})`
+        `- ${p.nombre}: ${p.stock_actual} ${p.unidad ?? ''} (${estadoAlerta(p)}${p.stock_minimo ? `, mínimo ${p.stock_minimo}` : ''})`
 
       // Una consulta genérica ("carne", "verduras") puede traer decenas. Se
       // muestran los más relevantes y se resume el resto en vez de cortar y
@@ -738,8 +762,8 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
       if (rows.length > MOSTRAR) {
         out += `\n…y ${rows.length - MOSTRAR} más. Se listaron los de mayor coincidencia; pedí uno puntual para verlo en detalle.`
       }
-      const criticos = rows.filter(p => estado(p) === 'CRÍTICO').length
-      if (criticos > 0) out += `\n\nDe esos, ${criticos} está${criticos !== 1 ? 'n' : ''} en crítico.`
+      const bajos = rows.filter(bajoMinimo).length
+      if (bajos > 0) out += `\n\nDe esos, ${bajos} está${bajos !== 1 ? 'n' : ''} bajo el mínimo.`
       return out
     }
 
@@ -1081,7 +1105,7 @@ export async function POST(req: NextRequest) {
   const restauranteId = await getRestauranteId(supabase, user.id)
   const permisos = restauranteId ? await getPermisosServer(supabase, user.id, restauranteId) : null
 
-  const { messages, screenContext, ctx } = await req.json()
+  const { messages, screenContext, ctx, vistas: pideVistas } = await req.json()
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
@@ -1098,12 +1122,17 @@ export async function POST(req: NextRequest) {
     if (snapshot) dynamicBlock += snapshot
   } catch { /* sin snapshot — seguimos */ }
 
+  // /centro pinta el resultado de cada tool como tabla en el lienzo: si el
+  // modelo contesta desde el snapshot, el lienzo queda vacío.
+  if (pideVistas === true) {
+    dynamicBlock += `\n\n## Lienzo activo\nAl lado del chat el usuario ve un lienzo que muestra como tabla el resultado de cada herramienta que llames. Para cualquier dato del restaurante llamá la herramienta aunque el dato ya esté en el contexto, y en el texto no repitas la lista entera: resumí en 1-3 frases y remití al lienzo.`
+  }
   if (screenContext) {
     dynamicBlock += `\n\n## Pantalla activa: ${JSON.stringify(screenContext)}`
   }
 
   if (ctx?.stockCritico?.length) {
-    dynamicBlock += `\n\n## Stock crítico (del cliente):`
+    dynamicBlock += `\n\n## Stock bajo mínimo (del cliente):`
     for (const item of ctx.stockCritico) {
       dynamicBlock += `\n- ${item.nombre}: ${item.cantidad} unidades (mínimo: ${item.minimo})`
     }
@@ -1206,6 +1235,8 @@ Reglas:
       // Accesos directos que junten las tools de este turno (ej. la ficha de la
       // receta que se consultó). Se emiten al cerrar, junto con la acción pendiente.
       const linksDelTurno: CoachLink[] = []
+      // Solo /centro las pide: el resultado de cada tool de lectura, para el lienzo.
+      const vistasDelTurno: CoachVista[] = []
       // Consumo acumulado de TODAS las rondas del loop agéntico: un turno del Coach
       // puede ser 3-4 llamadas a la API, y el costo del turno es la suma. Se asienta
       // una sola fila en `ia_uso` al cerrar el stream (ver finally).
@@ -1324,6 +1355,7 @@ Reglas:
               } else {
                 const result = await executeTool(name, parsedInputs[i], supabase, restauranteId, permisos?.verCostos ?? false, linksDelTurno)
                 toolResults.push({ type: 'tool_result', tool_use_id: toolUses[i].id, content: result })
+                if (pideVistas === true) vistasDelTurno.push({ tool: name, input: parsedInputs[i], resultado: result.slice(0, 6000) })
               }
             }
             convo.push({ role: 'user', content: toolResults })
@@ -1346,6 +1378,9 @@ Reglas:
           // el turno, el botón tiene que aparecer una sola vez.
           const unicos = [...new Map(linksDelTurno.map(l => [l.href, l])).values()].slice(0, 4)
           try { send(COACH_LINKS_MARK + JSON.stringify(unicos)) } catch { /* stream ya cerrado */ }
+        }
+        if (vistasDelTurno.length > 0) {
+          try { send(COACH_VISTAS_MARK + JSON.stringify(vistasDelTurno)) } catch { /* stream ya cerrado */ }
         }
         // Un asiento por turno del Coach, aunque el turno haya fallado a mitad:
         // los tokens ya consumidos se pagan igual y tienen que contar para el tope.

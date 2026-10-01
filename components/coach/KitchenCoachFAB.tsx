@@ -82,7 +82,7 @@ const SUGGESTIONS_BY_SCREEN: Record<string, Suggestion[]> = {
   ],
   stock: [
     { label: 'Ver recorrido de Inventario', action: 'tour' },
-    { label: '¿Qué productos están en crítico?', action: 'send' },
+    { label: '¿Qué productos están bajo el mínimo?', action: 'send' },
     { label: '¿Qué productos sin precio me bajan el food cost?', action: 'send' },
     { label: '¿Me conviene reconstruir el stock desde facturas?', action: 'send' },
   ],
@@ -660,7 +660,7 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
   const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant' && m.content && m.options?.length)
 
   // En la pantalla dedicada del Coach (/coach) el FAB es redundante — se oculta.
-  if (pathname === '/coach') return null
+  if (pathname === '/coach' || pathname === '/centro') return null
 
   return (
     <>
