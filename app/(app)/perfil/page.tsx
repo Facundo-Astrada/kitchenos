@@ -240,6 +240,22 @@ export default function PerfilPage() {
             </span>
           )}
 
+          {/* Avisos — la bandeja con el historial (lo nuevo llega por el popup). */}
+          <button
+            onClick={() => router.push('/avisos')}
+            className="w-full flex items-center gap-3 rounded-[14px] p-[14px]"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left' }}
+          >
+            <div style={{ width: 40, height: 40, borderRadius: 10, flexShrink: 0, background: 'var(--blue-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--accent)' }}>notifications</span>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>Avisos</div>
+              <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Lo nuevo y el historial</div>
+            </div>
+            <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-3)' }}>chevron_right</span>
+          </button>
+
           {/* Mi puesto — qué hace el puesto, a quién preguntarle, cómo va aprendiendo.
               Solo si el perfil resuelve a un miembro con puesto asignado. */}
           {miPuesto && (

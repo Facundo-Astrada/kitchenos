@@ -7,7 +7,7 @@ import { useRestauranteId } from './useRestauranteId'
 import { useAuth } from '@/lib/auth/context'
 import type { Notificacion } from '@/types'
 
-const LIMIT = 30
+const LIMIT = 100
 
 async function fetchNotificacionesData(key: string): Promise<Notificacion[]> {
   const [, restId, userId] = key.split('|')

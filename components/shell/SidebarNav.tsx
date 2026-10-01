@@ -285,7 +285,7 @@ export default function SidebarNav({ onImportarClick, dark = false, collapsed = 
             )}
             {!collapsed && (
               <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                <NotificacionesBell variant="sidebar" />
+                <NotificacionesBell />
                 <button
                   onClick={e => { e.preventDefault(); document.dispatchEvent(new CustomEvent('kos:shortcuts-help')) }}
                   title="Atajos de teclado (?)"
