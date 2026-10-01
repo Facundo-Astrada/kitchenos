@@ -63,25 +63,17 @@ legacy. Reimplementar sobre `tareas` **solo si el usuario los pide**.
 
 ---
 
-### Asistente al centro — prototipo `/centro` sin commitear
+### Asistente al centro — F0 cerrado, sigue F1
 Plan completo en `PLAN-ASISTENTE-2026-10.md` (fases F0-F5 + C1-C4 "cerebro de la casa", reglas de
 aviso con evidencia, métrica rectora: cosas resueltas desde un aviso, no tiempo en la app).
-Decisiones cerradas 01/10 (§7): HUD con tokens actuales, Centro para dueño/chef/compras, rutinas
-las crean admin/chef, acciones grandes solo como borrador, lo aprendido se guarda preguntando.
-**El nombre del asistente cambia** y pasa a ser figura de marketing ("el cerebro de la cocina"):
-se decide con el nombre de la marca en una sesión de Marketing. Hay un prototipo local en
-`/centro` (Coach a la izquierda, lienzo a la derecha con lo que devolvieron las tools vía
-`COACH_VISTAS_MARK`, pedido solo con `vistas: true`) y `consultar_stock` por sector físico. **Todo sin
-commitear** — se commitea en F0. Próximo: F0 (push de prueba + commit) → F1 (popup de
-avisos + `/avisos`) → F2 (informe de stock a Compras al cerrar el conteo).
+Decisiones cerradas 01/10 (§7). **El nombre del asistente cambia** y pasa a ser figura de marketing
+("el cerebro de la cocina"): se decide con el nombre de la marca en una sesión de Marketing.
+F0 cerrado 01/10: push llega al iPhone de Facundo, `/centro` commiteado, "crítico" reemplazado por
+"bajo mínimo" (`lib/stock/alerta.ts` + RPC `productos_bajo_minimo_count`), `AVISOS_ACTIVOS=1` prendido
+a propósito en Vercel. Falta de F0: Franco deja vigente el puesto de Compras en Bros (para F2).
+Próximo: F1 (popup de avisos + `/avisos`) → F2 (informe de stock a Compras al cerrar el conteo).
 Flecos del prototipo: el lienzo interpreta texto de las tools (pasar a `vista` estructurada si se
 queda), las vistas no se guardan con la conversación, mobile sin sheet.
-
-### "Crítico" cuenta distinto en el contador y en el Coach
-`productos_criticos_count` (el número del hero del Coach y del núcleo de `/centro`) dio 100 en El
-Rescoldo; el Coach, desde el snapshot, listó 8. Dos definiciones de crítico con `stock_critico` en 0
-en casi todas las filas (ver memoria de Stock ago 2026, que ya sacó "crítico" de la pantalla Stock).
-Unificar o reemplazar por "bajo mínimo" antes de mostrar ese número en serio.
 
 ---
 

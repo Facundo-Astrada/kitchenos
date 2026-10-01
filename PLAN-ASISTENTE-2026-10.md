@@ -250,7 +250,7 @@ Tal cual lo pediste, con dos agregados del research:
 
 | Fase | Qué | Esfuerzo | Se valida con |
 |---|---|---|---|
-| **F0** | Cargar VAPID en Vercel; corrida seca de `/api/cron/avisos`; que Franco deje vigente al menos el puesto de Compras en Bros (decisión 014) | ½ día | Push llega a un celular real |
+| **F0** ✅ 01/10 | Cargar VAPID en Vercel; corrida de `/api/cron/avisos` (salió en modo activo: `AVISOS_ACTIVOS=1` prendido a propósito); "crítico" → "bajo mínimo"; que Franco deje vigente al menos el puesto de Compras en Bros (decisión 014) — **esto último sigue pendiente** | ½ día | Push llega a un celular real ✅ |
 | **F1** | Popup de avisos + `/avisos` + agrupado | 1 día | Chico, independiente, sale primero |
 | **F2** | `asistente_rutinas` + motor determinístico + **2 disparadores reales en Bros**: conteo de stock cerrado → Compras (con análisis Haiku); receta modificada → equipo de la plaza. Silencio en servicio + presupuesto diario | 2-3 días | León recibe el informe del domingo |
 | **F3** | Home "Centro": asistente + brief + lienzo con renderers para 4-5 tools (stock, turnos, receta, ventas, agenda). Desktop primero, después mobile | 3-4 días | Partir `KitchenCoachFAB` antes (`refactor-marco.md`) |
