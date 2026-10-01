@@ -266,13 +266,41 @@ los avisos (medido como aviso → pantalla abierta desde el link), se revisa ant
 
 ---
 
-## 7. Decisiones abiertas (del usuario)
+## 7. Decisiones (cerradas 01/10/2026)
 
-1. **Estética:** ¿estructura HUD con los tokens actuales (recomendado) o cambiar DESIGN.md hacia
-   el look ChatGPT?
-2. **Quién ve el home Centro:** ¿todos los roles, o admin/chef/compras y el cocinero sigue con
-   "Mi plaza"?
-3. **Quién crea rutinas para otros:** ¿solo admin/chef? ¿Cada uno puede apagarse las suyas?
-   (recomendado: sí, salvo las urgentes)
-4. **Nombre:** ¿sigue siendo "Kitchen Coach" o pasa a llamarse de otra forma ahora que es
-   asistente?
+1. **Estética:** estructura HUD con los tokens actuales. DESIGN.md no cambia; F6 queda fuera.
+2. **Quién ve el home Centro:** dueño, chef y compras. El cocinero sigue con "Mi plaza".
+3. **Quién crea rutinas para otros:** admin y chef. Cada uno puede apagarse las suyas, salvo las urgentes.
+4. **Nombre:** se cambia. El asistente pasa a ser **la figura de la app** y una pieza de marketing
+   ("el cerebro de la cocina"): un personaje que genere confianza e interés en el cliente que
+   evalúa. Se decide junto con el nombre de la marca (abierto en `START UP KOS`, decisión 015);
+   el trabajo de nombre y personaje va a la silla de Marketing (agente `kos-marketing`).
+5. **Ficha de la casa:** la editan solo dueño y chef. El resto la consulta a través del Coach,
+   con la lente de su puesto.
+6. **Acciones grandes** (pedido, turnos de la semana): **solo borradores** que una persona
+   confirma. Después de usarlo se revisa qué se puede automatizar.
+7. **Lo aprendido en una charla:** el Coach pregunta "¿lo anoto?" antes de guardarlo.
+
+---
+
+## 8. Cerebro de la casa (investigación 01/10/2026) — fases nuevas
+
+Página con diagrama, estado por pilar e investigación: https://claude.ai/artifact/GzWCqv3tPVmup2iL9r8caa
+
+- **Cómo "usa la app" la IA:** cada acción es una herramienta (función en `lib/` que usan la
+  pantalla y el Coach). No se usa "computer use" (OSWorld 2.0 estricto: 41,7 %, sep 2026).
+- **Cobertura hoy:** 19 tools (11 consulta, 8 acción). Actúa en 6 de 28 módulos, solo lee 6, nada en 16.
+- **Límite:** Shopify Sidekick vio que entre 20 y 50 tools el modelo las combina mal. Antes de
+  pasar de 25: tool search de Anthropic (`defer_loading`) + set de evaluación.
+- **El cerebro en 4 capas:** datos en vivo (existe) · Ficha de la casa · hechos aprendidos ·
+  manual de la app (tools + tours + explicaciones).
+
+| Fase | Qué | Esfuerzo |
+|---|---|---|
+| **C1** | Ficha de la casa: tabla, generación al final del importador, pantalla para que dueño/chef corrijan, lente por puesto (extender `verCostos`) | 2-3 días |
+| **C2** | Detector de huecos (reglas sin IA: platos sin receta, evento sin menú, facturas sin cargar, puesto sin descripción) → próximos pasos dentro del brief, nunca push | 1-2 días |
+| **C3** | Set de evaluación (50 preguntas reales de Bros, 10 por puesto; el mozo nunca ve costos) + tool search + 6 tools: `crear_receta`, `armar_pedido` (borrador), `proponer_turnos`, `registrar_haccp`, `crear_reserva`, `asignar_produccion` | 3-4 días |
+| **C4** | Memoria de hechos aprendidos (pregunta "¿lo anoto?") + modo "mostrame cómo" (link + resaltado + tour) | 2-3 días |
+
+Orden: F0 → F1 → F2 → C1 → C2 → C3 → F3 → F4-F5 → C4.
+Regla de construcción: toda acción nueva de una pantalla se registra como tool en el mismo commit.

@@ -6,6 +6,13 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-10-01 — Cerebro de la casa (planificación, sin código).**
+
+- Investigación sobre agentes que operan apps (Shopify Sidekick, Toast IQ, computer use vs tools, tool search de Anthropic, WebMCP, memoria de agentes). Página: https://claude.ai/artifact/GzWCqv3tPVmup2iL9r8caa
+- Inventario del Coach: 19 tools (11 consulta, 8 acción); actúa en 6 de 28 módulos, solo lee 6, nada en 16.
+- `PLAN-ASISTENTE-2026-10.md`: §7 con las 7 decisiones cerradas y §8 con las fases C1-C4 (Ficha de la casa, detector de huecos, evaluación + tool search + 6 tools, memoria aprendida + "mostrame cómo").
+- **Resuelto:** VAPID (`NEXT_PUBLIC_VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`) cargado en Vercel por Facundo y redeployado; push activado en su celular. Falta el push de prueba.
+
 **Sesión 2026-09-29 — Menú en el mise ordenado por paso + Planificación explica el menú fijo.** 2 commits (`75d0b27`, `0b1cbe2`), pusheados.
 
 - `sincronizarMiseDeMenu` guarda `orden` = índice de la preparación y reordena las secciones-paso en el orden del menú (antes todo quedaba en `orden 0`). Se corrigieron a mano los datos de "Cotidiano 16 al 29/09" (Bros), que se había activado antes del fix del 16/09 y tenía las 23 preparaciones en "Estación". En la plaza `menu` se ocultan las secciones vacías.

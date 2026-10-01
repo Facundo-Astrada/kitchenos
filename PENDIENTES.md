@@ -64,11 +64,15 @@ legacy. Reimplementar sobre `tareas` **solo si el usuario los pide**.
 ---
 
 ### Asistente al centro — prototipo `/centro` sin commitear
-Plan completo en `PLAN-ASISTENTE-2026-10.md` (fases F0-F5, reglas de aviso con evidencia,
-métrica rectora: cosas resueltas desde un aviso, no tiempo en la app). Hay un prototipo local en
+Plan completo en `PLAN-ASISTENTE-2026-10.md` (fases F0-F5 + C1-C4 "cerebro de la casa", reglas de
+aviso con evidencia, métrica rectora: cosas resueltas desde un aviso, no tiempo en la app).
+Decisiones cerradas 01/10 (§7): HUD con tokens actuales, Centro para dueño/chef/compras, rutinas
+las crean admin/chef, acciones grandes solo como borrador, lo aprendido se guarda preguntando.
+**El nombre del asistente cambia** y pasa a ser figura de marketing ("el cerebro de la cocina"):
+se decide con el nombre de la marca en una sesión de Marketing. Hay un prototipo local en
 `/centro` (Coach a la izquierda, lienzo a la derecha con lo que devolvieron las tools vía
 `COACH_VISTAS_MARK`, pedido solo con `vistas: true`) y `consultar_stock` por sector físico. **Todo sin
-commitear** — decidir si se commitea el prototipo antes de seguir. Próximo: F0 (VAPID) → F1 (popup de
+commitear** — se commitea en F0. Próximo: F0 (push de prueba + commit) → F1 (popup de
 avisos + `/avisos`) → F2 (informe de stock a Compras al cerrar el conteo).
 Flecos del prototipo: el lienzo interpreta texto de las tools (pasar a `vista` estructurada si se
 queda), las vistas no se guardan con la conversación, mobile sin sheet.
@@ -86,8 +90,10 @@ En Planificación, "Cotidiano 29/9 a 9/10" (Bros) sale Postre → Pasta → Prot
 
 ## 🟡 Medio — Planes y cobro
 
-Decisiones tomadas (01/09) en `~/Desktop/START UP KOS/00-decisiones/`, 004 a
-008. Si difieren, manda esa carpeta. **Stripe descartado: no opera en
+Decisiones tomadas en `~/Desktop/START UP KOS/00-decisiones/`: 004 a 008 (01/09) y
+**015 (29/09): piloto gratis de 15 días con el plan elegido y tarjeta al inicio, IA con
+tope, piso sin IA = Base, sin fee de implementación** (revierte 007). Si difieren, manda
+esa carpeta. **Stripe descartado: no opera en
 Argentina** — el cobro va por Mercado Pago `preapproval`.
 Ya hecho: tabla `ia_uso`, `restaurantes.plan`, `lib/planes.ts`, hook `usePlan()`.
 
@@ -97,9 +103,18 @@ Cablear `puedeUsar()` en las pantallas, probablemente en `RouteGuard`. Coach
 desde Cocina. **No apurar sin al menos un cliente con plan asignado** — hoy
 `restaurantes.plan` es NULL en las 5 cuentas y `puedeUsar` devuelve siempre true.
 
-### Cobro automático (último)
-Mercado Pago `preapproval` + webhooks, UI en Configuración → Plan. **Recién
-cuando cobrar a mano moleste** (cliente 4-5). Prerrequisito que no es código:
+### Piloto de 15 días (decisión 015) — cambia el orden de lo que sigue
+- **El cobro automático deja de ser "lo último":** el piloto pide tarjeta al inicio y cobra
+  solo al día 15, así que necesita `preapproval` con período gratis. Sin eso, el piloto
+  se hace a mano (cobro manual al terminar), que funciona para los primeros 2-3.
+- **Tope de IA durante el piloto**, que no cuente la ayuda de puesta en marcha. Número abierto.
+- **Puesta en marcha sin ayuda** (Coach + tutoriales + regla de las 10 recetas): la 015
+  depende de que el cliente cargue solo en 15 días. Es la prioridad de producto que abre.
+- Abierto en negocio, no inventar en código: qué conserva cada plan al bajar al Base.
+
+### Cobro automático
+Mercado Pago `preapproval` + webhooks, UI en Configuración → Plan. Antes: **recién
+cuando cobrar a mano moleste** (cliente 4-5) — ver el piloto arriba. Prerrequisito que no es código:
 monotributo + facturación ARCA. Diseñar el dunning desde el día uno (20-40% de
 las bajas en LatAm son involuntarias).
 
@@ -138,13 +153,11 @@ desglosado.
 ### Fotos — falta completar
 `PhotoPicker` ya está en recetario, carta y equipo. Falta facturas, si se decide.
 
-### Notificaciones — falta cargar VAPID en Vercel, wirear triggers nuevos, y el canal email
+### Notificaciones — falta probar push real, wirear triggers nuevos, y el canal email
 In-app + push resueltos (sep 2026, `crearNotificacion()` dispara los dos —
-ver `HISTORIAL.md` sesión 2026-09-15 (4) para el detalle). Queda:
-- **Sumar `NEXT_PUBLIC_VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`
-  en Vercel (Production + Preview)** — están en `.env.local`, no se pudieron
-  cargar por CLI (`VERCEL_TOKEN` guardado vencido). Sin esto el toggle de
-  `/perfil` se auto-oculta (no rompe nada, pero el push no sale en prod).
+ver `HISTORIAL.md` sesión 2026-09-15 (4) para el detalle). VAPID cargado en
+Vercel 01/10 y Facundo activó el push en su celular. Queda:
+- **Mandar un push de prueba y confirmar que llega** al celular de Facundo (F0).
 - Wirear un trigger nuevo (stock crítico, vencimientos HACCP) es decisión de
   producto por cada uno — no asumir. Los dos triggers reales siguen siendo
   `useEquipo.asignarTurno` y el recordatorio de `/implantacion`.

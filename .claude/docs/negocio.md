@@ -1,7 +1,7 @@
 # Negocio — las reglas que cambian decisiones de código
 
-**Estado:** `VIGENTE` · 01/09/2026
-**Fuente de verdad:** `~/Desktop/START UP KOS/00-decisiones/DECISIONES.md` (decisiones 001-012).
+**Estado:** `VIGENTE` · 29/09/2026
+**Fuente de verdad:** `~/Desktop/START UP KOS/00-decisiones/DECISIONES.md` (decisiones 001-015).
 **Si este archivo y esa carpeta difieren, manda la carpeta.** Acá vive solo el destilado
 que afecta al código; el razonamiento completo, las reversiones y las condiciones de
 salida viven allá.
@@ -30,8 +30,16 @@ de suscripciones (`preapproval`) de Mercado Pago.
 ## 2. Planes: `lib/planes.ts` es un reflejo, no la fuente
 
 **Decisión 006.** Cuatro paquetes — Base ($48.000), Cocina ($75.000), Control ($110.000),
-Producción ($26.000), todos ARS/mes — más fee de implementación de $300.000 (pago único,
-decisión 007) y +65% por local adicional.
+Producción ($26.000), todos ARS/mes — y +65% por local adicional. **El fee de
+implementación de $300.000 se eliminó** (decisión 015, revierte 007).
+
+**Piloto (decisión 015):** el cliente elige un plan y lo contrata con **15 días gratis,
+tarjeta al inicio** (suscripción de Mercado Pago con período gratis). Durante el piloto
+usa todo el plan; solo la **IA tiene tope de tokens**. Al terminar paga el plan elegido o
+baja al **piso sin IA = plan Base**. Qué conserva cada plan al bajar está **abierto** —
+no inventarlo en código. Consecuencia para producto: la puesta en marcha sin ayuda
+(Coach, tutoriales, regla de las 10 recetas) pasa a ser crítica, y la ayuda de puesta en
+marcha no debería consumir el tope de IA del piloto.
 
 - `restaurantes.plan` **no tiene default a propósito**. Hoy es NULL en las 5 cuentas y
   `puedeUsar()` devuelve `true` siempre. No inventar un default.
