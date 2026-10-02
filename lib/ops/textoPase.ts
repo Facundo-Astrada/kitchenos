@@ -102,7 +102,7 @@ function lineasDeTareas(tareas: Tarea[], conCodigo: boolean): string[] {
       const d = ordenDe(a.prioridad) - ordenDe(b.prioridad)
       return d !== 0 ? d : a.titulo.localeCompare(b.titulo, 'es')
     })
-    .map(t => (conCodigo ? `${t.titulo} ${codigoDe(t.prioridad)}` : `· ${t.titulo}`))
+    .map(t => (conCodigo ? `- ${t.titulo} ${codigoDe(t.prioridad)}` : `- ${t.titulo}`))
 }
 
 /**
@@ -127,7 +127,7 @@ export function construirTextoPase(d: DatosPase): string {
     // Las notas llegan más nuevas primero (useNotasPlaza). En el mensaje se
     // leen en el orden en que pasaron las cosas, que es como se cuenta un turno.
     .reverse()
-  if (notas.length > 0) bloques.push(['Ojo', ...notas.map(t => `· ${t}`)].join('\n'))
+  if (notas.length > 0) bloques.push(['Ojo', ...notas.map(t => `- ${t}`)].join('\n'))
 
   // Sin nada más que el encabezado el mensaje no vale la pena mandarse.
   if (bloques.length === 1) bloques.push('Sin pendientes.')

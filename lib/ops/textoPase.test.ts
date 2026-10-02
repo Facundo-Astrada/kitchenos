@@ -46,7 +46,7 @@ describe('construirTextoPase', () => {
       ],
     }))
     const lineas = texto.split('\n\n')[1].split('\n')
-    expect(lineas).toEqual(['cebolla fugazza SP', 'queso fugazza P', 'coliflor REF'])
+    expect(lineas).toEqual(['- cebolla fugazza SP', '- queso fugazza P', '- coliflor REF'])
   })
 
   it('no incluye lo que ya se resolvió en el turno — solo lo que queda para el próximo', () => {
@@ -69,7 +69,7 @@ describe('construirTextoPase', () => {
       ],
     }))
     const lineas = texto.split('\n\n').find(b => b.startsWith('Ojo'))!.split('\n')
-    expect(lineas).toEqual(['Ojo', '· primera nota', '· segunda nota'])
+    expect(lineas).toEqual(['Ojo', '- primera nota', '- segunda nota'])
   })
 
   it('agrega el pie con autor y hora cuando están', () => {
@@ -95,7 +95,7 @@ describe('construirTextoPase', () => {
       ],
     }))
     const lineas = texto.split('\n\n')[1].split('\n')
-    expect(lineas).toEqual(['cebolla fugazza SP'])
+    expect(lineas).toEqual(['- cebolla fugazza SP'])
   })
 
   it('ignora tareas y notas con título/texto vacío', () => {
@@ -110,7 +110,7 @@ describe('construirTextoPase', () => {
     const texto = construirTextoPase(base({
       pendientes: [tarea({ id: 't1', titulo: '  cebolla   fugazza.  ' })],
     }))
-    expect(texto).toContain('cebolla fugazza SP')
+    expect(texto).toContain('- cebolla fugazza SP')
   })
 })
 

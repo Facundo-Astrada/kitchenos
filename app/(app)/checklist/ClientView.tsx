@@ -530,6 +530,15 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // El pase se abre solo al entregar (no es un paso aparte que se pueda
   // copiar-pegar en WhatsApp y olvidarse de cerrar) — ver doEntregarPlaza.
   const [showPaseSheet, setShowPaseSheet] = useState(false)
+  // Foto de lo que se está entregando, tomada al confirmar. La entrega adelanta
+  // la jornada/turno de la pantalla en el mismo instante (cena entregada →
+  // almuerzo del día siguiente): sin la foto el pase se armaba con la fecha y
+  // las notas del turno que entra, y la barra de cierre que lo alojaba se
+  // desmontaba — la hoja no llegaba a verse.
+  const [paseSnap, setPaseSnap] = useState<{
+    plaza: Plaza; fecha: string; jornadaProxima: string; turnoNombre: string | null
+    autor: string | null; entregadoAt: string; notas: PaseMensaje[]
+  } | null>(null)
 
   useEffect(() => {
     setModoControl(localStorage.getItem('checklist_modo_control') === 'true')
@@ -1085,6 +1094,11 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       setTurnoManual(turnoServicioId)
       // El pase se abre ya: la entrega entra optimista al cache (useCierresTurno)
       // y no hay por qué hacer esperar al cocinero el viaje a la base.
+      setPaseSnap({
+        plaza, fecha, jornadaProxima, turnoNombre: turnoActual?.nombre ?? null,
+        autor: [authPerfil?.nombre, authPerfil?.apellido].filter(Boolean).join(' ').trim() || null,
+        entregadoAt: new Date().toISOString(), notas: notasHoyPlaza,
+      })
       const pendiente = entregarPlaza({
         jornada: fecha, turnoId: turnoServicioId, plaza,
         cerradoPor: authPerfil?.miembro_id ?? null,
@@ -2683,6 +2697,17 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         </div>
       )}
 
+      {/* Fuera de la barra de cierre a propósito: la entrega puede cambiar la
+          jornada y desmontar la barra, y la hoja tiene que sobrevivir a eso. */}
+      {paseSnap && (
+        <CopiarPaseBoton sinBoton
+          plaza={paseSnap.plaza} fecha={paseSnap.fecha} jornadaProxima={paseSnap.jornadaProxima} tareas={tareas}
+          notasHoy={paseSnap.notas} plazasCustom={plazasCustom} turnoNombre={paseSnap.turnoNombre}
+          autor={paseSnap.autor} entregadoAt={paseSnap.entregadoAt}
+          open={showPaseSheet} onOpenChange={setShowPaseSheet}
+        />
+      )}
+
       {/* Barra persistente — cierre 100% completo.
           Ya no está condicionada al fichaje: entregar la plaza es del turno, no
           de la persona, y el que no fichó entrada igual tiene que poder pasar
@@ -2707,14 +2732,6 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                 : proximoTurno ? `Entregala para pasar a ${proximoTurno.nombre}` : 'Entregala para pasar el turno'}
             </div>
           </div>
-          {/* Sin botón propio: el pase se abre al confirmar "Entregar plaza" */}
-          <CopiarPaseBoton sinBoton
-            plaza={plaza} fecha={fecha} jornadaProxima={jornadaProxima} tareas={tareas}
-            notasHoy={notasHoyPlaza} plazasCustom={plazasCustom} turnoNombre={turnoActual?.nombre ?? null}
-            autor={[authPerfil?.nombre, authPerfil?.apellido].filter(Boolean).join(' ').trim() || null}
-            entregadoAt={entregaActual?.cerrado_at ?? null}
-            open={showPaseSheet} onOpenChange={setShowPaseSheet}
-          />
           {/* Entregar primero; una vez entregada, la barra ofrece deshacer (por si
               fue un error de tap) y la salida personal (solo si hay fichaje
               abierto que cerrar). */}
