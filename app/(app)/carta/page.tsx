@@ -16,6 +16,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useMenus, type MenuConPreparaciones } from '@/lib/hooks/useMenus'
 import { useChecklist } from '@/lib/hooks/useChecklist'
 import MenusView from './MenusView'
+import DesarrolloView from './DesarrolloView'
 import ComposicionEditor, { type CompPayload, type CompInicial } from './ComposicionEditor'
 import {
   upsertMiseChecklistItem, parseRecipienteNombre, TAREA_PRIO_TO_MISE,
@@ -316,7 +317,7 @@ function RentabilidadView({
 }
 
 // ── MAIN PAGE ───────────────────────────────────────────
-type View = 'list' | 'detail' | 'rentabilidad' | 'menus' | 'estandarizacion'
+type View = 'list' | 'detail' | 'rentabilidad' | 'menus' | 'estandarizacion' | 'desarrollo'
 
 export default function CartaPage() {
   const { items, loading, fetchItems, crearItem, actualizarItem, actualizarTags, toggleDisponible, eliminarItem, duplicarItem, agregarPlatoReceta, actualizarPlatoRecetaOpsCompleta, actualizarPlatoRecetaGramaje, eliminarPlatoReceta, agregarPlatoPackaging, eliminarPlatoPackaging, categorias } = useCarta()
@@ -366,6 +367,8 @@ export default function CartaPage() {
   // usuario sin permiso que entra directo por deep link queda en la vista.
   useEffect(() => {
     if (view === 'estandarizacion' && !canEdit) setView('list')
+    // Mismo cerrojo para En desarrollo (decisión 016): crear/editar fichas es de quien edita la carta.
+    if (view === 'desarrollo' && !canEdit) setView('list')
   }, [view, canEdit])
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [filter, setFilter] = useState<string>('Todas')
@@ -850,6 +853,20 @@ export default function CartaPage() {
     )
   }
 
+  // ── En desarrollo — platos nuevos antes de entrar a la carta (decisión 016) ──
+  if (view === 'desarrollo' && canEdit) {
+    return (
+      <>
+        <DesarrolloView
+          onBack={() => setView('list')}
+          onToast={setToast}
+          nombreReceta={(id) => recetasPorId.get(id)?.nombre}
+        />
+        {toast && <Toast msg={toast} onDone={() => setToast('')} />}
+      </>
+    )
+  }
+
   // ── Menús ──
   if (view === 'menus') {
     return (
@@ -974,6 +991,17 @@ export default function CartaPage() {
             <span className="material-symbols-outlined" style={{ fontSize: 14 }}>upload_file</span>
             Importar
           </button>
+          {canEdit && (
+            <button data-coach-target="carta-desarrollo" onClick={() => setView('desarrollo')} style={{
+              background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,.15)',
+              borderRadius: 18, padding: '4px 11px', color: 'rgba(255,255,255,0.85)',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+              fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>edit_note</span>
+              En desarrollo
+            </button>
+          )}
           <button onClick={() => exportCartaPDF(items)} style={{
             background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,.15)',
             borderRadius: 18, padding: '4px 11px', color: 'rgba(255,255,255,0.85)',

@@ -289,3 +289,58 @@ export function resumenTanda(
     (acc, p) => acc + p.ficha.preguntas.filter(q => !q.resuelta).length, 0)
   return { platos: platos.length, preguntasAbiertas, bases: [...new Set(basesReutilizadas)] }
 }
+
+// ── Ayudas para la pantalla ──────────────────────────────────────────────
+
+export function preguntasAbiertas(ficha: FichaDesarrollo): number {
+  return ficha.preguntas.filter(q => !q.resuelta).length
+}
+
+/** Cantidad de datos que sugirió la IA y el chef todavía no confirmó. */
+export function datosSinConfirmar(ficha: FichaDesarrollo): number {
+  let n = 0
+  for (const c of ficha.componentes) {
+    if (c.origen === 'ia') n++
+    for (const i of c.ingredientes) if (i.cantidad_origen === 'ia') n++
+    for (const p of c.procedimiento) if (p.origen === 'ia') n++
+  }
+  if (ficha.armado?.origen === 'ia') n++
+  return n
+}
+
+export function ingredienteVacio(): IngredienteDesarrollo {
+  return {
+    nombre: '', cantidad: null, unidad: null, cantidad_origen: null,
+    aprox: false, texto_cantidad: null, receta_id: null, producto_id: null,
+  }
+}
+
+export function componenteVacio(): ComponenteDesarrollo {
+  return {
+    id: nuevoId('comp'), nombre: '', origen: 'chef', receta_id: null,
+    gramaje: null, gramaje_unidad: null, gramaje_origen: null,
+    ingredientes: [], procedimiento: [], nota_despacho: null,
+  }
+}
+
+/**
+ * Corre `fn` sobre cada elemento con a lo sumo `limite` en vuelo a la vez, y
+ * respeta el orden de salida. Es lo que dispara las fichas del paso "ordenar":
+ * 10 llamadas de Sonnet de golpe se pisan con el rate limit; de a 4 llega la
+ * primera ficha en segundos y las demás van detrás.
+ */
+export async function correrConLimite<T, R>(
+  items: T[], limite: number, fn: (item: T, indice: number) => Promise<R>,
+): Promise<R[]> {
+  const resultados: R[] = new Array(items.length)
+  let siguiente = 0
+  async function trabajador() {
+    while (true) {
+      const i = siguiente++
+      if (i >= items.length) return
+      resultados[i] = await fn(items[i], i)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(limite, items.length)) }, trabajador))
+  return resultados
+}

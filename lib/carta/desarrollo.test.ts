@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   numerarLineas, recortarPorRangos, normalizarFichaIA, buscarRecetaExistente,
-  vincularFicha, resumenTanda,
+  vincularFicha, resumenTanda, correrConLimite, preguntasAbiertas, datosSinConfirmar,
 } from './desarrollo'
 
 // Notas reales del chef — cada una rompe una suposición distinta.
@@ -283,5 +283,43 @@ describe('vincularFicha + resumenTanda', () => {
     base.componentes[0].ingredientes[0].receta_id = 'manual'
     const { ficha } = vincularFicha(base, [{ id: 'r1', nombre: 'Fondo oscuro' }])
     expect(ficha.componentes[0].ingredientes[0].receta_id).toBe('manual')
+  })
+})
+
+describe('correrConLimite', () => {
+  it('nunca supera el límite en vuelo y devuelve en orden', async () => {
+    let enVuelo = 0
+    let maximo = 0
+    const r = await correrConLimite([1, 2, 3, 4, 5, 6, 7], 3, async n => {
+      enVuelo++
+      maximo = Math.max(maximo, enVuelo)
+      await new Promise(res => setTimeout(res, 5 * (8 - n)))
+      enVuelo--
+      return n * 10
+    })
+    expect(r).toEqual([10, 20, 30, 40, 50, 60, 70])
+    expect(maximo).toBe(3)
+  })
+  it('lista vacía no cuelga', async () => {
+    expect(await correrConLimite([], 4, async () => 1)).toEqual([])
+  })
+})
+
+describe('preguntasAbiertas / datosSinConfirmar', () => {
+  it('cuenta lo pendiente: preguntas sin resolver y datos que puso la IA', () => {
+    const { ficha } = normalizarFichaIA({
+      nombre: 'X',
+      componentes: [{
+        nombre: 'Masa', origen: 'ia', nota_despacho: null,
+        ingredientes: [{ nombre: 'Harina', cantidad: 500, unidad: 'g', cantidad_origen: 'ia', texto_cantidad: null }],
+        procedimiento: [{ texto: 'Amasar', origen: 'ia' }, { texto: 'Estirar', origen: 'chef' }],
+      }],
+      armado: { texto: 'Plato hondo', origen: 'ia' },
+      preguntas: [{ texto: 'a', componente: null }, { texto: 'b', componente: null }],
+    })
+    expect(preguntasAbiertas(ficha)).toBe(2)
+    ficha.preguntas[0].resuelta = true
+    expect(preguntasAbiertas(ficha)).toBe(1)
+    expect(datosSinConfirmar(ficha)).toBe(4) // componente + cantidad + 1 paso + armado
   })
 })

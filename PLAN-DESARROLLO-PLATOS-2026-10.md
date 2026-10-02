@@ -1,6 +1,6 @@
 # PLAN — Desarrollo de platos (de notas sueltas a ficha)
 
-**Estado:** `APROBADO` · 02/10/2026 · decisión de negocio **016** (excepción a la moratoria)
+**Estado:** `FASE 1 CONSTRUIDA` (falta la foto de cuaderno, ver § 6) · 02/10/2026 · decisión de negocio **016** (excepción a la moratoria)
 **Origen:** boceto en papel de Facundo ("Creación de platos": nombre, descripción, componentes
 —cada producción por separado—, cantidad, procedimiento) + la nota de la pasta rellena (§ 9).
 
@@ -203,7 +203,7 @@ Componente propio: `app/(app)/carta/DesarrolloView.tsx` (+ `FichaDesarrolloSheet
   "Receta existente: Fondo oscuro". Debajo, tabla **ingrediente | cant. | procedimiento** en
   desktop (como el boceto, el procedimiento en la columna derecha), apilado en mobile. Nota de
   despacho al pie del componente.
-- Valores `ia` en gris itálica con un toque para confirmar (pasa a `chef`). Cantidad vaga se
+- Valores `ia` con la marca única de IA del repo (`IAIcon` + tinte del acento, `components/ui/IA.tsx`) y un toque para confirmar (pasa a `chef`). No se estrenó un gris itálico propio: DESIGN.md manda reusar. Cantidad vaga se
   muestra como el texto del chef ("mucho") con un campo para ponerle número.
 - **Preguntas abiertas**: lista con check; tildar = resuelta. Se puede agregar a mano.
 - **"Lo que escribiste"** plegado al final: el `texto_origen` literal, para comparar.
@@ -216,7 +216,10 @@ Pasar `ui-auditor` al terminar.
 
 ## 6. Fases
 
-### Fase 1 — de notas a fichas (esta es la que se construye ahora)
+### Fase 1 — de notas a fichas · CONSTRUIDA 02/10/2026
+
+Medido con 3 notas reales contra la cuenta de pruebas: tarjetas en ~4 s, las 3 fichas en ~28 s (Sonnet 4.6, de a 4). Se probó también Sonnet 5.5: misma latencia (gasta tokens pensando) y calidad equivalente, así que se quedó el 4.6 que ya usa el repo. Los prompts se ajustaron tras la primera corrida (respetar el nombre que puso el chef, máx. 5 preguntas). **Pendiente de la Fase 1:** el paso 0 de foto/captura (transcribir con visión antes de separar) — el texto pegado ya anda de punta a punta.
+
 1. Migración `platos_desarrollo` + RLS + `reset_demo_restaurante()` + reload de schema.
    Agregar fila en `.claude/docs/columnas.md`.
 2. Tipos en `types/index.ts` (§ 3).
