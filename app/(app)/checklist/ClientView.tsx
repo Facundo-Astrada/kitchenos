@@ -1535,6 +1535,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     const plazasItem = item.receta_id ? (platoPlazoMap[item.receta_id] ?? SIN_PLAZAS) : SIN_PLAZAS
     const primaryPlaza = plazasItem.length > 0 ? plazasItem[0].plaza : item.plaza
     const esCierre = fase === 'cierre'
+    let fallo = false
     try {
     await handleCrearTarea({
       titulo: item.nombre,
@@ -1550,13 +1551,26 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       checklist_item_id: item.id,
     })
     } catch (e: unknown) {
+      fallo = true
       setToast('No se pudo mandar: ' + (e instanceof Error ? e.message : 'error'))
       return
     } finally {
-      soltar()
+      // Si falló se suelta ya. Si salió bien NO: se suelta recién cuando la
+      // tarea real está en la lista (efecto de abajo). Soltar al volver el
+      // insert dejaba un hueco en 4G — la fila se apagaba y volvía a prenderse
+      // cuando llegaba el refetch. El timer es solo la red de contención.
+      if (fallo) soltar()
+      else setTimeout(soltar, 20_000)
     }
     setToast(esCierre ? `Pasa al turno siguiente: ${item.nombre}` : `A producción: ${item.nombre}`)
   }, [handleCrearTarea, platoPlazoMap, fase, jornadaProxima])
+
+  useEffect(() => {
+    if (despachandoIds.size === 0) return
+    const aSoltar = [...despachandoIds].filter(id => tareasHoySet.has(id) || tareasPaseDespachadasSet.has(id))
+    if (aSoltar.length === 0) return
+    setDespachandoIds(prev => { const n = new Set(prev); aSoltar.forEach(id => n.delete(id)); return n })
+  }, [despachandoIds, tareasHoySet, tareasPaseDespachadasSet])
 
   const handleCrearVencimientoDesdeMise = useCallback(async (params: { producto_nombre: string; fecha_vencimiento: string; fecha_apertura: string }) => {
     await crearVencimiento({

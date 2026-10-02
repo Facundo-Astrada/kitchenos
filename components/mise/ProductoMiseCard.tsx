@@ -383,11 +383,14 @@ function ProductoMiseCardBase({
     })
   }
 
-  // Atajo de un tap desde el CTA de déficit — sin abrir el sheet, prioridad alta por defecto.
+  // Atajo de un tap desde el CTA de déficit — sin abrir el sheet, con la
+  // prioridad que ya tiene el ítem en el mise (antes iba siempre 'alta' y pisaba
+  // la que el cocinero había elegido).
   // Despachar la producción cierra el ítem para esta vuelta, así que además
   // manda el foco al siguiente: el recorrido se corre sin bajar el teclado.
+  const prioTarea = MISE_PRIO_TO_TAREA[item.prioridad] ?? 'alta'
   async function handleCrearTareaRapida(cantidad: number) {
-    await crearTarea(cantidad, 'alta', 'hoy', null)
+    await crearTarea(cantidad, prioTarea, 'hoy', null)
     onAvanzar?.(item.id)
   }
 
@@ -420,7 +423,7 @@ function ProductoMiseCardBase({
   const [cierreDespachado, setCierreDespachado] = useState(false)
 
   async function handleProducirManana(cantidad: number) {
-    await crearTarea(cantidad, 'alta', 'manana', null)
+    await crearTarea(cantidad, prioTarea, 'manana', null)
     setCierreDespachado(true)
   }
 
