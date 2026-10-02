@@ -1,7 +1,7 @@
 # Negocio — las reglas que cambian decisiones de código
 
-**Estado:** `VIGENTE` · 29/09/2026
-**Fuente de verdad:** `~/Desktop/START UP KOS/00-decisiones/DECISIONES.md` (decisiones 001-015).
+**Estado:** `VIGENTE` · 02/10/2026
+**Fuente de verdad:** `~/Desktop/START UP KOS/00-decisiones/DECISIONES.md` (decisiones 001-016).
 **Si este archivo y esa carpeta difieren, manda la carpeta.** Acá vive solo el destilado
 que afecta al código; el razonamiento completo, las reversiones y las condiciones de
 salida viven allá.
@@ -127,6 +127,13 @@ contra 1 cuenta viva es el riesgo más grande del proyecto.
   bloquea el resto, pero el botón "leí y entiendo" no se construye antes de esa consulta.
   Fase 5 (ficha de partida) sigue diferida. Condición de salida: si a las dos semanas de
   shippear la Fase 1 no hay ninguna descripción `vigente` en la cuenta viva, se revierte.
+- **Excepción vigente (decisión 016, 02/10/2026):** `PLAN-DESARROLLO-PLATOS-2026-10.md` —
+  pestaña "En desarrollo" dentro de Carta (notas sueltas → fichas por plato con IA → prueba →
+  plato de carta). Mismo argumento que 013/014, más que sirve a la carga sin ayuda de la 015.
+  **No es un `ModuloId` nuevo.** La vista de satélites entra solo en versión derivada
+  (componentes compartidos, sin tabla nueva); el vínculo comercial marcado a mano necesita su
+  propia decisión. Condición de salida: tres semanas después de la Fase 1 sin ningún plato en
+  desarrollo creado en una cuenta real → se congela lo que falte.
 
 ## 8. Marca: no poner nombre en nada de cobro
 
