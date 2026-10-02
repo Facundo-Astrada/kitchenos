@@ -1421,3 +1421,72 @@ export interface Notificacion {
   leida: boolean
   created_at: string
 }
+
+// ── Desarrollo de platos (PLAN-DESARROLLO-PLATOS-2026-10, decisión 016) ──
+// DB: platos_desarrollo. Mientras es idea la ficha vive entera en `ficha`
+// (JSONB); al aprobar se materializa en carta_items/recetas/plato_recetas.
+// `origen` marca qué escribió el chef y qué sugirió la IA: lo `ia` se ve
+// distinto en pantalla y el chef lo confirma con un toque.
+export type OrigenDato = 'chef' | 'ia'
+export type EstadoPlatoDesarrollo = 'idea' | 'prueba' | 'aprobado' | 'descartado'
+
+export interface IngredienteDesarrollo {
+  nombre: string
+  cantidad: number | null
+  unidad: string | null
+  cantidad_origen: OrigenDato | null
+  /** "mucho pimiento", "un puñado": la cantidad es vaga, el texto del chef va en `texto_cantidad`. */
+  aprox: boolean
+  texto_cantidad: string | null
+  receta_id: string | null
+  producto_id: string | null
+}
+
+export interface PasoDesarrollo {
+  texto: string
+  origen: OrigenDato
+}
+
+export interface ComponenteDesarrollo {
+  id: string
+  nombre: string
+  origen: OrigenDato
+  receta_id: string | null
+  gramaje: number | null
+  gramaje_unidad: string | null
+  gramaje_origen: OrigenDato | null
+  ingredientes: IngredienteDesarrollo[]
+  procedimiento: PasoDesarrollo[]
+  nota_despacho: string | null
+}
+
+export interface PreguntaDesarrollo {
+  id: string
+  texto: string
+  componente_id: string | null
+  resuelta: boolean
+}
+
+export interface FichaDesarrollo {
+  componentes: ComponenteDesarrollo[]
+  armado: PasoDesarrollo | null
+  preguntas: PreguntaDesarrollo[]
+  notas_prueba?: string[]
+}
+
+export interface PlatoDesarrollo {
+  id: string
+  restaurante_id: string
+  nombre: string
+  descripcion: string | null
+  categoria: string | null
+  estado: EstadoPlatoDesarrollo
+  ficha: FichaDesarrollo
+  texto_origen: string | null
+  tanda_id: string | null
+  foto_url: string | null
+  carta_item_id: string | null
+  creado_por: string | null
+  created_at: string
+  updated_at: string
+}
