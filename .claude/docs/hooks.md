@@ -353,4 +353,6 @@ Medirlo, no estimarlo: `node scripts/shot.mjs --ruta /x --net` imprime kB y requ
 
 Todo lo que el usuario tapea esperando feedback inmediato (tildar un ítem, cambiar un estado) actualiza el estado local en el mismo frame y **después** manda la escritura; si falla, se refetchea contra el servidor como rollback. Nunca `await escritura → await refetch` antes de pintar: son round-trips en serie y en la cocina, con 4G, se sienten como un segundo de nada por tap. Si el tap dispara varias escrituras (registro del mise + tareas vinculadas), van en `Promise.all`, no encadenadas.
 
+Si la escritura es un **insert** cuya fila final no se puede fabricar del lado del cliente (una tarea despachada desde el Mise), el botón igual se apaga en el acto con un `Set` local de ids "en vuelo" que cuenta como hecho hasta que vuelve la fila real o falla. Un botón que no cambia hasta el round-trip se toca dos o tres veces. Lo mismo vale para un upsert seguido de un modal (entregar la plaza → pase): el cache se actualiza optimista y el modal se abre sin esperar.
+
 Corolario: `loading` es de la **primera** carga. Un flag que se prende en cada refetch deja la lista en blanco al cambiar de tab o de fecha, que es lo que se percibe como "navegar lento".

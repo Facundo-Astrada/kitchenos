@@ -6,6 +6,12 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-10-02 — Mise: respuesta al tap (bugs de uso real).**
+
+- "+" de mandar a producción (modo Control) no cambiaba hasta que volvía el insert: el cocinero tocaba de nuevo. Ahora `despachandoIds` local en `ClientView.tsx` apaga la fila en el acto (commit `4e361a6`).
+- Entregar plaza esperaba upsert + refetch antes de abrir el pase: `useCierresTurno.entregarPlaza` pasa a optimista y el `PaseSheet` se abre sin esperar; si falla, se cierra con toast.
+- Sacado el botón copiar de la barra de cierre del Mise (`CopiarPaseBoton sinBoton`): el pase sale solo al entregar. En Producción el botón sigue.
+
 **Sesión 2026-10-01 — Cerebro de la casa (planificación, sin código).**
 
 - Investigación sobre agentes que operan apps (Shopify Sidekick, Toast IQ, computer use vs tools, tool search de Anthropic, WebMCP, memoria de agentes). Página: https://claude.ai/artifact/GzWCqv3tPVmup2iL9r8caa
