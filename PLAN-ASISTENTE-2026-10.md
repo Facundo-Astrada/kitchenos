@@ -280,6 +280,7 @@ los avisos (medido como aviso → pantalla abierta desde el link), se revisa ant
 6. **Acciones grandes** (pedido, turnos de la semana): **solo borradores** que una persona
    confirma. Después de usarlo se revisa qué se puede automatizar.
 7. **Lo aprendido en una charla:** el Coach pregunta "¿lo anoto?" antes de guardarlo.
+8. **Lo urgente (02/10/2026):** no hay silencio durante el servicio — los avisos llegan igual, se pueden ignorar y mirar después; se asume que en ese momento no todos los van a ver. Único urgente definido: **falta un producto clave para el servicio**. Va al **puesto responsable** (Compras), no a una persona. Si nadie lo abre, **no se repite ni escala**: queda en la bandeja. Se distingue con prefijo "⚠" y destacado arriba en la bandeja, sin sonido distinto. Temperatura de cámara, vencimientos y turnos de último momento **no** son urgentes. **"Producto clave" = derivado de la carta del día:** un producto sin stock (o bajo su mínimo, a definir al construirlo) que usa algún plato de la carta de hoy vía receta → ingrediente. Sin marca manual. Depende del vínculo ingrediente→producto: en Bros 88 % vinculado (2.398 de 2.717, 02/10); los desvinculados no disparan el aviso, así que el detector de huecos (C2) tiene que listarlos.
 
 ---
 
