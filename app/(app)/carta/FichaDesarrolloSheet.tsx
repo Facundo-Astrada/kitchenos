@@ -153,8 +153,9 @@ function BloqueComponente({ comp, nombreReceta, onChange, onQuitar }: {
         </button>
       </div>
 
-      {/* Ingredientes | cantidad  +  procedimiento — como el boceto. Se parte por ancho del contenedor (auto-fit), no por viewport. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 14, padding: 12 }}>
+      {/* Ingredientes | cantidad a la izquierda (lo primero que el chef necesita ver);
+          anotaciones y procedimiento a la derecha. Se parte por ancho del contenedor (auto-fit), no por viewport. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 14, padding: 12 }}>
         <div>
           <Etiqueta>Ingredientes · cantidad</Etiqueta>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -166,23 +167,25 @@ function BloqueComponente({ comp, nombreReceta, onChange, onQuitar }: {
           </div>
           <BotonTexto icon="add" label="Ingrediente" onClick={() => onChange({ ...comp, ingredientes: [...comp.ingredientes, ingredienteVacio()] })} />
         </div>
-        <div>
-          <Etiqueta>Procedimiento</Etiqueta>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {comp.procedimiento.map((p, i) => (
-              <FilaPaso key={i} paso={p} indice={i}
-                onChange={nuevo => onChange({ ...comp, procedimiento: comp.procedimiento.map((x, j) => j === i ? nuevo : x) })}
-                onQuitar={() => onChange({ ...comp, procedimiento: comp.procedimiento.filter((_, j) => j !== i) })} />
-            ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <Etiqueta>Anotaciones</Etiqueta>
+            <textarea value={comp.nota_despacho ?? ''} rows={2} placeholder="Producción o despacho: cómo se prepara, se guarda o se termina este componente"
+              onChange={e => onChange({ ...comp, nota_despacho: e.target.value || null })}
+              style={{ ...inputBase, resize: 'vertical', lineHeight: 1.4 }} />
           </div>
-          <BotonTexto icon="add" label="Paso" onClick={() => onChange({ ...comp, procedimiento: [...comp.procedimiento, { texto: '', origen: 'chef' }] })} />
+          <div>
+            <Etiqueta>Procedimiento</Etiqueta>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {comp.procedimiento.map((p, i) => (
+                <FilaPaso key={i} paso={p} indice={i}
+                  onChange={nuevo => onChange({ ...comp, procedimiento: comp.procedimiento.map((x, j) => j === i ? nuevo : x) })}
+                  onQuitar={() => onChange({ ...comp, procedimiento: comp.procedimiento.filter((_, j) => j !== i) })} />
+              ))}
+            </div>
+            <BotonTexto icon="add" label="Paso" onClick={() => onChange({ ...comp, procedimiento: [...comp.procedimiento, { texto: '', origen: 'chef' }] })} />
+          </div>
         </div>
-      </div>
-
-      <div style={{ padding: '0 12px 12px' }}>
-        <Etiqueta>Despacho</Etiqueta>
-        <input value={comp.nota_despacho ?? ''} placeholder="Cómo se termina o se sirve este componente (opcional)"
-          onChange={e => onChange({ ...comp, nota_despacho: e.target.value || null })} style={inputBase} />
       </div>
     </section>
   )
@@ -278,43 +281,6 @@ export default function FichaDesarrolloSheet({
           </button>
         </div>
 
-        {/* La idea */}
-        <div>
-          <Etiqueta>La idea del plato</Etiqueta>
-          <textarea value={descripcion} rows={2} placeholder="De qué se trata este plato"
-            onChange={e => { setDescripcion(e.target.value); programar({ descripcion: e.target.value || null }) }}
-            style={{ ...inputBase, resize: 'vertical', lineHeight: 1.4 }} />
-        </div>
-
-        {/* Preguntas abiertas: la lista de trabajo de la prueba */}
-        <div>
-          <Etiqueta>Para definir en la prueba</Etiqueta>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {ficha.preguntas.map((q, i) => (
-              <label key={q.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer', minHeight: 32, padding: '4px 0' }}>
-                <input type="checkbox" checked={q.resuelta} style={{ marginTop: 3 }}
-                  onChange={e => cambiarFicha({ ...ficha, preguntas: ficha.preguntas.map((x, j) => j === i ? { ...x, resuelta: e.target.checked } : x) })} />
-                <span style={{ fontSize: 13, lineHeight: 1.4, color: q.resuelta ? 'var(--text-3)' : 'var(--text)', textDecoration: q.resuelta ? 'line-through' : 'none' }}>
-                  {q.texto}
-                  {q.componente_id && (() => {
-                    const c = ficha.componentes.find(x => x.id === q.componente_id)
-                    return c ? <span style={{ color: 'var(--text-3)' }}> · {c.nombre}</span> : null
-                  })()}
-                </span>
-              </label>
-            ))}
-          </div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-            <input value={nuevaPregunta} placeholder="Agregar una duda" style={inputBase}
-              onChange={e => setNuevaPregunta(e.target.value)}
-              onKeyDown={e => {
-                if (e.key !== 'Enter' || !nuevaPregunta.trim()) return
-                cambiarFicha({ ...ficha, preguntas: [...ficha.preguntas, { id: nuevoId('preg'), texto: nuevaPregunta.trim(), componente_id: null, resuelta: false }] })
-                setNuevaPregunta('')
-              }} />
-          </div>
-        </div>
-
         {/* Componentes */}
         <div>
           <Etiqueta>Componentes · cada producción por separado</Etiqueta>
@@ -336,6 +302,47 @@ export default function FichaDesarrolloSheet({
               onChange={e => cambiarFicha({ ...ficha, armado: e.target.value ? { texto: e.target.value, origen: 'chef' } : null })}
               style={{ ...inputBase, resize: 'vertical', lineHeight: 1.4 }} />
           </MarcaIA>
+        </div>
+
+        {/* Preguntas abiertas: la lista de trabajo de la prueba. Se responden ahí mismo; responder la marca como resuelta. */}
+        <div>
+          <Etiqueta>Para definir en la prueba</Etiqueta>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {ficha.preguntas.map((q, i) => {
+              const comp = q.componente_id ? ficha.componentes.find(x => x.id === q.componente_id) : null
+              const cambiar = (c: Partial<typeof q>) => cambiarFicha({ ...ficha, preguntas: ficha.preguntas.map((x, j) => j === i ? { ...x, ...c } : x) })
+              return (
+                <div key={q.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={q.resuelta} style={{ marginTop: 3 }} onChange={e => cambiar({ resuelta: e.target.checked })} />
+                    <span style={{ fontSize: 13, lineHeight: 1.4, color: q.resuelta ? 'var(--text-3)' : 'var(--text)' }}>
+                      {q.texto}
+                      {comp && <span style={{ color: 'var(--text-3)' }}> · {comp.nombre}</span>}
+                    </span>
+                  </label>
+                  <input value={q.respuesta ?? ''} placeholder="Tu respuesta" style={{ ...inputBase, marginLeft: 24, width: 'calc(100% - 24px)', padding: '6px 10px', fontSize: 13 }}
+                    onChange={e => cambiar({ respuesta: e.target.value, resuelta: e.target.value.trim() ? true : q.resuelta })} />
+                </div>
+              )
+            })}
+          </div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            <input value={nuevaPregunta} placeholder="Agregar una duda" style={inputBase}
+              onChange={e => setNuevaPregunta(e.target.value)}
+              onKeyDown={e => {
+                if (e.key !== 'Enter' || !nuevaPregunta.trim()) return
+                cambiarFicha({ ...ficha, preguntas: [...ficha.preguntas, { id: nuevoId('preg'), texto: nuevaPregunta.trim(), componente_id: null, resuelta: false }] })
+                setNuevaPregunta('')
+              }} />
+          </div>
+        </div>
+
+        {/* La idea */}
+        <div>
+          <Etiqueta>La idea del plato</Etiqueta>
+          <textarea value={descripcion} rows={2} placeholder="De qué se trata este plato"
+            onChange={e => { setDescripcion(e.target.value); programar({ descripcion: e.target.value || null }) }}
+            style={{ ...inputBase, resize: 'vertical', lineHeight: 1.4 }} />
         </div>
 
         {/* Lo que escribió el chef, literal */}

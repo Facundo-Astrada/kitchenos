@@ -1,7 +1,7 @@
 'use client'
 
 import PageTransition from '@/components/PageTransition'
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { useCarta, type CategoriaCartaItem, type CartaItemEnriquecido, type PlatoRecetaEnriquecido } from '@/lib/hooks/useCarta'
 import type { OpsResult } from '@/components/ops/OpsPanel'
@@ -17,6 +17,7 @@ import { useMenus, type MenuConPreparaciones } from '@/lib/hooks/useMenus'
 import { useChecklist } from '@/lib/hooks/useChecklist'
 import MenusView from './MenusView'
 import DesarrolloView from './DesarrolloView'
+import SatelitesView from './SatelitesView'
 import ComposicionEditor, { type CompPayload, type CompInicial } from './ComposicionEditor'
 import {
   upsertMiseChecklistItem, parseRecipienteNombre, TAREA_PRIO_TO_MISE,
@@ -317,7 +318,7 @@ function RentabilidadView({
 }
 
 // ── MAIN PAGE ───────────────────────────────────────────
-type View = 'list' | 'detail' | 'rentabilidad' | 'menus' | 'estandarizacion' | 'desarrollo'
+type View = 'list' | 'detail' | 'rentabilidad' | 'menus' | 'estandarizacion' | 'desarrollo' | 'satelites'
 
 export default function CartaPage() {
   const { items, loading, fetchItems, crearItem, actualizarItem, actualizarTags, toggleDisponible, eliminarItem, duplicarItem, agregarPlatoReceta, actualizarPlatoRecetaOpsCompleta, actualizarPlatoRecetaGramaje, eliminarPlatoReceta, agregarPlatoPackaging, eliminarPlatoPackaging, categorias } = useCarta()
@@ -353,6 +354,7 @@ export default function CartaPage() {
   // recetario completo (useRecetas) sí tiene la subreceta aunque no sea ella
   // misma un plato. Ver lib/recetas/estandarizacion.ts.
   const recetasPorId = useMemo(() => new Map(recetas.map(r => [r.id, r])), [recetas])
+  const nombreReceta = useCallback((id: string) => recetasPorId.get(id)?.nombre, [recetasPorId])
   const estandarizacion = useMemo(() => analizarCarta(items, recetasPorId), [items, recetasPorId])
 
   const [view, setView] = useState<View>('list')
@@ -369,6 +371,7 @@ export default function CartaPage() {
     if (view === 'estandarizacion' && !canEdit) setView('list')
     // Mismo cerrojo para En desarrollo (decisión 016): crear/editar fichas es de quien edita la carta.
     if (view === 'desarrollo' && !canEdit) setView('list')
+    if (view === 'satelites' && !canEdit) setView('list')
   }, [view, canEdit])
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [filter, setFilter] = useState<string>('Todas')
@@ -860,10 +863,22 @@ export default function CartaPage() {
         <DesarrolloView
           onBack={() => setView('list')}
           onToast={setToast}
-          nombreReceta={(id) => recetasPorId.get(id)?.nombre}
+          nombreReceta={nombreReceta}
         />
         {toast && <Toast msg={toast} onDone={() => setToast('')} />}
       </>
+    )
+  }
+
+  // ── Satélites — qué platos comparten bases (Fase 3 derivada, decisión 016) ──
+  if (view === 'satelites' && canEdit) {
+    return (
+      <SatelitesView
+        items={items}
+        nombreReceta={nombreReceta}
+        onBack={() => setView('list')}
+        onOpenPlato={(pid) => { setSelectedItemId(pid); setView('detail') }}
+      />
     )
   }
 
@@ -957,7 +972,7 @@ export default function CartaPage() {
             contenido quedaba absurdamente grande en desktop. */}
         <div style={{
           display: 'flex', gap: 4, background: 'rgba(255,255,255,0.1)',
-          borderRadius: 13, padding: 4, maxWidth: 420,
+          borderRadius: 13, padding: 4, maxWidth: 560,
         }}>
           <button onClick={() => setView('list')} style={{
             flex: 1, border: 'none', borderRadius: 10, padding: '9px 0', cursor: 'pointer',
@@ -978,6 +993,17 @@ export default function CartaPage() {
             <span className="material-symbols-outlined" style={{ fontSize: 17 }}>menu_book</span>
             Menús
           </button>
+          {canEdit && (
+            <button data-coach-target="carta-desarrollo" onClick={() => setView('desarrollo')} style={{
+              flex: 1, border: 'none', borderRadius: 10, padding: '9px 0', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
+              background: 'transparent', color: 'rgba(255,255,255,0.75)',
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 17 }}>edit_note</span>
+              En desarrollo
+            </button>
+          )}
         </div>
 
         {/* Utilidades — secundarias, discretas */}
@@ -991,17 +1017,6 @@ export default function CartaPage() {
             <span className="material-symbols-outlined" style={{ fontSize: 14 }}>upload_file</span>
             Importar
           </button>
-          {canEdit && (
-            <button data-coach-target="carta-desarrollo" onClick={() => setView('desarrollo')} style={{
-              background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,.15)',
-              borderRadius: 18, padding: '4px 11px', color: 'rgba(255,255,255,0.85)',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-              fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,
-            }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>edit_note</span>
-              En desarrollo
-            </button>
-          )}
           <button onClick={() => exportCartaPDF(items)} style={{
             background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,.15)',
             borderRadius: 18, padding: '4px 11px', color: 'rgba(255,255,255,0.85)',
@@ -1104,6 +1119,27 @@ export default function CartaPage() {
               </div>
             </div>
             <span className="material-symbols-outlined" style={{ fontSize: 18 }}>chevron_right</span>
+          </button>
+        </div>
+      )}
+
+      {/* Satélites shortcut — qué platos comparten bases (decisión 016, Fase 3 derivada). */}
+      {canEdit && items.some(i => i.plato_recetas.length > 0) && (
+        <div style={{ padding: '12px 16px 0' }}>
+          <button data-coach-target="carta-satelites" onClick={() => setView('satelites')} style={{
+            width: '100%', padding: '10px 14px', borderRadius: 10,
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', gap: 8,
+            cursor: 'pointer', color: 'var(--text-1)',
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-2)' }}>hub</span>
+            <div style={{ flex: 1, textAlign: 'left' }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Satélites</div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                Qué platos comparten bases y cuáles giran solos
+              </div>
+            </div>
+            <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)' }}>chevron_right</span>
           </button>
         </div>
       )}

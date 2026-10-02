@@ -1465,6 +1465,8 @@ export interface PreguntaDesarrollo {
   texto: string
   componente_id: string | null
   resuelta: boolean
+  /** Lo que el chef decidió en la prueba. Escribirla marca la pregunta como resuelta. */
+  respuesta?: string
 }
 
 export interface FichaDesarrollo {

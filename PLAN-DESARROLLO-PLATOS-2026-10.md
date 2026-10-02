@@ -196,7 +196,7 @@ Componente propio: `app/(app)/carta/DesarrolloView.tsx` (+ `FichaDesarrolloSheet
 - Al terminar una tanda, un resumen arriba: "10 platos · 23 preguntas abiertas · 4 usan bases
   que ya tenés (Fondo oscuro, Masa al huevo)".
 
-**Ficha (sheet).** Calca el boceto:
+**Ficha (sheet), orden por lo que el chef necesita primero (02/10):** componentes con ingredientes y cantidades a la izquierda y anotaciones + procedimiento a la derecha → armado → preguntas (se responden ahí mismo; responder la marca resuelta) → la idea. Calca el boceto:
 - Nombre · Descripción (la idea) · foto (subir/sacar con la cámara; mismo bucket que
   `carta_items.foto_url`).
 - **Componentes**, cada uno un bloque: encabezado con el nombre y, si está vinculado, chip
@@ -244,7 +244,10 @@ Medido con 3 notas reales contra la cuenta de pruebas: tarjetas en ~4 s, las 3 f
 - Dictado por voz (reusar lo de descripción de puesto).
 - Coach: screen context de la vista (`/coach-screen`).
 
-### Fase 3 — satélites (solo versión derivada, ver 016)
+### Fase 3 — satélites (solo versión derivada, ver 016) · PRIMERA ENTREGA 02/10/2026
+
+Construido: vista **Satélites** en Carta (atajo en la lista, gate canEdit): el plato del centro y alrededor los que comparten bases, más cerca = más bases en común; lista de qué comparte con cada uno, bases más compartidas de toda la carta, y platos que giran solos. Las ideas en desarrollo con componentes vinculados entran como satélites (borde punteado). Lógica pura en `lib/carta/satelites.ts` con tests; sin tabla nueva. **Todavía no:** el vínculo comercial marcado a mano ni el cruce con comandas (decisión propia). Detalle de la pantalla original abajo.
+
 Vista de órbitas: un plato principal al centro y alrededor los que comparten componentes con él
 (calculado de `plato_recetas` + las fichas en desarrollo). Sirve para ver qué mise nuevo agrega
 una idea y qué platos quedan sueltos. CSS posicionado, sin librerías de gráficos. El vínculo
