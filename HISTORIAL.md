@@ -6,6 +6,13 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-10-02 — Asistente F0 + F1, "crítico" → "bajo mínimo".**
+
+- "Crítico" contaba productos en cero (`stock_critico` en 0 casi siempre): 100 en El Rescoldo cuando lo real era 1. Una sola regla en `lib/stock/alerta.ts` + RPC `productos_bajo_minimo_count` (migraciones `20261001*`, la vieja `productos_criticos_count` borrada); la usan el contador, `/centro`, el panel del Coach, sus tools y el contexto del layout. Bros: 199 → 168.
+- Push de prueba confirmado en iPhone; `AVISOS_ACTIVOS=1` prendido a propósito. `/centro` commiteado (727c0d3).
+- F1: `AvisosPopup` (pastilla de avisos nuevos), `/avisos` (nuevos agrupados por tipo + anteriores + filtro), campana flotante mobile eliminada, `agruparAvisos` con tests (c1f6b04).
+- Decisión 8 del plan: lo urgente definido (ver `PLAN-ASISTENTE-2026-10.md` §7).
+
 **Sesión 2026-10-02 — Mise: respuesta al tap (bugs de uso real).**
 
 - "+" de mandar a producción (modo Control) no cambiaba hasta que volvía el insert: el cocinero tocaba de nuevo. Ahora `despachandoIds` local en `ClientView.tsx` apaga la fila en el acto (commit `4e361a6`).

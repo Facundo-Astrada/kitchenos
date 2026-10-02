@@ -63,17 +63,20 @@ legacy. Reimplementar sobre `tareas` **solo si el usuario los pide**.
 
 ---
 
-### Asistente al centro — F0 cerrado, sigue F1
-Plan completo en `PLAN-ASISTENTE-2026-10.md` (fases F0-F5 + C1-C4 "cerebro de la casa", reglas de
-aviso con evidencia, métrica rectora: cosas resueltas desde un aviso, no tiempo en la app).
-Decisiones cerradas 01/10 (§7). **El nombre del asistente cambia** y pasa a ser figura de marketing
-("el cerebro de la cocina"): se decide con el nombre de la marca en una sesión de Marketing.
-F0 cerrado 01/10: push llega al iPhone de Facundo, `/centro` commiteado, "crítico" reemplazado por
-"bajo mínimo" (`lib/stock/alerta.ts` + RPC `productos_bajo_minimo_count`), `AVISOS_ACTIVOS=1` prendido
-a propósito en Vercel. Falta de F0: Franco deja vigente el puesto de Compras en Bros (para F2).
-Próximo: F1 (popup de avisos + `/avisos`) → F2 (informe de stock a Compras al cerrar el conteo).
-Flecos del prototipo: el lienzo interpreta texto de las tools (pasar a `vista` estructurada si se
-queda), las vistas no se guardan con la conversación, mobile sin sheet.
+### Asistente al centro — F0 y F1 cerrados, sigue F2
+Plan completo en `PLAN-ASISTENTE-2026-10.md` (fases F0-F5 + C1-C4, decisiones §7, métrica rectora:
+cosas resueltas desde un aviso, no tiempo en la app). **El nombre del asistente cambia** y pasa a ser
+figura de marketing ("el cerebro de la cocina"): se decide con el nombre de la marca (agente `kos-marketing`).
+Próximo: **F2** (`asistente_rutinas` + motor determinístico + conteo cerrado → informe a Compras con
+análisis Haiku; receta modificada → equipo de la plaza). Antes: Franco deja vigente la descripción del
+puesto de Compras en Bros. Hay que sumar los tipos de aviso nuevos a `ETIQUETAS` en
+`lib/notificaciones/agrupar.ts`. Reglas de F2 ya decididas (§7.8): sin silencio en servicio; único
+urgente = falta de producto clave (derivado de la carta del día, va al puesto Compras, ⚠ en el título,
+sin repetir ni escalar). A definir al construir: disparar con stock en cero o bajo mínimo; el 12 % de
+ingredientes sin producto vinculado en Bros no dispara el aviso (lo lista C2). Falta el "¿por qué me
+llegó?" de F1: depende de `asistente_rutinas`.
+Flecos del prototipo `/centro`: el lienzo interpreta texto de las tools (pasar a `vista` estructurada
+si se queda), las vistas no se guardan con la conversación, mobile sin sheet.
 
 ---
 

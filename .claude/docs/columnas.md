@@ -2,7 +2,7 @@
 
 | Tabla | Columna correcta | NO usar |
 |---|---|---|
-| `productos` | `stock_actual`, `stock_minimo`, `stock_critico` (NOT NULL, DEFAULT 0 — resetear con `0`, nunca `null`) | `cantidad` |
+| `productos` | `stock_actual`, `stock_minimo`, `stock_critico` (NOT NULL, DEFAULT 0 — resetear con `0`, nunca `null`). `stock_critico` está en 0 casi siempre: no usarlo para alertar — la alerta es `bajoMinimo()` (`lib/stock/alerta.ts`, o la RPC `productos_bajo_minimo_count`): solo cuenta productos con `stock_minimo > 0` y no `fuera_de_uso` | `cantidad` |
 | `productos` | `precio_unitario` | `precio` |
 | `productos` | `es_produccion BOOLEAN` + `receta_id UUID NULL` — producción interna: costo sale de la receta vinculada, no de factura | — |
 | `productos` | `sector_id UUID NULL` (FK `stock_sectores`) — sector físico. `fuera_de_uso BOOLEAN` — sigue en el valor del stock pero `calcEstado` lo fuerza a `'ok'` (sin alertas), excluido de sugerencias y del recorrido de Stockear | — |

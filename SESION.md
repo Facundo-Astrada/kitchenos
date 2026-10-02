@@ -1,18 +1,17 @@
-# Sesión — 02/10/2026 (Mise: respuesta al tap)
+# Sesión — 02/10/2026 (asistente: F0 + F1)
 
 ## Qué se cerró
-- "+" a producción del Mise (modo Control) se apaga en el mismo tap, sin esperar el insert.
-- Entregar plaza abre el pase al instante (entrega optimista en `useCierresTurno`).
-- Sin botón copiar en la barra de cierre del Mise; el pase sale solo al entregar.
-- En paralelo (otra sesión, ya commiteado): F0 del asistente cerrado y F1 (popup de avisos + `/avisos`).
+- F0: push de prueba llegó al iPhone; `/centro` commiteado; "crítico" → "bajo mínimo" en todo el Coach (`lib/stock/alerta.ts` + RPC `productos_bajo_minimo_count`; la vieja se borró). `AVISOS_ACTIVOS=1` está prendido a propósito.
+- F1: pastilla de avisos nuevos (`AvisosPopup`) + bandeja `/avisos` agrupada por tipo; campana mobile fuera, acceso desde Perfil y sidebar.
+- Decisión 8 del plan: lo urgente = falta de producto clave (derivado de la carta del día) → puesto Compras, "⚠", sin silencio en servicio ni repetición.
 
 ## Qué quedó a medias
-- Sin probar en el celular las tres correcciones del Mise.
-- Modo normal del Mise (tarjeta completa, no Control): puede tener la misma demora al mandar a producción — sin revisar.
-- Bros: Franco tiene que dejar vigente la descripción del puesto de Compras (destinatario de F2 del asistente).
+- Franco tiene que dejar vigente la descripción del puesto de Compras en Bros (destinatario de F2).
+- "¿Por qué me llegó?" de F1: espera a `asistente_rutinas` (F2).
+- Test `ratchets` falla: `checklist/ClientView.tsx` 3166 líneas vs techo 3145 (de otra sesión, no tocado).
 
 ## Probar primero mañana
-- En Bros, celular con 4G: tocar "+" una vez en Control (ámbar al instante) y entregar un cierre completo (pase sin espera).
+- Abrir la app en Bros y ver la pastilla con el aviso de prueba; revisar `/avisos` en celular y desktop (F1 no se vio en pantalla, solo typecheck/lint/tests).
 
 ## Próximo paso concreto
-- `/model sonnet` → F2 del asistente (`PLAN-ASISTENTE-2026-10.md`), salvo que la prueba del Mise muestre la demora también en modo normal.
+- F2: pasar `asistente_rutinas` por `db-designer`, motor determinístico, conteo cerrado → informe a Compras (Haiku). Definir si el urgente dispara con stock en cero o bajo mínimo. Sumar tipos nuevos a `ETIQUETAS` en `lib/notificaciones/agrupar.ts`.
