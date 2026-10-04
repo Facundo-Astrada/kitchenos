@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import type { ProductoConEstado } from '@/lib/hooks/useStock'
-import type { StockSector, StockEstante } from '@/types'
+import type { StockSector, StockEstante, StockGrupo } from '@/types'
 
 const ESTADO_COLOR: Record<ProductoConEstado['estado'], string> = {
   critico: 'var(--red-fg)',
@@ -11,29 +11,41 @@ const ESTADO_COLOR: Record<ProductoConEstado['estado'], string> = {
   ok: 'var(--text-3)',
 }
 
+const ESTADO_LABEL: Record<ProductoConEstado['estado'], string> = {
+  critico: 'Sin stock',
+  bajo: 'Bajo mínimo',
+  alto: 'Stock alto',
+  ok: 'Stock ok',
+}
+
 interface Props {
   producto: ProductoConEstado
   isDragging: boolean
   selected: boolean
   sectores: StockSector[]
   estantes: StockEstante[]
+  grupos: StockGrupo[]
   registerCardRef: (id: string, el: HTMLElement | null) => void
   onDragStart: (p: ProductoConEstado) => void
   onDragMove: (x: number, y: number) => void
   onDragEnd: () => void
-  onMoverA: (productoId: string, sectorId: string | null, estanteId: string | null) => void
+  onMoverA: (productoId: string, sectorId: string | null, estanteId: string | null, grupoId: string | null) => void
   onEliminar: (productoId: string) => void
   onToggleSelect: (productoId: string) => void
 }
 
-export default function StockBoardCard({ producto, isDragging, selected, sectores, estantes, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA, onEliminar, onToggleSelect }: Props) {
+export default function StockBoardCard({ producto, isDragging, selected, sectores, estantes, grupos, registerCardRef, onDragStart, onDragMove, onDragEnd, onMoverA, onEliminar, onToggleSelect }: Props) {
   const start = useRef<{ x: number; y: number } | null>(null)
   const active = useRef(false)
   const [showMenu, setShowMenu] = useState(false)
   const [moverSector, setMoverSector] = useState('')
   const [moverEstante, setMoverEstante] = useState('')
+  const [moverGrupo, setMoverGrupo] = useState('')
 
   const estantesDelSectorElegido = estantes.filter(e => e.sector_id === moverSector)
+  const gruposDelLugarElegido = grupos
+    .filter(g => g.sector_id === moverSector && (g.estante_id ?? '') === moverEstante)
+    .sort((a, b) => a.orden - b.orden)
 
   function onPointerDown(e: React.PointerEvent) {
     if ((e.target as HTMLElement).closest('[data-no-drag]')) return
@@ -68,11 +80,12 @@ export default function StockBoardCard({ producto, isDragging, selected, sectore
   function abrirMenu() {
     setMoverSector(producto.sector_id ?? '')
     setMoverEstante(producto.estante_id ?? '')
+    setMoverGrupo(producto.stock_grupo_id ?? '')
     setShowMenu(true)
   }
 
   function confirmarMover() {
-    onMoverA(producto.id, moverSector || null, moverEstante || null)
+    onMoverA(producto.id, moverSector || null, moverEstante || null, moverGrupo || null)
     setShowMenu(false)
   }
 
@@ -90,8 +103,9 @@ export default function StockBoardCard({ producto, isDragging, selected, sectore
       onPointerCancel={endDrag}
       style={{
         position: 'relative',
-        display: 'flex', alignItems: 'center', gap: 6,
-        padding: '7px 8px', borderRadius: 8,
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '9px 8px 9px 6px', borderRadius: 9,
+        boxShadow: isDragging ? 'none' : '0 1px 2px rgba(0,0,0,.04)',
         background: selected ? 'color-mix(in srgb, var(--accent) 14%, var(--surface))' : 'var(--surface)',
         border: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
         cursor: isDragging ? 'grabbing' : 'grab',
@@ -99,11 +113,11 @@ export default function StockBoardCard({ producto, isDragging, selected, sectore
         touchAction: 'none', userSelect: 'none',
       }}
     >
-      <span className="material-symbols-outlined" style={{ fontSize: 15, color: selected ? 'var(--accent)' : 'var(--text-3)', flexShrink: 0 }}>
+      <span className="material-symbols-outlined" style={{ fontSize: 16, color: selected ? 'var(--accent)' : 'var(--text-3)', opacity: selected ? 1 : 0.6, flexShrink: 0 }}>
         {selected ? 'check_box' : 'drag_indicator'}
       </span>
-      <span style={{ width: 6, height: 6, borderRadius: 99, background: ESTADO_COLOR[producto.estado], flexShrink: 0 }} />
-      <span style={{ fontSize: 12.5, color: 'var(--text-1)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <span title={ESTADO_LABEL[producto.estado]} style={{ width: 7, height: 7, borderRadius: 99, background: ESTADO_COLOR[producto.estado], flexShrink: 0 }} />
+      <span style={{ fontSize: 13.5, color: 'var(--text-1)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {producto.nombre}
       </span>
       <button
@@ -123,7 +137,7 @@ export default function StockBoardCard({ producto, isDragging, selected, sectore
           <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Mover a…</span>
           <select
             value={moverSector}
-            onChange={e => { setMoverSector(e.target.value); setMoverEstante('') }}
+            onChange={e => { setMoverSector(e.target.value); setMoverEstante(''); setMoverGrupo('') }}
             style={{ fontSize: 12, padding: '6px 8px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', fontFamily: 'inherit', cursor: 'pointer' }}
           >
             <option value="">Sin sector</option>
@@ -132,11 +146,21 @@ export default function StockBoardCard({ producto, isDragging, selected, sectore
           {moverSector && estantesDelSectorElegido.length > 0 && (
             <select
               value={moverEstante}
-              onChange={e => setMoverEstante(e.target.value)}
+              onChange={e => { setMoverEstante(e.target.value); setMoverGrupo('') }}
               style={{ fontSize: 12, padding: '6px 8px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', fontFamily: 'inherit', cursor: 'pointer' }}
             >
               <option value="">Sin estante</option>
               {estantesDelSectorElegido.map(es => <option key={es.id} value={es.id}>{es.nombre}</option>)}
+            </select>
+          )}
+          {moverSector && gruposDelLugarElegido.length > 0 && (
+            <select
+              value={moverGrupo}
+              onChange={e => setMoverGrupo(e.target.value)}
+              style={{ fontSize: 12, padding: '6px 8px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', fontFamily: 'inherit', cursor: 'pointer' }}
+            >
+              <option value="">Sin grupo</option>
+              {gruposDelLugarElegido.map(g => <option key={g.id} value={g.id}>{g.nombre}</option>)}
             </select>
           )}
           <button

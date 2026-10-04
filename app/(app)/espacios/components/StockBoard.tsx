@@ -4,8 +4,10 @@ import { useRef, useState, useCallback, useMemo, useEffect } from 'react'
 import { useStock, type ProductoConEstado } from '@/lib/hooks/useStock'
 import { useStockSectores } from '@/lib/hooks/useStockSectores'
 import { useStockEstantes } from '@/lib/hooks/useStockEstantes'
+import { useStockGrupos } from '@/lib/hooks/useStockGrupos'
+import { bloquesDeEstante } from '@/lib/stock/recorrido'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
-import StockBoardColumn, { StockBoardCollapsedChip, SECTOR_ICONOS } from './StockBoardColumn'
+import StockBoardColumn, { StockBoardCollapsedChip, SECTOR_ICONOS, type BoardCtx } from './StockBoardColumn'
 import { EmptyState } from '@/components/ui'
 
 const SIN_SECTOR_KEY = '__sin_sector__'
@@ -14,17 +16,18 @@ const AUTOSCROLL_MAX_SPEED = 16
 
 export default function StockBoard() {
   const RESTAURANTE_ID = useRestauranteId()
-  const { productos, loading: loadingStock, moverProductosBoard, eliminarProducto } = useStock()
+  const { productos, loading: loadingStock, moverProductosBoard, eliminarProducto, refetch: refetchProductos } = useStock()
   const { sectores, loading: loadingSec, agregarSector, eliminarSector, actualizarSector } = useStockSectores()
   const { estantes, loading: loadingEst, agregarEstante, renombrarEstante, eliminarEstante, reordenarEstantes } = useStockEstantes()
+  const { grupos, loading: loadingGru, agregarGrupo, renombrarGrupo, eliminarGrupo, reordenarGrupos, refetch: refetchGrupos } = useStockGrupos()
 
-  const loading = loadingStock || loadingSec || loadingEst
+  const loading = loadingStock || loadingSec || loadingEst || loadingGru
 
   // ── Drag state ──
   const [draggingProducto, setDraggingProducto] = useState<ProductoConEstado | null>(null)
   const [ghostPos, setGhostPos] = useState<{ x: number; y: number } | null>(null)
   const [overZoneKey, setOverZoneKey] = useState<string | null>(null)
-  const dropZonesRef = useRef<Map<string, { el: HTMLElement; sectorId: string | null; estanteId: string | null }>>(new Map())
+  const dropZonesRef = useRef<Map<string, { el: HTMLElement; sectorId: string | null; estanteId: string | null; grupoId: string | null }>>(new Map())
   const cardRefsRef = useRef<Map<string, HTMLElement>>(new Map())
   const lastPointerRef = useRef({ x: 0, y: 0 })
 
@@ -75,6 +78,8 @@ export default function StockBoard() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkSector, setBulkSector] = useState('')
   const [bulkEstante, setBulkEstante] = useState('')
+  const [bulkGrupo, setBulkGrupo] = useState('')
+  const [nombreGrupoNuevo, setNombreGrupoNuevo] = useState('')
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds(prev => {
       const next = new Set(prev)
@@ -84,7 +89,7 @@ export default function StockBoard() {
   }, [])
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set())
-    setBulkSector(''); setBulkEstante('')
+    setBulkSector(''); setBulkEstante(''); setBulkGrupo(''); setNombreGrupoNuevo('')
   }, [])
 
   // ── Nuevo sector ──
@@ -103,8 +108,19 @@ export default function StockBoard() {
     q ? productosOrdenados.filter(p => p.nombre.toLowerCase().includes(q)) : productosOrdenados
   , [productosOrdenados, q])
 
-  const registerDropZone = useCallback((key: string, el: HTMLElement | null, sectorId: string | null, estanteId: string | null) => {
-    if (el) dropZonesRef.current.set(key, { el, sectorId, estanteId })
+  // Productos de un lugar (sector + estante + grupo) en el orden en que se ven
+  // — el mismo que usa el board para dibujar y Stockear para recorrer.
+  const productosDeZona = useCallback((sectorId: string | null, estanteId: string | null, grupoId: string | null, excluir?: Set<string>) => {
+    const delLugar = productosOrdenados.filter(p =>
+      (p.sector_id ?? null) === sectorId && (p.estante_id ?? null) === estanteId && !excluir?.has(p.id))
+    const gruposAca = sectorId ? grupos.filter(g => g.sector_id === sectorId && (g.estante_id ?? null) === estanteId) : []
+    const bloques = bloquesDeEstante(delLugar, gruposAca)
+    const bloque = grupoId ? bloques.find(b => b.grupo?.id === grupoId) : bloques[bloques.length - 1]
+    return bloque?.productos ?? []
+  }, [productosOrdenados, grupos])
+
+  const registerDropZone = useCallback((key: string, el: HTMLElement | null, sectorId: string | null, estanteId: string | null, grupoId: string | null) => {
+    if (el) dropZonesRef.current.set(key, { el, sectorId, estanteId, grupoId })
     else dropZonesRef.current.delete(key)
   }, [])
   const registerCardRef = useCallback((id: string, el: HTMLElement | null) => {
@@ -150,63 +166,111 @@ export default function StockBoard() {
     if (!dragged || !key) return
     const zone = dropZonesRef.current.get(key)
     if (!zone) return
-    const { sectorId: targetSectorId, estanteId: targetEstanteId } = zone
+    const { sectorId, estanteId, grupoId } = zone
 
-    const bucketIds = productosOrdenados
-      .filter(p => (p.sector_id ?? null) === targetSectorId && (p.estante_id ?? null) === targetEstanteId && p.id !== dragged.id)
-      .map(p => p.id)
+    const bucketIds = productosDeZona(sectorId, estanteId, grupoId, new Set([dragged.id])).map(p => p.id)
     const insertIdx = computeInsertIndex(bucketIds, lastPointerRef.current.y)
     const newOrder = [...bucketIds.slice(0, insertIdx), dragged.id, ...bucketIds.slice(insertIdx)]
 
     try {
-      await moverProductosBoard(newOrder.map((id, idx) => ({ id, sector_id: targetSectorId, estante_id: targetEstanteId, orden_sector: idx })))
+      await moverProductosBoard(newOrder.map((id, idx) => ({ id, sector_id: sectorId, estante_id: estanteId, stock_grupo_id: grupoId, orden_sector: idx })))
     } catch (e) {
       console.error('[StockBoard] error moviendo producto', e)
     }
-  }, [draggingProducto, overZoneKey, productosOrdenados, moverProductosBoard])
+  }, [draggingProducto, overZoneKey, productosDeZona, moverProductosBoard])
 
-  const onMoverA = useCallback(async (productoId: string, sectorId: string | null, estanteId: string | null) => {
-    const bucketIds = productosOrdenados
-      .filter(p => (p.sector_id ?? null) === sectorId && (p.estante_id ?? null) === estanteId && p.id !== productoId)
-      .map(p => p.id)
-    const nuevoOrden = [...bucketIds, productoId]
-    try {
-      await moverProductosBoard(nuevoOrden.map((id, idx) => ({ id, sector_id: sectorId, estante_id: estanteId, orden_sector: idx })))
-    } catch (e) {
-      console.error('[StockBoard] error en Mover a…', e)
-    }
-  }, [productosOrdenados, moverProductosBoard])
+  // Agrega productos al final de un lugar, conservando el orden del resto.
+  const moverAlFinal = useCallback(async (ids: string[], sectorId: string | null, estanteId: string | null, grupoId: string | null) => {
+    const bucketIds = productosDeZona(sectorId, estanteId, grupoId, new Set(ids)).map(p => p.id)
+    const nuevoOrden = [...bucketIds, ...ids]
+    await moverProductosBoard(nuevoOrden.map((id, idx) => ({ id, sector_id: sectorId, estante_id: estanteId, stock_grupo_id: grupoId, orden_sector: idx })))
+  }, [productosDeZona, moverProductosBoard])
+
+  const onMoverA = useCallback(async (productoId: string, sectorId: string | null, estanteId: string | null, grupoId: string | null) => {
+    try { await moverAlFinal([productoId], sectorId, estanteId, grupoId) } catch (e) { console.error('[StockBoard] error en Mover a…', e) }
+  }, [moverAlFinal])
+
+  // Los seleccionados, en el orden en que se ven en el board.
+  const seleccionadosEnOrden = useCallback(() =>
+    productosOrdenados.filter(p => selectedIds.has(p.id))
+  , [productosOrdenados, selectedIds])
 
   const onMoverSeleccionados = useCallback(async () => {
-    const ids = Array.from(selectedIds)
+    const ids = seleccionadosEnOrden().map(p => p.id)
     if (ids.length === 0) return
-    const sectorId = bulkSector || null
-    const estanteId = bulkEstante || null
-    const bucketIds = productosOrdenados
-      .filter(p => (p.sector_id ?? null) === sectorId && (p.estante_id ?? null) === estanteId && !selectedIds.has(p.id))
-      .map(p => p.id)
-    const nuevoOrden = [...bucketIds, ...ids]
     try {
-      await moverProductosBoard(nuevoOrden.map((id, idx) => ({ id, sector_id: sectorId, estante_id: estanteId, orden_sector: idx })))
+      await moverAlFinal(ids, bulkSector || null, bulkEstante || null, bulkGrupo || null)
       clearSelection()
     } catch (e) {
       console.error('[StockBoard] error moviendo seleccionados', e)
     }
-  }, [selectedIds, bulkSector, bulkEstante, productosOrdenados, moverProductosBoard, clearSelection])
+  }, [seleccionadosEnOrden, bulkSector, bulkEstante, bulkGrupo, moverAlFinal, clearSelection])
 
-  const onOrdenarColumna = useCallback(async (sectorId: string | null) => {
-    const buckets = new Set<string | null>([null])
-    if (sectorId) estantes.filter(e => e.sector_id === sectorId).forEach(e => buckets.add(e.id))
-    const cambios: Array<{ id: string; sector_id: string | null; estante_id: string | null; orden_sector: number }> = []
-    for (const estanteId of buckets) {
-      const bucket = productosOrdenados.filter(p => (p.sector_id ?? null) === sectorId && (p.estante_id ?? null) === estanteId)
-      const alfabetico = [...bucket].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
-      alfabetico.forEach((p, i) => cambios.push({ id: p.id, sector_id: sectorId, estante_id: estanteId, orden_sector: i }))
+  // "Agrupar": crea un grupo con nombre en el lugar del primer seleccionado
+  // (su sector + estante) y mete ahí a todos los seleccionados.
+  const lugarAgrupar = useMemo(() => {
+    const primero = productosOrdenados.find(p => selectedIds.has(p.id))
+    return primero?.sector_id ? { sectorId: primero.sector_id, estanteId: primero.estante_id ?? null } : null
+  }, [productosOrdenados, selectedIds])
+
+  const onAgruparSeleccionados = useCallback(async () => {
+    if (!lugarAgrupar || !nombreGrupoNuevo.trim()) return
+    const ids = seleccionadosEnOrden().map(p => p.id)
+    try {
+      const grupo = await agregarGrupo(lugarAgrupar.sectorId, lugarAgrupar.estanteId, nombreGrupoNuevo.trim())
+      if (!grupo) return
+      await moverProductosBoard(ids.map((id, idx) => ({ id, sector_id: lugarAgrupar.sectorId, estante_id: lugarAgrupar.estanteId, stock_grupo_id: grupo.id, orden_sector: idx })))
+      clearSelection()
+    } catch (e) {
+      console.error('[StockBoard] error agrupando', e)
+    }
+  }, [lugarAgrupar, nombreGrupoNuevo, seleccionadosEnOrden, agregarGrupo, moverProductosBoard, clearSelection])
+
+  // A-Z dentro de cada grupo de cada estante — no mezcla grupos ni estantes.
+  // Pisa el orden manual, por eso pide confirmación.
+  const onOrdenarColumna = useCallback(async (sectorId: string | null, nombre: string) => {
+    if (!confirm(`¿Ordenar "${nombre}" de la A a la Z? Se pierde el orden que armaste a mano (los grupos y estantes se mantienen).`)) return
+    const lugares: Array<string | null> = [null, ...(sectorId ? estantes.filter(e => e.sector_id === sectorId).map(e => e.id) : [])]
+    const cambios: Array<{ id: string; sector_id: string | null; estante_id: string | null; stock_grupo_id: string | null; orden_sector: number }> = []
+    for (const estanteId of lugares) {
+      const gruposAca = sectorId ? grupos.filter(g => g.sector_id === sectorId && (g.estante_id ?? null) === estanteId) : []
+      for (const grupoId of [null, ...gruposAca.map(g => g.id)]) {
+        const alfabetico = [...productosDeZona(sectorId, estanteId, grupoId)].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+        alfabetico.forEach((p, i) => cambios.push({ id: p.id, sector_id: sectorId, estante_id: estanteId, stock_grupo_id: grupoId, orden_sector: i }))
+      }
     }
     if (cambios.length) {
       try { await moverProductosBoard(cambios) } catch (e) { console.error('[StockBoard] error ordenando columna', e) }
     }
-  }, [productosOrdenados, estantes, moverProductosBoard])
+  }, [estantes, grupos, productosDeZona, moverProductosBoard])
+
+  const onReordenarGrupo = useCallback(async (id: string, dir: 1 | -1) => {
+    const gr = grupos.find(g => g.id === id)
+    if (!gr) return
+    const hermanos = grupos
+      .filter(g => g.sector_id === gr.sector_id && (g.estante_id ?? null) === (gr.estante_id ?? null))
+      .sort((a, b) => a.orden - b.orden)
+    const idx = hermanos.findIndex(g => g.id === id)
+    const swapIdx = idx + dir
+    if (swapIdx < 0 || swapIdx >= hermanos.length) return
+    const ids = hermanos.map(g => g.id)
+    ;[ids[idx], ids[swapIdx]] = [ids[swapIdx], ids[idx]]
+    try { await reordenarGrupos(ids) } catch (e) { console.error('[StockBoard] error reordenando grupos', e) }
+  }, [grupos, reordenarGrupos])
+
+  // Borrar un grupo o un estante suelta productos por FK (SET NULL / cascada):
+  // hay que volver a pedir productos (y grupos) para que el board lo refleje.
+  const handleEliminarGrupo = useCallback(async (id: string) => {
+    try { await eliminarGrupo(id); refetchProductos() } catch (e) { console.error('[StockBoard] error eliminando grupo', e) }
+  }, [eliminarGrupo, refetchProductos])
+
+  const handleEliminarEstante = useCallback(async (id: string) => {
+    try { await eliminarEstante(id); refetchGrupos(); refetchProductos() } catch (e) { console.error('[StockBoard] error eliminando estante', e) }
+  }, [eliminarEstante, refetchGrupos, refetchProductos])
+
+  const handleAgregarGrupo = useCallback(async (sectorId: string, estanteId: string | null, nombre: string) => {
+    try { await agregarGrupo(sectorId, estanteId, nombre) } catch (e) { console.error('[StockBoard] error creando grupo', e) }
+  }, [agregarGrupo])
 
   const onReordenarEstante = useCallback(async (id: string, dir: 1 | -1) => {
     const est = estantes.find(e => e.id === id)
@@ -249,21 +313,45 @@ export default function StockBoard() {
     try { await actualizarSector(sectorId, { nombre, icono }) } catch (e) { console.error('[StockBoard] error editando sector', e) }
   }
 
+  const ctx: BoardCtx = useMemo(() => ({
+    sectores, estantes, grupos, overZoneKey, selectedIds,
+    draggingId: draggingProducto?.id ?? null,
+    registerDropZone, registerCardRef, onDragStart, onDragMove, onDragEnd,
+    onToggleSelect: toggleSelect,
+    onMoverA,
+    onEliminarProducto: handleEliminarProducto,
+    onAgregarEstante: agregarEstante,
+    onRenombrarEstante: renombrarEstante,
+    onEliminarEstante: handleEliminarEstante,
+    onReordenarEstante,
+    onAgregarGrupo: handleAgregarGrupo,
+    onRenombrarGrupo: renombrarGrupo,
+    onEliminarGrupo: handleEliminarGrupo,
+    onReordenarGrupo,
+  }), [sectores, estantes, grupos, overZoneKey, selectedIds, draggingProducto, registerDropZone, registerCardRef,
+    onDragStart, onDragMove, onDragEnd, toggleSelect, onMoverA, handleEliminarProducto, agregarEstante, renombrarEstante,
+    handleEliminarEstante, onReordenarEstante, handleAgregarGrupo, renombrarGrupo, handleEliminarGrupo, onReordenarGrupo])
+
   if (loading) {
     return <p style={{ color: 'var(--text-3)', fontSize: 14, padding: 24 }}>Cargando board de stock…</p>
   }
 
+  const estantesBulk = estantes.filter(e => e.sector_id === bulkSector).sort((a, b) => a.orden - b.orden)
+  const gruposBulk = bulkSector
+    ? grupos.filter(g => g.sector_id === bulkSector && (g.estante_id ?? '') === bulkEstante).sort((a, b) => a.orden - b.orden)
+    : []
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      {/* Buscador */}
-      <div style={{ padding: '0 4px 14px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 12px', maxWidth: 360 }}>
+      {/* Buscador + ayuda */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '0 4px 14px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '9px 12px', width: 360, maxWidth: '100%' }}>
           <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)' }}>search</span>
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar producto para ubicarlo…"
-            style={{ border: 'none', outline: 'none', background: 'none', flex: 1, fontSize: 13, color: 'var(--text-1)', fontFamily: 'inherit' }}
+            style={{ border: 'none', outline: 'none', background: 'none', flex: 1, minWidth: 0, fontSize: 13, color: 'var(--text-1)', fontFamily: 'inherit' }}
           />
           {search && (
             <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}>
@@ -271,16 +359,11 @@ export default function StockBoard() {
             </button>
           )}
         </div>
-        {q && selectedIds.size === 0 && (
-          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '6px 2px 0' }}>
-            {productosVisibles.length} resultado{productosVisibles.length !== 1 ? 's' : ''} — arrastrar está desactivado con un filtro activo, usá el menú &quot;⋮&quot; de cada producto para moverlo.
-          </p>
-        )}
-        {selectedIds.size === 0 && !q && (
-          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '6px 2px 0' }}>
-            Ctrl+clic (⌘+clic en Mac) sobre varios productos para seleccionarlos y moverlos juntos.
-          </p>
-        )}
+        <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, flex: 1, minWidth: 240 }}>
+          {q && selectedIds.size === 0
+            ? <>{productosVisibles.length} resultado{productosVisibles.length !== 1 ? 's' : ''} — con un filtro activo no se arrastra; usá el menú &quot;⋮&quot; de cada producto.</>
+            : <>Arrastrá para dejar cada producto donde está en la realidad — ese orden es el recorrido de Stockear. <b style={{ fontWeight: 600 }}>Ctrl+clic</b> (⌘ en Mac) para elegir varios y agruparlos.</>}
+        </p>
       </div>
 
       {/* Explicación — solo mientras no hay ningún sector creado todavía */}
@@ -289,42 +372,61 @@ export default function StockBoard() {
           <EmptyState
             icon="shelves"
             title="Organizá el stock por sectores"
-            subtitle="Un sector es un lugar físico donde guardás mercadería — ej: Materia prima seca, Cámara de frío, Freezer (producto terminado), Depósito de packaging. Arrastrá productos entre sectores para ubicarlos."
+            subtitle="Un sector es un lugar físico donde guardás mercadería — ej: Materia prima seca, Cámara de frío, Freezer (producto terminado), Depósito de packaging. Adentro armás estantes y grupos (Vinagres, Aceites, Latas…) en el orden en que los recorrés."
             cta={{ label: 'Crear mi primer sector', onClick: () => setAddingSector(true) }}
           />
         </div>
       )}
 
-      {/* Barra de selección múltiple */}
+      {/* Barra de selección múltiple: agrupar o mover */}
       {selectedIds.size > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '8px 12px', margin: '0 4px 14px', background: 'color-mix(in srgb, var(--accent) 8%, var(--surface))', border: '1px solid var(--accent)', borderRadius: 10, flexShrink: 0 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)', whiteSpace: 'nowrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '9px 12px', margin: '0 4px 14px', background: 'color-mix(in srgb, var(--accent) 8%, var(--surface))', border: '1px solid var(--accent)', borderRadius: 12, flexShrink: 0 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-1)', whiteSpace: 'nowrap' }}>
             {selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}
           </span>
-          <select
-            value={bulkSector}
-            onChange={e => { setBulkSector(e.target.value); setBulkEstante('') }}
-            style={{ fontSize: 12, padding: '6px 8px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', fontFamily: 'inherit', cursor: 'pointer' }}
-          >
-            <option value="">Sin sector</option>
-            {sectores.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-          </select>
-          {bulkSector && estantes.filter(e => e.sector_id === bulkSector).length > 0 && (
-            <select
-              value={bulkEstante}
-              onChange={e => setBulkEstante(e.target.value)}
-              style={{ fontSize: 12, padding: '6px 8px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', fontFamily: 'inherit', cursor: 'pointer' }}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              value={nombreGrupoNuevo}
+              onChange={e => setNombreGrupoNuevo(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') onAgruparSeleccionados() }}
+              disabled={!lugarAgrupar}
+              placeholder={lugarAgrupar ? 'Nombre del grupo (ej: Aceites)' : 'Primero ubicalos en un sector'}
+              style={{ ...selectSm, width: 210, cursor: 'text' }}
+            />
+            <button
+              onClick={onAgruparSeleccionados}
+              disabled={!lugarAgrupar || !nombreGrupoNuevo.trim()}
+              title="Crea el grupo en el estante del primer seleccionado y los junta ahí, en el orden en que están"
+              style={{ ...btnPrimario, opacity: !lugarAgrupar || !nombreGrupoNuevo.trim() ? 0.45 : 1 }}
             >
-              <option value="">Sin estante</option>
-              {estantes.filter(e => e.sector_id === bulkSector).map(es => <option key={es.id} value={es.id}>{es.nombre}</option>)}
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>link</span>
+              Agrupar
+            </button>
+          </div>
+
+          <span style={{ width: 1, height: 22, background: 'var(--border)' }} />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <select value={bulkSector} onChange={e => { setBulkSector(e.target.value); setBulkEstante(''); setBulkGrupo('') }} style={selectSm}>
+              <option value="">Sin sector</option>
+              {sectores.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
             </select>
-          )}
-          <button
-            onClick={onMoverSeleccionados}
-            style={{ padding: '7px 14px', borderRadius: 7, border: 'none', background: 'var(--navy)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
-          >
-            Mover
-          </button>
+            {bulkSector && estantesBulk.length > 0 && (
+              <select value={bulkEstante} onChange={e => { setBulkEstante(e.target.value); setBulkGrupo('') }} style={selectSm}>
+                <option value="">Sin estante</option>
+                {estantesBulk.map(es => <option key={es.id} value={es.id}>{es.nombre}</option>)}
+              </select>
+            )}
+            {gruposBulk.length > 0 && (
+              <select value={bulkGrupo} onChange={e => setBulkGrupo(e.target.value)} style={selectSm}>
+                <option value="">Sin grupo</option>
+                {gruposBulk.map(g => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+              </select>
+            )}
+            <button onClick={onMoverSeleccionados} style={{ ...btnPrimario, background: 'var(--navy)' }}>Mover</button>
+          </div>
+
           <button
             onClick={clearSelection}
             title="Cancelar selección"
@@ -335,7 +437,7 @@ export default function StockBoard() {
         </div>
       )}
 
-      {/* Sectores colapsados: fila de chips que se acomodan solos (wrap), no
+      {/* Sectores plegados: fila de chips que se acomodan solos (wrap), no
           ocupan toda la altura del board como las tiras verticales de antes. */}
       {(collapsedIds.has(SIN_SECTOR_KEY) || sectores.some(s => collapsedIds.has(s.id))) && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '0 4px 14px', flexShrink: 0 }}>
@@ -364,35 +466,19 @@ export default function StockBoard() {
         </div>
       )}
 
-      {/* Columnas expandidas */}
+      {/* Columnas desplegadas */}
       <div ref={boardScrollRef} style={{ flex: 1, minHeight: 0, overflowX: 'auto', overflowY: 'hidden' }}>
-        <div style={{ display: 'flex', gap: 14, height: '100%', paddingBottom: 8 }}>
+        <div style={{ display: 'flex', gap: 14, height: '100%', paddingBottom: 8, alignItems: 'flex-start' }}>
           {!collapsedIds.has(SIN_SECTOR_KEY) && (
             <StockBoardColumn
+              ctx={ctx}
               sectorId={null}
               nombre="Sin sector"
               estantesDelSector={[]}
               productosSinEstante={productosVisibles.filter(p => !p.sector_id)}
               productosPorEstante={new Map()}
-              sectoresTodos={sectores}
-              estantesTodos={estantes}
-              overZoneKey={overZoneKey}
-              draggingId={draggingProducto?.id ?? null}
-              registerDropZone={registerDropZone}
-              registerCardRef={registerCardRef}
-              onDragStart={onDragStart}
-              onDragMove={onDragMove}
-              onDragEnd={onDragEnd}
-              onMoverA={onMoverA}
-              onEliminarProducto={handleEliminarProducto}
-              onAgregarEstante={agregarEstante}
-              onRenombrarEstante={renombrarEstante}
-              onEliminarEstante={eliminarEstante}
-              onReordenarEstante={onReordenarEstante}
-              onOrdenarAlfabetico={() => onOrdenarColumna(null)}
+              onOrdenarAlfabetico={() => onOrdenarColumna(null, 'Sin sector')}
               onToggleCollapse={() => toggleCollapse(SIN_SECTOR_KEY)}
-              selectedIds={selectedIds}
-              onToggleSelect={toggleSelect}
             />
           )}
 
@@ -406,42 +492,26 @@ export default function StockBoard() {
             return (
               <StockBoardColumn
                 key={sec.id}
+                ctx={ctx}
                 sectorId={sec.id}
                 nombre={sec.nombre}
                 icono={sec.icono}
                 estantesDelSector={estantesDelSector}
                 productosSinEstante={productosSinEstante}
                 productosPorEstante={productosPorEstante}
-                sectoresTodos={sectores}
-                estantesTodos={estantes}
-                overZoneKey={overZoneKey}
-                draggingId={draggingProducto?.id ?? null}
-                registerDropZone={registerDropZone}
-                registerCardRef={registerCardRef}
-                onDragStart={onDragStart}
-                onDragMove={onDragMove}
-                onDragEnd={onDragEnd}
-                onMoverA={onMoverA}
-                onEliminarProducto={handleEliminarProducto}
-                onAgregarEstante={agregarEstante}
-                onRenombrarEstante={renombrarEstante}
-                onEliminarEstante={eliminarEstante}
-                onReordenarEstante={onReordenarEstante}
-                onOrdenarAlfabetico={() => onOrdenarColumna(sec.id)}
+                onOrdenarAlfabetico={() => onOrdenarColumna(sec.id, sec.nombre)}
                 onEliminarSector={() => handleEliminarSector(sec.id, sec.nombre)}
                 onEditarSector={(nombre, icono) => handleEditarSector(sec.id, nombre, icono)}
                 ultimoConteoAt={sec.ultimo_conteo_at}
                 onToggleCollapse={() => toggleCollapse(sec.id)}
-                selectedIds={selectedIds}
-                onToggleSelect={toggleSelect}
               />
             )
           })}
 
           {/* Nuevo sector */}
-          <div style={{ width: 220, flexShrink: 0 }}>
+          <div style={{ width: 240, flexShrink: 0 }}>
             {addingSector ? (
-              <div style={{ border: '1px solid var(--border)', borderRadius: 10, background: 'var(--surface)', padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ border: '1px solid var(--border)', borderRadius: 12, background: 'var(--surface)', padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <input
                   autoFocus
                   value={nuevoSectorNombre}
@@ -467,7 +537,7 @@ export default function StockBoard() {
             ) : (
               <button
                 onClick={() => setAddingSector(true)}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'none', border: '1px dashed var(--border)', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', color: 'var(--text-3)', fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'none', border: '1px dashed var(--border)', borderRadius: 12, padding: '12px', cursor: 'pointer', color: 'var(--text-3)', fontSize: 13, fontWeight: 700, fontFamily: 'inherit' }}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: 17 }}>add</span>
                 Sector
@@ -481,14 +551,24 @@ export default function StockBoard() {
       {draggingProducto && ghostPos && (
         <div style={{
           position: 'fixed', left: ghostPos.x + 12, top: ghostPos.y - 16, zIndex: 999, pointerEvents: 'none',
-          background: 'var(--surface)', border: '2px solid var(--accent)', borderRadius: 8, padding: '5px 10px',
-          fontSize: 12, fontWeight: 600, color: 'var(--text-1)', boxShadow: '0 8px 24px rgba(0,0,0,.18)',
-          maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          background: 'var(--surface)', border: '2px solid var(--accent)', borderRadius: 9, padding: '7px 12px',
+          fontSize: 13, fontWeight: 600, color: 'var(--text-1)', boxShadow: '0 8px 24px rgba(0,0,0,.18)',
+          maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 14, verticalAlign: 'middle', marginRight: 5 }}>drag_indicator</span>
+          <span className="material-symbols-outlined" style={{ fontSize: 15, verticalAlign: 'middle', marginRight: 5 }}>drag_indicator</span>
           {draggingProducto.nombre}
         </div>
       )}
     </div>
   )
+}
+
+const selectSm: React.CSSProperties = {
+  fontSize: 12, padding: '7px 9px', borderRadius: 8, border: '1px solid var(--border)',
+  background: 'var(--bg)', color: 'var(--text-1)', fontFamily: 'inherit', cursor: 'pointer',
+}
+
+const btnPrimario: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 5, padding: '7px 14px', borderRadius: 8, border: 'none',
+  background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
 }

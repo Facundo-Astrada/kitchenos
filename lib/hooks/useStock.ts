@@ -136,7 +136,7 @@ export function useStock() {
   // lista COMPLETA de cambios resultante del drop (no solo el ítem arrastrado) —
   // el caller recalcula orden_sector como el índice final de cada columna afectada.
   async function moverProductosBoard(
-    cambios: Array<{ id: string; sector_id: string | null; estante_id: string | null; orden_sector: number }>
+    cambios: Array<{ id: string; sector_id: string | null; estante_id: string | null; stock_grupo_id?: string | null; orden_sector: number }>
   ) {
     if (cambios.length === 0) return
     mutate(prev => {
@@ -144,13 +144,13 @@ export function useStock() {
       const map = new Map(cambios.map(c => [c.id, c]))
       return prev.map(p => {
         const c = map.get(p.id)
-        return c ? { ...p, sector_id: c.sector_id, estante_id: c.estante_id, orden_sector: c.orden_sector } : p
+        return c ? { ...p, sector_id: c.sector_id, estante_id: c.estante_id, stock_grupo_id: c.stock_grupo_id ?? null, orden_sector: c.orden_sector } : p
       })
     }, { revalidate: false })
     try {
       const results = await Promise.all(cambios.map(c =>
         supabase.from('productos')
-          .update({ sector_id: c.sector_id, estante_id: c.estante_id, orden_sector: c.orden_sector })
+          .update({ sector_id: c.sector_id, estante_id: c.estante_id, stock_grupo_id: c.stock_grupo_id ?? null, orden_sector: c.orden_sector })
           .eq('id', c.id)
       ))
       const primerError = results.find(r => r.error)?.error

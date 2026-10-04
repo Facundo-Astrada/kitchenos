@@ -199,7 +199,7 @@ export interface CategoriaProducto {
   icono?: string | null
 }
 
-// DB: productos (id, nombre, categoria, categoria_id, unidad, unidad_uso, unidad_compra, cantidad_por_envase, stock_actual, stock_minimo, stock_critico, stock_maximo, precio_unitario, proveedor_id, sector_id, fuera_de_uso, estante_id, orden_sector, merma_esperada_pct, nota_recepcion, restaurante_id, activo, created_at, updated_at)
+// DB: productos (id, nombre, categoria, categoria_id, unidad, unidad_uso, unidad_compra, cantidad_por_envase, stock_actual, stock_minimo, stock_critico, stock_maximo, precio_unitario, proveedor_id, sector_id, fuera_de_uso, estante_id, orden_sector, stock_grupo_id, merma_esperada_pct, nota_recepcion, restaurante_id, activo, created_at, updated_at)
 export interface Producto {
   id: string
   nombre: string
@@ -221,6 +221,7 @@ export interface Producto {
   fuera_de_uso?: boolean
   estante_id?: string | null
   orden_sector?: number
+  stock_grupo_id?: string | null
   merma_esperada_pct?: number | null
   nota_recepcion?: string | null
   restaurante_id: string
@@ -245,6 +246,18 @@ export interface StockEstante {
   id: string
   restaurante_id: string
   sector_id: string
+  nombre: string
+  orden: number
+  created_at?: string | null
+}
+
+// DB: stock_grupos — grupo con nombre dentro de un estante (o suelto en el
+// sector si estante_id es null). Ej: Estante 1 → Vinagres, Aceites, Latas.
+export interface StockGrupo {
+  id: string
+  restaurante_id: string
+  sector_id: string
+  estante_id: string | null
   nombre: string
   orden: number
   created_at?: string | null
