@@ -48,6 +48,8 @@ export interface CartaItemDB {
   foto_url: string | null
   orden: number
   tags: string[]
+  /** Nota de seguimiento del chef (mapa de la carta). Nunca sale en la carta pública. */
+  nota_chef?: string | null
   restaurante_id: string
   created_at: string
 }

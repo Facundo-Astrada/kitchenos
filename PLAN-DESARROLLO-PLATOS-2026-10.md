@@ -244,7 +244,11 @@ Medido con 3 notas reales contra la cuenta de pruebas: tarjetas en ~4 s, las 3 f
 - Dictado por voz (reusar lo de descripción de puesto).
 - Coach: screen context de la vista (`/coach-screen`).
 
-### Fase 3 — satélites (solo versión derivada, ver 016) · PRIMERA ENTREGA 02/10/2026
+### Fase 3 — mapa de la carta · REHECHA 04/10/2026
+
+La órbita del 02/10 se reemplazó por el **Mapa de la carta** (boceto del chef, 04/10): todos los platos por **grupo** (`carta_categorias`; bebidas en franja, Principales al medio), filtros por etiqueta (S/TACC, vegano…, todas a la vez), "¿Quién usa…?" para resaltar los platos que llevan una preparación o ingrediente, y al tocar un plato una ventana al lado con componentes, con quién comparte y qué, etiquetas editables, cambio de grupo y una **nota de seguimiento** (`carta_items.nota_chef`). "Agregar variantes" = crear grupos nuevos (ej. Guarnición 2) y mover platos ahí. **Lo compartido sale de los componentes:** la misma receta en dos platos (en Bros, "Cilantro osmosis" une pollo frito, mbejú y crema de castañas) y, un nivel más abajo, los ingredientes de esas recetas, normalizando nombres ("Cilantro (tallos)" = "cilantro fresco"), sin básicos (sal, aceite…), sin repetir los ingredientes de una preparación que ya comparten, y ordenando primero por preparaciones compartidas. Lógica en `lib/carta/mapaCarta.ts` con tests. Sigue afuera el vínculo comercial marcado a mano.
+
+#### (Histórico) primera entrega 02/10/2026 — órbita de satélites, reemplazada
 
 Construido: vista **Satélites** en Carta (atajo en la lista, gate canEdit): el plato del centro y alrededor los que comparten bases, más cerca = más bases en común; lista de qué comparte con cada uno, bases más compartidas de toda la carta, y platos que giran solos. Las ideas en desarrollo con componentes vinculados entran como satélites (borde punteado). Lógica pura en `lib/carta/satelites.ts` con tests; sin tabla nueva. **Todavía no:** el vínculo comercial marcado a mano ni el cruce con comandas (decisión propia). Detalle de la pantalla original abajo.
 

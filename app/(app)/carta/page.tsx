@@ -17,7 +17,7 @@ import { useMenus, type MenuConPreparaciones } from '@/lib/hooks/useMenus'
 import { useChecklist } from '@/lib/hooks/useChecklist'
 import MenusView from './MenusView'
 import DesarrolloView from './DesarrolloView'
-import SatelitesView from './SatelitesView'
+import MapaCartaView from './MapaCartaView'
 import ComposicionEditor, { type CompPayload, type CompInicial } from './ComposicionEditor'
 import {
   upsertMiseChecklistItem, parseRecipienteNombre, TAREA_PRIO_TO_MISE,
@@ -318,10 +318,10 @@ function RentabilidadView({
 }
 
 // ── MAIN PAGE ───────────────────────────────────────────
-type View = 'list' | 'detail' | 'rentabilidad' | 'menus' | 'estandarizacion' | 'desarrollo' | 'satelites'
+type View = 'list' | 'detail' | 'rentabilidad' | 'menus' | 'estandarizacion' | 'desarrollo' | 'mapa'
 
 export default function CartaPage() {
-  const { items, loading, fetchItems, crearItem, actualizarItem, actualizarTags, toggleDisponible, eliminarItem, duplicarItem, agregarPlatoReceta, actualizarPlatoRecetaOpsCompleta, actualizarPlatoRecetaGramaje, eliminarPlatoReceta, agregarPlatoPackaging, eliminarPlatoPackaging, categorias } = useCarta()
+  const { items, loading, fetchItems, crearItem, actualizarItem, actualizarTags, toggleDisponible, eliminarItem, duplicarItem, agregarPlatoReceta, actualizarPlatoRecetaOpsCompleta, actualizarPlatoRecetaGramaje, eliminarPlatoReceta, agregarPlatoPackaging, eliminarPlatoPackaging, categorias, crearCategoria } = useCarta()
   const { recetas, refetch: refetchRecetas } = useRecetas()
   const { productos } = useStock()
   const { ventas } = useVentas()
@@ -371,7 +371,7 @@ export default function CartaPage() {
     if (view === 'estandarizacion' && !canEdit) setView('list')
     // Mismo cerrojo para En desarrollo (decisión 016): crear/editar fichas es de quien edita la carta.
     if (view === 'desarrollo' && !canEdit) setView('list')
-    if (view === 'satelites' && !canEdit) setView('list')
+    if (view === 'mapa' && !canEdit) setView('list')
   }, [view, canEdit])
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [filter, setFilter] = useState<string>('Todas')
@@ -870,15 +870,25 @@ export default function CartaPage() {
     )
   }
 
-  // ── Satélites — qué platos comparten bases (Fase 3 derivada, decisión 016) ──
-  if (view === 'satelites' && canEdit) {
+  // ── Mapa de la carta — grupos, filtros y qué comparten los platos (decisión 016, Fase 3) ──
+  if (view === 'mapa' && canEdit) {
     return (
-      <SatelitesView
-        items={items}
-        nombreReceta={nombreReceta}
-        onBack={() => setView('list')}
-        onOpenPlato={(pid) => { setSelectedItemId(pid); setView('detail') }}
-      />
+      <>
+        <MapaCartaView
+          items={items}
+          categorias={categorias}
+          recetasPorId={recetasPorId}
+          verCostos={verCostos}
+          onBack={() => setView('list')}
+          onOpenPlato={(pid) => { setSelectedItemId(pid); setView('detail') }}
+          onOpenDesarrollo={() => setView('desarrollo')}
+          actualizarItem={actualizarItem}
+          actualizarTags={actualizarTags}
+          crearCategoria={crearCategoria}
+          onToast={setToast}
+        />
+        {toast && <Toast msg={toast} onDone={() => setToast('')} />}
+      </>
     )
   }
 
@@ -1123,20 +1133,20 @@ export default function CartaPage() {
         </div>
       )}
 
-      {/* Satélites shortcut — qué platos comparten bases (decisión 016, Fase 3 derivada). */}
-      {canEdit && items.some(i => i.plato_recetas.length > 0) && (
+      {/* Mapa de la carta — grupos, filtros y qué comparten los platos (decisión 016, Fase 3). */}
+      {canEdit && items.length > 0 && (
         <div style={{ padding: '12px 16px 0' }}>
-          <button data-coach-target="carta-satelites" onClick={() => setView('satelites')} style={{
+          <button data-coach-target="carta-mapa" onClick={() => setView('mapa')} style={{
             width: '100%', padding: '10px 14px', borderRadius: 10,
             background: 'var(--surface)', border: '1px solid var(--border)',
             display: 'flex', alignItems: 'center', gap: 8,
             cursor: 'pointer', color: 'var(--text-1)',
           }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-2)' }}>hub</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--text-2)' }}>bubble_chart</span>
             <div style={{ flex: 1, textAlign: 'left' }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>Satélites</div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Mapa de la carta</div>
               <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                Qué platos comparten bases y cuáles giran solos
+                Tus platos por grupo, filtros y qué ingredientes comparten
               </div>
             </div>
             <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)' }}>chevron_right</span>
