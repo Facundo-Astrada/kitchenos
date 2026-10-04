@@ -100,6 +100,20 @@ function CirculoPlato({ punto, color, tam, estado, badge, onTocar }: {
       }}>
         {punto.nombre}
       </span>
+      {/* Nota de seguimiento: azul si hay nota, apagado si no. Arriba a la izquierda, sin pisar el contador de compartidos. */}
+      {!punto.idea && (() => {
+        const conNota = !!punto.item?.nota_chef?.trim()
+        return (
+          <span aria-label={conNota ? 'Tiene nota de seguimiento' : undefined} title={conNota ? punto.item?.nota_chef ?? '' : 'Sin nota'} style={{
+            position: 'absolute', top: -3, left: -3, width: 22, height: 22, borderRadius: 99, boxSizing: 'border-box',
+            background: conNota ? 'var(--blue)' : 'var(--surface)', color: conNota ? '#fff' : 'var(--text-3)',
+            opacity: conNota ? 1 : 0.55, boxShadow: '0 0 0 2px var(--bg)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>sticky_note_2</span>
+          </span>
+        )
+      })()}
       {badge != null && badge > 0 && (
         <span aria-label={`${badge} componentes en común`} style={{
           position: 'absolute', top: -3, right: -3, minWidth: 22, height: 22, borderRadius: 99, padding: '0 6px',
