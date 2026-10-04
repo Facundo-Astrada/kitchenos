@@ -71,6 +71,16 @@ export default function StockBoard() {
     })
   }, [RESTAURANTE_ID])
 
+  // ── Pantalla completa: el board tapa header y sidebar para tener todo el
+  // alto/ancho al arrastrar entre columnas grandes. Esc sale. ──
+  const [pantallaCompleta, setPantallaCompleta] = useState(false)
+  useEffect(() => {
+    if (!pantallaCompleta) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPantallaCompleta(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [pantallaCompleta])
+
   // ── Búsqueda ──
   const [search, setSearch] = useState('')
 
@@ -341,29 +351,75 @@ export default function StockBoard() {
     ? grupos.filter(g => g.sector_id === bulkSector && (g.estante_id ?? '') === bulkEstante).sort((a, b) => a.orden - b.orden)
     : []
 
+  const hayPlegados = collapsedIds.has(SIN_SECTOR_KEY) || sectores.some(s => collapsedIds.has(s.id))
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      {/* Buscador + ayuda */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', padding: '0 4px 14px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '9px 12px', width: 360, maxWidth: '100%' }}>
+    <div style={pantallaCompleta
+      ? { position: 'fixed', inset: 0, zIndex: 900, background: 'var(--bg)', padding: '12px 14px 6px', display: 'flex', flexDirection: 'column' }
+      : { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+      {/* Barra única: buscador + sectores plegados (una sola fila que scrollea
+          de costado) + ayuda + pantalla completa — todo el alto que queda es
+          para el board. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 4px 12px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 12px', width: 270, flexShrink: 0 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)' }}>search</span>
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar producto para ubicarlo…"
+            placeholder="Buscar producto…"
+            title="Con un filtro activo no se arrastra: usá el menú ⋮ de cada producto"
             style={{ border: 'none', outline: 'none', background: 'none', flex: 1, minWidth: 0, fontSize: 13, color: 'var(--text-1)', fontFamily: 'inherit' }}
           />
+          {q && <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{productosVisibles.length}</span>}
           {search && (
             <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
             </button>
           )}
         </div>
-        <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, flex: 1, minWidth: 240 }}>
-          {q && selectedIds.size === 0
-            ? <>{productosVisibles.length} resultado{productosVisibles.length !== 1 ? 's' : ''} — con un filtro activo no se arrastra; usá el menú &quot;⋮&quot; de cada producto.</>
-            : <>Arrastrá para dejar cada producto donde está en la realidad — ese orden es el recorrido de Stockear. <b style={{ fontWeight: 600 }}>Ctrl+clic</b> (⌘ en Mac) para elegir varios y agruparlos.</>}
-        </p>
+
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', gap: 8, overflowX: 'auto', scrollbarWidth: 'thin', padding: '2px 0' }}>
+          {hayPlegados && (<>
+          {collapsedIds.has(SIN_SECTOR_KEY) && (
+            <StockBoardCollapsedChip
+              sectorId={null}
+              nombre="Sin sector"
+              total={productosVisibles.filter(p => !p.sector_id).length}
+              overZoneKey={overZoneKey}
+              registerDropZone={registerDropZone}
+              onExpand={() => toggleCollapse(SIN_SECTOR_KEY)}
+            />
+          )}
+          {sectores.filter(sec => collapsedIds.has(sec.id)).map(sec => (
+            <StockBoardCollapsedChip
+              key={sec.id}
+              sectorId={sec.id}
+              nombre={sec.nombre}
+              icono={sec.icono}
+              total={productosVisibles.filter(p => p.sector_id === sec.id).length}
+              overZoneKey={overZoneKey}
+              registerDropZone={registerDropZone}
+              onExpand={() => toggleCollapse(sec.id)}
+            />
+          ))}
+          </>)}
+        </div>
+
+        <span
+          className="material-symbols-outlined"
+          title={'Arrastrá cada producto a donde está en la realidad: ese orden es el recorrido de Stockear.\nCtrl+clic (⌘ en Mac) para elegir varios y agruparlos o moverlos juntos.\nPlegá los sectores que no estás usando (‹) para que queden como chips arriba — también se puede soltar sobre un chip.'}
+          style={{ fontSize: 19, color: 'var(--text-3)', cursor: 'help', flexShrink: 0 }}
+        >
+          help
+        </span>
+        <button
+          onClick={() => setPantallaCompleta(v => !v)}
+          title={pantallaCompleta ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa — más espacio para mover productos'}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10, border: '1px solid var(--border)', background: pantallaCompleta ? 'var(--navy)' : 'var(--surface)', color: pantallaCompleta ? '#fff' : 'var(--text-2)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap' }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{pantallaCompleta ? 'close_fullscreen' : 'open_in_full'}</span>
+          {pantallaCompleta ? 'Salir' : 'Pantalla completa'}
+        </button>
       </div>
 
       {/* Explicación — solo mientras no hay ningún sector creado todavía */}
@@ -434,35 +490,6 @@ export default function StockBoard() {
           >
             <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
           </button>
-        </div>
-      )}
-
-      {/* Sectores plegados: fila de chips que se acomodan solos (wrap), no
-          ocupan toda la altura del board como las tiras verticales de antes. */}
-      {(collapsedIds.has(SIN_SECTOR_KEY) || sectores.some(s => collapsedIds.has(s.id))) && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '0 4px 14px', flexShrink: 0 }}>
-          {collapsedIds.has(SIN_SECTOR_KEY) && (
-            <StockBoardCollapsedChip
-              sectorId={null}
-              nombre="Sin sector"
-              total={productosVisibles.filter(p => !p.sector_id).length}
-              overZoneKey={overZoneKey}
-              registerDropZone={registerDropZone}
-              onExpand={() => toggleCollapse(SIN_SECTOR_KEY)}
-            />
-          )}
-          {sectores.filter(sec => collapsedIds.has(sec.id)).map(sec => (
-            <StockBoardCollapsedChip
-              key={sec.id}
-              sectorId={sec.id}
-              nombre={sec.nombre}
-              icono={sec.icono}
-              total={productosVisibles.filter(p => p.sector_id === sec.id).length}
-              overZoneKey={overZoneKey}
-              registerDropZone={registerDropZone}
-              onExpand={() => toggleCollapse(sec.id)}
-            />
-          ))}
         </div>
       )}
 
