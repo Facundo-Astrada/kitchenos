@@ -1,217 +1,152 @@
 /**
- * Mapa de la carta (PLAN-DESARROLLO-PLATOS-2026-10, Fase 3 — reemplaza a la
- * órbita de satélites del 02/10).
+ * Mapa de la carta (PLAN-DESARROLLO-PLATOS-2026-10, Fase 3).
  *
- * La carta como grupos (Entradas, Principales, Guarnición 2…) de platos, y lo
- * que los platos comparten entre sí sacado de sus COMPONENTES: una receta que
- * dos platos usan ("Cilantro osmosis" en pollo frito, mbejú y crema de
- * castañas, en Bros) o un ingrediente que aparece adentro de sus componentes
- * ("cilantro" en el chimi y en la salsa tatemada). Todo derivado de
- * plato_recetas + ingredientes, sin tabla nueva. El vínculo comercial marcado
- * a mano sigue afuera (decisión 016).
+ * La carta como grupos de platos, y lo que los platos comparten entre sí
+ * sacado de sus COMPONENTES — lo mismo que la cocina ve en el mise de OPS y
+ * tilda para producir (`plato_recetas`, con su plaza). En Bros, "Cilantro
+ * osmosis" (plaza fríos) une pollo frito, mbejú y crema de castañas.
+ *
+ * A propósito NO baja a los ingredientes de cada receta (se probó el 04/10 y
+ * el chef lo descartó: "en vez de ver recetas, buscá los componentes"). Lo
+ * que importa para planificar es qué preparación del mise sirve a qué platos.
+ * El vínculo comercial marcado a mano sigue afuera (decisión 016).
  */
-import { normalizeNombre } from '@/lib/recetas/iaImport'
 
-// ── Qué tiene adentro cada plato ─────────────────────────────────────────
+// ── Componentes de cada plato ────────────────────────────────────────────
 
-export type ViaCompartido = 'componente' | 'ingrediente'
-
-export interface ItemCompartible {
-  /** `r:<receta_id>` para componentes/subrecetas, `i:<nombre normalizado>` para ingredientes. */
+export interface Componente {
+  /** `r:<receta_id>` — el mismo componente del mise en todos los platos que lo usan. */
   clave: string
   nombre: string
-  via: ViaCompartido
-  /** Solo ingredientes: claves (`r:…`) de las preparaciones de ESTE plato que lo traen. */
-  origenes?: string[]
-}
-
-/** Lo mínimo que hace falta de una receta: su nombre y sus ingredientes. */
-export interface RecetaParaMapa {
-  nombre: string
-  ingredientes?: { nombre: string; subreceta_id?: string | null }[]
+  plaza: string | null
 }
 
 export interface PlatoParaMapa {
-  plato_recetas: { receta_id: string | null; receta?: RecetaParaMapa | null }[]
+  plato_recetas: {
+    receta_id: string | null
+    receta?: { nombre: string } | null
+    plaza_efectiva?: string | null
+    plaza?: string | null
+  }[]
 }
 
-// Palabras que describen el corte o el estado, no el ingrediente:
-// "cilantro ( hoja y tallo )", "Cilantro (tallos)" y "cilantro fresco" son el mismo cilantro.
-const DESCRIPTORES = new Set([
-  'fresco', 'fresca', 'frescos', 'frescas', 'picado', 'picada', 'picados', 'picadas',
-  'hoja', 'hojas', 'tallo', 'tallos', 'entero', 'entera', 'enteros', 'enteras',
-])
-
-// Básicos que están en casi todo: compartirlos no dice nada de la carta.
-const BASICOS = new Set([
-  'sal', 'sal fina', 'sal gruesa', 'sal entrefina', 'sal marina', 'sal parrillera', 'sal en escamas',
-  'pimienta', 'pimienta negra', 'pimienta blanca', 'aceite', 'aceite de girasol', 'aceite de oliva',
-  'aceite neutro', 'agua', 'azucar', 'azucar blanca', 'manteca', 'harina', 'harina 000', 'harina 0000',
-])
-
-/** Clave de un ingrediente por su nombre: sin tildes, sin paréntesis, sin descriptores. '' = no sirve. */
-export function claveIngrediente(nombre: string): string {
-  const base = normalizeNombre(nombre.replace(/\([^)]*\)?/g, ' '))
-    .replace(/[^a-z0-9ñ\s]/g, ' ')
-    .split(/\s+/)
-    .filter(p => p && !DESCRIPTORES.has(p))
-    .join(' ')
-  return base
-}
-
-export function esBasico(clave: string): boolean {
-  return BASICOS.has(clave)
-}
-
-/**
- * Todo lo que un plato tiene adentro, sin repetir: cada componente (receta),
- * las subrecetas que esos componentes usan, y los ingredientes de ambos.
- * `recetaPorId` permite bajar un nivel más en las subrecetas.
- */
-export function itemsDePlato(
-  plato: PlatoParaMapa,
-  recetaPorId: (id: string) => RecetaParaMapa | undefined = () => undefined,
-): ItemCompartible[] {
-  const out = new Map<string, ItemCompartible>()
-  const agregarIngredientes = (receta: RecetaParaMapa | null | undefined, profundidad: number, origen: string) => {
-    for (const ing of receta?.ingredientes ?? []) {
-      if (ing.subreceta_id) {
-        const sub = recetaPorId(ing.subreceta_id)
-        const clave = `r:${ing.subreceta_id}`
-        if (!out.has(clave)) out.set(clave, { clave, nombre: sub?.nombre ?? ing.nombre, via: 'componente' })
-        if (profundidad < 2) agregarIngredientes(sub, profundidad + 1, clave)
-        continue
-      }
-      const k = claveIngrediente(ing.nombre)
-      if (!k || esBasico(k)) continue
-      const clave = `i:${k}`
-      const prev = out.get(clave)
-      if (!prev) out.set(clave, { clave, nombre: k.charAt(0).toUpperCase() + k.slice(1), via: 'ingrediente', origenes: [origen] })
-      else if (prev.origenes && !prev.origenes.includes(origen)) prev.origenes.push(origen)
-    }
-  }
+/** Componentes de un plato, sin repetir, en el orden en que están cargados. */
+export function componentesDePlato(
+  plato: PlatoParaMapa, nombreReceta: (id: string) => string | undefined = () => undefined,
+): Componente[] {
+  const out = new Map<string, Componente>()
   for (const pr of plato.plato_recetas) {
     if (!pr.receta_id) continue
-    const receta = pr.receta ?? recetaPorId(pr.receta_id)
     const clave = `r:${pr.receta_id}`
-    if (!out.has(clave)) out.set(clave, { clave, nombre: receta?.nombre ?? 'Receta', via: 'componente' })
-    agregarIngredientes(receta, 1, clave)
+    if (out.has(clave)) continue
+    out.set(clave, {
+      clave,
+      nombre: pr.receta?.nombre ?? nombreReceta(pr.receta_id) ?? 'Componente',
+      plaza: pr.plaza_efectiva ?? pr.plaza ?? null,
+    })
   }
   return [...out.values()]
 }
 
-// ── Índice: qué platos usan cada cosa ────────────────────────────────────
+/** Lo mismo para una idea en desarrollo: solo cuentan sus componentes ya vinculados a una receta. */
+export function componentesDeFicha(
+  componentes: { nombre: string; receta_id: string | null }[],
+  nombreReceta: (id: string) => string | undefined = () => undefined,
+): Componente[] {
+  const out = new Map<string, Componente>()
+  for (const c of componentes) {
+    if (!c.receta_id) continue
+    const clave = `r:${c.receta_id}`
+    if (!out.has(clave)) out.set(clave, { clave, nombre: nombreReceta(c.receta_id) ?? c.nombre, plaza: null })
+  }
+  return [...out.values()]
+}
+
+// ── Índice: qué platos usan cada componente ──────────────────────────────
 
 export interface EntradaIndice {
-  item: ItemCompartible
+  componente: Componente
   platoIds: string[]
 }
 
 export interface IndiceCompartidos {
-  porItem: Map<string, EntradaIndice>
-  porPlato: Map<string, ItemCompartible[]>
-  /** Ingredientes que están en tantos platos que no distinguen nada (se ignoran al vincular). */
-  comunes: ItemCompartible[]
+  porComponente: Map<string, EntradaIndice>
+  porPlato: Map<string, Componente[]>
 }
 
-/**
- * Arma el índice. Un INGREDIENTE presente en más del `umbralComun` de los
- * platos con componentes (y en al menos 4) se considera "de todo" y no
- * vincula — si no, el ajo terminaría uniendo media carta. Los COMPONENTES
- * nunca se descartan: compartir una preparación siempre es información.
- */
-export function indiceCompartidos(
-  platos: { id: string; items: ItemCompartible[] }[], umbralComun = 0.4,
-): IndiceCompartidos {
-  const porItem = new Map<string, EntradaIndice>()
-  const conItems = platos.filter(p => p.items.length > 0).length
-  for (const p of platos) for (const it of p.items) {
-    const e = porItem.get(it.clave) ?? { item: it, platoIds: [] }
-    if (!e.platoIds.includes(p.id)) e.platoIds.push(p.id)
-    porItem.set(it.clave, e)
-  }
-  const tope = Math.max(4, Math.ceil(conItems * umbralComun))
-  const comunes: ItemCompartible[] = []
-  for (const [clave, e] of porItem) {
-    if (e.item.via === 'ingrediente' && e.platoIds.length > tope) {
-      comunes.push(e.item)
-      porItem.delete(clave)
+export function indiceCompartidos(platos: { id: string; componentes: Componente[] }[]): IndiceCompartidos {
+  const porComponente = new Map<string, EntradaIndice>()
+  const porPlato = new Map<string, Componente[]>()
+  for (const p of platos) {
+    porPlato.set(p.id, p.componentes)
+    for (const c of p.componentes) {
+      const e = porComponente.get(c.clave) ?? { componente: c, platoIds: [] }
+      if (!e.platoIds.includes(p.id)) e.platoIds.push(p.id)
+      porComponente.set(c.clave, e)
     }
   }
-  const porPlato = new Map<string, ItemCompartible[]>()
-  for (const p of platos) porPlato.set(p.id, p.items.filter(it => porItem.has(it.clave)))
-  return { porItem, porPlato, comunes: comunes.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')) }
+  return { porComponente, porPlato }
 }
 
 export interface Compartido {
   platoId: string
-  items: ItemCompartible[]
+  componentes: Componente[]
 }
 
-/** Con qué platos comparte algo `platoId` y qué: primero los que comparten preparaciones, después ingredientes. */
+/** Con qué platos comparte componentes `platoId` y cuáles; los que más comparten primero. */
 export function compartidosCon(platoId: string, indice: IndiceCompartidos): Compartido[] {
-  const res = new Map<string, ItemCompartible[]>()
-  for (const it of indice.porPlato.get(platoId) ?? []) {
-    for (const otro of indice.porItem.get(it.clave)?.platoIds ?? []) {
+  const res = new Map<string, Componente[]>()
+  for (const c of indice.porPlato.get(platoId) ?? []) {
+    for (const otro of indice.porComponente.get(c.clave)?.platoIds ?? []) {
       if (otro === platoId) continue
       const l = res.get(otro) ?? []
-      l.push(it)
+      l.push(c)
       res.set(otro, l)
     }
   }
-  // Si comparten el chimichurri, el ajo y el orégano del chimichurri no son un vínculo aparte:
-  // un ingrediente se muestra solo si alguna de sus fuentes en este plato NO es compartida.
-  for (const [otro, items] of res) {
-    const compartidasComp = new Set(items.filter(i => i.via === 'componente').map(i => i.clave))
-    res.set(otro, items.filter(i => i.via === 'componente' || !i.origenes?.length || i.origenes.some(o => !compartidasComp.has(o))))
-    if (res.get(otro)!.length === 0) res.delete(otro)
-  }
-  // Primero cuántas PREPARACIONES comparten (eso es lo que pidió el chef); a igual, cuántos ingredientes.
-  const peso = (items: ItemCompartible[]) => items.reduce((a, i) => a + (i.via === 'componente' ? 1000 : 1), 0)
   return [...res.entries()]
-    .map(([id, items]) => ({
-      platoId: id,
-      items: items.sort((a, b) => (a.via === b.via ? a.nombre.localeCompare(b.nombre, 'es') : a.via === 'componente' ? -1 : 1)),
-    }))
-    .sort((a, b) => peso(b.items) - peso(a.items) || a.platoId.localeCompare(b.platoId))
+    .map(([id, componentes]) => ({ platoId: id, componentes: componentes.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')) }))
+    .sort((a, b) => b.componentes.length - a.componentes.length || a.platoId.localeCompare(b.platoId))
 }
 
-/** Lo que más platos comparten — para elegir "¿quién usa X?" de un vistazo. */
+/** Componentes que usan al menos `minPlatos` platos, los más compartidos primero. */
 export function masCompartidos(indice: IndiceCompartidos, minPlatos = 2): EntradaIndice[] {
-  return [...indice.porItem.values()]
+  return [...indice.porComponente.values()]
     .filter(e => e.platoIds.length >= minPlatos)
-    .sort((a, b) => b.platoIds.length - a.platoIds.length
-      || (a.item.via === b.item.via ? 0 : a.item.via === 'componente' ? -1 : 1)
-      || a.item.nombre.localeCompare(b.item.nombre, 'es'))
+    .sort((a, b) => b.platoIds.length - a.platoIds.length || a.componente.nombre.localeCompare(b.componente.nombre, 'es'))
 }
 
 // ── Filtros y grupos ─────────────────────────────────────────────────────
 
+function sinTildes(s: string): string {
+  return s.toLowerCase().trim().normalize('NFD').replace(/[̀-ͯ]/g, '')
+}
+
 /** El plato tiene TODAS las etiquetas pedidas (s/tacc Y vegano, no "o"). */
 export function cumpleFiltros(tags: string[] | null | undefined, filtros: string[]): boolean {
   if (filtros.length === 0) return true
-  const propias = new Set((tags ?? []).map(t => normalizeNombre(t)))
-  return filtros.every(f => propias.has(normalizeNombre(f)))
+  const propias = new Set((tags ?? []).map(sinTildes))
+  return filtros.every(f => propias.has(sinTildes(f)))
 }
 
-export type FormaGrupo = 'franja' | 'grupo'
+export type PlanoGrupo = 'platos' | 'secundario'
 
-/** Bebidas/vinos/cafetería son listas largas de cosas chicas: van en una franja, no en un grupo. */
-export function formaDeGrupo(nombre: string, cantidad: number): FormaGrupo {
-  return /bebid|vino|trago|coctel|cóctel|cafeter|cerveza|jugo/i.test(nombre) || cantidad > 16 ? 'franja' : 'grupo'
+/** Bebidas, vinos y cafetería van a un segundo plano: el chef viene a ver los platos. */
+export function planoDeGrupo(nombre: string): PlanoGrupo {
+  return /bebid|vino|trago|coctel|cóctel|cafe|café|cerveza|jugo|infusion|infusión/i.test(nombre) ? 'secundario' : 'platos'
 }
 
 export interface GrupoMapa<T> {
   nombre: string
-  forma: FormaGrupo
+  plano: PlanoGrupo
   platos: T[]
 }
 
 /**
- * Grupos en el orden de carta_categorias; un plato con categoría que no está
- * en la lista abre su propio grupo al final; los grupos vacíos se muestran
- * (un grupo recién creado tiene que verse para poder mover platos ahí).
- * Las franjas van primero, como en el boceto.
+ * Grupos de platos primero (Principales al frente, después el orden de
+ * carta_categorias), los secundarios al final. Un plato con una categoría
+ * que no está en la lista abre su propio grupo; los grupos vacíos se
+ * muestran (uno recién creado tiene que verse para mover platos ahí).
  */
 export function armarGrupos<T extends { categoria: string }>(
   categorias: { nombre: string; orden: number }[], platos: T[],
@@ -223,8 +158,10 @@ export function armarGrupos<T extends { categoria: string }>(
     if (!mapa.has(cat)) mapa.set(cat, [])
     mapa.get(cat)!.push(p)
   }
-  const grupos = [...mapa.entries()].map(([nombre, ps]) => ({ nombre, forma: formaDeGrupo(nombre, ps.length), platos: ps }))
-  return [...grupos.filter(g => g.forma === 'franja'), ...grupos.filter(g => g.forma === 'grupo')]
+  const grupos = [...mapa.entries()].map(([nombre, ps]) => ({ nombre, plano: planoDeGrupo(nombre), platos: ps }))
+  const dePlatosOrdenados = grupos.filter(g => g.plano === 'platos')
+    .sort((a, b) => Number(/principal/i.test(b.nombre)) - Number(/principal/i.test(a.nombre)))
+  return [...dePlatosOrdenados, ...grupos.filter(g => g.plano === 'secundario')]
 }
 
 // ── Dónde abrir la ventanita del plato ───────────────────────────────────
@@ -246,30 +183,4 @@ export function posicionVentana(
   const izquierda = circulo.left - margen - ventana.width
   if (izquierda >= margen) return { left: izquierda, top: clampTop(centroY), lado: 'izquierda' }
   return { left: clampLeft(circulo.left + circulo.width / 2 - ventana.width / 2), top: circulo.top + circulo.height + margen, lado: 'abajo' }
-}
-
-/**
- * Lo mismo que `itemsDePlato` para una idea en desarrollo: sus componentes
- * vinculados a recetas existentes cuentan como componente; los demás aportan
- * sus ingredientes (todavía no son recetas).
- */
-export function itemsDeFicha(
-  componentes: { receta_id: string | null; ingredientes: { nombre: string; receta_id: string | null }[] }[],
-  recetaPorId: (id: string) => RecetaParaMapa | undefined = () => undefined,
-): ItemCompartible[] {
-  const vinculados = componentes.filter(c => c.receta_id).map(c => ({ receta_id: c.receta_id, receta: recetaPorId(c.receta_id!) }))
-  const sueltos = componentes.filter(c => !c.receta_id).flatMap(c => c.ingredientes)
-  const deVinculados = itemsDePlato({ plato_recetas: vinculados }, recetaPorId)
-  const out = new Map(deVinculados.map(i => [i.clave, i]))
-  for (const ing of sueltos) {
-    if (ing.receta_id) {
-      const clave = `r:${ing.receta_id}`
-      if (!out.has(clave)) out.set(clave, { clave, nombre: recetaPorId(ing.receta_id)?.nombre ?? ing.nombre, via: 'componente' })
-      continue
-    }
-    const k = claveIngrediente(ing.nombre)
-    if (!k || esBasico(k)) continue
-    if (!out.has(`i:${k}`)) out.set(`i:${k}`, { clave: `i:${k}`, nombre: k.charAt(0).toUpperCase() + k.slice(1), via: 'ingrediente' })
-  }
-  return [...out.values()]
 }

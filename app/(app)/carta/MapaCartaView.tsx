@@ -1,18 +1,19 @@
 'use client'
 
-// Mapa de la carta (PLAN-DESARROLLO-PLATOS-2026-10, Fase 3) — reemplaza la
-// órbita de satélites. Sigue el boceto del chef: filtros y grupos a la
-// izquierda; en el tablero, las bebidas en una franja y cada grupo de la carta
-// como una burbuja con sus platos. Tocar un plato abre al lado una ventanita
-// con su info, con quién comparte componentes/ingredientes y una nota de
-// seguimiento. Registro Preparación. Todo CSS, sin librerías de gráficos.
+// Mapa de la carta (PLAN-DESARROLLO-PLATOS-2026-10, Fase 3). Los platos de la
+// carta como círculos del color de su grupo, sin recuadros, para aprovechar el
+// espacio; Principales primero y bebidas/cafetería plegadas al final (el chef
+// viene a ver los platos). Tocar un plato abre al lado una ventanita con sus
+// componentes (los del mise), con quién los comparte y una nota de seguimiento;
+// "Abrir ficha" muestra la ficha completa centrada, encima del mapa.
+// Registro Preparación. Todo CSS, sin librerías de gráficos.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AVATAR_PALETTE, Modal } from '@/components/ui'
 import type { CartaCategoria, CartaItemEnriquecido, CartaItemDB } from '@/lib/hooks/useCarta'
 import { usePlatosDesarrollo } from '@/lib/hooks/usePlatosDesarrollo'
 import {
-  armarGrupos, compartidosCon, cumpleFiltros, indiceCompartidos, itemsDeFicha, itemsDePlato, masCompartidos,
-  posicionVentana, type ItemCompartible, type RecetaParaMapa,
+  armarGrupos, compartidosCon, componentesDeFicha, componentesDePlato, cumpleFiltros, indiceCompartidos,
+  masCompartidos, posicionVentana, type Compartido, type Componente,
 } from '@/lib/carta/mapaCarta'
 import { fmtMoney } from './cards'
 
@@ -25,61 +26,64 @@ const ETIQUETAS = [
   { key: 'sin lactosa', label: 'Sin lactosa' },
 ]
 
-const VENTANA = { width: 330, height: 420 }
+const VENTANA = { width: 330, height: 440 }
 
-/** Un punto del tablero: plato de la carta o idea en desarrollo. */
+/** Un círculo del mapa: plato de la carta o idea en desarrollo. */
 interface Punto {
   id: string
   nombre: string
   categoria: string
   tags: string[]
-  componentes: string[]
+  componentes: Componente[]
   precio: number | null
   disponible: boolean
   idea: boolean
   item?: CartaItemEnriquecido
 }
 
-type Seleccion = { tipo: 'plato'; id: string } | { tipo: 'item'; clave: string } | null
+type Seleccion = { tipo: 'plato'; id: string } | { tipo: 'componente'; clave: string } | null
+type EstadoCirculo = 'normal' | 'elegido' | 'relacionado' | 'apagado' | 'filtrado'
 
 const etiquetaSeccion: React.CSSProperties = {
   fontSize: 10, fontWeight: 800, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6,
 }
 
-const chipBase: React.CSSProperties = {
-  fontSize: 12, fontWeight: 600, padding: '5px 10px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit', minHeight: 30,
+const chip: React.CSSProperties = {
+  fontSize: 12, fontWeight: 600, padding: '5px 11px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
+  minHeight: 30, whiteSpace: 'nowrap', flexShrink: 0,
+}
+
+function plazaLegible(p: string | null): string {
+  if (!p) return ''
+  return p.charAt(0).toUpperCase() + p.slice(1)
 }
 
 // ── Círculo de un plato ──────────────────────────────────────────────────
 
 function CirculoPlato({ punto, color, tam, estado, badge, onTocar }: {
-  punto: Punto
-  color: string
-  tam: number
-  estado: 'normal' | 'elegido' | 'relacionado' | 'apagado' | 'filtrado'
-  badge?: number
-  onTocar: (el: HTMLElement) => void
+  punto: Punto; color: string; tam: number; estado: EstadoCirculo; badge?: number; onTocar: () => void
 }) {
-  const opacidad = estado === 'filtrado' ? 0.18 : estado === 'apagado' ? 0.38 : 1
-  const borde = estado === 'elegido' ? '3px solid var(--navy)'
-    : estado === 'relacionado' ? '2.5px solid var(--accent)'
-    : punto.idea ? `1.5px dashed ${color}` : `1.5px solid color-mix(in srgb, ${color} 55%, transparent)`
+  const opacidad = estado === 'filtrado' ? 0.15 : estado === 'apagado' ? 0.32 : 1
+  const resaltado = estado === 'elegido' || estado === 'relacionado'
   return (
     <button
       type="button"
-      onClick={e => { e.stopPropagation(); onTocar(e.currentTarget) }}
+      onClick={e => { e.stopPropagation(); onTocar() }}
       title={punto.nombre}
       data-plato-id={punto.id}
       style={{
         position: 'relative', width: tam, height: tam, borderRadius: '50%', flexShrink: 0, cursor: 'pointer',
-        background: estado === 'relacionado' ? 'color-mix(in srgb, var(--accent) 12%, var(--surface))' : 'var(--surface)',
-        border: borde, boxShadow: estado === 'elegido' ? 'var(--shadow-2)' : 'var(--shadow-1)', opacity: opacidad,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 6, fontFamily: 'inherit', color: 'var(--text)',
-        transition: 'opacity 200ms, border-color 200ms',
+        background: punto.idea ? 'var(--surface)' : `color-mix(in srgb, ${color} ${resaltado ? 30 : 16}%, var(--surface))`,
+        border: estado === 'elegido' ? '3px solid var(--navy)'
+          : punto.idea ? `2px dashed ${color}` : `2px solid color-mix(in srgb, ${color} ${resaltado ? 100 : 55}%, transparent)`,
+        boxShadow: estado === 'elegido' ? 'var(--shadow-3)' : resaltado ? 'var(--shadow-2)' : 'none',
+        opacity: opacidad, padding: 7, fontFamily: 'inherit', color: 'var(--text)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'opacity 200ms, background 200ms, box-shadow 200ms',
       }}
     >
       <span style={{
-        fontSize: tam >= 90 ? 12 : 10.5, fontWeight: 700, lineHeight: 1.15, textAlign: 'center',
+        fontSize: tam >= 90 ? 12 : 11, fontWeight: 700, lineHeight: 1.15, textAlign: 'center',
         display: '-webkit-box', WebkitLineClamp: tam >= 90 ? 4 : 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
         textDecoration: punto.disponible ? 'none' : 'line-through',
       }}>
@@ -87,9 +91,9 @@ function CirculoPlato({ punto, color, tam, estado, badge, onTocar }: {
       </span>
       {badge != null && badge > 0 && (
         <span style={{
-          position: 'absolute', top: -4, right: -4, minWidth: 20, height: 20, borderRadius: 99, padding: '0 5px',
-          background: 'var(--accent)', color: '#fff', fontSize: 11, fontWeight: 800,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box',
+          position: 'absolute', top: -3, right: -3, minWidth: 20, height: 20, borderRadius: 99, padding: '0 5px',
+          background: 'var(--navy)', color: '#fff', fontSize: 11, fontWeight: 800, boxSizing: 'border-box',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>{badge}</span>
       )}
     </button>
@@ -99,21 +103,22 @@ function CirculoPlato({ punto, color, tam, estado, badge, onTocar }: {
 // ── Ventanita del plato ──────────────────────────────────────────────────
 
 function VentanaPlato({
-  punto, compartidos, puntosPorId, categorias, verCostos, onCerrar, onElegirPlato, onElegirItem, onAbrirFicha,
-  onGuardarNota, onCambiarGrupo, onCambiarTags,
+  punto, color, compartidos, puntosPorId, categorias, verCostos, onCerrar, onElegirPlato, onElegirComponente,
+  onAbrirFicha, onGuardarNota, onCambiarGrupo, onCambiarTags,
 }: {
   punto: Punto
-  compartidos: { platoId: string; items: ItemCompartible[] }[]
+  color: string
+  compartidos: Compartido[]
   puntosPorId: Map<string, Punto>
   categorias: CartaCategoria[]
   verCostos: boolean
   onCerrar: () => void
   onElegirPlato: (id: string) => void
-  onElegirItem: (clave: string) => void
-  onAbrirFicha: (id: string) => void
-  onGuardarNota: (id: string, nota: string) => void
-  onCambiarGrupo: (id: string, categoria: string) => void
-  onCambiarTags: (id: string, tags: string[]) => void
+  onElegirComponente: (clave: string) => void
+  onAbrirFicha: () => void
+  onGuardarNota: (nota: string) => void
+  onCambiarGrupo: (categoria: string) => void
+  onCambiarTags: (tags: string[]) => void
 }) {
   const inicial = punto.item?.nota_chef ?? ''
   const [nota, setNota] = useState(inicial)
@@ -121,14 +126,20 @@ function VentanaPlato({
   useEffect(() => { notaRef.current = nota }, [nota])
   // Guarda al cerrar/cambiar de plato si quedó algo sin guardar (el blur no corre si se desmonta).
   useEffect(() => () => {
-    if (punto.item && notaRef.current !== inicial) onGuardarNota(punto.id, notaRef.current)
+    if (punto.item && notaRef.current !== inicial) onGuardarNota(notaRef.current)
   }, [punto.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const compartidosSet = useMemo(() => {
+    const s = new Set<string>()
+    for (const c of compartidos) for (const k of c.componentes) s.add(k.clave)
+    return s
+  }, [compartidos])
   const fc = punto.item?.food_cost_pct
 
   return (
     <div onClick={e => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <span style={{ width: 12, height: 12, borderRadius: 99, background: color, marginTop: 5, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', lineHeight: 1.25 }}>{punto.nombre}</div>
           <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
@@ -150,8 +161,8 @@ function VentanaPlato({
             const on = punto.tags.includes(t.key)
             return (
               <button key={t.key} type="button"
-                onClick={() => onCambiarTags(punto.id, on ? punto.tags.filter(x => x !== t.key) : [...punto.tags, t.key])}
-                style={{ ...chipBase, fontSize: 11, padding: '3px 8px', minHeight: 26, border: on ? 'none' : '1px dashed var(--border)',
+                onClick={() => onCambiarTags(on ? punto.tags.filter(x => x !== t.key) : [...punto.tags, t.key])}
+                style={{ ...chip, fontSize: 11, padding: '3px 8px', minHeight: 26, border: on ? 'none' : '1px dashed var(--border)',
                   background: on ? 'var(--green-bg)' : 'transparent', color: on ? 'var(--green-fg)' : 'var(--text-3)' }}>
                 {t.label}
               </button>
@@ -160,40 +171,47 @@ function VentanaPlato({
         </div>
       )}
 
-      {punto.componentes.length > 0 && (
-        <div>
-          <div style={etiquetaSeccion}>Componentes</div>
-          <div style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.45 }}>{punto.componentes.join(' · ')}</div>
-        </div>
-      )}
+      <div>
+        <div style={etiquetaSeccion}>Componentes · lo que se prepara en el mise</div>
+        {punto.componentes.length === 0 ? (
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>Sin componentes cargados.</div>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {punto.componentes.map(c => {
+              const compartido = compartidosSet.has(c.clave)
+              return (
+                <button key={c.clave} type="button" onClick={() => onElegirComponente(c.clave)}
+                  title={compartido ? 'También lo usan otros platos — tocá para verlos' : 'Solo lo usa este plato'}
+                  style={{ ...chip, fontSize: 11.5, padding: '4px 9px', minHeight: 28, whiteSpace: 'normal', textAlign: 'left',
+                    border: compartido ? 'none' : '1px solid var(--border)',
+                    background: compartido ? 'var(--navy)' : 'var(--surface)', color: compartido ? '#fff' : 'var(--text-2)' }}>
+                  {c.nombre}{c.plaza && <span style={{ opacity: 0.65, fontWeight: 500 }}> · {plazaLegible(c.plaza)}</span>}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       <div>
-        <div style={etiquetaSeccion}>Comparte con</div>
+        <div style={etiquetaSeccion}>Comparte componentes con</div>
         {compartidos.length === 0 ? (
           <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
-            {punto.componentes.length === 0 ? 'Sin componentes cargados: no se puede saber.' : 'Ningún otro plato usa sus componentes.'}
+            {punto.componentes.length === 0 ? 'No se puede saber sin componentes.' : 'Ningún otro plato usa sus componentes.'}
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 150, overflowY: 'auto' }}>
-            {compartidos.slice(0, 12).map(c => {
+          <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 140, overflowY: 'auto' }}>
+            {compartidos.map(c => {
               const otro = puntosPorId.get(c.platoId)
               if (!otro) return null
               return (
-                <div key={c.platoId} style={{ display: 'flex', gap: 6, alignItems: 'baseline', fontSize: 12.5, padding: '3px 0' }}>
-                  <button type="button" onClick={() => onElegirPlato(c.platoId)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, color: 'var(--navy-ink)', fontSize: 12.5, textAlign: 'left', flexShrink: 0, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {otro.nombre}
-                  </button>
-                  <span style={{ color: 'var(--text-2)', lineHeight: 1.35 }}>
-                    {c.items.map((it, i) => (
-                      <span key={it.clave}>
-                        {i > 0 && ', '}
-                        <button type="button" onClick={() => onElegirItem(it.clave)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, color: 'var(--text-2)', fontWeight: it.via === 'componente' ? 700 : 400, textDecoration: 'underline dotted' }}>
-                          {it.nombre}
-                        </button>
-                      </span>
-                    ))}
-                  </span>
-                </div>
+                <button key={c.platoId} type="button" onClick={() => onElegirPlato(c.platoId)} style={{
+                  display: 'flex', gap: 8, alignItems: 'baseline', textAlign: 'left', padding: '5px 0', background: 'none',
+                  border: 'none', borderTop: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5,
+                }}>
+                  <span style={{ fontWeight: 700, color: 'var(--navy-ink)', flex: '0 0 auto', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{otro.nombre}</span>
+                  <span style={{ color: 'var(--text-2)', lineHeight: 1.35 }}>{c.componentes.map(k => k.nombre).join(', ')}</span>
+                </button>
               )
             })}
           </div>
@@ -201,26 +219,27 @@ function VentanaPlato({
       </div>
 
       {!punto.idea && (
-        <>
-          <div>
-            <div style={etiquetaSeccion}>Nota de seguimiento</div>
-            <textarea value={nota} rows={3} placeholder="Para vos: cómo sale, qué probar, qué cambiar…"
-              onChange={e => setNota(e.target.value)}
-              onBlur={() => { if (nota !== inicial) onGuardarNota(punto.id, nota) }}
-              style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 13, lineHeight: 1.4, fontFamily: 'inherit', resize: 'vertical', outline: 'none' }} />
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <select value={punto.categoria} onChange={e => onCambiarGrupo(punto.id, e.target.value)} aria-label="Grupo"
-              style={{ flex: 1, minWidth: 0, minHeight: 40, padding: '0 8px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit' }}>
-              {!categorias.some(c => c.nombre === punto.categoria) && <option value={punto.categoria}>{punto.categoria}</option>}
-              {categorias.map(c => <option key={c.id} value={c.nombre}>Grupo: {c.nombre}</option>)}
-            </select>
-            <button type="button" onClick={() => onAbrirFicha(punto.id)} style={{ minHeight: 40, padding: '0 14px', borderRadius: 10, border: 'none', background: 'var(--navy)', color: '#fff', fontWeight: 700, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              Abrir ficha
-            </button>
-          </div>
-        </>
+        <div>
+          <div style={etiquetaSeccion}>Nota de seguimiento</div>
+          <textarea value={nota} rows={3} placeholder="Para vos: cómo sale, qué probar, qué cambiar…"
+            onChange={e => setNota(e.target.value)}
+            onBlur={() => { if (nota !== inicial) onGuardarNota(nota) }}
+            style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 13, lineHeight: 1.4, fontFamily: 'inherit', resize: 'vertical', outline: 'none' }} />
+        </div>
       )}
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        {!punto.idea && (
+          <select value={punto.categoria} onChange={e => onCambiarGrupo(e.target.value)} aria-label="Grupo"
+            style={{ flex: 1, minWidth: 0, minHeight: 40, padding: '0 8px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit' }}>
+            {!categorias.some(c => c.nombre === punto.categoria) && <option value={punto.categoria}>{punto.categoria}</option>}
+            {categorias.map(c => <option key={c.id} value={c.nombre}>Grupo: {c.nombre}</option>)}
+          </select>
+        )}
+        <button type="button" onClick={onAbrirFicha} style={{ flex: punto.idea ? 1 : '0 0 auto', minHeight: 40, padding: '0 14px', borderRadius: 10, border: 'none', background: 'var(--navy)', color: '#fff', fontWeight: 700, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          {punto.idea ? 'Ver en En desarrollo' : 'Abrir ficha'}
+        </button>
+      </div>
     </div>
   )
 }
@@ -228,14 +247,15 @@ function VentanaPlato({
 // ── Pantalla ─────────────────────────────────────────────────────────────
 
 export default function MapaCartaView({
-  items, categorias, recetasPorId, verCostos, onBack, onOpenPlato, onOpenDesarrollo,
+  items, categorias, nombreReceta, verCostos, onBack, onOpenPlato, onOpenDesarrollo,
   actualizarItem, actualizarTags, crearCategoria, onToast,
 }: {
   items: CartaItemEnriquecido[]
   categorias: CartaCategoria[]
-  recetasPorId: Map<string, RecetaParaMapa>
+  nombreReceta: (id: string) => string | undefined
   verCostos: boolean
   onBack: () => void
+  /** Abre la ficha completa del plato (centrada, encima del mapa). */
   onOpenPlato: (id: string) => void
   onOpenDesarrollo: () => void
   actualizarItem: (id: string, datos: Partial<Omit<CartaItemDB, 'id' | 'restaurante_id' | 'created_at'>>) => Promise<void>
@@ -247,15 +267,11 @@ export default function MapaCartaView({
   const [filtros, setFiltros] = useState<string[]>([])
   const [mostrarIdeas, setMostrarIdeas] = useState(true)
   const [sel, setSel] = useState<Seleccion>(null)
-  const [busquedaItem, setBusquedaItem] = useState('')
   const [nuevoGrupo, setNuevoGrupo] = useState('')
+  const [creandoGrupo, setCreandoGrupo] = useState(false)
   const [ventanaPos, setVentanaPos] = useState<{ left: number; top: number } | null>(null)
   const [anchoTablero, setAnchoTablero] = useState(1000)
-  const [anchoPagina, setAnchoPagina] = useState(1200)
   const tableroRef = useRef<HTMLDivElement>(null)
-  const paginaRef = useRef<HTMLDivElement>(null)
-
-  const recetaPorId = useCallback((id: string) => recetasPorId.get(id), [recetasPorId])
 
   // Cambios optimistas: actualizarItem recarga la carta entera (varios segundos con
   // componentes y costos), así que el grupo, la nota y las etiquetas se pintan ya y
@@ -268,48 +284,35 @@ export default function MapaCartaView({
     try { await escribir() } catch { setOverrides(o => ({ ...o, [id]: previo ?? {} })); onToast(error) }
   }, [overrides, onToast])
 
-  // Platos de la carta + ideas, con lo que tiene adentro cada uno.
-  const { puntos, itemsPorPunto } = useMemo(() => {
+  const puntos = useMemo(() => {
     const ps: Punto[] = []
-    const its: { id: string; items: ItemCompartible[] }[] = []
     for (const base of items) {
       const i = overrides[base.id] ? { ...base, ...overrides[base.id] } : base
       ps.push({
         id: i.id, nombre: i.nombre, categoria: i.categoria, tags: i.tags ?? [], precio: i.precio_venta,
-        disponible: i.disponible, idea: false, item: i,
-        componentes: i.plato_recetas.map(pr => pr.receta?.nombre ?? recetasPorId.get(pr.receta_id)?.nombre).filter((x): x is string => !!x),
+        disponible: i.disponible, idea: false, item: i, componentes: componentesDePlato(i, nombreReceta),
       })
-      its.push({ id: i.id, items: itemsDePlato(i, recetaPorId) })
     }
     if (mostrarIdeas) {
       for (const p of ideas ?? []) {
         if (p.estado !== 'idea' && p.estado !== 'prueba') continue
-        const id = `idea:${p.id}`
         ps.push({
-          id, nombre: p.nombre, categoria: p.categoria ?? 'Ideas', tags: [], precio: null, disponible: true, idea: true,
-          componentes: p.ficha.componentes.map(c => c.nombre).filter(Boolean),
+          id: `idea:${p.id}`, nombre: p.nombre, categoria: p.categoria ?? 'Ideas', tags: [], precio: null, disponible: true,
+          idea: true, componentes: componentesDeFicha(p.ficha.componentes, nombreReceta),
         })
-        its.push({ id, items: itemsDeFicha(p.ficha.componentes, recetaPorId) })
       }
     }
-    return { puntos: ps, itemsPorPunto: its }
-  }, [items, ideas, mostrarIdeas, recetasPorId, recetaPorId, overrides])
+    return ps
+  }, [items, ideas, mostrarIdeas, nombreReceta, overrides])
 
   const puntosPorId = useMemo(() => new Map(puntos.map(p => [p.id, p])), [puntos])
-  const indice = useMemo(() => indiceCompartidos(itemsPorPunto), [itemsPorPunto])
-  // Como en el boceto: franjas arriba y Principales en el medio de los grupos.
-  const grupos = useMemo(() => {
-    const g = armarGrupos(categorias, puntos)
-    const franjas = g.filter(x => x.forma === 'franja')
-    const resto = g.filter(x => x.forma === 'grupo')
-    const iP = resto.findIndex(x => /principal/i.test(x.nombre))
-    if (iP < 0) return g
-    const [principal] = resto.splice(iP, 1)
-    resto.splice(Math.floor(resto.length / 2), 0, principal)
-    return [...franjas, ...resto]
-  }, [categorias, puntos])
-  // Color fijo por grupo: sale de su lugar en carta_categorias, no del orden en pantalla
-  // (que cambia al centrar Principales o al crear un grupo).
+  const indice = useMemo(() => indiceCompartidos(puntos), [puntos])
+  const grupos = useMemo(() => armarGrupos(categorias, puntos), [categorias, puntos])
+  const principales = grupos.filter(g => g.plano === 'platos')
+  const secundarios = grupos.filter(g => g.plano === 'secundario')
+  const nSecundarios = secundarios.reduce((a, g) => a + g.platos.length, 0)
+
+  // Color fijo por grupo: sale de su lugar en carta_categorias, no del orden en pantalla.
   const colorDe = useMemo(() => {
     const m = new Map<string, string>()
     const ordenadas = [...categorias].sort((a, b) => a.orden - b.orden)
@@ -319,43 +322,34 @@ export default function MapaCartaView({
     return m
   }, [categorias, grupos])
 
-  const top = useMemo(() => masCompartidos(indice), [indice])
-  const itemsBuscados = useMemo(() => {
-    const q = busquedaItem.trim().toLowerCase()
-    const base = q ? [...indice.porItem.values()].filter(e => e.item.nombre.toLowerCase().includes(q)).sort((a, b) => b.platoIds.length - a.platoIds.length) : top
-    return base.slice(0, 14)
-  }, [busquedaItem, indice, top])
+  const top = useMemo(() => masCompartidos(indice).slice(0, 14), [indice])
 
-  // Qué resaltar según la selección.
   const { relacionados, badges } = useMemo(() => {
     const rel = new Set<string>()
     const bad = new Map<string, number>()
     if (sel?.tipo === 'plato') {
-      for (const c of compartidosCon(sel.id, indice)) { rel.add(c.platoId); bad.set(c.platoId, c.items.length) }
-    } else if (sel?.tipo === 'item') {
-      for (const id of indice.porItem.get(sel.clave)?.platoIds ?? []) rel.add(id)
+      for (const c of compartidosCon(sel.id, indice)) { rel.add(c.platoId); bad.set(c.platoId, c.componentes.length) }
+    } else if (sel?.tipo === 'componente') {
+      for (const id of indice.porComponente.get(sel.clave)?.platoIds ?? []) rel.add(id)
     }
     return { relacionados: rel, badges: bad }
   }, [sel, indice])
 
   const visibles = useMemo(() => puntos.filter(p => cumpleFiltros(p.tags, filtros)).length, [puntos, filtros])
   const elegido = sel?.tipo === 'plato' ? puntosPorId.get(sel.id) ?? null : null
-  const itemElegido = sel?.tipo === 'item' ? indice.porItem.get(sel.clave) ?? null : null
+  const componenteElegido = sel?.tipo === 'componente' ? indice.porComponente.get(sel.clave) ?? null : null
   const compartidosElegido = useMemo(() => elegido ? compartidosCon(elegido.id, indice) : [], [elegido, indice])
 
   useEffect(() => {
     const el = tableroRef.current
-    const pag = paginaRef.current
-    if (!el || !pag) return
-    const ro = new ResizeObserver(() => { setAnchoTablero(el.clientWidth); setAnchoPagina(pag.clientWidth) })
+    if (!el) return
+    const ro = new ResizeObserver(() => setAnchoTablero(el.clientWidth))
     ro.observe(el)
-    ro.observe(pag)
     return () => ro.disconnect()
   }, [])
-  const alCostado = anchoPagina >= 1040
   const ventanaFlotante = anchoTablero >= 640
 
-  function ubicarVentana(id: string) {
+  const ubicarVentana = useCallback((id: string) => {
     const tablero = tableroRef.current
     const circulo = tablero?.querySelector<HTMLElement>(`[data-plato-id="${CSS.escape(id)}"]`)
     if (!tablero || !circulo) { setVentanaPos(null); return }
@@ -365,15 +359,14 @@ export default function MapaCartaView({
       { left: c.left - t.left, top: c.top - t.top, width: c.width, height: c.height },
       { width: t.width, height: Math.max(t.height, VENTANA.height + 20) }, VENTANA,
     ))
-  }
+  }, [])
 
   function elegirPlato(id: string) {
     setSel({ tipo: 'plato', id })
-    // El círculo puede estar en otra parte del tablero: ubicar después del render.
     requestAnimationFrame(() => ubicarVentana(id))
   }
 
-  function estadoDe(p: Punto): 'normal' | 'elegido' | 'relacionado' | 'apagado' | 'filtrado' {
+  function estadoDe(p: Punto): EstadoCirculo {
     if (!cumpleFiltros(p.tags, filtros)) return 'filtrado'
     if (!sel) return 'normal'
     if (sel.tipo === 'plato' && sel.id === p.id) return 'elegido'
@@ -384,25 +377,55 @@ export default function MapaCartaView({
     const n = nuevoGrupo.trim()
     if (!n) return
     if (categorias.some(c => c.nombre.toLowerCase() === n.toLowerCase())) { onToast('Ese grupo ya existe'); return }
-    try { await crearCategoria(n); setNuevoGrupo(''); onToast(`Grupo "${n}" creado — mové platos desde su ventana`) }
+    try { await crearCategoria(n); setNuevoGrupo(''); setCreandoGrupo(false); onToast(`Grupo "${n}" creado — mové platos desde su ventana`) }
     catch { onToast('No se pudo crear el grupo') }
+  }
+
+  function renderGrupo(g: (typeof grupos)[number], tamBase: number) {
+    const color = colorDe.get(g.nombre) ?? 'var(--accent)'
+    // En el celular, círculos más chicos: entran 4 por fila en vez de 3.
+    const escala = anchoTablero < 520 ? 0.8 : 1
+    const tam = Math.round((/principal/i.test(g.nombre) ? tamBase + 14 : tamBase) * escala)
+    return (
+      <section key={g.nombre} style={{ flex: '0 1 auto', minWidth: 0, maxWidth: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+          <span style={{ width: 10, height: 10, borderRadius: 99, background: color }} />
+          <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{g.nombre}</span>
+          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{g.platos.length}</span>
+        </div>
+        {g.platos.length === 0 ? (
+          <div style={{ width: tam * 2, height: tam, borderRadius: 99, border: `2px dashed color-mix(in srgb, ${color} 45%, transparent)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--text-3)', textAlign: 'center', padding: 10, boxSizing: 'border-box' }}>
+            Vacío — mové platos desde su ventana
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {g.platos.map(p => (
+              <CirculoPlato key={p.id} punto={p} color={color} tam={tam} estado={estadoDe(p)}
+                badge={sel?.tipo === 'plato' ? badges.get(p.id) : undefined}
+                onTocar={() => (sel?.tipo === 'plato' && sel.id === p.id ? setSel(null) : elegirPlato(p.id))} />
+            ))}
+          </div>
+        )}
+      </section>
+    )
   }
 
   const ventana = elegido && (
     <VentanaPlato
       key={elegido.id}
       punto={elegido}
+      color={colorDe.get(elegido.categoria) ?? 'var(--accent)'}
       compartidos={compartidosElegido}
       puntosPorId={puntosPorId}
       categorias={categorias}
       verCostos={verCostos}
       onCerrar={() => setSel(null)}
       onElegirPlato={elegirPlato}
-      onElegirItem={clave => setSel({ tipo: 'item', clave })}
-      onAbrirFicha={id => (elegido.idea ? onOpenDesarrollo() : onOpenPlato(id))}
-      onGuardarNota={(id, nota) => { const v = nota.trim() || null; aplicar(id, { nota_chef: v }, () => actualizarItem(id, { nota_chef: v }), 'No se pudo guardar la nota') }}
-      onCambiarGrupo={(id, categoria) => { aplicar(id, { categoria }, () => actualizarItem(id, { categoria }), 'No se pudo mover el plato'); requestAnimationFrame(() => requestAnimationFrame(() => ubicarVentana(id))) }}
-      onCambiarTags={(id, tags) => { aplicar(id, { tags }, () => actualizarTags(id, tags), 'No se pudieron guardar las etiquetas') }}
+      onElegirComponente={clave => setSel({ tipo: 'componente', clave })}
+      onAbrirFicha={() => (elegido.idea ? onOpenDesarrollo() : onOpenPlato(elegido.id))}
+      onGuardarNota={nota => { const v = nota.trim() || null; aplicar(elegido.id, { nota_chef: v }, () => actualizarItem(elegido.id, { nota_chef: v }), 'No se pudo guardar la nota') }}
+      onCambiarGrupo={categoria => { aplicar(elegido.id, { categoria }, () => actualizarItem(elegido.id, { categoria }), 'No se pudo mover el plato'); requestAnimationFrame(() => requestAnimationFrame(() => ubicarVentana(elegido.id))) }}
+      onCambiarTags={tags => { aplicar(elegido.id, { tags }, () => actualizarTags(elegido.id, tags), 'No se pudieron guardar las etiquetas') }}
     />
   )
 
@@ -415,133 +438,105 @@ export default function MapaCartaView({
           </button>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>Mapa de la carta</div>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,.5)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em' }}>Grupos, filtros y lo que comparten tus platos</div>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,.5)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em' }}>Tus platos por grupo y los componentes que comparten</div>
           </div>
         </div>
       </div>
 
-      <div ref={paginaRef} style={{ padding: '14px 14px 100px', display: 'flex', flexDirection: alCostado ? 'row' : 'column', gap: 14, alignItems: alCostado ? 'flex-start' : 'stretch', maxWidth: 1400, margin: '0 auto', boxSizing: 'border-box' }}>
-        {/* ── Columna izquierda: filtros, compartidos, grupos ── */}
-        <aside onClick={e => e.stopPropagation()} style={{ flex: alCostado ? '0 0 260px' : '0 0 auto', position: alCostado ? 'sticky' : 'static', top: 12,
-          // Al costado: columna. Arriba (pantalla angosta o Coach abierto): bloques lado a lado, para no comerse el alto.
-          ...(alCostado ? { display: 'flex', flexDirection: 'column' as const } : { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', alignItems: 'start' }), gap: 16, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: 'var(--shadow-1)', padding: 12 }}>
-          <div>
-            <div style={etiquetaSeccion}>Filtrar</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {ETIQUETAS.map(t => {
-                const on = filtros.includes(t.key)
-                return (
-                  <button key={t.key} type="button" onClick={() => setFiltros(f => on ? f.filter(x => x !== t.key) : [...f, t.key])}
-                    style={{ ...chipBase, border: on ? 'none' : '1px solid var(--border)', background: on ? 'var(--navy)' : 'var(--surface)', color: on ? '#fff' : 'var(--text-2)' }}>
-                    {t.label}
-                  </button>
-                )
-              })}
-            </div>
+      <div style={{ padding: '12px 16px 100px', maxWidth: 1400, margin: '0 auto', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* ── Barra: filtros, componentes compartidos, grupos ── */}
+        <div onClick={e => e.stopPropagation()} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto' }}>
+            <span style={{ ...etiquetaSeccion, marginBottom: 0, flexShrink: 0, marginRight: 4 }}>Filtrar</span>
+            {ETIQUETAS.map(t => {
+              const on = filtros.includes(t.key)
+              return (
+                <button key={t.key} type="button" onClick={() => setFiltros(f => on ? f.filter(x => x !== t.key) : [...f, t.key])}
+                  style={{ ...chip, border: on ? 'none' : '1px solid var(--border)', background: on ? 'var(--navy)' : 'var(--surface)', color: on ? '#fff' : 'var(--text-2)' }}>
+                  {t.label}
+                </button>
+              )
+            })}
             {filtros.length > 0 && (
-              <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>
-                {visibles} de {puntos.length} platos · <button type="button" onClick={() => setFiltros([])} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--navy-ink)', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>limpiar</button>
-              </div>
+              <span style={{ fontSize: 12, color: 'var(--text-3)', flexShrink: 0, marginLeft: 4 }}>
+                {visibles} de {puntos.length} · <button type="button" onClick={() => setFiltros([])} style={{ background: 'none', border: 'none', padding: 0, color: 'var(--navy-ink)', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>limpiar</button>
+              </span>
             )}
+            <span style={{ flex: 1 }} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-2)', cursor: 'pointer', flexShrink: 0 }}>
+              <input type="checkbox" checked={mostrarIdeas} onChange={e => setMostrarIdeas(e.target.checked)} />
+              Ideas en desarrollo
+            </label>
           </div>
 
-          <div>
-            <div style={etiquetaSeccion}>¿Quién usa…?</div>
-            <input value={busquedaItem} onChange={e => setBusquedaItem(e.target.value)} placeholder="Ingrediente o preparación"
-              style={{ width: '100%', boxSizing: 'border-box', padding: '7px 10px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', outline: 'none', marginBottom: 6 }} />
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {itemsBuscados.map(e => {
-                const on = sel?.tipo === 'item' && sel.clave === e.item.clave
+          {top.length > 0 && (
+            <div className="hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto' }}>
+              <span style={{ ...etiquetaSeccion, marginBottom: 0, flexShrink: 0, marginRight: 4 }}>Componentes compartidos</span>
+              {top.map(e => {
+                const on = sel?.tipo === 'componente' && sel.clave === e.componente.clave
                 return (
-                  <button key={e.item.clave} type="button" onClick={() => setSel(on ? null : { tipo: 'item', clave: e.item.clave })}
-                    title={e.item.via === 'componente' ? 'Preparación (componente)' : 'Ingrediente dentro de los componentes'}
-                    style={{ ...chipBase, fontSize: 11.5, padding: '4px 9px', minHeight: 28, border: on ? 'none' : '1px solid var(--border)',
-                      background: on ? 'var(--accent)' : 'var(--surface)', color: on ? '#fff' : 'var(--text-2)', fontWeight: e.item.via === 'componente' ? 700 : 500 }}>
-                    {e.item.nombre} · {e.platoIds.length}
+                  <button key={e.componente.clave} type="button" onClick={() => setSel(on ? null : { tipo: 'componente', clave: e.componente.clave })}
+                    style={{ ...chip, border: on ? 'none' : '1px solid var(--border)', background: on ? 'var(--navy)' : 'var(--surface)', color: on ? '#fff' : 'var(--text-2)' }}>
+                    {e.componente.nombre} · {e.platoIds.length}
                   </button>
                 )
               })}
-              {itemsBuscados.length === 0 && <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Nada compartido con ese nombre.</span>}
             </div>
-            {indice.comunes.length > 0 && (
-              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6, lineHeight: 1.4 }}>
-                No vinculan por estar en casi todo: {indice.comunes.slice(0, 6).map(i => i.nombre.toLowerCase()).join(', ')}{indice.comunes.length > 6 ? '…' : ''}
-              </div>
-            )}
-          </div>
+          )}
 
-          <div>
-            <div style={etiquetaSeccion}>Grupos</div>
-            <div style={{ display: 'flex', flexDirection: alCostado ? 'column' : 'row', flexWrap: 'wrap', gap: alCostado ? 2 : 10 }}>
-              {grupos.map(g => (
-                <div key={g.nombre} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '3px 0' }}>
-                  <span style={{ width: 10, height: 10, borderRadius: 99, background: colorDe.get(g.nombre), flexShrink: 0 }} />
-                  <span style={{ flex: alCostado ? 1 : 'none', color: 'var(--text)' }}>{g.nombre}</span>
-                  <span style={{ color: 'var(--text-3)', fontSize: 12 }}>{g.platos.length}</span>
-                </div>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-              <input value={nuevoGrupo} onChange={e => setNuevoGrupo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') agregarGrupo() }}
-                placeholder="Nuevo grupo (ej. Guarnición 2)"
-                style={{ flex: 1, minWidth: 0, padding: '7px 10px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
-              <button type="button" onClick={agregarGrupo} disabled={!nuevoGrupo.trim()} aria-label="Agregar grupo"
-                style={{ width: 36, minHeight: 36, borderRadius: 10, border: 'none', background: 'var(--navy)', color: '#fff', cursor: 'pointer', opacity: nuevoGrupo.trim() ? 1 : 0.4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 20 }}>add</span>
-              </button>
-            </div>
-          </div>
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-2)', cursor: 'pointer' }}>
-            <input type="checkbox" checked={mostrarIdeas} onChange={e => setMostrarIdeas(e.target.checked)} />
-            Mostrar ideas en desarrollo <span style={{ display: 'inline-block', width: 14, height: 14, borderRadius: 99, border: '1.5px dashed var(--text-3)' }} />
-          </label>
-        </aside>
-
-        {/* ── Tablero ── */}
-        <div ref={tableroRef} style={{ flex: '1 1 auto', position: 'relative', minWidth: 0 }}>
-          {itemElegido && (
-            <div onClick={e => e.stopPropagation()} style={{ marginBottom: 10, padding: '8px 12px', borderRadius: 10, background: 'color-mix(in srgb, var(--accent) 10%, var(--surface))', border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)', fontSize: 13, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ flex: 1 }}><b>{itemElegido.item.nombre}</b> está en {itemElegido.platoIds.length} {itemElegido.platoIds.length === 1 ? 'plato' : 'platos'}{itemElegido.item.via === 'ingrediente' ? ' (como ingrediente de sus componentes)' : ''}</span>
+          {componenteElegido && (
+            <div style={{ padding: '8px 12px', borderRadius: 10, background: 'var(--blue-bg)', fontSize: 13, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ flex: 1 }}>
+                <b>{componenteElegido.componente.nombre}</b>
+                {componenteElegido.componente.plaza && <> ({plazaLegible(componenteElegido.componente.plaza)})</>}
+                {' '}se usa en {componenteElegido.platoIds.length} {componenteElegido.platoIds.length === 1 ? 'plato' : 'platos'}
+              </span>
               <button type="button" onClick={() => setSel(null)} aria-label="Quitar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-2)', display: 'flex', padding: 0 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
               </button>
             </div>
           )}
+        </div>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'flex-start' }}>
-            {grupos.map(g => {
-              const color = colorDe.get(g.nombre) ?? 'var(--accent)'
-              const esFranja = g.forma === 'franja'
-              const esPrincipal = /principal/i.test(g.nombre)
-              const tam = esFranja ? 64 : esPrincipal ? 104 : 80
-              return (
-                <section key={g.nombre} style={{
-                  flex: esFranja ? '1 1 100%' : esPrincipal ? '2 1 360px' : '1 1 220px',
-                  border: `2px solid ${color}`, borderRadius: esFranja ? 999 : 40, padding: esFranja ? '10px 22px' : '14px 18px 18px',
-                  background: `color-mix(in srgb, ${color} 5%, transparent)`, minWidth: 0,
+        {/* ── Tablero ── */}
+        <div ref={tableroRef} style={{ position: 'relative', minWidth: 0 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '22px 36px', alignItems: 'flex-start' }}>
+            {principales.map(g => renderGrupo(g, 84))}
+
+            {/* Grupo nuevo (ej. Guarnición 2) */}
+            <section onClick={e => e.stopPropagation()} style={{ flex: '0 0 auto' }}>
+              <div style={{ height: 18, marginBottom: 8 }} />
+              {creandoGrupo ? (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input autoFocus value={nuevoGrupo} onChange={e => setNuevoGrupo(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') agregarGrupo(); if (e.key === 'Escape') setCreandoGrupo(false) }}
+                    placeholder="Nombre (ej. Guarnición 2)"
+                    style={{ width: 190, padding: '8px 10px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
+                  <button type="button" onClick={agregarGrupo} disabled={!nuevoGrupo.trim()} style={{ minHeight: 36, padding: '0 12px', borderRadius: 10, border: 'none', background: 'var(--navy)', color: '#fff', fontWeight: 700, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer', opacity: nuevoGrupo.trim() ? 1 : 0.4 }}>Crear</button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setCreandoGrupo(true)} style={{
+                  width: 84, height: 84, borderRadius: '50%', border: '2px dashed var(--border)', background: 'transparent', cursor: 'pointer',
+                  color: 'var(--text-3)', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
                 }}>
-                  <div style={{ fontSize: 12, fontWeight: 800, color, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10, textAlign: esFranja ? 'left' : 'center' }}>
-                    {g.nombre} <span style={{ fontWeight: 600, opacity: 0.7 }}>· {g.platos.length}</span>
-                  </div>
-                  {g.platos.length === 0 ? (
-                    <div style={{ fontSize: 12, color: 'var(--text-3)', textAlign: 'center', padding: '8px 0' }}>Grupo vacío — mové platos acá desde su ventana.</div>
-                  ) : (
-                    <div className={esFranja ? 'hide-scrollbar' : undefined} style={{
-                      display: 'flex', gap: 10, justifyContent: esFranja ? 'flex-start' : 'center',
-                      flexWrap: esFranja ? 'nowrap' : 'wrap', overflowX: esFranja ? 'auto' : 'visible', padding: 4,
-                    }}>
-                      {g.platos.map(p => (
-                        <CirculoPlato key={p.id} punto={p} color={color} tam={tam} estado={estadoDe(p)}
-                          badge={sel?.tipo === 'plato' ? badges.get(p.id) : undefined}
-                          onTocar={() => (sel?.tipo === 'plato' && sel.id === p.id ? setSel(null) : elegirPlato(p.id))} />
-                      ))}
-                    </div>
-                  )}
-                </section>
-              )
-            })}
+                  <span className="material-symbols-outlined" style={{ fontSize: 22 }}>add</span>
+                  Grupo
+                </button>
+              )}
+            </section>
           </div>
+
+          {/* Bebidas y cafetería: segundo plano, plegadas */}
+          {secundarios.length > 0 && (
+            <details onClick={e => e.stopPropagation()} style={{ marginTop: 28, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+              <summary style={{ cursor: 'pointer', fontSize: 12.5, fontWeight: 700, color: 'var(--text-2)', listStyle: 'revert' }}>
+                {secundarios.map(g => g.nombre).join(' y ')} · {nSecundarios}
+              </summary>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '18px 32px', marginTop: 12 }}>
+                {secundarios.map(g => renderGrupo(g, 64))}
+              </div>
+            </details>
+          )}
 
           {/* Ventanita al lado del plato (pantallas anchas) */}
           {ventana && ventanaFlotante && ventanaPos && (

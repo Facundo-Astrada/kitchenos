@@ -29,7 +29,7 @@ import { clasificarIngenieriaMenu, buildVentasMap, mapaCuadrantePorId, QUAD_META
 import { analizarCarta } from '@/lib/recetas/estandarizacion'
 import { sincronizarMiseDeMenu } from '@/lib/ops/menuMise'
 import { activarMenuParaFechas, resumenActivacion } from '@/lib/menus/activarMenu'
-import { Toast, FlipCard } from '@/components/ui'
+import { Toast, FlipCard, Modal } from '@/components/ui'
 import { fmtMoney, fcBadge, marginBadge, PlatoCard, PlatoCardBack, PlatoCardSkeleton } from './cards'
 import { exportCartaPDF, exportRentabilidadPDF } from './exportar'
 import { PackagingGruposDrawer } from './PackagingGruposDrawer'
@@ -374,6 +374,8 @@ export default function CartaPage() {
     if (view === 'mapa' && !canEdit) setView('list')
   }, [view, canEdit])
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
+  // Ficha abierta desde el Mapa de la carta: se muestra centrada encima del mapa, sin salir de él.
+  const [fichaEnMapa, setFichaEnMapa] = useState(false)
   const [filter, setFilter] = useState<string>('Todas')
   const [toast, setToast] = useState('')
   const [showGrupos, setShowGrupos] = useState(false)
@@ -877,16 +879,19 @@ export default function CartaPage() {
         <MapaCartaView
           items={items}
           categorias={categorias}
-          recetasPorId={recetasPorId}
+          nombreReceta={nombreReceta}
           verCostos={verCostos}
           onBack={() => setView('list')}
-          onOpenPlato={(pid) => { setSelectedItemId(pid); setView('detail') }}
+          onOpenPlato={(pid) => { setSelectedItemId(pid); setFichaEnMapa(true) }}
           onOpenDesarrollo={() => setView('desarrollo')}
           actualizarItem={actualizarItem}
           actualizarTags={actualizarTags}
           crearCategoria={crearCategoria}
           onToast={setToast}
         />
+        <Modal open={fichaEnMapa && !!selectedItem} onClose={() => setFichaEnMapa(false)} maxWidth={880} center>
+          {selectedItem && renderDetalle(selectedItem, () => setFichaEnMapa(false))}
+        </Modal>
         {toast && <Toast msg={toast} onDone={() => setToast('')} />}
       </>
     )
@@ -907,50 +912,59 @@ export default function CartaPage() {
     )
   }
 
+  // La ficha completa del plato — en su pantalla (view detail) o centrada encima del Mapa de la carta.
+  function renderDetalle(plato: CartaItemEnriquecido, onBack: () => void) {
+    return (
+      <>
+          <DetailView
+            item={plato}
+            recetas={recetas}
+            productos={productos}
+            categorias={categorias}
+            checklistItems={checklistItems}
+            recipientesUsados={recipientesUsados}
+            onBack={onBack}
+            onGuardarMeta={handleGuardarMeta}
+            onEliminarPlato={handleEliminar}
+            onDuplicar={handleDuplicarPlato}
+            onAgregarReceta={handleAgregarReceta}
+            onEliminarReceta={handleEliminarReceta}
+            onAgregarPackaging={handleAgregarPackaging}
+            onEliminarPackaging={handleEliminarPackaging}
+            onShowGrupos={() => setShowGrupos(true)}
+            onActualizarTags={tags => actualizarTags(plato.id, tags)}
+            openOpsId={openOpsIdDetalle}
+            savingOpsId={savingOpsIdDetalle}
+            onToggleOps={id => setOpenOpsIdDetalle(prev => prev === id ? null : id)}
+            onGuardarOps={handleGuardarOpsDetalle}
+            onQuitarOps={handleQuitarOpsDetalle}
+            onEditarGramaje={handleEditarGramajeDetalle}
+            onEditarPesoPorcion={handleEditarPesoPorcionDetalle}
+            onRecetaActualizada={async () => { await Promise.all([fetchItems(), refetchRecetas()]) }}
+            restauranteId={RESTAURANTE_ID}
+          />
+          {showGrupos && (
+            <PackagingGruposDrawer
+              grupos={grupos}
+              productos={productos}
+              platoActual={plato}
+              todosLosPlatos={items}
+              onCrearGrupo={crearGrupo}
+              onEliminarGrupo={eliminarGrupo}
+              onAplicarGrupo={handleAplicarGrupo}
+              onClose={() => setShowGrupos(false)}
+              onAfterApply={async () => { await fetchItems(); setShowGrupos(false); setToast('Grupo aplicado') }}
+            />
+          )}
+      </>
+    )
+  }
+
   // ── Detail ──
   if (view === 'detail' && selectedItem) {
     return (
       <>
-        <DetailView
-          item={selectedItem}
-          recetas={recetas}
-          productos={productos}
-          categorias={categorias}
-          checklistItems={checklistItems}
-          recipientesUsados={recipientesUsados}
-          onBack={() => setView('list')}
-          onGuardarMeta={handleGuardarMeta}
-          onEliminarPlato={handleEliminar}
-          onDuplicar={handleDuplicarPlato}
-          onAgregarReceta={handleAgregarReceta}
-          onEliminarReceta={handleEliminarReceta}
-          onAgregarPackaging={handleAgregarPackaging}
-          onEliminarPackaging={handleEliminarPackaging}
-          onShowGrupos={() => setShowGrupos(true)}
-          onActualizarTags={tags => actualizarTags(selectedItem.id, tags)}
-          openOpsId={openOpsIdDetalle}
-          savingOpsId={savingOpsIdDetalle}
-          onToggleOps={id => setOpenOpsIdDetalle(prev => prev === id ? null : id)}
-          onGuardarOps={handleGuardarOpsDetalle}
-          onQuitarOps={handleQuitarOpsDetalle}
-          onEditarGramaje={handleEditarGramajeDetalle}
-          onEditarPesoPorcion={handleEditarPesoPorcionDetalle}
-          onRecetaActualizada={async () => { await Promise.all([fetchItems(), refetchRecetas()]) }}
-          restauranteId={RESTAURANTE_ID}
-        />
-        {showGrupos && (
-          <PackagingGruposDrawer
-            grupos={grupos}
-            productos={productos}
-            platoActual={selectedItem}
-            todosLosPlatos={items}
-            onCrearGrupo={crearGrupo}
-            onEliminarGrupo={eliminarGrupo}
-            onAplicarGrupo={handleAplicarGrupo}
-            onClose={() => setShowGrupos(false)}
-            onAfterApply={async () => { await fetchItems(); setShowGrupos(false); setToast('Grupo aplicado') }}
-          />
-        )}
+        {renderDetalle(selectedItem, () => setView('list'))}
         {toast && <Toast msg={toast} onDone={() => setToast('')} />}
       </>
     )
