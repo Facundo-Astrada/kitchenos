@@ -150,6 +150,7 @@ no_negociables: string[] }` — cultura/políticas/no-negociables **del restaura
 confundir con los campos homónimos de `puesto_descripciones` (esos son por puesto).
 
 ## Unidades de ingredientes — trampas de conversión
+**Regla (oct 2026):** `ingredientes.cantidad`/`unidad` son del usuario y nunca se convierten. Si hay `producto_id`, `costo_unitario`/`unidad_costo` los escribe la base (trigger `ingredientes_costo_desde_producto`: precio y unidad del producto; con `productos.peso_por_unidad_g` cruza u↔peso) y un cambio de precio en Stock se propaga por `producto_id` (`productos_propaga_costo`). No escribir `unidad_costo = unidad de la receta`: era el origen del ×1000. Facturas/listas se llevan a la unidad del producto con `aUnidadDelProducto()` (`lib/stock/precios.ts`) y nunca le cambian la unidad. Vínculo automático solo exacto: `lib/recetas/vinculo.ts`.
 
 `ingredientes.unidad`/`unidad_costo` llegan con variantes no estándar desde importaciones: `gr/grs/gramo→g`, `lt/lts/litro→l`, `cc/mililitro→ml`, `unidad/unidades/un→u`. `canonUnit()` en `lib/hooks/useRecetas.ts` canoniza antes de calcular el factor; `supabase/migrations/normalizar_unidades_ingredientes.sql` corrige en DB.
 
