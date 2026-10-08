@@ -4,6 +4,7 @@
 - Costo de ingrediente vinculado = precio + unidad del producto, por trigger (migración `20261008_ingredientes_costo_desde_producto.sql`). Bros: 137 líneas ×1000 → 0, recetas distorsionadas 99 → 3.
 - Vínculo a Stock se guarda en las 6 vías de carga; auto-vínculo solo exacto; `RecetaEditSheet` ya no convierte "500 g" en "500 kg".
 - Facturas/listas convierten a la unidad del producto; `peso_por_unidad_g` con campo en Stock; sin conversión automática en pantalla; comas y miles.
+- Stock: chip "Sin precio" (ordenado por cuántas recetas usan cada producto, "en N recetas" por fila). Bros: 53, arriba Cebolla (34) y Agua (31).
 - Bros: 216 vínculos erróneos desvinculados, 79 revinculados exacto (respaldos `_bkp_ingredientes_*_20261008`).
 
 ## Qué quedó a medias
