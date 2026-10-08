@@ -30,7 +30,9 @@ import {
   type FilaIngredienteRapido,
 } from '@/components/recetas/CargaRapidaIngredientes'
 import { IAMultiResultScreen } from './IAResultScreens'
-import { IngRow, UNIDADES_SUBRECETA, type FormIng } from './IngRow'
+import { IngRow, UNIDADES_SUBRECETA, patchVinculo, type FormIng } from './IngRow'
+import { sugerenciaDeProducto, sugerenciaDeReceta, type SugerenciaIngrediente } from '@/lib/recetas/sugerencias'
+import type { ResultadoVinculoIA } from '@/lib/recetas/vinculoIA'
 import { apiToForm, parseNum, calcPesoPorcion, formatPeso, type IAApiResult } from './shared'
 
 
@@ -1058,6 +1060,8 @@ function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas
   // contra el formulario ya cargado. null = no vino de la IA o ya se cerró.
   const [iaOrigen, setIaOrigen] = useState<{ previewUrl: string | null; texto: string | null; rinde: string | null } | null>(null)
   const [verOriginal, setVerOriginal] = useState(false)
+  // Vínculo por IA de lo que el nombre exacto no resolvió (ver vincularConIA).
+  const [iaVinculo, setIaVinculo] = useState<{ estado: 'buscando' | 'listo' | 'error'; auto: number; dudas: number } | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const [iaPreviewUrl, setIaPreviewUrl] = useState<string | null>(null)
   const [iaInputText, setIaInputText] = useState<string | null>(null)
@@ -1334,7 +1338,7 @@ function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas
     if (form.porciones) setPorciones(String(form.porciones))
     if (form.tiempo_min) setTiempoMin(String(form.tiempo_min))
     if (form.ingredientes.length > 0) {
-      setIngs(form.ingredientes.map((i): FormIng => {
+      const filas = form.ingredientes.map((i): FormIng => {
         const unidad = canonUnit(i.unidad) || 'u'
         const base: FormIng = { id: uid(), nombre: i.nombre, cantidad: String(i.cantidad ?? ''), unidad, costo_unitario: 0, grupo: '' }
         const prod = buscarProductoExacto(i.nombre, stockProductos)
@@ -1346,7 +1350,9 @@ function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas
           return { ...base, nombre: rec.nombre, tipo: 'subreceta', subreceta_id: rec.id, unidad_costo: 'g', costo_unitario: rec.costoPorGramo ?? 0 }
         }
         return base
-      }))
+      })
+      setIngs(filas)
+      vincularConIA(filas)
     }
     if (form.pasos.length > 0) {
       setPasos(form.pasos.map(t => ({ id: uid(), texto: typeof t === 'string' ? t : '' })))
@@ -1360,6 +1366,51 @@ function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas
     setIaMode(null)
     setIaCollapsed(true)
     bodyRef.current?.scrollTo({ top: 0 })
+  }
+
+  // Lo que el nombre exacto no vinculó, lo intenta la IA (lib/recetas/vinculoIA.ts):
+  // si está segura vincula sola, si duda deja los candidatos como chips en la
+  // fila. Best-effort: si falla, quedan como estaban (se vinculan a mano).
+  async function vincularConIA(filas: FormIng[]) {
+    const pendientes = filas.filter(f => f.nombre.trim() && !f.producto_id && !f.subreceta_id)
+    if (pendientes.length === 0) { setIaVinculo(null); return }
+    setIaVinculo({ estado: 'buscando', auto: 0, dudas: 0 })
+    try {
+      const res = await fetch('/api/recetas/vincular-ia', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ingredientes: pendientes.map(f => ({ nombre: f.nombre, unidad: f.unidad })) }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const { resultados = [] } = await res.json() as { resultados?: ResultadoVinculoIA[] }
+
+      const catalogo = new Map<string, SugerenciaIngrediente>()
+      for (const p of stockProductos) catalogo.set(`producto:${p.id}`, sugerenciaDeProducto(p))
+      for (const r of recetasSugeribles) catalogo.set(`subreceta:${r.id}`, sugerenciaDeReceta(r))
+
+      const plan = new Map<number, { nombre: string; opciones: SugerenciaIngrediente[]; segura: boolean }>()
+      for (const r of resultados) {
+        const fila = pendientes[r.i]
+        if (!fila) continue
+        const opciones = r.opciones.map(o => catalogo.get(`${o.tipo}:${o.id}`)).filter((o): o is SugerenciaIngrediente => !!o)
+        if (opciones.length === 0) continue
+        // Una receta como ingrediente va en peso: si la fila viene en "u" o
+        // litros, vincularla sola cambiaría el sentido de la cantidad — se pregunta.
+        const segura = r.segura && (opciones[0].tipo === 'producto' || UNIDADES_SUBRECETA.includes(fila.unidad))
+        plan.set(fila.id, { nombre: fila.nombre, opciones, segura })
+      }
+      const valores = [...plan.values()]
+      setIaVinculo({ estado: 'listo', auto: valores.filter(v => v.segura).length, dudas: valores.filter(v => !v.segura).length })
+      setIngs(prev => prev.map(i => {
+        const p = plan.get(i.id)
+        // Si el cocinero ya tocó la fila mientras la IA pensaba, manda él.
+        if (!p || i.nombre !== p.nombre || i.producto_id || i.subreceta_id) return i
+        if (p.segura) return { ...i, ...patchVinculo(i, p.opciones[0]), vinculoIA: true }
+        return { ...i, opcionesIA: p.opciones }
+      }))
+    } catch (e) {
+      console.warn('[recetario] vínculo por IA:', e)
+      setIaVinculo({ estado: 'error', auto: 0, dudas: 0 })
+    }
   }
 
   function handleImportOption(mode: ImportMode) {
@@ -1574,8 +1625,26 @@ function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas
                 {iaOrigen.previewUrl ? 'Tocá la foto para compararla' : iaOrigen.texto ? `Desde: ${iaOrigen.texto}` : 'Corregí lo que haga falta abajo'}
                 {iaOrigen.rinde && ` · la ficha original rinde ${iaOrigen.rinde}`}
               </div>
+              {iaVinculo && (
+                <div style={{ fontSize: 11, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4, color: iaVinculo.estado === 'listo' && iaVinculo.dudas > 0 ? '#b45309' : 'var(--text-2)' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 13, animation: iaVinculo.estado === 'buscando' ? 'spin 1s linear infinite' : undefined }}>
+                    {iaVinculo.estado === 'buscando' ? 'progress_activity' : iaVinculo.estado === 'error' ? 'link_off' : 'link'}
+                  </span>
+                  {iaVinculo.estado === 'buscando' && 'Buscando tus insumos en Stock…'}
+                  {iaVinculo.estado === 'error' && 'No se pudo buscar en Stock — vinculá a mano'}
+                  {iaVinculo.estado === 'listo' && (
+                    iaVinculo.auto + iaVinculo.dudas === 0
+                      ? 'Lo que falta no está en Stock: se crea al guardar'
+                      : [
+                          iaVinculo.auto > 0 && `La IA vinculó ${iaVinculo.auto}`,
+                          iaVinculo.dudas > 0 && `${iaVinculo.dudas} para elegir abajo`,
+                        ].filter(Boolean).join(' · ')
+                  )}
+                  <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+                </div>
+              )}
             </div>
-            <button onClick={() => setIaOrigen(null)} aria-label="Cerrar aviso" style={{ ...btnClear, padding: 4, flexShrink: 0 }}>
+            <button onClick={() => { setIaOrigen(null); setIaVinculo(null) }} aria-label="Cerrar aviso" style={{ ...btnClear, padding: 4, flexShrink: 0 }}>
               <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)' }}>close</span>
             </button>
           </div>

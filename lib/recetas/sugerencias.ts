@@ -22,6 +22,24 @@ export type SugerenciaIngrediente = {
 type ProductoBuscable = { id: string; nombre: string; unidad: string; precio_unitario: number }
 type RecetaBuscable = { id: string; nombre: string; costoPorGramo?: number | null }
 
+export function sugerenciaDeProducto(p: ProductoBuscable): SugerenciaIngrediente {
+  const precio = p.precio_unitario || 0
+  return {
+    tipo: 'producto', id: p.id, nombre: p.nombre, unidad: p.unidad, costoUnitario: precio,
+    detalle: precio > 0 ? `$${precio.toLocaleString('es-AR', { maximumFractionDigits: 2 })}/${p.unidad}` : `sin precio · ${p.unidad}`,
+  }
+}
+
+// Subreceta: siempre por gramaje (ver CargaRapidaIngredientes.tsx). Sin peso
+// cargado no hay $/g real — queda en 0 para que se note el hueco.
+export function sugerenciaDeReceta(r: RecetaBuscable): SugerenciaIngrediente {
+  const cpg = r.costoPorGramo ?? 0
+  return {
+    tipo: 'subreceta', id: r.id, nombre: r.nombre, unidad: 'g', costoUnitario: cpg,
+    detalle: cpg > 0 ? `receta · $${(cpg * 1000).toLocaleString('es-AR', { maximumFractionDigits: 0 })}/kg` : 'receta · falta peso',
+  }
+}
+
 /**
  * 0 = igual, 1 = empieza con la búsqueda, 2 = alguna palabra empieza con ella,
  * 3 = la contiene, 4 = contiene todas las palabras sueltas. -1 = no coincide.
@@ -57,27 +75,18 @@ export function buscarSugerenciasIngrediente(
     const puntaje = puntajeCoincidencia(p.nombre, query)
     if (puntaje < 0) continue
     const precio = p.precio_unitario || 0
-    const c: Candidato = {
-      tipo: 'producto', id: p.id, nombre: p.nombre, unidad: p.unidad, costoUnitario: precio, puntaje,
-      detalle: precio > 0 ? `$${precio.toLocaleString('es-AR', { maximumFractionDigits: 2 })}/${p.unidad}` : `sin precio · ${p.unidad}`,
-    }
+    const c: Candidato = { ...sugerenciaDeProducto(p), puntaje }
     const clave = normalizarBusqueda(p.nombre)
     const previo = porNombre.get(clave)
     if (!previo || (previo.costoUnitario <= 0 && precio > 0)) porNombre.set(clave, c)
   }
   candidatos.push(...porNombre.values())
 
-  // Subreceta: siempre por gramaje (ver CargaRapidaIngredientes.tsx). Sin peso
-  // cargado no hay $/g real — queda en 0 para que se note el hueco.
   for (const r of recetas) {
     if (r.id === excluirRecetaId) continue
     const puntaje = puntajeCoincidencia(r.nombre, query)
     if (puntaje < 0) continue
-    const cpg = r.costoPorGramo ?? 0
-    candidatos.push({
-      tipo: 'subreceta', id: r.id, nombre: r.nombre, unidad: 'g', costoUnitario: cpg, puntaje,
-      detalle: cpg > 0 ? `receta · $${(cpg * 1000).toLocaleString('es-AR', { maximumFractionDigits: 0 })}/kg` : 'receta · falta peso',
-    })
+    candidatos.push({ ...sugerenciaDeReceta(r), puntaje })
   }
 
   candidatos.sort((a, b) =>

@@ -30,6 +30,30 @@ export interface FormIng {
   // Receta elegida como ingrediente (subreceta) — se costea por gramo.
   tipo?: 'producto' | 'subreceta'
   subreceta_id?: string | null
+  // Vínculo por IA (Nueva receta importada): candidatos para elegir cuando la
+  // IA dudó, y si el vínculo actual lo puso la IA sola.
+  opcionesIA?: SugerenciaIngrediente[]
+  vinculoIA?: boolean
+}
+
+// Lo que cambia en la fila al vincularla a un producto o receta. Lo usan el
+// desplegable, los chips de "¿Cuál usás?" y el vínculo automático de la IA.
+export function patchVinculo(ing: Pick<FormIng, 'unidad' | 'cantidad'>, s: SugerenciaIngrediente): Partial<FormIng> {
+  if (s.tipo === 'subreceta') {
+    return {
+      nombre: s.nombre, tipo: 'subreceta', subreceta_id: s.id, producto_id: null,
+      costo_unitario: s.costoUnitario, unidad_costo: 'g',
+      unidad: UNIDADES_SUBRECETA.includes(ing.unidad) ? ing.unidad : 'g',
+      opcionesIA: undefined, vinculoIA: false,
+    }
+  }
+  // La unidad del producto solo se sugiere si todavía no hay cantidad cargada.
+  return {
+    nombre: s.nombre, tipo: 'producto', producto_id: s.id, subreceta_id: null,
+    unidad_costo: s.unidad, costo_unitario: s.costoUnitario,
+    ...(parseNum(ing.cantidad) > 0 ? {} : { unidad: s.unidad }),
+    opcionesIA: undefined, vinculoIA: false,
+  }
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -97,25 +121,17 @@ export function IngRow({ ing, idx, isLast, isActive, stockProductos, recetas, ca
   function handleNombreChange(val: string) {
     // Tipear después de elegir desvincula: si no, quedaría guardado el
     // producto/receta anterior con un nombre que ya no le corresponde.
-    onUpdate(ing.id, { nombre: val, tipo: 'producto', producto_id: null, subreceta_id: null, unidad_costo: null })
+    // El precio también se limpia: quedaba el del producto anterior sin su
+    // unidad y "250 g" de leche a $1.764/l se costeaba como 250 litros.
+    onUpdate(ing.id, {
+      nombre: val, tipo: 'producto', producto_id: null, subreceta_id: null, unidad_costo: null,
+      costo_unitario: 0, opcionesIA: undefined, vinculoIA: false,
+    })
     buscar(val)
   }
 
   function selectSuggestion(s: SugerenciaIngrediente) {
-    if (s.tipo === 'subreceta') {
-      onUpdate(ing.id, {
-        nombre: s.nombre, tipo: 'subreceta', subreceta_id: s.id, producto_id: null,
-        costo_unitario: s.costoUnitario, unidad_costo: 'g',
-        unidad: UNIDADES_SUBRECETA.includes(ing.unidad) ? ing.unidad : 'g',
-      })
-    } else {
-      // La unidad del producto solo se sugiere si todavía no hay cantidad cargada.
-      onUpdate(ing.id, {
-        nombre: s.nombre, tipo: 'producto', producto_id: s.id, subreceta_id: null,
-        unidad_costo: s.unidad, costo_unitario: s.costoUnitario,
-        ...(parseNum(ing.cantidad) > 0 ? {} : { unidad: s.unidad }),
-      })
-    }
+    onUpdate(ing.id, patchVinculo(ing, s))
     setShowSuggestions(false)
     focusCantidad()
   }
@@ -184,7 +200,7 @@ export function IngRow({ ing, idx, isLast, isActive, stockProductos, recetas, ca
         {vinculado && (
           <span
             className="material-symbols-outlined"
-            title={esSubreceta ? 'Receta del recetario' : 'Vinculado a Stock'}
+            title={ing.vinculoIA ? 'Vinculado por la IA — tocá el nombre para cambiarlo' : esSubreceta ? 'Receta del recetario' : 'Vinculado a Stock'}
             style={{ fontSize: 14, paddingLeft: 10, flexShrink: 0, color: esSubreceta ? 'var(--accent)' : '#10b981' }}
           >
             {esSubreceta ? 'menu_book' : 'inventory_2'}
@@ -291,6 +307,46 @@ export function IngRow({ ing, idx, isLast, isActive, stockProductos, recetas, ca
           </button>
         )}
       </div>
+
+      {/* La IA dudó entre varios insumos: se elige con un toque. Va en el
+          flujo (no flotante) para que no tape la fila de abajo. */}
+      {!vinculado && ing.opcionesIA && ing.opcionesIA.length > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6,
+          padding: '2px 10px 9px', background: 'rgba(245,158,11,.06)',
+          borderBottom: isLast ? 'none' : '1px solid var(--border)',
+        }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: '#b45309', display: 'flex', alignItems: 'center', gap: 3 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 13 }}>help</span>
+            ¿Cuál usás?
+          </span>
+          {ing.opcionesIA.map(s => (
+            <button
+              key={`${s.tipo}:${s.id}`}
+              onClick={() => onUpdate(ing.id, patchVinculo(ing, s))}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 4, padding: '5px 9px', borderRadius: 99,
+                border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, color: 'var(--text-1)',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 13, color: s.tipo === 'subreceta' ? 'var(--accent)' : 'var(--text-3)' }}>
+                {s.tipo === 'subreceta' ? 'menu_book' : 'inventory_2'}
+              </span>
+              {s.nombre}
+              {s.costoUnitario > 0 && (
+                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace" }}>{s.detalle}</span>
+              )}
+            </button>
+          ))}
+          <button
+            onClick={() => onUpdate(ing.id, { opcionesIA: undefined })}
+            style={{ padding: '5px 8px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, color: 'var(--text-3)' }}
+          >
+            Ninguno, es nuevo
+          </button>
+        </div>
+      )}
 
       {/* Sugerencias de Stock + recetas, mientras se tipea */}
       {showSuggestions && (
