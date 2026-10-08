@@ -84,6 +84,15 @@ try {
     await page.waitForTimeout(800)
   }
 
+  // --despues: clics (mismo formato que --click) que van DESPUÉS de --type,
+  // ej. tipear un texto y tocar "Analizar". --wait: ms extra al final (una
+  // respuesta de IA tarda 10-20 s).
+  for (const sel of (args.despues || '').split('||').map(s => s.trim()).filter(Boolean)) {
+    await page.locator(sel).first().click()
+    await page.waitForTimeout(esperaClick)
+  }
+  if (args.wait) await page.waitForTimeout(Number(args.wait))
+
   // --scroll: píxeles de rueda sobre el centro de la pantalla, para ver una
   // parte de abajo de una lista larga (o de la hoja que abrió --click).
   if (scroll) {

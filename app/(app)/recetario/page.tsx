@@ -7,7 +7,7 @@ import PhotoPicker from '@/components/ui/PhotoPicker'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useRecetas, calcFoodCost, type RecetaConCosto } from '@/lib/hooks/useRecetas'
-import { vincularIngredientesConStock } from '@/lib/recetas/vinculo'
+import { vincularIngredientesConStock, buscarProductoExacto } from '@/lib/recetas/vinculo'
 import { useStock } from '@/lib/hooks/useStock'
 import { useCategoriasProducto } from '@/lib/hooks/useCategoriasProducto'
 import { usePermisos } from '@/lib/hooks/usePermisos'
@@ -17,10 +17,7 @@ import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
 import ImageCropModal from '@/components/ui/ImageCropModal'
 import { createPortal } from 'react-dom'
 import { SheetChrome, useSheetOpen } from '@/lib/ui/chrome'
-import { unitConversionFactor, separarCantidadUnidad } from '@/lib/unidades'
-import { normalizarBusqueda } from '@/lib/texto'
-import { buscarSugerenciasIngrediente, type SugerenciaIngrediente } from '@/lib/recetas/sugerencias'
-import { SugerenciasIngrediente, ofrecerNuevo } from '@/components/recetas/SugerenciasIngrediente'
+import { unitConversionFactor, canonUnit } from '@/lib/unidades'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import ImportadorFichasTecnicas from '@/components/importador/ImportadorFichasTecnicas'
 import { clasificarArchivo } from '@/lib/recetas/iaImport'
@@ -32,10 +29,10 @@ import {
   CargaRapidaIngredientes, TotalesRapidosBar, nuevaFilaRapida, filasToIngredientesData,
   type FilaIngredienteRapido,
 } from '@/components/recetas/CargaRapidaIngredientes'
-import { IAResultScreen, IAMultiResultScreen } from './IAResultScreens'
-import { apiToForm, parseNum, calcPesoPorcion, formatPeso, type IAApiResult, type IAResult } from './shared'
+import { IAMultiResultScreen } from './IAResultScreens'
+import { IngRow, UNIDADES_SUBRECETA, type FormIng } from './IngRow'
+import { apiToForm, parseNum, calcPesoPorcion, formatPeso, type IAApiResult } from './shared'
 
-const UNIDADES = ['kg', 'g', 'l', 'ml', 'u']
 
 // Categorías canónicas de recetas
 const CATEGORIAS_RECETA = [
@@ -129,22 +126,7 @@ function fcColor(pct: number) {
   return '#4ade80'
 }
 
-// ── Form types ──
-interface FormIng {
-  id: number
-  cantidad: string
-  unidad: string
-  nombre: string
-  costo_unitario: number
-  grupo: string
-  // Producto de Stock elegido de la lista (y la unidad en que está su precio).
-  // Antes solo se copiaban nombre/unidad/precio y el vínculo se perdía.
-  producto_id?: string | null
-  unidad_costo?: string | null
-  // Receta elegida como ingrediente (subreceta) — se costea por gramo.
-  tipo?: 'producto' | 'subreceta'
-  subreceta_id?: string | null
-}
+// ── Form types ── (FormIng vive en ./IngRow)
 
 interface FormPaso {
   id: number
@@ -1072,7 +1054,11 @@ function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas
   const [iaProcessing, setIaProcessing] = useState(false)
   const [iaTextInput, setIaTextInput] = useState('')
   const [iaGoogleLink, setIaGoogleLink] = useState('')
-  const [iaResult, setIaResult] = useState<IAApiResult | null>(null)
+  // Fuente de la última importación (foto / archivo / texto) para comparar
+  // contra el formulario ya cargado. null = no vino de la IA o ya se cerró.
+  const [iaOrigen, setIaOrigen] = useState<{ previewUrl: string | null; texto: string | null; rinde: string | null } | null>(null)
+  const [verOriginal, setVerOriginal] = useState(false)
+  const bodyRef = useRef<HTMLDivElement>(null)
   const [iaPreviewUrl, setIaPreviewUrl] = useState<string | null>(null)
   const [iaInputText, setIaInputText] = useState<string | null>(null)
   const [iaMultiResults, setIaMultiResults] = useState<IAApiResult[] | null>(null)
@@ -1261,25 +1247,27 @@ function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas
     setIaPreviewUrl(null)
     setIaInputText(null)
     setIaMultiResults(null)
+    // De dónde salió la receta: se muestra arriba del formulario para comparar.
+    const origen: { previewUrl: string | null; texto: string | null } = { previewUrl: null, texto: null }
+    const conPreview = async (file: File) => { origen.previewUrl = await fileToDataUrl(file); setIaPreviewUrl(origen.previewUrl) }
+    const conTexto = (t: string) => { origen.texto = t; setIaInputText(t) }
     try {
-      // Determine if this source likely has multiple recipes → use multi endpoint
-      const isMultiSource = mode === 'glink' || mode === 'file'
-
-      // Una sola receta ya no entra derecho al formulario: pasa por la
-      // pantalla de revisión, igual que texto y voz. Es el paso donde el
-      // cocinero compara contra su fuente antes de guardar, y era justamente
-      // el camino de la foto —el más propenso a error— el único que no lo tenía.
+      // Una sola receta entra derecho al formulario, ya cargada y editable: la
+      // pantalla de revisión tipo chat que había en el medio era un paso de
+      // más para hacerlo parado en la cocina. La comparación contra la fuente
+      // sigue: queda la franja "Cargada con IA" con la foto arriba del form.
+      // Varias recetas (un PDF con 10 fichas) siguen yendo a la pantalla multi.
       const recibir = (recetas: IAApiResult[]) => {
-        if (recetas.length === 1) setIaResult(recetas[0])
+        if (recetas.length === 1) cargarResultadoIA(recetas[0], origen)
         else setIaMultiResults(recetas)
       }
 
       if (mode === 'text' && typeof data === 'string') {
-        setIaInputText(data)
-        setIaResult(await callRecetaImport('text', { text: data, categorias }))
+        conTexto(data)
+        cargarResultadoIA(await callRecetaImport('text', { text: data, categorias }), origen)
 
       } else if ((mode === 'camera' || mode === 'gallery') && data instanceof File) {
-        setIaPreviewUrl(await fileToDataUrl(data))
+        await conPreview(data)
         const { base64, media_type } = await fileToBase64(data)
         recibir((await callRecetaImportMulti('image', { image_base64: base64, media_type, categorias })).recetas)
 
@@ -1288,13 +1276,13 @@ function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas
 
         switch (clasificarArchivo(data)) {
           case 'imagen': {
-            setIaPreviewUrl(await fileToDataUrl(data))
+            await conPreview(data)
             const { base64, media_type } = await fileToBase64(data)
             recibir((await callRecetaImportMulti('image', { image_base64: base64, media_type, categorias })).recetas)
             break
           }
           case 'planilla': {
-            setIaInputText(resumen)
+            conTexto(resumen)
             const { base64 } = await fileToBase64(data)
             recibir((await callRecetaImportMulti('text', { text: `__XLSX_BASE64__:${base64}`, categorias })).recetas)
             break
@@ -1304,7 +1292,7 @@ function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas
             // caían en `texto`, o sea `await data.text()` sobre un binario.
             // Ahora viajan en base64 y el servidor los manda como bloque
             // `document`, que es lo que la API sabe leer.
-            setIaInputText(resumen)
+            conTexto(resumen)
             const { base64, media_type } = await fileToBase64(data)
             recibir((await callRecetaImportMulti('document', {
               file_base64: base64, media_type, file_name: data.name, categorias,
@@ -1313,17 +1301,17 @@ function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas
           }
           default: {
             const text = await data.text()
-            setIaInputText(text)
+            conTexto(text)
             recibir((await callRecetaImportMulti('text', { text, categorias })).recetas)
           }
         }
 
       } else if (mode === 'audio' && typeof data === 'string') {
-        setIaInputText(data)
-        setIaResult(await callRecetaImport('text', { text: data, categorias }))
+        conTexto(data)
+        cargarResultadoIA(await callRecetaImport('text', { text: data, categorias }), origen)
 
       } else if (mode === 'glink' && typeof data === 'string') {
-        setIaInputText(data)
+        conTexto(data)
         recibir((await callRecetaImportMulti('google_url', { google_url: data, categorias })).recetas)
 
       } else {
@@ -1336,27 +1324,42 @@ function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas
     }
   }
 
-
-  // Cuando la IA termina de analizar → poblar el formulario directamente
-  function handleAcceptIAResult(r: IAResult) {
-    if (r.nombre) setNombre(r.nombre)
-    if (r.categoria) setCategoria(r.categoria)
-    if (r.porciones) setPorciones(String(r.porciones))
-    if (r.tiempo_min) setTiempoMin(String(r.tiempo_min))
-    if (r.ingredientes.length > 0) {
-      setIngs(r.ingredientes.map(i => ({
-        id: uid(), nombre: i.nombre, cantidad: i.cantidad, unidad: i.unidad, costo_unitario: 0, grupo: '',
-      })))
+  // Resultado de la IA → formulario poblado, listo para corregir y guardar.
+  // Lo que coincide exacto por nombre con Stock (o con una receta, si viene en
+  // peso) ya queda vinculado: ícono verde y costo en vivo sin tocar nada.
+  function cargarResultadoIA(r: IAApiResult, origen: { previewUrl: string | null; texto: string | null }) {
+    const form = apiToForm(r)
+    if (form.nombre) setNombre(form.nombre)
+    if (form.categoria) setCategoria(form.categoria)
+    if (form.porciones) setPorciones(String(form.porciones))
+    if (form.tiempo_min) setTiempoMin(String(form.tiempo_min))
+    if (form.ingredientes.length > 0) {
+      setIngs(form.ingredientes.map((i): FormIng => {
+        const unidad = canonUnit(i.unidad) || 'u'
+        const base: FormIng = { id: uid(), nombre: i.nombre, cantidad: String(i.cantidad ?? ''), unidad, costo_unitario: 0, grupo: '' }
+        const prod = buscarProductoExacto(i.nombre, stockProductos)
+        if (prod) {
+          return { ...base, nombre: prod.nombre, tipo: 'producto', producto_id: prod.id, unidad_costo: prod.unidad, costo_unitario: prod.precio_unitario || 0 }
+        }
+        const rec = UNIDADES_SUBRECETA.includes(unidad) ? buscarProductoExacto(i.nombre, recetasSugeribles) : undefined
+        if (rec) {
+          return { ...base, nombre: rec.nombre, tipo: 'subreceta', subreceta_id: rec.id, unidad_costo: 'g', costo_unitario: rec.costoPorGramo ?? 0 }
+        }
+        return base
+      }))
     }
-    if (r.pasos.length > 0) {
-      setPasos(r.pasos.map(t => ({ id: uid(), texto: typeof t === 'string' ? t : '' })))
+    if (form.pasos.length > 0) {
+      setPasos(form.pasos.map(t => ({ id: uid(), texto: typeof t === 'string' ? t : '' })))
     }
-    // Limpiar estado de IA (la pantalla ya muestra el formulario poblado)
-    setIaResult(null)
+    setIaOrigen({
+      ...origen,
+      rinde: r.rinde != null ? `${String(r.rinde).replace('.', ',')}${r.rinde_unidad ?? ''}` : null,
+    })
     setIaPreviewUrl(null)
     setIaInputText(null)
     setIaMode(null)
-    setIaCollapsed(false)
+    setIaCollapsed(true)
+    bodyRef.current?.scrollTo({ top: 0 })
   }
 
   function handleImportOption(mode: ImportMode) {
@@ -1503,24 +1506,6 @@ function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas
     )
   }
 
-  // ── Si hay resultado de IA pendiente, mostrar pantalla de resultado ──
-  if (iaResult) {
-    return (
-      <IAResultScreen
-        result={iaResult}
-        previewUrl={iaPreviewUrl}
-        inputText={iaInputText}
-        onAccept={handleAcceptIAResult}
-        onClose={() => { setIaResult(null); setIaPreviewUrl(null); setIaInputText(null) }}
-        agregarReceta={agregarReceta}
-        agregarProducto={agregarProducto}
-        stockProductos={stockProductos}
-        catSugeridas={categorias}
-        onSaved={(id) => { setIaResult(null); setIaPreviewUrl(null); setIaInputText(null); onCreated(id) }}
-      />
-    )
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: 'var(--bg)' }}>
 
@@ -1563,12 +1548,41 @@ function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas
       </div>
 
       {/* ── Body ── */}
-      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '10px 10px 32px' }}>
+      <div ref={bodyRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '10px 10px 32px' }}>
 
         {formError && <div style={{ background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 8, padding: '6px 10px', marginBottom: 8, fontSize: 11, color: '#ef4444' }}>{formError}</div>}
 
+        {/* ═══ CARGADA CON IA ═══ — la receta ya está en el formulario de abajo;
+            esto queda para comparar contra la fuente sin cambiar de pantalla. */}
+        {iaOrigen && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
+            padding: '8px 10px', borderRadius: 12,
+            background: 'rgba(67,97,160,.07)', border: '1px solid rgba(67,97,160,.25)',
+          }}>
+            {iaOrigen.previewUrl ? (
+              <button onClick={() => setVerOriginal(true)} title="Ver la foto original" style={{ ...btnClear, padding: 0, flexShrink: 0 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={iaOrigen.previewUrl} alt="Original" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 8, display: 'block', border: '1px solid var(--border)' }} />
+              </button>
+            ) : (
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--accent)', flexShrink: 0 }}>auto_awesome</span>
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-1)' }}>Cargada con IA · revisá y guardá</div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {iaOrigen.previewUrl ? 'Tocá la foto para compararla' : iaOrigen.texto ? `Desde: ${iaOrigen.texto}` : 'Corregí lo que haga falta abajo'}
+                {iaOrigen.rinde && ` · la ficha original rinde ${iaOrigen.rinde}`}
+              </div>
+            </div>
+            <button onClick={() => setIaOrigen(null)} aria-label="Cerrar aviso" style={{ ...btnClear, padding: 4, flexShrink: 0 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)' }}>close</span>
+            </button>
+          </div>
+        )}
+
         {/* ═══ IMPORTAR CON IA ═══ */}
-        {iaCollapsed ? (
+        {iaOrigen ? null : iaCollapsed ? (
           /* Colapsado: era un link de 12px, más escondido en el segundo uso que
              en el primero — justo al revés de lo que conviene. Ahora es el
              mismo botón de IA que en el estado vacío. */
@@ -1657,11 +1671,11 @@ function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas
         )}
 
         {/* Separador */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+        {!iaOrigen && <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
           <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
           <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>o cargá manualmente</span>
           <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-        </div>
+        </div>}
 
         {/* ═══ 0. FOTO ═══ */}
         {/* Al lado del nombre y no escondida en una hoja aparte: la foto es lo
@@ -1900,6 +1914,18 @@ function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas
         </div>
       )}
 
+      {/* Foto original a pantalla completa (desde la franja "Cargada con IA") */}
+      {verOriginal && iaOrigen?.previewUrl && (
+        <div
+          onClick={() => setVerOriginal(false)}
+          style={{ position: 'absolute', inset: 0, zIndex: 70, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, cursor: 'zoom-out' }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={iaOrigen.previewUrl} alt="Receta original" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8 }} />
+          <span className="material-symbols-outlined" style={{ position: 'absolute', top: 14, right: 14, fontSize: 26, color: '#fff' }}>close</span>
+        </div>
+      )}
+
       {/* Image crop modal */}
       {cropSrc && (
         <ImageCropModal
@@ -1973,282 +1999,6 @@ function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas
               setFormError('No se detectó voz. Intentá de nuevo hablando más cerca del micrófono.')
             }
           }}
-        />
-      )}
-    </div>
-  )
-}
-
-
-// ════════════════════════════════════════════════════════════════════
-// FILA DE INGREDIENTE — velocidad máxima
-// [Nombre] | [Cantidad·numpad] [kg] [✓ o ×]
-// Activa: ✓ confirma + crea siguiente + focus nombre
-// Inactiva: × elimina fila
-// Toca fuera de ingredientes → deja de agregar
-// ════════════════════════════════════════════════════════════════════
-
-interface IngRowProps {
-  ing: FormIng
-  idx: number
-  isLast: boolean
-  isActive: boolean
-  stockProductos: { id: string; nombre: string; unidad: string; precio_unitario: number }[]
-  recetas: RecetaConCosto[]
-  cantidadRefs: React.MutableRefObject<Map<number, HTMLInputElement>>
-  nombreRefs: React.MutableRefObject<Map<number, HTMLInputElement>>
-  onUpdate: (id: number, patch: Partial<FormIng>) => void
-  onRemove: (id: number) => void
-  onConfirm: (id: number) => void
-  onFocusRow: (id: number | null) => void
-}
-
-// Una subreceta se costea por peso (ver CargaRapidaIngredientes.tsx).
-const UNIDADES_SUBRECETA = ['g', 'kg']
-
-function IngRow({ ing, idx, isLast, isActive, stockProductos, recetas, cantidadRefs, nombreRefs, onUpdate, onRemove, onConfirm, onFocusRow }: IngRowProps) {
-  const [suggestions, setSuggestions] = useState<SugerenciaIngrediente[]>([])
-  const [showSuggestions, setShowSuggestions] = useState(false)
-  // Opción resaltada con ↑/↓ (suggestions.length = "insumo nuevo"), -1 = ninguna.
-  const [activa, setActiva] = useState(-1)
-  const [nombreFocused, setNombreFocused] = useState(false)
-  const esSubreceta = ing.tipo === 'subreceta'
-  const vinculado = esSubreceta ? !!ing.subreceta_id : !!ing.producto_id
-
-  function buscar(q: string) {
-    const items = buscarSugerenciasIngrediente(q, stockProductos, recetas)
-    setSuggestions(items)
-    // Si hay una coincidencia exacta queda resaltada: Enter la elige.
-    setActiva(items.length > 0 && normalizarBusqueda(items[0].nombre) === normalizarBusqueda(q) ? 0 : -1)
-    setShowSuggestions(!!q.trim())
-  }
-
-  // Si Stock/recetas terminan de cargar con el campo activo, rehacer la búsqueda.
-  useEffect(() => {
-    if (nombreFocused && ing.nombre.trim() && !vinculado) buscar(ing.nombre)
-  }, [stockProductos, recetas]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const cantRef = useCallback((el: HTMLInputElement | null) => {
-    if (el) cantidadRefs.current.set(ing.id, el)
-    else cantidadRefs.current.delete(ing.id)
-  }, [ing.id, cantidadRefs])
-
-  const nomRef = useCallback((el: HTMLInputElement | null) => {
-    if (el) nombreRefs.current.set(ing.id, el)
-    else nombreRefs.current.delete(ing.id)
-  }, [ing.id, nombreRefs])
-
-  function focusCantidad() {
-    setTimeout(() => cantidadRefs.current.get(ing.id)?.focus(), 30)
-  }
-
-  function handleNombreChange(val: string) {
-    // Tipear después de elegir desvincula: si no, quedaría guardado el
-    // producto/receta anterior con un nombre que ya no le corresponde.
-    onUpdate(ing.id, { nombre: val, tipo: 'producto', producto_id: null, subreceta_id: null, unidad_costo: null })
-    buscar(val)
-  }
-
-  function selectSuggestion(s: SugerenciaIngrediente) {
-    if (s.tipo === 'subreceta') {
-      onUpdate(ing.id, {
-        nombre: s.nombre, tipo: 'subreceta', subreceta_id: s.id, producto_id: null,
-        costo_unitario: s.costoUnitario, unidad_costo: 'g',
-        unidad: UNIDADES_SUBRECETA.includes(ing.unidad) ? ing.unidad : 'g',
-      })
-    } else {
-      // La unidad del producto solo se sugiere si todavía no hay cantidad cargada.
-      onUpdate(ing.id, {
-        nombre: s.nombre, tipo: 'producto', producto_id: s.id, subreceta_id: null,
-        unidad_costo: s.unidad, costo_unitario: s.costoUnitario,
-        ...(parseNum(ing.cantidad) > 0 ? {} : { unidad: s.unidad }),
-      })
-    }
-    setShowSuggestions(false)
-    focusCantidad()
-  }
-
-  function elegirNuevo() {
-    setShowSuggestions(false)
-    focusCantidad()
-  }
-
-  function handleNombreKeyDown(e: React.KeyboardEvent) {
-    const total = suggestions.length + (ofrecerNuevo(ing.nombre, suggestions) ? 1 : 0)
-    if (e.key === 'ArrowDown' && total > 0) {
-      e.preventDefault()
-      if (!showSuggestions) { buscar(ing.nombre); return }
-      setActiva(a => Math.min(a + 1, total - 1))
-    } else if (e.key === 'ArrowUp' && showSuggestions) {
-      e.preventDefault()
-      setActiva(a => Math.max(a - 1, -1))
-    } else if (e.key === 'Escape' && showSuggestions) {
-      e.preventDefault()
-      e.stopPropagation()
-      setShowSuggestions(false)
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      if (showSuggestions && activa >= 0 && activa < suggestions.length) { selectSuggestion(suggestions[activa]); return }
-      setShowSuggestions(false)
-      focusCantidad()
-    }
-  }
-
-  const unidades = esSubreceta ? UNIDADES_SUBRECETA : UNIDADES
-
-  function handleCantidadChange(raw: string) {
-    const val = raw.replace(/[^0-9.,a-zA-Z ]/g, '')
-    const { unidad } = separarCantidadUnidad(val)
-    onUpdate(ing.id, unidad && unidades.includes(unidad) && unidad !== ing.unidad
-      ? { cantidad: val, unidad }
-      : { cantidad: val })
-  }
-
-  // Al salir del campo queda solo el número (la unidad ya pasó al selector).
-  function normalizarCantidad() {
-    const { numero } = separarCantidadUnidad(ing.cantidad)
-    if (numero !== ing.cantidad) onUpdate(ing.id, { cantidad: numero })
-  }
-
-  function handleCantidadKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      normalizarCantidad()
-      onConfirm(ing.id)
-    }
-  }
-
-  return (
-    <div style={{ position: 'relative' }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 0,
-        background: isActive ? 'rgba(28,45,74,.04)' : 'transparent',
-        borderBottom: isLast ? 'none' : '1px solid var(--border)',
-        transition: 'background .15s',
-      }}>
-
-        {/* Vínculo: insumo de Stock o receta. Sin ícono = texto suelto, que al
-            guardar se vincula por nombre exacto o se crea en Stock. */}
-        {vinculado && (
-          <span
-            className="material-symbols-outlined"
-            title={esSubreceta ? 'Receta del recetario' : 'Vinculado a Stock'}
-            style={{ fontSize: 14, paddingLeft: 10, flexShrink: 0, color: esSubreceta ? 'var(--accent)' : '#10b981' }}
-          >
-            {esSubreceta ? 'menu_book' : 'inventory_2'}
-          </span>
-        )}
-
-        {/* Nombre ingrediente — PRIMERO */}
-        <input
-          ref={nomRef}
-          value={ing.nombre}
-          onChange={e => handleNombreChange(e.target.value)}
-          onKeyDown={handleNombreKeyDown}
-          onFocus={() => {
-            setNombreFocused(true)
-            onFocusRow(ing.id)
-            if (ing.nombre.trim() && !vinculado) buscar(ing.nombre)
-          }}
-          onBlur={() => { setNombreFocused(false); setTimeout(() => setShowSuggestions(false), 150) }}
-          placeholder={idx === 0 ? 'Ingrediente o receta…' : ''}
-          enterKeyHint="next"
-          autoComplete="off"
-          style={{
-            flex: 1, border: 'none', background: 'transparent', outline: 'none',
-            padding: vinculado ? '9px 8px 9px 6px' : '9px 8px 9px 10px', fontSize: 12, fontFamily: 'inherit',
-            color: 'var(--text-1)', minWidth: 0,
-          }}
-        />
-
-        {/* Separador */}
-        <div style={{ width: 1, height: 20, background: 'var(--border)', flexShrink: 0 }} />
-
-        {/* Cantidad — acepta coma y punto, y la unidad escrita al lado:
-            "500 g" o "1,5l" cambia la unidad sin ir al selector. */}
-        <input
-          ref={cantRef}
-          type="text"
-          inputMode="decimal"
-          value={ing.cantidad}
-          onChange={e => handleCantidadChange(e.target.value)}
-          onFocus={() => onFocusRow(ing.id)}
-          onBlur={normalizarCantidad}
-          onKeyDown={handleCantidadKeyDown}
-          placeholder="0"
-          enterKeyHint="done"
-          style={{
-            width: 58, border: 'none', background: 'transparent', outline: 'none',
-            padding: '9px 4px 9px 6px', fontSize: 13, fontWeight: 700,
-            fontFamily: "'DM Mono', monospace", color: 'var(--text-1)', textAlign: 'right',
-          }}
-        />
-
-        {/* Unidad — antes era texto gris que abría un popover al tocarlo, y no
-            se notaba que se podía cambiar. Select nativo con forma de chip:
-            en el celular abre la rueda del sistema, en desktop un desplegable. */}
-        <label
-          title="Unidad en que cargás la cantidad — el costo se convierte solo"
-          style={{
-            position: 'relative', display: 'flex', alignItems: 'center', flexShrink: 0,
-            margin: '0 6px 0 2px', borderRadius: 6, cursor: 'pointer',
-            border: '1px solid var(--border)', background: 'var(--bg)',
-          }}
-        >
-          <select
-            value={unidades.includes(ing.unidad) ? ing.unidad : ''}
-            onChange={e => onUpdate(ing.id, { unidad: e.target.value })}
-            onFocus={() => onFocusRow(ing.id)}
-            aria-label="Unidad"
-            style={{
-              appearance: 'none', WebkitAppearance: 'none', border: 'none', outline: 'none',
-              background: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
-              fontSize: 11.5, fontWeight: 700, color: 'var(--text-1)',
-              padding: '5px 20px 5px 8px', minWidth: 44,
-            }}
-          >
-            {!unidades.includes(ing.unidad) && <option value="" disabled>{ing.unidad || '—'}</option>}
-            {unidades.map(u => <option key={u} value={u}>{u}</option>)}
-          </select>
-          <span className="material-symbols-outlined" style={{
-            position: 'absolute', right: 3, fontSize: 15, color: 'var(--text-3)', pointerEvents: 'none',
-          }}>expand_more</span>
-        </label>
-
-        {/* ✓ (activa) o × (inactiva) — mismo lugar */}
-        {isActive ? (
-          <button
-            onClick={() => onConfirm(ing.id)}
-            style={{
-              background: 'var(--navy)', border: 'none', cursor: 'pointer',
-              padding: '0', width: 36, height: '100%', minHeight: 38,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0, borderRadius: '0 6px 6px 0',
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#fff' }}>check</span>
-          </button>
-        ) : (
-          <button
-            onClick={() => onRemove(ing.id)}
-            style={{
-              ...btnClear, padding: '8px 8px 8px 2px', opacity: .3, flexShrink: 0,
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#ef4444' }}>close</span>
-          </button>
-        )}
-      </div>
-
-      {/* Sugerencias de Stock + recetas, mientras se tipea */}
-      {showSuggestions && (
-        <SugerenciasIngrediente
-          items={suggestions}
-          query={ing.nombre}
-          activo={activa}
-          onSelect={selectSuggestion}
-          onNuevo={elegirNuevo}
-          onHover={setActiva}
         />
       )}
     </div>

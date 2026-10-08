@@ -355,3 +355,15 @@ Registro de decisiones tomadas con Facundo durante el diseño y construcción de
 - **Lo único separable y con valor propio quedó identificado: remarcar palabras clave.** Guardar el ítem partido (`verbo` / `cantidad` / `qué` / `detalle`) en vez de una frase hace que el resaltado sea estructura y no un regex adivinando — y **funciona igual en el registro Calma, sin nada del skin**. Es un candidato independiente para el mise real; si algún día se toma, se toma solo, sin arrastrar el resto.
 - **El límite era de ruta, no de gusto.** Aun adoptándolo, el juice nunca podía entrar en KDS/Muro (registro Servicio, dial 2, cero animación de entrada — §2/§6). Eso no cambia.
 - El detalle técnico de qué transfiere y qué no está en `.claude/docs/ui.md` § "Registro Arcade".
+
+---
+
+## 27. Importar receta con IA: directo al formulario, sin pantalla de revisión (oct 2026)
+
+**Decisión:** Cuando la IA lee UNA receta (foto, PDF, texto, voz), se abre directamente el formulario de Nueva receta ya cargado y editable. Se sacó la pantalla tipo chat "Resultado de IA" (burbujas, "Confirmá estos datos", "Pedí ajustes…").
+**Por qué:** Facundo, probándolo en el celular: el mensaje de confirmación era demasiado largo para hacerlo parado en la cocina. El formulario ya ES la revisión — se corrige ahí mismo, con el autocompletado de Stock y el costo en vivo. El chat de ajustes se reemplaza por editar la fila a mano, que es más rápido.
+**Cómo se aplica:**
+- `cargarResultadoIA()` en `recetario/page.tsx` llena el form y vincula exacto por nombre contra Stock (y contra recetas si la unidad es g/kg), así los ingredientes ya aparecen con ícono verde y costo.
+- La comparación contra la fuente no se pierde: franja "Cargada con IA · revisá y guardá" arriba del form, con la foto tocable a pantalla completa y el rinde de la ficha original.
+- Varias recetas a la vez (un PDF con N fichas) siguen pasando por `IAMultiResultScreen` — ahí sí hace falta elegir cuáles importar.
+- La acción `adjust` de `/api/recetas/import` quedó sin uso desde el cliente.

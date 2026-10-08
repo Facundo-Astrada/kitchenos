@@ -18,7 +18,7 @@ const ROOT = process.cwd()
 
 const TECHOS_LINEAS: Record<string, number> = {
   'app/(app)/carta/page.tsx': 2060, // día 7 plan-consolidado: moves puros a cards.tsx/exportar.ts/PackagingGruposDrawer.tsx/ImportCartaModal.tsx/EditarPlato.tsx
-  'app/(app)/recetario/page.tsx': 2850, // sep 2026: pestaña "Platos" se fue (Fase 3, Carta pasa a ser la dueña del plato) — 3167 → 2753, techo bajado con margen
+  'app/(app)/recetario/page.tsx': 2650, // oct 2026: fila de ingrediente → recetario/IngRow.tsx y sin pantalla "Resultado de IA" — 2873 → 2578, techo bajado con margen
   'app/(app)/facturas/page.tsx': 3675, // oct 2026: emparejar lista de precios → lib/facturas/listaPrecios.ts — 3692 → 3671. S6 sep 2026: 3666 → 3692 por el Bloque 5 (simplificación real de
   // Gastos): categoría/estado/proveedor eran 3 selects + un resumen en texto
   // siempre visibles en el header, redundante con las 4 KPI cards de abajo.
