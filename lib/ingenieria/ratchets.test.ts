@@ -19,7 +19,7 @@ const ROOT = process.cwd()
 const TECHOS_LINEAS: Record<string, number> = {
   'app/(app)/carta/page.tsx': 2060, // día 7 plan-consolidado: moves puros a cards.tsx/exportar.ts/PackagingGruposDrawer.tsx/ImportCartaModal.tsx/EditarPlato.tsx
   'app/(app)/recetario/page.tsx': 2850, // sep 2026: pestaña "Platos" se fue (Fase 3, Carta pasa a ser la dueña del plato) — 3167 → 2753, techo bajado con margen
-  'app/(app)/facturas/page.tsx': 3692, // S6 sep 2026: 3666 → 3692 por el Bloque 5 (simplificación real de
+  'app/(app)/facturas/page.tsx': 3675, // oct 2026: emparejar lista de precios → lib/facturas/listaPrecios.ts — 3692 → 3671. S6 sep 2026: 3666 → 3692 por el Bloque 5 (simplificación real de
   // Gastos): categoría/estado/proveedor eran 3 selects + un resumen en texto
   // siempre visibles en el header, redundante con las 4 KPI cards de abajo.
   // Pasaron a un popover "Filtros" (badge de conteo, un solo botón) — menos
@@ -32,7 +32,7 @@ const TECHOS_LINEAS: Record<string, number> = {
   // /facturas?tab=X pero la página nunca leía ese query param, así que
   // siempre aterrizaba en Gastos. Le faltaba el mismo efecto que ya tiene
   // operaciones/page.tsx (URLSearchParams sobre window.location.search).
-  'app/(app)/stock/ClientView.tsx': 3385, // sesión 15/09: modal de alta/edición de producto migrado a components/ui/Modal.tsx — 3405 → 3378
+  'app/(app)/stock/ClientView.tsx': 3360, // oct 2026: chips de filtro → components/stock/FiltroChip.tsx — 3381 → 3355. Sesión 15/09: modal de alta/edición de producto migrado a components/ui/Modal.tsx — 3405 → 3378
   'app/(app)/checklist/ClientView.tsx': 3145, // sesión 15/09: selector de plaza+turno migrado a components/ui/Modal.tsx — 3159 → 3139
 }
 

@@ -33,6 +33,8 @@ import type { MisePlaceItem, MisePlaceRegistro } from '@/types'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { parsePrecio } from '@/lib/unidades'
 import { PesoPorUnidadField } from '@/components/stock/PesoPorUnidadField'
+import { FiltroChip } from '@/components/stock/FiltroChip'
+import { esSinPrecio, usoEnRecetas, ordenarPorUso } from '@/lib/stock/sinPrecio'
 
 const UNIDADES = ['kg', 'g', 'L', 'ml', 'unidad', 'docena', 'caja', 'bolsa', 'lata', 'botella']
 const UNIDADES_USO = ['kg', 'g', 'l', 'ml', 'unidad']
@@ -87,7 +89,7 @@ function parseTSV(text: string): PasteRow[] {
   }).filter(r => r.nombre.length >= 2)
 }
 
-type FiltroEstado = 'all' | 'bajo' | 'pendiente' | 'inmovil' | 'unidad'
+type FiltroEstado = 'all' | 'bajo' | 'pendiente' | 'sinprecio' | 'inmovil' | 'unidad'
 const INMOVIL_DIAS = 60
 const PRECIO_SOSPECHOSO_UMBRAL = 2000
 
@@ -213,6 +215,7 @@ export default function StockPage() {
   const RESTAURANTE_ID = useRestauranteId()
   const { productos, loading, error, actualizarStock, agregarProducto, actualizarProducto, eliminarProducto, refetch } = useStock()
   const { recetas } = useRecetas()
+  const usoRecetas = useMemo(() => usoEnRecetas(recetas), [recetas])
   const { categorias, agregarCategoria } = useCategoriasProducto()
   const { sectores, agregarSector, marcarConteo } = useStockSectores()
   const { estantes } = useStockEstantes()
@@ -908,6 +911,8 @@ export default function StockPage() {
     let list = productos
     if (estadoFilter === 'pendiente') {
       list = productos.filter(esPendiente)
+    } else if (estadoFilter === 'sinprecio') {
+      list = productos.filter(esSinPrecio)
     } else if (estadoFilter === 'inmovil') {
       list = inmovilLoaded ? productos.filter(esInmovil) : []
     } else if (estadoFilter === 'unidad') {
@@ -938,8 +943,9 @@ export default function StockPage() {
         return (na - nb) * dir
       })
     }
-    return list
-  }, [productos, estadoFilter, catFilters, provFilters, secFilters, search, sortMode, esInmovil, inmovilLoaded])
+    // Sin precio: primero lo que usan más recetas (es lo que más subvalúa el food cost)
+    return estadoFilter === 'sinprecio' ? ordenarPorUso(list, usoRecetas) : list
+  }, [productos, estadoFilter, catFilters, provFilters, secFilters, search, sortMode, esInmovil, inmovilLoaded, usoRecetas])
 
   const totalDormido = useMemo(
     () => estadoFilter === 'inmovil' ? filtered.reduce((s, p) => s + valorStock(p), 0) : 0,
@@ -957,6 +963,7 @@ export default function StockPage() {
   const nAlerta = useMemo(() => productos.filter(esBajoOCritico).length, [productos])
   const nPendiente = useMemo(() => productos.filter(esPendiente).length, [productos])
   const nUnidadSospechosa = useMemo(() => productos.filter(esUnidadSospechosa).length, [productos])
+  const nSinPrecio = useMemo(() => productos.filter(esSinPrecio).length, [productos])
 
   useEffect(() => {
     // Insights accionables para Kitchen Coach (no solo conteos)
@@ -1247,44 +1254,11 @@ export default function StockPage() {
         actions={
           <div style={{ position: 'relative', overflow: 'hidden', maxWidth: '100%' }}>
           <div className="hide-scrollbar" style={{ display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto' }}>
-            <button
-              data-coach-target="stock-kpis"
-              onClick={() => setEstadoFilter(f => f === 'bajo' ? 'all' : 'bajo')}
-              style={{ background: estadoFilter === 'bajo' ? 'rgba(245,158,11,.3)' : 'rgba(245,158,11,.15)', border: `1px solid ${estadoFilter === 'bajo' ? 'rgba(245,158,11,.6)' : 'rgba(245,158,11,.3)'}`, borderRadius: 8, padding: '5px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
-            >
-              <span style={{ fontSize: 15, fontWeight: 700, color: '#fcd34d', fontFamily: "'DM Mono', monospace" }}>{nAlerta}</span>
-              <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.07em' }}>Bajo</span>
-            </button>
-            {nPendiente > 0 && (
-              <button
-                onClick={() => setEstadoFilter(f => f === 'pendiente' ? 'all' : 'pendiente')}
-                style={{ background: estadoFilter === 'pendiente' ? 'rgba(239,68,68,.3)' : 'rgba(239,68,68,.1)', border: `1px solid ${estadoFilter === 'pendiente' ? 'rgba(239,68,68,.5)' : 'rgba(239,68,68,.2)'}`, borderRadius: 8, padding: '5px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
-              >
-                <span style={{ fontSize: 15, fontWeight: 700, color: '#fca5a5', fontFamily: "'DM Mono', monospace" }}>{nPendiente}</span>
-                <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.07em' }}>Pendiente</span>
-              </button>
-            )}
-            {isAdmin && (
-              <button
-                onClick={() => setEstadoFilter(f => f === 'inmovil' ? 'all' : 'inmovil')}
-                title={`Productos con stock pero sin compras hace +${INMOVIL_DIAS} días`}
-                style={{ background: estadoFilter === 'inmovil' ? 'rgba(139,92,246,.35)' : 'rgba(139,92,246,.15)', border: `1px solid ${estadoFilter === 'inmovil' ? 'rgba(139,92,246,.6)' : 'rgba(139,92,246,.3)'}`, borderRadius: 8, padding: '5px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#c4b5fd' }}>hourglass_empty</span>
-                <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.07em' }}>Inmóvil</span>
-              </button>
-            )}
-            {isAdmin && nUnidadSospechosa > 0 && (
-              <button
-                onClick={() => setEstadoFilter(f => f === 'unidad' ? 'all' : 'unidad')}
-                title="Productos 'por unidad' con precio alto — posible unidad incorrecta que excluye líneas del food cost"
-                style={{ background: estadoFilter === 'unidad' ? 'rgba(245,158,11,.35)' : 'rgba(245,158,11,.15)', border: `1px solid ${estadoFilter === 'unidad' ? 'rgba(245,158,11,.6)' : 'rgba(245,158,11,.3)'}`, borderRadius: 8, padding: '5px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#fcd34d' }}>warning</span>
-                <span style={{ fontSize: 15, fontWeight: 700, color: '#fcd34d', fontFamily: "'DM Mono', monospace" }}>{nUnidadSospechosa}</span>
-                <span style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,.4)', textTransform: 'uppercase', letterSpacing: '.07em' }}>Unidades</span>
-              </button>
-            )}
+            <FiltroChip coachTarget="stock-kpis" activo={estadoFilter === 'bajo'} onClick={() => setEstadoFilter(f => f === 'bajo' ? 'all' : 'bajo')} rgb="245,158,11" count={nAlerta} countColor="#fcd34d" label="Bajo" />
+            {nPendiente > 0 && <FiltroChip activo={estadoFilter === 'pendiente'} onClick={() => setEstadoFilter(f => f === 'pendiente' ? 'all' : 'pendiente')} rgb="239,68,68" count={nPendiente} countColor="#fca5a5" label="Pendiente" />}
+            {verCostos && nSinPrecio > 0 && <FiltroChip activo={estadoFilter === 'sinprecio'} onClick={() => setEstadoFilter(f => f === 'sinprecio' ? 'all' : 'sinprecio')} rgb="239,68,68" icon="money_off" count={nSinPrecio} countColor="#fca5a5" label="Sin precio" title="Productos sin precio, primero los que usan más recetas — costean en $0" />}
+            {isAdmin && <FiltroChip activo={estadoFilter === 'inmovil'} onClick={() => setEstadoFilter(f => f === 'inmovil' ? 'all' : 'inmovil')} rgb="139,92,246" icon="hourglass_empty" countColor="#c4b5fd" label="Inmóvil" title={`Productos con stock pero sin compras hace +${INMOVIL_DIAS} días`} />}
+            {isAdmin && nUnidadSospechosa > 0 && <FiltroChip activo={estadoFilter === 'unidad'} onClick={() => setEstadoFilter(f => f === 'unidad' ? 'all' : 'unidad')} rgb="245,158,11" icon="warning" count={nUnidadSospechosa} countColor="#fcd34d" label="Unidades" title="Productos 'por unidad' con precio alto — posible unidad incorrecta que excluye líneas del food cost" />}
             <button
               data-coach-target="stock-stockear"
               onClick={() => setShowSectorSelect(v => !v)}
@@ -1715,7 +1689,7 @@ export default function StockPage() {
                           )}
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>
-                          {!isDesktop && `${p.categoria} · `}{p.unidad_uso ?? p.unidad}
+                          {!isDesktop && `${p.categoria} · `}{p.unidad_uso ?? p.unidad}{estadoFilter === 'sinprecio' && ` · en ${usoRecetas.get(p.id) ?? 0} receta${usoRecetas.get(p.id) === 1 ? '' : 's'}`}
                           {val > 0 && verCostos && !isDesktop && <span style={{ color: 'var(--accent)', fontWeight: 700, marginLeft: 6, fontFamily: "'DM Mono', monospace" }}>{fmtValor(val)}</span>}
                         </div>
                         {isNarrow && (
