@@ -17,7 +17,7 @@ import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
 import ImageCropModal from '@/components/ui/ImageCropModal'
 import { createPortal } from 'react-dom'
 import { SheetChrome, useSheetOpen } from '@/lib/ui/chrome'
-import { unitConversionFactor } from '@/lib/unidades'
+import { unitConversionFactor, separarCantidadUnidad } from '@/lib/unidades'
 import { normalizarBusqueda } from '@/lib/texto'
 import { buscarSugerenciasIngrediente, type SugerenciaIngrediente } from '@/lib/recetas/sugerencias'
 import { SugerenciasIngrediente, ofrecerNuevo } from '@/components/recetas/SugerenciasIngrediente'
@@ -2007,7 +2007,6 @@ interface IngRowProps {
 const UNIDADES_SUBRECETA = ['g', 'kg']
 
 function IngRow({ ing, idx, isLast, isActive, stockProductos, recetas, cantidadRefs, nombreRefs, onUpdate, onRemove, onConfirm, onFocusRow }: IngRowProps) {
-  const [showUnitPicker, setShowUnitPicker] = useState(false)
   const [suggestions, setSuggestions] = useState<SugerenciaIngrediente[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   // Opción resaltada con ↑/↓ (suggestions.length = "insumo nuevo"), -1 = ninguna.
@@ -2095,14 +2094,29 @@ function IngRow({ ing, idx, isLast, isActive, stockProductos, recetas, cantidadR
     }
   }
 
+  const unidades = esSubreceta ? UNIDADES_SUBRECETA : UNIDADES
+
+  function handleCantidadChange(raw: string) {
+    const val = raw.replace(/[^0-9.,a-zA-Z ]/g, '')
+    const { unidad } = separarCantidadUnidad(val)
+    onUpdate(ing.id, unidad && unidades.includes(unidad) && unidad !== ing.unidad
+      ? { cantidad: val, unidad }
+      : { cantidad: val })
+  }
+
+  // Al salir del campo queda solo el número (la unidad ya pasó al selector).
+  function normalizarCantidad() {
+    const { numero } = separarCantidadUnidad(ing.cantidad)
+    if (numero !== ing.cantidad) onUpdate(ing.id, { cantidad: numero })
+  }
+
   function handleCantidadKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter') {
       e.preventDefault()
+      normalizarCantidad()
       onConfirm(ing.id)
     }
   }
-
-  const unidades = esSubreceta ? UNIDADES_SUBRECETA : UNIDADES
 
   return (
     <div style={{ position: 'relative' }}>
@@ -2150,40 +2164,56 @@ function IngRow({ ing, idx, isLast, isActive, stockProductos, recetas, cantidadR
         {/* Separador */}
         <div style={{ width: 1, height: 20, background: 'var(--border)', flexShrink: 0 }} />
 
-        {/* Cantidad — text + decimal keyboard, acepta coma y punto */}
+        {/* Cantidad — acepta coma y punto, y la unidad escrita al lado:
+            "500 g" o "1,5l" cambia la unidad sin ir al selector. */}
         <input
           ref={cantRef}
           type="text"
           inputMode="decimal"
           value={ing.cantidad}
-          onChange={e => {
-            // Acepta números, punto y coma
-            const val = e.target.value.replace(/[^0-9.,]/g, '')
-            onUpdate(ing.id, { cantidad: val })
-          }}
+          onChange={e => handleCantidadChange(e.target.value)}
           onFocus={() => onFocusRow(ing.id)}
+          onBlur={normalizarCantidad}
           onKeyDown={handleCantidadKeyDown}
           placeholder="0"
           enterKeyHint="done"
           style={{
-            width: 50, border: 'none', background: 'transparent', outline: 'none',
-            padding: '9px 2px 9px 6px', fontSize: 13, fontWeight: 700,
+            width: 58, border: 'none', background: 'transparent', outline: 'none',
+            padding: '9px 4px 9px 6px', fontSize: 13, fontWeight: 700,
             fontFamily: "'DM Mono', monospace", color: 'var(--text-1)', textAlign: 'right',
           }}
         />
 
-        {/* Unidad — texto plano tocable */}
-        <button
-          onClick={() => setShowUnitPicker(!showUnitPicker)}
+        {/* Unidad — antes era texto gris que abría un popover al tocarlo, y no
+            se notaba que se podía cambiar. Select nativo con forma de chip:
+            en el celular abre la rueda del sistema, en desktop un desplegable. */}
+        <label
+          title="Unidad en que cargás la cantidad — el costo se convierte solo"
           style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            padding: '9px 2px 9px 2px', fontSize: 11, fontWeight: 700,
-            color: 'var(--text-3)', fontFamily: 'inherit',
-            minWidth: 22, textAlign: 'left',
+            position: 'relative', display: 'flex', alignItems: 'center', flexShrink: 0,
+            margin: '0 6px 0 2px', borderRadius: 6, cursor: 'pointer',
+            border: '1px solid var(--border)', background: 'var(--bg)',
           }}
         >
-          {ing.unidad}
-        </button>
+          <select
+            value={unidades.includes(ing.unidad) ? ing.unidad : ''}
+            onChange={e => onUpdate(ing.id, { unidad: e.target.value })}
+            onFocus={() => onFocusRow(ing.id)}
+            aria-label="Unidad"
+            style={{
+              appearance: 'none', WebkitAppearance: 'none', border: 'none', outline: 'none',
+              background: 'transparent', cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: 11.5, fontWeight: 700, color: 'var(--text-1)',
+              padding: '5px 20px 5px 8px', minWidth: 44,
+            }}
+          >
+            {!unidades.includes(ing.unidad) && <option value="" disabled>{ing.unidad || '—'}</option>}
+            {unidades.map(u => <option key={u} value={u}>{u}</option>)}
+          </select>
+          <span className="material-symbols-outlined" style={{
+            position: 'absolute', right: 3, fontSize: 15, color: 'var(--text-3)', pointerEvents: 'none',
+          }}>expand_more</span>
+        </label>
 
         {/* ✓ (activa) o × (inactiva) — mismo lugar */}
         {isActive ? (
@@ -2209,29 +2239,6 @@ function IngRow({ ing, idx, isLast, isActive, stockProductos, recetas, cantidadR
           </button>
         )}
       </div>
-
-      {/* Unit picker */}
-      {showUnitPicker && (
-        <div style={{
-          position: 'absolute', right: 0, top: '100%', zIndex: 30,
-          background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,.15)',
-          display: 'flex', gap: 0, overflow: 'hidden',
-        }}>
-          {unidades.map(u => (
-            <button
-              key={u}
-              onClick={() => { onUpdate(ing.id, { unidad: u }); setShowUnitPicker(false) }}
-              style={{
-                padding: '8px 12px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                fontSize: 12, fontWeight: u === ing.unidad ? 700 : 500,
-                background: u === ing.unidad ? 'var(--navy)' : 'transparent',
-                color: u === ing.unidad ? '#fff' : 'var(--text-2)',
-              }}
-            >{u}</button>
-          ))}
-        </div>
-      )}
 
       {/* Sugerencias de Stock + recetas, mientras se tipea */}
       {showSuggestions && (

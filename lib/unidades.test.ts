@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { unitConversionFactor, parseNumero, parsePrecio } from './unidades'
+import { unitConversionFactor, parseNumero, parsePrecio, separarCantidadUnidad } from './unidades'
 
 describe('unitConversionFactor', () => {
   it('misma unidad → factor 1', () => {
@@ -57,5 +57,21 @@ describe('parsePrecio', () => {
     expect(parsePrecio('15,42')).toBe(15.42)
     expect(parsePrecio('8.5')).toBe(8.5)
     expect(parsePrecio('0.125')).toBe(0.125)
+  })
+})
+
+describe('separarCantidadUnidad', () => {
+  it('separa número y unidad pegados o con espacio', () => {
+    expect(separarCantidadUnidad('500 g')).toEqual({ numero: '500', unidad: 'g' })
+    expect(separarCantidadUnidad('1,5lt')).toEqual({ numero: '1,5', unidad: 'l' })
+    expect(separarCantidadUnidad('200cc')).toEqual({ numero: '200', unidad: 'ml' })
+    expect(separarCantidadUnidad('2 kg')).toEqual({ numero: '2', unidad: 'kg' })
+    expect(separarCantidadUnidad('3 u')).toEqual({ numero: '3', unidad: 'u' })
+  })
+
+  it('sin letras o a medio tipear no propone unidad', () => {
+    expect(separarCantidadUnidad('0,5')).toEqual({ numero: '0,5', unidad: null })
+    expect(separarCantidadUnidad('500 m')).toEqual({ numero: '500', unidad: null })
+    expect(separarCantidadUnidad('')).toEqual({ numero: '', unidad: null })
   })
 })

@@ -69,3 +69,15 @@ export function parsePrecio(s: string | number | null | undefined): number {
   if (typeof s === 'string' && /^\s*[1-9]\d{0,2}\.\d{3}\s*$/.test(s)) return parseNumero(s.replace('.', ''))
   return parseNumero(s)
 }
+
+// Separa lo que se tipea en el campo cantidad cuando viene con la unidad
+// pegada: "500 g" → { numero: '500', unidad: 'g' }, "1,5lt" → '1,5' + 'l'.
+// `unidad` es null si no hay letras o no son una unidad conocida (todavía se
+// está tipeando, ej. "500 m" camino a "ml") — en ese caso no se toca la unidad.
+export function separarCantidadUnidad(raw: string): { numero: string; unidad: 'g' | 'kg' | 'ml' | 'l' | 'u' | null } {
+  const m = raw.match(/^\s*([\d.,]*)\s*([a-zA-Z]*)\s*$/)
+  if (!m) return { numero: raw.replace(/[^0-9.,]/g, ''), unidad: null }
+  const c = m[2] ? canonUnit(m[2]) : ''
+  const unidad = c === 'g' || c === 'kg' || c === 'ml' || c === 'l' || c === 'u' ? c : null
+  return { numero: m[1], unidad }
+}
