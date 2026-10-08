@@ -11,6 +11,7 @@ import type { RecetaConCosto } from '@/lib/hooks/useRecetas'
 import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
 import { unitConversionFactor, parseNumero, parsePrecio } from '@/lib/unidades'
 import { buscarProductoExacto } from '@/lib/recetas/vinculo'
+import { buscarSugerenciasIngrediente } from '@/lib/recetas/sugerencias'
 
 const UNIDADES_PRODUCTO = ['kg', 'g', 'l', 'ml', 'u']
 // Una subreceta usada como ingrediente solo se costea por peso — nunca litros
@@ -247,30 +248,18 @@ function FilaRapidaRow({ fila, idx, stockProductos, recetasDisponibles, autoFocu
   }, [fila.id, cantidadRefs])
 
   function buscar(q: string) {
-    const query = q.toLowerCase().trim()
-    if (!query) { setShowSug(false); return }
-    const prods: Sugerencia[] = stockProductos
-      .filter(p => p.nombre.toLowerCase().includes(query))
-      .slice(0, 5)
-      .map(p => ({
-        tipo: 'producto', nombre: p.nombre, unidad: p.unidad, costoUnitario: p.precio_unitario || 0, productoId: p.id,
-        detalle: p.precio_unitario > 0 ? `$${p.precio_unitario.toLocaleString('es-AR')}/${p.unidad}` : p.unidad,
-      }))
+    if (!q.trim()) { setShowSug(false); return }
     // Subreceta como ingrediente: siempre por gramaje, nunca por porción — el
     // costo_porcion asume "se usa una porción entera del batch", que rara vez
     // es el caso real (ver plato_recetas.gramaje). r.costoPorGramo ya prioriza
     // peso_escurrido_g (neto post-cocción) sobre peso_total_g (bruto) sobre
-    // la suma cruda de ingredientes (lib/recetas/peso.ts). Sin ningún peso
-    // cargado en la subreceta, no hay de dónde sacar un $/g real — se deja en
-    // 0 en vez de inventar uno con costo_porcion, para que se note el hueco.
-    const recs: Sugerencia[] = recetasDisponibles
-      .filter(r => r.nombre.toLowerCase().includes(query))
-      .slice(0, 5)
-      .map(r => ({
-        tipo: 'subreceta', nombre: r.nombre, unidad: 'g', costoUnitario: r.costoPorGramo ?? 0, subrecetaId: r.id,
-        detalle: r.costoPorGramo ? `receta · $${(r.costoPorGramo * 1000).toLocaleString('es-AR', { maximumFractionDigits: 0 })}/kg` : 'receta · falta peso neto',
+    // la suma cruda de ingredientes (lib/recetas/peso.ts). Búsqueda y orden
+    // por relevancia: lib/recetas/sugerencias.ts.
+    const combinadas: Sugerencia[] = buscarSugerenciasIngrediente(q, stockProductos, recetasDisponibles)
+      .map(s => ({
+        tipo: s.tipo, nombre: s.nombre, unidad: s.unidad, costoUnitario: s.costoUnitario, detalle: s.detalle,
+        ...(s.tipo === 'producto' ? { productoId: s.id } : { subrecetaId: s.id }),
       }))
-    const combinadas = [...prods, ...recs].slice(0, 8)
     setSugerencias(combinadas)
     setShowSug(combinadas.length > 0)
   }
@@ -364,7 +353,7 @@ function FilaRapidaRow({ fila, idx, stockProductos, recetasDisponibles, autoFocu
       )}
 
       {showSug && sugerencias.length > 0 && (
-        <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', zIndex: 25, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0 0 8px 8px', boxShadow: '0 4px 12px rgba(0,0,0,.12)', maxHeight: 160, overflowY: 'auto' }}>
+        <div style={{ position: 'absolute', left: 0, right: 0, top: '100%', zIndex: 25, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '0 0 8px 8px', boxShadow: '0 4px 12px rgba(0,0,0,.12)', maxHeight: 280, overflowY: 'auto' }}>
           {sugerencias.map((s, i) => (
             <button key={i} onMouseDown={e => { e.preventDefault(); seleccionar(s) }} onTouchStart={e => { e.preventDefault(); seleccionar(s) }}
               style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '7px 10px', background: 'none', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}

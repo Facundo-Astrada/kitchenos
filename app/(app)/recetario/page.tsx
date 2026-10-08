@@ -15,6 +15,12 @@ import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
 import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
 import ImageCropModal from '@/components/ui/ImageCropModal'
+import { createPortal } from 'react-dom'
+import { SheetChrome, useSheetOpen } from '@/lib/ui/chrome'
+import { unitConversionFactor } from '@/lib/unidades'
+import { normalizarBusqueda } from '@/lib/texto'
+import { buscarSugerenciasIngrediente, type SugerenciaIngrediente } from '@/lib/recetas/sugerencias'
+import { SugerenciasIngrediente, ofrecerNuevo } from '@/components/recetas/SugerenciasIngrediente'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import ImportadorFichasTecnicas from '@/components/importador/ImportadorFichasTecnicas'
 import { clasificarArchivo } from '@/lib/recetas/iaImport'
@@ -135,6 +141,9 @@ interface FormIng {
   // Antes solo se copiaban nombre/unidad/precio y el vínculo se perdía.
   producto_id?: string | null
   unidad_costo?: string | null
+  // Receta elegida como ingrediente (subreceta) — se costea por gramo.
+  tipo?: 'producto' | 'subreceta'
+  subreceta_id?: string | null
 }
 
 interface FormPaso {
@@ -380,11 +389,15 @@ export default function RecetarioPage() {
     return () => localStorage.removeItem('kc_screen_context')
   }, [recetas, recetasPublicadas, recetasDraft, tab, fcPromedio])
 
-  if (creando) {
-    return (
+  // En desktop la Nueva receta se abre como modal centrado sobre la lista (mismo
+  // chrome que el editor rápido de OPS, RecetaQuickEditModal); en el celular
+  // sigue ocupando toda la pantalla.
+  const nuevaFicha = creando ? (
       <NuevaFichaScreen
+        enModal={isDesktop}
         categorias={categorias}
         stockProductos={stockProductos}
+        recetas={recetasPublicadas}
         agregarReceta={agregarReceta}
         agregarIngrediente={agregarIngrediente}
         agregarProducto={agregarProducto}
@@ -407,8 +420,9 @@ export default function RecetarioPage() {
           else { router.push(`/recetario/${id}`) }
         }}
       />
-    )
-  }
+  ) : null
+
+  if (nuevaFicha && !isDesktop) return nuevaFicha
 
   if (cargaRapida) {
     return (
@@ -721,6 +735,8 @@ export default function RecetarioPage() {
         </>
       )}
 
+      {nuevaFicha && isDesktop && <ModalCentrado>{nuevaFicha}</ModalCentrado>}
+
     </div>
     </PageTransition>
   )
@@ -965,6 +981,31 @@ function AudioRecorderModal({ onClose, onRecorded }: { onClose: () => void; onRe
 
 
 
+// Modal centrado con fondo translúcido (desktop). Tocar afuera NO cierra: el
+// alta no se guarda sola y un click perdido tiraba la receta a medio cargar —
+// se cierra con la X o guardando.
+function ModalCentrado({ children }: { children: React.ReactNode }) {
+  if (typeof document === 'undefined') return null
+  return createPortal(
+    <SheetChrome>
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 2000,
+        background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+      }}>
+        <div className="toast-enter" style={{
+          position: 'relative', width: '100%', maxWidth: 760, height: 'min(920px, 92vh)',
+          borderRadius: 18, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,.35)',
+          background: 'var(--bg)',
+        }}>
+          {children}
+        </div>
+      </div>
+    </SheetChrome>,
+    document.body,
+  )
+}
+
 // ════════════════════════════════════════════════════════════════════
 // NUEVA FICHA — optimizada para velocidad máxima
 // Flujo: Ingredientes → Procedimiento → Nombre/Datos → Guardar
@@ -980,8 +1021,12 @@ interface InitialDraft {
 }
 
 interface NuevaFichaProps {
+  /** Dentro del modal de desktop: sin el espacio de la barra de estado arriba. */
+  enModal?: boolean
   categorias: string[]
   stockProductos: { id: string; nombre: string; unidad: string; precio_unitario: number; categoria: string }[]
+  /** Recetas publicadas, para usarlas como subreceta desde el campo ingrediente. */
+  recetas: RecetaConCosto[]
   agregarReceta: (d: any, ingredientes?: any[]) => Promise<string>
   agregarIngrediente: (recetaId: string, d: any) => Promise<void>
   agregarProducto: (datos: any) => Promise<string>
@@ -997,7 +1042,10 @@ interface NuevaFichaProps {
   onCreated: (id: string, asDraft?: boolean) => void
 }
 
-function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIngrediente, agregarProducto, actualizarReceta, initialDraft, iaAbierta = true, onClose, onCreated }: NuevaFichaProps) {
+function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas, agregarReceta, agregarIngrediente, agregarProducto, actualizarReceta, initialDraft, iaAbierta = true, onClose, onCreated }: NuevaFichaProps) {
+  // Esconde el FAB del Coach mientras se carga: en el celular tapaba el
+  // desplegable de sugerencias y el botón ✓ de la fila.
+  useSheetOpen()
   const [ings, setIngs] = useState<FormIng[]>(() => [{ id: uid(), cantidad: '', unidad: 'kg', nombre: '', costo_unitario: 0, grupo: '' }])
   // Etapa actual: se asigna a los ingredientes que se agreguen de acá en adelante
   // (mismo criterio de agrupación que la ficha del recetario, ver .claude/docs/columnas.md).
@@ -1056,8 +1104,10 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
     }
   }, [ings, pasos])
 
-  // Food cost live
-  const costoTotal = useMemo(() => ings.reduce((s, i) => s + (parseFloat(i.cantidad) || 0) * i.costo_unitario, 0), [ings])
+  // Food cost live — convierte la unidad de la receta a la del precio (500 g ×
+  // $/kg); antes multiplicaba directo y "500 g" de un producto por kg daba ×1000.
+  const costoTotal = useMemo(() => ings.reduce((s, i) =>
+    s + parseNum(i.cantidad) * unitConversionFactor(i.unidad, i.unidad_costo || i.unidad) * i.costo_unitario, 0), [ings])
   // ── Etapas del alta (PLAN-ACCESO-Y-USO B6) ──────────────────────────────
   // El modelo siempre soporto N etapas (`ingredientes.grupo` es por ingrediente),
   // pero el alta tenia UN selector global arriba de una lista plana: se leia
@@ -1124,8 +1174,10 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
   const fcPct = precioVentaN > 0 ? (costoPorcion / precioVentaN) * 100 : 0
   const margen = precioVentaN - costoPorcion
 
-  // Stock name index for quick search
-  const stockIndex = useMemo(() => stockProductos.map(p => ({ ...p, lower: p.nombre.toLowerCase() })), [stockProductos])
+  // Para completar una idea con IA: no ofrecerla como subreceta de sí misma.
+  const recetasSugeribles = useMemo(
+    () => initialDraft?.id ? recetas.filter(r => r.id !== initialDraft.id) : recetas,
+    [recetas, initialDraft?.id])
 
   // ── Ingrediente operations ──
   const updateIng = useCallback((id: number, patch: Partial<FormIng>) => {
@@ -1373,7 +1425,9 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
         unidad: ing.unidad || 'u',
         costo_unitario: ing.costo_unitario ?? 0,
         unidad_costo: ing.unidad_costo || ing.unidad || 'u',
-        producto_id: ing.producto_id ?? null,
+        tipo: ing.tipo ?? 'producto',
+        producto_id: ing.tipo === 'subreceta' ? null : (ing.producto_id ?? null),
+        subreceta_id: ing.tipo === 'subreceta' ? (ing.subreceta_id ?? null) : null,
         grupo: ing.grupo?.trim() || null,
       })), stockProductos, agregarProducto)
       let savedId: string
@@ -1471,7 +1525,7 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', background: 'var(--bg)' }}>
 
       {/* ── Compact header ── */}
-      <div style={{ background: 'var(--navy)', padding: '44px 12px 10px', flexShrink: 0 }}>
+      <div style={{ background: 'var(--navy)', padding: enModal ? '12px 14px 10px' : '44px 12px 10px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button onClick={onClose} style={btnClear}><span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 20 }}>close</span></button>
@@ -1672,14 +1726,19 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
                     )}
                   </div>
                 )}
-                <div style={{ background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)', overflow: 'hidden' }}>
-                  {filas.map(ing => (
+                {/* `overflow: visible` a propósito: con `hidden` el desplegable de
+                    sugerencias de la fila (absolute, debajo de ella) quedaba
+                    recortado — con un solo ingrediente, invisible del todo. */}
+                <div style={{ background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border)', overflow: 'visible' }}>
+                  {filas.map((ing, filaIdx) => (
                     <IngRow
                       key={ing.id}
                       ing={ing}
                       idx={ings.indexOf(ing)}
+                      isLast={filaIdx === filas.length - 1}
                       isActive={activeIngId === ing.id}
-                      stockIndex={stockIndex}
+                      stockProductos={stockProductos}
+                      recetas={recetasSugeribles}
                       cantidadRefs={cantidadRefs}
                       nombreRefs={nombreRefs}
                       onUpdate={updateIng}
@@ -1932,8 +1991,10 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
 interface IngRowProps {
   ing: FormIng
   idx: number
+  isLast: boolean
   isActive: boolean
-  stockIndex: { id: string; nombre: string; unidad: string; precio_unitario: number; categoria: string; lower: string }[]
+  stockProductos: { id: string; nombre: string; unidad: string; precio_unitario: number }[]
+  recetas: RecetaConCosto[]
   cantidadRefs: React.MutableRefObject<Map<number, HTMLInputElement>>
   nombreRefs: React.MutableRefObject<Map<number, HTMLInputElement>>
   onUpdate: (id: number, patch: Partial<FormIng>) => void
@@ -1942,20 +2003,31 @@ interface IngRowProps {
   onFocusRow: (id: number | null) => void
 }
 
-function IngRow({ ing, idx, isActive, stockIndex, cantidadRefs, nombreRefs, onUpdate, onRemove, onConfirm, onFocusRow }: IngRowProps) {
-  const [showUnitPicker, setShowUnitPicker] = useState(false)
-  const [suggestions, setSuggestions] = useState<typeof stockIndex>([])
-  const [showSuggestions, setShowSuggestions] = useState(false)
-  const [nombreFocused, setNombreFocused] = useState(false)
+// Una subreceta se costea por peso (ver CargaRapidaIngredientes.tsx).
+const UNIDADES_SUBRECETA = ['g', 'kg']
 
-  // Cuando los productos del stock cargan (o cambian), re-ejecutar búsqueda si el campo está activo
+function IngRow({ ing, idx, isLast, isActive, stockProductos, recetas, cantidadRefs, nombreRefs, onUpdate, onRemove, onConfirm, onFocusRow }: IngRowProps) {
+  const [showUnitPicker, setShowUnitPicker] = useState(false)
+  const [suggestions, setSuggestions] = useState<SugerenciaIngrediente[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  // Opción resaltada con ↑/↓ (suggestions.length = "insumo nuevo"), -1 = ninguna.
+  const [activa, setActiva] = useState(-1)
+  const [nombreFocused, setNombreFocused] = useState(false)
+  const esSubreceta = ing.tipo === 'subreceta'
+  const vinculado = esSubreceta ? !!ing.subreceta_id : !!ing.producto_id
+
+  function buscar(q: string) {
+    const items = buscarSugerenciasIngrediente(q, stockProductos, recetas)
+    setSuggestions(items)
+    // Si hay una coincidencia exacta queda resaltada: Enter la elige.
+    setActiva(items.length > 0 && normalizarBusqueda(items[0].nombre) === normalizarBusqueda(q) ? 0 : -1)
+    setShowSuggestions(!!q.trim())
+  }
+
+  // Si Stock/recetas terminan de cargar con el campo activo, rehacer la búsqueda.
   useEffect(() => {
-    if (!nombreFocused || !ing.nombre.trim() || stockIndex.length === 0) return
-    const q = ing.nombre.toLowerCase()
-    const matches = stockIndex.filter(p => p.lower.includes(q)).slice(0, 6)
-    setSuggestions(matches)
-    setShowSuggestions(matches.length > 0)
-  }, [stockIndex]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (nombreFocused && ing.nombre.trim() && !vinculado) buscar(ing.nombre)
+  }, [stockProductos, recetas]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const cantRef = useCallback((el: HTMLInputElement | null) => {
     if (el) cantidadRefs.current.set(ing.id, el)
@@ -1967,37 +2039,59 @@ function IngRow({ ing, idx, isActive, stockIndex, cantidadRefs, nombreRefs, onUp
     else nombreRefs.current.delete(ing.id)
   }, [ing.id, nombreRefs])
 
-  function handleNombreChange(val: string) {
-    onUpdate(ing.id, { nombre: val, producto_id: null, unidad_costo: null })
-    if (val.trim().length >= 1) {
-      const q = val.toLowerCase()
-      const matches = stockIndex.filter(p => p.lower.includes(q)).slice(0, 6)
-      setSuggestions(matches)
-      setShowSuggestions(matches.length > 0)
-    } else {
-      setShowSuggestions(false)
-    }
+  function focusCantidad() {
+    setTimeout(() => cantidadRefs.current.get(ing.id)?.focus(), 30)
   }
 
-  function selectSuggestion(p: typeof stockIndex[0]) {
-    // La unidad del producto solo se sugiere si todavía no hay cantidad cargada.
-    onUpdate(ing.id, {
-      nombre: p.nombre, producto_id: p.id, unidad_costo: p.unidad, costo_unitario: p.precio_unitario || 0,
-      ...(parseNum(ing.cantidad) > 0 ? {} : { unidad: p.unidad }),
-    })
+  function handleNombreChange(val: string) {
+    // Tipear después de elegir desvincula: si no, quedaría guardado el
+    // producto/receta anterior con un nombre que ya no le corresponde.
+    onUpdate(ing.id, { nombre: val, tipo: 'producto', producto_id: null, subreceta_id: null, unidad_costo: null })
+    buscar(val)
+  }
+
+  function selectSuggestion(s: SugerenciaIngrediente) {
+    if (s.tipo === 'subreceta') {
+      onUpdate(ing.id, {
+        nombre: s.nombre, tipo: 'subreceta', subreceta_id: s.id, producto_id: null,
+        costo_unitario: s.costoUnitario, unidad_costo: 'g',
+        unidad: UNIDADES_SUBRECETA.includes(ing.unidad) ? ing.unidad : 'g',
+      })
+    } else {
+      // La unidad del producto solo se sugiere si todavía no hay cantidad cargada.
+      onUpdate(ing.id, {
+        nombre: s.nombre, tipo: 'producto', producto_id: s.id, subreceta_id: null,
+        unidad_costo: s.unidad, costo_unitario: s.costoUnitario,
+        ...(parseNum(ing.cantidad) > 0 ? {} : { unidad: s.unidad }),
+      })
+    }
     setShowSuggestions(false)
-    setTimeout(() => {
-      const el = cantidadRefs.current.get(ing.id)
-      if (el) el.focus()
-    }, 50)
+    focusCantidad()
+  }
+
+  function elegirNuevo() {
+    setShowSuggestions(false)
+    focusCantidad()
   }
 
   function handleNombreKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter') {
+    const total = suggestions.length + (ofrecerNuevo(ing.nombre, suggestions) ? 1 : 0)
+    if (e.key === 'ArrowDown' && total > 0) {
       e.preventDefault()
+      if (!showSuggestions) { buscar(ing.nombre); return }
+      setActiva(a => Math.min(a + 1, total - 1))
+    } else if (e.key === 'ArrowUp' && showSuggestions) {
+      e.preventDefault()
+      setActiva(a => Math.max(a - 1, -1))
+    } else if (e.key === 'Escape' && showSuggestions) {
+      e.preventDefault()
+      e.stopPropagation()
       setShowSuggestions(false)
-      const el = cantidadRefs.current.get(ing.id)
-      if (el) el.focus()
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (showSuggestions && activa >= 0 && activa < suggestions.length) { selectSuggestion(suggestions[activa]); return }
+      setShowSuggestions(false)
+      focusCantidad()
     }
   }
 
@@ -2008,14 +2102,28 @@ function IngRow({ ing, idx, isActive, stockIndex, cantidadRefs, nombreRefs, onUp
     }
   }
 
+  const unidades = esSubreceta ? UNIDADES_SUBRECETA : UNIDADES
+
   return (
     <div style={{ position: 'relative' }}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 0,
         background: isActive ? 'rgba(28,45,74,.04)' : 'transparent',
-        borderBottom: '1px solid var(--border)',
+        borderBottom: isLast ? 'none' : '1px solid var(--border)',
         transition: 'background .15s',
       }}>
+
+        {/* Vínculo: insumo de Stock o receta. Sin ícono = texto suelto, que al
+            guardar se vincula por nombre exacto o se crea en Stock. */}
+        {vinculado && (
+          <span
+            className="material-symbols-outlined"
+            title={esSubreceta ? 'Receta del recetario' : 'Vinculado a Stock'}
+            style={{ fontSize: 14, paddingLeft: 10, flexShrink: 0, color: esSubreceta ? 'var(--accent)' : '#10b981' }}
+          >
+            {esSubreceta ? 'menu_book' : 'inventory_2'}
+          </span>
+        )}
 
         {/* Nombre ingrediente — PRIMERO */}
         <input
@@ -2026,18 +2134,15 @@ function IngRow({ ing, idx, isActive, stockIndex, cantidadRefs, nombreRefs, onUp
           onFocus={() => {
             setNombreFocused(true)
             onFocusRow(ing.id)
-            if (ing.nombre.trim()) {
-              const q = ing.nombre.toLowerCase()
-              const m = stockIndex.filter(p => p.lower.includes(q)).slice(0, 6)
-              if (m.length) { setSuggestions(m); setShowSuggestions(true) }
-            }
+            if (ing.nombre.trim() && !vinculado) buscar(ing.nombre)
           }}
           onBlur={() => { setNombreFocused(false); setTimeout(() => setShowSuggestions(false), 150) }}
-          placeholder={idx === 0 ? 'Ingrediente…' : ''}
+          placeholder={idx === 0 ? 'Ingrediente o receta…' : ''}
           enterKeyHint="next"
+          autoComplete="off"
           style={{
             flex: 1, border: 'none', background: 'transparent', outline: 'none',
-            padding: '9px 8px 9px 10px', fontSize: 12, fontFamily: 'inherit',
+            padding: vinculado ? '9px 8px 9px 6px' : '9px 8px 9px 10px', fontSize: 12, fontFamily: 'inherit',
             color: 'var(--text-1)', minWidth: 0,
           }}
         />
@@ -2113,7 +2218,7 @@ function IngRow({ ing, idx, isActive, stockIndex, cantidadRefs, nombreRefs, onUp
           borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,.15)',
           display: 'flex', gap: 0, overflow: 'hidden',
         }}>
-          {UNIDADES.map(u => (
+          {unidades.map(u => (
             <button
               key={u}
               onClick={() => { onUpdate(ing.id, { unidad: u }); setShowUnitPicker(false) }}
@@ -2128,38 +2233,16 @@ function IngRow({ ing, idx, isActive, stockIndex, cantidadRefs, nombreRefs, onUp
         </div>
       )}
 
-      {/* Stock suggestions */}
-      {showSuggestions && suggestions.length > 0 && (
-        <div style={{
-          position: 'absolute', left: 0, right: 0, top: '100%', zIndex: 25,
-          background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: '0 0 8px 8px', boxShadow: '0 4px 12px rgba(0,0,0,.12)',
-          maxHeight: 140, overflowY: 'auto',
-        }}>
-          {suggestions.map(p => (
-            <button
-              key={p.id}
-              onMouseDown={e => { e.preventDefault(); selectSuggestion(p) }}
-              onTouchStart={e => { e.preventDefault(); selectSuggestion(p) }}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                width: '100%', padding: '7px 10px', background: 'none',
-                border: 'none', borderBottom: '1px solid var(--border)',
-                cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
-              }}
-            >
-              <div>
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)' }}>{p.nombre}</span>
-                <span style={{ fontSize: 9, color: 'var(--text-3)', marginLeft: 6 }}>{p.unidad}</span>
-              </div>
-              {p.precio_unitario > 0 && (
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--navy-ink)' }}>
-                  ${p.precio_unitario.toLocaleString('es-AR')}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
+      {/* Sugerencias de Stock + recetas, mientras se tipea */}
+      {showSuggestions && (
+        <SugerenciasIngrediente
+          items={suggestions}
+          query={ing.nombre}
+          activo={activa}
+          onSelect={selectSuggestion}
+          onNuevo={elegirNuevo}
+          onHover={setActiva}
+        />
       )}
     </div>
   )

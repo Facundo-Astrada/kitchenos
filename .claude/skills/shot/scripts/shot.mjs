@@ -75,6 +75,15 @@ try {
     await page.waitForTimeout(esperaClick)
   }
 
+  // --type: "selector=>texto" — tipea tecla por tecla (como una persona, no
+  // `fill`), para capturar lo que reacciona al tipeo: autocompletados, filtros.
+  if (args.type) {
+    const [sel, texto] = args.type.split('=>')
+    await page.locator(sel).first().click()
+    await page.keyboard.type(texto, { delay: 60 })
+    await page.waitForTimeout(800)
+  }
+
   // --scroll: píxeles de rueda sobre el centro de la pantalla, para ver una
   // parte de abajo de una lista larga (o de la hoja que abrió --click).
   if (scroll) {
