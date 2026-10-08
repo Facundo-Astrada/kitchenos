@@ -32,7 +32,7 @@ import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import type { MisePlaceItem, MisePlaceRegistro } from '@/types'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { parsePrecio } from '@/lib/unidades'
-import { PesoPorUnidadField } from '@/components/stock/PesoPorUnidadField'
+import { UnidadesProductoFields } from '@/components/stock/UnidadesProducto'
 import { FiltroChip } from '@/components/stock/FiltroChip'
 import { esSinPrecio, usoEnRecetas, ordenarPorUso } from '@/lib/stock/sinPrecio'
 
@@ -328,7 +328,6 @@ export default function StockPage() {
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
   const [duplicadoWarn, setDuplicadoWarn] = useState<ProductoConEstado | null>(null)
-  const [showUnidadCompra, setShowUnidadCompra] = useState(false)
   const [showMasOpciones, setShowMasOpciones] = useState(false)
   const [showRecepcion, setShowRecepcion] = useState(false)
 
@@ -1064,7 +1063,6 @@ export default function StockPage() {
     setForm(FORM_EMPTY)
     setFormError(null)
     setDuplicadoWarn(null)
-    setShowUnidadCompra(false)
     setShowMasOpciones(false)
     setShowRecepcion(false)
     setModalOpen(true)
@@ -1093,8 +1091,7 @@ export default function StockPage() {
       merma_esperada_pct: p.merma_esperada_pct != null ? String(p.merma_esperada_pct) : '',
       nota_recepcion: p.nota_recepcion ?? '',
     })
-    setShowUnidadCompra(!!(p.unidad_compra || p.cantidad_por_envase))
-    setShowMasOpciones(!!(p.es_produccion || p.fuera_de_uso || p.unidad_compra || p.cantidad_por_envase || p.peso_por_unidad_g))
+    setShowMasOpciones(!!(p.es_produccion || p.fuera_de_uso))
     setShowRecepcion(!!(p.merma_esperada_pct || p.nota_recepcion))
     setFormError(null)
     setModalOpen(true)
@@ -1123,9 +1120,9 @@ export default function StockPage() {
         stock_maximo: form.stock_maximo ? parseNumAR(form.stock_maximo) : null,
         activo: true,
         precio_unitario: parsePrecio(form.precio_unitario),
-        unidad_compra: showUnidadCompra && form.unidad_compra.trim() ? form.unidad_compra.trim() : null,
-        cantidad_por_envase: showUnidadCompra && form.cantidad_por_envase ? parseNumAR(form.cantidad_por_envase) : null,
-        unidad_uso: showUnidadCompra && form.unidad_uso ? form.unidad_uso : null,
+        unidad_compra: form.unidad_compra.trim() || null,
+        cantidad_por_envase: form.cantidad_por_envase.trim() ? parseNumAR(form.cantidad_por_envase) : null,
+        unidad_uso: form.unidad_uso || null,
         peso_por_unidad_g: form.peso_por_unidad_g.trim() ? (parseNumAR(form.peso_por_unidad_g) || null) : null,
         es_produccion: form.es_produccion,
         receta_id: form.es_produccion && form.receta_id ? form.receta_id : null,
@@ -1962,6 +1959,15 @@ export default function StockPage() {
                 </div>
               </div>
 
+              <UnidadesProductoFields
+                unidad={form.unidad}
+                valores={form}
+                onChange={patch => setForm(f => ({ ...f, ...patch }))}
+                unidadesUso={UNIDADES_USO}
+                labelStyle={lblStyle}
+                inputStyle={inputStyle}
+              />
+
               {/* ── Ubicación, proveedor y precio ── */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -2030,7 +2036,7 @@ export default function StockPage() {
               </div>
               <p style={{ margin: '-4px 0 0', fontSize: 11, color: 'var(--text-3)' }}>Máximo — techo de compra, sobre todo para perecedero</p>
 
-              {/* ── Más opciones (colapsable): producción interna, fuera de uso, unidad de compra ── */}
+              {/* ── Más opciones (colapsable): producción interna, fuera de uso ── */}
               <div>
                 <button
                   onClick={() => setShowMasOpciones(v => !v)}
@@ -2118,59 +2124,6 @@ export default function StockPage() {
                       sub="No genera alertas ni aparece en Stockear — sigue contando en el valor del stock"
                     />
 
-                    <div style={{ height: 1, background: 'var(--border)' }} />
-
-                    <PesoPorUnidadField value={form.peso_por_unidad_g} onChange={v => setForm(f => ({ ...f, peso_por_unidad_g: v }))} labelStyle={lblStyle} inputStyle={inputStyle} />
-
-                    <button
-                      onClick={() => setShowUnidadCompra(v => !v)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: '10px 0', color: 'var(--text-2)', fontFamily: 'inherit' }}
-                    >
-                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
-                        {showUnidadCompra ? 'expand_less' : 'expand_more'}
-                      </span>
-                      <span style={{ fontSize: 12, fontWeight: 600 }}>Unidad de compra (opcional)</span>
-                    </button>
-
-                    {showUnidadCompra && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingBottom: 12 }}>
-                        <p style={{ margin: 0, fontSize: 11, color: 'var(--text-3)' }}>
-                          Ej: comprás 1 caja de 100 unidades → el stock se lleva en unidades
-                        </p>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <span style={lblStyle}>Unidad de compra</span>
-                            <input
-                              value={form.unidad_compra}
-                              onChange={e => setForm(f => ({ ...f, unidad_compra: e.target.value }))}
-                              placeholder="caja, pack, bolsa…"
-                              style={inputStyle}
-                            />
-                          </label>
-                          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            <span style={lblStyle}>Cantidad por envase</span>
-                            <input
-                              type="text" inputMode="numeric"
-                              value={form.cantidad_por_envase}
-                              onChange={e => setForm(f => ({ ...f, cantidad_por_envase: e.target.value }))}
-                              placeholder="100"
-                              style={inputStyle}
-                            />
-                          </label>
-                        </div>
-                        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          <span style={lblStyle}>Unidad de uso (stock se mide en)</span>
-                          <select
-                            value={form.unidad_uso}
-                            onChange={e => setForm(f => ({ ...f, unidad_uso: e.target.value }))}
-                            style={{ ...inputStyle, appearance: 'auto', cursor: 'pointer' }}
-                          >
-                            <option value="">Misma que unidad principal</option>
-                            {UNIDADES_USO.map(u => <option key={u} value={u}>{u}</option>)}
-                          </select>
-                        </label>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { esCategoriaValida, columnaCategoriaConfiable } from '@/lib/importador/categoriaStock'
 import { requireRestauranteId } from '@/lib/api/tenant'
 
 type MappedRow = Record<string, unknown>
@@ -82,6 +83,9 @@ async function importarStock(admin: ReturnType<typeof createAdminClient>, restau
   const toUpdate: { id: string; data: Record<string, unknown> }[] = []
   let omitidos = 0
   let lastCategoria = 'Sin categoría'
+  // Si la columna "categoría" no es de secciones (nombre, marca, proveedor mal
+  // mapeados), se ignora entera — ver lib/importador/categoriaStock.ts.
+  const categoriaConfiable = columnaCategoriaConfiable(rows.map(r => String(r.categoria ?? '')))
   const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
   for (const row of rows) {
@@ -100,7 +104,7 @@ async function importarStock(admin: ReturnType<typeof createAdminClient>, restau
 
     // Forward-fill: si la categoría está vacía, usar la última no vacía
     const catRaw = String(row.categoria ?? '').trim()
-    if (catRaw && catRaw !== 'Sin categoría') lastCategoria = catRaw
+    if (categoriaConfiable && esCategoriaValida(catRaw, nombreRaw)) lastCategoria = catRaw
     const cat = lastCategoria
 
     // Extraer unidad del patrón "Nombre (litros)" si no hay columna unidad mapeada
@@ -176,6 +180,7 @@ async function importarStock(admin: ReturnType<typeof createAdminClient>, restau
     actualizados: toUpdate.length,
     omitidos,
     categorias: catNuevas.length,
+    categoriaIgnorada: !categoriaConfiable,
     insertadosIds,
   })
 }
