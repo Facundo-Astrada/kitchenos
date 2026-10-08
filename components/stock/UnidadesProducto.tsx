@@ -57,7 +57,10 @@ export function UnidadesProductoFields({ unidad, valores, onChange, precio, onPr
   }
 
   const resumen: string[] = []
-  if (conEnvase) resumen.push(`1 ${envase} = ${fmt(cpe)} ${unidad}${precioN > 0 ? ` → $${fmt(precioN)} c/${unidad}` : ''}`)
+  // Con el precio a la vista "el pack sale $120.000" se nota el error más
+  // común: cambiar la Unidad de "caja" a "unidad" y dejar el precio de la caja
+  // (Bros, nori: 5 hojas valían $50.000 en stock).
+  if (conEnvase) resumen.push(`1 ${envase} = ${fmt(cpe)} ${unidad}${precioN > 0 ? ` → $${fmt(precioN)} c/${unidad} · 1 ${envase} sale $${fmt(precioN * cpe)}` : ''}`)
   if (valores.peso_por_unidad_g.trim()) {
     const g = parsePrecio(valores.peso_por_unidad_g)
     if (g > 0) resumen.push(`1 unidad pesa ${fmt(g)} g`)
@@ -108,7 +111,7 @@ export function UnidadesProductoFields({ unidad, valores, onChange, precio, onPr
         </label>
         {conEnvase && (
           <label style={campo}>
-            <span style={labelStyle}>Precio del {envase} ($)</span>
+            <span style={labelStyle}>Precio por {envase} ($)</span>
             <input
               type="text" inputMode="decimal"
               value={packTipeado ?? packDerivado}
@@ -130,6 +133,21 @@ export function UnidadesProductoFields({ unidad, valores, onChange, precio, onPr
           />
         </label>
       </div>
+
+      {conEnvase && precioN > 0 && (
+        <button
+          type="button"
+          onClick={() => { setPackTipeado(null); onPrecio(String(Math.round((precioN / cpe) * 100) / 100).replace('.', ',')) }}
+          style={{
+            alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px',
+            borderRadius: 99, border: '1px solid rgba(67,97,160,.3)', background: 'rgba(67,97,160,.06)',
+            cursor: 'pointer', fontFamily: 'inherit', fontSize: 11.5, color: 'var(--text-1)',
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent)' }}>call_split</span>
+          ¿${fmt(precioN)} es lo que pagás por {envase}? <b>Repartir → ${fmt(precioN / cpe)} c/{unidad}</b>
+        </button>
+      )}
 
       <p style={{ margin: 0, fontSize: 11, lineHeight: 1.45, color: resumen.length ? 'var(--text-2)' : 'var(--text-3)' }}>
         {resumen.length
