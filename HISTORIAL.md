@@ -6,6 +6,15 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-10-08 — Auditoría de costos, unidades y vínculo a Stock (devolución de Facundo, verificado en Bros).**
+
+- Costos ×1000: varias pantallas guardaban la unidad de la receta como unidad del precio (500 g × $/kg). Trigger `ingredientes_costo_desde_producto` + `productos_propaga_costo` (migración `20261008_ingredientes_costo_desde_producto.sql`, respaldo `_bkp_ingredientes_costo_20261008`): costo y unidad del costo salen del producto. Bros: 137 líneas infladas → 0; recetas distorsionadas 99 → 3 (las 3 = producto sin precio con costo manual).
+- Vínculo perdido al elegir producto (ficha, receta nueva, carga rápida, import IA): ahora se guarda `producto_id`; lo inexistente se crea en Stock y se vincula (`vincularIngredientesConStock`, `lib/recetas/vinculo.ts`). Auto-vínculo solo exacto.
+- `RecetaEditSheet` (Carta) leía `unidad_costo` como unidad: "500 g" se guardaba "500 kg" y perdía vínculo/merma/etapa/OPS al guardar.
+- Facturas/lista de precios/sync/import de productos pisaban la unidad del producto y (import desde facturas) reseteaban stock; ahora `aUnidadDelProducto()` convierte a la unidad del producto y lo no convertible se avisa sin tocar.
+- `productos.peso_por_unidad_g` (u ↔ peso) con campo en Stock. Pantalla sin conversión automática kg↔g. `parseNumero`/`parsePrecio` ("1.500,5", "12.500").
+- Bros: 216 vínculos por "contiene" desvinculados (Agua→Agua oxigenada, Salsa de soja→Sal, Caldo→Cal…) y 79 revinculados exacto; respaldo `_bkp_ingredientes_vinculo_20261008`.
+
 **Sesión 2026-10-02 — Asistente F0 + F1, "crítico" → "bajo mínimo".**
 
 - "Crítico" contaba productos en cero (`stock_critico` en 0 casi siempre): 100 en El Rescoldo cuando lo real era 1. Una sola regla en `lib/stock/alerta.ts` + RPC `productos_bajo_minimo_count` (migraciones `20261001*`, la vieja `productos_criticos_count` borrada); la usan el contador, `/centro`, el panel del Coach, sus tools y el contexto del layout. Bros: 199 → 168.

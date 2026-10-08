@@ -1,17 +1,17 @@
-# Sesión — 02/10/2026 (asistente: F0 + F1)
+# Sesión — 08/10/2026 (auditoría de costos, unidades y vínculo a Stock)
 
 ## Qué se cerró
-- F0: push de prueba llegó al iPhone; `/centro` commiteado; "crítico" → "bajo mínimo" en todo el Coach (`lib/stock/alerta.ts` + RPC `productos_bajo_minimo_count`; la vieja se borró). `AVISOS_ACTIVOS=1` está prendido a propósito.
-- F1: pastilla de avisos nuevos (`AvisosPopup`) + bandeja `/avisos` agrupada por tipo; campana mobile fuera, acceso desde Perfil y sidebar.
-- Decisión 8 del plan: lo urgente = falta de producto clave (derivado de la carta del día) → puesto Compras, "⚠", sin silencio en servicio ni repetición.
+- Costo de ingrediente vinculado = precio + unidad del producto, por trigger (migración `20261008_ingredientes_costo_desde_producto.sql`). Bros: 137 líneas ×1000 → 0, recetas distorsionadas 99 → 3.
+- Vínculo a Stock se guarda en las 6 vías de carga; auto-vínculo solo exacto; `RecetaEditSheet` ya no convierte "500 g" en "500 kg".
+- Facturas/listas convierten a la unidad del producto; `peso_por_unidad_g` con campo en Stock; sin conversión automática en pantalla; comas y miles.
+- Bros: 216 vínculos erróneos desvinculados, 79 revinculados exacto (respaldos `_bkp_ingredientes_*_20261008`).
 
 ## Qué quedó a medias
-- Franco tiene que dejar vigente la descripción del puesto de Compras en Bros (destinatario de F2).
-- "¿Por qué me llegó?" de F1: espera a `asistente_rutinas` (F2).
-- Test `ratchets` falla: `checklist/ClientView.tsx` 3166 líneas vs techo 3145 (de otra sesión, no tocado).
+- Subreceta como ingrediente sigue con costo guardado fuera de la ficha (PENDIENTES → Costos).
+- Test `ratchets`: `checklist/ClientView.tsx` sobre su techo (de antes, no tocado).
 
 ## Probar primero mañana
-- Abrir la app en Bros y ver la pastilla con el aviso de prueba; revisar `/avisos` en celular y desktop (F1 no se vio en pantalla, solo typecheck/lint/tests).
+- En Bros: ficha de receta → agregar 500 g de un producto por kg (ver "500 g × $X/kg" y punto verde); cargar "Peso de 1 unidad" en Ajo; cargar una factura en otra unidad.
 
 ## Próximo paso concreto
-- F2: pasar `asistente_rutinas` por `db-designer`, motor determinístico, conteo cerrado → informe a Compras (Haiku). Definir si el urgente dispara con stock en cero o bajo mínimo. Sumar tipos nuevos a `ETIQUETAS` en `lib/notificaciones/agrupar.ts`.
+- Repasar con Franco los 446 sin vincular en "Vincular stock" y cargar precios a Sal/Agua/Leche/aceites. Después, retomar F2 del asistente (`asistente_rutinas`).
