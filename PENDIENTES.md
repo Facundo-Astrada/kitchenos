@@ -83,7 +83,7 @@ si se queda), las vistas no se guardan con la conversación, mobile sin sheet.
 ### Costos — flecos de la auditoría del 08/10
 - **Subreceta como ingrediente** se costea con su `costo_unitario` guardado en la lista del Recetario y en Carta; solo la ficha la recalcula en vivo (`corregirSubreceta`). Llevar ese recálculo a `calcFoodCost`.
 - **Bros: 446 ingredientes sin vincular** (309 de antes + 216 desvinculados − 79 exactos) — repasarlos con "Vincular stock" (sugerencias parecidas, confirmar a mano).
-- **713 líneas de Bros contra productos sin precio** (Sal, Cebolla, Agua, Leche, aceites) y 234 en unidades contra $/kg: se arreglan cargando precio y "Peso de 1 unidad" en Stock — dato, no código.
+- **Bros: 53 productos sin precio** (arriba Cebolla en 34 recetas, Agua en 31) y 234 líneas en unidades contra $/kg: cargar precio y "Peso de 1 unidad" desde Stock → chip "Sin precio" — dato, no código.
 
 ### Planificación — los pasos del menú no siguen el orden de Carta
 En Planificación, "Cotidiano 29/9 a 9/10" (Bros) sale Postre → Pasta → Proteina, cuando en el menú es ape → entrada → proteina → pasta → postre. El mise ya respeta ese orden (`sincronizarMiseDeMenu`); falta que `MenuActivoView` (`produccion/page.tsx`) ordene los grupos por `menu_preparaciones.orden` en vez de por llegada o nombre.
