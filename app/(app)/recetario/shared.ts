@@ -1,3 +1,6 @@
+import { parseNumero } from '@/lib/unidades'
+import { toGramos } from '@/lib/recetas/peso'
+
 // Tipos y helpers de importación IA compartidos entre recetario/page.tsx y
 // recetario/IAResultScreens.tsx. Viven acá (y no en cualquiera de esos dos
 // archivos) para que ninguno dependa del otro — page.tsx importa las
@@ -42,21 +45,8 @@ export function apiToForm(data: IAApiResult): IAResult {
   }
 }
 
-/** Parsea "0,3" o "0.3" → 0.3 */
-export function parseNum(s: string | number | null | undefined): number {
-  if (s === null || s === undefined) return 0
-  if (typeof s === 'number') return isNaN(s) ? 0 : s
-  return parseFloat(String(s).replace(',', '.')) || 0
-}
-
-function toGramos(cantidad: number, unidad: string): number {
-  const u = (unidad || '').toLowerCase().trim()
-  if (u === 'kg') return cantidad * 1000
-  if (u === 'g') return cantidad
-  if (u === 'l' || u === 'lt' || u === 'lts' || u === 'l') return cantidad * 1000
-  if (u === 'ml') return cantidad
-  return 0
-}
+/** Parsea "0,3", "0.3" o "1.500,5" — ver parseNumero en lib/unidades.ts */
+export const parseNum = parseNumero
 
 export function calcPesoPorcion(ingredientes: { cantidad: number | string; unidad: string }[], porciones: number): number | null {
   if (!porciones || porciones <= 0) return null

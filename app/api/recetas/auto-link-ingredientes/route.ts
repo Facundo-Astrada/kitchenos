@@ -1,15 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRestauranteId } from '@/lib/api/tenant'
-
-function normalize(s: string): string {
-  return s
-    .toLowerCase()
-    .trim()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/\s+/g, ' ')
-}
+import { normalizarNombre as normalize, claveExacta } from '@/lib/recetas/vinculo'
 
 function wordOverlap(a: string, b: string): number {
   const words = (s: string) => s.split(' ').filter(w => w.length > 2)
@@ -27,8 +19,11 @@ function findMatch(
   prodList: Producto[]
 ): { producto: Producto; confianza: 'exacto' | 'parcial' | 'fuzzy' } | undefined {
   const norm = normalize(nombreKey)
+  const clave = claveExacta(nombreKey)
 
-  const exact = prodList.find(p => normalize(p.nombre) === norm)
+  // 'exacto' es lo único que los llamadores aplican sin preguntar (ver
+  // lib/recetas/vinculo.ts); 'parcial'/'fuzzy' son sugerencias para revisar.
+  const exact = prodList.find(p => claveExacta(p.nombre) === clave)
   if (exact) return { producto: exact, confianza: 'exacto' }
 
   const contains = prodList.find(p => {
@@ -177,21 +172,11 @@ export async function PATCH(req: NextRequest) {
     for (const link of links) {
       if (!link.ingrediente_ids?.length || !link.producto_id) continue
 
-      // Obtener precio actual del producto
-      const { data: prod } = await admin
-        .from('productos')
-        .select('precio_unitario')
-        .eq('id', link.producto_id)
-        .single()
-
-      if (!prod) continue
-
+      // Solo producto_id: el costo (precio + unidad del producto) lo completa
+      // el trigger ingredientes_costo_desde_producto en la base.
       const { error } = await admin
         .from('ingredientes')
-        .update({
-          producto_id: link.producto_id,
-          costo_unitario: prod.precio_unitario,
-        })
+        .update({ producto_id: link.producto_id })
         .in('id', link.ingrediente_ids)
 
       if (!error) vinculados += link.ingrediente_ids.length

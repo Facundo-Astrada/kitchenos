@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { unitConversionFactor } from './unidades'
+import { unitConversionFactor, parseNumero, parsePrecio } from './unidades'
 
 describe('unitConversionFactor', () => {
   it('misma unidad → factor 1', () => {
@@ -30,5 +30,32 @@ describe('unitConversionFactor', () => {
   it('normaliza variantes reales de datos importados', () => {
     expect(unitConversionFactor('grs', 'kgs')).toBe(0.001)
     expect(unitConversionFactor('lts', 'cc')).toBe(1000)
+  })
+})
+
+describe('parseNumero', () => {
+  it('coma decimal y punto de miles', () => {
+    expect(parseNumero('0,5')).toBe(0.5)
+    expect(parseNumero('1.500,5')).toBe(1500.5)
+    expect(parseNumero('1.500.000')).toBe(1500000)
+  })
+  it('punto solo es decimal (teclado del celular)', () => {
+    expect(parseNumero('1.5')).toBe(1.5)
+    expect(parseNumero('500')).toBe(500)
+  })
+  it('vacío o inválido → 0', () => {
+    expect(parseNumero('')).toBe(0)
+    expect(parseNumero('abc')).toBe(0)
+    expect(parseNumero(null)).toBe(0)
+  })
+})
+
+describe('parsePrecio', () => {
+  it('punto con 3 dígitos es miles en plata', () => {
+    expect(parsePrecio('12.500')).toBe(12500)
+    expect(parsePrecio('12.500,50')).toBe(12500.5)
+    expect(parsePrecio('15,42')).toBe(15.42)
+    expect(parsePrecio('8.5')).toBe(8.5)
+    expect(parsePrecio('0.125')).toBe(0.125)
   })
 })

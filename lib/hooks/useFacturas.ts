@@ -134,14 +134,14 @@ export function useFacturas() {
       // 3. Efectos idempotentes sobre Stock (aparte, dominio-kos.md §4.1): si
       // esto falla, la factura+items ya quedaron escritos enteros — lo que
       // falta es "faltan estos efectos", no un documento roto.
-      const { preciosActualizados } = await aplicarEfectosDeFactura({
+      const { preciosActualizados, sinConvertir } = await aplicarEfectosDeFactura({
         supabase, restauranteId: RESTAURANTE_ID, facturaId,
         proveedorNombre: datos.proveedor_nombre, items: itemsResueltos,
       })
 
       await fetchFacturas(true)
       invalidarPresupuesto()
-      return { facturaId, preciosActualizados, productosCreados }
+      return { facturaId, preciosActualizados, productosCreados, sinConvertir }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al crear factura'
       console.error('[useFacturas] crearFactura Error:', msg)

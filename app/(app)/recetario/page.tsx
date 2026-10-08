@@ -7,6 +7,7 @@ import PhotoPicker from '@/components/ui/PhotoPicker'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useRecetas, calcFoodCost, type RecetaConCosto } from '@/lib/hooks/useRecetas'
+import { vincularIngredientesConStock } from '@/lib/recetas/vinculo'
 import { useStock } from '@/lib/hooks/useStock'
 import { useCategoriasProducto } from '@/lib/hooks/useCategoriasProducto'
 import { usePermisos } from '@/lib/hooks/usePermisos'
@@ -130,6 +131,10 @@ interface FormIng {
   nombre: string
   costo_unitario: number
   grupo: string
+  // Producto de Stock elegido de la lista (y la unidad en que está su precio).
+  // Antes solo se copiaban nombre/unidad/precio y el vínculo se perdía.
+  producto_id?: string | null
+  unidad_costo?: string | null
 }
 
 interface FormPaso {
@@ -979,7 +984,7 @@ interface NuevaFichaProps {
   stockProductos: { id: string; nombre: string; unidad: string; precio_unitario: number; categoria: string }[]
   agregarReceta: (d: any, ingredientes?: any[]) => Promise<string>
   agregarIngrediente: (recetaId: string, d: any) => Promise<void>
-  agregarProducto: (datos: any) => Promise<void>
+  agregarProducto: (datos: any) => Promise<string>
   actualizarReceta: (id: string, d: any) => Promise<void>
   initialDraft?: InitialDraft
   /**
@@ -1279,28 +1284,6 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
     }
   }
 
-  // Fix 2: sincronizar ingredientes faltantes con el stock
-  async function sincronizarIngredientesConStock(ingredientesData: { nombre: string; unidad: string }[]) {
-    const stockNombres = new Set(stockProductos.map(p => p.nombre.toLowerCase().trim()))
-    for (const ing of ingredientesData) {
-      if (!stockNombres.has(ing.nombre.toLowerCase().trim())) {
-        try {
-          await agregarProducto({
-            nombre: ing.nombre,
-            categoria: 'Sin categoría',
-            unidad: ing.unidad,
-            stock_actual: 0,
-            stock_minimo: 0,
-            stock_critico: 0,
-            precio_unitario: 0,
-            activo: true,
-            proveedor_id: null,
-          })
-          stockNombres.add(ing.nombre.toLowerCase().trim())
-        } catch { /* ignorar */ }
-      }
-    }
-  }
 
   // Cuando la IA termina de analizar → poblar el formulario directamente
   function handleAcceptIAResult(r: IAResult) {
@@ -1381,14 +1364,18 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
     setFormError(null)
     try {
       const procedimiento = pasosValidos.map((p, i) => `${i + 1}. ${p.texto.trim()}`).join('\n')
-      const ingredientesData = ingsValidos.map(ing => ({
+      // unidad_costo = la del precio (la del producto elegido), no la de la
+      // receta: antes se copiaba ing.unidad y 500 g de un producto a $/kg se
+      // costeaba 500 × precio/kg (×1000).
+      const ingredientesData = await vincularIngredientesConStock(ingsValidos.map(ing => ({
         nombre: ing.nombre.trim(),
         cantidad: parseNum(ing.cantidad),
         unidad: ing.unidad || 'u',
         costo_unitario: ing.costo_unitario ?? 0,
-        unidad_costo: ing.unidad || 'u',
+        unidad_costo: ing.unidad_costo || ing.unidad || 'u',
+        producto_id: ing.producto_id ?? null,
         grupo: ing.grupo?.trim() || null,
-      }))
+      })), stockProductos, agregarProducto)
       let savedId: string
       if (initialDraft?.id) {
         // Actualizar el borrador existente en vez de crear uno nuevo
@@ -1430,7 +1417,6 @@ function NuevaFichaScreen({ categorias, stockProductos, agregarReceta, agregarIn
           ...(fotoUrl ? { foto_url: fotoUrl } : {}),
         }, ingredientesData)
       }
-      await sincronizarIngredientesConStock(ingredientesData)
       onCreated(savedId, isDraft)
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : 'Error al crear')
@@ -1982,7 +1968,7 @@ function IngRow({ ing, idx, isActive, stockIndex, cantidadRefs, nombreRefs, onUp
   }, [ing.id, nombreRefs])
 
   function handleNombreChange(val: string) {
-    onUpdate(ing.id, { nombre: val })
+    onUpdate(ing.id, { nombre: val, producto_id: null, unidad_costo: null })
     if (val.trim().length >= 1) {
       const q = val.toLowerCase()
       const matches = stockIndex.filter(p => p.lower.includes(q)).slice(0, 6)
@@ -1994,7 +1980,11 @@ function IngRow({ ing, idx, isActive, stockIndex, cantidadRefs, nombreRefs, onUp
   }
 
   function selectSuggestion(p: typeof stockIndex[0]) {
-    onUpdate(ing.id, { nombre: p.nombre, unidad: p.unidad, costo_unitario: p.precio_unitario || 0 })
+    // La unidad del producto solo se sugiere si todavía no hay cantidad cargada.
+    onUpdate(ing.id, {
+      nombre: p.nombre, producto_id: p.id, unidad_costo: p.unidad, costo_unitario: p.precio_unitario || 0,
+      ...(parseNum(ing.cantidad) > 0 ? {} : { unidad: p.unidad }),
+    })
     setShowSuggestions(false)
     setTimeout(() => {
       const el = cantidadRefs.current.get(ing.id)
@@ -2411,7 +2401,7 @@ function CargaRapidaScreen({ categorias, stockProductos, recetasDisponibles, agr
         precio_venta: parseFloat(precioVenta.replace(',', '.')) || 0,
         status: publicar ? 'published' : 'draft',
         activa: true,
-      }, filasToIngredientesData(filas))
+      }, filasToIngredientesData(filas, stockProductos))
       onCreated(nuevaId, !publicar)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error al guardar')

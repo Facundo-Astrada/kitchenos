@@ -6,6 +6,7 @@ import { SheetChrome } from '@/lib/ui/chrome'
 import { useRecetas, unitConversionFactor } from '@/lib/hooks/useRecetas'
 import { useProduccionRegistros, type ProduccionRegistro } from '@/lib/hooks/useProduccionRegistros'
 import { useStock } from '@/lib/hooks/useStock'
+import { parseNumero } from '@/lib/unidades'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { callRecetaImport, fileToBase64, type RecetaIAResult } from '@/lib/recetas/iaImport'
 import { IAButton, IAPanel } from '@/components/ui'
@@ -82,6 +83,9 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
   const [nuevoIng, setNuevoIng] = useState<{
     nombre: string; cantidad: string; unidad: string; costo_unitario: string
     tipo: 'producto' | 'subreceta'; productoId?: string; subrecetaId?: string
+    // Unidad en la que está el precio (la del producto de Stock). No es la
+    // unidad de la receta: 500 g de un producto a $/kg → unidad 'g', unidadCosto 'kg'.
+    unidadCosto?: string
   }>({ nombre: '', cantidad: '', unidad: 'g', costo_unitario: '', tipo: 'producto' })
   const [addingIng, setAddingIng] = useState(false)
   const [sugerenciasIng, setSugerenciasIng] = useState<SugerenciaIng[]>([])
@@ -138,7 +142,7 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
   }
 
   // Vincula por nombre los ingredientes sin producto_id contra el stock real
-  // (mismo endpoint y mismo criterio — exacto/parcial, nunca fuzzy — que usa
+  // (mismo endpoint y mismo criterio — solo exacto, ver lib/recetas/vinculo.ts — que usa
   // agregarReceta() en useRecetas.ts al crear una receta desde Recetario).
   // Sin esto, un ingrediente cargado acá quedaba con costo_unitario en 0 y
   // nunca entraba al food cost aunque el producto ya existiera en Stock.
@@ -149,7 +153,7 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
       })
       const { matches = [] } = await res.json() as { matches: { ingrediente_ids: string[]; producto_id: string; confianza: string }[] }
-      const toApply = matches.filter(m => m.confianza === 'exacto' || m.confianza === 'parcial')
+      const toApply = matches.filter(m => m.confianza === 'exacto')
       if (toApply.length === 0) return
       await fetch('/api/recetas/auto-link-ingredientes', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -169,10 +173,10 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
     if (!receta || !nuevoIng.nombre.trim()) return
     await agregarIngrediente(receta.id, {
       nombre: nuevoIng.nombre.trim(),
-      cantidad: parseFloat(nuevoIng.cantidad) || 0,
+      cantidad: parseNumero(nuevoIng.cantidad),
       unidad: nuevoIng.unidad,
-      costo_unitario: nuevoIng.costo_unitario ? parseFloat(nuevoIng.costo_unitario) : 0,
-      unidad_costo: nuevoIng.unidad,
+      costo_unitario: parseNumero(nuevoIng.costo_unitario),
+      unidad_costo: nuevoIng.unidadCosto ?? nuevoIng.unidad,
       tipo: nuevoIng.tipo,
       // Elegido del desplegable → el vínculo va directo, sin esperar al
       // auto-link por nombre de abajo (que sigue corriendo como red de
@@ -242,6 +246,11 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
     }
   }
 
+  function precioDeStock(ing: { producto_id?: string | null }): number {
+    if (!ing.producto_id) return 0
+    return stockProductos.find(p => p.id === ing.producto_id)?.precio_unitario ?? 0
+  }
+
   // Mismo criterio de match que CargaRapidaIngredientes.tsx: nombre de stock
   // y de recetas activas (excluida esta misma, para no poder autorreferenciarse).
   function buscarSugerenciasIng(q: string) {
@@ -269,7 +278,10 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
   function seleccionarSugerenciaIng(s: SugerenciaIng) {
     setNuevoIng(v => ({
       ...v,
-      nombre: s.nombre, unidad: s.unidad, costo_unitario: String(s.costoUnitario || ''),
+      // La unidad del producto solo se sugiere si todavía no cargaste cantidad:
+      // si ya pusiste "500 g", elegir un cacao que se compra por kg no te la cambia.
+      nombre: s.nombre, unidad: v.cantidad && s.tipo === 'producto' ? v.unidad : s.unidad,
+      unidadCosto: s.unidad, costo_unitario: String(s.costoUnitario || ''),
       tipo: s.tipo, productoId: s.productoId, subrecetaId: s.subrecetaId,
       cantidad: v.cantidad || (s.tipo === 'subreceta' ? '1' : ''),
     }))
@@ -294,7 +306,7 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
       if (patch.procedimiento !== undefined) setProcedimientoInput(patch.procedimiento)
     }
     for (const ing of resultado.ingredientes ?? []) {
-      const cantidad = parseFloat(String(ing.cantidad).replace(',', '.')) || 0
+      const cantidad = parseNumero(ing.cantidad)
       await agregarIngrediente(receta.id, {
         nombre: ing.nombre, cantidad, unidad: ing.unidad,
         costo_unitario: 0, unidad_costo: ing.unidad,
@@ -530,8 +542,8 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
                           style={{ ...inputStyle, flex: 1, minWidth: 0 }}
                         />
                         <input
-                          type="number" defaultValue={ing.cantidad}
-                          onBlur={e => { const v = parseFloat(e.target.value) || 0; if (v !== ing.cantidad) conAviso(actualizarIngrediente(ing.id, { cantidad: v })) }}
+                          type="text" inputMode="decimal" defaultValue={String(ing.cantidad).replace('.', ',')}
+                          onBlur={e => { const v = parseNumero(e.target.value); if (v !== ing.cantidad) conAviso(actualizarIngrediente(ing.id, { cantidad: v })) }}
                           style={{ ...inputStyle, width: 52, textAlign: 'center', fontFamily: "'DM Mono', monospace" }}
                         />
                         <select
@@ -543,10 +555,13 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
                         </select>
                         {verCostos && (
                           <>
+                            {/* Vinculado a un producto con precio: el costo sale de Stock
+                                (trigger ingredientes_costo_desde_producto) — se cambia allá. */}
                             <input
-                              type="number" defaultValue={ing.costo_unitario ?? 0}
-                              title={`Costo por ${ing.unidad_costo ?? ing.unidad}`}
-                              onBlur={e => { const v = parseFloat(e.target.value) || 0; if (v !== ing.costo_unitario) conAviso(actualizarIngrediente(ing.id, { costo_unitario: v })) }}
+                              type="text" inputMode="decimal" defaultValue={String(ing.costo_unitario ?? 0).replace('.', ',')}
+                              readOnly={precioDeStock(ing) > 0}
+                              title={precioDeStock(ing) > 0 ? `Precio de Stock por ${ing.unidad_costo ?? ing.unidad} — se cambia en Stock` : `Costo por ${ing.unidad_costo ?? ing.unidad}`}
+                              onBlur={e => { const v = parseNumero(e.target.value); if (v !== ing.costo_unitario) conAviso(actualizarIngrediente(ing.id, { costo_unitario: v })) }}
                               style={{ ...inputStyle, width: 60, textAlign: 'center', fontFamily: "'DM Mono', monospace" }}
                             />
                             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-2)', minWidth: 52, textAlign: 'right', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
@@ -572,7 +587,7 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
                         // Tipear después de elegir una sugerencia desvincula esa
                         // elección — si no, se guardaría el producto/receta viejo
                         // con un nombre que ya no le corresponde.
-                        setNuevoIng(v => ({ ...v, nombre, tipo: 'producto', productoId: undefined, subrecetaId: undefined }))
+                        setNuevoIng(v => ({ ...v, nombre, tipo: 'producto', productoId: undefined, subrecetaId: undefined, unidadCosto: undefined }))
                         buscarSugerenciasIng(nombre)
                       }}
                       onFocus={() => { if (nuevoIng.nombre.trim()) buscarSugerenciasIng(nuevoIng.nombre) }}
@@ -604,7 +619,7 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
                       </div>
                     )}
                     <input
-                      type="number" value={nuevoIng.cantidad}
+                      type="text" inputMode="decimal" value={nuevoIng.cantidad}
                       onChange={e => setNuevoIng(v => ({ ...v, cantidad: e.target.value }))}
                       onKeyDown={e => { if (e.key === 'Enter') handleAddIngrediente() }}
                       placeholder="0"
@@ -619,7 +634,7 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
                     </select>
                     {verCostos && (
                       <input
-                        type="number" value={nuevoIng.costo_unitario}
+                        type="text" inputMode="decimal" value={nuevoIng.costo_unitario}
                         onChange={e => setNuevoIng(v => ({ ...v, costo_unitario: e.target.value }))}
                         onKeyDown={e => { if (e.key === 'Enter') handleAddIngrediente() }}
                         placeholder="$"

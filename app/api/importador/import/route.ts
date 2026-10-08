@@ -107,9 +107,11 @@ async function importarStock(admin: ReturnType<typeof createAdminClient>, restau
     const unidadRaw = String(row.unidad ?? '').trim()
     let nombre = nombreRaw
     let unidadFinal: string
+    let unidadDeclarada = !!unidadRaw
     if (!unidadRaw) {
       const extraido = extraerUnidadDeNombre(nombreRaw)
       nombre = extraido.nombre
+      unidadDeclarada = !!extraido.unidad
       unidadFinal = extraido.unidad ?? 'unidad'
     } else {
       unidadFinal = normalizarUnidad(unidadRaw)
@@ -131,7 +133,10 @@ async function importarStock(admin: ReturnType<typeof createAdminClient>, restau
     }
     const existing = existMap.get(nombre.toLowerCase())
     if (existing) {
-      toUpdate.push({ id: existing, data: producto })
+      // Sin unidad en la planilla, la del producto existente no se toca (antes
+      // quedaba pisada con el default 'unidad').
+      const { unidad: _u, ...sinUnidad } = producto
+      toUpdate.push({ id: existing, data: unidadDeclarada ? producto : sinUnidad })
     } else {
       toInsert.push(producto)
     }

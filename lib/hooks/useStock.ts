@@ -70,14 +70,15 @@ export function useStock() {
 
   async function agregarProducto(
     datos: Omit<Producto, 'id' | 'restaurante_id' | 'created_at' | 'updated_at'>
-  ) {
+  ): Promise<string> {
     try {
-      const { error } = await supabase.from('productos').insert({
+      const { data, error } = await supabase.from('productos').insert({
         ...datos,
         restaurante_id: RESTAURANTE_ID,
-      })
+      }).select('id').single()
       if (error) throw error
       await mutate()
+      return (data as { id: string }).id
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al agregar producto'
       console.error('[useStock] agregarProducto Error:', msg)

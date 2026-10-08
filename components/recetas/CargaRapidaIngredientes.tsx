@@ -9,6 +9,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Ingrediente } from '@/types'
 import type { RecetaConCosto } from '@/lib/hooks/useRecetas'
 import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
+import { unitConversionFactor, parseNumero, parsePrecio } from '@/lib/unidades'
+import { buscarProductoExacto } from '@/lib/recetas/vinculo'
 
 const UNIDADES_PRODUCTO = ['kg', 'g', 'l', 'ml', 'u']
 // Una subreceta usada como ingrediente solo se costea por peso — nunca litros
@@ -23,6 +25,15 @@ export interface FilaIngredienteRapido {
   unidad: string
   costoUnitario: number
   subrecetaId?: string | null
+  // Producto de Stock vinculado y la unidad en que está su precio
+  // (costoUnitario). La unidad de la fila es la de la receta: 500 g de un
+  // producto a $/kg → unidad 'g', unidadCosto 'kg'. Sin unidadCosto el costo
+  // se interpreta en la unidad de la fila.
+  productoId?: string | null
+  unidadCosto?: string | null
+  // Columnas del ingrediente que esta UI no edita (merma, etapa, OPS) — se
+  // preservan al guardar, porque guardar reemplaza todos los ingredientes.
+  extra?: Partial<Omit<Ingrediente, 'id' | 'receta_id'>>
 }
 
 let _filaId = 0
@@ -31,19 +42,28 @@ export function nuevaFilaRapida(): FilaIngredienteRapido {
 }
 
 // Shape que espera `agregarReceta(datos, ingredientesData)` — filas vacías (sin nombre) se descartan.
-export function filasToIngredientesData(filas: FilaIngredienteRapido[]): Omit<Ingrediente, 'id' | 'receta_id'>[] {
+// Con `stockProductos`, lo que no se eligió de la lista se vincula si el
+// nombre coincide exacto (lib/recetas/vinculo.ts).
+export function filasToIngredientesData(filas: FilaIngredienteRapido[], stockProductos?: { id: string; nombre: string }[]): Omit<Ingrediente, 'id' | 'receta_id'>[] {
   return filas
     .filter(f => f.nombre.trim())
-    .map(f => ({
-      nombre: f.nombre.trim(),
-      cantidad: parseFloat(f.cantidad.replace(',', '.')) || 0,
-      unidad: f.unidad,
-      costo_unitario: f.costoUnitario,
-      unidad_costo: f.unidad,
-      tipo: f.tipo,
-      subreceta_id: f.tipo === 'subreceta' ? (f.subrecetaId ?? null) : null,
-      merma_pct: 0,
-    }))
+    .map(f => {
+      const productoId = f.tipo === 'producto'
+        ? (f.productoId ?? (stockProductos ? buscarProductoExacto(f.nombre, stockProductos)?.id : null) ?? null)
+        : null
+      return {
+        merma_pct: 0,
+        ...f.extra,
+        nombre: f.nombre.trim(),
+        cantidad: parseNumero(f.cantidad),
+        unidad: f.unidad,
+        costo_unitario: f.costoUnitario,
+        unidad_costo: f.unidadCosto || f.unidad,
+        tipo: f.tipo,
+        subreceta_id: f.tipo === 'subreceta' ? (f.subrecetaId ?? null) : null,
+        producto_id: productoId,
+      }
+    })
 }
 
 function pesoEnGramos(cantidad: number, unidad: string): number {
@@ -64,8 +84,9 @@ export function calcularTotalesRapido(filas: FilaIngredienteRapido[], porciones:
   let costoTotal = 0
   let pesoBrutoG = 0
   for (const f of filas) {
-    const cant = parseFloat(f.cantidad.replace(',', '.')) || 0
-    costoTotal += cant * f.costoUnitario
+    const cant = parseNumero(f.cantidad)
+    // Convierte la unidad de la receta a la del precio (500 g × $/kg).
+    costoTotal += cant * unitConversionFactor(f.unidad, f.unidadCosto || f.unidad) * f.costoUnitario
     // Antes solo contaba productos — una subreceta cargada por gramaje (ver
     // buscar()/seleccionar() más abajo) también es peso real del plato.
     pesoBrutoG += pesoEnGramos(cant, f.unidad)
@@ -116,6 +137,7 @@ type Sugerencia = {
   unidad: string
   costoUnitario: number
   subrecetaId?: string
+  productoId?: string
   detalle: string
 }
 
@@ -231,7 +253,7 @@ function FilaRapidaRow({ fila, idx, stockProductos, recetasDisponibles, autoFocu
       .filter(p => p.nombre.toLowerCase().includes(query))
       .slice(0, 5)
       .map(p => ({
-        tipo: 'producto', nombre: p.nombre, unidad: p.unidad, costoUnitario: p.precio_unitario || 0,
+        tipo: 'producto', nombre: p.nombre, unidad: p.unidad, costoUnitario: p.precio_unitario || 0, productoId: p.id,
         detalle: p.precio_unitario > 0 ? `$${p.precio_unitario.toLocaleString('es-AR')}/${p.unidad}` : p.unidad,
       }))
     // Subreceta como ingrediente: siempre por gramaje, nunca por porción — el
@@ -254,8 +276,14 @@ function FilaRapidaRow({ fila, idx, stockProductos, recetasDisponibles, autoFocu
   }
 
   function seleccionar(s: Sugerencia) {
+    const esProducto = s.tipo === 'producto'
     onUpdate(fila.id, {
-      nombre: s.nombre, tipo: s.tipo, unidad: s.unidad, costoUnitario: s.costoUnitario,
+      // Producto: el precio queda en la unidad del producto (unidadCosto) y la
+      // unidad de la fila solo se sugiere si todavía no hay cantidad.
+      nombre: s.nombre, tipo: s.tipo, costoUnitario: s.costoUnitario,
+      unidad: esProducto && fila.cantidad ? fila.unidad : s.unidad,
+      unidadCosto: esProducto ? s.unidad : null,
+      productoId: esProducto ? s.productoId ?? null : null,
       subrecetaId: s.tipo === 'subreceta' ? s.subrecetaId : null,
       cantidad: fila.cantidad || (s.tipo === 'subreceta' ? '100' : ''),
     })
@@ -278,7 +306,7 @@ function FilaRapidaRow({ fila, idx, stockProductos, recetasDisponibles, autoFocu
           ref={nomRef}
           autoFocus={autoFocus}
           value={fila.nombre}
-          onChange={e => { onUpdate(fila.id, { nombre: e.target.value }); buscar(e.target.value) }}
+          onChange={e => { onUpdate(fila.id, { nombre: e.target.value, productoId: null, unidadCosto: null }); buscar(e.target.value) }}
           onFocus={() => { if (fila.nombre.trim()) buscar(fila.nombre) }}
           onBlur={() => setTimeout(() => setShowSug(false), 150)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); setShowSug(false); cantidadRefs.current.get(fila.id)?.focus() } }}
@@ -303,9 +331,9 @@ function FilaRapidaRow({ fila, idx, stockProductos, recetasDisponibles, autoFocu
         <input
           type="text" inputMode="decimal"
           value={fila.costoUnitario || ''}
-          onChange={e => onUpdate(fila.id, { costoUnitario: parseFloat(e.target.value.replace(',', '.')) || 0 })}
+          onChange={e => onUpdate(fila.id, { costoUnitario: parsePrecio(e.target.value) })}
           placeholder="$0"
-          title="Costo por unidad"
+          title={`Costo por ${fila.unidadCosto || fila.unidad}`}
           style={{ width: 44, border: 'none', background: 'transparent', outline: 'none', padding: '9px 2px', fontSize: 11, fontWeight: 600, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', textAlign: 'right' }}
         />
         <button onClick={() => onRemove(fila.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px 8px 8px 2px', opacity: .3, flexShrink: 0, display: 'flex' }}>

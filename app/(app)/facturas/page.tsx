@@ -18,6 +18,7 @@ import ExcelPOSImportModal from '@/components/facturas/ExcelPOSImportModal'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import { createClient } from '@/lib/supabase/client'
 import { calcularVencimientoFactura, type VencimientoFactura } from '@/lib/utils'
+import { emparejarListaConStock } from '@/lib/facturas/listaPrecios'
 import type {
   Factura, FacturaItem, FacturaStatus, TipoFactura, CondicionPago,
   Pedido, PedidoItem, CategoriaGasto, CategoriaFinanciera, MedioPago,
@@ -1480,31 +1481,8 @@ function ListasPreciosView({ showToast: toast }: { showToast: (msg: string) => v
   const imageRef = useRef<HTMLInputElement>(null)
   const pdfRef = useRef<HTMLInputElement>(null)
 
-  // Match items against stock
-  const matchedItems = useMemo(() => {
-    if (!listaResult) return []
-    return listaResult.items.map(item => {
-      const normalizedName = normalizeName(item.producto_nombre)
-      const match = productos.find(p =>
-        normalizeName(p.nombre) === normalizedName ||
-        normalizeName(p.nombre).includes(normalizedName) ||
-        normalizedName.includes(normalizeName(p.nombre))
-      )
-      if (match) {
-        const priceDiff = match.precio_unitario > 0
-          ? ((item.precio_unitario - match.precio_unitario) / match.precio_unitario) * 100
-          : null
-        return {
-          ...item,
-          matchedProduct: match,
-          status: priceDiff !== null && Math.abs(priceDiff) < 1 ? 'sin_cambio' as const
-            : 'actualiza' as const,
-          priceDiff,
-        }
-      }
-      return { ...item, matchedProduct: null, status: 'nuevo' as const, priceDiff: null }
-    })
-  }, [listaResult, productos])
+  // Match items against stock (lib/facturas/listaPrecios.ts)
+  const matchedItems = useMemo(() => listaResult ? emparejarListaConStock(listaResult.items, productos) : [], [listaResult, productos])
 
   // Init checked items when result changes
   useEffect(() => {
@@ -1608,9 +1586,10 @@ function ListasPreciosView({ showToast: toast }: { showToast: (msg: string) => v
         if (!checkedItems.has(idx)) continue
 
         if (matched.matchedProduct) {
-          // Update existing product price
+          // Update existing product price — en la unidad del producto
+          if (matched.precioConvertido == null) continue
           await actualizarProducto(matched.matchedProduct.id, {
-            precio_unitario: matched.precio_unitario,
+            precio_unitario: matched.precioConvertido,
           })
           preciosActualizados++
         } else {
@@ -3010,6 +2989,7 @@ export default function FacturasPage() {
       const parts = []
       if (result.preciosActualizados > 0) parts.push(`${result.preciosActualizados} precios actualizados`)
       if (result.productosCreados > 0) parts.push(`${result.productosCreados} productos creados`)
+      if (result.sinConvertir.length > 0) parts.push(`sin actualizar por unidad distinta: ${result.sinConvertir.join(', ')} — cargá el peso por unidad en Stock`)
       showToast(`\u2713 Factura cargada${parts.length > 0 ? ' — ' + parts.join(', ') : ''}`)
       refetchStock()
       setView('list')

@@ -209,6 +209,10 @@ export interface Producto {
   unidad_uso?: string | null
   unidad_compra?: string | null
   cantidad_por_envase?: number | null
+  // Peso de 1 unidad del producto en gramos (1 u de ajo = 10 g). Permite
+  // costear recetas en unidades contra un precio por kg y viceversa, y llevar
+  // facturas en 'u' a un producto en kg. NULL = sin equivalencia.
+  peso_por_unidad_g?: number | null
   stock_actual: number
   stock_minimo: number
   stock_critico: number

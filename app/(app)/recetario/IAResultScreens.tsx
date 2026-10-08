@@ -7,6 +7,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { IAApiResult, IAResult, apiToForm, parseNum, calcPesoPorcion, formatPeso } from './shared'
+import { vincularIngredientesConStock } from '@/lib/recetas/vinculo'
 
 // callRecetaAdjust vive acá y no en shared.ts porque solo lo usa
 // IAResultScreen (el chat de "Pedí ajustes…") — page.tsx no lo llama.
@@ -40,8 +41,8 @@ interface IAResultScreenProps {
   onClose: () => void
   // Fix 1: direct save
   agregarReceta?: (d: any, ingredientes?: any[]) => Promise<string>
-  agregarProducto?: (datos: any) => Promise<void>
-  stockProductos?: { nombre: string; unidad: string }[]
+  agregarProducto?: (datos: any) => Promise<unknown>
+  stockProductos?: { id: string; nombre: string; unidad: string }[]
   restauranteId?: string
   onSaved?: (id: string) => void
   catSugeridas?: string[]
@@ -101,13 +102,18 @@ export function IAResultScreen({ result, previewUrl, inputText, onAccept, onClos
     setError(null)
     try {
       const procedimiento = (current.procedimiento || []).map((p, i) => `${i + 1}. ${p}`).join('\n') || ''
-      const ingredientesData = (current.ingredientes || []).map(ing => ({
+      const base = (current.ingredientes || []).map(ing => ({
         nombre: String(ing.nombre || 'Ingrediente'),
         cantidad: parseNum(ing.cantidad),
         unidad: ing.unidad || 'u',
         costo_unitario: 0,
         unidad_costo: ing.unidad || 'u',
       }))
+      // Vincula (o crea y vincula) cada ingrediente con Stock antes de guardar;
+      // el costo lo completa el trigger desde el producto.
+      const ingredientesData = agregarProducto && stockProductos
+        ? await vincularIngredientesConStock(base, stockProductos, agregarProducto)
+        : base
       const id = await agregarReceta({
         nombre: current.nombre_sugerido || 'Receta importada',
         categoria: editCategoria || current.categoria_sugerida || 'Otros',
@@ -118,27 +124,6 @@ export function IAResultScreen({ result, previewUrl, inputText, onAccept, onClos
         activa: true,
         status: 'published' as const,
       }, ingredientesData)
-      // Fix 2: Sync ingredientes faltantes al stock
-      if (agregarProducto && stockProductos) {
-        const stockNombres = new Set(stockProductos.map(p => p.nombre.toLowerCase().trim()))
-        for (const ing of ingredientesData) {
-          if (!stockNombres.has(ing.nombre.toLowerCase().trim())) {
-            try {
-              await agregarProducto({
-                nombre: ing.nombre,
-                categoria: 'Sin categoría',
-                unidad: ing.unidad,
-                stock_actual: 0,
-                stock_minimo: 0,
-                stock_critico: 0,
-                precio_unitario: 0,
-                activo: true,
-                proveedor_id: null,
-              })
-            } catch { /* ignorar errores individuales */ }
-          }
-        }
-      }
       if (onSaved) onSaved(id)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error al guardar receta')
@@ -457,8 +442,8 @@ interface IAMultiResultScreenProps {
   inputText: string | null
   agregarReceta: (d: any, ingredientes?: any[]) => Promise<string>
   agregarIngrediente: (recetaId: string, d: any) => Promise<void>
-  agregarProducto?: (datos: any) => Promise<void>
-  stockProductos?: { nombre: string; unidad: string }[]
+  agregarProducto?: (datos: any) => Promise<unknown>
+  stockProductos?: { id: string; nombre: string; unidad: string }[]
   onDone: (count: number) => void
   onClose: () => void
 }
@@ -503,23 +488,29 @@ export function IAMultiResultScreen({ results, previewUrl, inputText, agregarRec
     setImportProgress(0)
     setError(null)
 
-    // Fix 2: preparar set de nombres en stock para sync
-    const stockNombres = new Set(
-      (stockProductos || []).map(p => p.nombre.toLowerCase().trim())
-    )
+    // Catálogo de Stock que crece con lo que se va creando, para que la
+    // segunda receta del lote reuse el producto creado por la primera.
+    const catalogo: { id: string; nombre: string }[] = [...(stockProductos || [])]
 
     let imported = 0
     for (const idx of indices) {
       const r = results[idx]
       try {
         const procedimiento = (r.procedimiento || []).map((p, i) => `${i + 1}. ${p}`).join('\n') || ''
-        const ingredientesData = (r.ingredientes || []).map(ing => ({
+        const base = (r.ingredientes || []).map(ing => ({
           nombre: String(ing.nombre || 'Ingrediente'),
           cantidad: parseNum(ing.cantidad),
           unidad: ing.unidad || 'u',
           costo_unitario: 0,
           unidad_costo: ing.unidad || 'u',
         }))
+        const ingredientesData = agregarProducto
+          ? await vincularIngredientesConStock(base, catalogo, async (datos) => {
+            const id = await agregarProducto(datos)
+            if (typeof id === 'string') catalogo.push({ id, nombre: String(datos.nombre) })
+            return id
+          })
+          : base
         await agregarReceta({
           nombre: r.nombre_sugerido || `Receta importada ${idx + 1}`,
           categoria: r.categoria_sugerida || 'Otros',
@@ -530,27 +521,6 @@ export function IAMultiResultScreen({ results, previewUrl, inputText, agregarRec
           activa: true,
           status: 'published' as const,
         }, ingredientesData)
-        // Fix 2: sync ingredientes faltantes al stock
-        if (agregarProducto) {
-          for (const ing of ingredientesData) {
-            if (!stockNombres.has(ing.nombre.toLowerCase().trim())) {
-              try {
-                await agregarProducto({
-                  nombre: ing.nombre,
-                  categoria: 'Sin categoría',
-                  unidad: ing.unidad,
-                  stock_actual: 0,
-                  stock_minimo: 0,
-                  stock_critico: 0,
-                  precio_unitario: 0,
-                  activo: true,
-                  proveedor_id: null,
-                })
-                stockNombres.add(ing.nombre.toLowerCase().trim()) // evitar duplicados
-              } catch { /* ignorar */ }
-            }
-          }
-        }
         imported++
       } catch (e) {
         const msg = e instanceof Error ? e.message : `Error en receta ${idx + 1}`

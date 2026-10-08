@@ -43,3 +43,29 @@ export function unitConversionFactor(fromUnit: string, toUnit: string): number {
   if ((isCount(u) && isMeasure(c)) || (isMeasure(u) && isCount(c))) return 0
   return 1
 }
+
+// Lee un número tal como se tipea en Argentina. La coma es decimal ("0,5").
+// El punto es decimal si está solo ("1.5", lo que manda el teclado numérico
+// del celular) y separador de miles si aparece junto a una coma ("1.500,5")
+// o repetido ("1.500.000"). Antes `parseFloat(s.replace(',', '.'))` leía
+// "1.500,5" como 1,5. Vacío o inválido → 0.
+export function parseNumero(s: string | number | null | undefined): number {
+  if (s === null || s === undefined) return 0
+  if (typeof s === 'number') return isNaN(s) ? 0 : s
+  let x = String(s).trim().replace(/\s/g, '')
+  if (!x) return 0
+  const puntos = (x.match(/\./g) ?? []).length
+  if (x.includes(',') || puntos > 1) x = x.replace(/\./g, '')
+  x = x.replace(',', '.')
+  const n = parseFloat(x)
+  return isNaN(n) ? 0 : n
+}
+
+// Igual que parseNumero pero para plata: "12.500" es doce mil quinientos (un
+// punto seguido de exactamente 3 dígitos se lee como miles). Una cantidad
+// "1.500" en cambio sigue siendo 1,5 (parseNumero) — ahí el punto lo pone el
+// teclado del celular como decimal.
+export function parsePrecio(s: string | number | null | undefined): number {
+  if (typeof s === 'string' && /^\s*[1-9]\d{0,2}\.\d{3}\s*$/.test(s)) return parseNumero(s.replace('.', ''))
+  return parseNumero(s)
+}

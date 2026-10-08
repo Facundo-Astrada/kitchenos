@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { normalizeForStock, matchesWholeWord, sinTildes } from '@/lib/stock/precios'
+import { normalizeForStock, matchesWholeWord, sinTildes, aUnidadDelProducto } from '@/lib/stock/precios'
 
 // Día 8 del plan consolidado (dominio-kos.md §4.1): la transacción de
 // crear_factura_con_items (migración 20260831e) cubre SOLO factura+items.
@@ -161,8 +161,8 @@ export async function resolverProductosDeItems(params: {
 
 // ── Paso 2 (después de crear_factura_con_items): efectos idempotentes ──────
 // Sumar stock + actualizar precio de los productos ya existentes, dejar
-// precio_historial (necesita el factura_id real) y propagar el costo a
-// ingredientes. Los recién creados en el paso 1 ya nacieron con su stock y
+// precio_historial (necesita el factura_id real). El costo de los
+// ingredientes lo propaga la base (trigger productos_propaga_costo). Los recién creados en el paso 1 ya nacieron con su stock y
 // precio correctos — acá solo les falta el historial. Si esto se corta a
 // mitad de camino, la factura+items ya quedaron escritos enteros (los grabó
 // la rpc): lo que falta es "faltan estos efectos", no un documento roto.
@@ -172,7 +172,7 @@ export async function aplicarEfectosDeFactura(params: {
   facturaId: string
   proveedorNombre: string
   items: ItemFacturaResuelto[]
-}): Promise<{ preciosActualizados: number }> {
+}): Promise<{ preciosActualizados: number; sinConvertir: string[] }> {
   const { supabase, restauranteId, facturaId, proveedorNombre, items } = params
 
   if (proveedorNombre.trim()) {
@@ -190,17 +190,22 @@ export async function aplicarEfectosDeFactura(params: {
   }
 
   const itemsConProducto = items.filter(i => i.producto_id)
-  if (itemsConProducto.length === 0) return { preciosActualizados: 0 }
+  if (itemsConProducto.length === 0) return { preciosActualizados: 0, sinConvertir: [] }
 
-  const { data: recetasData } = await supabase.from('recetas').select('id').eq('restaurante_id', restauranteId)
-  const recetaIds = (recetasData ?? []).map((r: { id: string }) => r.id)
+  // Unidad (y peso por unidad) con que cada producto YA está en Stock: la
+  // factura se convierte a esa unidad, nunca al revés.
+  const { data: prodsData } = await supabase
+    .from('productos')
+    .select('id, unidad, peso_por_unidad_g, stock_actual')
+    .in('id', itemsConProducto.map(i => i.producto_id as string))
+  const prodPorId = new Map(((prodsData ?? []) as { id: string; unidad: string; peso_por_unidad_g: number | null; stock_actual: number }[]).map(p => [p.id, p]))
 
   let preciosActualizados = 0
+  const sinConvertir: string[] = []
 
   for (const item of itemsConProducto) {
-    const { cantidad_stock, unidad_stock, precio_stock } = normalizeForStock(item)
-
     if (item.es_nuevo) {
+      const { precio_stock } = normalizeForStock(item)
       await supabase.from('precio_historial').insert({
         producto_id: item.producto_id,
         precio_anterior: 0,
@@ -212,38 +217,40 @@ export async function aplicarEfectosDeFactura(params: {
       continue
     }
 
-    const nuevoStock = item.stock_actual_previo + cantidad_stock
+    const prod = prodPorId.get(item.producto_id as string)
+    if (!prod) continue
+    const conv = aUnidadDelProducto(item, prod)
+    // Unidad de la factura no convertible a la del producto (ej. 'u' contra
+    // kg sin peso por unidad): no se toca ni stock ni precio de ese producto.
+    if (!conv) {
+      sinConvertir.push(`${item.producto_nombre} (${item.unidad} → ${prod.unidad})`)
+      continue
+    }
+
+    const nuevoStock = (prod.stock_actual ?? item.stock_actual_previo) + conv.cantidad
     const precioAnt = item.precio_anterior ?? 0
 
+    // Sin `unidad`: la del producto no se cambia. El costo de los
+    // ingredientes vinculados lo propaga el trigger productos_propaga_costo
+    // (por producto_id — antes se hacía por nombre con ilike y sin unidad).
     await supabase.from('productos').update({
       stock_actual: nuevoStock,
-      unidad: unidad_stock,
-      precio_unitario: precio_stock,
+      precio_unitario: conv.precio,
       activo: true,
     }).eq('id', item.producto_id as string)
 
-    const variacion = precioAnt > 0 ? ((precio_stock - precioAnt) / precioAnt) * 100 : 0
+    const variacion = precioAnt > 0 ? ((conv.precio - precioAnt) / precioAnt) * 100 : 0
     await supabase.from('precio_historial').insert({
       producto_id: item.producto_id,
       precio_anterior: precioAnt,
-      precio_nuevo: precio_stock,
+      precio_nuevo: conv.precio,
       variacion_porcentaje: Math.round(variacion * 10) / 10,
       factura_id: facturaId,
       restaurante_id: restauranteId,
     })
 
-    // costo_unitario usa precio_stock (normalizado a kg/l), NO
-    // item.precio_unitario (que viene en la unidad cruda de la factura, ej.
-    // por gramo) — si no, el costo del ingrediente queda hasta 1000x menor.
-    if (recetaIds.length > 0) {
-      await supabase.from('ingredientes')
-        .update({ costo_unitario: precio_stock })
-        .ilike('nombre', item.producto_nombre)
-        .in('receta_id', recetaIds)
-    }
-
     preciosActualizados++
   }
 
-  return { preciosActualizados }
+  return { preciosActualizados, sinConvertir }
 }

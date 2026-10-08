@@ -1,5 +1,5 @@
 import type { createAdminClient } from '@/lib/supabase/admin'
-import { normalizeForStock, matchesWholeWord, sinTildes } from './precios'
+import { aUnidadDelProducto, matchesWholeWord, sinTildes } from './precios'
 import { fetchAllRows } from '@/lib/supabase/paginate'
 
 // Sincroniza productos.precio_unitario con el precio de la última factura que los
@@ -11,7 +11,7 @@ const DELTA_MINIMO_PCT = 2
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
-export type ProductoRow = { id: string; nombre: string; unidad: string; precio_unitario: number | null }
+export type ProductoRow = { id: string; nombre: string; unidad: string; precio_unitario: number | null; peso_por_unidad_g?: number | null }
 export type FacturaItemRow = { producto_nombre: string; precio_unitario: number; unidad: string | null; factura_id: string }
 export type Desfasado = {
   producto_id: string
@@ -40,13 +40,16 @@ function matchDesfasados(candidatos: ProductoRow[], items: FacturaItemRow[], fac
     }
     if (!mejor) continue
 
-    const { unidad_stock, precio_stock } = normalizeForStock({
+    // Precio de la factura llevado a la unidad del producto (factura en kg,
+    // producto en g → $/g). No convertible (ej. 'u' contra kg sin peso por
+    // unidad) → no adivinar, excluir.
+    const conv = aUnidadDelProducto({
       cantidad: 1,
       unidad: mejor.item.unidad ?? p.unidad,
       precio_unitario: mejor.item.precio_unitario,
-    })
-    // Familias de unidad distintas (ej. factura en 'u', producto en 'kg') → no adivinar, excluir.
-    if (unidad_stock.toLowerCase().trim() !== p.unidad.toLowerCase().trim()) continue
+    }, p)
+    if (!conv) continue
+    const precio_stock = conv.precio
 
     const precioActual = p.precio_unitario ?? 0
     const deltaPct = precioActual > 0 ? ((precio_stock - precioActual) / precioActual) * 100 : 100
@@ -70,7 +73,7 @@ function matchDesfasados(candidatos: ProductoRow[], items: FacturaItemRow[], fac
 async function fetchCandidatos(admin: AdminClient, restauranteId: string): Promise<ProductoRow[]> {
   const { data } = await admin
     .from('productos')
-    .select('id, nombre, unidad, precio_unitario')
+    .select('id, nombre, unidad, precio_unitario, peso_por_unidad_g')
     .eq('restaurante_id', restauranteId)
     .eq('activo', true)
     .eq('es_produccion', false)

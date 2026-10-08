@@ -1,3 +1,5 @@
+import { canonUnit, unitConversionFactor } from '@/lib/unidades'
+
 // Lógica de precios/matching compartida entre useFacturas.ts (cliente) y
 // /api/stock/sync-precios-facturas (servidor) — funciones puras, sin 'use client'.
 
@@ -41,4 +43,42 @@ export function normalizeForStock(item: { cantidad: number; unidad: string; prec
     return { cantidad_stock: item.cantidad * item.peso_kg, unidad_stock: 'kg', precio_stock: item.precio_unitario / item.peso_kg }
   // Sin conversión disponible — se deja tal cual (el caller decide si matchea con la unidad del producto)
   return { cantidad_stock: item.cantidad, unidad_stock: item.unidad, precio_stock: item.precio_unitario }
+}
+
+// Factor para pasar 1 unidad `desde` a la unidad `hacia` del producto,
+// usando el peso por unidad del producto cuando una de las dos es conteo
+// ('u') y la otra peso/volumen. 0 = no convertible.
+export function factorHaciaProducto(desde: string, hacia: string, pesoPorUnidadG?: number | null): number {
+  const d = canonUnit(desde)
+  const h = canonUnit(hacia)
+  if (d === h) return 1
+  // Unidades que no son g/kg/ml/l/u ('caja', 'docena', 'pack'): solo valen si
+  // son la misma — unitConversionFactor devolvería 1 y mezclaría precios.
+  const conocidas = ['g', 'kg', 'ml', 'l', 'u']
+  if (!conocidas.includes(d) || !conocidas.includes(h)) return 0
+  const f = unitConversionFactor(d, h)
+  if (f !== 0) return f
+  if (!pesoPorUnidadG || pesoPorUnidadG <= 0) return 0
+  // 1 u = peso g → a la unidad del producto
+  if (d === 'u') return pesoPorUnidadG * unitConversionFactor('g', h)
+  // 1 g/kg/ml/l → unidades
+  if (h === 'u') return unitConversionFactor(d, 'g') / pesoPorUnidadG
+  return 0
+}
+
+// Lleva un ítem de factura (o de lista de precios) a la unidad en que el
+// producto YA está cargado en Stock. Nunca cambia la unidad del producto
+// (auditoría 08/10/2026: antes la factura la pisaba — un producto en g
+// pasaba a kg y la cantidad se sumaba sin convertir: 5000 g + 2 kg = "5002
+// kg"). null = la unidad de la factura no se puede llevar a la del producto
+// (ej. factura en 'u' contra producto en kg sin peso por unidad): el que
+// llama no toca ni stock ni precio de ese producto.
+export function aUnidadDelProducto(
+  item: { cantidad: number; unidad: string; precio_unitario: number; peso_kg?: number },
+  producto: { unidad: string; peso_por_unidad_g?: number | null },
+): { cantidad: number; precio: number } | null {
+  const n = normalizeForStock(item)
+  const f = factorHaciaProducto(n.unidad_stock, producto.unidad, producto.peso_por_unidad_g)
+  if (!f) return null
+  return { cantidad: n.cantidad_stock * f, precio: n.precio_stock / f }
 }

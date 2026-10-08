@@ -180,8 +180,10 @@ export function useRecetas() {
       }, { revalidate: false })
       mutate() // background sync — una sola vez al crear, no por cada edición
 
-      // Auto-link ingredientes al stock (exacto + parcial) en background
-      if (ingredientesData && ingredientesData.length > 0) {
+      // Auto-link al stock de lo que quedó sin vincular, en background. Solo
+      // coincidencia exacta (lib/recetas/vinculo.ts): lo parecido se revisa a
+      // mano en "Vincular stock" — aplicarlo solo dejaba vínculos equivocados.
+      if (ingredientesData && ingredientesData.some(i => !i.producto_id)) {
         fetch('/api/recetas/auto-link-ingredientes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -189,9 +191,7 @@ export function useRecetas() {
         })
           .then(r => r.json())
           .then(({ matches = [] }) => {
-            const toApply = matches.filter((m: { confianza: string }) =>
-              m.confianza === 'exacto' || m.confianza === 'parcial'
-            )
+            const toApply = matches.filter((m: { confianza: string }) => m.confianza === 'exacto')
             if (!toApply.length) return
             return fetch('/api/recetas/auto-link-ingredientes', {
               method: 'PATCH',
@@ -309,9 +309,15 @@ export function useRecetas() {
       marcarEscrituraPropia(id)
       await mutate(
         async (current) => {
-          const { error } = await supabase.from('ingredientes').update(datos).eq('id', id)
+          // La fila vuelve de la base: el trigger ingredientes_costo_desde_producto
+          // puede haber reescrito costo_unitario/unidad_costo desde el producto.
+          const { data: fila, error } = await supabase.from('ingredientes').update(datos).eq('id', id).select().single()
           if (error) throw error
-          return optimistic(current)
+          const real = fila as Ingrediente
+          return (current ?? []).map(r => {
+            if (!r.ingredientes?.some(i => i.id === id)) return r
+            return conFoodCostRecalculado({ ...r, ingredientes: r.ingredientes.map(i => i.id === id ? { ...i, ...real } : i) })
+          })
         },
         { optimisticData: optimistic, revalidate: false, rollbackOnError: true }
       )

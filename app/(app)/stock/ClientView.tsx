@@ -31,6 +31,8 @@ import { canonUnit } from '@/lib/hooks/useRecetas'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import type { MisePlaceItem, MisePlaceRegistro } from '@/types'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
+import { parsePrecio } from '@/lib/unidades'
+import { PesoPorUnidadField } from '@/components/stock/PesoPorUnidadField'
 
 const UNIDADES = ['kg', 'g', 'L', 'ml', 'unidad', 'docena', 'caja', 'bolsa', 'lata', 'botella']
 const UNIDADES_USO = ['kg', 'g', 'l', 'ml', 'unidad']
@@ -122,6 +124,7 @@ interface FormData {
   unidad_compra: string
   cantidad_por_envase: string
   unidad_uso: string
+  peso_por_unidad_g: string
   // producción interna (opcional)
   es_produccion: boolean
   receta_id: string
@@ -143,6 +146,7 @@ const FORM_EMPTY: FormData = {
   unidad_compra: '',
   cantidad_por_envase: '',
   unidad_uso: '',
+  peso_por_unidad_g: '',
   es_produccion: false,
   receta_id: '',
   sector_id: '',
@@ -1069,10 +1073,11 @@ export default function StockPage() {
       stock_actual: String(p.stock_actual),
       stock_minimo: String(p.stock_minimo),
       stock_maximo: p.stock_maximo != null ? String(p.stock_maximo) : '',
-      precio_unitario: String(p.precio_unitario || 0),
+      precio_unitario: String(p.precio_unitario || 0).replace('.', ','), // coma: parsePrecio lee "8.125" como miles
       unidad_compra: p.unidad_compra ?? '',
       cantidad_por_envase: p.cantidad_por_envase != null ? String(p.cantidad_por_envase) : '',
       unidad_uso: p.unidad_uso ?? '',
+      peso_por_unidad_g: p.peso_por_unidad_g != null ? String(p.peso_por_unidad_g).replace('.', ',') : '',
       es_produccion: !!p.es_produccion,
       receta_id: p.receta_id ?? '',
       sector_id: p.sector_id ?? '',
@@ -1082,7 +1087,7 @@ export default function StockPage() {
       nota_recepcion: p.nota_recepcion ?? '',
     })
     setShowUnidadCompra(!!(p.unidad_compra || p.cantidad_por_envase))
-    setShowMasOpciones(!!(p.es_produccion || p.fuera_de_uso || p.unidad_compra || p.cantidad_por_envase))
+    setShowMasOpciones(!!(p.es_produccion || p.fuera_de_uso || p.unidad_compra || p.cantidad_por_envase || p.peso_por_unidad_g))
     setShowRecepcion(!!(p.merma_esperada_pct || p.nota_recepcion))
     setFormError(null)
     setModalOpen(true)
@@ -1110,10 +1115,11 @@ export default function StockPage() {
         stock_critico: 0,
         stock_maximo: form.stock_maximo ? parseNumAR(form.stock_maximo) : null,
         activo: true,
-        precio_unitario: parseNumAR(form.precio_unitario) ?? 0,
+        precio_unitario: parsePrecio(form.precio_unitario),
         unidad_compra: showUnidadCompra && form.unidad_compra.trim() ? form.unidad_compra.trim() : null,
         cantidad_por_envase: showUnidadCompra && form.cantidad_por_envase ? parseNumAR(form.cantidad_por_envase) : null,
         unidad_uso: showUnidadCompra && form.unidad_uso ? form.unidad_uso : null,
+        peso_por_unidad_g: form.peso_por_unidad_g.trim() ? (parseNumAR(form.peso_por_unidad_g) || null) : null,
         es_produccion: form.es_produccion,
         receta_id: form.es_produccion && form.receta_id ? form.receta_id : null,
         sector_id: form.sector_id || null,
@@ -2139,6 +2145,8 @@ export default function StockPage() {
                     />
 
                     <div style={{ height: 1, background: 'var(--border)' }} />
+
+                    <PesoPorUnidadField value={form.peso_por_unidad_g} onChange={v => setForm(f => ({ ...f, peso_por_unidad_g: v }))} labelStyle={lblStyle} inputStyle={inputStyle} />
 
                     <button
                       onClick={() => setShowUnidadCompra(v => !v)}

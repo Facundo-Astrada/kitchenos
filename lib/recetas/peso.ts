@@ -5,6 +5,8 @@
 // Carta") la saca a lib compartida para que useRecetas.ts y useCarta.ts
 // puedan derivar costoPorGramo sin duplicar la conversión de unidades.
 
+import { canonUnit } from '@/lib/unidades'
+
 export interface IngredientePeso {
   cantidad: number
   unidad: string
@@ -14,10 +16,11 @@ export interface IngredientePeso {
 // Convierte una cantidad+unidad a gramos. Unidades sueltas (u, docena, caja)
 // no suman peso → 0 (se excluyen del peso total, no se inventa una densidad).
 export function toGramos(cantidad: number, unidad: string): number {
-  const u = (unidad || '').toLowerCase().trim()
+  // canonUnit: antes "gr", "kgs", "cc" o "litros" pesaban 0.
+  const u = canonUnit(unidad)
   if (u === 'kg') return cantidad * 1000
   if (u === 'g') return cantidad
-  if (u === 'l' || u === 'lt' || u === 'lts') return cantidad * 1000 // 1L ≈ 1kg
+  if (u === 'l') return cantidad * 1000 // 1L ≈ 1kg
   if (u === 'ml') return cantidad
   return 0
 }
@@ -48,29 +51,14 @@ export function formatPeso(gramos: number): string {
   return `${gramos}g/u`
 }
 
-// Smart display: siempre muestra la unidad más legible independiente de cómo está guardado.
-// 0.005 kg → 5g | 1500 g → 1.5kg | 0.05 l → 50ml | 2000 ml → 2l
-export function smartQty(qty: number, unit: string): { qty: string; unit: string } {
-  const u = (unit || '').toLowerCase().trim()
-  if ((u === 'kg' || u === 'kgs' || u === 'kilo') && qty < 0.1 && qty > 0) {
-    const g = qty * 1000
-    return { qty: g % 1 === 0 ? String(g) : g.toFixed(1), unit: 'g' }
-  }
-  if (u === 'g' && qty >= 1000) {
-    const kg = qty / 1000
-    return { qty: kg % 1 === 0 ? String(kg) : kg.toFixed(2).replace(/\.?0+$/, ''), unit: 'kg' }
-  }
-  if ((u === 'l' || u === 'lt' || u === 'lts') && qty < 0.1 && qty > 0) {
-    const ml = qty * 1000
-    return { qty: ml % 1 === 0 ? String(ml) : ml.toFixed(1), unit: 'ml' }
-  }
-  if (u === 'ml' && qty >= 1000) {
-    const l = qty / 1000
-    return { qty: l % 1 === 0 ? String(l) : l.toFixed(2).replace(/\.?0+$/, ''), unit: 'l' }
-  }
-  // Default: format removing trailing zeros
-  const fmtQty = qty % 1 === 0 ? String(qty) : qty.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
-  return { qty: fmtQty, unit }
+// Muestra una cantidad tal como está cargada, en SU unidad: nunca cambia
+// kg↔g ni l↔ml por su cuenta (auditoría 08/10/2026 — antes smartQty pasaba
+// 0,05 kg a "50 g" y 1500 g a "1,5 kg" sin que nadie lo pidiera). Coma
+// decimal, hasta 3 decimales, sin ceros de cola.
+export function formatCantidad(qty: number): string {
+  if (!isFinite(qty)) return '0'
+  const r = Math.round(qty * 1000) / 1000
+  return r.toLocaleString('es-AR', { maximumFractionDigits: 3, useGrouping: false })
 }
 
 // Peso total de una receta, en gramos — preferí el dato pesado a mano, del

@@ -15,11 +15,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useSheetOpen } from '@/lib/ui/chrome'
 import type { RecetaConCosto } from '@/lib/hooks/useRecetas'
-import { fileToBase64, callRecetaImport, matchPorNombre, parseProcedimiento, formatProcedimiento, type RecetaIAResult } from '@/lib/recetas/iaImport'
+import { fileToBase64, callRecetaImport, parseProcedimiento, formatProcedimiento, type RecetaIAResult } from '@/lib/recetas/iaImport'
 import {
   CargaRapidaIngredientes, TotalesRapidosBar, filasToIngredientesData,
   nuevaFilaRapida, type FilaIngredienteRapido,
 } from './CargaRapidaIngredientes'
+import { buscarProductoExacto } from '@/lib/recetas/vinculo'
 
 interface StockItem { id: string; nombre: string; unidad: string; precio_unitario: number }
 
@@ -30,13 +31,18 @@ const iaMiniBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', 
 // criterio que el import de un plato/menú nuevo (ver ComposicionEditor).
 function iaIngredientesAFilas(ingredientes: RecetaIAResult['ingredientes'], stockProductos: StockItem[]): FilaIngredienteRapido[] {
   return ingredientes.filter(i => i.nombre?.trim()).map(i => {
-    const match = matchPorNombre(i.nombre, stockProductos)
+    // Solo coincidencia exacta (lib/recetas/vinculo.ts): "contiene" dejaba
+    // vínculos equivocados. La unidad es la que trae la receta, no la del
+    // producto: el precio se queda en la suya (unidadCosto).
+    const match = buscarProductoExacto(i.nombre, stockProductos)
     return {
       ...nuevaFilaRapida(),
       nombre: i.nombre.trim(),
       cantidad: String(i.cantidad ?? '').replace('.', ','),
-      unidad: match?.unidad || i.unidad || 'kg',
+      unidad: i.unidad || match?.unidad || 'kg',
       costoUnitario: match?.precio_unitario ?? 0,
+      unidadCosto: match?.unidad ?? null,
+      productoId: match?.id ?? null,
     }
   })
 }
@@ -125,9 +131,21 @@ export function RecetaEditSheet({
         tipo: (i.tipo === 'subreceta' ? 'subreceta' : 'producto') as 'producto' | 'subreceta',
         nombre: i.nombre as string,
         cantidad: String(i.cantidad ?? '').replace('.', ','),
-        unidad: (i.unidad_costo ?? i.unidad ?? 'kg') as string,
+        // La unidad de la receta, no la del precio: antes se leía
+        // unidad_costo y "500 g" de un producto a $/kg aparecía (y se
+        // guardaba) como "500 kg".
+        unidad: (i.unidad ?? 'kg') as string,
+        unidadCosto: (i.unidad_costo ?? null) as string | null,
         costoUnitario: (i.costo_unitario as number) ?? 0,
         subrecetaId: i.subreceta_id as string | null,
+        productoId: (i.producto_id ?? null) as string | null,
+        // Guardar reemplaza todos los ingredientes: lo que esta UI no edita
+        // (merma, etapa, datos de OPS) se lleva tal cual.
+        extra: {
+          merma_pct: i.merma_pct, grupo: i.grupo, plaza: i.plaza, seccion_mise: i.seccion_mise,
+          cantidad_ops: i.cantidad_ops, unidad_ops: i.unidad_ops, recipiente_nombre: i.recipiente_nombre,
+          peso_porcion: i.peso_porcion, peso_porcion_unidad: i.peso_porcion_unidad,
+        },
       }))
       setFilas(rows.length > 0 ? rows : [nuevaFilaRapida()])
       setPorciones((rec?.porciones as number) || 1)
@@ -147,7 +165,7 @@ export function RecetaEditSheet({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           enrichRecetaId: recetaId,
-          ingredientes: filasToIngredientesData(filas),
+          ingredientes: filasToIngredientesData(filas, stockProductos),
           receta: { procedimiento: formatProcedimiento(pasos) },
         }),
       })

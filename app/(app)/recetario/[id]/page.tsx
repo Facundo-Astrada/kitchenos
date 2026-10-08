@@ -17,7 +17,9 @@ import IngredienteOpsSheet from './IngredienteOpsSheet'
 import { RecetaDetailSkeleton } from './loading'
 import { createClient } from '@/lib/supabase/client'
 import { upsertMiseChecklistItem, PLAZAS_OPS } from '@/lib/ops/mise'
-import { toGramos, calcPesoPorcion, calcPesoNetos, formatPeso, smartQty } from '@/lib/recetas/peso'
+import { toGramos, calcPesoPorcion, calcPesoNetos, formatPeso, formatCantidad } from '@/lib/recetas/peso'
+import { parseNumero, parsePrecio } from '@/lib/unidades'
+import { buscarProductoExacto } from '@/lib/recetas/vinculo'
 import type { OpsResult } from '@/components/ops/OpsPanel'
 
 const UNIDADES = ['kg', 'g', 'L', 'ml', 'unidad', 'docena', 'caja']
@@ -75,8 +77,12 @@ interface FormIng {
   unidad_costo: string
   merma_pct: string
   grupo: string
+  // Producto de Stock vinculado. Se setea al elegirlo de la lista y se borra
+  // si se cambia el nombre a mano; antes no existía y el vínculo se perdía
+  // al guardar (había que volver a tocar el ingrediente).
+  producto_id: string | null
 }
-const ING_EMPTY: FormIng = { nombre: '', cantidad: '0', unidad: 'kg', costo_unitario: '0', unidad_costo: 'kg', merma_pct: '0', grupo: '' }
+const ING_EMPTY: FormIng = { nombre: '', cantidad: '0', unidad: 'kg', costo_unitario: '0', unidad_costo: 'kg', merma_pct: '0', grupo: '', producto_id: null }
 
 // ── PDF Export (lazy-loaded to avoid SSR issues with jsPDF) ──
 async function handleExportPDF(receta: RecetaConCosto) {
@@ -297,8 +303,10 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
     const subR = recetas.find(r => r.id === i.subreceta_id)
     if (!subR) return i
     if (subR.costoPorGramo && subR.costoPorGramo > 0) {
-      const cantidadG = toGramos(i.cantidad, i.unidad)
-      if (cantidadG > 0) return { ...i, cantidad: cantidadG, unidad: 'g', unidad_costo: 'g', costo_unitario: subR.costoPorGramo }
+      // Costo por UNA unidad de la receta (kg, g, l, ml) — la cantidad y la
+      // unidad cargadas no se tocan (antes se pasaban a gramos).
+      const gPorUnidad = toGramos(1, i.unidad)
+      if (gPorUnidad > 0) return { ...i, unidad_costo: i.unidad, costo_unitario: subR.costoPorGramo * gPorUnidad }
     }
     // Fallback por porción si no tiene peso medible
     return { ...i, costo_unitario: subR.food_cost.costo_porcion, unidad: 'unidad', unidad_costo: 'unidad' }
@@ -388,6 +396,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
   )
 
   const fc = scaledFC ?? receta.food_cost
+  const productoVinculado = ingForm.producto_id ? stockProductos.find(p => p.id === ingForm.producto_id) ?? null : null
   const ings = receta.ingredientes ?? []
   const gruposExistentes = Array.from(new Set(ings.map(i => i.grupo?.trim()).filter((g): g is string => !!g))).sort()
   // Sub-recetas con costos corregidos (para food cost card)
@@ -444,7 +453,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
   // Escalar a N porciones (Feature 1)
   function escalarAPorciones(valor: string) {
     setProdPorc(valor)
-    const n = parseFloat(valor.replace(',', '.'))
+    const n = parseNumero(valor)
     const base = receta?.porciones ?? 0
     if (n > 0 && base > 0) {
       setScaleFactor(n / base)
@@ -475,10 +484,10 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
     if (tipo === 'subreceta') {
       // Recalcular desde datos live para corregir costo_unitario mal guardado
       const corr = corregirSubreceta(i)
-      setIngForm({ nombre: i.nombre, cantidad: String(corr.cantidad), unidad: corr.unidad, costo_unitario: String(corr.costo_unitario?.toFixed(6) ?? 0), unidad_costo: corr.unidad, merma_pct: '0', grupo: i.grupo ?? '' })
+      setIngForm({ nombre: i.nombre, cantidad: String(corr.cantidad), unidad: corr.unidad, costo_unitario: String(corr.costo_unitario?.toFixed(6) ?? 0), unidad_costo: corr.unidad_costo ?? corr.unidad, merma_pct: '0', grupo: i.grupo ?? '', producto_id: null })
       setMermaPesoInput('0')
     } else {
-      setIngForm({ nombre: i.nombre, cantidad: String(i.cantidad), unidad: i.unidad, costo_unitario: String(i.costo_unitario ?? 0), unidad_costo: i.unidad_costo ?? '', merma_pct: String(i.merma_pct ?? 0), grupo: i.grupo ?? '' })
+      setIngForm({ nombre: i.nombre, cantidad: String(i.cantidad), unidad: i.unidad, costo_unitario: String(i.costo_unitario ?? 0).replace('.', ','), unidad_costo: i.unidad_costo ?? '', merma_pct: String(i.merma_pct ?? 0), grupo: i.grupo ?? '', producto_id: i.producto_id ?? null })
       const pct = i.merma_pct ?? 0
       if (pct > 0 && i.cantidad > 0) {
         const peso = i.cantidad * (pct / 100)
@@ -501,15 +510,21 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
     setIngSaving(true)
     setIngError(null)
     try {
+      // Sin elegir de la lista: si el nombre coincide exacto con un producto
+      // de Stock, se vincula igual (lib/recetas/vinculo.ts).
+      const productoId = ingTipo === 'producto'
+        ? (ingForm.producto_id ?? buscarProductoExacto(ingForm.nombre, stockProductos)?.id ?? null)
+        : null
       const datos = {
         nombre: ingForm.nombre.trim(),
-        cantidad: parseFloat(ingForm.cantidad) || 0,
+        cantidad: parseNumero(ingForm.cantidad),
         unidad: ingForm.unidad,
-        costo_unitario: parseFloat(ingForm.costo_unitario) || 0,
-        unidad_costo: ingForm.unidad_costo,
+        costo_unitario: parsePrecio(ingForm.costo_unitario),
+        unidad_costo: ingForm.unidad_costo || ingForm.unidad,
+        producto_id: productoId,
         tipo: ingTipo,
         subreceta_id: ingTipo === 'subreceta' ? ingSubrecetaId : null,
-        merma_pct: parseFloat(ingForm.merma_pct) || 0,
+        merma_pct: parseNumero(ingForm.merma_pct),
         grupo: ingForm.grupo.trim() || null,
       }
       if (editIng) {
@@ -574,7 +589,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
         nombre: editForm.nombre.trim(),
         categoria: editForm.categoria.trim() || 'Otros',
         porciones: parseInt(editForm.porciones) || 1,
-        precio_venta: parseFloat(editForm.precio_venta) || 0,
+        precio_venta: parsePrecio(editForm.precio_venta),
         tiempo_min: parseInt(editForm.tiempo_min) || 0,
         procedimiento: editForm.procedimiento,
         peso_total_g: isNaN(pesoTotalV) ? null : pesoTotalV,
@@ -937,17 +952,16 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                     ) : (() => {
                       const baseUnit = i.unidad?.toLowerCase() ?? ''
                       const pair = UNIT_PAIRS[baseUnit]
-                      // Con el toggle global: fuerza conversión kg→g / l→ml
-                      // Sin toggle: usa smart formatting (muestra la unidad más legible)
+                      // Solo el toggle KG/L ↔ G/ML (lo toca el usuario) convierte.
+                      // Sin toggle se muestra lo cargado, en su unidad.
                       let displayQty: string
                       let displayUnit: string
                       if (unitToggleGlobal && pair) {
-                        displayQty = (scaled * pair.factor).toFixed(0)
+                        displayQty = formatCantidad(scaled * pair.factor)
                         displayUnit = pair.target
                       } else {
-                        const smart = smartQty(scaled, i.unidad ?? '')
-                        displayQty = smart.qty
-                        displayUnit = smart.unit
+                        displayQty = formatCantidad(scaled)
+                        displayUnit = i.unidad ?? ''
                       }
                       return (
                         <div
@@ -1122,7 +1136,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
               )}
               {/* Sugerir precio de venta por food cost objetivo */}
               {receta.food_cost.costo_porcion > 0 && (() => {
-                const tfc = parseFloat(targetFC.replace(',', '.'))
+                const tfc = parseNumero(targetFC)
                 const sugerido = tfc > 0 ? receta.food_cost.costo_porcion / (tfc / 100) : 0
                 return (
                   <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', background: 'rgba(67,97,160,.04)' }}>
@@ -1242,14 +1256,10 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                 const costoEfectivo = cu * convFactor  // precio por unidad del ingrediente
                 const subtotal = i.cantidad * costoEfectivo * scaleFactor
                 const pct = costoTotal > 0 ? (i.cantidad * costoEfectivo / costoTotal) * 100 : 0
-                // Para sub-recetas corregidas (unidad='g', costo=$/g) mostrar precio en $/kg
-                const esSubrecetaEnGramos = i.tipo === 'subreceta' && i.unidad === 'g'
-                const cantDisplay = esSubrecetaEnGramos
-                  ? `${Math.round(i.cantidad * scaleFactor)}g`
-                  : `${(i.cantidad * scaleFactor).toFixed(2)} ${i.unidad}`
-                const precioDisplay = esSubrecetaEnGramos
-                  ? `$${(cu * 1000).toFixed(0)}/kg`
-                  : `$${Number.isInteger(costoEfectivo) ? costoEfectivo : costoEfectivo.toFixed(2)}`
+                // Cantidad en la unidad de la receta; precio en la unidad en que
+                // se compra (la del producto): "500 g · $15.421/kg".
+                const cantDisplay = `${formatCantidad(i.cantidad * scaleFactor)} ${i.unidad}`
+                const precioDisplay = `$${cu.toLocaleString('es-AR', { maximumFractionDigits: cu < 10 ? 2 : 0 })}/${i.unidad_costo ?? i.unidad}`
                 return (
                   <div key={i.id} style={{
                     display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
@@ -1317,7 +1327,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                   <span style={lbl}>Nombre *</span>
                   <input value={ingForm.nombre} onChange={e => {
                     const v = e.target.value
-                    setIngForm(f => ({ ...f, nombre: v }))
+                    setIngForm(f => ({ ...f, nombre: v, producto_id: null }))
                     if (v.length >= 2) {
                       const q = v.toLowerCase()
                       const matches = stockProductos.filter(p => p.nombre.toLowerCase().includes(q)).slice(0, 6)
@@ -1339,7 +1349,9 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                       {ingSuggestions.map(p => (
                         <button key={p.id} onMouseDown={e => {
                           e.preventDefault()
-                          setIngForm(f => ({ ...f, nombre: p.nombre, unidad: p.unidad, costo_unitario: String(p.precio_unitario || 0), unidad_costo: p.unidad }))
+                          // unidad_costo = la del producto (el precio está en esa unidad).
+                          // La unidad de la receta solo se sugiere si todavía no hay cantidad.
+                          setIngForm(f => ({ ...f, nombre: p.nombre, producto_id: p.id, unidad: parseNumero(f.cantidad) > 0 ? f.unidad : p.unidad, costo_unitario: String(p.precio_unitario || 0).replace('.', ','), unidad_costo: p.unidad }))
                           setShowSuggestions(false)
                         }} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', textAlign: 'left', padding: '9px 12px', border: 'none', cursor: 'pointer', background: 'transparent', fontFamily: 'inherit', borderBottom: '1px solid var(--border)' }}>
                           <div>
@@ -1438,7 +1450,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={lbl}>Cantidad bruta</span>
-                  <input type="text" inputMode="decimal" value={ingForm.cantidad} onChange={e => setIngForm(f => ({ ...f, cantidad: e.target.value.replace(',', '.') }))} style={inp} />
+                  <input type="text" inputMode="decimal" value={ingForm.cantidad} onChange={e => setIngForm(f => ({ ...f, cantidad: e.target.value }))} style={inp} />
                 </label>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={lbl}>Unidad</span>
@@ -1484,7 +1496,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                         const val = e.target.value.replace(',', '.')
                         setMermaPesoInput(val)
                         const peso = parseFloat(val) || 0
-                        const cant = parseFloat(ingForm.cantidad) || 0
+                        const cant = parseNumero(ingForm.cantidad)
                         // cant es bruta → pct = merma / bruta
                         const pct = cant > 0 && peso > 0 ? (peso / cant) * 100 : 0
                         setIngForm(f => ({ ...f, merma_pct: pct.toFixed(4) }))
@@ -1493,7 +1505,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                       style={{ ...inp, flex: 1 }}
                     />
                     {(() => {
-                      const pct = parseFloat(ingForm.merma_pct) || 0
+                      const pct = parseNumero(ingForm.merma_pct)
                       return (
                         <span style={{
                           fontSize: 13, fontWeight: 700, minWidth: 44, textAlign: 'right',
@@ -1505,7 +1517,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                     })()}
                   </div>
                   {(() => {
-                    const cant = parseFloat(ingForm.cantidad) || 0
+                    const cant = parseNumero(ingForm.cantidad)
                     const peso = parseFloat(mermaPesoInput) || 0
                     if (peso > 0 && cant > 0 && peso < cant) {
                       const neta = cant - peso
@@ -1515,11 +1527,18 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                   })()}
                 </label>
               )}
-              {ingTipo === 'producto' ? (
+              {ingTipo === 'producto' && productoVinculado && productoVinculado.precio_unitario > 0 ? (
+                // Vinculado a un producto con precio: el costo es el de Stock
+                // (trigger ingredientes_costo_desde_producto), no se edita acá.
+                <div style={{ background: 'rgba(16,185,129,.07)', border: '1px solid rgba(16,185,129,.25)', borderRadius: 8, padding: '8px 10px', fontSize: 12, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 15, color: '#10b981' }}>link</span>
+                  <span>Precio de Stock: <b>${productoVinculado.precio_unitario.toLocaleString('es-AR', { maximumFractionDigits: 2 })}/{productoVinculado.unidad}</b> — se actualiza solo con cada factura</span>
+                </div>
+              ) : ingTipo === 'producto' ? (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     <span style={lbl}>Costo unitario $</span>
-                    <input type="text" inputMode="decimal" value={ingForm.costo_unitario} onChange={e => setIngForm(f => ({ ...f, costo_unitario: e.target.value.replace(',', '.') }))} style={inp} />
+                    <input type="text" inputMode="decimal" value={ingForm.costo_unitario} onChange={e => setIngForm(f => ({ ...f, costo_unitario: e.target.value }))} style={inp} />
                   </label>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     <span style={lbl}>Por unidad de</span>
@@ -1530,7 +1549,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                 </div>
               ) : ingSubrecetaId && (
                 <div style={{ background: 'rgba(67,97,160,.06)', border: '1px solid rgba(67,97,160,.2)', borderRadius: 8, padding: '7px 10px', fontSize: 11, color: 'var(--text-2)' }}>
-                  Costo auto-calculado: ${parseFloat(ingForm.costo_unitario || '0').toFixed(4)}/{ingForm.unidad_costo || ingForm.unidad}
+                  Costo auto-calculado: ${parseNumero(ingForm.costo_unitario).toFixed(4)}/{ingForm.unidad_costo || ingForm.unidad}
                 </div>
               )}
             </div>
@@ -1539,12 +1558,12 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
             <div style={{ padding: '12px 16px', paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))', borderTop: '1px solid var(--border)', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {/* Preview de costo en tiempo real */}
               {ingTipo === 'producto' && (() => {
-                const cantV = parseFloat(ingForm.cantidad.replace(',', '.')) || 0
-                const costoV = parseFloat(ingForm.costo_unitario.replace(',', '.')) || 0
+                const cantV = parseNumero(ingForm.cantidad)
+                const costoV = parsePrecio(ingForm.costo_unitario)
                 const factor = unitConversionFactor(ingForm.unidad, ingForm.unidad_costo || ingForm.unidad)
                 const subtotal = cantV * costoV * factor
                 const mermaG = toGramos(cantV, ingForm.unidad)
-                const netoG = mermaG > 0 ? mermaG * (1 - (parseFloat(ingForm.merma_pct) || 0) / 100) : 0
+                const netoG = mermaG > 0 ? mermaG * (1 - parseNumero(ingForm.merma_pct) / 100) : 0
                 if (cantV <= 0 || costoV <= 0) return null
                 return (
                   <div style={{ background: 'rgba(67,97,160,.06)', border: '1px solid rgba(67,97,160,.15)', borderRadius: 8, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

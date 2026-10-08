@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { aUnidadDelProducto } from '@/lib/stock/precios'
 import { requireRestauranteId } from '@/lib/api/tenant'
 import { pedirAClaude } from '@/lib/ia/claude'
 
@@ -306,12 +307,12 @@ export async function POST(req: NextRequest) {
     //    Step 1: traer TODOS los existentes en una sola query
     const { data: existentesRaw } = await admin
       .from('productos')
-      .select('id, nombre')
+      .select('id, nombre, unidad, peso_por_unidad_g')
       .eq('restaurante_id', restaurante_id)
 
-    const existentesMap = new Map<string, string>()
+    const existentesMap = new Map<string, { id: string; unidad: string; peso_por_unidad_g: number | null }>()
     for (const p of existentesRaw ?? []) {
-      existentesMap.set(normalize(p.nombre), p.id as string)
+      existentesMap.set(normalize(p.nombre), { id: p.id as string, unidad: p.unidad as string, peso_por_unidad_g: p.peso_por_unidad_g as number | null })
     }
 
     //    Step 2: dividir en updates vs inserts
@@ -331,9 +332,13 @@ export async function POST(req: NextRequest) {
         restaurante_id,
         activo: true,
       }
-      const existingId = existentesMap.get(c.nombre_norm)
-      if (existingId) {
-        toUpdate.push({ id: existingId, payload })
+      const existente = existentesMap.get(c.nombre_norm)
+      if (existente) {
+        // Producto que ya existe: no se le cambia la unidad ni se le pisa el
+        // stock (antes: unidad de la factura + stock_actual 0). Solo precio,
+        // llevado a la unidad del producto; si no se puede convertir, nada.
+        const conv = aUnidadDelProducto({ cantidad: 1, unidad: c.unidad, precio_unitario: c.precio_unitario }, existente)
+        if (conv) toUpdate.push({ id: existente.id, payload: { precio_unitario: conv.precio, activo: true, ...(c.proveedor_id ? { proveedor_id: c.proveedor_id } : {}) } })
       } else {
         toInsert.push(payload)
       }
