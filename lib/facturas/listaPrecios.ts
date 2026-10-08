@@ -11,7 +11,7 @@ import { matchProducto } from './matching'
 import { aUnidadDelProducto } from '@/lib/stock/precios'
 
 type ItemLista = { producto_nombre: string; unidad?: string | null; precio_unitario: number }
-type ProductoStock = { id: string; nombre: string; unidad: string; precio_unitario: number; peso_por_unidad_g?: number | null }
+type ProductoStock = { id: string; nombre: string; unidad: string; precio_unitario: number; peso_por_unidad_g?: number | null; unidad_compra?: string | null; cantidad_por_envase?: number | null }
 
 export function emparejarListaConStock<I extends ItemLista, P extends ProductoStock>(items: I[], productos: P[]) {
   return items.map(item => {

@@ -11,7 +11,7 @@ const DELTA_MINIMO_PCT = 2
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
-export type ProductoRow = { id: string; nombre: string; unidad: string; precio_unitario: number | null; peso_por_unidad_g?: number | null }
+export type ProductoRow = { id: string; nombre: string; unidad: string; precio_unitario: number | null; peso_por_unidad_g?: number | null; unidad_compra?: string | null; cantidad_por_envase?: number | null }
 export type FacturaItemRow = { producto_nombre: string; precio_unitario: number; unidad: string | null; factura_id: string }
 export type Desfasado = {
   producto_id: string
@@ -73,7 +73,7 @@ function matchDesfasados(candidatos: ProductoRow[], items: FacturaItemRow[], fac
 async function fetchCandidatos(admin: AdminClient, restauranteId: string): Promise<ProductoRow[]> {
   const { data } = await admin
     .from('productos')
-    .select('id, nombre, unidad, precio_unitario, peso_por_unidad_g')
+    .select('id, nombre, unidad, precio_unitario, peso_por_unidad_g, unidad_compra, cantidad_por_envase')
     .eq('restaurante_id', restauranteId)
     .eq('activo', true)
     .eq('es_produccion', false)

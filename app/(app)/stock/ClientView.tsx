@@ -1122,7 +1122,7 @@ export default function StockPage() {
         precio_unitario: parsePrecio(form.precio_unitario),
         unidad_compra: form.unidad_compra.trim() || null,
         cantidad_por_envase: form.cantidad_por_envase.trim() ? parseNumAR(form.cantidad_por_envase) : null,
-        unidad_uso: form.unidad_uso || null,
+        unidad_uso: null, // "Stock se mide en" se sacó: la Unidad del producto ya es la de uso (ver UnidadesProducto.tsx)
         peso_por_unidad_g: form.peso_por_unidad_g.trim() ? (parseNumAR(form.peso_por_unidad_g) || null) : null,
         es_produccion: form.es_produccion,
         receta_id: form.es_produccion && form.receta_id ? form.receta_id : null,
@@ -1963,7 +1963,8 @@ export default function StockPage() {
                 unidad={form.unidad}
                 valores={form}
                 onChange={patch => setForm(f => ({ ...f, ...patch }))}
-                unidadesUso={UNIDADES_USO}
+                precio={form.precio_unitario}
+                onPrecio={v => setForm(f => ({ ...f, precio_unitario: v }))}
                 labelStyle={lblStyle}
                 inputStyle={inputStyle}
               />

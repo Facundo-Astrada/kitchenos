@@ -307,12 +307,12 @@ export async function POST(req: NextRequest) {
     //    Step 1: traer TODOS los existentes en una sola query
     const { data: existentesRaw } = await admin
       .from('productos')
-      .select('id, nombre, unidad, peso_por_unidad_g')
+      .select('id, nombre, unidad, peso_por_unidad_g, unidad_compra, cantidad_por_envase')
       .eq('restaurante_id', restaurante_id)
 
-    const existentesMap = new Map<string, { id: string; unidad: string; peso_por_unidad_g: number | null }>()
+    const existentesMap = new Map<string, { id: string; unidad: string; peso_por_unidad_g: number | null; unidad_compra: string | null; cantidad_por_envase: number | null }>()
     for (const p of existentesRaw ?? []) {
-      existentesMap.set(normalize(p.nombre), { id: p.id as string, unidad: p.unidad as string, peso_por_unidad_g: p.peso_por_unidad_g as number | null })
+      existentesMap.set(normalize(p.nombre), { id: p.id as string, unidad: p.unidad as string, peso_por_unidad_g: p.peso_por_unidad_g as number | null, unidad_compra: p.unidad_compra as string | null, cantidad_por_envase: p.cantidad_por_envase as number | null })
     }
 
     //    Step 2: dividir en updates vs inserts

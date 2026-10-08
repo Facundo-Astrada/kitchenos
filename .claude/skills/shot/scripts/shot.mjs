@@ -77,8 +77,9 @@ try {
 
   // --type: "selector=>texto" — tipea tecla por tecla (como una persona, no
   // `fill`), para capturar lo que reacciona al tipeo: autocompletados, filtros.
-  if (args.type) {
-    const [sel, texto] = args.type.split('=>')
+  // Varios campos: "sel1=>texto1&&sel2=>texto2" (en orden).
+  for (const paso of (args.type || '').split('&&').filter(Boolean)) {
+    const [sel, texto] = paso.split('=>')
     await page.locator(sel).first().click()
     await page.keyboard.type(texto, { delay: 60 })
     await page.waitForTimeout(800)

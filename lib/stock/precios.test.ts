@@ -33,3 +33,27 @@ describe('aUnidadDelProducto — la factura se lleva a la unidad del producto', 
     expect(r?.precio).toBeCloseTo(4000)
   })
 })
+
+describe('aUnidadDelProducto — envase de compra', () => {
+  const nori = { unidad: 'unidad', unidad_compra: 'pack', cantidad_por_envase: 12 }
+
+  it('una línea en pack se reparte en las unidades del envase', () => {
+    expect(aUnidadDelProducto({ cantidad: 2, unidad: 'pack', precio_unitario: 10000 }, nori))
+      .toEqual({ cantidad: 24, precio: 10000 / 12 })
+  })
+
+  it('reconoce abreviaturas y plurales de factura', () => {
+    expect(aUnidadDelProducto({ cantidad: 1, unidad: 'PAQ', precio_unitario: 12000 }, nori)?.cantidad).toBe(12)
+    expect(aUnidadDelProducto({ cantidad: 1, unidad: 'Packs', precio_unitario: 12000 }, nori)?.precio).toBe(1000)
+    expect(aUnidadDelProducto({ cantidad: 3, unidad: 'CJ', precio_unitario: 600 }, { unidad: 'u', unidad_compra: 'caja', cantidad_por_envase: 6 }))
+      .toEqual({ cantidad: 18, precio: 100 })
+  })
+
+  it('una línea en unidades no toca el envase', () => {
+    expect(aUnidadDelProducto({ cantidad: 5, unidad: 'u', precio_unitario: 900 }, nori)).toEqual({ cantidad: 5, precio: 900 })
+  })
+
+  it('sin cantidad por envase no convierte', () => {
+    expect(aUnidadDelProducto({ cantidad: 1, unidad: 'pack', precio_unitario: 10000 }, { unidad: 'unidad', unidad_compra: 'pack', cantidad_por_envase: null })).toBeNull()
+  })
+})

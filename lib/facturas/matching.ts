@@ -192,13 +192,13 @@ export async function aplicarEfectosDeFactura(params: {
   const itemsConProducto = items.filter(i => i.producto_id)
   if (itemsConProducto.length === 0) return { preciosActualizados: 0, sinConvertir: [] }
 
-  // Unidad (y peso por unidad) con que cada producto YA está en Stock: la
-  // factura se convierte a esa unidad, nunca al revés.
+  // Unidad (y peso por unidad, y envase de compra) con que cada producto YA
+  // está en Stock: la factura se convierte a esa unidad, nunca al revés.
   const { data: prodsData } = await supabase
     .from('productos')
-    .select('id, unidad, peso_por_unidad_g, stock_actual')
+    .select('id, unidad, peso_por_unidad_g, unidad_compra, cantidad_por_envase, stock_actual')
     .in('id', itemsConProducto.map(i => i.producto_id as string))
-  const prodPorId = new Map(((prodsData ?? []) as { id: string; unidad: string; peso_por_unidad_g: number | null; stock_actual: number }[]).map(p => [p.id, p]))
+  const prodPorId = new Map(((prodsData ?? []) as { id: string; unidad: string; peso_por_unidad_g: number | null; unidad_compra: string | null; cantidad_por_envase: number | null; stock_actual: number }[]).map(p => [p.id, p]))
 
   let preciosActualizados = 0
   const sinConvertir: string[] = []

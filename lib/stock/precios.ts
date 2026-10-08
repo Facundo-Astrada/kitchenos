@@ -75,10 +75,42 @@ export function factorHaciaProducto(desde: string, hacia: string, pesoPorUnidadG
 // llama no toca ni stock ni precio de ese producto.
 export function aUnidadDelProducto(
   item: { cantidad: number; unidad: string; precio_unitario: number; peso_kg?: number },
-  producto: { unidad: string; peso_por_unidad_g?: number | null },
+  producto: { unidad: string; peso_por_unidad_g?: number | null; unidad_compra?: string | null; cantidad_por_envase?: number | null },
 ): { cantidad: number; precio: number } | null {
+  // Envase: el producto se compra por "pack de 12" y se usa por unidad. Una
+  // línea de factura en pack trae 12 unidades y su precio se reparte entre
+  // ellas (antes cantidad_por_envase se guardaba y nadie lo leía).
+  const cpe = producto.cantidad_por_envase ?? 0
+  if (cpe > 0 && producto.unidad_compra && mismoEnvase(item.unidad, producto.unidad_compra)) {
+    return { cantidad: item.cantidad * cpe, precio: item.precio_unitario / cpe }
+  }
   const n = normalizeForStock(item)
   const f = factorHaciaProducto(n.unidad_stock, producto.unidad, producto.peso_por_unidad_g)
   if (!f) return null
   return { cantidad: n.cantidad_stock * f, precio: n.precio_stock / f }
+}
+
+// Abreviaturas de envase que traen las facturas ("PAQ", "CJ", "Bolsas").
+const SINONIMOS_ENVASE: Record<string, string> = {
+  paq: 'pack', paquete: 'pack', pak: 'pack', pck: 'pack',
+  cj: 'caja', cja: 'caja',
+  bol: 'bolsa', bsa: 'bolsa',
+  bot: 'botella', bt: 'botella',
+  lt: 'lata',
+  fdo: 'fardo',
+  doc: 'docena', dna: 'docena',
+  bid: 'bidon',
+}
+
+export function canonEnvase(u: string): string {
+  let x = sinTildes(u).toLowerCase().trim().replace(/\.$/, '')
+  if (x.length > 3 && x.endsWith('es')) x = x.slice(0, -2)
+  else if (x.length > 3 && x.endsWith('s')) x = x.slice(0, -1)
+  return SINONIMOS_ENVASE[x] ?? x
+}
+
+/** La unidad de la factura es el envase de compra del producto ("PAQ" = "pack"). */
+export function mismoEnvase(unidadFactura: string, unidadCompra: string): boolean {
+  const a = canonEnvase(unidadFactura)
+  return !!a && a === canonEnvase(unidadCompra)
 }
