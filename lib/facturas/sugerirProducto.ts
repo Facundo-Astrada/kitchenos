@@ -42,8 +42,11 @@ function raiz(t: string): string {
 
 export function tokens(s: string): string[] {
   const out: string[] = []
-  for (const t of normAlias(s).split(' ')) {
+  // Medidas "45 x 60" / "30x40mm" son parte del nombre (bolsas, film, bandejas): una sola palabra "45x60".
+  const base = normAlias(s).replace(/(\d+)\s*x\s*(\d+)\s*(mm|cm)?/g, '$1x$2')
+  for (const t of base.split(' ')) {
     if (!t || RUIDO.has(t)) continue
+    if (/^\d+x\d+$/.test(t)) { out.push(t); continue }
     if (/^\d/.test(t)) {
       // "000"/"0000" distinguen harinas; el resto de los números son pesos, medidas, cantidades.
       if (/^0{3,4}$/.test(t)) out.push(t)
