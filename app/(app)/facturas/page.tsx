@@ -21,6 +21,7 @@ import FiltrosCompras from '@/components/facturas/FiltrosCompras'
 import PrivacidadSheet from '@/components/facturas/PrivacidadSheet'
 import { ConfirmSheet } from '@/components/ui'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
+import { hojasDeFacturas } from '@/lib/facturas/exportarFacturas'
 import { createClient } from '@/lib/supabase/client'
 import { calcularVencimientoFactura, type VencimientoFactura } from '@/lib/utils'
 import { emparejarListaConStock } from '@/lib/facturas/listaPrecios'
@@ -2649,6 +2650,7 @@ export default function FacturasPage() {
   }), [filtro, desdeFiltro, hastaFiltro, estadoFiltro, proveedorFiltro, catFiltroId, medioFiltroId, tipoFiltro])
   const { facturas, loading, resumen: resumenServidor, crearFactura, actualizarFactura, actualizarStatus, eliminarFactura, fetchItems, fetchFacturas, hasMore, fetchMore, totalCount, fetchPorPagar, vincularPedido } = useFacturas(filtrosServidor)
   const { productos, refetch: refetchStock } = useStock()
+  const RESTAURANTE_ID_PAGE = useRestauranteId()
   const { proveedores } = useProveedores()
   const { categorias: categoriasGasto } = useCategoriasGasto()
   const { medios: mediosPago } = useMediosPago()
@@ -2877,38 +2879,15 @@ export default function FacturasPage() {
   }, [facturas, facturasFiltradas, mainTab, filtro, totalCount, resumen, totalPorPagar, resumenVencimientos])
 
   async function exportXLSX() {
-    const facturasRows = facturasFiltradas.map(f => ({
-      'Proveedor': f.proveedor_nombre,
-      'Fecha': f.fecha_factura,
-      'N° Factura': f.numero_factura ?? '',
-      'Tipo': f.tipo_factura ?? '',
-      'Estado': f.status ?? '',
-      'Condición pago': f.condicion_pago ?? '',
-      'Subtotal': f.subtotal ?? 0,
-      'IVA': f.iva_total ?? 0,
-      'Total': f.total,
-    }))
-
-    const allItems = await Promise.all(
-      facturasFiltradas.map(f => fetchItems(f.id).then(items =>
-        items.map(i => ({
-          'Proveedor': f.proveedor_nombre,
-          'Fecha': f.fecha_factura,
-          'N° Factura': f.numero_factura ?? '',
-          'Producto': i.producto_nombre,
-          'Cantidad': i.cantidad,
-          'Unidad': i.unidad ?? '',
-          'Precio unitario': i.precio_unitario,
-          'IVA %': i.alicuota_iva ?? 0,
-          'Subtotal': i.subtotal ?? i.cantidad * i.precio_unitario,
-        }))
-      ))
-    )
-
-    await exportarExcel(`facturas_${fechaArchivo()}.xlsx`, [
-      { nombre: 'Facturas', filas: facturasRows },
-      { nombre: 'Líneas', filas: allItems.flat() },
-    ])
+    if (!RESTAURANTE_ID_PAGE) return
+    showToast('Preparando el Excel…')
+    try {
+      const { hojas, total } = await hojasDeFacturas(supabasePriv, RESTAURANTE_ID_PAGE, filtrosServidor)
+      await exportarExcel(`facturas_${fechaArchivo()}.xlsx`, hojas)
+      showToast(`✓ ${total} facturas exportadas`)
+    } catch {
+      showToast('No se pudo exportar')
+    }
   }
 
   function showToast(msg: string) {

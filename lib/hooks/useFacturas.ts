@@ -26,7 +26,7 @@ export interface FiltrosFacturas {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function aplicarFiltros(q: any, f: FiltrosFacturas) {
+export function aplicarFiltros(q: any, f: FiltrosFacturas) {
   if (f.desde) q = q.gte('fecha_factura', f.desde)
   if (f.hasta) q = q.lte('fecha_factura', f.hasta)
   if (f.estado) q = q.eq('status', f.estado)

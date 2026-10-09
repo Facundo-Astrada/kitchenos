@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto'
 import { calcularDesfasadosDeItemsNuevos, aplicarDesfasados } from '@/lib/stock/syncPrecios'
 import { matchProducto } from '@/lib/facturas/matching'
 import { pedirAClaude } from '@/lib/ia/claude'
+import { fetchAllRows } from '@/lib/supabase/paginate'
 import {
   norm, excelDateToISO, parseNum, mapTipoFactura, mapUnidad, isFudoFormat, parseFudo,
   type FacturaPayload, type ItemPayload, type PagoPayload, type PagosPorFactura,
@@ -617,6 +618,26 @@ async function insertBatch(
     }
   }
 
+  // Fecha de la compra más reciente ya cargada de cada producto, ANTES de insertar
+  // estos ítems: un export amplio puede traer facturas viejas que todavía no
+  // estaban, y no deben pisar un precio que viene de una compra posterior.
+  const ultimaCompra = new Map<string, string>()
+  try {
+    const pids = Array.from(new Set(itemsFinal.map(i => i.producto_id).filter((x): x is string => !!x)))
+    for (let i = 0; i < pids.length; i += 100) {
+      const filas = await fetchAllRows<{ producto_id: string; facturas: { fecha_factura: string | null } | { fecha_factura: string | null }[] }>((from, to) =>
+        admin.from('factura_items').select('producto_id, facturas!inner(fecha_factura)').in('producto_id', pids.slice(i, i + 100)).range(from, to) as unknown as PromiseLike<{ data: { producto_id: string; facturas: { fecha_factura: string | null } | { fecha_factura: string | null }[] }[] | null; error: { message: string } | null }>
+      )
+      for (const r of filas) {
+        const f = Array.isArray(r.facturas) ? r.facturas[0] : r.facturas
+        const fecha = f?.fecha_factura ?? ''
+        if (fecha > (ultimaCompra.get(r.producto_id) ?? '')) ultimaCompra.set(r.producto_id, fecha)
+      }
+    }
+  } catch (e) {
+    console.error('[facturas-universal] última compra por producto falló (no bloqueante):', e)
+  }
+
   for (let i = 0; i < itemsFinal.length; i += BATCH) {
     const { error } = await admin.from('factura_items').insert(itemsFinal.slice(i, i + BATCH))
     if (error) return NextResponse.json({ error: `Error insertando items: ${error.message}` }, { status: 500 })
@@ -630,7 +651,8 @@ async function insertBatch(
     const facturaFecha = new Map<string, string>()
     const hoy = new Date().toISOString().slice(0, 10)
     for (const f of facturasFinal) facturaFecha.set(f.id, f.fecha_factura || hoy)
-    const desfasados = await calcularDesfasadosDeItemsNuevos(admin, restId, itemsFinal, facturaFecha)
+    const desfasados = (await calcularDesfasadosDeItemsNuevos(admin, restId, itemsFinal, facturaFecha))
+      .filter(d => !d.fecha || d.fecha >= (ultimaCompra.get(d.producto_id) ?? ''))
     if (desfasados.length > 0) {
       await aplicarDesfasados(admin, restId, desfasados.map(d => ({ producto_id: d.producto_id, precio_nuevo: d.precio_nuevo, factura_id: d.factura_id })))
       for (const d of desfasados) cambiosPrecio.push({ producto: d.nombre, unidad: d.unidad, precio_anterior: d.precio_actual, precio_nuevo: d.precio_nuevo, delta_pct: d.delta_pct })
