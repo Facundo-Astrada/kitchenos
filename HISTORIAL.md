@@ -6,6 +6,12 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-10-09 — Compras: facturas de Fudo sin duplicados, Precios, ticket lateral.** Commits `45810d2`, `5f91ef5`.
+
+- Bros tenía 1.653 facturas duplicadas (~$254M) por re-imports (5 cargas masivas, sin dedupe). Borradas con respaldo en `bak_facturas_dedupe_20261009` / `bak_factura_items_dedupe_20261009`; pendientes 332 ($56,7M) → 106 ($21M).
+- `facturas.external_id`/`external_source` + upsert en `/api/importador/facturas-universal`; parser a `lib/importador/fudo.ts` con test; lee pagos (`factura_pagos`), IIBB/Ganancias/otras, sector, CUIT ("Número Fiscal"), vencimiento y creador.
+- `producto_alias` (aprendizaje de vínculos), `/api/facturas/vincular-items` y `/revertir-precio`, `PreciosView`, `ResumenImport`, `FacturaTicket` (≥900px), `FiltrosCompras`, `PrivacidadSheet`; filtros de la lista resueltos en la base (`useFacturas(filtros)`).
+
 **Sesión 2026-10-08/09 — Recetario: alta rápida + IA directo al formulario; Stock: categorías y envase (feedback de Facundo en celular y web).** 7 commits `468b09b`…`f6e1466`.
 
 - Nueva receta en desktop = modal centrado con fondo translúcido (`ModalCentrado`); mobile sigue pantalla completa.

@@ -26,6 +26,13 @@ corrió en prod el 11/09 — detalle en `HISTORIAL.md`.
 
 ## 🟠 Alto
 
+- Compras/Fudo (oct 2026): probar el flujo real con Bros — import del Excel de hoy (¿salen "actualizadas" + solo octubre como nuevas?), pestaña **Precios** (deshacer, vincular) y el ticket lateral en desktop. Sin login de Bros no se verificó en pantalla.
+- Compras: los 106 pendientes de Bros que quedaron tras la limpieza incluyen deuda de antes de septiembre; re-importar un export amplio de Fudo los concilia.
+- Compras: nombres de proveedor de Fudo con la condición adentro ("Hinfa Girgolas - Cta Cte 7 días") parten un proveedor en varios; limpiar requiere re-matchear historia. No hecho a propósito.
+- Compras: "Exportar" de Facturas exporta solo la página cargada (20), no todo el filtro.
+- Ratchet `checklist/ClientView.tsx` sobre su techo (3197 > 3145), de antes.
+
+
 ### Retirar `/onboarding`
 Convive con `/implantacion` a propósito (estrangulamiento). **Sigue sin poder
 probarse** (11/09): la ruta lleva 4 días corriendo y los 5 restaurantes están
