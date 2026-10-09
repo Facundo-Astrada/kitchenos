@@ -40,7 +40,7 @@ export default function ExcelPOSImportModal({ open, onClose, onImported, initial
   const [detecting, setDetecting] = useState(false)
   const [detected, setDetected] = useState<DetectResult | null>(null)
   const [applying, setApplying] = useState(false)
-  const [result, setResult] = useState<{ importadas: number; items: number; omitidas: number } | null>(null)
+  const [result, setResult] = useState<{ importadas: number; actualizadas?: number; items: number; omitidas: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hojaSeleccionada, setHojaSeleccionada] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -305,7 +305,8 @@ export default function ExcelPOSImportModal({ open, onClose, onImported, initial
                 ✓ Importación completada
               </div>
               <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-1)', fontSize: 14, lineHeight: 1.8 }}>
-                <li>{result.importadas} facturas importadas</li>
+                <li>{result.importadas} facturas nuevas</li>
+                {(result.actualizadas ?? 0) > 0 && <li>{result.actualizadas} ya estaban cargadas y se actualizaron</li>}
                 <li>{result.items} items importados</li>
                 {result.omitidas > 0 && <li>{result.omitidas} omitidas (canceladas o vacías)</li>}
               </ul>

@@ -91,6 +91,10 @@ type FacturaPayload = {
   notas: string | null
   restaurante_id: string
   categoria_gasto_id?: string | null
+  external_id?: string | null
+  external_source?: string | null
+  fecha_vencimiento?: string | null
+  proveedor_cuit?: string | null
 }
 
 type ItemPayload = {
@@ -133,6 +137,8 @@ function parseFudo(wb: XLSX.WorkBook, restauranteId: string): {
     tipo: findCol(gHeaders, ['Tipo de comprobante', 'Tipo']),
     nro: findCol(gHeaders, ['N° de comprobante', 'Nro', 'Numero', 'Número']),
     cancelado: findCol(gHeaders, ['Cancelado']),
+    vencimiento: findCol(gHeaders, ['Fecha de vencimiento', 'Vencimiento']),
+    cuit: findCol(gHeaders, ['CUIT']),
   }
 
   // ── Detalle ──
@@ -209,6 +215,10 @@ function parseFudo(wb: XLSX.WorkBook, restauranteId: string): {
       status: norm(estadoStr) === 'pagado' ? 'pagada' : 'pendiente',
       notas,
       restaurante_id: restauranteId,
+      external_id: gastoId,
+      external_source: 'fudo',
+      fecha_vencimiento: cG.vencimiento >= 0 ? excelDateToISO(row[cG.vencimiento]) : null,
+      proveedor_cuit: cG.cuit >= 0 ? (String(row[cG.cuit] ?? '').replace(/\D/g, '') || null) : null,
     })
 
     for (const ir of detalleByGastoId.get(gastoId) ?? []) {
@@ -715,6 +725,52 @@ async function insertBatch(
     console.error('[facturas-universal] lookup de categoría por proveedor falló (no bloqueante):', e)
   }
 
+  // Dedupe: una factura que ya está cargada (mismo external_id, o —para las
+  // anteriores a external_id— mismo proveedor+fecha+total+nro) se ACTUALIZA
+  // (estado de pago, vencimiento, CUIT) en vez de insertarse otra vez.
+  let actualizadas = 0
+  let sinCambios = 0
+  try {
+    const restId = facturasFinal[0].restaurante_id
+    type Existente = { id: string; external_id: string | null; proveedor_nombre: string; fecha_factura: string | null; total: number; numero_factura: string | null; status: string; fecha_vencimiento: string | null }
+    const existentes: Existente[] = []
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await admin.from('facturas')
+        .select('id, external_id, proveedor_nombre, fecha_factura, total, numero_factura, status, fecha_vencimiento')
+        .eq('restaurante_id', restId).range(from, from + 999)
+      if (error) throw error
+      existentes.push(...((data ?? []) as Existente[]))
+      if (!data || data.length < 1000) break
+    }
+    const clave = (f: { proveedor_nombre: string; fecha_factura: string | null; total: number; numero_factura: string | null }) =>
+      `${normNombre(f.proveedor_nombre)}|${f.fecha_factura ?? ''}|${Math.round(Number(f.total))}|${f.numero_factura ?? ''}`
+    const porExterno = new Map(existentes.filter(e => e.external_id).map(e => [e.external_id as string, e]))
+    const porClave = new Map<string, Existente>()
+    for (const e of existentes) if (!e.external_id) porClave.set(clave(e), e)
+
+    const nuevas: FacturaPayload[] = []
+    const idsYaExistentes = new Set<string>()
+    for (const f of facturasFinal) {
+      const ex = (f.external_id && porExterno.get(f.external_id)) || porClave.get(clave(f))
+      if (!ex) { nuevas.push(f); continue }
+      idsYaExistentes.add(f.id)
+      porClave.delete(clave(ex))
+      const cambios: Record<string, unknown> = {}
+      if (f.external_id && !ex.external_id) { cambios.external_id = f.external_id; cambios.external_source = f.external_source }
+      if (f.status !== ex.status) { cambios.status = f.status; cambios.condicion_pago = f.condicion_pago }
+      if (f.fecha_vencimiento && f.fecha_vencimiento !== ex.fecha_vencimiento) cambios.fecha_vencimiento = f.fecha_vencimiento
+      if (f.proveedor_cuit) cambios.proveedor_cuit = f.proveedor_cuit
+      if (Object.keys(cambios).length === 0) { sinCambios++; continue }
+      const { error } = await admin.from('facturas').update(cambios).eq('id', ex.id).eq('restaurante_id', restId)
+      if (!error) actualizadas++
+    }
+    facturasFinal = nuevas
+    itemsFinal = itemsFinal.filter(it => !idsYaExistentes.has(it.factura_id))
+  } catch (e) {
+    console.error('[facturas-universal] dedupe falló, se aborta el import para no duplicar:', e)
+    return NextResponse.json({ error: 'No se pudo comprobar qué facturas ya estaban cargadas. No se importó nada para no duplicar.' }, { status: 500 })
+  }
+
   for (let i = 0; i < facturasFinal.length; i += BATCH) {
     const { error } = await admin.from('facturas').insert(facturasFinal.slice(i, i + BATCH))
     if (error) return NextResponse.json({ error: `Error insertando facturas: ${error.message}` }, { status: 500 })
@@ -762,6 +818,8 @@ async function insertBatch(
 
   return NextResponse.json({
     importadas: facturasFinal.length,
+    actualizadas,
+    sin_cambios: sinCambios,
     items: itemsFinal.length,
     omitidas,
     excluidas_privacidad: excluidasPorNombre,

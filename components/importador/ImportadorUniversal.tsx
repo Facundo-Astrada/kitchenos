@@ -148,6 +148,7 @@ export default function ImportadorUniversal({ onClose }: Props) {
   const [tipoElegido, setTipoElegido] = useState<TipoDetectado>('desconocido')
   const [error, setError] = useState<string | null>(null)
   const [importCount, setImportCount] = useState(0)
+  const [actualizadas, setActualizadas] = useState(0)
   const [omitidas, setOmitidas] = useState(0)
   const wbRef = useRef<WorkbookRef | null>(null)
   const [hojasDisponibles, setHojasDisponibles] = useState<string[]>([])
@@ -463,9 +464,10 @@ export default function ImportadorUniversal({ onClose }: Props) {
       fd.append('restauranteId', RESTAURANTE_ID)
       fd.append('mode', 'apply')
       const res = await fetch('/api/importador/facturas-universal', { method: 'POST', body: fd })
-      const data = await res.json() as { importadas?: number; items?: number; omitidas?: number; excluidas_privacidad?: string[]; error?: string }
+      const data = await res.json() as { importadas?: number; actualizadas?: number; items?: number; omitidas?: number; excluidas_privacidad?: string[]; error?: string }
       if (data.error) { setError(data.error); setStep('fudo_preview'); return }
       setImportCount(data.importadas ?? 0)
+      setActualizadas(data.actualizadas ?? 0)
       setOmitidas(data.omitidas ?? 0)
       setStep('done')
     } catch {
@@ -562,7 +564,10 @@ export default function ImportadorUniversal({ onClose }: Props) {
               </>
             ) : (
               <>
-                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)' }}>{importCount} facturas importadas</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)' }}>{importCount} facturas nuevas</div>
+                {actualizadas > 0 && (
+                  <div style={{ fontSize: 13, color: 'var(--text-2)' }}>{actualizadas} ya estaban cargadas y se actualizaron (estado de pago, vencimiento)</div>
+                )}
                 {omitidas > 0 && (
                   <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{omitidas} omitidas (canceladas en FUDO)</div>
                 )}
