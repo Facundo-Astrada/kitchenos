@@ -6,7 +6,7 @@ const STOCK = [
   'Ajo', 'Ajo en polvo', 'Ajo negro', 'Almendras', 'Ciboulette', 'Fecula de mandioca', 'Fecula de papa',
   'Frutillas', 'Harina 000 Campodonico', 'Harina 0000 Campodonico', 'Harina en paquete 0000', 'Harina arroz',
   'Mandarina', 'Mizuna hidroponicas', 'Cebolla morada', 'Garbanzo lata', 'Pechuga', 'Romero', 'Mango', 'Champiñon', 'Pak choi hidroponica', 'Pata muslo', 'Pepino', 'Pomelo', 'Cebolla', 'Leche',
-  'Vinagre de vino', 'Vino tinto', 'Nueces peladas', 'Nuez moscada',
+  'Vinagre de vino', 'Vino tinto', 'Nueces peladas', 'Nuez moscada', 'Bolsas 45 x 60', 'Bolsas 30x40 (grandes)',
 ].map(nombre => ({ nombre }))
 
 const seguro = (item: string) => sugerenciaSegura(item, STOCK)?.nombre ?? null
@@ -27,6 +27,7 @@ describe('sugerenciaSegura — variantes que deben vincularse solas', () => {
     ['Almendra', 'Almendras'],
     ['CEBOLLA MORADA CHICA EL KG.', 'Cebolla morada'],
     ['Garbanzos en lata', 'Garbanzo lata'],
+    ['Bolsas 45 x 60', 'Bolsas 45 x 60'],
   ])('%s → %s', (item, esperado) => {
     expect(seguro(item)).toBe(esperado)
   })

@@ -81,7 +81,9 @@ function parecidos(a: string, b: string): boolean {
 export function puntaje(nombreItem: string, nombreProducto: string): number {
   const I = tokens(nombreItem)
   const P = tokens(nombreProducto)
-  if (I.length === 0 || P.length === 0) return 0
+  // Nombres hechos solo de "ruido" ("Bolsas 45 x 60"): sin palabras que comparar,
+  // vale la igualdad del nombre completo.
+  if (I.length === 0 || P.length === 0) return normAlias(nombreItem) === normAlias(nombreProducto) ? 1 : 0
   const pEnI = P.filter(p => I.some(i => parecidos(i, p))).length
   const iEnP = I.filter(i => P.some(p => parecidos(i, p))).length
   if (pEnI === 0) return 0
