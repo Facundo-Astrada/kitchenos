@@ -244,6 +244,14 @@ input, textarea, [contenteditable] {
   display: none;
 }
 
+/* Calendario (vista Mes desktop): el "+" de cada celda aparece al pasar el
+   mouse, en el día seleccionado o con foco de teclado — antes había 42
+   botones visibles siempre compitiendo con los eventos. */
+.cal-cell .cal-add { opacity: 0; transition: opacity .12s ease-out; }
+.cal-cell:hover .cal-add,
+.cal-cell[data-selected] .cal-add,
+.cal-cell .cal-add:focus-visible { opacity: 1; }
+
 /* ── Animación de entrada de pantallas ── */
 @keyframes screenIn {
   from {

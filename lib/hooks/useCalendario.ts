@@ -4,6 +4,9 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
 import { tieneCarga } from '@/lib/reservas/helpers'
+import { ocurrencias, rango as rangoFechas, addDays, hoy as hoyFecha } from '@/lib/calendario/fechas'
+import { feriadosEnRango } from '@/lib/calendario/feriados'
+import { CAPA_POR_ID, type CapaId } from '@/lib/calendario/capas'
 
 /* ─── Types ─── */
 
@@ -23,6 +26,7 @@ export interface EventoCalendario {
   descripcion: string | null
   tipo: TipoEvento
   fecha_inicio: string          // 'YYYY-MM-DD'
+  /** Evento de un solo día: null. Varios días: último día. Recurrente: fin de la serie. */
   fecha_fin: string | null
   hora_inicio: string           // 'HH:MM:SS'
   hora_fin: string              // 'HH:MM:SS'
@@ -39,6 +43,27 @@ export interface EventoCalendario {
   _fromMenu?: boolean
   /* flag for auto-generated reservas-del-día events (PLAN-4-CAPAS B9) */
   _fromReserva?: boolean
+}
+
+/**
+ * Lo que pinta la pantalla: un evento propio (o una ocurrencia de uno
+ * recurrente) o un reflejo de solo lectura de otro módulo.
+ */
+export interface ItemCalendario extends EventoCalendario {
+  capa: CapaId
+  /** Primer y último día que ocupa en la grilla (multi-día = barra). */
+  dia: string
+  diaFin: string
+  todoElDia: boolean
+  /** Reflejo de otro módulo — no se edita acá. */
+  soloLectura: boolean
+  /** Destino dentro de la app para ver/editar el dato de origen. */
+  href?: string
+  hrefLabel?: string
+  /** Id de la fila en `eventos` (las ocurrencias de una serie comparten este id). */
+  serieId?: string
+  /** Detalle extra de un reflejo (monto, pax...). */
+  meta?: string
 }
 
 export interface Proveedor {
@@ -70,229 +95,297 @@ export const TIPO_CONFIG: Record<TipoEvento, { label: string; icon: string; colo
   entrega_proveedor:   { label: 'Entrega',           icon: 'local_shipping',    color: '#f97316' },
   reserva_especial:    { label: 'Reserva especial',  icon: 'restaurant',        color: '#8b5cf6' },
   reservas_dia:        { label: 'Reservas',          icon: 'event_seat',       color: '#14b8a6' },
-  evento_equipo:       { label: 'Evento equipo',     icon: 'groups',            color: '#3b82f6' },
+  evento_equipo:       { label: 'Reunión / equipo',  icon: 'groups',            color: '#3b82f6' },
   mantenimiento:       { label: 'Mantenimiento',     icon: 'build',             color: '#ef4444' },
   capacitacion:        { label: 'Capacitación',      icon: 'school',            color: '#10b981' },
   visita_bromatologia: { label: 'Bromatología',      icon: 'verified_user',     color: '#ec4899' },
   otro:                { label: 'Otro',               icon: 'event',             color: '#6b7280' },
 }
 
+export const TODO_EL_DIA = { inicio: '00:00:00', fin: '23:59:00' }
+
+export function esTodoElDia(ev: Pick<EventoCalendario, 'hora_inicio' | 'hora_fin'>) {
+  return (ev.hora_inicio ?? '').startsWith('00:00') && (ev.hora_fin ?? '').startsWith('23:59')
+}
+
+const PESO = '$'
+/** "$786 mil", "$1,3 M" — el monto tiene que entrar en una píldora de celda. */
+const fmtPesosCorto = (n: number) =>
+  n >= 1e6 ? PESO + (n / 1e6).toLocaleString('es-AR', { maximumFractionDigits: 1 }) + ' M'
+  : n >= 1e3 ? PESO + Math.round(n / 1e3) + ' mil'
+  : PESO + Math.round(n)
+const fmtPesos = (n: number) => PESO + Math.round(n).toLocaleString('es-AR')
+
+/** Base común de un reflejo de solo lectura (todo el día). */
+function reflejo(
+  restauranteId: string,
+  p: Pick<ItemCalendario, 'id' | 'titulo' | 'capa' | 'dia'> & Partial<ItemCalendario>,
+): ItemCalendario {
+  return {
+    descripcion: null,
+    tipo: 'otro',
+    fecha_inicio: p.dia,
+    fecha_fin: null,
+    hora_inicio: TODO_EL_DIA.inicio,
+    hora_fin: TODO_EL_DIA.fin,
+    recurrente: false,
+    frecuencia: null,
+    color: CAPA_POR_ID[p.capa].color,
+    proveedor_id: null,
+    usuario_id: null,
+    restaurante_id: restauranteId,
+    created_at: '',
+    diaFin: p.dia,
+    todoElDia: true,
+    soloLectura: true,
+    ...p,
+  }
+}
+
 /* ─── Hook ─── */
 
-export function useCalendario() {
+export function useCalendario({ verPagos = false }: { verPagos?: boolean } = {}) {
   const RESTAURANTE_ID = useRestauranteId()
   const restIdRef = useRef(RESTAURANTE_ID)
   restIdRef.current = RESTAURANTE_ID
-  const [eventos, setEventos] = useState<EventoCalendario[]>([])
+  const verPagosRef = useRef(verPagos)
+  verPagosRef.current = verPagos
+  const [items, setItems] = useState<ItemCalendario[]>([])
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [notaItems, setNotaItems] = useState<Record<string, NotaItemCalendario[]>>({})
+  // loading = primera carga (skeleton); refreshing = cambio de rango con datos
+  // ya en pantalla (no se reemplaza la grilla por "Cargando...").
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const supabase = useMemo(() => createClient(), [])
+  const cargadoRef = useRef(false)
+  // Descarta respuestas viejas si se navega rápido (mes → mes → mes).
+  const reqRef = useRef(0)
 
-  /* Fetch eventos for a given month + auto-gen from pedidos */
-  const fetchEventos = useCallback(async (mes: number, anio: number) => {
-    if (!restIdRef.current) { setLoading(false); return }
-    setLoading(true)
+  /* Fetch de todo lo que cae en [desde, hasta] — el rango visible real (la
+     grilla del mes incluye días del mes anterior/siguiente, y la semana
+     puede cruzar de mes: antes esos días salían vacíos). */
+  const fetchRango = useCallback(async (desde: string, hasta: string) => {
+    const rid = restIdRef.current
+    if (!rid) { setLoading(false); return }
+    const req = ++reqRef.current
+    if (cargadoRef.current) setRefreshing(true)
+    else setLoading(true)
     setError(null)
 
     try {
-      const primerDia = `${anio}-${String(mes).padStart(2, '0')}-01`
-      const ultimoDiaDt = new Date(anio, mes, 0) // last day of month
-      const ultimoDia = `${anio}-${String(mes).padStart(2, '0')}-${String(ultimoDiaDt.getDate()).padStart(2, '0')}`
+      const [evtsRes, pedRes, prodRes, tareasRes, menusRes, resRes, notasRes, facRes] = await Promise.all([
+        // 1. Eventos propios: los que empiezan en el rango, los de varios días
+        //    que empezaron antes y siguen, y las series recurrentes vivas.
+        supabase.from('eventos').select('*').eq('restaurante_id', rid)
+          .or(`and(fecha_inicio.gte.${desde},fecha_inicio.lte.${hasta}),and(recurrente.eq.true,fecha_inicio.lte.${hasta}),and(fecha_inicio.lt.${desde},fecha_fin.gte.${desde})`)
+          .order('fecha_inicio', { ascending: true }),
+        // 2. Entregas de pedidos
+        supabase.from('pedidos').select('id, proveedor_nombre, fecha_entrega_esperada, status, restaurante_id')
+          .eq('restaurante_id', rid).gte('fecha_entrega_esperada', desde).lte('fecha_entrega_esperada', hasta),
+        // 3. produccion_diaria (OPS Planificación/Menú, legado)
+        supabase.from('produccion_diaria').select('fecha, menu_tag')
+          .eq('restaurante_id', rid).gte('fecha', desde).lte('fecha', hasta),
+        // 4. Tareas de menús activados (los días de preparación reales)
+        supabase.from('tareas').select('turno_fecha, menu_id')
+          .eq('restaurante_id', rid).not('menu_id', 'is', null).gte('turno_fecha', desde).lte('turno_fecha', hasta),
+        // 5. Menús con fecha: vigencia de los fijos (barra de varios días) y
+        //    fecha del evento — antes solo se veían si ya tenían tareas.
+        supabase.from('menus').select('id, nombre, tipo, activo, fecha_evento, vigencia_desde, vigencia_hasta, pax')
+          .eq('restaurante_id', rid).eq('activo', true)
+          .or(`and(fecha_evento.gte.${desde},fecha_evento.lte.${hasta}),and(vigencia_desde.lte.${hasta},vigencia_hasta.gte.${desde})`),
+        // 6. Reservas (PLAN-4-CAPAS B9)
+        supabase.from('reservas').select('fecha, pax, estado')
+          .eq('restaurante_id', rid).gte('fecha', desde).lte('fecha', hasta),
+        // 7. Notas por día
+        supabase.from('calendario_nota_items').select('*')
+          .eq('restaurante_id', rid).gte('fecha', desde).lte('fecha', hasta)
+          .order('created_at', { ascending: true }),
+        // 8. Vencimientos de facturas impagas — solo quien ve plata.
+        verPagosRef.current
+          ? supabase.from('facturas').select('fecha_vencimiento, total, proveedor_nombre')
+              .eq('restaurante_id', rid).neq('status', 'pagada')
+              .gte('fecha_vencimiento', desde).lte('fecha_vencimiento', hasta)
+          : Promise.resolve({ data: [], error: null }),
+      ])
+      if (req !== reqRef.current) return
+      if (evtsRes.error) throw evtsRes.error
+      if (pedRes.error) throw pedRes.error
+      if (notasRes.error) throw notasRes.error
 
-      // 1. Eventos from DB
-      const { data: evts, error: evtsErr } = await supabase
-        .from('eventos')
-        .select('*')
-        .eq('restaurante_id', restIdRef.current)
-        .gte('fecha_inicio', primerDia)
-        .lte('fecha_inicio', ultimoDia)
-        .order('fecha_inicio', { ascending: true })
+      const out: ItemCalendario[] = []
 
-      if (evtsErr) throw evtsErr
-
-      const eventosDb = (evts ?? []) as EventoCalendario[]
-
-      // 2. Auto-generate from pedidos with fecha_entrega_esperada in range
-      const { data: pedidos, error: pedErr } = await supabase
-        .from('pedidos')
-        .select('id, proveedor_nombre, fecha_entrega_esperada, status, restaurante_id')
-        .eq('restaurante_id', restIdRef.current)
-        .gte('fecha_entrega_esperada', primerDia)
-        .lte('fecha_entrega_esperada', ultimoDia)
-
-      if (pedErr) throw pedErr
-
-      const pedidoEventos: EventoCalendario[] = (pedidos ?? []).map((p: PedidoRow) => ({
-        id: `pedido-${p.id}`,
-        titulo: `Entrega de ${p.proveedor_nombre}`,
-        descripcion: `Pedido ${p.status}`,
-        tipo: 'entrega_proveedor' as TipoEvento,
-        fecha_inicio: p.fecha_entrega_esperada,
-        fecha_fin: null,
-        hora_inicio: '08:00:00',
-        hora_fin: '09:00:00',
-        recurrente: false,
-        frecuencia: null,
-        color: TIPO_CONFIG.entrega_proveedor.color,
-        proveedor_id: null,
-        usuario_id: null,
-        restaurante_id: p.restaurante_id,
-        created_at: '',
-        _fromPedido: true,
-      }))
-
-      // 3. Auto-generate from produccion_diaria (OPS Planificación/Menú)
-      const { data: prodDias } = await supabase
-        .from('produccion_diaria')
-        .select('fecha, menu_tag')
-        .eq('restaurante_id', restIdRef.current)
-        .gte('fecha', primerDia)
-        .lte('fecha', ultimoDia)
-
-      // Deduplicate by fecha+menu_tag
-      const seenProd = new Set<string>()
-      const prodEventos: EventoCalendario[] = []
-      for (const row of (prodDias ?? [])) {
-        const key = `${row.fecha}_${row.menu_tag ?? ''}`
-        if (seenProd.has(key)) continue
-        seenProd.add(key)
-        prodEventos.push({
-          id: `ops-${row.fecha}-${row.menu_tag ?? 'base'}`,
-          titulo: row.menu_tag ? `OPS: ${row.menu_tag}` : 'OPS: Menú del día',
-          descripcion: 'Producción planificada desde OPS',
-          tipo: 'otro' as TipoEvento,
-          fecha_inicio: row.fecha,
-          fecha_fin: null,
-          hora_inicio: '09:00:00',
-          hora_fin: '17:00:00',
-          recurrente: false,
-          frecuencia: null,
-          color: '#10b981',
-          proveedor_id: null,
-          usuario_id: null,
-          restaurante_id: restIdRef.current,
-          created_at: '',
-        })
-      }
-
-      // 4. Auto-generate from menús activados (tareas con menu_id, turno_fecha) —
-      // el sistema real de Planificación/Producción. Un evento por (menú, día).
-      const { data: tareasMenu } = await supabase
-        .from('tareas')
-        .select('turno_fecha, menu_id')
-        .eq('restaurante_id', restIdRef.current)
-        .not('menu_id', 'is', null)
-        .gte('turno_fecha', primerDia)
-        .lte('turno_fecha', ultimoDia)
-
-      const menuEventos: EventoCalendario[] = []
-      const menuIdsDelMes = [...new Set((tareasMenu ?? []).map(t => t.menu_id as string))]
-      if (menuIdsDelMes.length > 0) {
-        const { data: menusData } = await supabase
-          .from('menus')
-          .select('id, nombre, tipo')
-          .in('id', menuIdsDelMes)
-        const menusPorId = new Map((menusData ?? []).map(m => [m.id as string, m as { id: string; nombre: string; tipo: string }]))
-
-        const seenMenuDia = new Set<string>()
-        for (const row of (tareasMenu ?? [])) {
-          const fecha = row.turno_fecha as string
-          const menuId = row.menu_id as string
-          const key = `${menuId}_${fecha}`
-          if (seenMenuDia.has(key)) continue
-          seenMenuDia.add(key)
-          const menu = menusPorId.get(menuId)
-          if (!menu) continue
-          menuEventos.push({
-            id: `menu-${menuId}-${fecha}`,
-            titulo: `Menú: ${menu.nombre}`,
-            descripcion: 'Activado desde Planificación / Calendario',
-            tipo: 'otro' as TipoEvento,
-            fecha_inicio: fecha,
-            fecha_fin: null,
-            hora_inicio: '00:00:00',
-            hora_fin: '23:59:00',
-            recurrente: false,
-            frecuencia: null,
-            color: menu.tipo === 'evento' ? '#8b5cf6' : '#0ea5e9',
-            proveedor_id: null,
-            usuario_id: null,
-            restaurante_id: restIdRef.current,
-            created_at: '',
-            _fromMenu: true,
-          })
+      // 1. Eventos propios (+ ocurrencias de series)
+      for (const ev of (evtsRes.data ?? []) as EventoCalendario[]) {
+        const todoElDia = esTodoElDia(ev)
+        const base = {
+          ...ev,
+          capa: (ev.tipo === 'entrega_proveedor' ? 'compras' : 'eventos') as CapaId,
+          color: ev.color || TIPO_CONFIG[ev.tipo]?.color || TIPO_CONFIG.otro.color,
+          todoElDia,
+          soloLectura: false,
+          serieId: ev.id,
+        }
+        if (ev.recurrente) {
+          for (const f of ocurrencias(ev.fecha_inicio, ev.frecuencia, desde, hasta, ev.fecha_fin)) {
+            out.push({ ...base, id: `${ev.id}::${f}`, dia: f, diaFin: f })
+          }
+        } else {
+          const fin = ev.fecha_fin && ev.fecha_fin > ev.fecha_inicio ? ev.fecha_fin : ev.fecha_inicio
+          out.push({ ...base, dia: ev.fecha_inicio, diaFin: fin, todoElDia: todoElDia || fin !== ev.fecha_inicio })
         }
       }
 
-      // 5. Auto-generate from reservas (PLAN-4-CAPAS B9) — reflejo de solo
-      // lectura, un evento por día con el resumen (no uno por reserva, para
-      // no saturar la grilla del mes).
-      const { data: reservasMes } = await supabase
-        .from('reservas')
-        .select('fecha, pax, estado')
-        .eq('restaurante_id', restIdRef.current)
-        .gte('fecha', primerDia)
-        .lte('fecha', ultimoDia)
+      // 2. Entregas de pedidos
+      for (const p of (pedRes.data ?? []) as PedidoRow[]) {
+        out.push(reflejo(rid, {
+          id: `pedido-${p.id}`, capa: 'compras', dia: p.fecha_entrega_esperada,
+          titulo: `Entrega de ${p.proveedor_nombre}`, meta: `Pedido ${p.status}`,
+          tipo: 'entrega_proveedor', _fromPedido: true,
+          href: '/facturas?tab=pedidos', hrefLabel: 'Ver pedido',
+        }))
+      }
 
-      const porFechaReservas = new Map<string, { count: number; pax: number }>()
-      for (const row of (reservasMes ?? [])) {
+      // 3. produccion_diaria (dedupe fecha+menu_tag)
+      const seenProd = new Set<string>()
+      for (const row of (prodRes.data ?? [])) {
+        const key = `${row.fecha}_${row.menu_tag ?? ''}`
+        if (seenProd.has(key)) continue
+        seenProd.add(key)
+        out.push(reflejo(rid, {
+          id: `ops-${key}`, capa: 'menus', dia: row.fecha,
+          titulo: row.menu_tag ? `OPS: ${row.menu_tag}` : 'OPS: Menú del día',
+          href: '/operaciones?tab=planificacion', hrefLabel: 'Abrir Planificación',
+        }))
+      }
+
+      // 5. Menús con fecha (un color por capa: fijo vs evento se distinguen por ícono)
+      type MenuRow = { id: string; nombre: string; tipo: string; fecha_evento: string | null; vigencia_desde: string | null; vigencia_hasta: string | null; pax: number | null }
+      const menusRango = (menusRes.data ?? []) as MenuRow[]
+      const menuConVigencia = new Set<string>()
+      const fechaEventoDe = new Map<string, string>()
+      for (const m of menusRango) {
+        if (m.tipo === 'evento' && m.fecha_evento) {
+          fechaEventoDe.set(m.id, m.fecha_evento)
+          if (m.fecha_evento >= desde && m.fecha_evento <= hasta) {
+            out.push(reflejo(rid, {
+              id: `menu-evento-${m.id}`, capa: 'menus', dia: m.fecha_evento,
+              titulo: m.nombre, meta: m.pax ? `Evento · ${m.pax} pax` : 'Evento',
+              tipo: 'reserva_especial', _fromMenu: true,
+              href: '/operaciones?tab=planificacion', hrefLabel: 'Abrir Planificación',
+            }))
+          }
+        } else if (m.tipo !== 'evento' && m.vigencia_desde && m.vigencia_hasta) {
+          menuConVigencia.add(m.id)
+          out.push(reflejo(rid, {
+            id: `menu-vig-${m.id}`, capa: 'menus', dia: m.vigencia_desde, diaFin: m.vigencia_hasta,
+            fecha_inicio: m.vigencia_desde, fecha_fin: m.vigencia_hasta,
+            titulo: m.nombre, meta: 'Menú fijo vigente', _fromMenu: true,
+            href: '/carta', hrefLabel: 'Ver en Carta',
+          }))
+        }
+      }
+
+      // 4. Días de preparación de menús activados (tareas.menu_id). Un menú
+      //    fijo con vigencia ya se ve como barra; un evento ya tiene su día:
+      //    acá solo quedan los días de PREP, rotulados como tales.
+      const tareasMenu = (tareasRes.data ?? []) as { turno_fecha: string; menu_id: string }[]
+      const idsTareas = [...new Set(tareasMenu.map(t => t.menu_id))]
+      const menusPorId = new Map(menusRango.map(m => [m.id, m]))
+      const faltan = idsTareas.filter(id => !menusPorId.has(id))
+      if (faltan.length > 0) {
+        const { data: extra } = await supabase.from('menus').select('id, nombre, tipo, fecha_evento, vigencia_desde, vigencia_hasta, pax').in('id', faltan)
+        for (const m of (extra ?? []) as MenuRow[]) {
+          menusPorId.set(m.id, m)
+          if (m.fecha_evento) fechaEventoDe.set(m.id, m.fecha_evento)
+        }
+      }
+      if (req !== reqRef.current) return
+      const seenMenuDia = new Set<string>()
+      for (const t of tareasMenu) {
+        const key = `${t.menu_id}_${t.turno_fecha}`
+        if (seenMenuDia.has(key)) continue
+        seenMenuDia.add(key)
+        const m = menusPorId.get(t.menu_id)
+        if (!m || menuConVigencia.has(m.id)) continue
+        if (fechaEventoDe.get(m.id) === t.turno_fecha) continue
+        const esEvento = m.tipo === 'evento'
+        out.push(reflejo(rid, {
+          id: `menu-${m.id}-${t.turno_fecha}`, capa: 'menus', dia: t.turno_fecha,
+          titulo: esEvento ? `Prep: ${m.nombre}` : `Menú: ${m.nombre}`,
+          meta: esEvento ? 'Día de preparación del evento' : 'Activado en Producción',
+          _fromMenu: true,
+          href: '/operaciones?tab=planificacion', hrefLabel: 'Abrir Planificación',
+        }))
+      }
+
+      // 6. Reservas: un resumen por día (no una por reserva)
+      const porFecha = new Map<string, { count: number; pax: number }>()
+      for (const row of (resRes.data ?? [])) {
         if (!tieneCarga(row.estado)) continue
-        const acc = porFechaReservas.get(row.fecha) ?? { count: 0, pax: 0 }
+        const acc = porFecha.get(row.fecha) ?? { count: 0, pax: 0 }
         acc.count += 1
         acc.pax += row.pax as number
-        porFechaReservas.set(row.fecha, acc)
+        porFecha.set(row.fecha, acc)
       }
-      const reservaEventos: EventoCalendario[] = [...porFechaReservas.entries()].map(([fecha, { count, pax }]) => ({
-        id: `reservas-${fecha}`,
-        titulo: `${count} reserva${count > 1 ? 's' : ''} · ${pax} cubiertos`,
-        descripcion: 'Reflejo de solo lectura desde /reservas',
-        tipo: 'reservas_dia' as TipoEvento,
-        fecha_inicio: fecha,
-        fecha_fin: null,
-        hora_inicio: '00:00:00',
-        hora_fin: '23:59:00',
-        recurrente: false,
-        frecuencia: null,
-        color: TIPO_CONFIG.reservas_dia.color,
-        proveedor_id: null,
-        usuario_id: null,
-        restaurante_id: restIdRef.current,
-        created_at: '',
-        _fromReserva: true,
-      }))
-
-      setEventos([...eventosDb, ...pedidoEventos, ...prodEventos, ...menuEventos, ...reservaEventos])
-
-      // 5. Ítems de nota del mes (vinculados a la fecha, uno por línea escrita)
-      const { data: itemsData, error: itemsErr } = await supabase
-        .from('calendario_nota_items')
-        .select('*')
-        .eq('restaurante_id', restIdRef.current)
-        .gte('fecha', primerDia)
-        .lte('fecha', ultimoDia)
-        .order('created_at', { ascending: true })
-
-      if (itemsErr) throw itemsErr
-      // Se re-inicializan TODOS los días del rango pedido (no solo los que
-      // trajeron filas) para que un día que se quedó sin ítems no arrastre
-      // el estado local viejo.
-      const porFecha: Record<string, NotaItemCalendario[]> = {}
-      for (let d = new Date(primerDia + 'T12:00:00'); d <= new Date(ultimoDia + 'T12:00:00'); d.setDate(d.getDate() + 1)) {
-        porFecha[d.toISOString().slice(0, 10)] = []
+      for (const [fecha, { count, pax }] of porFecha) {
+        out.push(reflejo(rid, {
+          id: `reservas-${fecha}`, capa: 'reservas', dia: fecha, tipo: 'reservas_dia',
+          titulo: `${count} reserva${count > 1 ? 's' : ''} · ${pax} cubiertos`,
+          _fromReserva: true, href: '/reservas', hrefLabel: 'Ver reservas',
+        }))
       }
-      for (const it of (itemsData ?? []) as NotaItemCalendario[]) {
-        if (!porFecha[it.fecha]) porFecha[it.fecha] = []
-        porFecha[it.fecha].push(it)
+
+      // 8. Pagos: un resumen por día de vencimiento. El monto va primero (es
+      //    lo que tiene que entrar en la píldora); lo impago de días pasados
+      //    se marca "Vencido".
+      const hoyStr = hoyFecha()
+      const pagos = new Map<string, { n: number; total: number; provs: Set<string> }>()
+      for (const f of (facRes.data ?? []) as { fecha_vencimiento: string; total: number | null; proveedor_nombre: string | null }[]) {
+        const acc = pagos.get(f.fecha_vencimiento) ?? { n: 0, total: 0, provs: new Set<string>() }
+        acc.n += 1
+        acc.total += Number(f.total ?? 0)
+        if (f.proveedor_nombre) acc.provs.add(f.proveedor_nombre)
+        pagos.set(f.fecha_vencimiento, acc)
       }
-      setNotaItems(prev => ({ ...prev, ...porFecha }))
+      for (const [fecha, { n, total, provs }] of pagos) {
+        const lista = [...provs]
+        out.push(reflejo(rid, {
+          id: `pagos-${fecha}`, capa: 'pagos', dia: fecha,
+          titulo: `${fecha < hoyStr ? 'Vencido' : 'Pagar'} ${fmtPesosCorto(total)}`,
+          meta: `${n} factura${n > 1 ? 's' : ''} · ${fmtPesos(total)} · `
+            + lista.slice(0, 4).join(', ') + (lista.length > 4 ? ` y ${lista.length - 4} más` : ''),
+          href: '/facturas?tab=facturas', hrefLabel: 'Ver facturas',
+        }))
+      }
+
+      // 9. Feriados
+      for (const f of feriadosEnRango(desde, hasta)) {
+        out.push(reflejo(rid, {
+          id: `feriado-${f.fecha}`, capa: 'feriados', dia: f.fecha,
+          titulo: f.nombre, meta: f.turistico ? 'Día no laborable con fines turísticos' : 'Feriado nacional',
+        }))
+      }
+
+      setItems(out)
+
+      // Notas: se re-inicializan TODOS los días del rango (no solo los que
+      // trajeron filas) para que un día que quedó vacío no arrastre lo viejo.
+      const notas: Record<string, NotaItemCalendario[]> = {}
+      for (const f of rangoFechas(desde, hasta)) notas[f] = []
+      for (const it of (notasRes.data ?? []) as NotaItemCalendario[]) {
+        if (!notas[it.fecha]) notas[it.fecha] = []
+        notas[it.fecha].push(it)
+      }
+      setNotaItems(prev => ({ ...prev, ...notas }))
+      cargadoRef.current = true
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al cargar eventos del calendario'
-      console.error('[useCalendario] fetchEventos Error:', msg)
-      setError(msg)
+      const msg = e instanceof Error ? e.message : 'Error al cargar el calendario'
+      console.error('[useCalendario] fetchRango Error:', msg)
+      if (req === reqRef.current) setError(msg)
     } finally {
-      setLoading(false)
+      if (req === reqRef.current) { setLoading(false); setRefreshing(false) }
     }
   }, [supabase])
 
@@ -344,42 +437,44 @@ export function useCalendario() {
     }
   }, [supabase])
 
-  /* CRUD */
-  const crearEvento = useCallback(async (datos: Omit<EventoCalendario, 'id' | 'created_at' | '_fromPedido'>) => {
-    try {
-      const { error } = await supabase.from('eventos').insert({
-        ...datos,
-        restaurante_id: restIdRef.current,
-      })
-      if (error) throw error
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al crear evento'
-      console.error('[useCalendario] crearEvento Error:', msg)
-      throw new Error(msg)
+  /* CRUD — devuelven el id para poder deshacer */
+  type EventoInput = Omit<EventoCalendario, 'id' | 'created_at' | 'restaurante_id' | '_fromPedido' | '_fromMenu' | '_fromReserva'>
+
+  const crearEvento = useCallback(async (datos: EventoInput): Promise<string> => {
+    const { data, error } = await supabase.from('eventos')
+      .insert({ ...datos, restaurante_id: restIdRef.current })
+      .select('id').single()
+    if (error) {
+      console.error('[useCalendario] crearEvento Error:', error.message)
+      throw new Error(error.message)
     }
+    return data.id as string
   }, [supabase])
 
-  const actualizarEvento = useCallback(async (id: string, datos: Partial<EventoCalendario>) => {
-    try {
-      const { _fromPedido, ...rest } = datos as Partial<EventoCalendario> & { _fromPedido?: boolean }
-      void _fromPedido
-      const { error } = await supabase.from('eventos').update(rest).eq('id', id)
-      if (error) throw error
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al actualizar evento'
-      console.error('[useCalendario] actualizarEvento Error:', msg)
-      throw new Error(msg)
+  const actualizarEvento = useCallback(async (id: string, datos: Partial<EventoInput>) => {
+    // Optimista: mover/editar se ve al instante; si falla, el refetch corrige.
+    setItems(prev => prev.map(it => {
+      if (it.serieId !== id || it.recurrente) return it
+      const next = { ...it, ...datos } as ItemCalendario
+      if (datos.fecha_inicio) {
+        next.dia = datos.fecha_inicio
+        next.diaFin = datos.fecha_fin && datos.fecha_fin > datos.fecha_inicio ? datos.fecha_fin : datos.fecha_inicio
+      }
+      return next
+    }))
+    const { error } = await supabase.from('eventos').update(datos).eq('id', id)
+    if (error) {
+      console.error('[useCalendario] actualizarEvento Error:', error.message)
+      throw new Error(error.message)
     }
   }, [supabase])
 
   const eliminarEvento = useCallback(async (id: string) => {
-    try {
-      const { error } = await supabase.from('eventos').delete().eq('id', id)
-      if (error) throw error
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al eliminar evento'
-      console.error('[useCalendario] eliminarEvento Error:', msg)
-      throw new Error(msg)
+    setItems(prev => prev.filter(it => it.serieId !== id))
+    const { error } = await supabase.from('eventos').delete().eq('id', id)
+    if (error) {
+      console.error('[useCalendario] eliminarEvento Error:', error.message)
+      throw new Error(error.message)
     }
   }, [supabase])
 
@@ -400,39 +495,46 @@ export function useCalendario() {
     }
   }, [supabase])
 
-  /* Mes actualmente pedido por la pantalla — el realtime debe refetchear ESE
-     mes, no "hoy": si estás navegando septiembre y alguien crea un evento,
-     un refetch de agosto te lo esconde. */
-  const mesActualRef = useRef<{ mes: number; anio: number } | null>(null)
-  const fetchEventosTracked = useCallback(async (mes: number, anio: number) => {
-    mesActualRef.current = { mes, anio }
-    await fetchEventos(mes, anio)
-  }, [fetchEventos])
+  /* Rango actualmente pedido por la pantalla — el realtime refetchea ESE
+     rango, no "hoy". */
+  const rangoRef = useRef<{ desde: string; hasta: string } | null>(null)
+  const fetchRangoTracked = useCallback(async (desde: string, hasta: string) => {
+    rangoRef.current = { desde, hasta }
+    await fetchRango(desde, hasta)
+  }, [fetchRango])
 
-  /* Initial fetch + Realtime */
+  const refetch = useCallback(() => {
+    const r = rangoRef.current
+    if (r) return fetchRango(r.desde, r.hasta)
+  }, [fetchRango])
+
+  /* Proveedores + Realtime. El primer fetch de items lo dispara la pantalla
+     (es la que sabe qué rango mira) — antes el hook pedía "el mes de hoy" al
+     montar y la pantalla lo volvía a pedir: dos fetch iguales por visita. */
   useEffect(() => {
-    const now = new Date()
-    fetchEventosTracked(now.getMonth() + 1, now.getFullYear())
+    if (!RESTAURANTE_ID) return
     fetchProveedores()
 
     const ch = supabase
       .channel('eventos-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'eventos', filter: `restaurante_id=eq.${RESTAURANTE_ID}` }, () => {
-        const actual = mesActualRef.current ?? { mes: now.getMonth() + 1, anio: now.getFullYear() }
-        fetchEventos(actual.mes, actual.anio)
+        const r = rangoRef.current
+        if (r) fetchRango(r.desde, r.hasta)
       })
       .subscribe()
 
     return () => { supabase.removeChannel(ch) }
-  }, [RESTAURANTE_ID])
+  }, [RESTAURANTE_ID, supabase, fetchProveedores, fetchRango])
 
   return {
-    eventos,
+    items,
     proveedores,
     notaItems,
     loading,
+    refreshing,
     error,
-    fetchEventos: fetchEventosTracked,
+    fetchRango: fetchRangoTracked,
+    refetch,
     crearEvento,
     actualizarEvento,
     eliminarEvento,
@@ -440,4 +542,22 @@ export function useCalendario() {
     eliminarNotaItem,
     asignarPlazaNotaItem,
   }
+}
+
+/** Ítems ordenados para mostrar en un día: todo-el-día primero (feriado arriba), después por hora. */
+export function ordenarItemsDia(lista: ItemCalendario[]) {
+  const peso = (it: ItemCalendario) => it.capa === 'feriados' ? 0 : it.todoElDia ? 1 : 2
+  return [...lista].sort((a, b) =>
+    peso(a) - peso(b) || a.hora_inicio.localeCompare(b.hora_inicio) || a.titulo.localeCompare(b.titulo))
+}
+
+/** Índice fecha → ítems que tocan ese día (un multi-día aparece en cada uno). */
+export function indexarPorDia(lista: ItemCalendario[]) {
+  const map: Record<string, ItemCalendario[]> = {}
+  for (const it of lista) {
+    for (let f = it.dia; f <= it.diaFin; f = addDays(f, 1)) {
+      ;(map[f] ??= []).push(it)
+    }
+  }
+  return map
 }

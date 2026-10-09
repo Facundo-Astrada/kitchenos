@@ -1,1338 +1,562 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+// Calendario — Registro Preparación (DESIGN.md §2): se usa para planificar,
+// no durante el servicio. Orquesta las vistas de components/calendario/:
+// Mes (grilla + panel del día), Semana (7 días desktop / 3 mobile), Agenda
+// (lista cronológica). El hook junta eventos propios + reflejos de solo
+// lectura de otros módulos (menús, entregas, reservas, pagos, feriados) y
+// las capas encienden/apagan cada fuente.
+
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'motion/react'
 import {
-  useCalendario,
-  TIPO_CONFIG,
-  type EventoCalendario,
-  type TipoEvento,
-  type NotaItemCalendario,
+  useCalendario, indexarPorDia,
+  type ItemCalendario, type NotaItemCalendario,
 } from '@/lib/hooks/useCalendario'
 import { useTareas } from '@/lib/hooks/useTareas'
 import { useMenus, type MenuConPreparaciones } from '@/lib/hooks/useMenus'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
-import { Modal } from '@/components/ui'
+import { usePermisos } from '@/lib/hooks/usePermisos'
+import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
+import { SegmentedTabs, HeaderAction, Toast } from '@/components/ui'
 import { useReducedMotion, DURATION, EASE_OUT } from '@/lib/ui/motion'
 import { createClient } from '@/lib/supabase/client'
 import { activarMenuParaFechas, rangoFechas, resumenActivacion } from '@/lib/menus/activarMenu'
-import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
-import { todasLasPlazas, plazaLabel, plazaColor } from '@/lib/constants'
+import { plazaLabel } from '@/lib/constants'
 import type { Plaza } from '@/types'
+import {
+  MESES, grillaMes, hoy as hoyStr, addDays, lunesDe, diffDays, etiquetaRango, fechaLarga, toDateStr, rango,
+} from '@/lib/calendario/fechas'
+import { CAPAS_DEFAULT, type CapaId } from '@/lib/calendario/capas'
+import { generarIcs, descargarIcs } from '@/lib/calendario/ics'
+import { CapasChips } from '@/components/calendario/shared'
+import { MesGrid } from '@/components/calendario/MesGrid'
+import { SemanaGrid } from '@/components/calendario/SemanaGrid'
+import { AgendaLista } from '@/components/calendario/AgendaLista'
+import { DiaPanel } from '@/components/calendario/DiaPanel'
+import { EventoDetalle, textoRecurrencia } from '@/components/calendario/EventoDetalle'
+import { EventoForm, formVacio, formDesdeEvento, payloadDesdeForm, type EventoFormData } from '@/components/calendario/EventoForm'
+import { PlanificarEventoModal } from '@/components/calendario/PlanificarEventoModal'
 
-/* ─── Helpers ─── */
+type Vista = 'mes' | 'semana' | 'agenda'
+type ToastState = { msg: string; variant?: 'default' | 'error'; action?: { label: string; onClick: () => void } } | null
 
-const DIAS_SEMANA = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
-const DIAS_NOMBRE = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
-const MESES = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-]
-const HORAS = Array.from({ length: 17 }, (_, i) => i + 7) // 7..23
+const LS_VISTA = 'kc_calendario_vista'
+const LS_CAPAS = 'kc_calendario_capas'
 
-function pad2(n: number) { return String(n).padStart(2, '0') }
-
-function toDateStr(y: number, m: number, d: number) {
-  return `${y}-${pad2(m)}-${pad2(d)}`
+function leerLS<T>(clave: string, def: T): T {
+  if (typeof window === 'undefined') return def
+  try { const v = localStorage.getItem(clave); return v ? JSON.parse(v) as T : def } catch { return def }
+}
+function escribirLS(clave: string, v: unknown) {
+  try { localStorage.setItem(clave, JSON.stringify(v)) } catch {}
 }
 
-function isSameDay(a: string, b: string) {
-  return a === b
+/* Ancho real del área de contenido. "Desktop" no alcanza: con el panel del
+   Coach abierto quedan ~780px y la grilla + panel lateral no entran. */
+function useAncho(ref: React.RefObject<HTMLDivElement | null>) {
+  const [ancho, setAncho] = useState(0)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const ro = new ResizeObserver(([e]) => setAncho(Math.round(e.contentRect.width)))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [ref])
+  return ancho
 }
 
-const today = () => {
-  const d = new Date()
-  return toDateStr(d.getFullYear(), d.getMonth() + 1, d.getDate())
-}
+export default function CalendarioPage() {
+  const router = useRouter()
+  const isDesktop = useIsDesktop()
+  const reducedMotion = useReducedMotion()
+  const RESTAURANTE_ID = useRestauranteId()
+  const { isAdmin, puedeVer, verCostos } = usePermisos()
+  const verPagos = verCostos && (isAdmin || puedeVer('facturas'))
 
-/* Build calendar grid — returns array of {day, month, year, inMonth} for 6 rows x 7 cols */
-function buildGrid(month: number, year: number) {
-  const firstDay = new Date(year, month - 1, 1)
-  let startDow = firstDay.getDay() // 0=Sun
-  startDow = startDow === 0 ? 6 : startDow - 1 // Mon=0
-  const daysInMonth = new Date(year, month, 0).getDate()
+  const hoy = hoyStr()
+  const [mes, setMes] = useState(() => Number(hoy.slice(5, 7)))
+  const [anio, setAnio] = useState(() => Number(hoy.slice(0, 4)))
+  const [sel, setSel] = useState(hoy)
+  const [vista, setVista] = useState<Vista>('mes')
+  const [capas, setCapas] = useState<CapaId[]>(CAPAS_DEFAULT)
+  const [navDir, setNavDir] = useState(1)
+  // Preferencias del browser después de montar — leerlas en el estado
+  // inicial desalinea el HTML del server con el del cliente (hidratación).
+  // Mismo criterio que OPS (kc_ops_pantalla_completa): acá el setState en
+  // efecto es lo correcto, no el atajo.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setVista(leerLS<Vista>(LS_VISTA, 'mes'))
+    setCapas(leerLS<CapaId[]>(LS_CAPAS, CAPAS_DEFAULT))
+  }, [])
 
-  // prev month
-  const prevMonth = month === 1 ? 12 : month - 1
-  const prevYear = month === 1 ? year - 1 : year
-  const daysInPrev = new Date(prevYear, prevMonth, 0).getDate()
+  const rootRef = useRef<HTMLDivElement>(null)
+  const anchoMedido = useAncho(rootRef)
+  const ancho = anchoMedido || (isDesktop ? 1200 : 390)
+  const panelLateral = ancho >= 1080
+  const headerUnaFila = ancho >= 1000
+  const gridAncho = panelLateral ? ancho - 400 : ancho - 24
+  const mesCompacto = gridAncho / 7 < 92
+  const diasPorVista = ancho >= 720 ? 7 : 3
 
-  const cells: { day: number; month: number; year: number; inMonth: boolean }[] = []
+  const [detalle, setDetalle] = useState<ItemCalendario | null>(null)
+  const [form, setForm] = useState<{ open: boolean; editandoId: string | null; inicial: EventoFormData }>(
+    () => ({ open: false, editandoId: null, inicial: formVacio(hoy) }))
+  const [planificar, setPlanificar] = useState(false)
+  const [toast, setToast] = useState<ToastState>(null)
+  const cerrarToast = useCallback(() => setToast(null), [])
 
-  // fill leading days from prev month
-  for (let i = startDow - 1; i >= 0; i--) {
-    cells.push({ day: daysInPrev - i, month: prevMonth, year: prevYear, inMonth: false })
-  }
-  // current month
-  for (let d = 1; d <= daysInMonth; d++) {
-    cells.push({ day: d, month, year, inMonth: true })
-  }
-  // trailing days
-  const nextMonth = month === 12 ? 1 : month + 1
-  const nextYear = month === 12 ? year + 1 : year
-  let trailing = 1
-  while (cells.length < 42) {
-    cells.push({ day: trailing++, month: nextMonth, year: nextYear, inMonth: false })
-  }
-  return cells
-}
+  const {
+    items, proveedores, notaItems, loading, refreshing, error,
+    fetchRango, refetch, crearEvento, actualizarEvento, eliminarEvento,
+    agregarNotaItem, eliminarNotaItem, asignarPlazaNotaItem,
+  } = useCalendario({ verPagos })
+  const { agregarTarea } = useTareas({ soloEscritura: true })
+  const { menus: todosLosMenus } = useMenus()
+  const catalogoEventos = useMemo(() => todosLosMenus.filter(m => m.tipo === 'evento'), [todosLosMenus])
+  const { plazasCustom } = usePlazasCustom()
 
-function getWeekDates(dateStr: string) {
-  const d = new Date(dateStr + 'T12:00:00')
-  let dow = d.getDay()
-  dow = dow === 0 ? 6 : dow - 1 // Mon=0
-  const monday = new Date(d)
-  monday.setDate(d.getDate() - dow)
-  return Array.from({ length: 7 }, (_, i) => {
-    const dd = new Date(monday)
-    dd.setDate(monday.getDate() + i)
-    return {
-      dateStr: toDateStr(dd.getFullYear(), dd.getMonth() + 1, dd.getDate()),
-      dayNum: dd.getDate(),
-      dayName: DIAS_NOMBRE[i],
-    }
-  })
-}
+  /* ── Rango visible: la grilla de 42 días del mes cubre las tres vistas ── */
+  const grilla = useMemo(() => grillaMes(mes, anio), [mes, anio])
+  const desde = grilla[0], hasta = grilla[41]
+  useEffect(() => { if (RESTAURANTE_ID) fetchRango(desde, hasta) }, [desde, hasta, fetchRango, RESTAURANTE_ID, verPagos])
 
-/* ─── Styles ─── */
+  const primeroMes = toDateStr(anio, mes, 1)
+  const ultimoMes = toDateStr(anio, mes, new Date(anio, mes, 0).getDate())
+  const esMesActual = hoy >= primeroMes && hoy <= ultimoMes
+  const diasSemana = useMemo(() => diasPorVista === 7
+    ? Array.from({ length: 7 }, (_, i) => addDays(lunesDe(sel), i))
+    : Array.from({ length: 3 }, (_, i) => addDays(sel, i)), [diasPorVista, sel])
+  const diasAgenda = useMemo(() => rango(esMesActual ? hoy : primeroMes, ultimoMes), [esMesActual, hoy, primeroMes, ultimoMes])
 
-const fieldStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '12px 14px',
-  borderRadius: 12,
-  border: '1px solid var(--border)',
-  background: 'var(--surface)',
-  color: 'var(--text-1)',
-  fontSize: 14,
-  outline: 'none',
-}
+  const filtrados = useMemo(() => items.filter(it => capas.includes(it.capa)), [items, capas])
+  const porDia = useMemo(() => indexarPorDia(filtrados), [filtrados])
+  const capasDisponibles = useMemo<CapaId[]>(() =>
+    ['eventos', 'menus', 'compras', 'reservas', ...(verPagos ? ['pagos' as const] : []), 'feriados'], [verPagos])
+  const conteoCapas = useMemo(() => {
+    const c: Partial<Record<CapaId, number>> = {}
+    for (const it of items) if (it.diaFin >= primeroMes && it.dia <= ultimoMes) c[it.capa] = (c[it.capa] ?? 0) + 1
+    return c
+  }, [items, primeroMes, ultimoMes])
+  const vacioMes = !loading && filtrados.every(it => it.diaFin < primeroMes || it.dia > ultimoMes || it.capa === 'feriados')
 
-const btnPrimary: React.CSSProperties = {
-  background: 'var(--navy)',
-  color: '#fff',
-  borderRadius: 12,
-  padding: '12px 20px',
-  border: 'none',
-  fontSize: 14,
-  fontWeight: 600,
-  cursor: 'pointer',
-}
+  /* ── Navegación ── */
+  const irAMes = useCallback((m: number, y: number, dir: number, dia?: string) => {
+    setNavDir(dir); setMes(m); setAnio(y)
+    const p = toDateStr(y, m, 1)
+    const u = toDateStr(y, m, new Date(y, m, 0).getDate())
+    setSel(dia ?? (hoy >= p && hoy <= u ? hoy : p))
+  }, [hoy])
 
-const cardStyle: React.CSSProperties = {
-  background: 'var(--surface)',
-  borderRadius: 12,
-  border: '1px solid var(--border)',
-}
+  const irAFecha = useCallback((f: string, dir = 0) => {
+    const m = Number(f.slice(5, 7)), y = Number(f.slice(0, 4))
+    if (m !== mes || y !== anio) { setNavDir(dir || (f > sel ? 1 : -1)); setMes(m); setAnio(y) }
+    setSel(f)
+  }, [mes, anio, sel])
 
-/* Leyenda de tipos de evento — colapsada por default, recuerda el estado
-   entre visitas (mismo patrón que Explicacion en Reportes/Presupuesto). */
-function CalendarioLeyenda() {
-  const [open, setOpen] = useState(() => {
-    if (typeof window === 'undefined') return false
-    try { return localStorage.getItem('kc_calendario_leyenda') === '1' } catch { return false }
-  })
-  function toggle() {
-    setOpen(v => {
-      const next = !v
-      try { localStorage.setItem('kc_calendario_leyenda', next ? '1' : '0') } catch {}
+  const navegar = useCallback((dir: number) => {
+    if (vista === 'semana') { setNavDir(dir); irAFecha(addDays(sel, dir * diasPorVista), dir); return }
+    let m = mes + dir, y = anio
+    if (m < 1) { m = 12; y-- }
+    if (m > 12) { m = 1; y++ }
+    irAMes(m, y, dir)
+  }, [vista, sel, diasPorVista, irAFecha, mes, anio, irAMes])
+
+  const irHoy = useCallback(() => irAFecha(hoy), [irAFecha, hoy])
+
+  const cambiarVista = useCallback((v: Vista) => { setVista(v); escribirLS(LS_VISTA, v) }, [])
+  const toggleCapa = useCallback((id: CapaId) => {
+    setCapas(prev => {
+      const next = prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
+      escribirLS(LS_CAPAS, next)
       return next
     })
+  }, [])
+
+  /* ── Crear / editar / mover / eliminar ── */
+  const abrirCrear = useCallback((fecha: string, hora?: string) => {
+    setSel(fecha)
+    setForm({ open: true, editandoId: null, inicial: formVacio(fecha, hora) })
+  }, [])
+
+  const editar = (it: ItemCalendario) => {
+    setDetalle(null)
+    setForm({ open: true, editandoId: it.serieId ?? it.id, inicial: formDesdeEvento(it) })
   }
-  return (
-    <div style={{ ...cardStyle, marginTop: 12, overflow: 'hidden' }}>
-      <button
-        onClick={toggle}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
-          background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
-        }}
-      >
-        <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'var(--text-3)', flexShrink: 0 }}>palette</span>
-        <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: 'var(--text-2)' }}>Referencias</span>
-        <span
-          className="material-symbols-outlined"
-          style={{ fontSize: 18, color: 'var(--text-3)', transform: open ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }}
+  const duplicar = (it: ItemCalendario) => {
+    setDetalle(null)
+    const base = formDesdeEvento(it)
+    const largo = diffDays(it.dia, it.diaFin)
+    setForm({ open: true, editandoId: null, inicial: { ...base, fecha_inicio: it.dia, fecha_fin: addDays(it.dia, largo), frecuencia: '', repetir_hasta: '' } })
+  }
+
+  const guardar = async (f: EventoFormData) => {
+    const payload = payloadDesdeForm(f)
+    if (form.editandoId) await actualizarEvento(form.editandoId, payload)
+    else await crearEvento(payload)
+    setForm(s => ({ ...s, open: false }))
+    await refetch()
+    const rep = textoRecurrencia(payload)
+    setToast({ msg: form.editandoId ? 'Cambios guardados' : rep ? `Evento creado · ${rep}` : `Evento creado · ${fechaLarga(f.fecha_inicio)}` })
+    if (!form.editandoId) irAFecha(f.fecha_inicio)
+  }
+
+  const eliminar = async (it: ItemCalendario) => {
+    setDetalle(null)
+    const id = it.serieId ?? it.id
+    const copia = payloadDesdeForm(formDesdeEvento(it))
+    try {
+      await eliminarEvento(id)
+      setToast({
+        msg: it.recurrente ? 'Serie eliminada' : 'Evento eliminado',
+        action: { label: 'Deshacer', onClick: async () => { await crearEvento(copia); refetch() } },
+      })
+    } catch (e) {
+      refetch()
+      setToast({ msg: 'No se pudo eliminar: ' + (e instanceof Error ? e.message : ''), variant: 'error' })
+    }
+  }
+
+  const mover = async (it: ItemCalendario, fecha: string) => {
+    const id = it.serieId ?? it.id
+    const delta = diffDays(it.dia, fecha)
+    const antes = { fecha_inicio: it.fecha_inicio, fecha_fin: it.fecha_fin }
+    const despues = { fecha_inicio: fecha, fecha_fin: it.fecha_fin ? addDays(it.fecha_fin, delta) : null }
+    try {
+      await actualizarEvento(id, despues)
+      setSel(fecha)
+      setToast({
+        msg: `Movido al ${fechaLarga(fecha).toLowerCase()}`,
+        action: { label: 'Deshacer', onClick: async () => { await actualizarEvento(id, antes); refetch() } },
+      })
+    } catch (e) {
+      refetch()
+      setToast({ msg: 'No se pudo mover: ' + (e instanceof Error ? e.message : ''), variant: 'error' })
+    }
+  }
+
+  /* ── Planificar evento del catálogo ── */
+  const activarEvento = async (menu: MenuConPreparaciones, d: string, h: string) => {
+    if (!RESTAURANTE_ID) return
+    if (menu.preparaciones.length === 0) { setToast({ msg: 'Ese evento no tiene preparaciones cargadas', variant: 'error' }); return }
+    try {
+      const res = await activarMenuParaFechas(createClient(), RESTAURANTE_ID, menu, rangoFechas(d, h))
+      setPlanificar(false)
+      refetch()
+      setToast({ msg: res.diasActivados === 0 ? 'Ese evento ya estaba activo en esas fechas'
+        : `Evento activado · ${resumenActivacion(res)}${res.diasYaActivos > 0 ? ` (${res.diasYaActivos} ya activos)` : ''}` })
+    } catch (e) {
+      setToast({ msg: 'Error: ' + (e instanceof Error ? e.message : 'no se pudo activar'), variant: 'error' })
+    }
+  }
+
+  /* ── Notas → Producción ── */
+  const enviarNota = async (item: NotaItemCalendario, plaza: Plaza) => {
+    try {
+      const tareaId = await agregarTarea({
+        titulo: item.texto.slice(0, 120),
+        descripcion: `Desde nota del calendario (${item.fecha})`,
+        status: 'pendiente', estado: 'pendiente', prioridad: 'media', categoria: 'general',
+        modo: 'carta', seccion: 'general', plaza, turno_fecha: item.fecha, fecha_limite: item.fecha,
+      })
+      await asignarPlazaNotaItem(item.id, item.fecha, plaza, tareaId)
+      setToast({ msg: `Enviado a ${plazaLabel(plaza, plazasCustom)}` })
+    } catch {
+      setToast({ msg: 'No se pudo enviar a Producción', variant: 'error' })
+    }
+  }
+
+  /* ── Export .ics del mes visible (capas encendidas) ── */
+  const exportar = () => {
+    const delMes = filtrados.filter(it => it.diaFin >= primeroMes && it.dia <= ultimoMes)
+    descargarIcs(generarIcs(delMes, 'KitchenOS'), `kitchenos-${MESES[mes - 1].toLowerCase()}-${anio}.ics`)
+    setToast({ msg: `${delMes.length} ítems exportados — abrilo con tu calendario` })
+  }
+
+  /* ── Atajos de teclado (desktop) ── */
+  const hayModal = !!detalle || form.open || planificar
+  useEffect(() => {
+    if (!isDesktop) return
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      if (hayModal || e.metaKey || e.ctrlKey || e.altKey) return
+      if (t.closest('input, textarea, select, [contenteditable="true"]')) return
+      const k = e.key.toLowerCase()
+      if (e.key === 'ArrowLeft') navegar(-1)
+      else if (e.key === 'ArrowRight') navegar(1)
+      else if (k === 't') irHoy()
+      else if (k === 'm') cambiarVista('mes')
+      else if (k === 's') cambiarVista('semana')
+      else if (k === 'a') cambiarVista('agenda')
+      else if (k === 'n' || k === 'c') abrirCrear(sel)
+      else return
+      e.preventDefault()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isDesktop, hayModal, navegar, irHoy, cambiarVista, abrirCrear, sel])
+
+  /* ── Contexto del Coach: ±14 días, no 3 eventos sueltos ── */
+  useEffect(() => {
+    const ventana = filtrados
+      .filter(it => it.diaFin >= addDays(hoy, -1) && it.dia <= addDays(hoy, 14))
+      .sort((a, b) => a.dia.localeCompare(b.dia))
+      .slice(0, 40)
+      .map(it => ({ titulo: it.titulo, desde: it.dia, hasta: it.diaFin !== it.dia ? it.diaFin : undefined, capa: it.capa, hora: it.todoElDia ? undefined : it.hora_inicio.slice(0, 5), detalle: it.meta }))
+    try {
+      localStorage.setItem('kc_screen_context', JSON.stringify({
+        screen: 'calendario',
+        vista,
+        mesVisible: `${MESES[mes - 1]} ${anio}`,
+        diaSeleccionado: sel,
+        capasVisibles: capas,
+        proximos14Dias: ventana,
+        itemsNotaDiaSeleccionado: (notaItems[sel] ?? []).map(it => ({ texto: it.texto, plaza: it.plaza })).slice(0, 20),
+        diasConNotaEsteMes: Object.entries(notaItems).filter(([f, l]) => f >= primeroMes && f <= ultimoMes && l.length > 0).length,
+      }))
+    } catch {}
+    return () => { try { localStorage.removeItem('kc_screen_context') } catch {} }
+  }, [filtrados, notaItems, sel, vista, capas, mes, anio, hoy, primeroMes, ultimoMes])
+
+  /* ── Render ── */
+  const titulo = vista === 'semana'
+    ? `${etiquetaRango(diasSemana[0], diasSemana[diasSemana.length - 1])} ${diasSemana[diasSemana.length - 1].slice(0, 4)}`
+    : `${MESES[mes - 1]} ${anio}`
+  const hoyVisible = vista === 'semana' ? diasSemana.includes(hoy) : esMesActual && sel === hoy
+
+  const tabs = [
+    { id: 'mes' as const, label: 'Mes', icon: 'calendar_view_month' },
+    { id: 'semana' as const, label: diasPorVista === 7 ? 'Semana' : '3 días', icon: 'view_week' },
+    { id: 'agenda' as const, label: 'Agenda', icon: 'view_agenda' },
+  ]
+
+  const navBtn = (dir: number) => (
+    <button type="button" onClick={() => navegar(dir)} aria-label={dir < 0 ? 'Anterior' : 'Siguiente'} style={{
+      width: 36, height: 36, borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.1)', color: '#fff',
+      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    }}>
+      <span className="material-symbols-outlined" style={{ fontSize: 22 }}>{dir < 0 ? 'chevron_left' : 'chevron_right'}</span>
+    </button>
+  )
+  const btnGhost = (label: string, icon: string, onClick: () => void, soloIcono = false) => (
+    <button type="button" onClick={onClick} title={label} aria-label={label} style={{
+      display: 'flex', alignItems: 'center', gap: 5, height: 36, padding: soloIcono ? '0 9px' : '0 12px', borderRadius: 10,
+      border: 'none', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: 13, fontWeight: 600,
+      cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
+    }}>
+      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{icon}</span>
+      {!soloIcono && label}
+    </button>
+  )
+
+  const animado = (key: string, children: React.ReactNode, swipe: boolean) => (
+    <div style={{ position: 'relative', overflow: 'hidden' }}>
+      <AnimatePresence mode="popLayout" custom={navDir} initial={false}>
+        <motion.div
+          key={key}
+          custom={navDir}
+          variants={{
+            enter: (dir: number) => ({ opacity: 0, x: dir * 24 }),
+            center: { opacity: 1, x: 0 },
+            exit: (dir: number) => ({ opacity: 0, x: dir * -24 }),
+          }}
+          initial="enter" animate="center" exit="exit"
+          transition={{ duration: reducedMotion ? 0 : DURATION.enter, ease: EASE_OUT }}
+          drag={swipe ? 'x' : false}
+          dragConstraints={{ left: 0, right: 0 }}
+          dragElastic={0.35}
+          onDragEnd={(_e, info) => {
+            if (info.offset.x < -60) navegar(1)
+            else if (info.offset.x > 60) navegar(-1)
+          }}
         >
-          expand_more
-        </span>
-      </button>
-      {open && (
-        <div style={{ padding: '0 12px 12px', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {(Object.keys(TIPO_CONFIG) as TipoEvento[]).map(t => {
-            const cfg = TIPO_CONFIG[t]
-            return (
-              <span key={t} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text-2)' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 15, color: cfg.color }}>{cfg.icon}</span>
-                {cfg.label}
-              </span>
-            )
-          })}
+          {children}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  )
+
+  const panelDia = (
+    <DiaPanel
+      fecha={sel}
+      items={porDia[sel] ?? []}
+      notas={notaItems[sel] ?? []}
+      plazasCustom={plazasCustom}
+      puedePlanificar={catalogoEventos.length > 0}
+      onAbrir={setDetalle}
+      onCrear={() => abrirCrear(sel)}
+      onPlanificar={() => setPlanificar(true)}
+      onAgregarNota={async t => {
+        try { await agregarNotaItem(sel, t) } catch { setToast({ msg: 'No se pudo agregar la nota', variant: 'error' }) }
+      }}
+      onEliminarNota={id => eliminarNotaItem(id, sel)}
+      onEnviarNota={enviarNota}
+    />
+  )
+
+  return (
+    <div ref={rootRef} style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
+      {/* ── Header: una fila si entra, dos si no (mobile o Coach abierto) ── */}
+      <div style={{ background: 'var(--navy)', padding: `var(--header-top) 16px ${headerUnaFila ? 14 : 12}px` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {ancho >= 700 && <h1 style={{ color: '#fff', fontSize: 20, fontWeight: 700, margin: '0 10px 0 0' }}>Calendario</h1>}
+          {navBtn(-1)}
+          {navBtn(1)}
+          <div aria-live="polite" style={{
+            color: '#fff', fontSize: ancho >= 700 ? 17 : 18, fontWeight: 700, padding: '0 6px', whiteSpace: 'nowrap',
+            minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums',
+          }}>
+            {ancho < 700 ? <h1 style={{ all: 'inherit', margin: 0 }}>{titulo}</h1> : titulo}
+          </div>
+          {!hoyVisible && btnGhost('Hoy', 'today', irHoy, false)}
+          <div style={{ flex: 1 }} />
+          {headerUnaFila && <SegmentedTabs tabs={tabs} active={vista} onChange={cambiarVista} style={{ width: 330, flexShrink: 0 }} />}
+          {ancho >= 700 && btnGhost('Exportar a mi calendario (.ics)', 'ios_share', exportar, true)}
+          {ancho >= 700 && catalogoEventos.length > 0 && btnGhost('Planificar evento', 'celebration', () => setPlanificar(true), !headerUnaFila)}
+          <HeaderAction label={ancho >= 700 ? 'Nuevo evento' : 'Nuevo'} onClick={() => abrirCrear(sel)} style={{ height: 36 }} />
         </div>
-      )}
+        {!headerUnaFila && (
+          <SegmentedTabs tabs={tabs} active={vista} onChange={cambiarVista} style={{ marginTop: 12 }} />
+        )}
+      </div>
+
+      {/* Barra de recarga fina en vez de reemplazar la grilla por "Cargando..." */}
+      <div aria-hidden style={{ height: 2, background: refreshing ? 'var(--accent)' : 'transparent', opacity: refreshing ? 0.6 : 0, transition: 'opacity .2s' }} />
+
+      <div style={{ padding: ancho >= 700 ? '12px 20px 24px' : '10px 12px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <CapasChips activas={capas} onToggle={toggleCapa} disponibles={capasDisponibles} conteo={conteoCapas} />
+          </div>
+          {ancho < 700 && (
+            <button type="button" onClick={exportar} aria-label="Exportar a mi calendario" title="Exportar (.ics)" style={{
+              width: 36, height: 36, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)',
+              color: 'var(--text-2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>ios_share</span>
+            </button>
+          )}
+        </div>
+
+        {error && (
+          <div role="alert" style={{ marginBottom: 10, padding: '10px 12px', borderRadius: 10, background: 'var(--red-bg)', color: 'var(--red-fg)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>error</span>
+            <span style={{ flex: 1 }}>No se pudo cargar el calendario.</span>
+            <button type="button" onClick={() => refetch()} style={{ background: 'none', border: 'none', color: 'inherit', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Reintentar</button>
+          </div>
+        )}
+
+        {vacioMes && vista !== 'agenda' && (
+          <div style={{ marginBottom: 10, padding: '10px 12px', borderRadius: 12, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--accent)' }}>tips_and_updates</span>
+            <span style={{ flex: 1, fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.4 }}>
+              {MESES[mes - 1]} no tiene nada todavía. El calendario se llena solo con los menús de Carta, las entregas de Compras y las reservas — o agendá reuniones, inventarios y capacitaciones.
+            </span>
+            <button type="button" onClick={() => abrirCrear(sel)} style={{ background: 'none', border: 'none', color: 'var(--accent)', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+              Crear
+            </button>
+          </div>
+        )}
+
+        {loading ? (
+          <div aria-busy style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0,1fr))', gap: 4 }}>
+            {Array.from({ length: 35 }, (_, i) => (
+              <div key={i} className="skeleton-pulse" style={{ height: mesCompacto ? 50 : 110, borderRadius: 10, background: 'var(--surface)', border: '1px solid var(--border)' }} />
+            ))}
+          </div>
+        ) : vista === 'agenda' ? (
+          <div style={{ maxWidth: 780, margin: '0 auto' }}>
+            <AgendaLista
+              dias={diasAgenda}
+              porDia={porDia}
+              onAbrir={setDetalle}
+              onSeleccionar={f => { irAFecha(f); cambiarVista('mes') }}
+              onCrear={f => abrirCrear(f)}
+              onMesSiguiente={() => navegar(1)}
+            />
+          </div>
+        ) : (
+          <div style={panelLateral ? { display: 'flex', gap: 20, alignItems: 'flex-start' } : { display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {vista === 'mes'
+                ? animado(`${mes}-${anio}`, (
+                  <MesGrid
+                    grilla={grilla}
+                    mes={mes}
+                    porDia={porDia}
+                    notaItems={notaItems}
+                    seleccionado={sel}
+                    compacto={mesCompacto}
+                    onSeleccionar={irAFecha}
+                    onCrear={f => abrirCrear(f)}
+                    onAbrir={setDetalle}
+                    onMover={mover}
+                  />
+                ), !isDesktop)
+                : animado(diasSemana[0], (
+                  <SemanaGrid
+                    dias={diasSemana}
+                    porDia={porDia}
+                    seleccionado={sel}
+                    onSeleccionar={irAFecha}
+                    onCrear={abrirCrear}
+                    onAbrir={setDetalle}
+                  />
+                ), false)}
+              {isDesktop && (
+                <div style={{ marginTop: 10, fontSize: 11.5, color: 'var(--text-3)', display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                  <span><Kbd>←</Kbd> <Kbd>→</Kbd> navegar</span>
+                  <span><Kbd>T</Kbd> hoy</span>
+                  <span><Kbd>M</Kbd> <Kbd>S</Kbd> <Kbd>A</Kbd> vistas</span>
+                  <span><Kbd>N</Kbd> nuevo evento</span>
+                  {vista === 'mes' && <span>Doble clic en un día para crear · arrastrá un evento para moverlo</span>}
+                </div>
+              )}
+            </div>
+            <div style={panelLateral ? { width: 340, flexShrink: 0, position: 'sticky', top: 12 } : undefined}>
+              {panelDia}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <EventoDetalle
+        item={detalle}
+        onClose={() => setDetalle(null)}
+        onEditar={editar}
+        onDuplicar={duplicar}
+        onEliminar={eliminar}
+        onIr={href => { setDetalle(null); router.push(href) }}
+      />
+      <EventoForm
+        open={form.open}
+        editando={!!form.editandoId}
+        inicial={form.inicial}
+        proveedores={proveedores}
+        onClose={() => setForm(s => ({ ...s, open: false }))}
+        onGuardar={guardar}
+      />
+      <PlanificarEventoModal
+        open={planificar}
+        fecha={sel}
+        catalogo={catalogoEventos}
+        onClose={() => setPlanificar(false)}
+        onActivar={activarEvento}
+      />
+
+      {toast && <Toast msg={toast.msg} variant={toast.variant} action={toast.action} onDone={cerrarToast} />}
     </div>
   )
 }
 
-/* ─── Page ─── */
-
-export default function CalendarioPage() {
-  const router = useRouter()
-  const now = new Date()
-  const [currentMonth, setCurrentMonth] = useState(now.getMonth() + 1)
-  const [currentYear, setCurrentYear] = useState(now.getFullYear())
-  const [selectedDate, setSelectedDate] = useState<string>(today())
-  const [view, setView] = useState<'mes' | 'semana'>('mes')
-  const [showForm, setShowForm] = useState(false)
-  const [editEvento, setEditEvento] = useState<EventoCalendario | null>(null)
-  // Dirección de la última navegación (mes o semana) — alimenta el shared
-  // axis: +1 el contenido nuevo entra desde la derecha, -1 desde la izquierda.
-  const [navDir, setNavDir] = useState(1)
-  const reducedMotion = useReducedMotion()
-
-  const {
-    eventos, proveedores, notaItems, loading,
-    fetchEventos, crearEvento, actualizarEvento, eliminarEvento,
-    agregarNotaItem, eliminarNotaItem, asignarPlazaNotaItem,
-  } = useCalendario()
-  const { agregarTarea } = useTareas({ soloEscritura: true })
-  // Solo eventos: un menú fijo se activa por vigencia en el mise, no por
-  // fecha puntual (adenda 2026-08-20, "una sola puerta de activación" —
-  // ver PLAN-MENUS-MISE-2026-08.md). Este picker crea tareas directo a
-  // Producción para una fecha exacta, que es justo lo que un evento necesita.
-  const { menus: todosLosMenus } = useMenus()
-  const catalogoMenus = useMemo(() => todosLosMenus.filter(m => m.tipo === 'evento'), [todosLosMenus])
-  const RESTAURANTE_ID = useRestauranteId()
-  const isDesktop = useIsDesktop()
-
-  /* ── Planificar menú: activa un Menú del catálogo para un rango de días ── */
-  const [showMenuPlan, setShowMenuPlan] = useState(false)
-  const [menuPlanMenuId, setMenuPlanMenuId] = useState('')
-  const [menuPlanDesde, setMenuPlanDesde] = useState('')
-  const [menuPlanHasta, setMenuPlanHasta] = useState('')
-  const [activandoMenu, setActivandoMenu] = useState(false)
-  const [toast, setToast] = useState('')
-
-  const showToast = (msg: string) => {
-    setToast(msg)
-    setTimeout(() => setToast(''), 3000)
-  }
-
-  const openMenuPlan = () => {
-    setMenuPlanMenuId('')
-    setMenuPlanDesde(selectedDate)
-    setMenuPlanHasta(selectedDate)
-    setShowMenuPlan(true)
-  }
-
-  const handleActivarMenuRango = async () => {
-    if (!RESTAURANTE_ID || !menuPlanMenuId) return
-    const menu = catalogoMenus.find(m => m.id === menuPlanMenuId)
-    if (!menu) return
-    if (menu.preparaciones.length === 0) { showToast('Ese menú no tiene preparaciones cargadas'); return }
-    if (menuPlanHasta < menuPlanDesde) { showToast('La fecha "hasta" no puede ser anterior a "desde"'); return }
-    setActivandoMenu(true)
-    try {
-      const supabase = createClient()
-      const fechas = rangoFechas(menuPlanDesde, menuPlanHasta)
-      const res = await activarMenuParaFechas(supabase, RESTAURANTE_ID, menu, fechas)
-      setShowMenuPlan(false)
-      fetchEventos(currentMonth, currentYear)
-      if (res.diasActivados === 0) showToast('Ese menú ya estaba activo en esas fechas')
-      else showToast(`Menú activado · ${resumenActivacion(res)}${res.diasYaActivos > 0 ? ` (${res.diasYaActivos} ya activos)` : ''}`)
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al activar el menú'
-      showToast('Error: ' + msg)
-    } finally {
-      setActivandoMenu(false)
-    }
-  }
-
-  /* ── Notas del día seleccionado — ítems individuales, enviables a Producción ── */
-  const { plazasCustom } = usePlazasCustom()
-  const [nuevoItemTexto, setNuevoItemTexto] = useState('')
-  const [agregandoItem, setAgregandoItem] = useState(false)
-  const [eligiendoPlazaId, setEligiendoPlazaId] = useState<string | null>(null)
-  const [enviandoItemId, setEnviandoItemId] = useState<string | null>(null)
-
-  const itemsDelDia = notaItems[selectedDate] ?? []
-
-  const handleAgregarItem = async () => {
-    const texto = nuevoItemTexto.trim()
-    if (!texto) return
-    setAgregandoItem(true)
-    try {
-      await agregarNotaItem(selectedDate, texto)
-      setNuevoItemTexto('')
-    } catch {
-      showToast('No se pudo agregar el ítem')
-    } finally {
-      setAgregandoItem(false)
-    }
-  }
-
-  const handleEnviarAPlaza = async (item: NotaItemCalendario, plaza: Plaza) => {
-    setEligiendoPlazaId(null)
-    setEnviandoItemId(item.id)
-    try {
-      const tareaId = await agregarTarea({
-        titulo: item.texto.slice(0, 120),
-        descripcion: `Desde nota del calendario (${selectedDate})`,
-        status: 'pendiente',
-        estado: 'pendiente',
-        prioridad: 'media',
-        categoria: 'general',
-        modo: 'carta',
-        seccion: 'general',
-        plaza,
-        turno_fecha: selectedDate,
-        fecha_limite: selectedDate,
-      })
-      await asignarPlazaNotaItem(item.id, selectedDate, plaza, tareaId)
-      showToast(`Enviado a ${plazaLabel(plaza, plazasCustom)}`)
-    } catch {
-      showToast('No se pudo enviar a Producción')
-    } finally {
-      setEnviandoItemId(null)
-    }
-  }
-
-  /* Fetch on month change */
-  useEffect(() => {
-    fetchEventos(currentMonth, currentYear)
-  }, [currentMonth, currentYear, fetchEventos])
-
-  /* Navigation */
-  const goMonth = (dir: number) => {
-    let m = currentMonth + dir
-    let y = currentYear
-    if (m < 1) { m = 12; y-- }
-    if (m > 12) { m = 1; y++ }
-    setNavDir(dir)
-    setCurrentMonth(m)
-    setCurrentYear(y)
-  }
-
-  const goWeek = (dir: number) => {
-    setNavDir(dir)
-    const d = new Date(selectedDate + 'T12:00:00')
-    d.setDate(d.getDate() + dir * 7)
-    setSelectedDate(toDateStr(d.getFullYear(), d.getMonth() + 1, d.getDate()))
-  }
-
-  const goHoy = () => {
-    const n = new Date()
-    setCurrentMonth(n.getMonth() + 1)
-    setCurrentYear(n.getFullYear())
-    setSelectedDate(today())
-  }
-
-  const esMesActual = currentMonth === now.getMonth() + 1 && currentYear === now.getFullYear()
-
-  /* Events by date map */
-  const eventosByDate = useMemo(() => {
-    const map: Record<string, EventoCalendario[]> = {}
-    for (const ev of eventos) {
-      const key = ev.fecha_inicio
-      if (!map[key]) map[key] = []
-      map[key].push(ev)
-    }
-    return map
-  }, [eventos])
-
-  const grid = useMemo(() => buildGrid(currentMonth, currentYear), [currentMonth, currentYear])
-
-  useEffect(() => {
-    const hoyStr = today()
-    const eventosHoy = (eventosByDate[hoyStr] ?? []).length
-    const eventosProximos = Object.entries(eventosByDate)
-      .filter(([k]) => k >= hoyStr)
-      .flatMap(([, evs]) => evs)
-      .slice(0, 3)
-      .map(ev => ({ titulo: ev.titulo, fecha: ev.fecha_inicio }))
-    const diasConNota = Object.values(notaItems).filter(items => items.length > 0).length
-    const itemsSeleccionado = notaItems[selectedDate] ?? []
-    localStorage.setItem('kc_screen_context', JSON.stringify({
-      screen: 'calendario',
-      totalEventos: eventos.length,
-      eventosHoy,
-      eventosProximos,
-      diaSeleccionado: selectedDate,
-      itemsNotaDiaSeleccionado: itemsSeleccionado.map(it => ({ texto: it.texto, plaza: it.plaza })).slice(0, 20),
-      diasConNotaEsteMes: diasConNota,
-    }))
-    return () => localStorage.removeItem('kc_screen_context')
-  }, [eventos, eventosByDate, notaItems, selectedDate])
-  const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate])
-  const selectedEvents = eventosByDate[selectedDate] ?? []
-
-  /* Form state */
-  const [formData, setFormData] = useState({
-    titulo: '',
-    tipo: 'otro' as TipoEvento,
-    fecha_inicio: today(),
-    hora_inicio: '08:00',
-    hora_fin: '09:00',
-    descripcion: '',
-    proveedor_id: '',
-    recurrente: false,
-    frecuencia: 'semanal',
-  })
-
-  const openNewForm = () => {
-    setEditEvento(null)
-    setFormData({
-      titulo: '',
-      tipo: 'otro',
-      fecha_inicio: selectedDate,
-      hora_inicio: '08:00',
-      hora_fin: '09:00',
-      descripcion: '',
-      proveedor_id: '',
-      recurrente: false,
-      frecuencia: 'semanal',
-    })
-    setShowForm(true)
-  }
-
-  /* Click en un día vacío de la grilla — crear directo, sin pasar por el FAB */
-  const openNewFormFor = (dateStr: string) => {
-    setSelectedDate(dateStr)
-    setEditEvento(null)
-    setFormData({
-      titulo: '',
-      tipo: 'otro',
-      fecha_inicio: dateStr,
-      hora_inicio: '08:00',
-      hora_fin: '09:00',
-      descripcion: '',
-      proveedor_id: '',
-      recurrente: false,
-      frecuencia: 'semanal',
-    })
-    setShowForm(true)
-  }
-
-  const openEditForm = (ev: EventoCalendario) => {
-    if (ev._fromPedido) return
-    if (ev._fromMenu) { router.push('/operaciones?tab=planificacion'); return }
-    if (ev._fromReserva) { router.push('/reservas'); return }
-    setEditEvento(ev)
-    setFormData({
-      titulo: ev.titulo,
-      tipo: ev.tipo,
-      fecha_inicio: ev.fecha_inicio,
-      hora_inicio: ev.hora_inicio?.slice(0, 5) ?? '08:00',
-      hora_fin: ev.hora_fin?.slice(0, 5) ?? '09:00',
-      descripcion: ev.descripcion ?? '',
-      proveedor_id: ev.proveedor_id ?? '',
-      recurrente: ev.recurrente,
-      frecuencia: ev.frecuencia ?? 'semanal',
-    })
-    setShowForm(true)
-  }
-
-  const handleSave = async () => {
-    const payload: any = {
-      titulo: formData.titulo,
-      tipo: formData.tipo,
-      fecha_inicio: formData.fecha_inicio,
-      fecha_fin: null,
-      hora_inicio: formData.hora_inicio + ':00',
-      hora_fin: formData.hora_fin + ':00',
-      descripcion: formData.descripcion || null,
-      recurrente: formData.recurrente,
-      frecuencia: formData.recurrente ? formData.frecuencia : null,
-      color: TIPO_CONFIG[formData.tipo].color,
-      proveedor_id: formData.tipo === 'entrega_proveedor' && formData.proveedor_id ? formData.proveedor_id : null,
-      usuario_id: null,
-    }
-
-    try {
-      if (editEvento) {
-        await actualizarEvento(editEvento.id, payload)
-      } else {
-        await crearEvento(payload)
-      }
-      setShowForm(false)
-      fetchEventos(currentMonth, currentYear)
-    } catch (e) {
-      console.error(e)
-    }
-  }
-
-  const handleDelete = async () => {
-    if (!editEvento) return
-    try {
-      await eliminarEvento(editEvento.id)
-      setShowForm(false)
-      fetchEventos(currentMonth, currentYear)
-    } catch (e) {
-      console.error(e)
-    }
-  }
-
-  /* ─── Render: Form overlay ─── */
-  if (showForm) {
-    const formFields = (
-      <>
-          {/* Título */}
-          <div>
-            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>Título</label>
-            <input
-              style={fieldStyle}
-              placeholder="Nombre del evento"
-              value={formData.titulo}
-              onChange={e => setFormData(p => ({ ...p, titulo: e.target.value }))}
-            />
-          </div>
-
-          {/* Tipo pills */}
-          <div>
-            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>Tipo</label>
-            <div className="hide-scrollbar" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
-              {(Object.keys(TIPO_CONFIG) as TipoEvento[]).filter(t => t !== 'reservas_dia').map(t => {
-                const cfg = TIPO_CONFIG[t]
-                const sel = formData.tipo === t
-                return (
-                  <button
-                    key={t}
-                    onClick={() => setFormData(p => ({ ...p, tipo: t }))}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      padding: '8px 14px', borderRadius: 20,
-                      border: sel ? `2px solid ${cfg.color}` : '1px solid var(--border)',
-                      background: sel ? cfg.color + '18' : 'var(--surface)',
-                      color: sel ? cfg.color : 'var(--text-2)',
-                      fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{cfg.icon}</span>
-                    {cfg.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Fecha */}
-          <div>
-            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>Fecha inicio</label>
-            <input
-              type="date"
-              style={fieldStyle}
-              value={formData.fecha_inicio}
-              onChange={e => setFormData(p => ({ ...p, fecha_inicio: e.target.value }))}
-            />
-          </div>
-
-          {/* Hora inicio / fin */}
-          <div style={{ display: 'flex', gap: 12 }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>Hora inicio</label>
-              <input
-                type="time"
-                style={fieldStyle}
-                value={formData.hora_inicio}
-                onChange={e => setFormData(p => ({ ...p, hora_inicio: e.target.value }))}
-              />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>Hora fin</label>
-              <input
-                type="time"
-                style={fieldStyle}
-                value={formData.hora_fin}
-                onChange={e => setFormData(p => ({ ...p, hora_fin: e.target.value }))}
-              />
-            </div>
-          </div>
-
-          {/* Descripción */}
-          <div>
-            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>Descripción</label>
-            <textarea
-              style={{ ...fieldStyle, minHeight: 80, resize: 'vertical' }}
-              placeholder="Notas adicionales..."
-              value={formData.descripcion}
-              onChange={e => setFormData(p => ({ ...p, descripcion: e.target.value }))}
-            />
-          </div>
-
-          {/* Proveedor dropdown (only if entrega_proveedor) */}
-          {formData.tipo === 'entrega_proveedor' && (
-            <div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>Proveedor</label>
-              <select
-                style={fieldStyle}
-                value={formData.proveedor_id}
-                onChange={e => setFormData(p => ({ ...p, proveedor_id: e.target.value }))}
-              >
-                <option value="">Seleccionar proveedor</option>
-                {proveedores.map(pv => (
-                  <option key={pv.id} value={pv.id}>{pv.nombre}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Recurrente */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>Recurrente</label>
-            <button
-              onClick={() => setFormData(p => ({ ...p, recurrente: !p.recurrente }))}
-              style={{
-                width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
-                background: formData.recurrente ? 'var(--navy)' : 'var(--border)',
-                position: 'relative', transition: 'background .2s',
-              }}
-            >
-              <div style={{
-                width: 18, height: 18, borderRadius: 9, background: '#fff',
-                position: 'absolute', top: 3,
-                left: formData.recurrente ? 23 : 3,
-                transition: 'left .2s',
-              }} />
-            </button>
-          </div>
-
-          {formData.recurrente && (
-            <div style={{ display: 'flex', gap: 8 }}>
-              {['diaria', 'semanal', 'mensual'].map(f => (
-                <button
-                  key={f}
-                  onClick={() => setFormData(p => ({ ...p, frecuencia: f }))}
-                  style={{
-                    flex: 1, padding: '10px 0', borderRadius: 10, fontSize: 13, fontWeight: 600,
-                    border: formData.frecuencia === f ? '2px solid var(--navy)' : '1px solid var(--border)',
-                    background: formData.frecuencia === f ? 'var(--navy)' : 'var(--surface)',
-                    color: formData.frecuencia === f ? '#fff' : 'var(--text-2)',
-                    cursor: 'pointer', textTransform: 'capitalize',
-                  }}
-                >
-                  {f.charAt(0).toUpperCase() + f.slice(1)}
-                </button>
-              ))}
-            </div>
-          )}
-      </>
-    )
-
-    return (
-      <Modal open={showForm} onClose={() => setShowForm(false)} maxWidth={560}>
-        <div style={{ padding: isDesktop ? 24 : 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>
-              {editEvento ? 'Editar evento' : 'Nuevo evento'}
-            </h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              {editEvento && (
-                <button onClick={handleDelete} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', padding: 4 }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 22 }}>delete</span>
-                </button>
-              )}
-              <button onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', display: 'flex', padding: 4 }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 22 }}>close</span>
-              </button>
-            </div>
-          </div>
-          {formFields}
-          <div style={{ display: 'flex', gap: 12 }}>
-            <button
-              onClick={() => setShowForm(false)}
-              style={{
-                flex: 1, padding: '12px 20px', borderRadius: 12, border: '1px solid var(--border)',
-                background: 'var(--surface)', color: 'var(--text-2)', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-              }}
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={!formData.titulo.trim()}
-              style={{
-                ...btnPrimary,
-                flex: 1,
-                opacity: formData.titulo.trim() ? 1 : 0.5,
-              }}
-            >
-              Guardar
-            </button>
-          </div>
-        </div>
-      </Modal>
-    )
-  }
-
-  /* ─── Render: Planificar menú (rango de días) ─── */
-  if (showMenuPlan) {
-    const menuSeleccionado = catalogoMenus.find(m => m.id === menuPlanMenuId) ?? null
-    const cantidadDias = menuPlanDesde && menuPlanHasta && menuPlanHasta >= menuPlanDesde
-      ? rangoFechas(menuPlanDesde, menuPlanHasta).length
-      : 0
-
-    const menuPlanFields = (
-      <>
-        <div style={{ display: 'flex', gap: 12 }}>
-          <div style={{ flex: 1 }}>
-            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>Desde</label>
-            <input
-              type="date"
-              style={fieldStyle}
-              value={menuPlanDesde}
-              onChange={e => setMenuPlanDesde(e.target.value)}
-            />
-          </div>
-          <div style={{ flex: 1 }}>
-            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>Hasta</label>
-            <input
-              type="date"
-              style={fieldStyle}
-              value={menuPlanHasta}
-              onChange={e => setMenuPlanHasta(e.target.value)}
-            />
-          </div>
-        </div>
-
-        {cantidadDias > 0 && (
-          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
-            {cantidadDias === 1 ? 'Se activa 1 día' : `Se activa en ${cantidadDias} días`}
-          </div>
-        )}
-
-        <div>
-          <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6, display: 'block' }}>Evento</label>
-          {catalogoMenus.length === 0 ? (
-            <div style={{ ...cardStyle, padding: 20, textAlign: 'center' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 28, color: 'var(--text-3)' }}>menu_book</span>
-              <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '6px 0 0' }}>No hay eventos en el catálogo. Armá uno en Carta → Menús.</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {catalogoMenus.map((menu: MenuConPreparaciones) => {
-                const sel = menuPlanMenuId === menu.id
-                return (
-                  <button
-                    key={menu.id}
-                    onClick={() => setMenuPlanMenuId(menu.id)}
-                    style={{
-                      textAlign: 'left', background: sel ? 'rgba(67,97,160,0.08)' : 'var(--surface)',
-                      border: sel ? '2px solid var(--navy)' : '1px solid var(--border)',
-                      borderRadius: 12, padding: '10px 14px', cursor: 'pointer', fontFamily: 'inherit',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{
-                        fontSize: 9, fontWeight: 800, padding: '2px 8px', borderRadius: 99, textTransform: 'uppercase', letterSpacing: '.04em',
-                        background: menu.tipo === 'evento' ? 'rgba(139,92,246,.14)' : 'rgba(14,165,233,.14)',
-                        color: menu.tipo === 'evento' ? '#8b5cf6' : '#0ea5e9',
-                      }}>
-                        {menu.tipo === 'evento' ? 'Evento' : 'Fijo'}
-                      </span>
-                      <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{menu.nombre}</span>
-                      <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>{menu.preparaciones.length} prep.</span>
-                    </div>
-                    {menu.descripcion && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>{menu.descripcion}</div>}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-          <button
-            onClick={() => setShowMenuPlan(false)}
-            style={{
-              flex: 1, padding: '12px 20px', borderRadius: 12, border: '1px solid var(--border)',
-              background: 'var(--surface)', color: 'var(--text-2)', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-            }}
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleActivarMenuRango}
-            disabled={!menuSeleccionado || activandoMenu || cantidadDias === 0}
-            style={{
-              ...btnPrimary,
-              flex: 1,
-              opacity: (!menuSeleccionado || activandoMenu || cantidadDias === 0) ? 0.5 : 1,
-            }}
-          >
-            {activandoMenu ? 'Activando...' : 'Activar menú'}
-          </button>
-        </div>
-      </>
-    )
-
-    return (
-      <Modal open={showMenuPlan} onClose={() => setShowMenuPlan(false)} maxWidth={560}>
-        <div style={{ padding: isDesktop ? 24 : 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>Planificar evento</h2>
-              <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>Activa un evento del catálogo para un rango de días</p>
-            </div>
-            <button onClick={() => setShowMenuPlan(false)} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', display: 'flex', padding: 4, flexShrink: 0 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 22 }}>close</span>
-            </button>
-          </div>
-          {menuPlanFields}
-        </div>
-      </Modal>
-    )
-  }
-
-  /* ─── Render: Main calendar ─── */
+function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ minHeight: '100dvh', background: 'var(--bg)' }}>
-      {/* ── Header ── */}
-      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <h1 style={{ color: '#fff', fontSize: 20, fontWeight: 700, margin: 0 }}>Calendario</h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button onClick={openMenuPlan} title="Planificar evento" style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 10, padding: isDesktop ? '8px 14px' : '8px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>celebration</span>
-              {isDesktop && 'Planificar evento'}
-            </button>
-            <button onClick={openNewForm} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff', borderRadius: 10, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
-              Nuevo evento
-            </button>
-          </div>
-        </div>
-
-        {/* Month nav */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <button onClick={() => goMonth(-1)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 24 }}>chevron_left</span>
-            </button>
-            <span style={{ color: '#fff', fontSize: 16, fontWeight: 600 }}>
-              {MESES[currentMonth - 1]} {currentYear}
-            </span>
-            <button onClick={() => goMonth(1)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 24 }}>chevron_right</span>
-            </button>
-          </div>
-          {!esMesActual && (
-            <button
-              onClick={goHoy}
-              style={{
-                background: 'rgba(255,255,255,0.15)', border: 'none', color: '#fff',
-                borderRadius: 8, padding: '5px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-              }}
-            >
-              Hoy
-            </button>
-          )}
-        </div>
-
-        {/* View toggle pills */}
-        <div style={{ display: 'flex', gap: 0, marginTop: 12, background: 'rgba(255,255,255,0.1)', borderRadius: 10, overflow: 'hidden' }}>
-          {(['mes', 'semana'] as const).map(v => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              style={{
-                flex: 1, padding: '8px 0', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                background: view === v ? 'rgba(255,255,255,0.25)' : 'transparent',
-                color: '#fff',
-              }}
-            >
-              {v === 'mes' ? 'Mes' : 'Semana'}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Content ── */}
-      <div style={{ padding: 16 }}>
-        {loading && (
-          <div style={{ textAlign: 'center', padding: 32, color: 'var(--text-3)', fontSize: 13 }}>
-            Cargando...
-          </div>
-        )}
-
-        {!loading && view === 'mes' && (() => {
-          const maxPills = isDesktop ? 3 : 2
-
-          const plazasDisponibles = todasLasPlazas(plazasCustom)
-
-          const notasPanel = (
-            <div style={{ ...cardStyle, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>edit_note</span>
-                Notas del día
-              </div>
-
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  value={nuevoItemTexto}
-                  onChange={e => setNuevoItemTexto(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAgregarItem() } }}
-                  placeholder="Agregar un ítem — pendiente, tema de reunión..."
-                  style={{
-                    flex: 1, padding: '9px 12px', borderRadius: 10, border: '1px solid var(--border)',
-                    background: 'var(--bg)', color: 'var(--text-1)', fontSize: 13, outline: 'none', fontFamily: 'inherit',
-                  }}
-                />
-                <button
-                  onClick={handleAgregarItem}
-                  disabled={!nuevoItemTexto.trim() || agregandoItem}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    width: 38, borderRadius: 10, border: 'none',
-                    background: nuevoItemTexto.trim() ? 'var(--navy)' : 'var(--border)',
-                    color: '#fff', cursor: nuevoItemTexto.trim() ? 'pointer' : 'default', flexShrink: 0,
-                  }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: 20 }}>add</span>
-                </button>
-              </div>
-
-              {itemsDelDia.length === 0 ? (
-                <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>Sin ítems este día todavía.</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  {itemsDelDia.map(item => {
-                    const color = item.plaza ? plazaColor(item.plaza as Plaza, plazasCustom) : null
-                    return (
-                      <div key={item.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 16, color: item.plaza ? '#22c55e' : 'var(--text-3)', marginTop: 2, flexShrink: 0 }}>
-                          {item.plaza ? 'check_circle' : 'radio_button_unchecked'}
-                        </span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13, color: 'var(--text-1)' }}>{item.texto}</div>
-
-                          {item.plaza ? (
-                            <span style={{
-                              display: 'inline-block', marginTop: 4, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 8,
-                              background: color + '18', color: color as string,
-                            }}>
-                              Enviado a {plazaLabel(item.plaza as Plaza, plazasCustom)}
-                            </span>
-                          ) : eligiendoPlazaId === item.id ? (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-                              {plazasDisponibles.map(p => {
-                                const c = plazaColor(p, plazasCustom)
-                                return (
-                                  <button
-                                    key={p}
-                                    onClick={() => handleEnviarAPlaza(item, p)}
-                                    style={{
-                                      padding: '4px 10px', borderRadius: 99, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                                      fontSize: 11, fontWeight: 700, background: c + '18', color: c,
-                                    }}
-                                  >
-                                    {plazaLabel(p, plazasCustom)}
-                                  </button>
-                                )
-                              })}
-                              <button
-                                onClick={() => setEligiendoPlazaId(null)}
-                                style={{
-                                  padding: '4px 10px', borderRadius: 99, border: '1px solid var(--border)', cursor: 'pointer',
-                                  fontFamily: 'inherit', fontSize: 11, fontWeight: 700, background: 'none', color: 'var(--text-3)',
-                                }}
-                              >
-                                Cancelar
-                              </button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setEligiendoPlazaId(item.id)}
-                              disabled={enviandoItemId === item.id}
-                              style={{
-                                marginTop: 4, display: 'flex', alignItems: 'center', gap: 4,
-                                background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                                fontSize: 11, fontWeight: 600, color: 'var(--accent)', fontFamily: 'inherit',
-                              }}
-                            >
-                              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>restaurant_menu</span>
-                              {enviandoItemId === item.id ? 'Enviando...' : 'Enviar a Producción'}
-                            </button>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => eliminarNotaItem(item.id, selectedDate)}
-                          title="Eliminar ítem"
-                          style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', display: 'flex', padding: 2, flexShrink: 0 }}
-                        >
-                          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )
-
-          const eventsList = (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {selectedEvents.length === 0 && (
-                <div style={{ ...cardStyle, padding: 24, textAlign: 'center' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 32, color: 'var(--text-3)' }}>event_available</span>
-                  <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '8px 0 0' }}>Sin eventos este día</p>
-                </div>
-              )}
-              {selectedEvents.map(ev => {
-                const cfg = TIPO_CONFIG[ev.tipo] ?? TIPO_CONFIG.otro
-                return (
-                  <button
-                    key={ev.id}
-                    onClick={() => openEditForm(ev)}
-                    style={{
-                      ...cardStyle,
-                      padding: '12px 14px',
-                      display: 'flex', alignItems: 'center', gap: 12,
-                      borderLeft: `4px solid ${ev.color || cfg.color}`,
-                      cursor: ev._fromPedido ? 'default' : 'pointer',
-                      textAlign: 'left', width: '100%',
-                    }}
-                  >
-                    <div style={{
-                      width: 38, height: 38, borderRadius: 10,
-                      background: (ev.color || cfg.color) + '18',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                    }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 20, color: ev.color || cfg.color }}>
-                        {ev._fromPedido ? 'local_shipping' : ev._fromMenu ? 'restaurant_menu' : cfg.icon}
-                      </span>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {ev.titulo}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                          {ev.hora_inicio?.slice(0, 5)} - {ev.hora_fin?.slice(0, 5)}
-                        </span>
-                        <span style={{
-                          fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 8,
-                          background: (ev.color || cfg.color) + '18',
-                          color: ev.color || cfg.color,
-                        }}>
-                          {cfg.label}
-                        </span>
-                      </div>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-          )
-
-          const diaHeading = (
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)', textTransform: 'capitalize' }}>
-              {new Date(selectedDate + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}
-            </div>
-          )
-
-          return (
-            <div style={isDesktop ? { display: 'flex', gap: 20, alignItems: 'flex-start' } : undefined}>
-              <div style={{ flex: isDesktop ? 2 : undefined, minWidth: 0 }}>
-                {/* Day headers */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 3, marginBottom: 4 }}>
-                  {DIAS_SEMANA.map((d, i) => (
-                    <div key={i} style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text-3)', padding: '4px 0' }}>
-                      {d}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Calendar grid — shared axis: el mes sale para el lado del que entra */}
-                <div style={{ position: 'relative', overflow: 'hidden' }}>
-                <AnimatePresence mode="popLayout" custom={navDir} initial={false}>
-                <motion.div
-                  key={`${currentMonth}-${currentYear}`}
-                  custom={navDir}
-                  variants={{
-                    enter: (dir: number) => ({ opacity: 0, x: dir * 24 }),
-                    center: { opacity: 1, x: 0 },
-                    exit: (dir: number) => ({ opacity: 0, x: dir * -24 }),
-                  }}
-                  initial="enter"
-                  animate="center"
-                  exit="exit"
-                  transition={{ duration: reducedMotion ? 0 : DURATION.enter, ease: EASE_OUT }}
-                  drag={!isDesktop ? 'x' : false}
-                  dragConstraints={{ left: 0, right: 0 }}
-                  dragElastic={0.35}
-                  onDragEnd={(_e, info) => {
-                    if (info.offset.x < -60) goMonth(1)
-                    else if (info.offset.x > 60) goMonth(-1)
-                  }}
-                  style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 3 }}
-                >
-                  {grid.map((cell, i) => {
-                    const dateStr = toDateStr(cell.year, cell.month, cell.day)
-                    const isToday = dateStr === today()
-                    const isSelected = dateStr === selectedDate
-                    const dayEvents = eventosByDate[dateStr] ?? []
-                    const tieneNota = (notaItems[dateStr]?.length ?? 0) > 0
-
-                    return (
-                      <div key={i} style={{ position: 'relative' }}>
-                        <button
-                          onClick={() => setSelectedDate(dateStr)}
-                          onMouseEnter={e => { e.currentTarget.style.boxShadow = 'var(--shadow-2)' }}
-                          onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none' }}
-                          style={{
-                            width: '100%',
-                            background: isSelected ? 'rgba(67,97,160,0.12)' : 'transparent',
-                            border: isSelected ? '2px solid var(--navy)' : '1px solid var(--border)',
-                            borderRadius: 10,
-                            padding: isSelected ? '3px 5px 5px' : '4px 6px 6px',
-                            cursor: 'pointer',
-                            display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 3,
-                            minHeight: isDesktop ? 118 : 64,
-                            textAlign: 'left',
-                            transition: 'box-shadow .12s ease-out',
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span style={{
-                              fontSize: 13,
-                              fontWeight: isToday ? 700 : 500,
-                              color: !cell.inMonth ? 'var(--text-3)' : 'var(--text-1)',
-                              width: 22, height: 22, lineHeight: '22px', textAlign: 'center',
-                              borderRadius: 11,
-                              background: isToday ? 'var(--navy)' : 'transparent',
-                              ...(isToday ? { color: '#fff' } : {}),
-                            }}>
-                              {cell.day}
-                            </span>
-                            {tieneNota && (
-                              <span className="material-symbols-outlined" style={{ fontSize: 13, color: 'var(--text-3)' }}>edit_note</span>
-                            )}
-                          </div>
-
-                          {dayEvents.length > 0 && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                              {dayEvents.slice(0, maxPills).map((ev, j) => {
-                                const color = ev.color || TIPO_CONFIG[ev.tipo]?.color || '#6b7280'
-                                return (
-                                  <div
-                                    key={j}
-                                    style={{
-                                      fontSize: 10, fontWeight: 600, padding: '1px 5px', borderRadius: 4,
-                                      background: color + '20', color, borderLeft: `3px solid ${color}`,
-                                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                                    }}
-                                  >
-                                    {ev.titulo}
-                                  </div>
-                                )
-                              })}
-                              {dayEvents.length > maxPills && (
-                                <span style={{ fontSize: 10, color: 'var(--text-3)', paddingLeft: 5 }}>
-                                  +{dayEvents.length - maxPills} más
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </button>
-
-                        <button
-                          onClick={(e) => { e.stopPropagation(); openNewFormFor(dateStr) }}
-                          title="Nuevo evento este día"
-                          style={{
-                            position: 'absolute', bottom: 3, right: 3,
-                            width: 18, height: 18, borderRadius: 9, border: 'none',
-                            background: 'var(--surface)', color: 'var(--text-3)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
-                          }}
-                        >
-                          <span className="material-symbols-outlined" style={{ fontSize: 13 }}>add</span>
-                        </button>
-                      </div>
-                    )
-                  })}
-                </motion.div>
-                </AnimatePresence>
-                </div>
-
-                {/* Leyenda de tipos — colapsable */}
-                <CalendarioLeyenda />
-
-                {!isDesktop && (
-                  <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {diaHeading}
-                    {notasPanel}
-                    {eventsList}
-                  </div>
-                )}
-              </div>
-
-              {isDesktop && (
-                <div style={{ flex: 1, minWidth: 300, display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {diaHeading}
-                  {notasPanel}
-                  {eventsList}
-                </div>
-              )}
-            </div>
-          )
-        })()}
-
-        {/* ── Weekly view ── */}
-        {!loading && view === 'semana' && (
-          <div>
-            {/* Nav de semana */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 6 }}>
-              <button onClick={() => goWeek(-1)} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', display: 'flex' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 22 }}>chevron_left</span>
-              </button>
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)' }}>
-                {weekDates[0].dayNum} — {weekDates[6].dayNum} de {MESES[currentMonth - 1]}
-              </span>
-              <button onClick={() => goWeek(1)} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer', display: 'flex' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 22 }}>chevron_right</span>
-              </button>
-            </div>
-
-            <div style={{ position: 'relative', overflow: 'hidden' }}>
-            <AnimatePresence mode="popLayout" custom={navDir} initial={false}>
-            <motion.div
-              key={weekDates[0].dateStr}
-              custom={navDir}
-              variants={{
-                enter: (dir: number) => ({ opacity: 0, x: dir * 24 }),
-                center: { opacity: 1, x: 0 },
-                exit: (dir: number) => ({ opacity: 0, x: dir * -24 }),
-              }}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ duration: reducedMotion ? 0 : DURATION.enter, ease: EASE_OUT }}
-              drag={!isDesktop ? 'x' : false}
-              dragConstraints={{ left: 0, right: 0 }}
-              dragElastic={0.35}
-              onDragEnd={(_e, info) => {
-                if (info.offset.x < -60) goWeek(1)
-                else if (info.offset.x > 60) goWeek(-1)
-              }}
-            >
-            {/* Day headers */}
-            <div style={{ display: 'grid', gridTemplateColumns: '48px repeat(7,1fr)', gap: 0, marginBottom: 8 }}>
-              <div />
-              {weekDates.map(wd => {
-                const isToday_ = wd.dateStr === today()
-                const isSel = wd.dateStr === selectedDate
-                return (
-                  <button
-                    key={wd.dateStr}
-                    onClick={() => setSelectedDate(wd.dateStr)}
-                    style={{
-                      background: 'none', border: 'none', cursor: 'pointer',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '4px 0',
-                    }}
-                  >
-                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)' }}>{wd.dayName}</span>
-                    <span style={{
-                      fontSize: 14, fontWeight: isToday_ ? 700 : 500,
-                      width: 28, height: 28, lineHeight: '28px', textAlign: 'center',
-                      borderRadius: 14,
-                      background: isSel ? 'var(--navy)' : isToday_ ? 'var(--navy)' : 'transparent',
-                      color: (isSel || isToday_) ? '#fff' : 'var(--text-1)',
-                    }}>
-                      {wd.dayNum}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Time grid */}
-            <div style={{ position: 'relative', overflowY: 'auto', maxHeight: 'calc(100dvh - 280px)' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '48px repeat(7,1fr)', gap: 0 }}>
-                {HORAS.map(h => (
-                  <div key={h} style={{ display: 'contents' }}>
-                    {/* Hour label */}
-                    <div style={{
-                      fontSize: 11, color: 'var(--text-3)', textAlign: 'right', paddingRight: 8,
-                      height: 48, lineHeight: '48px', borderTop: '1px solid var(--border)',
-                    }}>
-                      {pad2(h)}:00
-                    </div>
-                    {/* Day columns */}
-                    {weekDates.map(wd => {
-                      const dayEvts = (eventosByDate[wd.dateStr] ?? []).filter(ev => {
-                        const evHour = parseInt(ev.hora_inicio?.slice(0, 2) ?? '0', 10)
-                        return evHour === h
-                      })
-                      return (
-                        <div
-                          key={wd.dateStr + h}
-                          style={{
-                            height: 48,
-                            borderTop: '1px solid var(--border)',
-                            borderLeft: '1px solid var(--border)',
-                            position: 'relative',
-                            padding: 1,
-                          }}
-                        >
-                          {dayEvts.map(ev => {
-                            const cfg = TIPO_CONFIG[ev.tipo] ?? TIPO_CONFIG.otro
-                            return (
-                              <button
-                                key={ev.id}
-                                onClick={() => openEditForm(ev)}
-                                style={{
-                                  width: '100%',
-                                  background: (ev.color || cfg.color) + '30',
-                                  borderLeft: `3px solid ${ev.color || cfg.color}`,
-                                  borderRadius: 4,
-                                  padding: '2px 3px',
-                                  fontSize: 10,
-                                  fontWeight: 600,
-                                  color: ev.color || cfg.color,
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                  textAlign: 'left',
-                                  border: 'none',
-                                  borderLeftStyle: 'solid',
-                                  borderLeftWidth: 3,
-                                  borderLeftColor: ev.color || cfg.color,
-                                  cursor: ev._fromPedido ? 'default' : 'pointer',
-                                  height: '100%',
-                                  display: 'block',
-                                }}
-                              >
-                                {ev.titulo}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      )
-                    })}
-                  </div>
-                ))}
-              </div>
-            </div>
-            </motion.div>
-            </AnimatePresence>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {toast && (
-        <div style={{
-          position: 'fixed', bottom: 'max(env(safe-area-inset-bottom), 16px)', left: '50%', transform: 'translateX(-50%)',
-          zIndex: 3000, padding: '10px 18px', borderRadius: 12, fontSize: 13, fontWeight: 600, color: '#fff',
-          background: toast.startsWith('Error') ? '#ef4444' : 'var(--navy)', boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
-          maxWidth: '90vw', textAlign: 'center',
-        }}>
-          {toast}
-        </div>
-      )}
-    </div>
+    <kbd style={{
+      display: 'inline-block', minWidth: 18, padding: '0 5px', borderRadius: 5, border: '1px solid var(--border)',
+      background: 'var(--surface)', fontSize: 10.5, fontFamily: 'inherit', fontWeight: 700, color: 'var(--text-2)', textAlign: 'center',
+    }}>{children}</kbd>
   )
 }
