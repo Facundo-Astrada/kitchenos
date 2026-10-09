@@ -146,16 +146,16 @@ export async function aplicarDesfasados(
     .eq('restaurante_id', restauranteId)
   const propiosMap = new Map((propios ?? []).map(p => [p.id as string, p.precio_unitario as number | null]))
 
-  let actualizados = 0
-  for (const it of items) {
+  // De a 10 en paralelo: cada producto son 3 escrituras, y un import grande mueve cientos.
+  const aplicar = async (it: (typeof items)[number]): Promise<boolean> => {
     const precioAnterior = propiosMap.get(it.producto_id)
-    if (precioAnterior === undefined) continue // no pertenece a este restaurante — se ignora
+    if (precioAnterior === undefined) return false // no pertenece a este restaurante — se ignora
 
     const { error: eUpdate } = await admin
       .from('productos')
       .update({ precio_unitario: it.precio_nuevo })
       .eq('id', it.producto_id)
-    if (eUpdate) continue
+    if (eUpdate) return false
 
     const ant = precioAnterior ?? 0
     const variacion = ant > 0 ? ((it.precio_nuevo - ant) / ant) * 100 : 0
@@ -168,7 +168,12 @@ export async function aplicarDesfasados(
       restaurante_id: restauranteId,
     })
     await admin.from('ingredientes').update({ costo_unitario: it.precio_nuevo }).eq('producto_id', it.producto_id)
-    actualizados++
+    return true
+  }
+  let actualizados = 0
+  for (let i = 0; i < items.length; i += 10) {
+    const r = await Promise.all(items.slice(i, i + 10).map(aplicar))
+    actualizados += r.filter(Boolean).length
   }
   return actualizados
 }

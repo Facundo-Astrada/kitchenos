@@ -105,7 +105,11 @@ export default function ExcelPOSImportModal({ open, onClose, onImported, onVerPr
         fd.append('mapeo', JSON.stringify(detected.mapeo))
       }
       const res = await fetch('/api/importador/facturas-universal', { method: 'POST', body: fd })
-      const data = await res.json()
+      const texto = await res.text()
+      let data: ResultadoImport & { error?: string }
+      try { data = JSON.parse(texto) } catch {
+        throw new Error('El servidor tardó demasiado y cortó el import. Lo ya cargado quedó guardado: volvé a importar el mismo archivo y continúa sin duplicar.')
+      }
       if (!res.ok) throw new Error(data.error || 'Error importando')
       setResult(data)
       invalidarPresupuesto()

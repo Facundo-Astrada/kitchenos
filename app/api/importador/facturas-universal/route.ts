@@ -12,7 +12,8 @@ import {
   type FacturaPayload, type ItemPayload, type PagoPayload, type PagosPorFactura,
 } from '@/lib/importador/fudo'
 
-export const maxDuration = 60
+// Un export grande de Fudo (miles de facturas + pagos + ítems) no entra en 60s.
+export const maxDuration = 300
 
 // ──────────────────────────────────────────────────────────────────────────
 // Mapeo IA para formatos no-Fudo (Maxirest, Bistrosoft, custom)
@@ -284,8 +285,8 @@ export async function POST(req: NextRequest) {
         rol = 'impuestos / IVA'
         usada = true
       } else if (n.includes('pago') || n.includes('cobr')) {
-        rol = 'pagos (ignorado)'
-        usada = false
+        rol = 'pagos (fecha y medio)'
+        usada = true
       }
 
       return { name, filas: filasData, columnas: cols, rol, usada }
@@ -512,6 +513,7 @@ async function insertBatch(
   // otra vez.
   let actualizadas = 0
   let sinCambios = 0
+  const fechaDeExistentes = new Map<string, string>()
   const pagosAReemplazar: Array<{ facturaId: string; pagos: PagoPayload[] }> = []
   try {
     type Existente = { id: string; external_id: string | null; proveedor_nombre: string; fecha_factura: string | null; total: number; numero_factura: string | null; status: string; fecha_vencimiento: string | null; sector: string | null; percepcion_iibb: number | null }
@@ -531,11 +533,13 @@ async function insertBatch(
     for (const e of existentes) if (!e.external_id) porClave.set(clave(e), e)
 
     const nuevas: FacturaPayload[] = []
-    const idsYaExistentes = new Set<string>()
+    const idsYaExistentes = new Map<string, string>() // id nuevo (del archivo) -> id existente en la base
+    const updatesPend: Array<{ id: string; cambios: Record<string, unknown> }> = []
     for (const f of facturasFinal) {
       const ex = (f.external_id && porExterno.get(f.external_id)) || porClave.get(clave(f))
       if (!ex) { nuevas.push(f); continue }
-      idsYaExistentes.add(f.id)
+      idsYaExistentes.set(f.id, ex.id)
+      fechaDeExistentes.set(ex.id, ex.fecha_factura ?? '')
       porClave.delete(clave(ex))
       const ps = pagos.get(f.id)
       if (ps?.length) pagosAReemplazar.push({ facturaId: ex.id, pagos: ps })
@@ -553,11 +557,34 @@ async function insertBatch(
       if (f.creado_por) cambios.creado_por = f.creado_por
       if (f.medio_pago_id) cambios.medio_pago_id = f.medio_pago_id
       if (Object.keys(cambios).length === 0) { sinCambios++; continue }
-      const { error } = await admin.from('facturas').update(cambios).eq('id', ex.id).eq('restaurante_id', restId)
-      if (!error) actualizadas++
+      updatesPend.push({ id: ex.id, cambios })
+    }
+    // Updates de a 25 en paralelo: de a uno, miles de facturas no entran en el límite de la función.
+    for (let i = 0; i < updatesPend.length; i += 25) {
+      const res = await Promise.all(updatesPend.slice(i, i + 25).map(u =>
+        admin.from('facturas').update(u.cambios).eq('id', u.id).eq('restaurante_id', restId)))
+      actualizadas += res.filter(r => !r.error).length
     }
     facturasFinal = nuevas
-    itemsFinal = itemsFinal.filter(it => !idsYaExistentes.has(it.factura_id))
+
+    // Reparación: una factura que ya existe pero quedó SIN ítems (import anterior cortado
+    // a mitad) recupera los del archivo. Sin esto, re-importar nunca los completaría.
+    const conItemsEnArchivo = new Set(itemsFinal.map(it => it.factura_id))
+    const candidatas = Array.from(idsYaExistentes.entries()).filter(([nuevoId]) => conItemsEnArchivo.has(nuevoId))
+    const sinItems = new Map<string, string>()
+    if (candidatas.length > 0) {
+      const tienen = new Set<string>()
+      const exIds = candidatas.map(([, ex]) => ex)
+      for (let i = 0; i < exIds.length; i += 150) {
+        const lote = exIds.slice(i, i + 150)
+        const filas = await fetchAllRows<{ factura_id: string }>((from, to) =>
+          admin.from('factura_items').select('factura_id').in('factura_id', lote).range(from, to))
+        for (const r of filas) tienen.add(r.factura_id)
+      }
+      for (const [nuevoId, exId] of candidatas) if (!tienen.has(exId)) sinItems.set(nuevoId, exId)
+    }
+    const repuestos = itemsFinal.filter(it => sinItems.has(it.factura_id)).map(it => ({ ...it, factura_id: sinItems.get(it.factura_id)! }))
+    itemsFinal = [...itemsFinal.filter(it => !idsYaExistentes.has(it.factura_id)), ...repuestos]
   } catch (e) {
     console.error('[facturas-universal] dedupe falló, se aborta el import para no duplicar:', e)
     return NextResponse.json({ error: 'No se pudo comprobar qué facturas ya estaban cargadas. No se importó nada para no duplicar.' }, { status: 500 })
@@ -566,29 +593,6 @@ async function insertBatch(
   for (let i = 0; i < facturasFinal.length; i += BATCH) {
     const { error } = await admin.from('facturas').insert(facturasFinal.slice(i, i + BATCH))
     if (error) return NextResponse.json({ error: `Error insertando facturas: ${error.message}` }, { status: 500 })
-  }
-
-  // Pagos: de las facturas nuevas se insertan; de las que ya existían se
-  // reemplazan por los del archivo (Fudo es la fuente: un pago editado o
-  // cancelado allá se refleja acá).
-  try {
-    const filas: Array<Record<string, unknown>> = []
-    for (const f of facturasFinal) {
-      for (const pg of pagos.get(f.id) ?? []) filas.push({ ...pg, factura_id: f.id, restaurante_id: restId })
-    }
-    if (pagosAReemplazar.length > 0) {
-      const ids = pagosAReemplazar.map(x => x.facturaId)
-      for (let i = 0; i < ids.length; i += 200) {
-        await admin.from('factura_pagos').delete().eq('restaurante_id', restId).in('factura_id', ids.slice(i, i + 200))
-      }
-      for (const x of pagosAReemplazar) for (const pg of x.pagos) filas.push({ ...pg, factura_id: x.facturaId, restaurante_id: restId })
-    }
-    for (let i = 0; i < filas.length; i += BATCH) {
-      const { error } = await admin.from('factura_pagos').insert(filas.slice(i, i + BATCH))
-      if (error) console.error('[facturas-universal] insert de pagos falló (no bloqueante):', error.message)
-    }
-  } catch (e) {
-    console.error('[facturas-universal] pagos falló (no bloqueante):', e)
   }
 
   // Resolver producto_id contra lo que ya existe en stock — mismo criterio de
@@ -643,6 +647,29 @@ async function insertBatch(
     if (error) return NextResponse.json({ error: `Error insertando items: ${error.message}` }, { status: 500 })
   }
 
+  // Pagos: de las facturas nuevas se insertan; de las que ya existían se
+  // reemplazan por los del archivo (Fudo es la fuente: un pago editado o
+  // cancelado allá se refleja acá).
+  try {
+    const filas: Array<Record<string, unknown>> = []
+    for (const f of facturasFinal) {
+      for (const pg of pagos.get(f.id) ?? []) filas.push({ ...pg, factura_id: f.id, restaurante_id: restId })
+    }
+    if (pagosAReemplazar.length > 0) {
+      const ids = pagosAReemplazar.map(x => x.facturaId)
+      for (let i = 0; i < ids.length; i += 200) {
+        await admin.from('factura_pagos').delete().eq('restaurante_id', restId).in('factura_id', ids.slice(i, i + 200))
+      }
+      for (const x of pagosAReemplazar) for (const pg of x.pagos) filas.push({ ...pg, factura_id: x.facturaId, restaurante_id: restId })
+    }
+    for (let i = 0; i < filas.length; i += BATCH) {
+      const { error } = await admin.from('factura_pagos').insert(filas.slice(i, i + BATCH))
+      if (error) console.error('[facturas-universal] insert de pagos falló (no bloqueante):', error.message)
+    }
+  } catch (e) {
+    console.error('[facturas-universal] pagos falló (no bloqueante):', e)
+  }
+
   // Sync de precios best-effort — solo sobre los ítems recién insertados (no relee
   // la historia completa de facturas, así que es rápido sin importar el volumen del
   // restaurante). Un fallo acá nunca debe romper la respuesta del import.
@@ -651,8 +678,9 @@ async function insertBatch(
     const facturaFecha = new Map<string, string>()
     const hoy = new Date().toISOString().slice(0, 10)
     for (const f of facturasFinal) facturaFecha.set(f.id, f.fecha_factura || hoy)
+    for (const [exId, fecha] of fechaDeExistentes) facturaFecha.set(exId, fecha)
     const desfasados = (await calcularDesfasadosDeItemsNuevos(admin, restId, itemsFinal, facturaFecha))
-      .filter(d => !d.fecha || d.fecha >= (ultimaCompra.get(d.producto_id) ?? ''))
+      .filter(d => !!d.fecha && d.fecha >= (ultimaCompra.get(d.producto_id) ?? ''))
     if (desfasados.length > 0) {
       await aplicarDesfasados(admin, restId, desfasados.map(d => ({ producto_id: d.producto_id, precio_nuevo: d.precio_nuevo, factura_id: d.factura_id })))
       for (const d of desfasados) cambiosPrecio.push({ producto: d.nombre, unidad: d.unidad, precio_anterior: d.precio_actual, precio_nuevo: d.precio_nuevo, delta_pct: d.delta_pct })
