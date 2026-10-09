@@ -19,6 +19,7 @@ import PreciosView from '@/components/facturas/PreciosView'
 import FacturaTicket from '@/components/facturas/FacturaTicket'
 import FiltrosCompras from '@/components/facturas/FiltrosCompras'
 import PrivacidadSheet from '@/components/facturas/PrivacidadSheet'
+import MapeoCategoriasOrigen from '@/components/facturas/MapeoCategoriasOrigen'
 import { ConfirmSheet } from '@/components/ui'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import { hojasDeFacturas } from '@/lib/facturas/exportarFacturas'
@@ -2371,6 +2372,7 @@ function CategoriasGastoView({ showToast }: { showToast: (msg: string) => void }
 
   return (
     <div className="flex-1 overflow-y-auto" style={{ padding: 16 }}>
+      <MapeoCategoriasOrigen categorias={categorias} showToast={showToast} />
       {/* Sin categorizar */}
       {(loadingSinCat || proveedoresSinCategoria.length > 0) && (
         <div style={{ marginBottom: 18, background: 'var(--surface)', border: '1px solid rgba(217,119,6,.35)', borderRadius: 14, overflow: 'hidden' }}>

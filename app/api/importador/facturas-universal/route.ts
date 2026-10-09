@@ -447,9 +447,12 @@ async function insertBatch(
   let facturasFinal = facturas
   let itemsFinal = items
   let excluidasPorNombre = 0
+  // Equivalencias "categoría de Fudo" → categoría de gasto (Compras → Cat. de Gastos).
+  let categoriaPorOrigen = new Map<string, string>()
   try {
     const { data: rest } = await admin.from('restaurantes').select('configuracion').eq('id', restId).single()
-    const cfg = rest?.configuracion as { nombres_excluidos?: string[] } | null
+    const cfg = rest?.configuracion as { nombres_excluidos?: string[]; categorias_origen?: Record<string, string> } | null
+    categoriaPorOrigen = new Map(Object.entries(cfg?.categorias_origen ?? {}))
     const internos = (Array.isArray(cfg?.nombres_excluidos) ? cfg!.nombres_excluidos : []).map(normNombre).filter(Boolean)
     const idsExcluidos = new Set<string>()
     facturasFinal = facturas.filter(f => {
@@ -482,12 +485,11 @@ async function insertBatch(
       ((provsData ?? []) as { nombre: string; categoria_gasto_id: string }[])
         .map(p => [normNombre(p.nombre), p.categoria_gasto_id])
     )
-    if (categoriaPorProveedor.size > 0) {
-      for (const f of facturasFinal) {
-        if (f.categoria_gasto_id) continue
-        const cat = categoriaPorProveedor.get(normNombre(f.proveedor_nombre))
-        if (cat) f.categoria_gasto_id = cat
-      }
+    for (const f of facturasFinal) {
+      if (f.categoria_gasto_id) continue
+      const cat = categoriaPorProveedor.get(normNombre(f.proveedor_nombre))
+        ?? (f.categoria_origen ? categoriaPorOrigen.get(normNombre(f.categoria_origen)) : undefined)
+      if (cat) f.categoria_gasto_id = cat
     }
   } catch (e) {
     console.error('[facturas-universal] lookup de categoría por proveedor falló (no bloqueante):', e)
@@ -516,11 +518,11 @@ async function insertBatch(
   const fechaDeExistentes = new Map<string, string>()
   const pagosAReemplazar: Array<{ facturaId: string; pagos: PagoPayload[] }> = []
   try {
-    type Existente = { id: string; external_id: string | null; proveedor_nombre: string; fecha_factura: string | null; total: number; numero_factura: string | null; status: string; fecha_vencimiento: string | null; sector: string | null; percepcion_iibb: number | null }
+    type Existente = { id: string; categoria_gasto_id: string | null; external_id: string | null; proveedor_nombre: string; fecha_factura: string | null; total: number; numero_factura: string | null; status: string; fecha_vencimiento: string | null; sector: string | null; percepcion_iibb: number | null }
     const existentes: Existente[] = []
     for (let from = 0; ; from += 1000) {
       const { data, error } = await admin.from('facturas')
-        .select('id, external_id, proveedor_nombre, fecha_factura, total, numero_factura, status, fecha_vencimiento, sector, percepcion_iibb')
+        .select('id, categoria_gasto_id, external_id, proveedor_nombre, fecha_factura, total, numero_factura, status, fecha_vencimiento, sector, percepcion_iibb')
         .eq('restaurante_id', restId).range(from, from + 999)
       if (error) throw error
       existentes.push(...((data ?? []) as Existente[]))
@@ -556,6 +558,7 @@ async function insertBatch(
       }
       if (f.creado_por) cambios.creado_por = f.creado_por
       if (f.categoria_origen) cambios.categoria_origen = f.categoria_origen
+      if (!ex.categoria_gasto_id && f.categoria_gasto_id) cambios.categoria_gasto_id = f.categoria_gasto_id
       if (f.medio_pago_id) cambios.medio_pago_id = f.medio_pago_id
       if (Object.keys(cambios).length === 0) { sinCambios++; continue }
       updatesPend.push({ id: ex.id, cambios })
