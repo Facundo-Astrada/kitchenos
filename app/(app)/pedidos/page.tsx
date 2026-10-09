@@ -1079,6 +1079,7 @@ export default function PedidosRoute() {
 }
 
 export function PedidosView({ embedded = false }: { embedded?: boolean } = {}) {
+  const router = useRouter()
   const RESTAURANTE_ID = useRestauranteId()
   const { pedidos, loading, crearPedido, enviarPedido, recibirPedido, eliminarPedido, fetchItems } = usePedidos()
   const { proveedores } = useProveedores()
@@ -1221,6 +1222,7 @@ export function PedidosView({ embedded = false }: { embedded?: boolean } = {}) {
           subtitle={loading ? '…' : `${pedidos.length} pedido${pedidos.length !== 1 ? 's' : ''}`}
           actions={
             <>
+              <ActionButton icon="checklist" label="Pedido diario" onClick={() => router.push('/pedido-diario')} />
               <ActionButton icon="auto_awesome" label="Sugerir pedido" onClick={() => setShowSugerencia(true)} />
               <ActionButton icon="add" label="Nuevo pedido" onClick={() => setView('nuevo')} />
             </>
@@ -1242,6 +1244,10 @@ export function PedidosView({ embedded = false }: { embedded?: boolean } = {}) {
               Nuevo pedido
             </button>
           </div>
+          <button onClick={() => router.push('/pedido-diario')} style={{ padding: '11px 14px', borderRadius: 12, background: 'var(--surface)', border: '1px solid var(--accent)', color: 'var(--navy-ink)', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', fontFamily: 'inherit' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>checklist</span>
+            Pedido diario
+          </button>
           <FiltrosPedidos filter={filter} onChange={setFilter} />
         </div>
       )}

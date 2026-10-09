@@ -228,6 +228,8 @@ export interface Producto {
   stock_grupo_id?: string | null
   merma_esperada_pct?: number | null
   nota_recepcion?: string | null
+  // Entra en la pantalla del pedido de todos los días (/pedido-diario).
+  pedido_diario?: boolean
   restaurante_id: string
   activo: boolean
   created_at: string
@@ -375,6 +377,8 @@ export interface Proveedor {
   rubro?: string | null
   dias_entrega?: string[] | null
   horario_entrega?: string | null
+  // 'HH:MM' — hasta qué hora recibe el pedido del día (/pedido-diario).
+  hora_corte_pedido?: string | null
   categoria_gasto_id?: string | null
   activo: boolean
   restaurante_id: string

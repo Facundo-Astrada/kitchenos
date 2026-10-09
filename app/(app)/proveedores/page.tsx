@@ -29,8 +29,9 @@ interface FormProv {
   telefono: string
   dias_entrega: string[]
   horario_entrega: string
+  hora_corte_pedido: string
 }
-const FORM_EMPTY: FormProv = { nombre: '', rubro: '', telefono: '', dias_entrega: [], horario_entrega: '' }
+const FORM_EMPTY: FormProv = { nombre: '', rubro: '', telefono: '', dias_entrega: [], horario_entrega: '', hora_corte_pedido: '' }
 
 const TIPO_INCIDENCIA_LABEL: Record<TipoIncidenciaProveedor, [string, string]> = {
   faltante: ['faltante', 'faltantes'],
@@ -182,7 +183,7 @@ export function ProveedoresView({ embedded = false }: { embedded?: boolean }) {
   }
   function openEdit(p: Proveedor) {
     setEditProv(p)
-    setForm({ nombre: p.nombre, rubro: p.rubro ?? '', telefono: p.telefono ?? '', dias_entrega: p.dias_entrega ?? [], horario_entrega: p.horario_entrega ?? '' })
+    setForm({ nombre: p.nombre, rubro: p.rubro ?? '', telefono: p.telefono ?? '', dias_entrega: p.dias_entrega ?? [], horario_entrega: p.horario_entrega ?? '', hora_corte_pedido: p.hora_corte_pedido ?? '' })
     setFormError(null)
     setModalOpen(true)
   }
@@ -200,9 +201,9 @@ export function ProveedoresView({ embedded = false }: { embedded?: boolean }) {
     setFormError(null)
     try {
       if (editProv) {
-        await actualizarProveedor(editProv.id, form)
+        await actualizarProveedor(editProv.id, { ...form, hora_corte_pedido: form.hora_corte_pedido || null })
       } else {
-        await agregarProveedor({ ...form, created_at: new Date().toISOString() })
+        await agregarProveedor({ ...form, hora_corte_pedido: form.hora_corte_pedido || null, created_at: new Date().toISOString() })
       }
       setModalOpen(false)
     } catch (e: unknown) {
@@ -505,6 +506,11 @@ export function ProveedoresView({ embedded = false }: { embedded?: boolean }) {
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={labelStyle}>Horario de entrega</span>
                 <input value={form.horario_entrega} onChange={e => setForm(f => ({ ...f, horario_entrega: e.target.value }))} placeholder="Ej: 8 a 11 hs" style={inputStyle} />
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={labelStyle}>Hora de corte del pedido</span>
+                <input type="time" value={form.hora_corte_pedido} onChange={e => setForm(f => ({ ...f, hora_corte_pedido: e.target.value }))} style={inputStyle} />
+                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Hasta qué hora recibe el pedido del día. Se ve en el Pedido diario.</span>
               </label>
             </div>
 

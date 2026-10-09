@@ -254,6 +254,7 @@ export const RUTA_A_MODULO: Record<string, string | string[]> = {
   '/recetario': 'recetario',
   '/stock': 'stock',
   '/pedidos': ['facturas', 'pedidos', 'proveedores'],
+  '/pedido-diario': 'pedidos',
   '/haccp': 'haccp',
   '/reportes': 'reportes',
   '/presupuesto': 'presupuesto',

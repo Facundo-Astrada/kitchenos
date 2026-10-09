@@ -132,6 +132,7 @@ interface FormData {
   receta_id: string
   sector_id: string
   fuera_de_uso: boolean
+  pedido_diario: boolean
   proveedor_id: string
   merma_esperada_pct: string
   nota_recepcion: string
@@ -153,6 +154,7 @@ const FORM_EMPTY: FormData = {
   receta_id: '',
   sector_id: '',
   fuera_de_uso: false,
+  pedido_diario: false,
   proveedor_id: '',
   merma_esperada_pct: '',
   nota_recepcion: '',
@@ -1087,6 +1089,7 @@ export default function StockPage() {
       receta_id: p.receta_id ?? '',
       sector_id: p.sector_id ?? '',
       fuera_de_uso: !!p.fuera_de_uso,
+      pedido_diario: !!p.pedido_diario,
       proveedor_id: p.proveedor_id ?? '',
       merma_esperada_pct: p.merma_esperada_pct != null ? String(p.merma_esperada_pct) : '',
       nota_recepcion: p.nota_recepcion ?? '',
@@ -1128,6 +1131,7 @@ export default function StockPage() {
         receta_id: form.es_produccion && form.receta_id ? form.receta_id : null,
         sector_id: form.sector_id || null,
         fuera_de_uso: form.fuera_de_uso,
+        pedido_diario: form.pedido_diario,
         proveedor_id: form.proveedor_id || null,
         merma_esperada_pct: showRecepcion && form.merma_esperada_pct ? parseNumAR(form.merma_esperada_pct) : null,
         nota_recepcion: showRecepcion && form.nota_recepcion.trim() ? form.nota_recepcion.trim() : null,
@@ -1995,6 +1999,15 @@ export default function StockPage() {
                     </select>
                   </label>
                 </div>
+
+                <SwitchRow
+                  icon="shopping_basket"
+                  color="#4361a0"
+                  checked={form.pedido_diario}
+                  onChange={v => setForm(f => ({ ...f, pedido_diario: v }))}
+                  label="Entra en el pedido diario"
+                  sub="Aparece en la lista de pedir todos los días, con su mínimo y máximo"
+                />
 
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={{ ...lblStyle, color: 'var(--navy-ink)' }}>
