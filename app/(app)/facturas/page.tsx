@@ -15,6 +15,11 @@ import { PedidosView } from '@/app/(app)/pedidos/page'
 import ImageCropModal from '@/components/ui/ImageCropModal'
 import BulkUploadDrawer from '@/components/facturas/BulkUploadDrawer'
 import ExcelPOSImportModal from '@/components/facturas/ExcelPOSImportModal'
+import PreciosView from '@/components/facturas/PreciosView'
+import FacturaTicket from '@/components/facturas/FacturaTicket'
+import FiltrosCompras from '@/components/facturas/FiltrosCompras'
+import PrivacidadSheet from '@/components/facturas/PrivacidadSheet'
+import { ConfirmSheet } from '@/components/ui'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import { createClient } from '@/lib/supabase/client'
 import { calcularVencimientoFactura, type VencimientoFactura } from '@/lib/utils'
@@ -155,18 +160,18 @@ interface ListaAIResult {
   _demo?: boolean
 }
 
-type MainTab = 'pedidos' | 'facturas' | 'recepcion' | 'categorias' | 'listas' | 'proveedores'
-const MAIN_TABS = ['pedidos', 'recepcion', 'facturas', 'proveedores', 'listas', 'categorias'] as const
+type MainTab = 'pedidos' | 'facturas' | 'recepcion' | 'categorias' | 'listas' | 'proveedores' | 'precios'
+const MAIN_TABS = ['pedidos', 'recepcion', 'facturas', 'precios', 'proveedores', 'listas', 'categorias'] as const
 function esMainTab(v: string | null): v is MainTab {
-  return v === 'facturas' || v === 'listas' || v === 'proveedores' || v === 'recepcion' || v === 'categorias' || v === 'pedidos'
+  return v === 'facturas' || v === 'listas' || v === 'proveedores' || v === 'recepcion' || v === 'categorias' || v === 'pedidos' || v === 'precios'
 }
-const TAB_LABELS: Record<MainTab, string> = { pedidos: 'Pedidos', facturas: 'Facturas', recepcion: 'Recepción', categorias: 'Cat. de Gastos', listas: 'Listas', proveedores: 'Proveedores' }
+const TAB_LABELS: Record<MainTab, string> = { pedidos: 'Pedidos', facturas: 'Facturas', recepcion: 'Recepción', categorias: 'Cat. de Gastos', listas: 'Listas', proveedores: 'Proveedores', precios: 'Precios' }
 // Qué permiso habilita cada tab de Compras — hay puestos reales con 'pedidos'
 // sin 'facturas'/'proveedores' (S6, sep 2026), así que cada tab se filtra por
 // su propio permiso en vez de asumir que quien entra a la ruta ve todo.
 const TAB_PERMISO: Record<MainTab, 'pedidos' | 'proveedores' | 'facturas'> = {
   pedidos: 'pedidos', proveedores: 'proveedores',
-  facturas: 'facturas', recepcion: 'facturas', listas: 'facturas', categorias: 'facturas',
+  facturas: 'facturas', recepcion: 'facturas', listas: 'facturas', categorias: 'facturas', precios: 'facturas',
 }
 
 // Navy + título "Compras" + tab pills — repetido igual en 5 de los 6 tabs
@@ -2624,7 +2629,25 @@ function RecepcionView() {
 
 // ── Main Page ────────────────────────────────────────────────
 export default function FacturasPage() {
-  const { facturas, loading, crearFactura, actualizarFactura, actualizarStatus, eliminarFactura, fetchItems, fetchFacturas, hasMore, fetchMore, totalCount, fetchPorPagar, vincularPedido } = useFacturas()
+  // Filtros de la lista: se resuelven en la base (useFacturas), no sobre lo cargado.
+  const [filtro, setFiltro] = useState<'todas' | 'semana' | 'mes' | 'por_pagar'>('todas')
+  const [catFiltroId, setCatFiltroId] = useState('')
+  const [estadoFiltro, setEstadoFiltro] = useState('')
+  const [proveedorFiltro, setProveedorFiltro] = useState('')
+  const [medioFiltroId, setMedioFiltroId] = useState('')
+  const [tipoFiltro, setTipoFiltro] = useState('')
+  const [desdeFiltro, setDesdeFiltro] = useState('')
+  const [hastaFiltro, setHastaFiltro] = useState('')
+  const filtrosServidor = useMemo(() => ({
+    desde: desdeFiltro || (filtro === 'semana' ? inicioSemana() : filtro === 'mes' ? inicioMes() : undefined),
+    hasta: hastaFiltro || undefined,
+    estado: estadoFiltro || undefined,
+    proveedor: proveedorFiltro || undefined,
+    categoriaId: catFiltroId || undefined,
+    medioId: medioFiltroId || undefined,
+    tipo: tipoFiltro || undefined,
+  }), [filtro, desdeFiltro, hastaFiltro, estadoFiltro, proveedorFiltro, catFiltroId, medioFiltroId, tipoFiltro])
+  const { facturas, loading, resumen: resumenServidor, crearFactura, actualizarFactura, actualizarStatus, eliminarFactura, fetchItems, fetchFacturas, hasMore, fetchMore, totalCount, fetchPorPagar, vincularPedido } = useFacturas(filtrosServidor)
   const { productos, refetch: refetchStock } = useStock()
   const { proveedores } = useProveedores()
   const { categorias: categoriasGasto } = useCategoriasGasto()
@@ -2675,19 +2698,30 @@ export default function FacturasPage() {
   const [analyzing, setAnalyzing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
-  const [filtro, setFiltro] = useState<'todas' | 'semana' | 'mes' | 'por_pagar'>('todas')
-  const [catFiltroId, setCatFiltroId] = useState('')
-  const [estadoFiltro, setEstadoFiltro] = useState('')
-  const [proveedorFiltro, setProveedorFiltro] = useState('')
   // Bloque 5 (S6, sep 2026): categoría/estado/proveedor eran 3 selects + un
   // resumen de período en texto siempre visibles en el header, encima de las
   // 4 KPI cards que ya cuentan la misma plata — puro ruido antes de llegar a
   // una sola factura. Los 3 selects pasan a un popover ("Filtros"), y se saca
   // el resumen en texto (redundante con las KPI cards de abajo).
-  const [showFiltrosAvanzados, setShowFiltrosAvanzados] = useState(false)
   const [porPagar, setPorPagar] = useState<Factura[]>([])
   const [porPagarLoading, setPorPagarLoading] = useState(false)
   const [selectedFactura, setSelectedFactura] = useState<Factura | null>(null)
+  const [confirmEliminar, setConfirmEliminar] = useState(false)
+  const nFiltros = [catFiltroId, estadoFiltro, proveedorFiltro, medioFiltroId, tipoFiltro, desdeFiltro, hastaFiltro].filter(Boolean).length
+
+  // Ticket lateral (idea de Fudo): si a la lista le queda ancho para convivir con
+  // un panel de ~400px, la factura se abre al costado; si no, pantalla completa.
+  // Se decide por el ancho REAL del contenedor, no por el viewport (ui.md).
+  const [splitEl, setSplitEl] = useState<HTMLDivElement | null>(null)
+  const [anchoSplit, setAnchoSplit] = useState(0)
+  useEffect(() => {
+    if (!splitEl) return
+    const ro = new ResizeObserver(entries => setAnchoSplit(entries[0].contentRect.width))
+    ro.observe(splitEl)
+    return () => ro.disconnect()
+  }, [splitEl])
+  const puedeSplit = anchoSplit >= 900
+  const productosPorId = useMemo(() => new Map(productos.map(p => [p.id, p.nombre])), [productos])
   const [textoInput, setTextoInput] = useState('')
   const [cropSrc, setCropSrc] = useState<string | null>(null)
   const [showBulkUpload, setShowBulkUpload] = useState(false)
@@ -2697,7 +2731,6 @@ export default function FacturasPage() {
   // ── Privacidad: nombres internos a excluir ──
   const [showPrivacidad, setShowPrivacidad] = useState(false)
   const [nombresExcluidos, setNombresExcluidos] = useState<string[]>([])
-  const [nuevoNombre, setNuevoNombre] = useState('')
   const supabasePriv = useMemo(() => createClient(), [])
 
   useEffect(() => {
@@ -2725,28 +2758,23 @@ export default function FacturasPage() {
     await supabasePriv.from('restaurantes').update({ configuracion: { ...cfg, nombres_excluidos: lista } }).eq('id', ur.restaurante_id)
   }
 
-  // Filter facturas
-  const facturasFiltradas = useMemo(() => {
-    let list = facturas
-    if (filtro !== 'todas' && filtro !== 'por_pagar') {
-      const desde = filtro === 'semana' ? inicioSemana() : inicioMes()
-      list = list.filter(f => (f.fecha_factura || f.created_at.slice(0, 10)) >= desde)
-    }
-    if (catFiltroId) list = list.filter(f => f.categoria_gasto_id === catFiltroId)
-    if (estadoFiltro) list = list.filter(f => (f.status ?? 'pendiente') === estadoFiltro)
-    if (proveedorFiltro) list = list.filter(f => f.proveedor_nombre === proveedorFiltro)
-    return list
-  }, [facturas, filtro, catFiltroId, estadoFiltro, proveedorFiltro])
+  // La lista ya llega filtrada desde la base (filtrosServidor).
+  const facturasFiltradas = facturas
+  const facturaPanel = selectedFactura ? (facturas.find(f => f.id === selectedFactura.id) ?? selectedFactura) : null
+  const panelAbierto = puedeSplit && !!facturaPanel && view === 'list'
+  function abrirFactura(f: Factura) {
+    setSelectedFactura(f)
+    if (!puedeSplit) setView('detail')
+  }
 
   const categoriasGastoMap = useMemo(() => Object.fromEntries(categoriasGasto.map(c => [c.id, c])), [categoriasGasto])
 
   // Summary
   const resumen = useMemo(() => {
     const ff = facturasFiltradas
-    const total = ff.reduce((s, f) => s + f.total, 0)
     const proveedores = new Set(ff.map(f => f.proveedor_nombre)).size
-    return { total, count: ff.length, proveedores }
-  }, [facturasFiltradas])
+    return { total: resumenServidor.total, count: resumenServidor.n, proveedores }
+  }, [facturasFiltradas, resumenServidor])
 
   // Cargar cuentas por pagar: siempre en la tab Gastos (alimenta los KPIs A vencer/
   // Vencidos/A pagar, no solo el chip "Por pagar") y al cambiar facturas (marcar pagada, nueva factura).
@@ -2806,8 +2834,7 @@ export default function FacturasPage() {
   // "Vencidos" salen de porPagar (todas las facturas a crédito, no paginado); "Total
   // pagado" sobre el conjunto filtrado actual (mismo alcance/caveat que "resumen").
   const kpisGasto = useMemo(() => {
-    let totalPagado = 0
-    for (const f of facturasFiltradas) if (f.status === 'pagada') totalPagado += f.total
+    const totalPagado = resumenServidor.pagado
     const vencidas = porPagar.filter(f => vencimientos.get(f.id)?.urgencia === 'vencida')
     const aVencer = porPagar.filter(f => vencimientos.get(f.id)?.urgencia !== 'vencida')
     return {
@@ -2815,7 +2842,7 @@ export default function FacturasPage() {
       vencidasN: vencidas.length, vencidasTotal: vencidas.reduce((s, f) => s + f.total, 0),
       totalPagado,
     }
-  }, [facturasFiltradas, porPagar, vencimientos])
+  }, [resumenServidor, porPagar, vencimientos])
 
   async function marcarPagadaRapido(f: Factura) {
     try {
@@ -3008,7 +3035,7 @@ export default function FacturasPage() {
         factura={selectedFactura}
         categoriasGasto={categoriasGasto}
         mediosPago={mediosPago}
-        onBack={() => { setView('list'); setSelectedFactura(null) }}
+        onBack={() => { setView('list'); if (!puedeSplit) setSelectedFactura(null) }}
         onStatusChange={async (status) => {
           await actualizarStatus(selectedFactura.id, status)
           setSelectedFactura({ ...selectedFactura, status })
@@ -3256,6 +3283,24 @@ export default function FacturasPage() {
     )
   }
 
+  // ── Precios tab: cambios de precio de stock + mercadería sin vincular ──
+  if (mainTab === 'precios') {
+    return (
+      <div className="flex flex-col h-full">
+        <ComprasHeader tabsVisibles={tabsVisibles} mainTab={mainTab} onChange={setMainTab} />
+        <PreciosView
+          productos={productos.map(p => ({ id: p.id, nombre: p.nombre, unidad: p.unidad, precio_unitario: p.precio_unitario ?? 0 }))}
+          showToast={showToast}
+          onCambio={refetchStock}
+        />
+        {toast && (
+          <div className="fixed top-[60px] left-4 right-4 z-[300] rounded-[12px] p-[12px_16px] text-[13px] font-semibold text-white text-center"
+            style={{ background: toast.startsWith('✓') ? '#10b981' : '#ef4444' }}>{toast}</div>
+        )}
+      </div>
+    )
+  }
+
   // ── Recepción tab ──
   if (mainTab === 'recepcion') {
     return (
@@ -3328,63 +3373,13 @@ export default function FacturasPage() {
             ))}
           </div>
 
-          <div style={{ position: 'relative', marginLeft: 'auto' }}>
-            <button
-              onClick={() => setShowFiltrosAvanzados(v => !v)}
-              className="px-[10px] py-[4px] rounded-full border-none cursor-pointer text-[11px] font-semibold"
-              style={{
-                display: 'flex', alignItems: 'center', gap: 4,
-                background: (catFiltroId || estadoFiltro || proveedorFiltro) ? 'white' : 'rgba(255,255,255,0.15)',
-                color: (catFiltroId || estadoFiltro || proveedorFiltro) ? 'var(--navy)' : 'rgba(255,255,255,0.7)',
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>tune</span>
-              Filtros
-              {[catFiltroId, estadoFiltro, proveedorFiltro].filter(Boolean).length > 0 && (
-                <span>· {[catFiltroId, estadoFiltro, proveedorFiltro].filter(Boolean).length}</span>
-              )}
-            </button>
-
-            {showFiltrosAvanzados && (
-              <>
-                <div style={{ position: 'fixed', inset: 0, zIndex: 199 }} onClick={() => setShowFiltrosAvanzados(false)} />
-                <div style={{
-                  position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 200,
-                  background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12,
-                  padding: 12, width: 220, boxShadow: 'var(--shadow-3)',
-                  display: 'flex', flexDirection: 'column', gap: 8,
-                }}>
-                  {(() => {
-                    const selSt: React.CSSProperties = { padding: '7px 9px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', outline: 'none', width: '100%' }
-                    return (
-                      <>
-                        <select value={catFiltroId} onChange={e => setCatFiltroId(e.target.value)} style={selSt}>
-                          <option value="">Categoría: todas</option>
-                          {categoriasGasto.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                        </select>
-                        <select value={estadoFiltro} onChange={e => setEstadoFiltro(e.target.value)} style={selSt}>
-                          <option value="">Estado: todos</option>
-                          {(['pendiente', 'confirmada', 'pagada', 'observada'] as FacturaStatus[]).map(s => (
-                            <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>
-                          ))}
-                        </select>
-                        <select value={proveedorFiltro} onChange={e => setProveedorFiltro(e.target.value)} style={selSt}>
-                          <option value="">Proveedor: todos</option>
-                          {proveedores.map(p => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
-                        </select>
-                        {(catFiltroId || estadoFiltro || proveedorFiltro) && (
-                          <button onClick={() => { setCatFiltroId(''); setEstadoFiltro(''); setProveedorFiltro('') }}
-                            style={{ ...selSt, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, background: 'transparent', border: 'none', color: 'var(--accent)' }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>close</span>Limpiar filtros
-                          </button>
-                        )}
-                      </>
-                    )
-                  })()}
-                </div>
-              </>
-            )}
-          </div>
+          <FiltrosCompras
+            valores={{ categoria: catFiltroId, estado: estadoFiltro, proveedor: proveedorFiltro, medio: medioFiltroId, tipo: tipoFiltro, desde: desdeFiltro, hasta: hastaFiltro }}
+            onChange={v => { setCatFiltroId(v.categoria); setEstadoFiltro(v.estado); setProveedorFiltro(v.proveedor); setMedioFiltroId(v.medio); setTipoFiltro(v.tipo); setDesdeFiltro(v.desde); setHastaFiltro(v.hasta) }}
+            categorias={categoriasGasto}
+            proveedores={proveedores}
+            medios={mediosPago}
+          />
         </div>
       </div>
 
@@ -3406,8 +3401,9 @@ export default function FacturasPage() {
         ))}
       </div>
 
-      {/* List */}
-      <div data-coach-target="facturas-lista" className="flex-1 overflow-y-auto" style={{ padding: isDesktop ? '0 0 8px' : '16px' }}>
+      {/* List (+ ticket lateral cuando hay ancho) */}
+      <div ref={setSplitEl} style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      <div data-coach-target="facturas-lista" className="flex-1 overflow-y-auto" style={{ padding: isDesktop ? '0 0 8px' : '16px', minWidth: 0 }}>
         {loading ? (
           <div className="flex items-center justify-center h-32">
             <span className="text-[13px]" style={{ color: 'var(--text-3)' }}>Cargando...</span>
@@ -3458,7 +3454,7 @@ export default function FacturasPage() {
                     <FacturaCard
                       key={f.id}
                       f={f}
-                      onClick={() => { setSelectedFactura(f); setView('detail') }}
+                      onClick={() => abrirFactura(f)}
                       vencimiento={vencimientos.get(f.id)}
                       onMarcarPagada={() => marcarPagadaRapido(f)}
                     />
@@ -3495,15 +3491,15 @@ export default function FacturasPage() {
                 return (
                   <tr
                     key={f.id}
-                    onClick={() => { setSelectedFactura(f); setView('detail') }}
+                    onClick={() => abrirFactura(f)}
                     style={{
                       borderBottom: '1px solid var(--border)',
-                      background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg)',
+                      background: facturaPanel?.id === f.id ? 'rgba(67,97,160,.14)' : i % 2 === 0 ? 'var(--surface)' : 'var(--bg)',
                       cursor: 'pointer',
                       transition: 'background .1s',
                     }}
                     onMouseEnter={e => (e.currentTarget.style.background = 'rgba(67,97,160,.07)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? 'var(--surface)' : 'var(--bg)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = facturaPanel?.id === f.id ? 'rgba(67,97,160,.14)' : i % 2 === 0 ? 'var(--surface)' : 'var(--bg)')}
                   >
                     <td style={{ padding: '11px 16px', fontSize: 13, fontWeight: 600, color: 'var(--text-1)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.proveedor_nombre}</td>
                     <td style={{ padding: '11px 12px', fontSize: 12, color: 'var(--text-2)', whiteSpace: 'nowrap' }}>{fmtFecha(f.fecha_factura)}</td>
@@ -3530,7 +3526,7 @@ export default function FacturasPage() {
           /* ── Mobile: cards ── */
           <>
             {facturasFiltradas.map(f => (
-              <FacturaCard key={f.id} f={f} onClick={() => { setSelectedFactura(f); setView('detail') }} />
+              <FacturaCard key={f.id} f={f} onClick={() => abrirFactura(f)} />
             ))}
           </>
         )}
@@ -3544,6 +3540,37 @@ export default function FacturasPage() {
           </button>
         )}
       </div>
+      {panelAbierto && facturaPanel && (
+        <div style={{ width: 400, flexShrink: 0, minHeight: 0 }}>
+          <FacturaTicket
+            key={facturaPanel.id}
+            factura={facturaPanel}
+            categorias={categoriasGasto}
+            medios={mediosPago}
+            productosPorId={productosPorId}
+            fetchItems={fetchItems}
+            onEditar={() => setView('detail')}
+            onEliminar={() => setConfirmEliminar(true)}
+            onMarcarPagada={async () => { await marcarPagadaRapido(facturaPanel); setSelectedFactura({ ...facturaPanel, status: 'pagada' }) }}
+            onCerrar={() => setSelectedFactura(null)}
+          />
+        </div>
+      )}
+      </div>
+
+      {confirmEliminar && facturaPanel && (
+        <ConfirmSheet
+          icon="delete" iconColor="#ef4444" title="¿Eliminar esta factura?"
+          body={`${facturaPanel.proveedor_nombre} · ${fmt(facturaPanel.total)}. Se borran también sus ítems.`}
+          confirmLabel="Eliminar" confirmColor="#ef4444"
+          onCancel={() => setConfirmEliminar(false)}
+          onConfirm={async () => {
+            setConfirmEliminar(false)
+            try { await eliminarFactura(facturaPanel.id); setSelectedFactura(null); showToast('✓ Factura eliminada') }
+            catch { showToast('Error al eliminar la factura') }
+          }}
+        />
+      )}
 
       {/* FABs */}
       <div data-coach-target="facturas-acciones" className="flex-shrink-0 p-4 flex gap-2" style={{
@@ -3592,71 +3619,15 @@ export default function FacturasPage() {
       <ExcelPOSImportModal
         open={showExcelPOS}
         onClose={() => setShowExcelPOS(false)}
+        onVerPrecios={() => { setShowExcelPOS(false); setMainTab('precios') }}
         onImported={(count) => {
           showToast(`✓ ${count} factura${count !== 1 ? 's' : ''} importada${count !== 1 ? 's' : ''} desde POS`)
           fetchFacturas()
         }}
       />
 
-      {/* Modal privacidad \u2014 nombres a excluir */}
       {showPrivacidad && (
-        <>
-          <div className="fixed inset-0 z-[310]" style={{ background: 'rgba(0,0,0,0.45)' }} onClick={() => setShowPrivacidad(false)} />
-          <div className="fixed bottom-0 left-0 right-0 z-[311] rounded-t-[20px] flex flex-col" style={{ background: 'var(--surface)', maxHeight: '80vh', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}>
-            <div className="p-4 flex-shrink-0" style={{ borderBottom: '1px solid var(--border)' }}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined" style={{ color: 'var(--accent)' }}>shield_person</span>
-                  <h3 className="text-[16px] font-bold m-0" style={{ color: 'var(--text-1)' }}>Nombres a excluir</h3>
-                </div>
-                <button onClick={() => setShowPrivacidad(false)} className="bg-transparent border-none cursor-pointer">
-                  <span className="material-symbols-outlined" style={{ color: 'var(--text-3)' }}>close</span>
-                </button>
-              </div>
-              <p className="text-[12px] mt-2 mb-0" style={{ color: 'var(--text-2)' }}>
-                Empleados y socios cuyos nombres aparecen en facturas. El OCR los detecta y excluye autom\u00e1ticamente de las compras.
-              </p>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="flex gap-2 mb-3">
-                <input
-                  value={nuevoNombre}
-                  onChange={e => setNuevoNombre(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && nuevoNombre.trim()) { guardarNombresExcluidos([...nombresExcluidos, nuevoNombre.trim()]); setNuevoNombre('') } }}
-                  placeholder="Ej: Juan P\u00e9rez"
-                  className="flex-1 rounded-[10px] px-3 py-2 text-[14px] outline-none"
-                  style={{ background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-1)' }}
-                />
-                <button
-                  onClick={() => { if (nuevoNombre.trim()) { guardarNombresExcluidos([...nombresExcluidos, nuevoNombre.trim()]); setNuevoNombre('') } }}
-                  disabled={!nuevoNombre.trim()}
-                  className="px-4 rounded-[10px] border-none cursor-pointer text-[14px] font-bold text-white"
-                  style={{ background: nuevoNombre.trim() ? 'var(--navy)' : '#ccc' }}
-                >
-                  Agregar
-                </button>
-              </div>
-
-              {nombresExcluidos.length === 0 ? (
-                <div className="text-center py-8 text-[13px]" style={{ color: 'var(--text-3)' }}>
-                  Sin nombres configurados todav\u00eda
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {nombresExcluidos.map((n, i) => (
-                    <div key={i} className="flex items-center justify-between rounded-[10px] px-3 py-2" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
-                      <span className="text-[14px]" style={{ color: 'var(--text-1)' }}>{n}</span>
-                      <button onClick={() => guardarNombresExcluidos(nombresExcluidos.filter((_, j) => j !== i))} className="bg-transparent border-none cursor-pointer">
-                        <span className="material-symbols-outlined text-[18px]" style={{ color: 'var(--text-3)' }}>delete</span>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </>
+        <PrivacidadSheet nombres={nombresExcluidos} onGuardar={guardarNombresExcluidos} onClose={() => setShowPrivacidad(false)} />
       )}
 
       {/* Toast */}

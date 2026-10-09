@@ -154,7 +154,25 @@ export interface Factura {
   categoria_gasto_id?: string | null
   medio_pago_id?: string | null
   fecha_vencimiento?: string | null
+  /** ID del comprobante en el sistema de origen (Fudo "Id" de gasto) — clave del dedupe al re-importar. */
+  external_id?: string | null
+  external_source?: string | null
+  percepcion_iibb?: number | null
+  percepcion_ganancias?: number | null
+  otras_percepciones?: number | null
+  /** Subcategoría de Fudo: Salón / Cocina / Administración. */
+  sector?: string | null
+  creado_por?: string | null
   created_at: string
+}
+
+export interface FacturaPago {
+  id: string
+  factura_id: string
+  fecha_pago: string | null
+  importe: number
+  medio_pago: string | null
+  caja: string | null
 }
 
 // DB: categorias_gasto (id, restaurante_id, nombre, categoria_financiera, parent_id, activa, orden, created_at)

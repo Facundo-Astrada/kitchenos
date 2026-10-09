@@ -9,11 +9,40 @@ import type {
 import { useRestauranteId } from './useRestauranteId'
 import { resolverProductosDeItems, aplicarEfectosDeFactura, type ItemFacturaInput } from '@/lib/facturas/matching'
 import { invalidarPresupuesto } from './invalidarPresupuesto'
+import { fetchAllRows } from '@/lib/supabase/paginate'
 
 const PAGE_SIZE = 20
 
-export function useFacturas() {
+// Filtros que se resuelven en la base (no sobre las 20 filas ya cargadas): con
+// miles de facturas, filtrar en el cliente solo veía la primera página.
+export interface FiltrosFacturas {
+  desde?: string
+  hasta?: string
+  estado?: string
+  proveedor?: string
+  categoriaId?: string
+  medioId?: string
+  tipo?: string
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function aplicarFiltros(q: any, f: FiltrosFacturas) {
+  if (f.desde) q = q.gte('fecha_factura', f.desde)
+  if (f.hasta) q = q.lte('fecha_factura', f.hasta)
+  if (f.estado) q = q.eq('status', f.estado)
+  if (f.proveedor) q = q.eq('proveedor_nombre', f.proveedor)
+  if (f.categoriaId) q = q.eq('categoria_gasto_id', f.categoriaId)
+  if (f.medioId) q = q.eq('medio_pago_id', f.medioId)
+  if (f.tipo) q = q.eq('tipo_factura', f.tipo)
+  return q
+}
+
+export function useFacturas(filtros: FiltrosFacturas = {}) {
   const RESTAURANTE_ID = useRestauranteId()
+  const filtrosKey = JSON.stringify(filtros)
+  const filtrosRef = useRef(filtros)
+  filtrosRef.current = filtros
+  const [resumen, setResumen] = useState({ n: 0, total: 0, pagado: 0 })
   const [facturas, setFacturas] = useState<Factura[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -32,8 +61,11 @@ export function useFacturas() {
     const to = from + PAGE_SIZE - 1
 
     try {
-      const { data, error, count } = await supabase.from('facturas').select('*', { count: 'exact' })
-        .eq('restaurante_id', RESTAURANTE_ID)
+      const f = filtrosRef.current
+      const { data, error, count } = await aplicarFiltros(
+        supabase.from('facturas').select('*', { count: 'exact' }).eq('restaurante_id', RESTAURANTE_ID), f,
+      )
+        .order('fecha_factura', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: false })
         .range(from, to)
 
@@ -47,6 +79,20 @@ export function useFacturas() {
       if (count != null) setTotalCount(count)
       setHasMore((data?.length ?? 0) === PAGE_SIZE)
       pageRef.current = currentPage + 1
+
+      // Totales del filtro completo (no solo de lo cargado) — alimentan los KPIs.
+      if (reset) {
+        try {
+          const filas = await fetchAllRows<{ total: number; status: string | null }>((a, b) =>
+            aplicarFiltros(supabase.from('facturas').select('total, status').eq('restaurante_id', RESTAURANTE_ID), f).range(a, b)
+          )
+          setResumen({
+            n: filas.length,
+            total: filas.reduce((x, r) => x + Number(r.total ?? 0), 0),
+            pagado: filas.filter(r => r.status === 'pagada').reduce((x, r) => x + Number(r.total ?? 0), 0),
+          })
+        } catch (e) { console.error('[useFacturas] resumen:', e) }
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al cargar facturas'
       console.error('[useFacturas] Error:', msg)
@@ -54,7 +100,8 @@ export function useFacturas() {
     } finally {
       setLoading(false)
     }
-  }, [RESTAURANTE_ID, supabase])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [RESTAURANTE_ID, supabase, filtrosKey])
 
   const fetchMore = useCallback(() => {
     if (hasMore && !loading) fetchFacturas(false, false)
@@ -268,7 +315,7 @@ export function useFacturas() {
   }, [fetchFacturas, RESTAURANTE_ID])
 
   return {
-    facturas, loading, error,
+    facturas, loading, error, resumen,
     hasMore, fetchMore, totalCount,
     fetchFacturas, fetchItems, crearFactura,
     actualizarFactura, actualizarStatus, eliminarFactura, fetchHistorialPrecios,

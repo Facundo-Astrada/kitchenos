@@ -1,5 +1,6 @@
 'use client'
 
+import ResumenImport, { type ResultadoImport } from './ResumenImport'
 import { useState, useRef, useEffect } from 'react'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { invalidarPresupuesto } from '@/lib/hooks/invalidarPresupuesto'
@@ -30,17 +31,19 @@ interface Props {
   open: boolean
   onClose: () => void
   onImported?: (count: number) => void
+  /** Lleva a la pestaña de precios (cambios / ítems sin vincular) al terminar el import. */
+  onVerPrecios?: () => void
   initialFile?: File
 }
 
-export default function ExcelPOSImportModal({ open, onClose, onImported, initialFile }: Props) {
+export default function ExcelPOSImportModal({ open, onClose, onImported, onVerPrecios, initialFile }: Props) {
   useSheetOpenWhen(open)
   const RESTAURANTE_ID = useRestauranteId()
   const [file, setFile] = useState<File | null>(null)
   const [detecting, setDetecting] = useState(false)
   const [detected, setDetected] = useState<DetectResult | null>(null)
   const [applying, setApplying] = useState(false)
-  const [result, setResult] = useState<{ importadas: number; actualizadas?: number; items: number; omitidas: number } | null>(null)
+  const [result, setResult] = useState<ResultadoImport | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hojaSeleccionada, setHojaSeleccionada] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -296,22 +299,7 @@ export default function ExcelPOSImportModal({ open, onClose, onImported, initial
           )}
 
           {/* Result */}
-          {result && (
-            <div style={{
-              background: 'rgba(22,101,52,.1)', border: '1px solid rgba(22,101,52,.3)',
-              borderRadius: 12, padding: 16,
-            }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--green-fg)', marginBottom: 12 }}>
-                ✓ Importación completada
-              </div>
-              <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-1)', fontSize: 14, lineHeight: 1.8 }}>
-                <li>{result.importadas} facturas nuevas</li>
-                {(result.actualizadas ?? 0) > 0 && <li>{result.actualizadas} ya estaban cargadas y se actualizaron</li>}
-                <li>{result.items} items importados</li>
-                {result.omitidas > 0 && <li>{result.omitidas} omitidas (canceladas o vacías)</li>}
-              </ul>
-            </div>
-          )}
+          {result && <ResumenImport r={result} onVerPrecios={onVerPrecios} />}
         </div>
 
         <div style={{

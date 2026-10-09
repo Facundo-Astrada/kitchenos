@@ -1,5 +1,6 @@
 'use client'
 
+import ResumenImport, { type ResultadoImport } from '@/components/facturas/ResumenImport'
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import * as XLSX from 'xlsx'
@@ -149,6 +150,7 @@ export default function ImportadorUniversal({ onClose }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [importCount, setImportCount] = useState(0)
   const [actualizadas, setActualizadas] = useState(0)
+  const [resumenFull, setResumenFull] = useState<ResultadoImport | null>(null)
   const [omitidas, setOmitidas] = useState(0)
   const wbRef = useRef<WorkbookRef | null>(null)
   const [hojasDisponibles, setHojasDisponibles] = useState<string[]>([])
@@ -464,10 +466,11 @@ export default function ImportadorUniversal({ onClose }: Props) {
       fd.append('restauranteId', RESTAURANTE_ID)
       fd.append('mode', 'apply')
       const res = await fetch('/api/importador/facturas-universal', { method: 'POST', body: fd })
-      const data = await res.json() as { importadas?: number; actualizadas?: number; items?: number; omitidas?: number; excluidas_privacidad?: string[]; error?: string }
+      const data = await res.json() as Partial<ResultadoImport> & { excluidas_privacidad?: string[]; error?: string }
       if (data.error) { setError(data.error); setStep('fudo_preview'); return }
       setImportCount(data.importadas ?? 0)
       setActualizadas(data.actualizadas ?? 0)
+      setResumenFull({ importadas: data.importadas ?? 0, items: data.items ?? 0, omitidas: data.omitidas ?? 0, ...data })
       setOmitidas(data.omitidas ?? 0)
       setStep('done')
     } catch {
@@ -563,6 +566,9 @@ export default function ImportadorUniversal({ onClose }: Props) {
                 )}
               </>
             ) : (
+              resumenFull ? (
+                <div style={{ width: '100%', textAlign: 'left' }}><ResumenImport r={resumenFull} /></div>
+              ) : (
               <>
                 <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-1)' }}>{importCount} facturas nuevas</div>
                 {actualizadas > 0 && (
@@ -572,6 +578,7 @@ export default function ImportadorUniversal({ onClose }: Props) {
                   <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{omitidas} omitidas (canceladas en FUDO)</div>
                 )}
               </>
+              )
             )}
             <button onClick={onClose} style={{ background: 'var(--navy)', border: 'none', borderRadius: 12, padding: '14px 32px', fontSize: 14, fontWeight: 700, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>
               Listo

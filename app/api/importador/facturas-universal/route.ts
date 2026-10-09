@@ -6,245 +6,12 @@ import { randomUUID } from 'crypto'
 import { calcularDesfasadosDeItemsNuevos, aplicarDesfasados } from '@/lib/stock/syncPrecios'
 import { matchProducto } from '@/lib/facturas/matching'
 import { pedirAClaude } from '@/lib/ia/claude'
+import {
+  norm, excelDateToISO, parseNum, mapTipoFactura, mapUnidad, isFudoFormat, parseFudo,
+  type FacturaPayload, type ItemPayload, type PagoPayload, type PagosPorFactura,
+} from '@/lib/importador/fudo'
 
 export const maxDuration = 60
-
-// ──────────────────────────────────────────────────────────────────────────
-// Helpers
-// ──────────────────────────────────────────────────────────────────────────
-
-function norm(s: unknown): string {
-  return String(s ?? '')
-    .toLowerCase()
-    .trim()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/\s+/g, ' ')
-}
-
-function excelDateToISO(serial: unknown): string | null {
-  if (typeof serial === 'string') {
-    const d = new Date(serial)
-    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10)
-    return null
-  }
-  if (typeof serial !== 'number' || serial <= 0) return null
-  const date = new Date(Math.round((serial - 25569) * 86400 * 1000))
-  return date.toISOString().slice(0, 10)
-}
-
-function parseNum(v: unknown): number {
-  if (typeof v === 'number') return v
-  const s = String(v ?? '').replace(/\$|\s/g, '').replace(/\./g, '').replace(',', '.')
-  const n = parseFloat(s)
-  return isNaN(n) ? 0 : n
-}
-
-function mapTipoFactura(v: string): string {
-  const t = norm(v)
-  if (t.includes('factura a') || /\ba\b/.test(t)) return 'A'
-  if (t.includes('factura b') || /\bb\b/.test(t)) return 'B'
-  if (t.includes('factura c') || /\bc\b/.test(t)) return 'C'
-  if (t.includes('remito')) return 'remito'
-  if (t.includes('ticket') || t.includes('recibo')) return 'ticket'
-  return 'ticket'
-}
-
-function mapUnidad(v: string): string {
-  const r = norm(v)
-  if (r === 'kg' || r.includes('kilo')) return 'kg'
-  if (r === 'g' || r === 'gr' || r.includes('gramo')) return 'g'
-  if (r === 'l' || r === 'lt' || r.includes('litro')) return 'l'
-  if (r === 'ml' || r === 'cc') return 'ml'
-  return 'u'
-}
-
-function findCol(headers: string[], names: string[]): number {
-  const normHeaders = headers.map(norm)
-  for (const target of names) {
-    const t = norm(target)
-    const idx = normHeaders.findIndex(h => h === t || h.includes(t))
-    if (idx >= 0) return idx
-  }
-  return -1
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// Detección: Fudo (hojas Gastos + Detalle)
-// ──────────────────────────────────────────────────────────────────────────
-
-function isFudoFormat(wb: XLSX.WorkBook): boolean {
-  return !!(wb.Sheets['Gastos'] && wb.Sheets['Detalle'])
-}
-
-type FacturaPayload = {
-  id: string
-  proveedor_nombre: string
-  fecha_factura: string | null
-  tipo_factura: string
-  numero_factura: string | null
-  subtotal: number
-  iva_total: number
-  total: number
-  condicion_pago: string
-  status: string
-  notas: string | null
-  restaurante_id: string
-  categoria_gasto_id?: string | null
-  external_id?: string | null
-  external_source?: string | null
-  fecha_vencimiento?: string | null
-  proveedor_cuit?: string | null
-}
-
-type ItemPayload = {
-  factura_id: string
-  producto_nombre: string
-  cantidad: number
-  unidad: string
-  precio_unitario: number
-  alicuota_iva: number
-  subtotal: number
-  producto_id?: string | null
-}
-
-function parseFudo(wb: XLSX.WorkBook, restauranteId: string): {
-  facturas: FacturaPayload[]
-  items: ItemPayload[]
-  omitidas: number
-} {
-  const facturas: FacturaPayload[] = []
-  const items: ItemPayload[] = []
-  let omitidas = 0
-
-  // ── Gastos ──
-  const gastosRaw = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets['Gastos'], { header: 1, defval: '' }) as unknown[][]
-  const gHeaderIdx = gastosRaw.findIndex(r => {
-    const cells = (r as unknown[]).map(c => norm(c))
-    return cells.includes('id') && cells.some(c => c.startsWith('fecha'))
-  })
-  if (gHeaderIdx < 0) return { facturas, items, omitidas }
-
-  const gHeaders = gastosRaw[gHeaderIdx] as string[]
-  const cG = {
-    id: findCol(gHeaders, ['Id']),
-    fecha: findCol(gHeaders, ['Fecha']),
-    proveedor: findCol(gHeaders, ['Proveedor']),
-    categoria: findCol(gHeaders, ['Categoría', 'Categoria']),
-    comentario: findCol(gHeaders, ['Comentario']),
-    estado: findCol(gHeaders, ['Estado del pago', 'EstadoPago', 'Estado']),
-    importe: findCol(gHeaders, ['Importe', 'Total']),
-    tipo: findCol(gHeaders, ['Tipo de comprobante', 'Tipo']),
-    nro: findCol(gHeaders, ['N° de comprobante', 'Nro', 'Numero', 'Número']),
-    cancelado: findCol(gHeaders, ['Cancelado']),
-    vencimiento: findCol(gHeaders, ['Fecha de vencimiento', 'Vencimiento']),
-    cuit: findCol(gHeaders, ['CUIT']),
-  }
-
-  // ── Detalle ──
-  const detalleRaw = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets['Detalle'], { header: 1, defval: '' }) as unknown[][]
-  const dHeaderIdx = detalleRaw.findIndex(r => {
-    const cells = (r as unknown[]).map(c => norm(c))
-    return cells.some(c => c.includes('gasto')) && cells.some(c => c.includes('descrip') || c.includes('producto'))
-  })
-  const dStart = dHeaderIdx >= 0 ? dHeaderIdx + 1 : 1
-  const dHeaders = dHeaderIdx >= 0
-    ? (detalleRaw[dHeaderIdx] as string[])
-    : ['Id. Gasto', 'Fecha', 'Cantidad', 'Unidad', 'Descripción', 'Precio', 'Cancelado']
-  const cD = {
-    idGasto: findCol(dHeaders, ['Id. Gasto', 'IdGasto', 'Id Gasto']),
-    cantidad: findCol(dHeaders, ['Cantidad']),
-    unidad: findCol(dHeaders, ['Unidad', 'U/M']),
-    desc: findCol(dHeaders, ['Descripción', 'Descripcion', 'Producto', 'Detalle']),
-    precio: findCol(dHeaders, ['Precio', 'Importe', 'Total']),
-    cancelado: findCol(dHeaders, ['Cancelado']),
-  }
-
-  const detalleByGastoId = new Map<string, unknown[][]>()
-  for (const r of detalleRaw.slice(dStart)) {
-    const row = r as unknown[]
-    const id = String(row[cD.idGasto] ?? '').trim()
-    if (!id) continue
-    if (!detalleByGastoId.has(id)) detalleByGastoId.set(id, [])
-    detalleByGastoId.get(id)!.push(row)
-  }
-
-  // ── Impuestos (opcional) ──
-  const impSheet = wb.Sheets['Impuestos y percepciones']
-  const impuestosByGastoId = new Map<string, unknown[]>()
-  if (impSheet) {
-    const impRaw = XLSX.utils.sheet_to_json<unknown[]>(impSheet, { header: 1, defval: '' }) as unknown[][]
-    for (const r of impRaw.slice(1)) {
-      const row = r as unknown[]
-      const id = String(row[0] ?? '').trim()
-      if (id) impuestosByGastoId.set(id, row)
-    }
-  }
-
-  // ── Build ──
-  for (const r of gastosRaw.slice(gHeaderIdx + 1)) {
-    const row = r as unknown[]
-    if (!row[cG.id]) { omitidas++; continue }
-    if (norm(row[cG.cancelado]) === 'si') { omitidas++; continue }
-
-    const gastoId = String(row[cG.id] ?? '').trim()
-    const total = parseNum(row[cG.importe])
-    if (total <= 0) { omitidas++; continue }
-
-    const imp = impuestosByGastoId.get(gastoId)
-    const subtotal = imp ? (parseNum(imp[1]) || total) : total
-    const ivaTotal = imp ? parseNum(imp[2]) : 0
-
-    const facturaId = randomUUID()
-    const categoria = String(row[cG.categoria] ?? '').trim()
-    const comentario = String(row[cG.comentario] ?? '').trim()
-    const notas = [categoria, comentario].filter(Boolean).join(' · ') || null
-
-    const estadoStr = String(row[cG.estado] ?? '').trim()
-
-    facturas.push({
-      id: facturaId,
-      proveedor_nombre: String(row[cG.proveedor] ?? '').trim() || 'Sin proveedor',
-      fecha_factura: excelDateToISO(row[cG.fecha]),
-      tipo_factura: mapTipoFactura(String(row[cG.tipo] ?? '')),
-      numero_factura: String(row[cG.nro] ?? '').trim() || null,
-      subtotal,
-      iva_total: ivaTotal,
-      total,
-      condicion_pago: norm(estadoStr) === 'a pagar' ? 'cuenta_corriente' : 'contado',
-      status: norm(estadoStr) === 'pagado' ? 'pagada' : 'pendiente',
-      notas,
-      restaurante_id: restauranteId,
-      external_id: gastoId,
-      external_source: 'fudo',
-      fecha_vencimiento: cG.vencimiento >= 0 ? excelDateToISO(row[cG.vencimiento]) : null,
-      proveedor_cuit: cG.cuit >= 0 ? (String(row[cG.cuit] ?? '').replace(/\D/g, '') || null) : null,
-    })
-
-    for (const ir of detalleByGastoId.get(gastoId) ?? []) {
-      const irow = ir as unknown[]
-      if (norm(irow[cD.cancelado]) === 'si') continue
-      const desc = String(irow[cD.desc] ?? '').trim()
-      if (!desc || norm(desc) === 'iva') continue
-
-      const cantidad = parseNum(irow[cD.cantidad]) || 1
-      const precioTotal = parseNum(irow[cD.precio])
-      const precioUnitario = cantidad > 0 ? precioTotal / cantidad : precioTotal
-
-      items.push({
-        factura_id: facturaId,
-        producto_nombre: desc,
-        cantidad,
-        unidad: mapUnidad(String(irow[cD.unidad] ?? '')),
-        precio_unitario: Math.round(precioUnitario * 100) / 100,
-        alicuota_iva: 21,
-        subtotal: precioTotal,
-      })
-    }
-  }
-
-  return { facturas, items, omitidas }
-}
 
 // ──────────────────────────────────────────────────────────────────────────
 // Mapeo IA para formatos no-Fudo (Maxirest, Bistrosoft, custom)
@@ -526,7 +293,7 @@ export async function POST(req: NextRequest) {
 
   // ── Camino 1: Fudo ──────────────────────────────────────────────
   if (isFudoFormat(wb)) {
-    const { facturas, items, omitidas } = parseFudo(wb, restauranteId)
+    const { facturas, items, omitidas, pagos } = parseFudo(wb, restauranteId)
 
     if (mode === 'detect') {
       return NextResponse.json({
@@ -545,7 +312,7 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    return await insertBatch(facturas, items, omitidas)
+    return await insertBatch(facturas, items, omitidas, pagos)
   }
 
   // ── Camino 2: Genérico con IA ───────────────────────────────────
@@ -657,10 +424,14 @@ function normNombre(s: string): string {
     .trim()
 }
 
+type CambioPrecio = { producto: string; unidad: string; precio_anterior: number; precio_nuevo: number; delta_pct: number }
+type SinVincular = { nombre: string; veces: number; gasto: number; ultimo_precio: number; unidad: string }
+
 async function insertBatch(
   facturas: FacturaPayload[],
   items: ItemPayload[],
   omitidas: number,
+  pagos: PagosPorFactura = new Map(),
 ): Promise<NextResponse> {
   if (facturas.length === 0) {
     return NextResponse.json({ error: 'No se detectaron facturas válidas', omitidas }, { status: 400 })
@@ -668,30 +439,28 @@ async function insertBatch(
 
   const admin = createAdminClient()
   const BATCH = 100
+  const restId = facturas[0].restaurante_id
 
   // Filtro de privacidad: excluir facturas cuyo proveedor coincide con un nombre interno (empleado/socio)
   let facturasFinal = facturas
   let itemsFinal = items
   let excluidasPorNombre = 0
   try {
-    const restId = facturas[0]?.restaurante_id
-    if (restId) {
-      const { data: rest } = await admin.from('restaurantes').select('configuracion').eq('id', restId).single()
-      const cfg = rest?.configuracion as { nombres_excluidos?: string[] } | null
-      const internos = (Array.isArray(cfg?.nombres_excluidos) ? cfg!.nombres_excluidos : []).map(normNombre).filter(Boolean)
-      const idsExcluidos = new Set<string>()
-      facturasFinal = facturas.filter(f => {
-        const prov = normNombre(f.proveedor_nombre)
-        // Prefijo "Empleado" (Fudo marca así sueldos/adelantos) o match con nombre interno
-        const esEmpleado = prov.startsWith('empleado')
-        const match = esEmpleado || internos.some(n => n && (prov.includes(n) || n.includes(prov)))
-        if (match) { idsExcluidos.add(f.id); return false }
-        return true
-      })
-      if (idsExcluidos.size > 0) {
-        itemsFinal = items.filter(it => !idsExcluidos.has(it.factura_id))
-        excluidasPorNombre = idsExcluidos.size
-      }
+    const { data: rest } = await admin.from('restaurantes').select('configuracion').eq('id', restId).single()
+    const cfg = rest?.configuracion as { nombres_excluidos?: string[] } | null
+    const internos = (Array.isArray(cfg?.nombres_excluidos) ? cfg!.nombres_excluidos : []).map(normNombre).filter(Boolean)
+    const idsExcluidos = new Set<string>()
+    facturasFinal = facturas.filter(f => {
+      const prov = normNombre(f.proveedor_nombre)
+      // Prefijo "Empleado" (Fudo marca así sueldos/adelantos) o match con nombre interno
+      const esEmpleado = prov.startsWith('empleado')
+      const match = esEmpleado || internos.some(n => n && (prov.includes(n) || n.includes(prov)))
+      if (match) { idsExcluidos.add(f.id); return false }
+      return true
+    })
+    if (idsExcluidos.size > 0) {
+      itemsFinal = items.filter(it => !idsExcluidos.has(it.factura_id))
+      excluidasPorNombre = idsExcluidos.size
     }
   } catch { /* sin config, seguimos */ }
 
@@ -703,40 +472,52 @@ async function insertBatch(
   // lote en Categorías de Gasto) — sin esto, cada import nuevo entraba
   // sin categorizar aunque el proveedor ya se hubiera categorizado una vez.
   try {
-    const restId = facturasFinal[0]?.restaurante_id
-    if (restId) {
-      const { data: provsData } = await admin.from('proveedores')
-        .select('nombre, categoria_gasto_id')
-        .eq('restaurante_id', restId)
-        .not('categoria_gasto_id', 'is', null)
-      const categoriaPorProveedor = new Map(
-        ((provsData ?? []) as { nombre: string; categoria_gasto_id: string }[])
-          .map(p => [normNombre(p.nombre), p.categoria_gasto_id])
-      )
-      if (categoriaPorProveedor.size > 0) {
-        for (const f of facturasFinal) {
-          if (f.categoria_gasto_id) continue
-          const cat = categoriaPorProveedor.get(normNombre(f.proveedor_nombre))
-          if (cat) f.categoria_gasto_id = cat
-        }
+    const { data: provsData } = await admin.from('proveedores')
+      .select('nombre, categoria_gasto_id')
+      .eq('restaurante_id', restId)
+      .not('categoria_gasto_id', 'is', null)
+    const categoriaPorProveedor = new Map(
+      ((provsData ?? []) as { nombre: string; categoria_gasto_id: string }[])
+        .map(p => [normNombre(p.nombre), p.categoria_gasto_id])
+    )
+    if (categoriaPorProveedor.size > 0) {
+      for (const f of facturasFinal) {
+        if (f.categoria_gasto_id) continue
+        const cat = categoriaPorProveedor.get(normNombre(f.proveedor_nombre))
+        if (cat) f.categoria_gasto_id = cat
       }
     }
   } catch (e) {
     console.error('[facturas-universal] lookup de categoría por proveedor falló (no bloqueante):', e)
   }
 
+  // Medio de pago: el del último pago de Fudo ("Transferencia bbva") se enlaza
+  // con medios_pago por nombre, si existe uno igual.
+  try {
+    const { data: mediosData } = await admin.from('medios_pago').select('id, nombre').eq('restaurante_id', restId).eq('activo', true)
+    const medioPorNombre = new Map(((mediosData ?? []) as { id: string; nombre: string }[]).map(m => [normNombre(m.nombre), m.id]))
+    for (const f of facturasFinal) {
+      const ps = pagos.get(f.id)
+      const ultimo = ps?.[ps.length - 1]?.medio_pago
+      if (ultimo) f.medio_pago_id = medioPorNombre.get(normNombre(ultimo)) ?? null
+    }
+  } catch (e) {
+    console.error('[facturas-universal] enlace de medio de pago falló (no bloqueante):', e)
+  }
+
   // Dedupe: una factura que ya está cargada (mismo external_id, o —para las
   // anteriores a external_id— mismo proveedor+fecha+total+nro) se ACTUALIZA
-  // (estado de pago, vencimiento, CUIT) en vez de insertarse otra vez.
+  // (estado de pago, vencimiento, percepciones, pagos) en vez de insertarse
+  // otra vez.
   let actualizadas = 0
   let sinCambios = 0
+  const pagosAReemplazar: Array<{ facturaId: string; pagos: PagoPayload[] }> = []
   try {
-    const restId = facturasFinal[0].restaurante_id
-    type Existente = { id: string; external_id: string | null; proveedor_nombre: string; fecha_factura: string | null; total: number; numero_factura: string | null; status: string; fecha_vencimiento: string | null }
+    type Existente = { id: string; external_id: string | null; proveedor_nombre: string; fecha_factura: string | null; total: number; numero_factura: string | null; status: string; fecha_vencimiento: string | null; sector: string | null; percepcion_iibb: number | null }
     const existentes: Existente[] = []
     for (let from = 0; ; from += 1000) {
       const { data, error } = await admin.from('facturas')
-        .select('id, external_id, proveedor_nombre, fecha_factura, total, numero_factura, status, fecha_vencimiento')
+        .select('id, external_id, proveedor_nombre, fecha_factura, total, numero_factura, status, fecha_vencimiento, sector, percepcion_iibb')
         .eq('restaurante_id', restId).range(from, from + 999)
       if (error) throw error
       existentes.push(...((data ?? []) as Existente[]))
@@ -755,11 +536,21 @@ async function insertBatch(
       if (!ex) { nuevas.push(f); continue }
       idsYaExistentes.add(f.id)
       porClave.delete(clave(ex))
+      const ps = pagos.get(f.id)
+      if (ps?.length) pagosAReemplazar.push({ facturaId: ex.id, pagos: ps })
       const cambios: Record<string, unknown> = {}
       if (f.external_id && !ex.external_id) { cambios.external_id = f.external_id; cambios.external_source = f.external_source }
       if (f.status !== ex.status) { cambios.status = f.status; cambios.condicion_pago = f.condicion_pago }
       if (f.fecha_vencimiento && f.fecha_vencimiento !== ex.fecha_vencimiento) cambios.fecha_vencimiento = f.fecha_vencimiento
       if (f.proveedor_cuit) cambios.proveedor_cuit = f.proveedor_cuit
+      if (f.sector && f.sector !== ex.sector) cambios.sector = f.sector
+      if ((f.percepcion_iibb ?? 0) !== Number(ex.percepcion_iibb ?? 0)) {
+        cambios.percepcion_iibb = f.percepcion_iibb
+        cambios.percepcion_ganancias = f.percepcion_ganancias
+        cambios.otras_percepciones = f.otras_percepciones
+      }
+      if (f.creado_por) cambios.creado_por = f.creado_por
+      if (f.medio_pago_id) cambios.medio_pago_id = f.medio_pago_id
       if (Object.keys(cambios).length === 0) { sinCambios++; continue }
       const { error } = await admin.from('facturas').update(cambios).eq('id', ex.id).eq('restaurante_id', restId)
       if (!error) actualizadas++
@@ -776,19 +567,52 @@ async function insertBatch(
     if (error) return NextResponse.json({ error: `Error insertando facturas: ${error.message}` }, { status: 500 })
   }
 
+  // Pagos: de las facturas nuevas se insertan; de las que ya existían se
+  // reemplazan por los del archivo (Fudo es la fuente: un pago editado o
+  // cancelado allá se refleja acá).
+  try {
+    const filas: Array<Record<string, unknown>> = []
+    for (const f of facturasFinal) {
+      for (const pg of pagos.get(f.id) ?? []) filas.push({ ...pg, factura_id: f.id, restaurante_id: restId })
+    }
+    if (pagosAReemplazar.length > 0) {
+      const ids = pagosAReemplazar.map(x => x.facturaId)
+      for (let i = 0; i < ids.length; i += 200) {
+        await admin.from('factura_pagos').delete().eq('restaurante_id', restId).in('factura_id', ids.slice(i, i + 200))
+      }
+      for (const x of pagosAReemplazar) for (const pg of x.pagos) filas.push({ ...pg, factura_id: x.facturaId, restaurante_id: restId })
+    }
+    for (let i = 0; i < filas.length; i += BATCH) {
+      const { error } = await admin.from('factura_pagos').insert(filas.slice(i, i + BATCH))
+      if (error) console.error('[facturas-universal] insert de pagos falló (no bloqueante):', error.message)
+    }
+  } catch (e) {
+    console.error('[facturas-universal] pagos falló (no bloqueante):', e)
+  }
+
   // Resolver producto_id contra lo que ya existe en stock — mismo criterio de
-  // matching que useFacturas.crearFactura (lib/facturas/matching.ts). Un
-  // import masivo/histórico NO crea productos por cada ítem sin match (eso sí
-  // lo hace el alta manual de una factura).
+  // matching que useFacturas.crearFactura (lib/facturas/matching.ts), más los
+  // vínculos que el usuario ya confirmó a mano (producto_alias). Un import
+  // masivo/histórico NO crea productos por cada ítem sin match (eso sí lo hace
+  // el alta manual de una factura).
+  const sinVincularMap = new Map<string, SinVincular>()
   if (itemsFinal.length > 0) {
-    const restId = facturasFinal[0]?.restaurante_id
-    const { data: productosData } = restId
-      ? await admin.from('productos').select('id, nombre').eq('restaurante_id', restId)
-      : { data: null }
+    const { data: productosData } = await admin.from('productos').select('id, nombre').eq('restaurante_id', restId)
     const productos = (productosData ?? []) as { id: string; nombre: string }[]
-    if (productos.length > 0) {
-      for (const item of itemsFinal) {
-        item.producto_id = matchProducto(item.producto_nombre, productos)?.id ?? null
+    const { data: aliasData } = await admin.from('producto_alias').select('alias_norm, producto_id').eq('restaurante_id', restId)
+    const alias = new Map(((aliasData ?? []) as { alias_norm: string; producto_id: string }[]).map(a => [a.alias_norm, a.producto_id]))
+    for (const item of itemsFinal) {
+      item.producto_id = alias.get(normNombre(item.producto_nombre)) ?? (productos.length > 0 ? matchProducto(item.producto_nombre, productos)?.id : null) ?? null
+      if (!item.producto_id && item.precio_unitario > 0) {
+        const k = normNombre(item.producto_nombre)
+        const prev = sinVincularMap.get(k)
+        sinVincularMap.set(k, {
+          nombre: prev?.nombre ?? item.producto_nombre,
+          veces: (prev?.veces ?? 0) + 1,
+          gasto: (prev?.gasto ?? 0) + (item.subtotal || 0),
+          ultimo_precio: item.precio_unitario,
+          unidad: item.unidad,
+        })
       }
     }
   }
@@ -801,16 +625,15 @@ async function insertBatch(
   // Sync de precios best-effort — solo sobre los ítems recién insertados (no relee
   // la historia completa de facturas, así que es rápido sin importar el volumen del
   // restaurante). Un fallo acá nunca debe romper la respuesta del import.
+  const cambiosPrecio: CambioPrecio[] = []
   try {
-    const restId = facturasFinal[0]?.restaurante_id
-    if (restId) {
-      const facturaFecha = new Map<string, string>()
-      const hoy = new Date().toISOString().slice(0, 10)
-      for (const f of facturasFinal) facturaFecha.set(f.id, f.fecha_factura || hoy)
-      const desfasados = await calcularDesfasadosDeItemsNuevos(admin, restId, itemsFinal, facturaFecha)
-      if (desfasados.length > 0) {
-        await aplicarDesfasados(admin, restId, desfasados.map(d => ({ producto_id: d.producto_id, precio_nuevo: d.precio_nuevo, factura_id: d.factura_id })))
-      }
+    const facturaFecha = new Map<string, string>()
+    const hoy = new Date().toISOString().slice(0, 10)
+    for (const f of facturasFinal) facturaFecha.set(f.id, f.fecha_factura || hoy)
+    const desfasados = await calcularDesfasadosDeItemsNuevos(admin, restId, itemsFinal, facturaFecha)
+    if (desfasados.length > 0) {
+      await aplicarDesfasados(admin, restId, desfasados.map(d => ({ producto_id: d.producto_id, precio_nuevo: d.precio_nuevo, factura_id: d.factura_id })))
+      for (const d of desfasados) cambiosPrecio.push({ producto: d.nombre, unidad: d.unidad, precio_anterior: d.precio_actual, precio_nuevo: d.precio_nuevo, delta_pct: d.delta_pct })
     }
   } catch (e) {
     console.error('[facturas-universal] sync de precios post-import falló (no bloqueante):', e)
@@ -823,5 +646,9 @@ async function insertBatch(
     items: itemsFinal.length,
     omitidas,
     excluidas_privacidad: excluidasPorNombre,
+    cambios_precio: cambiosPrecio.slice(0, 50),
+    total_cambios_precio: cambiosPrecio.length,
+    sin_vincular: Array.from(sinVincularMap.values()).sort((a, b) => b.gasto - a.gasto).slice(0, 30),
+    total_sin_vincular: sinVincularMap.size,
   })
 }
