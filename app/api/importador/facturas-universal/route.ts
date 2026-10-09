@@ -3,8 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requireRestauranteId } from '@/lib/api/tenant'
 import * as XLSX from 'xlsx'
 import { randomUUID } from 'crypto'
-import { calcularDesfasadosDeItemsNuevos, aplicarDesfasados } from '@/lib/stock/syncPrecios'
-import { matchProducto } from '@/lib/facturas/matching'
+import { calcularDesfasadosDeItemsNuevos, aplicarDesfasados, registrarPendientes, UMBRAL_REVISION_PCT } from '@/lib/stock/syncPrecios'
+import { sugerenciaSegura } from '@/lib/facturas/sugerirProducto'
 import { pedirAClaude } from '@/lib/ia/claude'
 import { fetchAllRows } from '@/lib/supabase/paginate'
 import {
@@ -426,7 +426,7 @@ function normNombre(s: string): string {
     .trim()
 }
 
-type CambioPrecio = { producto: string; unidad: string; precio_anterior: number; precio_nuevo: number; delta_pct: number }
+type CambioPrecio = { producto: string; unidad: string; precio_anterior: number; precio_nuevo: number; delta_pct: number; pendiente?: boolean; origen?: string }
 type SinVincular = { nombre: string; veces: number; gasto: number; ultimo_precio: number; unidad: string }
 
 async function insertBatch(
@@ -555,6 +555,7 @@ async function insertBatch(
         cambios.otras_percepciones = f.otras_percepciones
       }
       if (f.creado_por) cambios.creado_por = f.creado_por
+      if (f.categoria_origen) cambios.categoria_origen = f.categoria_origen
       if (f.medio_pago_id) cambios.medio_pago_id = f.medio_pago_id
       if (Object.keys(cambios).length === 0) { sinCambios++; continue }
       updatesPend.push({ id: ex.id, cambios })
@@ -602,12 +603,14 @@ async function insertBatch(
   // el alta manual de una factura).
   const sinVincularMap = new Map<string, SinVincular>()
   if (itemsFinal.length > 0) {
-    const { data: productosData } = await admin.from('productos').select('id, nombre').eq('restaurante_id', restId)
+    const { data: productosData } = await admin.from('productos').select('id, nombre').eq('restaurante_id', restId).eq('activo', true).eq('es_produccion', false)
     const productos = (productosData ?? []) as { id: string; nombre: string }[]
     const { data: aliasData } = await admin.from('producto_alias').select('alias_norm, producto_id').eq('restaurante_id', restId)
     const alias = new Map(((aliasData ?? []) as { alias_norm: string; producto_id: string }[]).map(a => [a.alias_norm, a.producto_id]))
     for (const item of itemsFinal) {
-      item.producto_id = alias.get(normNombre(item.producto_nombre)) ?? (productos.length > 0 ? matchProducto(item.producto_nombre, productos)?.id : null) ?? null
+      item.producto_id = alias.get(normNombre(item.producto_nombre))
+        ?? (productos.length > 0 ? sugerenciaSegura(item.producto_nombre, productos)?.id : null)
+        ?? null
       if (!item.producto_id && item.precio_unitario > 0) {
         const k = normNombre(item.producto_nombre)
         const prev = sinVincularMap.get(k)
@@ -681,10 +684,14 @@ async function insertBatch(
     for (const [exId, fecha] of fechaDeExistentes) facturaFecha.set(exId, fecha)
     const desfasados = (await calcularDesfasadosDeItemsNuevos(admin, restId, itemsFinal, facturaFecha))
       .filter(d => !!d.fecha && d.fecha >= (ultimaCompra.get(d.producto_id) ?? ''))
-    if (desfasados.length > 0) {
-      await aplicarDesfasados(admin, restId, desfasados.map(d => ({ producto_id: d.producto_id, precio_nuevo: d.precio_nuevo, factura_id: d.factura_id })))
-      for (const d of desfasados) cambiosPrecio.push({ producto: d.nombre, unidad: d.unidad, precio_anterior: d.precio_actual, precio_nuevo: d.precio_nuevo, delta_pct: d.delta_pct })
+    const aRevisar = desfasados.filter(d => d.precio_actual > 0 && Math.abs(d.delta_pct) > UMBRAL_REVISION_PCT)
+    const aAplicar = desfasados.filter(d => !aRevisar.includes(d))
+    if (aAplicar.length > 0) {
+      await aplicarDesfasados(admin, restId, aAplicar.map(d => ({ producto_id: d.producto_id, precio_nuevo: d.precio_nuevo, factura_id: d.factura_id, origen: d.origen })))
     }
+    await registrarPendientes(admin, restId, aRevisar)
+    for (const d of aRevisar) cambiosPrecio.push({ producto: d.nombre, unidad: d.unidad, precio_anterior: d.precio_actual, precio_nuevo: d.precio_nuevo, delta_pct: d.delta_pct, pendiente: true, origen: d.origen })
+    for (const d of aAplicar) cambiosPrecio.push({ producto: d.nombre, unidad: d.unidad, precio_anterior: d.precio_actual, precio_nuevo: d.precio_nuevo, delta_pct: d.delta_pct, origen: d.origen })
   } catch (e) {
     console.error('[facturas-universal] sync de precios post-import falló (no bloqueante):', e)
   }

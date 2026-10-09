@@ -8,11 +8,15 @@ import { fetchAllRows } from '@/lib/supabase/paginate'
 // del real (confirmado: 79/152 productos matcheables en Bros con >5% de delta).
 // Esta lógica SOLO toca precios — nunca stock_actual ni umbrales.
 const DELTA_MINIMO_PCT = 2
+// Un salto mayor a esto no se aplica solo: queda "pendiente" en precio_historial
+// hasta que alguien lo confirma (pestaña Precios de Compras). Casi siempre es
+// una unidad mal leída o un producto mal vinculado, no inflación.
+export const UMBRAL_REVISION_PCT = 50
 
 type AdminClient = ReturnType<typeof createAdminClient>
 
 export type ProductoRow = { id: string; nombre: string; unidad: string; precio_unitario: number | null; peso_por_unidad_g?: number | null; unidad_compra?: string | null; cantidad_por_envase?: number | null }
-export type FacturaItemRow = { producto_nombre: string; precio_unitario: number; unidad: string | null; factura_id: string }
+export type FacturaItemRow = { producto_nombre: string; precio_unitario: number; unidad: string | null; factura_id: string; producto_id?: string | null; cantidad?: number }
 export type Desfasado = {
   producto_id: string
   nombre: string
@@ -22,19 +26,28 @@ export type Desfasado = {
   fecha: string | null
   factura_id: string
   delta_pct: number
+  /** Línea de factura que produjo el precio, para poder revisarlo. */
+  origen: string
 }
 
-function matchDesfasados(candidatos: ProductoRow[], items: FacturaItemRow[], facturaFecha: Map<string, string>): Desfasado[] {
+// soloVinculados: el ítem cuenta solo para SU producto_id (el vínculo que ya
+// resolvió el import, alias incluido). Sin eso, el match por nombre de acá iba
+// por su cuenta y le asignaba a "Vinagre de alcohol" el precio de otra línea.
+function matchDesfasados(candidatos: ProductoRow[], items: FacturaItemRow[], facturaFecha: Map<string, string>, soloVinculados = false): Desfasado[] {
   const resultado: Desfasado[] = []
   for (const p of candidatos) {
     const nombreProdSinTildes = sinTildes(p.nombre.toLowerCase())
-    if (nombreProdSinTildes.length < 4) continue
+    if (!soloVinculados && nombreProdSinTildes.length < 4) continue
 
     // De todos los ítems que matchean el producto, nos quedamos con el más reciente.
     let mejor: { item: FacturaItemRow; fecha: string } | null = null
     for (const it of items) {
-      const itemSinTildes = sinTildes(it.producto_nombre.toLowerCase())
-      if (!matchesWholeWord(itemSinTildes, nombreProdSinTildes)) continue
+      if (soloVinculados) {
+        if (it.producto_id !== p.id) continue
+      } else {
+        const itemSinTildes = sinTildes(it.producto_nombre.toLowerCase())
+        if (!matchesWholeWord(itemSinTildes, nombreProdSinTildes)) continue
+      }
       const fecha = facturaFecha.get(it.factura_id) ?? ''
       if (!mejor || fecha > mejor.fecha) mejor = { item: it, fecha }
     }
@@ -64,6 +77,7 @@ function matchDesfasados(candidatos: ProductoRow[], items: FacturaItemRow[], fac
       fecha: mejor.fecha || null,
       factura_id: mejor.item.factura_id,
       delta_pct: Math.round(deltaPct * 10) / 10,
+      origen: `${mejor.item.producto_nombre}${mejor.item.cantidad ? ` · ${mejor.item.cantidad} ${mejor.item.unidad ?? ''}` : ''}`.trim(),
     })
   }
   resultado.sort((a, b) => Math.abs(b.delta_pct) - Math.abs(a.delta_pct))
@@ -126,7 +140,7 @@ export async function calcularDesfasadosDeItemsNuevos(
   if (itemsConPrecio.length === 0) return []
   const candidatos = await fetchCandidatos(admin, restauranteId)
   if (candidatos.length === 0) return []
-  return matchDesfasados(candidatos, itemsConPrecio, facturaFecha)
+  return matchDesfasados(candidatos, itemsConPrecio, facturaFecha, true)
 }
 
 // Aplica una lista de desfasados: actualiza precio del producto, registra
@@ -135,7 +149,7 @@ export async function calcularDesfasadosDeItemsNuevos(
 export async function aplicarDesfasados(
   admin: AdminClient,
   restauranteId: string,
-  items: Array<{ producto_id: string; precio_nuevo: number; factura_id?: string | null }>,
+  items: Array<{ producto_id: string; precio_nuevo: number; factura_id?: string | null; origen?: string | null }>,
 ): Promise<number> {
   if (items.length === 0) return 0
   const ids = items.map(i => i.producto_id)
@@ -166,6 +180,7 @@ export async function aplicarDesfasados(
       variacion_porcentaje: Math.round(variacion * 10) / 10,
       factura_id: it.factura_id ?? null,
       restaurante_id: restauranteId,
+      origen: it.origen ?? null,
     })
     await admin.from('ingredientes').update({ costo_unitario: it.precio_nuevo }).eq('producto_id', it.producto_id)
     return true
@@ -176,4 +191,21 @@ export async function aplicarDesfasados(
     actualizados += r.filter(Boolean).length
   }
   return actualizados
+}
+
+// Deja asentados cambios que NO se aplican todavía (salto > UMBRAL_REVISION_PCT):
+// el producto conserva su precio hasta que alguien confirma en Compras → Precios.
+export async function registrarPendientes(admin: AdminClient, restauranteId: string, items: Desfasado[]): Promise<number> {
+  if (items.length === 0) return 0
+  const { error } = await admin.from('precio_historial').insert(items.map(d => ({
+    producto_id: d.producto_id,
+    precio_anterior: d.precio_actual,
+    precio_nuevo: d.precio_nuevo,
+    variacion_porcentaje: d.delta_pct,
+    factura_id: d.factura_id,
+    restaurante_id: restauranteId,
+    origen: d.origen,
+    estado: 'pendiente',
+  })))
+  return error ? 0 : items.length
 }

@@ -12,7 +12,7 @@ export interface ResultadoImport {
   sin_cambios?: number
   items: number
   omitidas: number
-  cambios_precio?: Array<{ producto: string; unidad: string; precio_anterior: number; precio_nuevo: number; delta_pct: number }>
+  cambios_precio?: Array<{ producto: string; unidad: string; precio_anterior: number; precio_nuevo: number; delta_pct: number; pendiente?: boolean; origen?: string }>
   total_cambios_precio?: number
   sin_vincular?: Array<{ nombre: string; veces: number; gasto: number; ultimo_precio: number; unidad: string }>
   total_sin_vincular?: number
@@ -21,8 +21,10 @@ export interface ResultadoImport {
 const fmt = (n: number) => n.toLocaleString('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: n < 100 ? 2 : 0 })
 
 export default function ResumenImport({ r, onVerPrecios }: { r: ResultadoImport; onVerPrecios?: () => void }) {
-  const cambios = r.cambios_precio ?? []
-  const totalCambios = r.total_cambios_precio ?? cambios.length
+  const todos = r.cambios_precio ?? []
+  const aRevisar = todos.filter(c => c.pendiente)
+  const cambios = todos.filter(c => !c.pendiente)
+  const totalCambios = (r.total_cambios_precio ?? todos.length) - aRevisar.length
   const sinVincular = r.total_sin_vincular ?? 0
   const sube = cambios.filter(c => c.delta_pct > 0).length
   const baja = cambios.filter(c => c.delta_pct < 0).length
@@ -39,6 +41,25 @@ export default function ResumenImport({ r, onVerPrecios }: { r: ResultadoImport;
           {r.omitidas > 0 && <li>{r.omitidas} omitidas (canceladas o vacías)</li>}
         </ul>
       </div>
+
+      {aRevisar.length > 0 && (
+        <div style={{ background: 'var(--amber-bg)', borderRadius: 12, padding: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--amber-fg)' }}>rule</span>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--amber-fg)' }}>
+              {aRevisar.length} cambio{aRevisar.length !== 1 ? 's' : ''} de más de ±50% quedaron sin aplicar
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--amber-fg)', opacity: 0.85, marginTop: 4 }}>
+            {aRevisar.slice(0, 4).map(c => `${c.producto} (${c.delta_pct > 0 ? '+' : ''}${c.delta_pct.toFixed(0)}%)`).join(' · ')}{aRevisar.length > 4 ? '…' : ''}
+          </div>
+          {onVerPrecios && (
+            <button onClick={onVerPrecios} style={{ marginTop: 8, background: 'none', border: 'none', color: 'var(--amber-fg)', fontWeight: 700, fontSize: 12, cursor: 'pointer', padding: 0, textDecoration: 'underline', fontFamily: 'inherit' }}>
+              Revisarlos
+            </button>
+          )}
+        </div>
+      )}
 
       {totalCambios > 0 && (
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 14 }}>

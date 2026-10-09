@@ -99,6 +99,8 @@ export type FacturaPayload = {
   otras_percepciones?: number
   sector?: string | null
   creado_por?: string | null
+  /** Categoría en el sistema de origen (Fudo: "Verduras y frutas", "Vino", "Egresos Varios"). */
+  categoria_origen?: string | null
   medio_pago_id?: string | null
 }
 
@@ -273,6 +275,7 @@ export function parseFudo(wb: XLSX.WorkBook, restauranteId: string): {
       otras_percepciones: percOtras,
       sector: cG.sector >= 0 ? (String(row[cG.sector] ?? '').trim() || null) : null,
       creado_por: cG.creadoPor >= 0 ? (String(row[cG.creadoPor] ?? '').trim() || null) : null,
+      categoria_origen: categoria || null,
     })
     const susPagos = pagosPorGastoId.get(gastoId)
     if (susPagos?.length) pagos.set(facturaId, susPagos)
