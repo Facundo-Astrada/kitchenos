@@ -82,8 +82,14 @@ si se queda), las vistas no se guardan con la conversación, mobile sin sheet.
 
 ### Costos — flecos de la auditoría del 08/10
 - **Subreceta como ingrediente** se costea con su `costo_unitario` guardado en la lista del Recetario y en Carta; solo la ficha la recalcula en vivo (`corregirSubreceta`). Llevar ese recálculo a `calcFoodCost`.
-- **Bros: 446 ingredientes sin vincular** (309 de antes + 216 desvinculados − 79 exactos) — repasarlos con "Vincular stock" (sugerencias parecidas, confirmar a mano).
+- **Bros: 446 ingredientes sin vincular** (309 de antes + 216 desvinculados − 79 exactos). El drawer "Vincular stock" sigue con sugerencias por palabras; pasarle `/api/recetas/vincular-ia` (segura → aplicar, dudosa → elegir entre 3) — probado contra el catálogo de Bros, resuelve sinónimos (worcestershire → Salsa inglesa) y pregunta lo ambiguo (Leche).
+- **Factura en "u" de un producto con envase**: una línea "1 UN" de un pack de 12 entra como 1 unidad al precio del pack — solo se convierte si la unidad de la factura es la de compra (pack/PAQ/CJ). Ver si los proveedores de Bros facturan así antes de adivinar.
+- **Bros, datos**: producto duplicado "Alga Nori" (g, sin precio ni stock) junto a la buena; decidir si "Almacen" y "Secos" son la misma sección.
 - **Bros: 53 productos sin precio** (arriba Cebolla en 34 recetas, Agua en 31) y 234 líneas en unidades contra $/kg: cargar precio y "Peso de 1 unidad" desde Stock → chip "Sin precio" — dato, no código.
+
+### Herramientas — flecos de la sesión del 08/10
+- `.env.local` tiene `BROS_PASSWORD` sin `BROS_EMAIL`: `/shot --cuenta bros` no loguea (no es la cuenta de Franco). Falta el mail.
+- La acción `adjust` de `/api/recetas/import` quedó sin uso (se sacó el chat "Resultado de IA") — borrarla.
 
 ### Planificación — los pasos del menú no siguen el orden de Carta
 En Planificación, "Cotidiano 29/9 a 9/10" (Bros) sale Postre → Pasta → Proteina, cuando en el menú es ape → entrada → proteina → pasta → postre. El mise ya respeta ese orden (`sincronizarMiseDeMenu`); falta que `MenuActivoView` (`produccion/page.tsx`) ordene los grupos por `menu_preparaciones.orden` en vez de por llegada o nombre.

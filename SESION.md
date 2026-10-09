@@ -1,18 +1,18 @@
-# Sesión — 08/10/2026 (auditoría de costos, unidades y vínculo a Stock)
+# Sesión — 08-09/10/2026 (Recetario: alta rápida + IA directo; Stock: categorías y envase)
 
 ## Qué se cerró
-- Costo de ingrediente vinculado = precio + unidad del producto, por trigger (migración `20261008_ingredientes_costo_desde_producto.sql`). Bros: 137 líneas ×1000 → 0, recetas distorsionadas 99 → 3.
-- Vínculo a Stock se guarda en las 6 vías de carga; auto-vínculo solo exacto; `RecetaEditSheet` ya no convierte "500 g" en "500 kg".
-- Facturas/listas convierten a la unidad del producto; `peso_por_unidad_g` con campo en Stock; sin conversión automática en pantalla; comas y miles.
-- Stock: chip "Sin precio" (ordenado por cuántas recetas usan cada producto, "en N recetas" por fila). Bros: 53, arriba Cebolla (34) y Agua (31).
-- Bros: 216 vínculos erróneos desvinculados, 79 revinculados exacto (respaldos `_bkp_ingredientes_*_20261008`).
+- Nueva receta: modal centrado en desktop; sugerencias de Stock + recetas al tipear (el desplegable estaba recortado), ↑↓+Enter, unidad como chip y tipeable ("500 g"); costo en vivo con conversión y coma.
+- Importar con IA: abre la receta cargada (sin chat "Resultado de IA"); vínculo exacto + `/api/recetas/vincular-ia` (segura → sola, dudosa → chips "¿Cuál usás?").
+- Stock Bros: 185 → 19 categorías (respaldo `_bkp_categorias_producto_20261008`); el importador ya no crea categorías basura.
+- Ficha de producto: "Unidades y envase" a la vista; el envase reparte el precio y convierte facturas en pack/caja; botón "Repartir". Nori de Bros a $833,33.
 
 ## Qué quedó a medias
-- Subreceta como ingrediente sigue con costo guardado fuera de la ficha (PENDIENTES → Costos).
+- No probé la pantalla con login de Bros: falta `BROS_EMAIL` en `.env.local` (verificado con El Rescoldo + script contra el catálogo de Bros).
 - Test `ratchets`: `checklist/ClientView.tsx` sobre su techo (de antes, no tocado).
 
 ## Probar primero mañana
-- En Bros: ficha de receta → agregar 500 g de un producto por kg (ver "500 g × $X/kg" y punto verde); cargar "Peso de 1 unidad" en Ajo; cargar una factura en otra unidad.
+- En el celular, Bros: Nueva receta → foto de una ficha → que se abra cargada y aparezcan "¿Cuál usás?" (Leche, Pimienta).
+- Stock → nori: ver el bloque nuevo y el valor de stock ($4.167).
 
 ## Próximo paso concreto
-- Repasar con Franco los 446 sin vincular en "Vincular stock" y cargar precios a Sal/Agua/Leche/aceites. Después, retomar F2 del asistente (`asistente_rutinas`).
+- Pasar `/api/recetas/vincular-ia` al drawer "Vincular stock" para los 446 sin vincular de Bros. Después, retomar F2 del asistente (`asistente_rutinas`).

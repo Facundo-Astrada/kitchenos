@@ -6,6 +6,16 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-10-08/09 — Recetario: alta rápida + IA directo al formulario; Stock: categorías y envase (feedback de Facundo en celular y web).** 7 commits `468b09b`…`f6e1466`.
+
+- Nueva receta en desktop = modal centrado con fondo translúcido (`ModalCentrado`); mobile sigue pantalla completa.
+- Sugerencias de ingrediente al tipear: el desplegable quedaba recortado por `overflow: hidden` (invisible con 1 fila). Buscador nuevo `lib/recetas/sugerencias.ts` (exacto > empieza > palabra > contiene, sin acentos, sin duplicados, Stock + recetas como subreceta), ↑↓+Enter, opción "insumo nuevo". Lo usan Nueva receta y Carga rápida. Fila → `recetario/IngRow.tsx` (ratchet recetario 2873 → 2578, techo 2650).
+- Unidad del ingrediente como chip (select nativo) + unidad tipeable en cantidad ("500 g", "200cc") — `separarCantidadUnidad`.
+- Costo en vivo del alta: convierte unidades y acepta coma; reescribir un ingrediente vinculado dejaba su precio sin unidad (250 g de leche a $/l = $441.180).
+- Importar con IA: una receta entra directo al formulario (se sacó la pantalla chat "Resultado de IA", DECISIONES §27); franja "Cargada con IA" con foto tocable; vínculo exacto + `/api/recetas/vincular-ia` (Haiku, catálogo cacheado, ~1 ¢): segura → sola, dudosa → chips "¿Cuál usás?".
+- Stock: Bros tenía 185 categorías, 170 sin productos (nombres de producto, marcas). Respaldo `_bkp_categorias_producto_20261008` + `_bkp_productos_categoria_20261008`, borradas las sin uso, unificadas Lacteos/Descartable/Verduleria; quedan 19 secciones. Importador filtra la columna categoría (`lib/importador/categoriaStock.ts`).
+- Ficha de producto: bloque "Unidades y envase" a la vista (`components/stock/UnidadesProducto.tsx`, ratchet stock 3355 → 3308, techo 3330): precio por envase ↔ unitario, botón "Repartir", aviso si la Unidad es un envase; se sacó "Stock se mide en". `cantidad_por_envase` antes no lo leía nadie: ahora `aUnidadDelProducto` convierte líneas de factura en la unidad de compra (pack/PAQ/CJ). Nori de Bros corregida a $833,33 (estaba a $10.000 la hoja).
+
 **Sesión 2026-10-08 — Auditoría de costos, unidades y vínculo a Stock (devolución de Facundo, verificado en Bros).**
 
 - Costos ×1000: varias pantallas guardaban la unidad de la receta como unidad del precio (500 g × $/kg). Trigger `ingredientes_costo_desde_producto` + `productos_propaga_costo` (migración `20261008_ingredientes_costo_desde_producto.sql`, respaldo `_bkp_ingredientes_costo_20261008`): costo y unidad del costo salen del producto. Bros: 137 líneas infladas → 0; recetas distorsionadas 99 → 3 (las 3 = producto sin precio con costo manual).
