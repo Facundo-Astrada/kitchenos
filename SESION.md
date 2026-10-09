@@ -1,16 +1,16 @@
-# Sesión — 09/10/2026 (Compras: facturas de Fudo)
+# Sesión — 09/10/2026 (Compras/Fudo en Bros: import, vínculos, categorías)
 
 ## Qué se cerró
-- Bros: 1.653 facturas duplicadas borradas (respaldo en `bak_*_20261009`); import de Fudo idempotente por `external_id`.
-- Parser de Fudo en `lib/importador/fudo.ts` (con test): pagos, IIBB/Ganancias, sector, CUIT, vencimiento.
-- Pestaña Precios (cambios + deshacer, sin vincular + alias), resumen post-import, ticket lateral ≥900px, filtros en la base.
+- Import de Fudo de 2.710 facturas sin duplicar (554 nuevas, 1.811 actualizadas); saltos de precio >50% van a "A revisar".
+- Matcher único (`lib/facturas/sugerirProducto.ts`) para import, carga manual y OCR, que aprende de lo vinculado; 366 alias en Bros.
+- Bros: mercadería 89% / bebidas 92% / limpieza 86% vinculadas; 148 vinos + 34 bebidas + 61 productos nuevos; facturas sin categoría ~680 → 21; almacén/carnes/verdulería ahora cuentan en CMV.
 
 ## Qué quedó a medias
-- No probé en pantalla con login de Bros (solo build, tests y parser contra el export real de agosto).
-- Exportar de Facturas sigue siendo solo la página cargada. Ratchet de `checklist/ClientView.tsx` sobre su techo (de antes).
+- 11 precios en "A revisar"; carnes creadas por "u" que quizás son kg; mínimos en 0 de los productos nuevos; carta de Bebidas sin vincular a sus productos.
+- Ratchet `checklist/ClientView.tsx` sobre su techo (de antes).
 
 ## Probar primero mañana
-- Importar el Excel de hoy en Compras → POS: ¿"actualizadas" + solo octubre nuevo? ¿Resumen de precios? Pestaña Precios y ticket en desktop.
+- Compras → Precios en Bros: que "A revisar" muestre la línea de origen y que "No es este producto" desvincule.
 
 ## Próximo paso concreto
-- Si el import sale limpio: vincular lo "sin vincular" más caro en Precios y revisar los cambios >15%.
+- Recetas de Bros con costo incompleto: 705 ingredientes a productos desactivados, 657 a productos $0, 260 recetas afectadas → revincular al producto activo con precio (dry-run + respaldo).

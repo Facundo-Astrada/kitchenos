@@ -6,6 +6,15 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-10-09 (tarde) — Fudo en Bros: import completo, vínculos y categorías.** Commits `e222c6e`…`af9024a`.
+
+- Import grande de Fudo (2.710 facturas) se cortaba a 60s: updates en paralelo, `maxDuration` 300, ítems antes que pagos, reparación de facturas sin ítems. Resultado: 554 nuevas, 1.811 actualizadas.
+- Precios: el sync del import usa solo el vínculo del ítem (antes matcheaba por nombre aparte: Vinagre ×10). Saltos >50% → `precio_historial.estado='pendiente'` con `origen`; `/api/facturas/resolver-precio` (aplicar / mantener / no es este producto).
+- Matcher `lib/facturas/sugerirProducto.ts` (plurales, ñ, orden, ruido, medidas 45x60; fuzzy solo ≥7 letras) reemplaza el parcial en import, auto-vincular, carga manual/OCR (ConfirmView) y `resolverProductosDeItems` (que además aprende el vínculo confirmado).
+- Bros (datos, con respaldo `bak_*_20261009`): 131 vínculos viejos corregidos; ~2.200 líneas revinculadas; 51 productos de mercadería + 170 vinos/bebidas (148 vinos unificados por añada/escritura) + 10 de limpieza creados, 6 bebidas reactivadas; 366 alias aprendidos. Líneas vinculadas: mercadería 89%, bebidas 92%, limpieza 86%.
+- Categorías de gasto: `facturas.categoria_origen` + mapa `restaurantes.configuracion.categorias_origen` (editable en Cat. de Gastos, lo usa el import). Bros: ~680 facturas sin categoría → 21; almacen/carnes/verduleria pasaron a contar en CMV (no contaban) y se unificaron sus duplicados.
+- Exportar de Compras trae todo el filtro (no la página de 20).
+
 **Sesión 2026-10-09 — Compras: facturas de Fudo sin duplicados, Precios, ticket lateral.** Commits `45810d2`, `5f91ef5`.
 
 - Bros tenía 1.653 facturas duplicadas (~$254M) por re-imports (5 cargas masivas, sin dedupe). Borradas con respaldo en `bak_facturas_dedupe_20261009` / `bak_factura_items_dedupe_20261009`; pendientes 332 ($56,7M) → 106 ($21M).

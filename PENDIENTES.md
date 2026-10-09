@@ -26,8 +26,8 @@ corrió en prod el 11/09 — detalle en `HISTORIAL.md`.
 
 ## 🟠 Alto
 
-- Compras/Fudo (oct 2026): probar el flujo real con Bros — import del Excel de hoy (¿salen "actualizadas" + solo octubre como nuevas?), pestaña **Precios** (deshacer, vincular) y el ticket lateral en desktop. Sin login de Bros no se verificó en pantalla.
-- Compras: los 106 pendientes de Bros que quedaron tras la limpieza incluyen deuda de antes de septiembre; re-importar un export amplio de Fudo los concilia.
+- **Recetas de Bros con costo incompleto (food cost subestimado).** De 2.775 ingredientes: 705 apuntan a un producto **desactivado**, 657 a uno con **precio $0**, 349 sin producto; 260 recetas tienen al menos un ingrediente a $0 (aceites, anchoas en sal, alga nori…). El producto bueno suele existir con precio: revincular ingrediente → producto activo con `sugerenciaSegura` (lib/facturas/sugerirProducto.ts), dry-run + respaldo, dejando los $0 legítimos (agua). Próxima sesión.
+- Compras/Bros: 11 cambios de precio en **A revisar** (Compras → Precios); carnes creadas por unidad que quizás son por kg (Vacío, Entraña, Costilla vacuna, Tapa de cuadril, Punta de espalda); productos nuevos (vinos, limpieza) con mínimo 0 → no entran al Pedido diario; 19 ítems de Bebidas de la carta sin vincular a sus productos (margen por botella).
 - Compras: nombres de proveedor de Fudo con la condición adentro ("Hinfa Girgolas - Cta Cte 7 días") parten un proveedor en varios; limpiar requiere re-matchear historia. No hecho a propósito.
 - Ratchet `checklist/ClientView.tsx` sobre su techo (3197 > 3145), de antes.
 
