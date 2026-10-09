@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { normalizeForStock, matchesWholeWord, sinTildes, aUnidadDelProducto } from '@/lib/stock/precios'
+import { UMBRAL_REVISION_PCT } from '@/lib/stock/syncPrecios'
+import { normAlias, sugerenciaSegura } from './sugerirProducto'
 
 // Día 8 del plan consolidado (dominio-kos.md §4.1): la transacción de
 // crear_factura_con_items (migración 20260831e) cubre SOLO factura+items.
@@ -98,6 +100,13 @@ export async function resolverProductosDeItems(params: {
     id: string; nombre: string; precio_unitario: number; stock_actual: number; unidad: string
   }[]
 
+  // Vínculos aprendidos (Compras → Precios, imports anteriores): misma fuente
+  // que usa el import de Fudo, para que una factura cargada a mano o por foto
+  // reconozca lo mismo.
+  const { data: aliasData } = await supabase.from('producto_alias').select('alias_norm, producto_id').eq('restaurante_id', restauranteId)
+  const alias = new Map(((aliasData ?? []) as { alias_norm: string; producto_id: string }[]).map(a => [a.alias_norm, a.producto_id]))
+  const aprendidos: Array<{ restaurante_id: string; alias_norm: string; producto_id: string }> = []
+
   const resueltos: ItemFacturaResuelto[] = []
   let productosCreados = 0
 
@@ -106,8 +115,18 @@ export async function resolverProductosDeItems(params: {
     let productoId = item.producto_id || null
     let precioAnterior = item.precio_anterior || null
 
+    // Vínculo elegido (o confirmado) por quien cargó la factura: se aprende.
+    if (productoId) {
+      const k = normAlias(item.producto_nombre)
+      if (k && alias.get(k) !== productoId) aprendidos.push({ restaurante_id: restauranteId, alias_norm: k, producto_id: productoId })
+    }
+
     if (!productoId) {
-      const match = matchProducto(nombreNorm, productosExistentes)
+      // alias → variante segura (plurales, ñ, orden) → match parcial clásico.
+      const porAlias = alias.get(normAlias(item.producto_nombre))
+      const match = (porAlias ? productosExistentes.find(p => p.id === porAlias) : undefined)
+        ?? sugerenciaSegura(item.producto_nombre, productosExistentes)
+        ?? matchProducto(nombreNorm, productosExistentes)
       if (match) {
         productoId = match.id
         precioAnterior = match.precio_unitario || null
@@ -156,6 +175,11 @@ export async function resolverProductosDeItems(params: {
     })
   }
 
+  if (aprendidos.length > 0) {
+    const { error } = await supabase.from('producto_alias').upsert(aprendidos, { onConflict: 'restaurante_id,alias_norm' })
+    if (error) console.error('[matching] no se pudo guardar el vínculo aprendido:', error.message)
+  }
+
   return { items: resueltos, productosCreados }
 }
 
@@ -172,7 +196,7 @@ export async function aplicarEfectosDeFactura(params: {
   facturaId: string
   proveedorNombre: string
   items: ItemFacturaResuelto[]
-}): Promise<{ preciosActualizados: number; sinConvertir: string[] }> {
+}): Promise<{ preciosActualizados: number; sinConvertir: string[]; aRevisar: string[] }> {
   const { supabase, restauranteId, facturaId, proveedorNombre, items } = params
 
   if (proveedorNombre.trim()) {
@@ -190,7 +214,7 @@ export async function aplicarEfectosDeFactura(params: {
   }
 
   const itemsConProducto = items.filter(i => i.producto_id)
-  if (itemsConProducto.length === 0) return { preciosActualizados: 0, sinConvertir: [] }
+  if (itemsConProducto.length === 0) return { preciosActualizados: 0, sinConvertir: [], aRevisar: [] }
 
   // Unidad (y peso por unidad, y envase de compra) con que cada producto YA
   // está en Stock: la factura se convierte a esa unidad, nunca al revés.
@@ -202,6 +226,7 @@ export async function aplicarEfectosDeFactura(params: {
 
   let preciosActualizados = 0
   const sinConvertir: string[] = []
+  const aRevisar: string[] = []
 
   for (const item of itemsConProducto) {
     if (item.es_nuevo) {
@@ -229,6 +254,26 @@ export async function aplicarEfectosDeFactura(params: {
 
     const nuevoStock = (prod.stock_actual ?? item.stock_actual_previo) + conv.cantidad
     const precioAnt = item.precio_anterior ?? 0
+    const variacion = precioAnt > 0 ? ((conv.precio - precioAnt) / precioAnt) * 100 : 0
+
+    // Salto grande: la mercadería entra igual (stock), pero el precio no se
+    // pisa hasta que alguien lo confirma en Compras → Precios — casi siempre
+    // es una unidad mal leída o un producto mal vinculado.
+    if (precioAnt > 0 && Math.abs(variacion) > UMBRAL_REVISION_PCT) {
+      await supabase.from('productos').update({ stock_actual: nuevoStock, activo: true }).eq('id', item.producto_id as string)
+      await supabase.from('precio_historial').insert({
+        producto_id: item.producto_id,
+        precio_anterior: precioAnt,
+        precio_nuevo: conv.precio,
+        variacion_porcentaje: Math.round(variacion * 10) / 10,
+        factura_id: facturaId,
+        restaurante_id: restauranteId,
+        estado: 'pendiente',
+        origen: `${item.producto_nombre} · ${item.cantidad} ${item.unidad}`,
+      })
+      aRevisar.push(item.producto_nombre)
+      continue
+    }
 
     // Sin `unidad`: la del producto no se cambia. El costo de los
     // ingredientes vinculados lo propaga el trigger productos_propaga_costo
@@ -239,7 +284,6 @@ export async function aplicarEfectosDeFactura(params: {
       activo: true,
     }).eq('id', item.producto_id as string)
 
-    const variacion = precioAnt > 0 ? ((conv.precio - precioAnt) / precioAnt) * 100 : 0
     await supabase.from('precio_historial').insert({
       producto_id: item.producto_id,
       precio_anterior: precioAnt,
@@ -252,5 +296,5 @@ export async function aplicarEfectosDeFactura(params: {
     preciosActualizados++
   }
 
-  return { preciosActualizados, sinConvertir }
+  return { preciosActualizados, sinConvertir, aRevisar }
 }

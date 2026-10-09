@@ -23,6 +23,7 @@ import MapeoCategoriasOrigen from '@/components/facturas/MapeoCategoriasOrigen'
 import { ConfirmSheet } from '@/components/ui'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import { hojasDeFacturas } from '@/lib/facturas/exportarFacturas'
+import { normAlias, sugerenciaSegura, sugerirProductos } from '@/lib/facturas/sugerirProducto'
 import { createClient } from '@/lib/supabase/client'
 import { calcularVencimientoFactura, type VencimientoFactura } from '@/lib/utils'
 import { emparejarListaConStock } from '@/lib/facturas/listaPrecios'
@@ -451,29 +452,29 @@ function ConfirmView({ result, productos, proveedores, categoriasGasto = [], med
     return productos.filter(p => p.nombre.toLowerCase().includes(q)).slice(0, 8)
   }
 
-  // Auto-match products on mount
+  // Auto-match: vínculo aprendido → variante segura ('alta'); si no, la mejor
+  // sugerencia razonable queda propuesta ('media') para que quien carga la
+  // confirme o la cambie. Misma lógica que el import de Fudo (sugerirProducto).
   useEffect(() => {
-    setData(prev => ({
-      ...prev,
-      items: prev.items.map(item => {
-        if (item.producto_id) return item
-        const norm = (s: string) => s.toLowerCase().replace(/[^a-záéíóúñ0-9 ]/g, '').trim()
-        const nItem = norm(item.producto_nombre)
-        const match = productos.find(p => {
-          const nProd = norm(p.nombre)
-          return nProd === nItem || nProd.includes(nItem) || nItem.includes(nProd)
-        })
-        if (match) {
-          return {
-            ...item,
-            producto_id: match.id,
-            precio_anterior: (match as Record<string, unknown>).precio_unitario as number || null,
-            match_confianza: 'media' as const,
-          }
-        }
-        return { ...item, match_confianza: 'nueva' as const }
-      }),
-    }))
+    let vivo = true
+    ;(async () => {
+      const { data: al } = await createClient().from('producto_alias').select('alias_norm, producto_id')
+      if (!vivo) return
+      const alias = new Map(((al ?? []) as { alias_norm: string; producto_id: string }[]).map(a => [a.alias_norm, a.producto_id]))
+      setData(prev => ({
+        ...prev,
+        items: prev.items.map(item => {
+          if (item.producto_id) return item
+          const pid = alias.get(normAlias(item.producto_nombre))
+          const seguro = (pid ? productos.find(p => p.id === pid) : undefined) ?? sugerenciaSegura(item.producto_nombre, productos)
+          const sug = seguro ? undefined : sugerirProductos(item.producto_nombre, productos, 1)[0]
+          const match = seguro ?? (sug && sug.puntaje >= 0.75 ? sug.producto : undefined)
+          if (!match) return { ...item, match_confianza: 'nueva' as const }
+          return { ...item, producto_id: match.id, precio_anterior: match.precio_unitario || null, match_confianza: seguro ? 'alta' as const : 'media' as const }
+        }),
+      }))
+    })()
+    return () => { vivo = false }
   }, [productos])
 
   return (
@@ -2997,6 +2998,7 @@ export default function FacturasPage() {
       const parts = []
       if (result.preciosActualizados > 0) parts.push(`${result.preciosActualizados} precios actualizados`)
       if (result.productosCreados > 0) parts.push(`${result.productosCreados} productos creados`)
+      if (result.aRevisar.length > 0) parts.push(`${result.aRevisar.length} precio${result.aRevisar.length !== 1 ? 's' : ''} con salto grande quedaron a revisar en Precios`)
       if (result.sinConvertir.length > 0) parts.push(`sin actualizar por unidad distinta: ${result.sinConvertir.join(', ')} — cargá el peso por unidad en Stock`)
       showToast(`\u2713 Factura cargada${parts.length > 0 ? ' — ' + parts.join(', ') : ''}`)
       refetchStock()
