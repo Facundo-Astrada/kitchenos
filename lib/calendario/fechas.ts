@@ -90,6 +90,71 @@ export function minutos(hora: string | null | undefined) {
 export type Frecuencia = 'diaria' | 'semanal' | 'quincenal' | 'mensual' | 'anual'
 
 /**
+ * `eventos.frecuencia` es texto libre; las variantes se codifican ahí para no
+ * necesitar columnas nuevas (nadie más lee esa columna de `eventos`):
+ *   'semanal'          → el mismo día de la semana del inicio
+ *   'semanal:1,4'      → esos días (0 = lunes … 6 = domingo), ej. martes y viernes
+ *   'mensual'          → el mismo número de día (el 11)
+ *   'mensual:2'        → el 2º <día de semana del inicio> de cada mes
+ *   'mensual:-1'       → el último <día de semana del inicio> de cada mes
+ */
+export function parseFrecuencia(frecuencia: string | null) {
+  const [base, arg] = (frecuencia ?? 'semanal').split(':')
+  const tipo = (base || 'semanal') as Frecuencia
+  const dias = tipo === 'semanal' && arg
+    ? [...new Set(arg.split(',').map(Number).filter(n => n >= 0 && n <= 6))].sort()
+    : null
+  const ordinal = tipo === 'mensual' && arg ? Number(arg) : null
+  return { tipo, dias: dias && dias.length ? dias : null, ordinal: ordinal && (ordinal === -1 || (ordinal >= 1 && ordinal <= 4)) ? ordinal : null }
+}
+
+const ORDINALES = ['', 'primer', 'segundo', 'tercer', 'cuarto']
+const plural = (dia: string) => dia.endsWith('s') ? dia : dia + 's'
+const unirY = (l: string[]) => l.length <= 1 ? l.join('') : l.slice(0, -1).join(', ') + ' y ' + l[l.length - 1]
+
+/** "Todos los martes y viernes", "El segundo domingo de cada mes"... */
+export function describirRepeticion(inicio: string, frecuencia: string | null) {
+  const { tipo, dias, ordinal } = parseFrecuencia(frecuencia)
+  const dia = diaNombre(inicio)
+  const d = parse(inicio)
+  switch (tipo) {
+    case 'diaria': return 'Todos los días'
+    case 'semanal': {
+      const ds = dias ?? [dowLunes(inicio)]
+      if (ds.length === 7) return 'Todos los días'
+      if (ds.length === 5 && ds.every(x => x < 5)) return 'De lunes a viernes'
+      return 'Todos los ' + unirY(ds.map(i => plural(DIAS_LARGO[i].toLowerCase())))
+    }
+    case 'quincenal': return `Cada 2 semanas, los ${plural(dia)}`
+    case 'mensual':
+      if (ordinal === -1) return `El último ${dia} de cada mes`
+      if (ordinal) return `El ${ORDINALES[ordinal]} ${dia} de cada mes`
+      return `Todos los meses, el día ${d.getDate()}`
+    case 'anual': return `Todos los años, el ${d.getDate()}/${d.getMonth() + 1}`
+    default: return 'Se repite'
+  }
+}
+
+/** En qué semana del mes cae la fecha (1–5) y si es el último de ese día de semana. */
+export function ordinalEnMes(fecha: string) {
+  const d = parse(fecha)
+  const n = Math.ceil(d.getDate() / 7)
+  const ultimo = d.getDate() + 7 > new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+  return { n, esUltimo: ultimo }
+}
+
+/** El `ordinal`-ésimo `dow` (0 = lunes) del mes; ordinal -1 = el último. */
+function enesimoDiaSemana(anio: number, mes: number, dow: number, ordinal: number): string | null {
+  if (ordinal === -1) {
+    const ult = toDateStr(anio, mes, new Date(anio, mes, 0).getDate())
+    return addDays(ult, -((dowLunes(ult) - dow + 7) % 7))
+  }
+  const primero = toDateStr(anio, mes, 1)
+  const f = addDays(primero, (dow - dowLunes(primero) + 7) % 7 + (ordinal - 1) * 7)
+  return Number(f.slice(5, 7)) === mes ? f : null
+}
+
+/**
  * Fechas en que cae un evento recurrente dentro de [desde, hasta].
  * Antes `recurrente`/`frecuencia` se guardaban y nadie los procesaba: un
  * evento "semanal" aparecía una sola vez, el día que se creó (CALENDARIO-PLAN
@@ -108,7 +173,27 @@ export function ocurrencias(
   const fin = hastaRecurrencia && hastaRecurrencia < hasta ? hastaRecurrencia : hasta
   if (fin < inicio) return []
   const out: string[] = []
-  const f = (frecuencia ?? 'semanal') as Frecuencia
+  const { tipo: f, dias, ordinal } = parseFrecuencia(frecuencia)
+  if (f === 'semanal' && dias) {
+    // Varios días por semana: se recorre el rango y se toman esos días.
+    const desdeReal = desde > inicio ? desde : inicio
+    for (let fecha = desdeReal; fecha <= fin; fecha = addDays(fecha, 1)) {
+      if (dias.includes(dowLunes(fecha))) out.push(fecha)
+    }
+    return out
+  }
+  if (f === 'mensual' && ordinal) {
+    const dow = dowLunes(inicio)
+    const dd = parse(desde > inicio ? desde : inicio)
+    let y = dd.getFullYear(), m = dd.getMonth() + 1
+    for (let guard = 0; guard < 400; guard++) {
+      if (toDateStr(y, m, 1) > fin) break
+      const fecha = enesimoDiaSemana(y, m, dow, ordinal)
+      if (fecha && fecha >= desde && fecha >= inicio && fecha <= fin) out.push(fecha)
+      m++; if (m > 12) { m = 1; y++ }
+    }
+    return out
+  }
   if (f === 'diaria' || f === 'semanal' || f === 'quincenal') {
     const paso = f === 'diaria' ? 1 : f === 'semanal' ? 7 : 14
     // Saltar directo a la primera ocurrencia >= desde

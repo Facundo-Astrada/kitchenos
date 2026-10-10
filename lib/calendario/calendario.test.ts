@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ocurrencias, grillaMes, fechaLarga, etiquetaRango, addDays } from './fechas'
+import { ocurrencias, grillaMes, fechaLarga, etiquetaRango, addDays, describirRepeticion } from './fechas'
 import { segmentosSemana, bloquesDia } from './layout'
 import { generarIcs } from './ics'
 import { feriadosEnRango } from './feriados'
@@ -28,6 +28,26 @@ describe('ocurrencias de un evento recurrente', () => {
   it('mensual: arranca en el mes del rango aunque la serie sea vieja', () => {
     expect(ocurrencias('2025-03-01', 'mensual', '2026-09-28', '2026-11-08'))
       .toEqual(['2026-10-01', '2026-11-01'])
+  })
+  it('semanal en varios días: martes y viernes', () => {
+    expect(ocurrencias('2026-10-01', 'semanal:1,4', '2026-10-01', '2026-10-16'))
+      .toEqual(['2026-10-02', '2026-10-06', '2026-10-09', '2026-10-13', '2026-10-16'])
+  })
+  it('mensual por día de semana: el segundo domingo', () => {
+    // 11/10/2026 es el 2º domingo de octubre
+    expect(ocurrencias('2026-10-11', 'mensual:2', '2026-10-01', '2026-12-31'))
+      .toEqual(['2026-10-11', '2026-11-08', '2026-12-13'])
+  })
+  it('mensual por día de semana: el último viernes', () => {
+    expect(ocurrencias('2026-10-30', 'mensual:-1', '2026-10-01', '2026-12-31'))
+      .toEqual(['2026-10-30', '2026-11-27', '2026-12-25'])
+  })
+  it('el texto de la repetición', () => {
+    expect(describirRepeticion('2026-10-11', 'mensual:2')).toBe('El segundo domingo de cada mes')
+    expect(describirRepeticion('2026-10-11', 'mensual')).toBe('Todos los meses, el día 11')
+    expect(describirRepeticion('2026-10-02', 'semanal:1,4')).toBe('Todos los martes y viernes')
+    expect(describirRepeticion('2026-10-02', 'semanal:0,1,2,3,4')).toBe('De lunes a viernes')
+    expect(describirRepeticion('2026-10-11', 'semanal')).toBe('Todos los domingos')
   })
   it('anual', () => {
     expect(ocurrencias('2025-12-31', 'anual', '2026-12-01', '2027-01-10')).toEqual(['2026-12-31'])

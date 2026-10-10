@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Modal, SwitchRow } from '@/components/ui'
 import { TIPO_CONFIG, TODO_EL_DIA, type TipoEvento, type EventoCalendario, type Proveedor } from '@/lib/hooks/useCalendario'
-import { minutos, pad2, diaNombre, parse } from '@/lib/calendario/fechas'
+import { minutos, pad2, parse, dowLunes, parseFrecuencia, ordinalEnMes, describirRepeticion, DIAS_LARGO } from '@/lib/calendario/fechas'
 import { fieldStyle, labelStyle, btnPrimario, btnSecundario } from './shared'
 
 export interface EventoFormData {
@@ -30,6 +30,10 @@ export interface EventoFormData {
   descripcion: string
   proveedor_id: string
   frecuencia: '' | 'diaria' | 'semanal' | 'quincenal' | 'mensual' | 'anual'
+  /** Semanal: días elegidos (0 = lunes … 6 = domingo). Vacío = el día del inicio. */
+  dias_semana: number[]
+  /** Mensual: el mismo número de día, el N-ésimo día de semana, o el último. */
+  modo_mensual: 'dia' | 'semana' | 'ultimo'
   repetir_hasta: string
 }
 
@@ -39,7 +43,7 @@ export function formVacio(fecha: string, hora?: string): EventoFormData {
   return {
     titulo: '', tipo: 'evento_equipo', fecha_inicio: fecha, fecha_fin: fecha, varios_dias: false,
     todo_el_dia: false, hora_inicio: ini, hora_fin: fin, descripcion: '', proveedor_id: '',
-    frecuencia: '', repetir_hasta: '',
+    frecuencia: '', dias_semana: [], modo_mensual: 'dia', repetir_hasta: '',
   }
 }
 
@@ -53,15 +57,48 @@ export function formDesdeEvento(ev: EventoCalendario): EventoFormData {
     hora_inicio: todo ? '09:00' : ev.hora_inicio?.slice(0, 5) ?? '09:00',
     hora_fin: todo ? '10:00' : ev.hora_fin?.slice(0, 5) ?? '10:00',
     descripcion: ev.descripcion ?? '', proveedor_id: ev.proveedor_id ?? '',
-    frecuencia: ev.recurrente ? ((ev.frecuencia ?? 'semanal') as EventoFormData['frecuencia']) : '',
+    ...repeticionDesdeTexto(ev.recurrente ? ev.frecuencia ?? 'semanal' : null),
     repetir_hasta: ev.recurrente ? ev.fecha_fin ?? '' : '',
   }
+}
+
+/** 'semanal:1,4' / 'mensual:2' → campos del form (ver parseFrecuencia). */
+function repeticionDesdeTexto(frecuencia: string | null): Pick<EventoFormData, 'frecuencia' | 'dias_semana' | 'modo_mensual'> {
+  if (!frecuencia) return { frecuencia: '', dias_semana: [], modo_mensual: 'dia' }
+  const { tipo, dias, ordinal } = parseFrecuencia(frecuencia)
+  return {
+    frecuencia: tipo,
+    dias_semana: dias ?? [],
+    modo_mensual: ordinal === -1 ? 'ultimo' : ordinal ? 'semana' : 'dia',
+  }
+}
+
+/** Campos del form → texto de `eventos.frecuencia`. */
+export function frecuenciaTexto(f: Pick<EventoFormData, 'frecuencia' | 'dias_semana' | 'modo_mensual' | 'fecha_inicio'>): string | null {
+  if (!f.frecuencia) return null
+  if (f.frecuencia === 'semanal') {
+    const dias = [...new Set(f.dias_semana)].sort()
+    // Un solo día igual al del inicio = el 'semanal' de siempre.
+    if (dias.length === 0 || (dias.length === 1 && dias[0] === dowLunes(f.fecha_inicio))) return 'semanal'
+    return 'semanal:' + dias.join(',')
+  }
+  if (f.frecuencia === 'mensual') {
+    if (f.modo_mensual === 'ultimo') return 'mensual:-1'
+    if (f.modo_mensual === 'semana') {
+      // Un 5º <día> no existe todos los meses: se guarda como "el último".
+      const { n, esUltimo } = ordinalEnMes(f.fecha_inicio)
+      return n <= 4 ? 'mensual:' + n : esUltimo ? 'mensual:-1' : 'mensual'
+    }
+    return 'mensual'
+  }
+  return f.frecuencia
 }
 
 /** Lo que se guarda en `eventos` a partir del form. */
 export function payloadDesdeForm(f: EventoFormData) {
   const recurrente = f.frecuencia !== ''
   const todo = f.todo_el_dia || f.varios_dias
+  const frecuencia = frecuenciaTexto(f)
   return {
     titulo: f.titulo.trim(),
     tipo: f.tipo,
@@ -72,7 +109,7 @@ export function payloadDesdeForm(f: EventoFormData) {
     hora_fin: todo ? TODO_EL_DIA.fin : f.hora_fin + ':00',
     descripcion: f.descripcion.trim() || null,
     recurrente,
-    frecuencia: recurrente ? f.frecuencia : null,
+    frecuencia: recurrente ? frecuencia : null,
     color: TIPO_CONFIG[f.tipo].color,
     proveedor_id: f.tipo === 'entrega_proveedor' && f.proveedor_id ? f.proveedor_id : null,
     usuario_id: null,
@@ -126,17 +163,28 @@ export function EventoForm({ open, editando, inicial, proveedores, onClose, onGu
     finally { setGuardando(false) }
   }
 
+  // Repetición a la vista (chips), no escondida en un desplegable: "semanal"
+  // existía pero no se encontraba. Semanal permite varios días; mensual,
+  // "el día 11" o "el segundo domingo".
   const d = parse(f.fecha_inicio)
-  const dia = diaNombre(f.fecha_inicio)
-  const plural = dia.endsWith('s') ? dia : dia + 's'
+  const dowInicio = dowLunes(f.fecha_inicio)
+  const diasSel = f.dias_semana.length ? f.dias_semana : [dowInicio]
+  const { n: nSemana, esUltimo } = ordinalEnMes(f.fecha_inicio)
+  const diaInicio = DIAS_LARGO[dowInicio].toLowerCase()
+  const ORD = ['', 'primer', 'segundo', 'tercer', 'cuarto']
   const OPCIONES_REP: { v: EventoFormData['frecuencia']; l: string }[] = [
     { v: '', l: 'No se repite' },
-    { v: 'diaria', l: 'Todos los días' },
-    { v: 'semanal', l: `Todos los ${plural}` },
-    { v: 'quincenal', l: `Cada 2 semanas, los ${plural}` },
-    { v: 'mensual', l: `Todos los meses, el ${d.getDate()}` },
-    { v: 'anual', l: `Todos los años, el ${d.getDate()}/${d.getMonth() + 1}` },
+    { v: 'diaria', l: 'Diaria' },
+    { v: 'semanal', l: 'Semanal' },
+    { v: 'quincenal', l: 'Cada 2 semanas' },
+    { v: 'mensual', l: 'Mensual' },
+    { v: 'anual', l: 'Anual' },
   ]
+  const toggleDia = (i: number) => {
+    const next = diasSel.includes(i) ? diasSel.filter(x => x !== i) : [...diasSel, i]
+    if (next.length) set({ dias_semana: next.sort() })
+  }
+  const resumenRep = f.frecuencia ? describirRepeticion(f.fecha_inicio, frecuenciaTexto(f)) : ''
 
   return (
     <Modal open={open} onClose={onClose} maxWidth={560}>
@@ -236,17 +284,58 @@ export function EventoForm({ open, editando, inicial, proveedores, onClose, onGu
         )}
 
         {!f.varios_dias && (
-          <div style={{ display: 'flex', gap: 10 }}>
-            <div style={{ flex: 1.4 }}>
-              <label htmlFor="ev-rep" style={labelStyle}>Repetir</label>
-              <select id="ev-rep" style={fieldStyle} value={f.frecuencia} onChange={e => set({ frecuencia: e.target.value as EventoFormData['frecuencia'] })}>
-                {OPCIONES_REP.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
-              </select>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div>
+              <span style={labelStyle}>Repetir</span>
+              <div role="radiogroup" aria-label="Repetir" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {OPCIONES_REP.map(o => (
+                  <Chip key={o.v} on={f.frecuencia === o.v} onClick={() => set({ frecuencia: o.v })} role="radio">{o.l}</Chip>
+                ))}
+              </div>
             </div>
+
+            {f.frecuencia === 'semanal' && (
+              <div>
+                <span style={labelStyle}>Qué días</span>
+                <div role="group" aria-label="Días de la semana" style={{ display: 'flex', gap: 6 }}>
+                  {DIAS_LARGO.map((nombre, i) => {
+                    const on = diasSel.includes(i)
+                    return (
+                      <button key={nombre} type="button" aria-pressed={on} aria-label={nombre} title={nombre} onClick={() => toggleDia(i)} style={{
+                        flex: 1, maxWidth: 52, height: 40, borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+                        border: on ? 'none' : '1px solid var(--border)', background: on ? 'var(--navy)' : 'var(--surface)',
+                        color: on ? '#fff' : 'var(--text-2)', fontSize: 13, fontWeight: 700,
+                      }}>
+                        {nombre.charAt(0)}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {f.frecuencia === 'mensual' && (
+              <div role="radiogroup" aria-label="Qué día del mes" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                <Chip on={f.modo_mensual === 'dia'} onClick={() => set({ modo_mensual: 'dia' })} role="radio">El día {d.getDate()}</Chip>
+                {nSemana <= 4 && (
+                  <Chip on={f.modo_mensual === 'semana'} onClick={() => set({ modo_mensual: 'semana' })} role="radio">El {ORD[nSemana]} {diaInicio}</Chip>
+                )}
+                {esUltimo && (
+                  <Chip on={f.modo_mensual === 'ultimo'} onClick={() => set({ modo_mensual: 'ultimo' })} role="radio">El último {diaInicio}</Chip>
+                )}
+              </div>
+            )}
+
             {f.frecuencia && (
-              <div style={{ flex: 1 }}>
-                <label htmlFor="ev-rh" style={labelStyle}>Hasta (opcional)</label>
-                <input id="ev-rh" type="date" style={fieldStyle} min={f.fecha_inicio} value={f.repetir_hasta} onChange={e => set({ repetir_hasta: e.target.value })} />
+              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+                <div style={{ flex: 1, fontSize: 13, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 6, paddingBottom: 12 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--accent)' }}>repeat</span>
+                  {resumenRep}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label htmlFor="ev-rh" style={labelStyle}>Hasta (opcional)</label>
+                  <input id="ev-rh" type="date" style={fieldStyle} min={f.fecha_inicio} value={f.repetir_hasta} onChange={e => set({ repetir_hasta: e.target.value })} />
+                </div>
               </div>
             )}
           </div>
@@ -279,6 +368,18 @@ export function EventoForm({ open, editando, inicial, proveedores, onClose, onGu
         </div>
       </form>
     </Modal>
+  )
+}
+
+function Chip({ on, onClick, children, role }: { on: boolean; onClick: () => void; children: React.ReactNode; role?: string }) {
+  return (
+    <button type="button" role={role} aria-checked={role === 'radio' ? on : undefined} onClick={onClick} style={{
+      padding: '8px 13px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+      border: on ? 'none' : '1px solid var(--border)', background: on ? 'var(--navy)' : 'var(--surface)',
+      color: on ? '#fff' : 'var(--text-2)',
+    }}>
+      {children}
+    </button>
   )
 }
 

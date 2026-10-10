@@ -10,21 +10,12 @@ import { Modal } from '@/components/ui'
 import type { ItemCalendario } from '@/lib/hooks/useCalendario'
 import { TIPO_CONFIG } from '@/lib/hooks/useCalendario'
 import { CAPA_POR_ID } from '@/lib/calendario/capas'
-import { fechaLarga, parse, diaNombre } from '@/lib/calendario/fechas'
+import { fechaLarga, parse, describirRepeticion } from '@/lib/calendario/fechas'
 import { colorItem, iconoItem, horaCorta, btnPrimario, btnSecundario } from './shared'
 
 export function textoRecurrencia(it: Pick<ItemCalendario, 'recurrente' | 'frecuencia' | 'fecha_inicio' | 'fecha_fin'>) {
   if (!it.recurrente) return null
-  const d = parse(it.fecha_inicio)
-  const dia = diaNombre(it.fecha_inicio)
-  const plural = dia.endsWith('s') ? dia : dia + 's'
-  const base = {
-    diaria: 'Todos los días',
-    semanal: `Todos los ${plural}`,
-    quincenal: `Cada 2 semanas, los ${plural}`,
-    mensual: `Todos los meses, el día ${d.getDate()}`,
-    anual: `Todos los años, el ${d.getDate()}/${d.getMonth() + 1}`,
-  }[it.frecuencia ?? 'semanal'] ?? 'Se repite'
+  const base = describirRepeticion(it.fecha_inicio, it.frecuencia)
   return it.fecha_fin ? `${base}, hasta el ${fechaLarga(it.fecha_fin).toLowerCase()}` : base
 }
 
