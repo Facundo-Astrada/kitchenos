@@ -202,7 +202,7 @@ export function EventoForm({ open, editando, inicial, proveedores, onClose, onGu
         {!editando && (
           <div>
             <span style={labelStyle}>Plantillas rápidas</span>
-            <div className="hide-scrollbar" style={{ display: 'flex', gap: 6, overflowX: 'auto' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {PLANTILLAS.map(p => (
                 <button key={p.label} type="button" onClick={() => set(p.aplicar(f))} style={{
                   display: 'flex', alignItems: 'center', gap: 5, padding: '7px 11px', borderRadius: 99, flexShrink: 0,
@@ -225,7 +225,9 @@ export function EventoForm({ open, editando, inicial, proveedores, onClose, onGu
 
         <div>
           <span style={labelStyle}>Tipo</span>
-          <div className="hide-scrollbar" style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+          {/* En varias líneas, no fila con scroll: con mouse y la barra oculta no
+              se podía mover, y el tipo elegido ("Otro") quedaba fuera de vista. */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {(Object.keys(TIPO_CONFIG) as TipoEvento[]).filter(t => t !== 'reservas_dia').map(t => {
               const cfg = TIPO_CONFIG[t]
               const sel = f.tipo === t
