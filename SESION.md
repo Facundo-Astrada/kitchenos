@@ -1,16 +1,18 @@
-# Sesión — 09/10/2026 (Compras/Fudo en Bros: import, vínculos, categorías)
+# Sesión — 10/10/2026 (Calendario: rediseño, privado, Coach que agenda, avisos)
 
 ## Qué se cerró
-- Import de Fudo de 2.710 facturas sin duplicar (554 nuevas, 1.811 actualizadas); saltos de precio >50% van a "A revisar".
-- Matcher único (`lib/facturas/sugerirProducto.ts`) para import, carga manual y OCR, que aprende de lo vinculado; 366 alias en Bros.
-- Bros: mercadería 89% / bebidas 92% / limpieza 86% vinculadas; 148 vinos + 34 bebidas + 61 productos nuevos; facturas sin categoría ~680 → 21; almacén/carnes/verdulería ahora cuentan en CMV.
+- Calendario rediseñado: vistas Mes/Semana/Agenda, capas que se llenan solas (menús, entregas, reservas, pagos, feriados), repetición real (semanal en varios días, mensual "el 2º domingo"), deshacer, .ics. Pantalla partida en `components/calendario/` + `lib/calendario/`.
+- Eventos privados ("solo para mí", RLS verificada con dos usuarios) + autor en el detalle.
+- Coach: `agendar_eventos` — una lista de notas queda como un evento por línea (probado con las notas reales de planificación).
+- "Avisar al equipo" (todos / puestos / personas → campana + push, una vez por evento).
 
 ## Qué quedó a medias
-- 11 precios en "A revisar"; carnes creadas por "u" que quizás son kg; mínimos en 0 de los productos nuevos; carta de Bebidas sin vincular a sus productos.
-- Ratchet `checklist/ClientView.tsx` sobre su techo (de antes).
+- Nunca se vio llegar un aviso real: en la demo nadie más tiene usuario.
+- Recordatorio del día anterior (segunda etapa acordada). Ratchet de `checklist/ClientView.tsx` sobre su techo (de antes).
 
 ## Probar primero mañana
-- Compras → Precios en Bros: que "A revisar" muestre la línea de origen y que "No es este producto" desvincule.
+- Bros: evento con "Avisar al equipo" → Personas → una persona de confianza; que le llegue a la campana (y al celular si tiene push).
+- Bros: pegarle al Coach notas de planificación con "cargá esto en el calendario y avisale a cocina".
 
 ## Próximo paso concreto
-- Recetas de Bros con costo incompleto: 705 ingredientes a productos desactivados, 657 a productos $0, 260 recetas afectadas → revincular al producto activo con precio (dry-run + respaldo).
+- Recetas de Bros con costo incompleto: 705 ingredientes a productos desactivados, 657 a productos $0 → revincular al producto activo con precio (dry-run + respaldo). Sigue siendo lo más importante del backlog.

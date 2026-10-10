@@ -54,3 +54,7 @@ npm run test:watch    # vitest en watch
 npm run test:coverage # con cobertura
 npm run test:e2e      # playwright — requiere dev server + chromium instalado
 ```
+
+**Dev server sirviendo CSS viejo (Windows):** el caché persistente de Turbopack puede seguir mandando un `globals.css` anterior aunque el archivo cambió (la regla nueva no aparece en `document.styleSheets`). Parar el server, borrar `.next/dev` y volver a levantar. Antes de dar por roto un estilo, chequear que la regla llegó al browser.
+
+**Capturas contra local:** `scripts/shot.mjs --base http://localhost:3100 …` (mismo login y esperas que contra prod).

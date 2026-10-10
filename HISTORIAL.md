@@ -6,6 +6,16 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-10-10 — Calendario: rediseño, privado/autor, Coach que agenda, avisos al equipo.** Commits `5a926e6`…`cb7ef1c`.
+
+- Punto de partida: el calendario casi no se usaba (1 evento en Bros, 0 notas). Investigación en galerías (Mobbin/Land-book/Behance bloquean scraping; se usaron PageFlows, ScreensDesign y los productos curados: Google/Notion Calendar, Fantastical, Amie, 7shifts).
+- Pantalla partida en `components/calendario/` (1.338 → ~560 líneas) + lógica pura en `lib/calendario/` con tests. Vistas Mes/Semana/Agenda, capas con reflejos nuevos (vigencia de menús, menús-evento, pagos, feriados), layout por ancho real, deshacer, .ics, atajos.
+- Fixes: `recurrente` se guardaba y nunca se expandía; días de otros meses vacíos; semana que cruza de mes; todo-el-día invisible en Semana; doble fetch; "9 De Octubre"; fila de Tipo con scroll oculto (con mouse no se podía elegir "Otro").
+- Repetición: semanal en varios días y mensual por día de semana, codificadas en `eventos.frecuencia` (`semanal:1,4`, `mensual:2`, `mensual:-1`) sin migración.
+- Migraciones: `eventos_autor_privado.sql` (creado_por DEFAULT auth.uid(), privado + RLS; verificado impersonando dos usuarios de Bros), `20261010_coach_acciones_agendar_eventos.sql`, `20261010b_eventos_avisar.sql` (avisar jsonb, avisado_at).
+- Coach: `agendar_eventos` (antes solo existía `crear_evento`, que arma un menú — no podía agendar "una reunión de compras"). Primer intento falló porque el CHECK de `coach_acciones.tool_name` no la incluía; quedó un test que lo detecta.
+- Avisar al equipo: `lib/calendario/avisar.ts` + `/api/calendario/avisar`; campana + push, una vez por evento, nunca privados ni al autor. Line-up, banner de OPS y explicación de producción excluyen privados.
+
 **Sesión 2026-10-09 (tarde) — Fudo en Bros: import completo, vínculos y categorías.** Commits `e222c6e`…`af9024a`.
 
 - Import grande de Fudo (2.710 facturas) se cortaba a 60s: updates en paralelo, `maxDuration` 300, ítems antes que pagos, reparación de facturas sin ítems. Resultado: 554 nuevas, 1.811 actualizadas.

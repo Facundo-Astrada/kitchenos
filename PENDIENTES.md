@@ -317,11 +317,20 @@ Solo después de una semana de uso real en servicio, y cada ítem es hipótesis 
 validar: tomar/asignar desde el muro, sonido en una `duda` nueva, cronómetro por
 ítem, foto del turno al entregar.
 
-### Calendario — F2 a F5 del plan de expansión
-F1 deployado. En orden: F2 motor de rutinas recurrentes (generalizar
-`haccp_limpieza` a una tabla `rutinas` compartida — **decisión de Facundo:
-generalizar, no duplicar por dominio**), F3 más reflejos de solo lectura, F4
-Coach con contexto del calendario, F5 extras (ICS, feriados, semana tipo).
+### Calendario — lo que queda (rediseño + privado + avisos shippeados 10/10)
+- **Probar en Bros el primer aviso real** ("Avisar al equipo" → Personas → una
+  persona): en la demo nadie más tiene usuario, nunca se vio llegar uno.
+- **Recordatorio el día anterior** de los eventos con `avisar` (cron de avisos
+  existente) — segunda etapa acordada. Respetar el presupuesto de PLAN-ASISTENTE §2b.
+- F2 motor de rutinas con ocurrencias tildables (generalizar `haccp_limpieza` a
+  `rutinas` — **decisión de Facundo: generalizar, no duplicar por dominio**).
+  Hoy la repetición de `eventos` es solo visual, no se tilda.
+- Reflejos que faltan: limpiezas HACCP, quién trabaja (turnos), antigüedad del
+  último conteo de stock. Días de entrega por proveedor: `dias_entrega` vacío en Bros.
+- La repetición no se expande fuera de la pantalla: `consultar_agenda` del Coach
+  y "Próximos días" del Dashboard ven una serie semanal una sola vez.
+- Arrastrar: solo eventos de un día en Mes desktop (no barras multi-día, no
+  Semana, nada en mobile). Feed .ics suscribible (hoy es descarga) y semana tipo.
 
 ### Bitácora — F2 y F3 del plan
 F1 deployado (13/08). F2: estados/tipos por ítem + convertir un ítem en tarea
