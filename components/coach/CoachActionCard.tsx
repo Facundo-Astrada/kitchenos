@@ -38,6 +38,18 @@ function formatReadonly(v: unknown): string {
         const extra = [p.plaza, p.prioridad && p.prioridad !== 'media' ? p.prioridad : null].filter(Boolean).join(', ')
         return `${p.paso}: ${p.nombre}${extra ? ` (${extra})` : ''}`
       }
+      // Ítem del calendario (agendar_eventos): "vie 16/10 · Vinito y chamuyo".
+      // Con el día de la semana a la vista para chequear "el domingo 18" de un vistazo.
+      if (item && typeof item === 'object' && 'titulo' in item && 'fecha' in item) {
+        const e = item as { titulo: string; fecha: string; hasta?: string; hora_inicio?: string; hora_fin?: string; privado?: boolean }
+        const dia = (f: string) => {
+          const d = new Date(f + 'T12:00:00')
+          return `${['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'][d.getDay()]} ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+        }
+        const cuando = e.hasta && e.hasta > e.fecha ? `${dia(e.fecha)} → ${dia(e.hasta)}` : dia(e.fecha)
+        const hora = e.hora_inicio ? ` ${e.hora_inicio}${e.hora_fin ? `–${e.hora_fin}` : ''}` : ''
+        return `${cuando}${hora} · ${e.titulo}${e.privado ? ' (solo para mí)' : ''}`
+      }
       return String(item)
     }).join('\n')
   }

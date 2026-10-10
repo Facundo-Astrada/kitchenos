@@ -85,6 +85,7 @@ export function ItemPill({ it, onClick, compacta, draggable, onDragStart, style 
         </span>
       )}
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.titulo}</span>
+      {it.privado && <span className="material-symbols-outlined" aria-label="Privado" style={{ fontSize: compacta ? 11 : 13, color: 'var(--text-3)', flexShrink: 0, marginLeft: 'auto' }}>lock</span>}
     </button>
   )
 }
@@ -125,6 +126,7 @@ export function ItemFila({ it, onClick }: { it: ItemCalendario; onClick: (it: It
           <span className="material-symbols-outlined" style={{ fontSize: 14, color }}>{iconoItem(it)}</span>
           <span style={{ whiteSpace: 'nowrap' }}>{it.capa === 'eventos' ? TIPO_CONFIG[it.tipo]?.label : capa.label}</span>
           {it.recurrente && <span className="material-symbols-outlined" style={{ fontSize: 13 }} title="Se repite">repeat</span>}
+          {it.privado && <span className="material-symbols-outlined" style={{ fontSize: 13 }} title="Privado: solo lo ves vos">lock</span>}
           {it.soloLectura && it.meta && (
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>· {it.meta}</span>
           )}

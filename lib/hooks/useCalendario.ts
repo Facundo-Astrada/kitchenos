@@ -7,18 +7,12 @@ import { tieneCarga } from '@/lib/reservas/helpers'
 import { ocurrencias, rango as rangoFechas, addDays, hoy as hoyFecha } from '@/lib/calendario/fechas'
 import { feriadosEnRango } from '@/lib/calendario/feriados'
 import { CAPA_POR_ID, type CapaId } from '@/lib/calendario/capas'
+import { TIPO_CONFIG, TODO_EL_DIA, type TipoEvento } from '@/lib/calendario/tipos'
+
+// Re-export: la pantalla y el Dashboard los importan desde acá.
+export { TIPO_CONFIG, TODO_EL_DIA, type TipoEvento }
 
 /* ─── Types ─── */
-
-export type TipoEvento =
-  | 'entrega_proveedor'
-  | 'reserva_especial'
-  | 'reservas_dia'
-  | 'evento_equipo'
-  | 'mantenimiento'
-  | 'capacitacion'
-  | 'visita_bromatologia'
-  | 'otro'
 
 export interface EventoCalendario {
   id: string
@@ -37,6 +31,10 @@ export interface EventoCalendario {
   usuario_id: string | null
   restaurante_id: string
   created_at: string
+  /** auth.uid() de quien lo creó (lo pone la base). NULL en eventos viejos. */
+  creado_por?: string | null
+  /** Solo lo ve quien lo creó (RLS). */
+  privado?: boolean
   /* flag for auto-generated pedido events */
   _fromPedido?: boolean
   /* flag for auto-generated menú-activado events */
@@ -91,19 +89,6 @@ interface PedidoRow {
   restaurante_id: string
 }
 
-export const TIPO_CONFIG: Record<TipoEvento, { label: string; icon: string; color: string }> = {
-  entrega_proveedor:   { label: 'Entrega',           icon: 'local_shipping',    color: '#f97316' },
-  reserva_especial:    { label: 'Reserva especial',  icon: 'restaurant',        color: '#8b5cf6' },
-  reservas_dia:        { label: 'Reservas',          icon: 'event_seat',       color: '#14b8a6' },
-  evento_equipo:       { label: 'Reunión / equipo',  icon: 'groups',            color: '#3b82f6' },
-  mantenimiento:       { label: 'Mantenimiento',     icon: 'build',             color: '#ef4444' },
-  capacitacion:        { label: 'Capacitación',      icon: 'school',            color: '#10b981' },
-  visita_bromatologia: { label: 'Bromatología',      icon: 'verified_user',     color: '#ec4899' },
-  otro:                { label: 'Otro',               icon: 'event',             color: '#6b7280' },
-}
-
-export const TODO_EL_DIA = { inicio: '00:00:00', fin: '23:59:00' }
-
 export function esTodoElDia(ev: Pick<EventoCalendario, 'hora_inicio' | 'hora_fin'>) {
   return (ev.hora_inicio ?? '').startsWith('00:00') && (ev.hora_fin ?? '').startsWith('23:59')
 }
@@ -152,6 +137,9 @@ export function useCalendario({ verPagos = false }: { verPagos?: boolean } = {})
   verPagosRef.current = verPagos
   const [items, setItems] = useState<ItemCalendario[]>([])
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
+  // auth uid → nombre, para el "Creado por" del detalle (equipo_miembros:
+  // en cuentas reales `perfiles` puede estar vacía).
+  const [autores, setAutores] = useState<Record<string, string>>({})
   const [notaItems, setNotaItems] = useState<Record<string, NotaItemCalendario[]>>({})
   // loading = primera carga (skeleton); refreshing = cambio de rango con datos
   // ya en pantalla (no se reemplaza la grilla por "Cargando...").
@@ -437,8 +425,8 @@ export function useCalendario({ verPagos = false }: { verPagos?: boolean } = {})
     }
   }, [supabase])
 
-  /* CRUD — devuelven el id para poder deshacer */
-  type EventoInput = Omit<EventoCalendario, 'id' | 'created_at' | 'restaurante_id' | '_fromPedido' | '_fromMenu' | '_fromReserva'>
+  /* CRUD — devuelven el id para poder deshacer. creado_por no se manda: lo pone la base. */
+  type EventoInput = Omit<EventoCalendario, 'id' | 'created_at' | 'restaurante_id' | 'creado_por' | '_fromPedido' | '_fromMenu' | '_fromReserva'>
 
   const crearEvento = useCallback(async (datos: EventoInput): Promise<string> => {
     const { data, error } = await supabase.from('eventos')
@@ -478,6 +466,20 @@ export function useCalendario({ verPagos = false }: { verPagos?: boolean } = {})
     }
   }, [supabase])
 
+  const fetchAutores = useCallback(async () => {
+    if (!restIdRef.current) return
+    const { data } = await supabase.from('equipo_miembros')
+      .select('auth_user_id, nombre, apellido')
+      .eq('restaurante_id', restIdRef.current)
+      .not('auth_user_id', 'is', null)
+    const map: Record<string, string> = {}
+    for (const m of (data ?? []) as { auth_user_id: string; nombre: string | null; apellido: string | null }[]) {
+      const n = [m.nombre, m.apellido].filter(Boolean).join(' ').trim()
+      if (n) map[m.auth_user_id] = n
+    }
+    setAutores(map)
+  }, [supabase])
+
   /* Proveedores */
   const fetchProveedores = useCallback(async () => {
     if (!restIdRef.current) return
@@ -514,6 +516,7 @@ export function useCalendario({ verPagos = false }: { verPagos?: boolean } = {})
   useEffect(() => {
     if (!RESTAURANTE_ID) return
     fetchProveedores()
+    fetchAutores()
 
     const ch = supabase
       .channel('eventos-changes')
@@ -524,11 +527,12 @@ export function useCalendario({ verPagos = false }: { verPagos?: boolean } = {})
       .subscribe()
 
     return () => { supabase.removeChannel(ch) }
-  }, [RESTAURANTE_ID, supabase, fetchProveedores, fetchRango])
+  }, [RESTAURANTE_ID, supabase, fetchProveedores, fetchAutores, fetchRango])
 
   return {
     items,
     proveedores,
+    autores,
     notaItems,
     loading,
     refreshing,

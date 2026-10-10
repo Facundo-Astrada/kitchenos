@@ -34,6 +34,7 @@ export function EventoBanner({ restauranteId, modo, onGenerarLista }: EventoBann
     sb.from('eventos')
       .select('id, titulo, fecha_inicio, descripcion')
       .eq('restaurante_id', restauranteId)
+      .eq('privado', false) // banner del equipo: los privados no van
       .in('fecha_inicio', [hoy, manana])
       .order('fecha_inicio', { ascending: true })
       .limit(1)

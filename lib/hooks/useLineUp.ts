@@ -70,8 +70,9 @@ async function fetchLineUp(key: string): Promise<CrudoLineUp> {
       .order('created_at', { ascending: false }).limit(12),
 
     // Hoy y mañana: el aviso anticipado de un evento grande vale tanto como el de hoy.
+    // Sin privados: la hoja es del equipo (aunque la abra quien lo creó).
     supabase.from('eventos').select('titulo, hora_inicio, fecha_inicio')
-      .eq('restaurante_id', rid)
+      .eq('restaurante_id', rid).eq('privado', false)
       .gte('fecha_inicio', jornada).lt('fecha_inicio', pasadoManana)
       .order('fecha_inicio').order('hora_inicio'),
 

@@ -19,8 +19,11 @@ export function textoRecurrencia(it: Pick<ItemCalendario, 'recurrente' | 'frecue
   return it.fecha_fin ? `${base}, hasta el ${fechaLarga(it.fecha_fin).toLowerCase()}` : base
 }
 
-export function EventoDetalle({ item, onClose, onEditar, onDuplicar, onEliminar, onIr }: {
+export function EventoDetalle({ item, autorNombre, esMio, onClose, onEditar, onDuplicar, onEliminar, onIr }: {
   item: ItemCalendario | null
+  /** Nombre de quien lo creó (null si no se sabe: eventos anteriores a oct 2026). */
+  autorNombre: string | null
+  esMio: boolean
   onClose: () => void
   onEditar: (it: ItemCalendario) => void
   onDuplicar: (it: ItemCalendario) => void
@@ -59,6 +62,12 @@ export function EventoDetalle({ item, onClose, onEditar, onDuplicar, onEliminar,
           <Linea icon="schedule">{item.todoElDia ? 'Todo el día' : `${horaCorta(item.hora_inicio)} – ${horaCorta(item.hora_fin)}`}</Linea>
           {rep && <Linea icon="repeat">{rep}</Linea>}
           {item.descripcion && <Linea icon="notes"><span style={{ whiteSpace: 'pre-wrap' }}>{item.descripcion}</span></Linea>}
+          {!item.soloLectura && (esMio || autorNombre) && (
+            <Linea icon="person"><span style={{ color: 'var(--text-2)' }}>{esMio ? 'Lo cargaste vos' : `Lo cargó ${autorNombre}`}</span></Linea>
+          )}
+          {item.privado && (
+            <Linea icon="lock"><span style={{ color: 'var(--text-2)' }}><b>Privado</b> — solo lo ves vos</span></Linea>
+          )}
           {item.soloLectura && capa.origen && (
             <Linea icon="link">
               <span style={{ color: 'var(--text-2)' }}>Viene de <b>{capa.origen}</b>. Se edita allá; acá se refleja solo.</span>

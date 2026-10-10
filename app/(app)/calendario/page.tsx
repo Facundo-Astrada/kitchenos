@@ -19,6 +19,7 @@ import { useMenus, type MenuConPreparaciones } from '@/lib/hooks/useMenus'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { usePermisos } from '@/lib/hooks/usePermisos'
+import { useAuth } from '@/lib/auth/context'
 import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
 import { SegmentedTabs, HeaderAction, Toast } from '@/components/ui'
 import { useReducedMotion, DURATION, EASE_OUT } from '@/lib/ui/motion'
@@ -74,6 +75,7 @@ export default function CalendarioPage() {
   const reducedMotion = useReducedMotion()
   const RESTAURANTE_ID = useRestauranteId()
   const { isAdmin, puedeVer, verCostos } = usePermisos()
+  const { user } = useAuth()
   const verPagos = verCostos && (isAdmin || puedeVer('facturas'))
 
   const hoy = hoyStr()
@@ -110,7 +112,7 @@ export default function CalendarioPage() {
   const cerrarToast = useCallback(() => setToast(null), [])
 
   const {
-    items, proveedores, notaItems, loading, refreshing, error,
+    items, proveedores, autores, notaItems, loading, refreshing, error,
     fetchRango, refetch, crearEvento, actualizarEvento, eliminarEvento,
     agregarNotaItem, eliminarNotaItem, asignarPlazaNotaItem,
   } = useCalendario({ verPagos })
@@ -525,6 +527,8 @@ export default function CalendarioPage() {
 
       <EventoDetalle
         item={detalle}
+        autorNombre={detalle?.creado_por ? autores[detalle.creado_por] ?? null : null}
+        esMio={!!detalle?.creado_por && detalle.creado_por === user?.id}
         onClose={() => setDetalle(null)}
         onEditar={editar}
         onDuplicar={duplicar}

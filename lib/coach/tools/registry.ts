@@ -9,6 +9,7 @@ import {
   type CartaItemCoach,
 } from '@/lib/coach/catalogo'
 import { ganadorClaro } from '@/lib/coach/busqueda'
+import { TIPO_CONFIG, TODO_EL_DIA, TIPOS_CARGABLES, type TipoEvento } from '@/lib/calendario/tipos'
 
 const fmtARS = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 
@@ -102,6 +103,29 @@ const crearEventoSchema = z.object({
   fecha_evento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   pasos: z.array(pasoMenuSchema).min(1),
 })
+
+// Un ítem del CALENDARIO (tabla eventos) — no confundir con crear_evento, que
+// arma un MENÚ de evento en Carta/Planificación. Esto es lo que el Coach no
+// podía hacer: "agendá la reunión de compras", "León se va de vacaciones del
+// 19 al 25", o pegar las notas de una reunión de planificación y que cada
+// línea quede como su propio evento.
+const FECHA = /^\d{4}-\d{2}-\d{2}$/
+const HORA = /^\d{2}:\d{2}$/
+const eventoAgendaSchema = z.object({
+  titulo: z.string().trim().min(1),
+  fecha: z.string().regex(FECHA),
+  hasta: z.string().regex(FECHA).optional(),
+  hora_inicio: z.string().regex(HORA).optional(),
+  hora_fin: z.string().regex(HORA).optional(),
+  tipo: z.enum(TIPOS_CARGABLES as [TipoEvento, ...TipoEvento[]]).default('otro'),
+  descripcion: z.string().trim().optional(),
+  privado: z.boolean().default(false),
+})
+const agendarEventosSchema = z.object({
+  eventos: z.array(eventoAgendaSchema).min(1).max(30),
+})
+
+const ddmm = (f: string) => `${f.slice(8, 10)}/${f.slice(5, 7)}`
 
 // Reusa la forma de un paso de crear_evento — mismo criterio: paso+nombre
 // obligatorios, plaza/prioridad opcionales con el default de siempre.
@@ -351,6 +375,60 @@ export const COACH_TOOL_REGISTRY: Record<string, ToolRegistryEntry<any>> = {
       if (errPasos) return { ok: false, message: `El evento se creó pero hubo un error al cargar el menú: ${errPasos.message}` }
 
       return { ok: true, message: `Evento "${input.nombre}" creado para el ${input.fecha_evento} con ${input.pasos.length} paso${input.pasos.length !== 1 ? 's' : ''}. Lo vas a ver en Operaciones → Planificación → Eventos.` }
+    },
+  },
+
+  agendar_eventos: {
+    moduloId: 'calendario',
+    schema: agendarEventosSchema,
+    tituloHumano: 'Agendar en el calendario',
+    resumen: (i: z.infer<typeof agendarEventosSchema>) => {
+      const n = i.eventos?.length ?? 0
+      return `${n} evento${n !== 1 ? 's' : ''}: ` + (i.eventos ?? []).slice(0, 4).map(e => `${e.titulo} (${ddmm(e.fecha)}${e.hasta && e.hasta > e.fecha ? `–${ddmm(e.hasta)}` : ''})`).join(', ')
+        + (n > 4 ? ` y ${n - 4} más` : '')
+    },
+    campos: () => [
+      { key: 'eventos', label: 'Eventos', tipo: 'readonly' },
+    ],
+    warnings: async (input: z.infer<typeof agendarEventosSchema>) => {
+      const hoy = hoyOperativo()
+      const out: string[] = []
+      const pasados = (input.eventos ?? []).filter(e => (e.hasta ?? e.fecha) < hoy)
+      if (pasados.length) out.push(`${pasados.map(e => `"${e.titulo}"`).join(', ')} ${pasados.length === 1 ? 'cae' : 'caen'} en una fecha que ya pasó. Revisá el año.`)
+      const invertidos = (input.eventos ?? []).filter(e => e.hasta && e.hasta < e.fecha)
+      if (invertidos.length) out.push(`${invertidos.map(e => `"${e.titulo}"`).join(', ')}: el "hasta" es anterior al inicio; se va a guardar como un solo día.`)
+      return out
+    },
+    execute: async (supabase, restauranteId, input: z.infer<typeof agendarEventosSchema>) => {
+      const rows = input.eventos.map(e => {
+        const varios = !!e.hasta && e.hasta > e.fecha
+        const conHora = !!e.hora_inicio && !varios
+        let horaFin = e.hora_fin
+        if (conHora && (!horaFin || horaFin <= e.hora_inicio!)) {
+          const h = Math.min(23, Number(e.hora_inicio!.slice(0, 2)) + 1)
+          horaFin = `${String(h).padStart(2, '0')}:${e.hora_inicio!.slice(3, 5)}`
+        }
+        return {
+          restaurante_id: restauranteId,
+          titulo: e.titulo,
+          descripcion: e.descripcion || null,
+          tipo: e.tipo,
+          fecha_inicio: e.fecha,
+          fecha_fin: varios ? e.hasta! : null,
+          hora_inicio: conHora ? e.hora_inicio + ':00' : TODO_EL_DIA.inicio,
+          hora_fin: conHora ? horaFin + ':00' : TODO_EL_DIA.fin,
+          recurrente: false,
+          frecuencia: null,
+          color: TIPO_CONFIG[e.tipo].color,
+          privado: e.privado,
+          // creado_por lo pone la base (DEFAULT auth.uid()): el cliente server
+          // corre con la sesión de quien confirma.
+        }
+      })
+      const { error } = await supabase.from('eventos').insert(rows)
+      if (error) return { ok: false, message: `Error al agendar: ${error.message}` }
+      const lista = input.eventos.map(e => `${e.titulo} (${ddmm(e.fecha)}${e.hasta && e.hasta > e.fecha ? ` al ${ddmm(e.hasta)}` : ''})`).join(', ')
+      return { ok: true, message: `Agendé ${rows.length} evento${rows.length !== 1 ? 's' : ''} en el Calendario: ${lista}.` }
     },
   },
 

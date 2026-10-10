@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
       .from('eventos')
       .select('titulo, tipo')
       .eq('restaurante_id', restauranteId)
+      .eq('privado', false) // contexto de demanda del local, no la agenda personal
       .lte('fecha_inicio', fechaObjetivo)
       .or(`fecha_fin.gte.${fechaObjetivo},fecha_fin.is.null`)
     if (eventos && eventos.length > 0) {

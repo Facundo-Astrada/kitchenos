@@ -35,6 +35,8 @@ export interface EventoFormData {
   /** Mensual: el mismo número de día, el N-ésimo día de semana, o el último. */
   modo_mensual: 'dia' | 'semana' | 'ultimo'
   repetir_hasta: string
+  /** Solo lo ve quien lo crea. */
+  privado: boolean
 }
 
 export function formVacio(fecha: string, hora?: string): EventoFormData {
@@ -43,7 +45,7 @@ export function formVacio(fecha: string, hora?: string): EventoFormData {
   return {
     titulo: '', tipo: 'evento_equipo', fecha_inicio: fecha, fecha_fin: fecha, varios_dias: false,
     todo_el_dia: false, hora_inicio: ini, hora_fin: fin, descripcion: '', proveedor_id: '',
-    frecuencia: '', dias_semana: [], modo_mensual: 'dia', repetir_hasta: '',
+    frecuencia: '', dias_semana: [], modo_mensual: 'dia', repetir_hasta: '', privado: false,
   }
 }
 
@@ -59,6 +61,7 @@ export function formDesdeEvento(ev: EventoCalendario): EventoFormData {
     descripcion: ev.descripcion ?? '', proveedor_id: ev.proveedor_id ?? '',
     ...repeticionDesdeTexto(ev.recurrente ? ev.frecuencia ?? 'semanal' : null),
     repetir_hasta: ev.recurrente ? ev.fecha_fin ?? '' : '',
+    privado: ev.privado ?? false,
   }
 }
 
@@ -113,6 +116,7 @@ export function payloadDesdeForm(f: EventoFormData) {
     color: TIPO_CONFIG[f.tipo].color,
     proveedor_id: f.tipo === 'entrega_proveedor' && f.proveedor_id ? f.proveedor_id : null,
     usuario_id: null,
+    privado: f.privado,
   }
 }
 
@@ -358,6 +362,12 @@ export function EventoForm({ open, editando, inicial, proveedores, onClose, onGu
           <label htmlFor="ev-desc" style={labelStyle}>Notas</label>
           <textarea id="ev-desc" style={{ ...fieldStyle, minHeight: 72, resize: 'vertical' }} placeholder="Quién va, qué llevar, qué preparar…"
             value={f.descripcion} onChange={e => set({ descripcion: e.target.value })} />
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 2, marginTop: -4 }}>
+          <SwitchRow icon="lock" label="Solo para mí"
+            sub={f.privado ? 'Nadie más del equipo lo ve: ni en el calendario, ni en el line-up, ni su Coach' : 'Lo ve todo el equipo'}
+            checked={f.privado} onChange={v => set({ privado: v })} />
         </div>
 
         {error && <Err>No se pudo guardar: {error}</Err>}

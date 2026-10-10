@@ -557,6 +557,34 @@ const COACH_TOOLS = [
     },
   },
   {
+    name: 'agendar_eventos',
+    description: 'Carga uno o varios eventos en el CALENDARIO del restaurante (tabla de eventos, no menús). Usar para reuniones, vacaciones/francos del equipo, eventos sin menú armado, visitas, mantenimientos, recordatorios con fecha, o cuando el usuario pega notas/una lista para planificar ("agendá…", "anotá en el calendario…"). Cada línea de una lista es un evento separado; mandalos todos juntos en una sola llamada. Un rango de días ("del 19 al 25") es UN evento con fecha y hasta. Para un evento con menú de pasos (entrada, principal…) usar crear_evento.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        eventos: {
+          type: 'array',
+          description: 'Los eventos a agendar, uno por cosa a recordar.',
+          items: {
+            type: 'object',
+            properties: {
+              titulo: { type: 'string', description: 'Título corto y claro. Ej: "Vinito y chamuyo", "Vacaciones de León", "Día de la Madre — menú especial".' },
+              fecha: { type: 'string', description: 'Primer día, YYYY-MM-DD.' },
+              hasta: { type: 'string', description: 'Opcional. Último día si dura varios días, YYYY-MM-DD.' },
+              hora_inicio: { type: 'string', description: 'Opcional, HH:MM. Solo si el usuario dijo una hora; si no, queda todo el día.' },
+              hora_fin: { type: 'string', description: 'Opcional, HH:MM.' },
+              tipo: { type: 'string', enum: ['evento_equipo', 'ausencia', 'reserva_especial', 'capacitacion', 'mantenimiento', 'visita_bromatologia', 'entrega_proveedor', 'otro'], description: 'evento_equipo = reunión/actividad del equipo; ausencia = vacaciones, franco o días libres de alguien; reserva_especial = evento con clientes (cena temática, evento privado, fecha especial); otro si no encaja.' },
+              descripcion: { type: 'string', description: 'Opcional. Detalle que el usuario haya dado (ej. "menú especial", "falta confirmar").' },
+              privado: { type: 'boolean', description: 'true solo si el usuario pidió que sea solo para él/ella.' },
+            },
+            required: ['titulo', 'fecha'],
+          },
+        },
+      },
+      required: ['eventos'],
+    },
+  },
+  {
     name: 'agregar_componentes_menu',
     description: 'Agrega componentes nuevos a un menú o evento QUE YA EXISTE, sin tocar los que ya tiene. Usar cuando el usuario pide sumar algo a un menú/evento ya creado ("al evento del sábado agregale un postre de X", "sumale una entrada al menú de bodas"). Si el usuario en cambio quiere armar un evento desde cero, usá crear_evento. Cada componente es un objeto {paso, nombre, plaza?, prioridad?}, mismo formato que crear_evento — "plaza" y "prioridad" solo si el usuario las dijo. Si no queda claro a qué menú/evento se refiere o falta el nombre de algún componente, preguntá antes de llamar la herramienta.',
     input_schema: {
@@ -1167,6 +1195,7 @@ Acciones que MODIFICAN datos — usalas SOLO cuando el usuario lo pide explícit
 - cargar_producto ("cargá un producto nuevo…"), ajustar_stock ("quedan 3 kg de…", "entraron 10 de…"), registrar_venta ("hoy vendimos 450 mil con 60 cubiertos").
 - crear_evento ("armá un evento para el sábado con menú de…", "creá el evento de tal fecha con entrada X, principal Y…") — pedile la fecha si no la dio, y confirmá cada paso del menú antes de llamar la herramienta si algo quedó ambiguo.
 - agregar_componentes_menu ("al evento del sábado agregale un postre de…", "sumale una entrada al menú de bodas") — para un menú/evento QUE YA EXISTE, no crea uno nuevo (eso es crear_evento). Si no está claro a cuál te referís, preguntá.
+- agendar_eventos: cargar UNO O VARIOS ítems en el CALENDARIO (reuniones, vacaciones y francos del equipo, eventos sin menú armado, visitas, mantenimientos, "anotá que…"). Es la herramienta por defecto para "agendá", "anotá en el calendario", "cargá en el calendario". crear_evento es SOLO cuando el usuario dicta un menú con pasos. Si pega una lista o las notas de una reunión, cada línea es un evento propio en UNA sola llamada. Rangos ("del 19 al 25", "viernes 6, sábado 7 y domingo 8") → fecha + hasta, un solo evento de varios días. Ausencias de una persona → tipo ausencia, con el nombre en el título ("Vacaciones de León"). Sin hora → todo el día (no inventes horarios). Año: el de la próxima vez que cae esa fecha desde hoy. Chequeá EN SILENCIO que el día de la semana que dijo coincida con la fecha: si coincide no lo comentes; solo si NO coincide, preguntá antes de llamar la herramienta. No expliques tu razonamiento ni repitas la lista: llamá la herramienta y cerrá con una frase corta. privado = true solo si pide que sea "solo para mí"/"privado".
 - IMPORTANTE: estas herramientas NO ejecutan el cambio al llamarlas — dejan la acción PROPUESTA. El usuario va a ver una tarjeta editable en el chat y tiene que confirmarla ahí. No digas "ya lo hice", "listo, cargado" ni nada que dé a entender que el cambio ya ocurrió — decí algo como "te dejo esto para que confirmes" y cerrá corto.
 
 Reglas:
