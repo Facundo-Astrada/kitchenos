@@ -17,6 +17,8 @@ import { Modal, SwitchRow } from '@/components/ui'
 import { TIPO_CONFIG, TODO_EL_DIA, type TipoEvento, type EventoCalendario, type Proveedor } from '@/lib/hooks/useCalendario'
 import { minutos, pad2, parse, dowLunes, parseFrecuencia, ordinalEnMes, describirRepeticion, DIAS_LARGO } from '@/lib/calendario/fechas'
 import { fieldStyle, labelStyle, btnPrimario, btnSecundario } from './shared'
+import { destinatarios, type DestinoAviso } from '@/lib/calendario/aviso-destino'
+import type { MiembroEquipo } from '@/lib/hooks/useCalendario'
 
 export interface EventoFormData {
   titulo: string
@@ -37,6 +39,8 @@ export interface EventoFormData {
   repetir_hasta: string
   /** Solo lo ve quien lo crea. */
   privado: boolean
+  /** A quién avisar al crearlo. null = a nadie (default). */
+  avisar: DestinoAviso | null
 }
 
 export function formVacio(fecha: string, hora?: string): EventoFormData {
@@ -45,7 +49,7 @@ export function formVacio(fecha: string, hora?: string): EventoFormData {
   return {
     titulo: '', tipo: 'evento_equipo', fecha_inicio: fecha, fecha_fin: fecha, varios_dias: false,
     todo_el_dia: false, hora_inicio: ini, hora_fin: fin, descripcion: '', proveedor_id: '',
-    frecuencia: '', dias_semana: [], modo_mensual: 'dia', repetir_hasta: '', privado: false,
+    frecuencia: '', dias_semana: [], modo_mensual: 'dia', repetir_hasta: '', privado: false, avisar: null,
   }
 }
 
@@ -62,6 +66,7 @@ export function formDesdeEvento(ev: EventoCalendario): EventoFormData {
     ...repeticionDesdeTexto(ev.recurrente ? ev.frecuencia ?? 'semanal' : null),
     repetir_hasta: ev.recurrente ? ev.fecha_fin ?? '' : '',
     privado: ev.privado ?? false,
+    avisar: ev.avisar ?? null,
   }
 }
 
@@ -117,6 +122,8 @@ export function payloadDesdeForm(f: EventoFormData) {
     proveedor_id: f.tipo === 'entrega_proveedor' && f.proveedor_id ? f.proveedor_id : null,
     usuario_id: null,
     privado: f.privado,
+    // Un privado no se avisa a nadie (lo mismo chequea el server).
+    avisar: f.privado ? null : f.avisar,
   }
 }
 
@@ -129,11 +136,17 @@ const PLANTILLAS: { label: string; icon: string; aplicar: (f: EventoFormData) =>
   { label: 'Service de equipos', icon: 'build', aplicar: () => ({ titulo: 'Service de equipos', tipo: 'mantenimiento', todo_el_dia: false, hora_inicio: '09:00', hora_fin: '11:00', frecuencia: '' }) },
 ]
 
-export function EventoForm({ open, editando, inicial, proveedores, onClose, onGuardar }: {
+export function EventoForm({ open, editando, inicial, proveedores, equipo, puestos, yoId, avisadoAt, onClose, onGuardar }: {
   open: boolean
   editando: boolean
   inicial: EventoFormData
   proveedores: Proveedor[]
+  /** Para "Avisar al equipo". */
+  equipo: MiembroEquipo[]
+  puestos: { id: string; nombre: string }[]
+  yoId: string | null
+  /** Si el evento ya avisó, no se vuelve a ofrecer (el aviso sale una vez). */
+  avisadoAt: string | null
   onClose: () => void
   onGuardar: (f: EventoFormData) => Promise<void>
 }) {
@@ -367,7 +380,15 @@ export function EventoForm({ open, editando, inicial, proveedores, onClose, onGu
         <div style={{ borderTop: '1px solid var(--border)', paddingTop: 2, marginTop: -4 }}>
           <SwitchRow icon="lock" label="Solo para mí"
             sub={f.privado ? 'Nadie más del equipo lo ve: ni en el calendario, ni en el line-up, ni su Coach' : 'Lo ve todo el equipo'}
-            checked={f.privado} onChange={v => set({ privado: v })} />
+            checked={f.privado} onChange={v => set({ privado: v, ...(v ? { avisar: null } : {}) })} />
+          {!f.privado && (avisadoAt ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', fontSize: 12.5, color: 'var(--text-2)' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--green)' }}>notifications_active</span>
+              Ya se avisó al equipo el {new Date(avisadoAt).toLocaleDateString('es-AR', { day: 'numeric', month: 'numeric' })}. Los cambios no vuelven a avisar.
+            </div>
+          ) : (
+            <AvisarSelector valor={f.avisar} onChange={avisar => set({ avisar })} equipo={equipo} puestos={puestos} yoId={yoId} />
+          ))}
         </div>
 
         {error && <Err>No se pudo guardar: {error}</Err>}
@@ -380,6 +401,62 @@ export function EventoForm({ open, editando, inicial, proveedores, onClose, onGu
         </div>
       </form>
     </Modal>
+  )
+}
+
+/**
+ * "Avisar al equipo": apagado por defecto. Prendido elige a quién — todos, uno
+ * o más puestos, o personas — y muestra a cuántos les llega (sin contarte a vos).
+ */
+function AvisarSelector({ valor, onChange, equipo, puestos, yoId }: {
+  valor: DestinoAviso | null
+  onChange: (v: DestinoAviso | null) => void
+  equipo: MiembroEquipo[]
+  puestos: { id: string; nombre: string }[]
+  yoId: string | null
+}) {
+  const miembros = equipo.map(m => ({ auth_user_id: m.authUserId, nombre: m.nombre, puesto_id: m.puestoId }))
+  const n = valor ? destinatarios(valor, miembros, yoId).length : 0
+  const ids = valor && valor.modo !== 'todos' ? valor.ids : []
+  const toggle = (id: string) => {
+    if (!valor || valor.modo === 'todos') return
+    const next = ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]
+    onChange({ modo: valor.modo, ids: next })
+  }
+  const sub = !valor ? 'No le llega nada a nadie'
+    : n === 0 ? 'Elegí a quién avisarle'
+    : `Le llega a ${n} persona${n !== 1 ? 's' : ''} en la campana, y al celular a quien lo tenga activado`
+  return (
+    <>
+      <SwitchRow icon="notifications" label="Avisar al equipo" sub={sub}
+        checked={!!valor} onChange={v => onChange(v ? { modo: 'todos' } : null)} />
+      {valor && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '2px 0 10px 30px' }}>
+          <div role="radiogroup" aria-label="A quién avisar" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            <Chip role="radio" on={valor.modo === 'todos'} onClick={() => onChange({ modo: 'todos' })}>Todo el equipo</Chip>
+            {puestos.length > 0 && <Chip role="radio" on={valor.modo === 'puestos'} onClick={() => onChange({ modo: 'puestos', ids: [] })}>Por puesto</Chip>}
+            <Chip role="radio" on={valor.modo === 'personas'} onClick={() => onChange({ modo: 'personas', ids: [] })}>Personas</Chip>
+          </div>
+          {valor.modo !== 'todos' && (
+            <div role="group" aria-label={valor.modo === 'puestos' ? 'Puestos' : 'Personas'} style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {(valor.modo === 'puestos'
+                ? puestos.map(p => ({ id: p.id, label: p.nombre }))
+                : equipo.filter(m => m.authUserId !== yoId).map(m => ({ id: m.authUserId, label: m.nombre }))
+              ).map(o => (
+                <button key={o.id} type="button" aria-pressed={ids.includes(o.id)} onClick={() => toggle(o.id)} style={{
+                  padding: '6px 11px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600,
+                  border: ids.includes(o.id) ? '1px solid var(--accent)' : '1px solid var(--border)',
+                  background: ids.includes(o.id) ? 'var(--blue-bg)' : 'var(--surface)',
+                  color: ids.includes(o.id) ? 'var(--text-1)' : 'var(--text-2)',
+                }}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </>
   )
 }
 

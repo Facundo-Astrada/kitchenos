@@ -15,7 +15,14 @@ const NOTAS = {
 
 function fakeSupabase() {
   const insertados: Record<string, unknown>[] = []
-  const sb = { from: () => ({ insert: (rows: Record<string, unknown>[]) => { insertados.push(...rows); return Promise.resolve({ error: null }) } }) }
+  const sb = {
+    from: () => ({
+      insert: (rows: Record<string, unknown>[]) => {
+        insertados.push(...rows)
+        return { select: () => Promise.resolve({ data: rows.map((r, i) => ({ id: `ev-${i}`, avisar: r.avisar ?? null })), error: null }) }
+      },
+    }),
+  }
   return { sb: sb as unknown as SupabaseClient, insertados }
 }
 

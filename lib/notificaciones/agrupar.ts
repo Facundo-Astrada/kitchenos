@@ -10,6 +10,7 @@ const ETIQUETAS: Record<string, { singular: string; plural: string; icono: strin
   ruta_recordatorio: { singular: 'recordatorio de la ruta', plural: 'recordatorios de la ruta', icono: 'alt_route' },
   ruta_reconocimiento: { singular: 'avance de la ruta', plural: 'avances de la ruta', icono: 'emoji_events' },
   prueba: { singular: 'prueba', plural: 'pruebas', icono: 'science' },
+  evento_calendario: { singular: 'evento nuevo en el calendario', plural: 'eventos nuevos en el calendario', icono: 'calendar_month' },
 }
 
 export interface GrupoAvisos {

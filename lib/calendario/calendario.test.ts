@@ -3,6 +3,8 @@ import { ocurrencias, grillaMes, fechaLarga, etiquetaRango, addDays, describirRe
 import { segmentosSemana, bloquesDia } from './layout'
 import { generarIcs } from './ics'
 import { feriadosEnRango } from './feriados'
+import { destinatarios } from './aviso-destino'
+import { textoAviso } from './avisar'
 
 describe('ocurrencias de un evento recurrente', () => {
   it('semanal: aparece todas las semanas del rango, no solo el día que se creó', () => {
@@ -109,5 +111,30 @@ describe('ics y feriados', () => {
   })
   it('octubre 2026 tiene el feriado trasladado del 12', () => {
     expect(feriadosEnRango('2026-10-01', '2026-10-31').map(f => f.fecha)).toEqual(['2026-10-12'])
+  })
+})
+
+describe('avisar al equipo', () => {
+  const equipo = [
+    { auth_user_id: 'yo', nombre: 'Facundo', puesto_id: 'p-dueño' },
+    { auth_user_id: 'leon', nombre: 'León', puesto_id: 'p-cocina' },
+    { auth_user_id: 'zoe', nombre: 'Zoe', puesto_id: 'p-cocina' },
+    { auth_user_id: 'ana', nombre: 'Ana', puesto_id: 'p-salon' },
+  ]
+  it('todos, menos quien lo cargó', () => {
+    expect(destinatarios({ modo: 'todos' }, equipo, 'yo')).toEqual(['leon', 'zoe', 'ana'])
+  })
+  it('por puesto', () => {
+    expect(destinatarios({ modo: 'puestos', ids: ['p-cocina'] }, equipo, 'yo')).toEqual(['leon', 'zoe'])
+  })
+  it('personas, sin repetir y sin el autor aunque se elija', () => {
+    expect(destinatarios({ modo: 'personas', ids: ['ana', 'ana', 'yo'] }, equipo, 'yo')).toEqual(['ana'])
+  })
+  it('el texto dice qué, cuándo y quién', () => {
+    const base = { titulo: 'Capacitación', fecha_inicio: '2026-10-15', fecha_fin: null, hora_inicio: '15:00:00', hora_fin: '16:30:00', recurrente: false, frecuencia: null }
+    expect(textoAviso(base, 'Facundo')).toEqual({ titulo: 'Nuevo en el calendario: Capacitación', cuerpo: 'Jueves 15 de octubre · 15:00 — lo cargó Facundo' })
+    expect(textoAviso({ ...base, titulo: 'Vacaciones de León', fecha_inicio: '2026-10-19', fecha_fin: '2026-10-25', hora_inicio: '00:00:00', hora_fin: '23:59:00' }, null).cuerpo)
+      .toBe('Del lunes 19 de octubre al domingo 25 de octubre')
+    expect(textoAviso({ ...base, recurrente: true, frecuencia: 'semanal:1' }, null).cuerpo).toBe('Jueves 15 de octubre · 15:00 · todos los martes')
   })
 })

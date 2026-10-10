@@ -105,14 +105,14 @@ export default function CalendarioPage() {
   const diasPorVista = ancho >= 720 ? 7 : 3
 
   const [detalle, setDetalle] = useState<ItemCalendario | null>(null)
-  const [form, setForm] = useState<{ open: boolean; editandoId: string | null; inicial: EventoFormData }>(
+  const [form, setForm] = useState<{ open: boolean; editandoId: string | null; inicial: EventoFormData; avisadoAt?: string | null }>(
     () => ({ open: false, editandoId: null, inicial: formVacio(hoy) }))
   const [planificar, setPlanificar] = useState(false)
   const [toast, setToast] = useState<ToastState>(null)
   const cerrarToast = useCallback(() => setToast(null), [])
 
   const {
-    items, proveedores, autores, notaItems, loading, refreshing, error,
+    items, proveedores, autores, equipo, puestos, notaItems, loading, refreshing, error,
     fetchRango, refetch, crearEvento, actualizarEvento, eliminarEvento,
     agregarNotaItem, eliminarNotaItem, asignarPlazaNotaItem,
   } = useCalendario({ verPagos })
@@ -169,6 +169,13 @@ export default function CalendarioPage() {
 
   const irHoy = useCallback(() => irAFecha(hoy), [irAFecha, hoy])
 
+  // Deep link desde un aviso: /calendario?fecha=2026-10-16 abre ese día.
+  useEffect(() => {
+    const f = new URLSearchParams(window.location.search).get('fecha')
+    if (f && /^\d{4}-\d{2}-\d{2}$/.test(f)) irAFecha(f)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const cambiarVista = useCallback((v: Vista) => { setVista(v); escribirLS(LS_VISTA, v) }, [])
   const toggleCapa = useCallback((id: CapaId) => {
     setCapas(prev => {
@@ -186,23 +193,37 @@ export default function CalendarioPage() {
 
   const editar = (it: ItemCalendario) => {
     setDetalle(null)
-    setForm({ open: true, editandoId: it.serieId ?? it.id, inicial: formDesdeEvento(it) })
+    setForm({ open: true, editandoId: it.serieId ?? it.id, inicial: formDesdeEvento(it), avisadoAt: it.avisado_at ?? null })
   }
   const duplicar = (it: ItemCalendario) => {
     setDetalle(null)
     const base = formDesdeEvento(it)
     const largo = diffDays(it.dia, it.diaFin)
-    setForm({ open: true, editandoId: null, inicial: { ...base, fecha_inicio: it.dia, fecha_fin: addDays(it.dia, largo), frecuencia: '', repetir_hasta: '' } })
+    setForm({ open: true, editandoId: null, inicial: { ...base, fecha_inicio: it.dia, fecha_fin: addDays(it.dia, largo), frecuencia: '', repetir_hasta: '', avisar: null } })
   }
 
   const guardar = async (f: EventoFormData) => {
     const payload = payloadDesdeForm(f)
-    if (form.editandoId) await actualizarEvento(form.editandoId, payload)
-    else await crearEvento(payload)
+    // Un evento que ya avisó no vuelve a mandar su destino (el aviso sale una vez).
+    const datos = form.avisadoAt ? (({ avisar: _a, ...resto }) => { void _a; return resto })(payload) : payload
+    let id = form.editandoId
+    if (id) await actualizarEvento(id, datos)
+    else id = await crearEvento(payload)
     setForm(s => ({ ...s, open: false }))
+    // Aviso al equipo: el server decide (idempotente: solo si lo pidió y no avisó todavía).
+    let aviso = ''
+    if (payload.avisar && !form.avisadoAt && id) {
+      try {
+        const r = await fetch('/api/calendario/avisar', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ eventoId: id }),
+        }).then(res => res.json()) as { avisados?: number; push?: number; motivo?: string }
+        if (r.avisados) aviso = ` · avisado a ${r.avisados}${r.push ? ` (${r.push} al celular)` : ''}`
+        else if (r.motivo === 'nadie en ese destino') aviso = ' · no había a quién avisarle'
+      } catch { /* el evento ya quedó guardado; el aviso es best-effort */ }
+    }
     await refetch()
     const rep = textoRecurrencia(payload)
-    setToast({ msg: form.editandoId ? 'Cambios guardados' : rep ? `Evento creado · ${rep}` : `Evento creado · ${fechaLarga(f.fecha_inicio)}` })
+    setToast({ msg: (form.editandoId ? 'Cambios guardados' : rep ? `Evento creado · ${rep}` : `Evento creado · ${fechaLarga(f.fecha_inicio)}`) + aviso })
     if (!form.editandoId) irAFecha(f.fecha_inicio)
   }
 
@@ -540,6 +561,10 @@ export default function CalendarioPage() {
         editando={!!form.editandoId}
         inicial={form.inicial}
         proveedores={proveedores}
+        equipo={equipo}
+        puestos={puestos}
+        yoId={user?.id ?? null}
+        avisadoAt={form.avisadoAt ?? null}
         onClose={() => setForm(s => ({ ...s, open: false }))}
         onGuardar={guardar}
       />

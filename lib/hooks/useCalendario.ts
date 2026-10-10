@@ -8,6 +8,7 @@ import { ocurrencias, rango as rangoFechas, addDays, hoy as hoyFecha } from '@/l
 import { feriadosEnRango } from '@/lib/calendario/feriados'
 import { CAPA_POR_ID, type CapaId } from '@/lib/calendario/capas'
 import { TIPO_CONFIG, TODO_EL_DIA, type TipoEvento } from '@/lib/calendario/tipos'
+import type { DestinoAviso } from '@/lib/calendario/aviso-destino'
 
 // Re-export: la pantalla y el Dashboard los importan desde acá.
 export { TIPO_CONFIG, TODO_EL_DIA, type TipoEvento }
@@ -35,6 +36,10 @@ export interface EventoCalendario {
   creado_por?: string | null
   /** Solo lo ve quien lo creó (RLS). */
   privado?: boolean
+  /** A quién avisar al crearlo (null = a nadie). Ver lib/calendario/avisar.ts. */
+  avisar?: DestinoAviso | null
+  /** Cuándo se avisó — el aviso sale una sola vez. */
+  avisado_at?: string | null
   /* flag for auto-generated pedido events */
   _fromPedido?: boolean
   /* flag for auto-generated menú-activado events */
@@ -63,6 +68,8 @@ export interface ItemCalendario extends EventoCalendario {
   /** Detalle extra de un reflejo (monto, pax...). */
   meta?: string
 }
+
+export interface MiembroEquipo { authUserId: string; nombre: string; puestoId: string | null }
 
 export interface Proveedor {
   id: string
@@ -140,6 +147,9 @@ export function useCalendario({ verPagos = false }: { verPagos?: boolean } = {})
   // auth uid → nombre, para el "Creado por" del detalle (equipo_miembros:
   // en cuentas reales `perfiles` puede estar vacía).
   const [autores, setAutores] = useState<Record<string, string>>({})
+  // Para el selector de "Avisar al equipo": quién tiene usuario y en qué puesto.
+  const [equipo, setEquipo] = useState<MiembroEquipo[]>([])
+  const [puestos, setPuestos] = useState<{ id: string; nombre: string }[]>([])
   const [notaItems, setNotaItems] = useState<Record<string, NotaItemCalendario[]>>({})
   // loading = primera carga (skeleton); refreshing = cambio de rango con datos
   // ya en pantalla (no se reemplaza la grilla por "Cargando...").
@@ -426,7 +436,7 @@ export function useCalendario({ verPagos = false }: { verPagos?: boolean } = {})
   }, [supabase])
 
   /* CRUD — devuelven el id para poder deshacer. creado_por no se manda: lo pone la base. */
-  type EventoInput = Omit<EventoCalendario, 'id' | 'created_at' | 'restaurante_id' | 'creado_por' | '_fromPedido' | '_fromMenu' | '_fromReserva'>
+  type EventoInput = Omit<EventoCalendario, 'id' | 'created_at' | 'restaurante_id' | 'creado_por' | 'avisado_at' | '_fromPedido' | '_fromMenu' | '_fromReserva'>
 
   const crearEvento = useCallback(async (datos: EventoInput): Promise<string> => {
     const { data, error } = await supabase.from('eventos')
@@ -468,16 +478,25 @@ export function useCalendario({ verPagos = false }: { verPagos?: boolean } = {})
 
   const fetchAutores = useCallback(async () => {
     if (!restIdRef.current) return
-    const { data } = await supabase.from('equipo_miembros')
-      .select('auth_user_id, nombre, apellido')
-      .eq('restaurante_id', restIdRef.current)
-      .not('auth_user_id', 'is', null)
+    const [{ data }, { data: ps }] = await Promise.all([
+      supabase.from('equipo_miembros')
+        .select('auth_user_id, nombre, apellido, puesto_id, activo')
+        .eq('restaurante_id', restIdRef.current)
+        .not('auth_user_id', 'is', null),
+      supabase.from('puestos').select('id, nombre').eq('restaurante_id', restIdRef.current).order('nombre'),
+    ])
     const map: Record<string, string> = {}
-    for (const m of (data ?? []) as { auth_user_id: string; nombre: string | null; apellido: string | null }[]) {
+    const lista: MiembroEquipo[] = []
+    for (const m of (data ?? []) as { auth_user_id: string; nombre: string | null; apellido: string | null; puesto_id: string | null; activo: boolean | null }[]) {
       const n = [m.nombre, m.apellido].filter(Boolean).join(' ').trim()
       if (n) map[m.auth_user_id] = n
+      if (m.activo !== false) lista.push({ authUserId: m.auth_user_id, nombre: n || 'Sin nombre', puestoId: m.puesto_id })
     }
     setAutores(map)
+    setEquipo(lista.sort((a, b) => a.nombre.localeCompare(b.nombre)))
+    // Solo puestos con alguien con usuario: avisar a un puesto vacío no le llega a nadie.
+    const conGente = new Set(lista.map(m => m.puestoId).filter(Boolean))
+    setPuestos(((ps ?? []) as { id: string; nombre: string }[]).filter(p => conGente.has(p.id)))
   }, [supabase])
 
   /* Proveedores */
@@ -533,6 +552,8 @@ export function useCalendario({ verPagos = false }: { verPagos?: boolean } = {})
     items,
     proveedores,
     autores,
+    equipo,
+    puestos,
     notaItems,
     loading,
     refreshing,

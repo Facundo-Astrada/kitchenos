@@ -10,6 +10,9 @@ import {
 } from '@/lib/coach/catalogo'
 import { ganadorClaro } from '@/lib/coach/busqueda'
 import { TIPO_CONFIG, TODO_EL_DIA, TIPOS_CARGABLES, type TipoEvento } from '@/lib/calendario/tipos'
+import { avisarEvento } from '@/lib/calendario/avisar'
+import type { DestinoAviso } from '@/lib/calendario/aviso-destino'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 const fmtARS = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
 
@@ -120,12 +123,48 @@ const eventoAgendaSchema = z.object({
   tipo: z.enum(TIPOS_CARGABLES as [TipoEvento, ...TipoEvento[]]).default('otro'),
   descripcion: z.string().trim().optional(),
   privado: z.boolean().default(false),
+  // "todos", o puestos/personas por nombre ("cocina", "León y Zoe"). Se
+  // resuelve contra el equipo real al confirmar; sin esto no se avisa a nadie.
+  avisar_a: z.string().trim().optional(),
 })
 const agendarEventosSchema = z.object({
   eventos: z.array(eventoAgendaSchema).min(1).max(30),
 })
 
 const ddmm = (f: string) => `${f.slice(8, 10)}/${f.slice(5, 7)}`
+
+const normalizar = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+
+/**
+ * "todos" | "cocina" | "León y Zoe" → destino del aviso. Un término matchea un
+ * puesto si uno contiene al otro ("cocina" → "jefe de cocina", "ayudante
+ * cocina") o una persona por nombre. Devuelve también lo que no encontró,
+ * para avisarlo en la tarjeta antes de confirmar.
+ */
+async function resolverAvisarA(supabase: SupabaseClient, restauranteId: string, texto: string): Promise<{ destino: DestinoAviso | null; etiqueta: string; sinMatch: string[] }> {
+  const t = normalizar(texto)
+  if (!t) return { destino: null, etiqueta: '', sinMatch: [] }
+  if (/^(todos|todo el equipo|el equipo|equipo|todo el mundo)$/.test(t)) return { destino: { modo: 'todos' }, etiqueta: 'todo el equipo', sinMatch: [] }
+  const [{ data: miembros }, { data: puestos }] = await Promise.all([
+    supabase.from('equipo_miembros').select('auth_user_id, nombre, apellido, puesto_id').eq('restaurante_id', restauranteId).not('auth_user_id', 'is', null),
+    supabase.from('puestos').select('id, nombre').eq('restaurante_id', restauranteId),
+  ])
+  const ms = (miembros ?? []) as { auth_user_id: string; nombre: string | null; apellido: string | null; puesto_id: string | null }[]
+  const ps = (puestos ?? []) as { id: string; nombre: string }[]
+  const ids = new Set<string>(); const nombres: string[] = []; const sinMatch: string[] = []
+  for (const termino of t.split(/,| y | e |\//).map(x => x.trim()).filter(Boolean)) {
+    const pMatch = ps.filter(p => { const n = normalizar(p.nombre); return n.includes(termino) || termino.includes(n) })
+    const mMatch = ms.filter(m => normalizar([m.nombre, m.apellido].filter(Boolean).join(' ')).split(' ').includes(termino) || normalizar(m.nombre ?? '') === termino)
+    if (pMatch.length === 0 && mMatch.length === 0) { sinMatch.push(termino); continue }
+    for (const p of pMatch) { nombres.push(p.nombre); for (const m of ms) if (m.puesto_id === p.id) ids.add(m.auth_user_id) }
+    for (const m of mMatch) { nombres.push(m.nombre ?? termino); ids.add(m.auth_user_id) }
+  }
+  return {
+    destino: ids.size ? { modo: 'personas', ids: [...ids] } : null,
+    etiqueta: [...new Set(nombres)].join(', '),
+    sinMatch,
+  }
+}
 
 // Reusa la forma de un paso de crear_evento — mismo criterio: paso+nombre
 // obligatorios, plaza/prioridad opcionales con el default de siempre.
@@ -390,13 +429,18 @@ export const COACH_TOOL_REGISTRY: Record<string, ToolRegistryEntry<any>> = {
     campos: () => [
       { key: 'eventos', label: 'Eventos', tipo: 'readonly' },
     ],
-    warnings: async (input: z.infer<typeof agendarEventosSchema>) => {
+    warnings: async (input: z.infer<typeof agendarEventosSchema>, { supabase, restauranteId }) => {
       const hoy = hoyOperativo()
       const out: string[] = []
       const pasados = (input.eventos ?? []).filter(e => (e.hasta ?? e.fecha) < hoy)
       if (pasados.length) out.push(`${pasados.map(e => `"${e.titulo}"`).join(', ')} ${pasados.length === 1 ? 'cae' : 'caen'} en una fecha que ya pasó. Revisá el año.`)
       const invertidos = (input.eventos ?? []).filter(e => e.hasta && e.hasta < e.fecha)
       if (invertidos.length) out.push(`${invertidos.map(e => `"${e.titulo}"`).join(', ')}: el "hasta" es anterior al inicio; se va a guardar como un solo día.`)
+      for (const e of input.eventos ?? []) {
+        if (!e.avisar_a || e.privado) continue
+        const r = await resolverAvisarA(supabase, restauranteId, e.avisar_a)
+        if (r.sinMatch.length) out.push(`"${e.titulo}": no encontré a ${r.sinMatch.map(x => `"${x}"`).join(', ')} en el equipo${r.destino ? ` — se avisa solo a ${r.etiqueta}` : ' — no se va a avisar a nadie'}.`)
+      }
       return out
     },
     execute: async (supabase, restauranteId, input: z.infer<typeof agendarEventosSchema>) => {
@@ -421,14 +465,32 @@ export const COACH_TOOL_REGISTRY: Record<string, ToolRegistryEntry<any>> = {
           frecuencia: null,
           color: TIPO_CONFIG[e.tipo].color,
           privado: e.privado,
+          avisar: null as DestinoAviso | null,
           // creado_por lo pone la base (DEFAULT auth.uid()): el cliente server
           // corre con la sesión de quien confirma.
         }
       })
-      const { error } = await supabase.from('eventos').insert(rows)
+      // A quién avisar, resuelto contra el equipo real (no lo que dijo el modelo).
+      for (let i = 0; i < rows.length; i++) {
+        const e = input.eventos[i]
+        if (e.avisar_a && !e.privado) rows[i].avisar = (await resolverAvisarA(supabase, restauranteId, e.avisar_a)).destino
+      }
+      const { data: creados, error } = await supabase.from('eventos').insert(rows).select('id, avisar')
       if (error) return { ok: false, message: `Error al agendar: ${error.message}` }
       const lista = input.eventos.map(e => `${e.titulo} (${ddmm(e.fecha)}${e.hasta && e.hasta > e.fecha ? ` al ${ddmm(e.hasta)}` : ''})`).join(', ')
-      return { ok: true, message: `Agendé ${rows.length} evento${rows.length !== 1 ? 's' : ''} en el Calendario: ${lista}.` }
+
+      let avisoTxt = ''
+      const aAvisar = (creados ?? []).filter(c => c.avisar)
+      if (aAvisar.length) {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const admin = createAdminClient()
+          const res = await Promise.all(aAvisar.map(c => avisarEvento(supabase, admin, restauranteId, user.id, c.id as string)))
+          const total = res.reduce((n, r) => n + r.avisados, 0)
+          if (total) avisoTxt = ` Avisé a ${total} persona${total !== 1 ? 's' : ''}.`
+        }
+      }
+      return { ok: true, message: `Agendé ${rows.length} evento${rows.length !== 1 ? 's' : ''} en el Calendario: ${lista}.${avisoTxt}` }
     },
   },
 
