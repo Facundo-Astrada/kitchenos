@@ -1,18 +1,17 @@
-# Sesión — 10/10/2026 (Calendario: rediseño, privado, Coach que agenda, avisos)
+# Sesión — 10/10/2026 (costos de recetas de Bros)
 
 ## Qué se cerró
-- Calendario rediseñado: vistas Mes/Semana/Agenda, capas que se llenan solas (menús, entregas, reservas, pagos, feriados), repetición real (semanal en varios días, mensual "el 2º domingo"), deshacer, .ics. Pantalla partida en `components/calendario/` + `lib/calendario/`.
-- Eventos privados ("solo para mí", RLS verificada con dos usuarios) + autor en el detalle.
-- Coach: `agendar_eventos` — una lista de notas queda como un evento por línea (probado con las notas reales de planificación).
-- "Avisar al equipo" (todos / puestos / personas → campana + push, una vez por evento).
+- Diagnóstico: 988 ingredientes con costo $0 (567 a desactivados, 340 sin producto, 81 a activos en $0; ~80 son agua). Origen: productos "Sin categoría" a $0 creados al guardar recetas y desactivados en tandas desde Stock.
+- Aplicado: 115 ingredientes revinculados (87 salieron de $0) con respaldo `bak_ingredientes_revincular_20261010`; 19 productos con precio reactivados, respaldo `bak_productos_reactivar_20261010`.
+- `scripts/revincular-recetas-bros.mjs`: dry-run reutilizable (alias + sugerenciaSegura + frenos propios).
 
 ## Qué quedó a medias
-- Nunca se vio llegar un aviso real: en la demo nadie más tiene usuario.
-- Recordatorio del día anterior (segunda etapa acordada). Ratchet de `checklist/ClientView.tsx` sobre su techo (de antes).
+- ~780 ingredientes en $0 reales, 276 de 372 recetas: genéricos sin producto activo con precio (Sal, Manteca, Pimienta, Leche, Oliva, Limón, Aceite) y nombres basura ("1/2", "c/n").
+- 8 desactivados con precio sin reactivar por duplicar uno activo (MSA, Anchoas en sal, Berro, Harina 0000, Mani tostado, Leche en polvo caja, Bondiola navidad, Harina algarroba tostada).
+- Prevención al desactivar productos con recetas: decidido NO por ahora.
 
 ## Probar primero mañana
-- Bros: evento con "Avisar al equipo" → Personas → una persona de confianza; que le llegue a la campana (y al celular si tiene push).
-- Bros: pegarle al Coach notas de planificación con "cargá esto en el calendario y avisale a cocina".
+- Bros: food cost de la carta (debería subir) y que Manteca/Pollo aparezcan en Stock sin romper alertas.
 
 ## Próximo paso concreto
-- Recetas de Bros con costo incompleto: 705 ingredientes a productos desactivados, 657 a productos $0 → revincular al producto activo con precio (dry-run + respaldo). Sigue siendo lo más importante del backlog.
+- Decidir mapeos genéricos (Sal→Sal fina, Manteca→pilones, Jugo de limón→Limón), cargar precio de pimienta/leche/aceite de oliva, y borrar el alias malo "aceite de girasol"→Semillas de girasol.
