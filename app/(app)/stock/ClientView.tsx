@@ -36,6 +36,7 @@ import { UnidadesProductoFields } from '@/components/stock/UnidadesProducto'
 import { FiltroChip } from '@/components/stock/FiltroChip'
 import AsignacionesMasivas, { type BulkMode } from '@/components/stock/AsignacionesMasivas'
 import NuevoRegistroModal from '@/components/stock/NuevoRegistroModal'
+import NivelRing from '@/components/stock/NivelRing'
 import { esSinPrecio, usoEnRecetas, ordenarPorUso } from '@/lib/stock/sinPrecio'
 
 const UNIDADES = ['kg', 'g', 'L', 'ml', 'unidad', 'docena', 'caja', 'bolsa', 'lata', 'botella']
@@ -847,9 +848,11 @@ export default function StockPage() {
     return categoriasFiltro.map(c => ({ value: c, label: c, count: cnt.get(c) ?? 0 }))
   }, [productos, categoriasFiltro])
 
-  // Opciones de filtro de proveedor (con conteo) — incluye "Sin proveedor"
+  // Lookup id→nombre compartido por el filtro de proveedor y la columna Proveedor de la tabla (desktop).
+  const proveedorNombrePorId = useMemo(() => new Map(proveedores.map(pr => [pr.id, pr.nombre])), [proveedores])
+  const proveedorNombre = useCallback((id: string | null | undefined) => id ? proveedorNombrePorId.get(id) ?? null : null, [proveedorNombrePorId])
+
   const provOpciones = useMemo(() => {
-    const nombre = new Map(proveedores.map(pr => [pr.id, pr.nombre]))
     const cnt = new Map<string, number>()
     for (const p of productos) {
       const key = p.proveedor_id ?? '__sin__'
@@ -857,11 +860,11 @@ export default function StockPage() {
     }
     const opts = Array.from(cnt.entries())
       .filter(([k]) => k !== '__sin__')
-      .map(([id, count]) => ({ value: id, label: nombre.get(id) ?? 'Proveedor', count }))
+      .map(([id, count]) => ({ value: id, label: proveedorNombrePorId.get(id) ?? 'Proveedor', count }))
       .sort((a, b) => a.label.localeCompare(b.label, 'es'))
     if (cnt.has('__sin__')) opts.push({ value: '__sin__', label: 'Sin proveedor', count: cnt.get('__sin__')! })
     return opts
-  }, [productos, proveedores])
+  }, [productos, proveedorNombrePorId])
 
   // Opciones de filtro de sector físico (con conteo) — incluye "Sin sector"
   const secOpciones = useMemo(() => {
@@ -931,7 +934,7 @@ export default function StockPage() {
 
 
   // Cantidad de columnas visibles (para colSpan de estados vacíos)
-  const colCount = 3 + (isDesktop ? 2 : 0) + (verCostos ? 2 : 0)
+  const colCount = 3 + (isDesktop ? 3 : 0) + (verCostos ? 2 : 0)
 
   const totalValor = useMemo(() =>
     filtered.reduce((acc, p) => acc + valorStock(p), 0),
@@ -1647,11 +1650,12 @@ export default function StockPage() {
         )}
         <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <colgroup>
-            <col style={{ width: isDesktop ? '30%' : undefined }} />
-            {isDesktop && <col style={{ width: '14%' }} />}
-            {isDesktop && <col style={{ width: '16%' }} />}
+            <col style={{ width: isDesktop ? '28%' : undefined }} />
+            {isDesktop && <col style={{ width: '12%' }} />}
+            {isDesktop && <col style={{ width: '12%' }} />}
+            {isDesktop && <col style={{ width: '9%' }} />}
             {verCostos && <col style={{ width: isDesktop ? '10%' : 64 }} />}
-            <col style={{ width: isDesktop ? '14%' : isNarrow ? 64 : 84 }} />
+            <col style={{ width: isDesktop ? '13%' : isNarrow ? 64 : 84 }} />
             <col style={{ width: isDesktop ? '6%' : isNarrow ? 62 : 56 }} />
             {verCostos && <col style={{ width: isDesktop ? '10%' : 92 }} />}
           </colgroup>
@@ -1668,6 +1672,7 @@ export default function StockPage() {
                 </span>
               </th>
               {isDesktop && <th style={{ ...thStyle, background: 'var(--navy)', textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Categoría</th>}
+              {isDesktop && <th style={{ ...thStyle, background: 'var(--navy)', textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Proveedor</th>}
               {isDesktop && (
                 <th
                   onClick={() => setSortMode(s => s === 'nivel_desc' ? 'nivel_asc' : s === 'nivel_asc' ? 'default' : 'nivel_desc')}
@@ -1759,22 +1764,20 @@ export default function StockPage() {
                         )}
                       </td>
                     )}
-                    {/* Nivel — mini-barra stock vs mínimo (solo desktop) */}
-                    {isDesktop && (() => {
-                      const min = p.stock_minimo ?? 0
-                      const pct = min > 0 ? Math.min(100, Math.round((p.stock_actual / min) * 100)) : (p.stock_actual > 0 ? 100 : 0)
-                      const barColor = esBajoOCritico(p) ? '#d97706' : '#10b981'
-                      return (
-                        <td style={{ padding: '11px 10px 11px 8px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <div style={{ flex: 1, height: 6, borderRadius: 99, background: 'var(--border)', overflow: 'hidden' }}>
-                              <div style={{ width: `${pct}%`, height: '100%', borderRadius: 99, background: barColor, transition: 'width .2s' }} />
-                            </div>
-                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', minWidth: 28, textAlign: 'right' }}>{min > 0 ? `${pct}%` : '—'}</span>
-                          </div>
-                        </td>
-                      )
-                    })()}
+                    {/* Proveedor — solo desktop */}
+                    {isDesktop && (
+                      <td style={{ padding: '11px 8px', maxWidth: 0 }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-2)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={proveedorNombre(p.proveedor_id) ?? undefined}>
+                          {proveedorNombre(p.proveedor_id) ?? '—'}
+                        </span>
+                      </td>
+                    )}
+                    {/* Nivel — anillo compacto stock vs mínimo (solo desktop): mismo dato que la barra vieja, menos ancho */}
+                    {isDesktop && (
+                      <td style={{ padding: '11px 8px' }}>
+                        <NivelRing stockActual={p.stock_actual} stockMinimo={p.stock_minimo} bajo={esBajoOCritico(p)} />
+                      </td>
+                    )}
                     {/* Precio */}
                     {verCostos && (
                     <td style={{ padding: '11px 8px 11px 4px', textAlign: 'right' }}>
