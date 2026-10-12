@@ -101,9 +101,10 @@ function esUnidadSospechosa(p: { unidad: string; precio_unitario: number | null 
 
 // !p.precio_unitario cubre 0, null y undefined — antes algunos chequeos usaban
 // `=== 0` estricto y no contaban los productos con precio NULL como pendientes.
-// fuera_de_uso nunca es "pendiente" — no genera ruido operativo.
-function esPendiente(p: { stock_actual: number; precio_unitario: number | null; fuera_de_uso?: boolean | null }): boolean {
-  return !p.fuera_de_uso && p.stock_actual === 0 && !p.precio_unitario
+// fuera_de_uso nunca es "pendiente" — no genera ruido operativo. Producción interna
+// tampoco: se costea desde su receta, no desde precio_unitario (igual que esSinPrecio).
+function esPendiente(p: { stock_actual: number; precio_unitario: number | null; fuera_de_uso?: boolean | null; es_produccion?: boolean | null }): boolean {
+  return !p.fuera_de_uso && !p.es_produccion && p.stock_actual === 0 && !p.precio_unitario
 }
 
 // 'alto' (sobre-stock) es un estado != 'ok' pero NO significa que haya que reponer —
@@ -648,6 +649,11 @@ export default function StockPage() {
   const [sectorParaAsignar, setSectorParaAsignar] = useState('')
   const [asignSaving, setAsignSaving] = useState(false)
 
+  // ── Marcar producción masiva — comparte `seleccionados` con Asignar sector
+  // (sheets mutuamente excluyentes, cada uno resetea el set al abrir/cerrar)
+  const [marcandoProduccion, setMarcandoProduccion] = useState(false)
+  const [marcProdSaving, setMarcProdSaving] = useState(false)
+
   function toggleSeleccionado(id: string) {
     setSeleccionados(prev => {
       const next = new Set(prev)
@@ -952,6 +958,47 @@ export default function StockPage() {
     () => estadoFilter === 'inmovil' ? filtered.reduce((s, p) => s + valorStock(p), 0) : 0,
     [estadoFilter, filtered]
   )
+
+  // Producción interna no aparece en la tabla de Insumos — vive en la pestaña Producciones.
+  const filteredInsumos = useMemo(() => filtered.filter(p => !p.es_produccion), [filtered])
+  const productosProduccion = useMemo(() => productos.filter(p => p.es_produccion), [productos])
+
+  function abrirMarcarProduccion() {
+    // Candidatos pre-tildados: categoría "Otros" y sin precio — el patrón típico
+    // de un fondo/salsa/puré cargado a mano sin categorizar ni costear por factura.
+    // Respeta los filtros activos (ej. Sector = freezer) para que el recorte sea manejable.
+    const candidatos = filtered.filter(p =>
+      !p.fuera_de_uso && !p.es_produccion && p.categoria === 'Otros' && !((p.precio_unitario ?? 0) > 0)
+    )
+    setSeleccionados(new Set(candidatos.map(p => p.id)))
+    setMarcandoProduccion(true)
+  }
+
+  function cerrarMarcarProduccion() {
+    setMarcandoProduccion(false)
+    setSeleccionados(new Set())
+  }
+
+  async function aplicarMarcarProduccion() {
+    if (!seleccionados.size) return
+    setMarcProdSaving(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('productos')
+        .update({ es_produccion: true })
+        .in('id', Array.from(seleccionados))
+      if (error) throw error
+      setSugToast(`${seleccionados.size} producto${seleccionados.size !== 1 ? 's' : ''} marcado${seleccionados.size !== 1 ? 's' : ''} como producción`)
+      setTimeout(() => setSugToast(null), 3000)
+      cerrarMarcarProduccion()
+      refetch()
+    } catch (e) {
+      setSugToast('Error al marcar producción: ' + (e instanceof Error ? e.message : 'desconocido'))
+      setTimeout(() => setSugToast(null), 3500)
+    }
+    setMarcProdSaving(false)
+  }
 
   // Cantidad de columnas visibles (para colSpan de estados vacíos)
   const colCount = 3 + (isDesktop ? 2 : 0) + (verCostos ? 2 : 0)
@@ -1355,6 +1402,63 @@ export default function StockPage() {
       {/* ── Producciones view ── */}
       {activeTab === 'producciones' && (
         <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          {/* Productos marcados como producción interna — stock editable, como en Insumos */}
+          {productosProduccion.length > 0 && (
+            <div style={{ padding: '10px 14px 4px' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>
+                En stock · {productosProduccion.length} ítem{productosProduccion.length !== 1 ? 's' : ''}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {productosProduccion.map(p => {
+                  const secActual = sectores.find(s => s.id === p.sector_id)
+                  return (
+                    <div
+                      key={p.id}
+                      onDoubleClick={() => canEdit && openEdit(p)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '10px 12px', opacity: p.fuera_de_uso ? 0.55 : 1 }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1 }}>
+                          {p.categoria || 'Otros'}{secActual ? ` · ${secActual.nombre}` : ''}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          readOnly={!canEdit}
+                          value={editingId === p.id ? editValue : String(p.stock_actual)}
+                          onFocus={e => { if (canEdit) { startEdit(p); e.currentTarget.select() } }}
+                          onChange={e => setEditValue(e.target.value)}
+                          onBlur={() => { if (editingId === p.id) commitEdit(p.id) }}
+                          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { cancelEdit(); e.currentTarget.blur() } }}
+                          title="Tocá para editar stock"
+                          style={{
+                            width: 56, textAlign: 'right', padding: '3px 4px', fontSize: 15, fontWeight: 800,
+                            fontFamily: "'DM Mono', monospace", lineHeight: 1.1,
+                            color: editingId === p.id ? '#fff' : (esBajoOCritico(p) ? '#d97706' : 'var(--text-1)'),
+                            background: editingId === p.id ? 'var(--navy)' : 'transparent',
+                            border: editingId === p.id ? '1px solid rgba(255,255,255,.3)' : '1px solid transparent',
+                            borderRadius: 6, outline: 'none', cursor: canEdit ? 'pointer' : 'default',
+                          }}
+                        />
+                        <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{p.unidad_uso ?? p.unidad}</span>
+                      </div>
+                      {canEdit && (
+                        <button onClick={() => openEdit(p)} aria-label="Editar producto" title="Editar producto" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', flexShrink: 0 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'var(--text-3)' }}>edit</span>
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              <div style={{ padding: '14px 0 2px', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em' }}>
+                Checklist de plaza (mise en place)
+              </div>
+            </div>
+          )}
           {prodLoading ? (
             <div style={{ padding: '48px 24px', textAlign: 'center' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 28, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>hourglass_empty</span>
@@ -1655,7 +1759,7 @@ export default function StockPage() {
               <span className="material-symbols-outlined" style={{ fontSize: 28, color: '#ef4444', display: 'block', marginBottom: 8 }}>error</span>
               <p style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>{error}</p>
             </td></tr></tbody>
-          ) : filtered.length === 0 ? (
+          ) : filteredInsumos.length === 0 ? (
             <tbody><tr><td colSpan={colCount} style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-3)' }}>
               <span className="material-symbols-outlined" style={{ fontSize: 36, color: 'var(--text-3)', display: 'block', marginBottom: 8 }}>search_off</span>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>{productos.length === 0 ? 'Sin productos aún' : 'Sin resultados'}</div>
@@ -1663,7 +1767,7 @@ export default function StockPage() {
             </td></tr></tbody>
           ) : (
             <tbody>
-              {filtered.map((p, i) => {
+              {filteredInsumos.map((p, i) => {
                 const val = valorStock(p)
                 return (
                   <tr
@@ -2248,6 +2352,7 @@ export default function StockPage() {
                 ...(isAdmin ? [{ icon: 'tune', label: 'Sugerir mínimos', onClick: abrirSugerir }] : []),
                 ...(isAdmin ? [{ icon: 'price_change', label: 'Actualizar precios', onClick: abrirSyncPrecios }] : []),
                 ...(canEdit && sectores.length > 0 ? [{ icon: 'shelves', label: 'Asignar sector', onClick: () => setAsignandoSector(true) }] : []),
+                ...(canEdit ? [{ icon: 'soup_kitchen', label: 'Marcar producción', onClick: abrirMarcarProduccion }] : []),
               ].map(fn => (
                 <button
                   key={fn.label}
@@ -2455,6 +2560,62 @@ export default function StockPage() {
                 {asignSaving ? 'Guardando…' : 'Asignar'}
               </button>
             </div>
+          </div>
+        </div>
+        </SheetChrome>
+      )}
+
+      {/* ── Marcar producción masiva ── */}
+      {marcandoProduccion && (
+        <SheetChrome>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>Marcar producción</div>
+              <div style={{ color: 'rgba(255,255,255,.5)', fontSize: 11 }}>
+                Pasan a la pestaña Producciones — pre-tildados los sin categoría/precio (Otros, $0)
+              </div>
+            </div>
+            <button onClick={cerrarMarcarProduccion} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+              <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>close</span>
+            </button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+            {filtered.filter(p => !p.fuera_de_uso && !p.es_produccion).map(p => {
+              const sel = seleccionados.has(p.id)
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => toggleSeleccionado(p.id)}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: sel ? 'rgba(16,185,129,.08)' : 'transparent', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 20, color: sel ? '#10b981' : 'var(--text-3)' }}>
+                    {sel ? 'check_box' : 'check_box_outline_blank'}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-3)' }}>
+                      {p.categoria || 'Sin categoría'}{p.precio_unitario ? ` · ${fmtPrecio(p.precio_unitario)}` : ' · sin precio'}
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
+            {filtered.filter(p => !p.fuera_de_uso && !p.es_produccion).length === 0 && (
+              <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 12 }}>
+                No hay productos para marcar con los filtros actuales
+              </div>
+            )}
+          </div>
+          <div style={{ padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0, borderTop: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>{seleccionados.size} seleccionado{seleccionados.size !== 1 ? 's' : ''}</div>
+            <button
+              onClick={aplicarMarcarProduccion}
+              disabled={!seleccionados.size || marcProdSaving}
+              style={{ width: '100%', padding: '12px 18px', borderRadius: 10, background: !seleccionados.size ? 'var(--border)' : '#10b981', border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: !seleccionados.size ? 'default' : 'pointer', fontFamily: 'inherit' }}
+            >
+              {marcProdSaving ? 'Guardando…' : `Marcar ${seleccionados.size || ''} como producción`}
+            </button>
           </div>
         </div>
         </SheetChrome>
