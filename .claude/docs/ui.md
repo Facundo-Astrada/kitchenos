@@ -19,6 +19,10 @@ import type { SegmentedTab, FilterChip } from '@/components/ui'
 
 ---
 
+## Grilla que se llena casillero por casillero — pincel, no un modal por celda
+
+Una matriz donde casi todas las celdas llevan uno de pocos valores (turnos: persona × día) no se carga abriendo un modal por casillero: la leyenda de colores pasa a ser el control. Se elige un valor ("pincel") y cada toque lo aplica; el primer toque del gesto decide si pinta o despinta (tocar una celda que ya tiene ese valor la vacía) y con mouse el arrastre sigue ese modo. Sin pincel, el toque abre el editor del detalle. Requiere escritura optimista y deshacer (el inverso del lote), y que el pincel activo se vea (chip marcado + línea de ayuda). La categoría nunca usa ámbar ni rojo: quedan libres para lo que hay que revisar. Referencia: `components/turnos/PlanillaGrid.tsx` + `pintar()` en `turnos/page.tsx`.
+
 ## Tabla con header fijo: una sola `<table>` con `thead` sticky, no dos tablas separadas
 
 Header y body en tablas distintas se desalinean si el body tiene scrollbar (~15px de desfase con anchos en %). Usar una `<table tableLayout: fixed>` con `<thead style={{position:'sticky', top:0, zIndex:5}}>`, fondo (`background: var(--navy)`) en cada `<th>` (no en un div padre), un solo `<colgroup>` compartido, y loading/error/vacío como filas `<tbody><tr><td colSpan={N}>`.

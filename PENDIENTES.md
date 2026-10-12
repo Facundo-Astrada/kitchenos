@@ -171,8 +171,9 @@ ver `HISTORIAL.md` sesión 2026-09-15 (4) para el detalle). VAPID cargado en
 Vercel 01/10 y Facundo activó el push en su celular. Queda:
 - **Mandar un push de prueba y confirmar que llega** al celular de Facundo (F0).
 - Wirear un trigger nuevo (stock crítico, vencimientos HACCP) es decisión de
-  producto por cada uno — no asumir. Los dos triggers reales siguen siendo
-  `useEquipo.asignarTurno` y el recordatorio de `/implantacion`.
+  producto por cada uno — no asumir. Los triggers reales son «Avisar al equipo»
+  (Calendario y `/turnos`, los dos a pedido de quien carga) y el recordatorio
+  de `/implantacion`. Asignar un turno ya no avisa solo.
 - Email para el que dejó de entrar: destinatario/copy/cadencia sin decidir.
   Ya no está bloqueado por infraestructura — Resend sigue esperando el
   dominio propio verificado (ver "Invitación por email falla a veces" abajo).
@@ -209,9 +210,9 @@ arrastre ahí. Si molesta, hacer el reorden del mise group-aware con
 `AnimatePresence` es reestructurar control de flujo en un componente de 2700
 líneas. Hoy es un fade+scale simple. Su propio bloque, no algo para forzar.
 
-### `confirm()` nativo — 21 en pantallas de gestión
-Los 5 de superficie de servicio ya se resolvieron (`ConfirmSheet`). Los 21
-restantes, en 17 archivos, son pantallas de gestión: el lint los marca WARN, no
+### `confirm()` nativo — 20 en pantallas de gestión
+Los 5 de superficie de servicio ya se resolvieron (`ConfirmSheet`). Los 20
+restantes, en 16 archivos, son pantallas de gestión: el lint los marca WARN, no
 ERROR — ahí es debate de estilo, no el mismo bug.
 
 ### `tareas`/`checklist`/`produccion` como permiso: gatea el sidebar, no la ruta
@@ -316,6 +317,22 @@ Detalle completo en `HISTORIAL.md`. Lo que quedó afuera:
 Solo después de una semana de uso real en servicio, y cada ítem es hipótesis a
 validar: tomar/asignar desde el muro, sonido en una `duda` nueva, cronómetro por
 ítem, foto del turno al entregar.
+
+### Turnos — lo que queda (planilla rediseñada 12/10)
+- **Probar en Bros con la semana real**: ajustar «Horarios habituales» (hoy valen
+  9–17 / 13–21 / 20–02 de fábrica), pintar la semana, y mandar el primer
+  «Avisar al equipo» real — en la demo nadie más tiene usuario, no se vio llegar.
+- **La vista de quien no administra no se probó con una cuenta real** (su fila
+  primera, sin pincel, KPIs "tu próximo turno"): no hay credenciales de un
+  cocinero con el módulo Turnos.
+- "Ya avisado" se recuerda en el `localStorage` del browser: desde otro
+  dispositivo vuelve a ofrecer avisar a todos. Si molesta, pasa a la base.
+- No hay turno partido (UNIQUE `miembro_id,fecha`) ni dotación mínima por día:
+  la cobertura se muestra pero la app no puede decir "falta gente" sin ese dato.
+- La pantalla monta `useCalendario` entero para la banda Agenda y las notas
+  (9 queries por cambio de semana). Medir con `shot.mjs --net` si pesa en celular.
+- Ideas sin pedir: semana tipo guardada, pedido de franco/cambio desde el
+  cocinero, planilla contra fichaje real.
 
 ### Calendario — lo que queda (rediseño + privado + avisos shippeados 10/10)
 - **Probar en Bros el primer aviso real** ("Avisar al equipo" → Personas → una

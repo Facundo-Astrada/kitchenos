@@ -6,6 +6,16 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-10-12 — Turnos: planilla rediseñada.** Commit `653c3e3`.
+
+- Pedido: repasar Turnos como se repasó Calendario — recuadros más marcados, mejor UX/UI, transiciones, ver eventos para planificar horarios, notas por día, y mejorar el sistema de horarios.
+- Pantalla partida en `components/turnos/` (883 líneas en un archivo → página orquestadora + grilla, vista mobile, panel del día, editor, modales, fichajes). Lógica pura en `lib/turnos/` (16 tests) y hook `useTurnos`; los turnos salieron de `useEquipo` (958 → 795 líneas).
+- Lo que cambió del sistema: pincel con arrastre, escrituras optimistas en lote con inverso (deshacer), `turnos.notas` en uso, "repetir en", horarios habituales en `restaurantes.configuracion.turnos_horarios`, avisos de descanso/racha/horas, aviso semanal por persona en vez de un push por celda, texto de la planilla para WhatsApp.
+- Colores: Mañana dejó de ser ámbar (el ámbar es "atención", DESIGN.md §3) y Tarde/Noche dejaron de compartir azul → celeste / naranja / violeta.
+- Bug latente arreglado: filas de `turnos` con `turno_tipo` `almuerzo`/`cena` (seeds de Origen) rompían la pantalla al indexar `TURNO_CONFIG`.
+- `NotasDia` extraído de `DiaPanel` para que Calendario y Turnos compartan el bloque de notas. Se fue el `confirm()` de "Copiar semana" (ahora deshacer).
+- Verificado con Playwright contra el dev server en la demo (pintar, arrastrar, deshacer, editor, nota, modales, mobile) y en lectura contra Bros; los 21 turnos y la nota de prueba se borraron de El Rescoldo.
+
 **Sesión 2026-10-10 — Calendario: rediseño, privado/autor, Coach que agenda, avisos al equipo.** Commits `5a926e6`…`cb7ef1c`.
 
 - Punto de partida: el calendario casi no se usaba (1 evento en Bros, 0 notas). Investigación en galerías (Mobbin/Land-book/Behance bloquean scraping; se usaron PageFlows, ScreensDesign y los productos curados: Google/Notion Calendar, Fantastical, Amie, 7shifts).
