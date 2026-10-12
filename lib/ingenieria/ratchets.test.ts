@@ -32,7 +32,7 @@ const TECHOS_LINEAS: Record<string, number> = {
   // /facturas?tab=X pero la página nunca leía ese query param, así que
   // siempre aterrizaba en Gastos. Le faltaba el mismo efecto que ya tiene
   // operaciones/page.tsx (URLSearchParams sobre window.location.search).
-  'app/(app)/stock/ClientView.tsx': 3330, // oct 2026: "Unidades y envase" → components/stock/UnidadesProducto.tsx — 3355 → 3308. Antes: chips de filtro → FiltroChip.tsx, modal → components/ui/Modal.tsx
+  'app/(app)/stock/ClientView.tsx': 3340, // oct 2026: 3 sheets de acción masiva (sector/proveedor/producción) → components/stock/AsignacionesMasivas.tsx, un solo sheet por `mode` — 3576 → 3304. Encima: "Nuevo proveedor" sin salir del form (mismo pedido que las acciones masivas: no cortar el flujo de ordenar stock) — modal compartido con "Nueva categoría" en components/stock/NuevoRegistroModal.tsx, pero el botón+handler+2 campos de estado netos no entran en el techo viejo — 3330 → 3340. Antes: "Unidades y envase" → components/stock/UnidadesProducto.tsx — 3355 → 3308
   'app/(app)/checklist/ClientView.tsx': 3145, // sesión 15/09: selector de plaza+turno migrado a components/ui/Modal.tsx — 3159 → 3139
 }
 

@@ -49,16 +49,20 @@ export function useProveedores() {
     return () => { supabase.removeChannel(channel) }
   }, [RESTAURANTE_ID, supabase, mutate])
 
+  // Devuelve la fila creada (con su id) — permite seleccionarla al toque en
+  // vez del patrón viejo "insert + mutate + esperar 500ms + buscar por nombre"
+  // (facturas/page.tsx), propenso a carrera si dos proveedores nuevos comparten prefijo.
   async function agregarProveedor(
     datos: Omit<Proveedor, 'id' | 'restaurante_id' | 'activo'>
-  ) {
+  ): Promise<Proveedor> {
     try {
-      const { error } = await supabase.from('proveedores').insert({
+      const { data, error } = await supabase.from('proveedores').insert({
         ...datos,
         restaurante_id: RESTAURANTE_ID,
-      })
+      }).select().single()
       if (error) throw error
       await mutate()
+      return data as Proveedor
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al agregar proveedor'
       console.error('[useProveedores] agregarProveedor Error:', msg)

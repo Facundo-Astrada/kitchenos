@@ -35,6 +35,7 @@ import { parsePrecio } from '@/lib/unidades'
 import { UnidadesProductoFields } from '@/components/stock/UnidadesProducto'
 import { FiltroChip } from '@/components/stock/FiltroChip'
 import AsignacionesMasivas, { type BulkMode } from '@/components/stock/AsignacionesMasivas'
+import NuevoRegistroModal from '@/components/stock/NuevoRegistroModal'
 import { esSinPrecio, usoEnRecetas, ordenarPorUso } from '@/lib/stock/sinPrecio'
 
 const UNIDADES = ['kg', 'g', 'L', 'ml', 'unidad', 'docena', 'caja', 'bolsa', 'lata', 'botella']
@@ -225,7 +226,7 @@ export default function StockPage() {
   const { estantes } = useStockEstantes()
   const { grupos } = useStockGrupos()
   const { crearPedido } = usePedidos()
-  const { proveedores } = useProveedores()
+  const { proveedores, agregarProveedor } = useProveedores()
   const { fetchComparador } = usePreciosProveedores()
   const [comparadorPrecios, setComparadorPrecios] = useState<ComparadorPrecioProducto[]>([])
   useEffect(() => {
@@ -560,6 +561,11 @@ export default function StockPage() {
   const [newCatNombre, setNewCatNombre] = useState('')
   const [newCatColor, setNewCatColor] = useState('#4361a0')
   const [newCatSaving, setNewCatSaving] = useState(false)
+
+  const [newProvModal, setNewProvModal] = useState(false)
+  const [newProvNombre, setNewProvNombre] = useState('')
+  const [newProvSaving, setNewProvSaving] = useState(false)
+  const [newProvError, setNewProvError] = useState<string | null>(null)
 
   // Banner rebuild: aparece cuando hay facturas pero >50% productos sin precio/proveedor
   const [facturasCount, setFacturasCount] = useState(0)
@@ -1139,6 +1145,22 @@ export default function StockPage() {
       // ignore duplicate
     } finally {
       setNewCatSaving(false)
+    }
+  }
+
+  async function handleNewProv() {
+    if (!newProvNombre.trim()) return
+    setNewProvSaving(true)
+    setNewProvError(null)
+    try {
+      const nuevo = await agregarProveedor({ nombre: newProvNombre.trim(), created_at: new Date().toISOString() })
+      setForm(f => ({ ...f, proveedor_id: nuevo.id }))
+      setNewProvModal(false)
+      setNewProvNombre('')
+    } catch (e) {
+      setNewProvError(e instanceof Error ? e.message : 'Error al crear el proveedor')
+    } finally {
+      setNewProvSaving(false)
     }
   }
 
@@ -2017,14 +2039,23 @@ export default function StockPage() {
                   </label>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     <span style={lblStyle}>Proveedor</span>
-                    <select
-                      value={form.proveedor_id}
-                      onChange={e => setForm(f => ({ ...f, proveedor_id: e.target.value }))}
-                      style={{ ...inputStyle, appearance: 'auto', cursor: 'pointer' }}
-                    >
-                      <option value="">Sin proveedor</option>
-                      {proveedores.map(pr => <option key={pr.id} value={pr.id}>{pr.nombre}</option>)}
-                    </select>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <select
+                        value={form.proveedor_id}
+                        onChange={e => setForm(f => ({ ...f, proveedor_id: e.target.value }))}
+                        style={{ ...inputStyle, appearance: 'auto', flex: 1, cursor: 'pointer' }}
+                      >
+                        <option value="">Sin proveedor</option>
+                        {proveedores.map(pr => <option key={pr.id} value={pr.id}>{pr.nombre}</option>)}
+                      </select>
+                      <button
+                        onClick={() => { setNewProvNombre(''); setNewProvError(null); setNewProvModal(true) }}
+                        title="Nuevo proveedor"
+                        style={{ width: 34, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-2)' }}>add</span>
+                      </button>
+                    </div>
                   </label>
                 </div>
 
@@ -2208,38 +2239,37 @@ export default function StockPage() {
             </div>
       </Modal>
 
-      {/* ── Nueva categoría modal ── */}
+      {/* ── Nueva categoría / Nuevo proveedor — crear sin salir del form de producto ── */}
       {newCatModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <div style={{ background: 'var(--surface)', borderRadius: 16, padding: 24, width: '100%', maxWidth: 360 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', margin: '0 0 16px' }}>Nueva categoría</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <input
-                value={newCatNombre}
-                onChange={e => setNewCatNombre(e.target.value)}
-                placeholder="Ej: Congelados, Especias…"
-                autoFocus
-                style={inputStyle}
-                onKeyDown={e => { if (e.key === 'Enter') handleNewCat() }}
-              />
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600 }}>Color</span>
-                <input
-                  type="color"
-                  value={newCatColor}
-                  onChange={e => setNewCatColor(e.target.value)}
-                  style={{ width: 40, height: 32, border: 'none', borderRadius: 6, cursor: 'pointer', padding: 0 }}
-                />
-              </div>
+        <NuevoRegistroModal
+          titulo="Nueva categoría"
+          placeholder="Ej: Congelados, Especias…"
+          value={newCatNombre}
+          onChange={setNewCatNombre}
+          onCancel={() => setNewCatModal(false)}
+          onConfirm={handleNewCat}
+          saving={newCatSaving}
+          inputStyle={inputStyle}
+          extra={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600 }}>Color</span>
+              <input type="color" value={newCatColor} onChange={e => setNewCatColor(e.target.value)} style={{ width: 40, height: 32, border: 'none', borderRadius: 6, cursor: 'pointer', padding: 0 }} />
             </div>
-            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-              <button onClick={() => setNewCatModal(false)} style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: 11, fontSize: 13, fontWeight: 700, color: 'var(--text-2)', cursor: 'pointer', fontFamily: 'inherit' }}>Cancelar</button>
-              <button onClick={handleNewCat} disabled={newCatSaving || !newCatNombre.trim()} style={{ flex: 1, background: 'var(--navy)', border: 'none', borderRadius: 10, padding: 11, fontSize: 13, fontWeight: 700, color: '#fff', cursor: 'pointer', fontFamily: 'inherit', opacity: !newCatNombre.trim() ? 0.5 : 1 }}>
-                {newCatSaving ? 'Guardando…' : 'Crear'}
-              </button>
-            </div>
-          </div>
-        </div>
+          }
+        />
+      )}
+      {newProvModal && (
+        <NuevoRegistroModal
+          titulo="Nuevo proveedor"
+          placeholder="Ej: Bodega Los Toneles, Carnes del Sur…"
+          value={newProvNombre}
+          onChange={setNewProvNombre}
+          onCancel={() => setNewProvModal(false)}
+          onConfirm={handleNewProv}
+          saving={newProvSaving}
+          error={newProvError}
+          inputStyle={inputStyle}
+        />
       )}
 
       {/* ── Merma bottom sheet ── */}
