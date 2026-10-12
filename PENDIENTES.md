@@ -257,6 +257,7 @@ con stock (botón sin explicar qué hace).
 ### Backlog chico — sin síntoma reportado, priorizar solo si molesta en uso real
 Lista completa con el detalle de cada uno en `HISTORIAL.md`. En una línea:
 
+- **Stock → Producción interna sin costeo automático.** Marcar un producto como `es_produccion` (bulk o individual) no lo vincula a una receta: en el freezer de Bros, de 63 candidatos solo 3 matchearon por nombre exacto. El resto queda en $0 hasta elegir la receta a mano en el modal (campo `receta_id`).
 - Cuenta regresiva de la banda Evento no soporta **dos eventos activos a la vez**.
 - **`puestos.nivel` no es confiable** para decisiones automáticas ("Chef
   Ejecutivo" está cargado como `nivel='cocinero'`) — segmentar por puesto concreto.
