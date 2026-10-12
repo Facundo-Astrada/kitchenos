@@ -36,13 +36,18 @@ export function useStockSectores() {
     }
   )
 
-  async function agregarSector(nombre: string, icono: string) {
+  // Devuelve la fila creada (con su id) — permite seleccionarla al toque
+  // desde un lugar que no sea el form de "Stockear" (ver Stock › CeldaSector).
+  async function agregarSector(nombre: string, icono: string): Promise<StockSector | undefined> {
     if (!RESTAURANTE_ID || !nombre.trim()) return
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('stock_sectores')
       .insert({ restaurante_id: RESTAURANTE_ID, nombre: nombre.trim(), icono, orden: sectores.length })
+      .select()
+      .single()
     if (error) throw error
     await mutate()
+    return data as StockSector
   }
 
   async function eliminarSector(id: string) {

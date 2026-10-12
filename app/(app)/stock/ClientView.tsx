@@ -36,8 +36,7 @@ import { UnidadesProductoFields } from '@/components/stock/UnidadesProducto'
 import { FiltroChip } from '@/components/stock/FiltroChip'
 import AsignacionesMasivas, { type BulkMode } from '@/components/stock/AsignacionesMasivas'
 import NuevoRegistroModal from '@/components/stock/NuevoRegistroModal'
-import NivelRing from '@/components/stock/NivelRing'
-import { CeldaCategoria, CeldaProveedor, CeldaPrecio } from '@/components/stock/CeldasInlineTabla'
+import FilaProductoInsumo from '@/components/stock/FilaProductoInsumo'
 import { esSinPrecio, usoEnRecetas, ordenarPorUso } from '@/lib/stock/sinPrecio'
 
 const UNIDADES = ['kg', 'g', 'L', 'ml', 'unidad', 'docena', 'caja', 'bolsa', 'lata', 'botella']
@@ -328,11 +327,11 @@ export default function StockPage() {
     setEditThr(null)
   }, [editThr, actualizarProducto])
 
-  // Categoría/proveedor inline (un click en la tabla) — "+ Nueva/o…" (manejado
-  // adentro de CeldaCategoria/CeldaProveedor) abre el mismo modal que el form
-  // grande, pero recuerda a qué fila aplicarlo en vez de volcarlo a `form`
-  // (que solo existe si el modal grande está abierto).
-  const [inlineNewTarget, setInlineNewTarget] = useState<{ id: string; field: 'categoria' | 'proveedor' } | null>(null)
+  // Categoría/proveedor/sector inline (un click en la tabla) — "+ Nueva/o…"
+  // (manejado adentro de CeldaCategoria/CeldaProveedor/CeldaSector) abre el
+  // mismo modal que el form grande, pero recuerda a qué fila aplicarlo en vez
+  // de volcarlo a `form` (que solo existe si el modal grande está abierto).
+  const [inlineNewTarget, setInlineNewTarget] = useState<{ id: string; field: 'categoria' | 'proveedor' | 'sector' } | null>(null)
 
   async function handleInlineCategoria(p: ProductoConEstado, value: string) {
     if (value === (p.categoria || '')) return
@@ -342,6 +341,36 @@ export default function StockPage() {
   async function handleInlineProveedor(p: ProductoConEstado, value: string | null) {
     if (value === (p.proveedor_id ?? null)) return
     try { await actualizarProducto(p.id, { proveedor_id: value }) } catch { /* noop */ }
+  }
+
+  async function handleInlineSector(p: ProductoConEstado, value: string | null) {
+    if (value === (p.sector_id ?? null)) return
+    try { await actualizarProducto(p.id, { sector_id: value }) } catch { /* noop */ }
+  }
+
+  async function handleInlineUnidad(p: ProductoConEstado, value: string) {
+    if (value === p.unidad) return
+    try { await actualizarProducto(p.id, { unidad: value }) } catch { /* noop */ }
+  }
+
+  function abrirNuevaCategoria(p: ProductoConEstado) {
+    setInlineNewTarget({ id: p.id, field: 'categoria' })
+    setNewCatNombre('')
+    setNewCatModal(true)
+  }
+
+  function abrirNuevoProveedor(p: ProductoConEstado) {
+    setInlineNewTarget({ id: p.id, field: 'proveedor' })
+    setNewProvNombre('')
+    setNewProvError(null)
+    setNewProvModal(true)
+  }
+
+  function abrirNuevoSector(p: ProductoConEstado) {
+    setInlineNewTarget({ id: p.id, field: 'sector' })
+    setNewSectorNombre('')
+    setNewSectorIcono(SECTOR_ICONOS[0])
+    setNewSectorModal(true)
   }
 
   // Add/edit modal
@@ -668,6 +697,32 @@ export default function StockPage() {
     setCreandoSector(false)
   }
 
+  // ── "+ Crear sector…" desde la celda inline de la tabla — mismo
+  // SECTOR_ICONOS, modal flotante aparte (NuevoRegistroModal) en vez del
+  // form embebido del sheet de Stockear, para que quede consistente con
+  // "+ Nueva categoría" / "+ Nuevo proveedor".
+  const [newSectorModal, setNewSectorModal] = useState(false)
+  const [newSectorNombre, setNewSectorNombre] = useState('')
+  const [newSectorIcono, setNewSectorIcono] = useState(SECTOR_ICONOS[0])
+  const [newSectorSaving, setNewSectorSaving] = useState(false)
+
+  async function handleNewSector() {
+    if (!newSectorNombre.trim()) return
+    setNewSectorSaving(true)
+    try {
+      const nuevo = await agregarSector(newSectorNombre.trim(), newSectorIcono)
+      if (inlineNewTarget?.field === 'sector' && nuevo) {
+        await actualizarProducto(inlineNewTarget.id, { sector_id: nuevo.id })
+      }
+      setNewSectorModal(false)
+      setNewSectorNombre('')
+      setNewSectorIcono(SECTOR_ICONOS[0])
+      setInlineNewTarget(null)
+    } catch { /* noop */ } finally {
+      setNewSectorSaving(false)
+    }
+  }
+
   // ── Acciones masivas (Asignar sector / Asignar proveedor / Marcar producción) ──
   // UI y lógica en components/stock/AsignacionesMasivas.tsx — un solo sheet
   // parametrizado por `bulkMode`, no tres casi idénticos (techo de líneas, refactor-kos.md §4).
@@ -950,7 +1005,7 @@ export default function StockPage() {
 
 
   // Cantidad de columnas visibles (para colSpan de estados vacíos)
-  const colCount = 3 + (isDesktop ? 3 : 0) + (verCostos ? 2 : 0)
+  const colCount = 3 + (isDesktop ? 4 : 0) + (verCostos ? 2 : 0)
 
   const totalValor = useMemo(() =>
     filtered.reduce((acc, p) => acc + valorStock(p), 0),
@@ -1229,24 +1284,6 @@ export default function StockPage() {
     doc.save(`inventario-${new Date().toISOString().slice(0, 10)}.pdf`)
   }
 
-  // ── Estado badge ──
-  function estadoBadge(p: ProductoConEstado) {
-    if (p.fuera_de_uso) return (
-      <span style={{ background: 'rgba(148,163,184,.15)', border: '1px solid rgba(148,163,184,.3)', borderRadius: 6, padding: '2px 6px', fontSize: 9, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>Fuera de uso</span>
-    )
-    if (esPendiente(p)) return (
-      <span style={{ background: 'rgba(239,68,68,.12)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 6, padding: '2px 6px', fontSize: 9, fontWeight: 700, color: '#fca5a5', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>Pendiente</span>
-    )
-    if (p.estado === 'alto') return (
-      <span style={{ background: 'rgba(56,189,248,.15)', border: '1px solid rgba(56,189,248,.3)', borderRadius: 6, padding: '2px 6px', fontSize: 9, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>Alto</span>
-    )
-    if (p.estado !== 'ok') return (
-      <span style={{ background: 'rgba(245,158,11,.15)', border: '1px solid rgba(245,158,11,.3)', borderRadius: 6, padding: '2px 6px', fontSize: 9, fontWeight: 700, color: '#fcd34d', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>Bajo</span>
-    )
-    return (
-      <span style={{ background: 'rgba(74,222,128,.1)', border: '1px solid rgba(74,222,128,.25)', borderRadius: 6, padding: '2px 6px', fontSize: 9, fontWeight: 700, color: '#4ade80', textTransform: 'uppercase', letterSpacing: '.06em', whiteSpace: 'nowrap' }}>OK</span>
-    )
-  }
 
   async function exportXLSX() {
     await exportarExcel(`stock_${fechaArchivo()}.xlsx`, [{
@@ -1676,12 +1713,13 @@ export default function StockPage() {
         )}
         <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <colgroup>
-            <col style={{ width: isDesktop ? '28%' : undefined }} />
-            {isDesktop && <col style={{ width: '12%' }} />}
-            {isDesktop && <col style={{ width: '12%' }} />}
+            <col style={{ width: isDesktop ? '24%' : undefined }} />
+            {isDesktop && <col style={{ width: '10%' }} />}
+            {isDesktop && <col style={{ width: '10%' }} />}
+            {isDesktop && <col style={{ width: '9%' }} />}
             {isDesktop && <col style={{ width: '9%' }} />}
             {verCostos && <col style={{ width: isDesktop ? '10%' : 64 }} />}
-            <col style={{ width: isDesktop ? '13%' : isNarrow ? 64 : 84 }} />
+            <col style={{ width: isDesktop ? '12%' : isNarrow ? 64 : 84 }} />
             <col style={{ width: isDesktop ? '6%' : isNarrow ? 62 : 56 }} />
             {verCostos && <col style={{ width: isDesktop ? '10%' : 92 }} />}
           </colgroup>
@@ -1699,6 +1737,7 @@ export default function StockPage() {
               </th>
               {isDesktop && <th style={{ ...thStyle, background: 'var(--navy)', textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Categoría</th>}
               {isDesktop && <th style={{ ...thStyle, background: 'var(--navy)', textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Proveedor</th>}
+              {isDesktop && <th style={{ ...thStyle, background: 'var(--navy)', textAlign: 'left', paddingLeft: 8, color: 'rgba(255,255,255,.7)' }}>Sector</th>}
               {isDesktop && (
                 <th
                   onClick={() => setSortMode(s => s === 'nivel_desc' ? 'nivel_asc' : s === 'nivel_asc' ? 'default' : 'nivel_desc')}
@@ -1744,190 +1783,50 @@ export default function StockPage() {
             </td></tr></tbody>
           ) : (
             <tbody>
-              {filteredInsumos.map((p, i) => {
-                const val = valorStock(p)
-                return (
-                  <tr
-                    key={p.id}
-                    onDoubleClick={() => canEdit && openEdit(p)}
-                    style={{
-                      borderBottom: '1px solid var(--border)',
-                      background: esPendiente(p)
-                        ? 'rgba(239,68,68,0.07)'
-                        : i % 2 === 0 ? 'var(--surface)' : 'var(--bg)',
-                      cursor: canEdit ? 'pointer' : 'default',
-                      opacity: p.fuera_de_uso ? 0.55 : 1,
-                    }}
-                  >
-                    {/* Producto */}
-                    <td style={{ padding: '11px 8px 11px 12px' }}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)', lineHeight: 1.25, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {p.nombre}
-                          {p.es_produccion && (
-                            <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em', padding: '1px 5px', borderRadius: 4, background: 'rgba(16,185,129,.12)', color: '#10b981', flexShrink: 0 }}>
-                              Producción
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>
-                          {!isDesktop && `${p.categoria} · `}{p.unidad_uso ?? p.unidad}{estadoFilter === 'sinprecio' && ` · en ${usoRecetas.get(p.id) ?? 0} receta${usoRecetas.get(p.id) === 1 ? '' : 's'}`}
-                          {val > 0 && verCostos && !isDesktop && <span style={{ color: 'var(--accent)', fontWeight: 700, marginLeft: 6, fontFamily: "'DM Mono', monospace" }}>{fmtValor(val)}</span>}
-                        </div>
-                        {isNarrow && (
-                          <div style={{ fontSize: 9.5, color: 'var(--text-3)', marginTop: 2, fontFamily: "'DM Mono', monospace", display: 'flex', gap: 8 }}>
-                            <span>mín <b style={{ color: '#d97706' }}>{p.stock_minimo ?? 0}</b></span>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    {/* Categoría/Proveedor/Precio — un click edita in situ, sin pasar por el modal (components/stock/CeldasInlineTabla.tsx) */}
-                    {isDesktop && (
-                      <td style={{ padding: '11px 8px' }} onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
-                        <CeldaCategoria
-                          categoria={p.categoria}
-                          opciones={categoriasNombres}
-                          canEdit={canEdit}
-                          onChange={v => handleInlineCategoria(p, v)}
-                          onNueva={() => { setInlineNewTarget({ id: p.id, field: 'categoria' }); setNewCatNombre(''); setNewCatModal(true) }}
-                        />
-                        {val > 0 && verCostos && (
-                          <div style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700, marginTop: 1, fontFamily: "'DM Mono', monospace" }}>{fmtValor(val)}</div>
-                        )}
-                      </td>
-                    )}
-                    {isDesktop && (
-                      <td style={{ padding: '11px 8px', maxWidth: 0 }} onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
-                        <CeldaProveedor
-                          proveedorId={p.proveedor_id}
-                          opciones={proveedores}
-                          canEdit={canEdit}
-                          onChange={v => handleInlineProveedor(p, v)}
-                          onNuevo={() => { setInlineNewTarget({ id: p.id, field: 'proveedor' }); setNewProvNombre(''); setNewProvError(null); setNewProvModal(true) }}
-                        />
-                      </td>
-                    )}
-                    {/* Nivel — anillo compacto stock vs mínimo (solo desktop): mismo dato que la barra vieja, menos ancho */}
-                    {isDesktop && (
-                      <td style={{ padding: '11px 8px' }}>
-                        <NivelRing stockActual={p.stock_actual} stockMinimo={p.stock_minimo} bajo={esBajoOCritico(p)} />
-                      </td>
-                    )}
-                    {verCostos && (
-                    <td style={{ padding: '11px 8px 11px 4px', textAlign: 'right' }} onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
-                      <CeldaPrecio precio={p.precio_unitario} canEdit={canEdit} onGuardar={precio => actualizarProducto(p.id, { precio_unitario: precio })} />
-                    </td>
-                    )}
-                    {/* Stock + umbrales editables — HORIZONTAL alineado */}
-                    <td style={{ padding: '8px 6px', background: 'color-mix(in srgb, var(--accent) 6%, transparent)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                        {/* Número de stock (sub-columna derecha, ancho fijo) — input siempre montado: onFocus abre teclado nativo en el mismo gesto.
-                            La unidad solo se repite acá en desktop: en móvil ya está en el renglón de abajo del producto y sacarla evita
-                            que el bloque se desborde de la columna angosta (64px en <480px). */}
-                        <div style={{ width: isDesktop ? 78 : isNarrow ? 50 : 54, display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: 3, flexShrink: 0 }}>
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            readOnly={!canEdit}
-                            value={editingId === p.id ? editValue : String(p.stock_actual)}
-                            onFocus={e => { if (canEdit) { startEdit(p); e.currentTarget.select() } }}
-                            onChange={e => setEditValue(e.target.value)}
-                            onBlur={() => { if (editingId === p.id) commitEdit(p.id) }}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter') e.currentTarget.blur()
-                              if (e.key === 'Escape') { cancelEdit(); e.currentTarget.blur() }
-                            }}
-                            onClick={e => e.stopPropagation()}
-                            title="Tocá para editar stock"
-                            style={{
-                              width: isDesktop ? 54 : isNarrow ? 50 : 54, textAlign: 'right', padding: isNarrow ? '3px 3px' : '3px 4px',
-                              fontSize: isDesktop ? 14 : 16,
-                              fontWeight: 800, fontFamily: "'DM Mono', monospace", lineHeight: 1.1,
-                              color: editingId === p.id ? '#fff' : (esBajoOCritico(p) ? '#d97706' : 'var(--text-1)'),
-                              background: editingId === p.id ? 'var(--navy)' : 'transparent',
-                              border: editingId === p.id ? '1px solid rgba(255,255,255,.3)' : '1px solid transparent',
-                              borderRadius: 6, outline: 'none',
-                              cursor: canEdit ? 'pointer' : 'default',
-                            }}
-                          />
-                          {isDesktop && <span style={{ fontSize: 9, color: 'var(--text-3)', flexShrink: 0 }}>{p.unidad_uso ?? p.unidad}</span>}
-                        </div>
-
-                        {/* Separador vertical + Mín — oculto en pantallas muy angostas (<480px) */}
-                        {!isNarrow && <div style={{ width: 1, alignSelf: 'stretch', minHeight: 22, background: 'var(--border)', opacity: 0.6 }} />}
-
-                        {/* Mín (sub-columna izquierda, ancho fijo) — input siempre montado: onFocus abre teclado nativo en el mismo gesto */}
-                        {!isNarrow && (
-                          <div style={{ width: 52, textAlign: 'left', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                            <span style={{ fontSize: 9.5, color: 'var(--text-3)', fontFamily: "'DM Mono', monospace" }}>mín </span>
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              readOnly={!canEdit}
-                              value={editThr?.id === p.id ? editThr.min : String(p.stock_minimo ?? 0)}
-                              onFocus={e => { if (canEdit) { setEditThr({ id: p.id, min: String(p.stock_minimo ?? 0) }); e.currentTarget.select() } }}
-                              onChange={e => setEditThr(t => t && { ...t, min: e.target.value })}
-                              onBlur={() => { if (editThr?.id === p.id) guardarUmbrales() }}
-                              onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setEditThr(null); e.currentTarget.blur() } }}
-                              title="Tocá para editar el mínimo"
-                              style={{
-                                width: 32, textAlign: 'left', padding: '1px 2px',
-                                fontSize: isDesktop ? 10 : 16,
-                                fontWeight: 700, fontFamily: "'DM Mono', monospace", color: '#d97706',
-                                background: editThr?.id === p.id ? 'var(--bg)' : 'transparent',
-                                border: `1px solid ${editThr?.id === p.id ? 'var(--border)' : 'transparent'}`,
-                                borderRadius: 5, outline: 'none', cursor: canEdit ? 'pointer' : 'default',
-                              }}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    {/* Estado */}
-                    <td style={{ padding: '11px 4px', textAlign: 'center' }}>
-                      {estadoBadge(p)}
-                    </td>
-                    {/* Acciones */}
-                    {isAdmin && (
-                    <td style={{ padding: '11px 4px', textAlign: 'center' }}>
-                      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                        {!p.fuera_de_uso && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); addToCart(p) }}
-                          aria-label="Agregar al carrito de compras"
-                          title="Agregar al pedido"
-                          disabled={cart.some(it => it.producto_id === p.id)}
-                          style={{ background: 'none', border: 'none', cursor: cart.some(it => it.producto_id === p.id) ? 'default' : 'pointer', padding: 0, display: 'flex' }}
-                        >
-                          <span className="material-symbols-outlined" style={{ fontSize: 19, color: cart.some(it => it.producto_id === p.id) ? 'var(--accent)' : esBajoOCritico(p) ? 'var(--accent)' : 'var(--text-3)' }}>
-                            {cart.some(it => it.producto_id === p.id) ? 'shopping_cart' : 'add_shopping_cart'}
-                          </span>
-                        </button>
-                        )}
-                        <button
-                          onClick={(e) => { e.stopPropagation(); openMerma(p) }}
-                          aria-label="Registrar merma"
-                          title="Registrar merma"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}
-                        >
-                          <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'var(--text-3)' }}>delete_sweep</span>
-                        </button>
-                        {puedeEliminar && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setDeleteId(p.id) }}
-                          aria-label="Eliminar producto"
-                          title="Eliminar producto"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}
-                        >
-                          <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'var(--text-3)' }}>delete</span>
-                        </button>
-                        )}
-                      </div>
-                    </td>
-                    )}
-                  </tr>
-                )
-              })}
+              {filteredInsumos.map((p, i) => (
+                <FilaProductoInsumo
+                  key={p.id}
+                  p={p}
+                  index={i}
+                  isDesktop={isDesktop}
+                  isNarrow={isNarrow}
+                  canEdit={canEdit}
+                  isAdmin={isAdmin}
+                  puedeEliminar={puedeEliminar}
+                  verCostos={verCostos}
+                  pendiente={esPendiente(p)}
+                  bajo={esBajoOCritico(p)}
+                  mostrarRecetas={estadoFilter === 'sinprecio'}
+                  usoRecetasCount={usoRecetas.get(p.id) ?? 0}
+                  categoriasNombres={categoriasNombres}
+                  proveedores={proveedores}
+                  sectores={sectores}
+                  estaEnCarrito={cart.some(it => it.producto_id === p.id)}
+                  editingId={editingId}
+                  editValue={editValue}
+                  editThr={editThr}
+                  onOpenEdit={openEdit}
+                  onInlineCategoria={handleInlineCategoria}
+                  onNuevaCategoria={abrirNuevaCategoria}
+                  onInlineProveedor={handleInlineProveedor}
+                  onNuevoProveedor={abrirNuevoProveedor}
+                  onInlineSector={handleInlineSector}
+                  onNuevoSector={abrirNuevoSector}
+                  onInlineUnidad={handleInlineUnidad}
+                  onGuardarPrecio={actualizarProducto}
+                  onStartEdit={startEdit}
+                  onEditValueChange={setEditValue}
+                  onCommitEdit={commitEdit}
+                  onCancelEdit={cancelEdit}
+                  onEditThrFocus={p2 => setEditThr({ id: p2.id, min: String(p2.stock_minimo ?? 0) })}
+                  onEditThrChange={v => setEditThr(t => t && { ...t, min: v })}
+                  onEditThrCancel={() => setEditThr(null)}
+                  onGuardarUmbrales={guardarUmbrales}
+                  onAddToCart={addToCart}
+                  onOpenMerma={openMerma}
+                  onDelete={setDeleteId}
+                />
+              ))}
             </tbody>
           )}
         </table>
@@ -2042,6 +1941,8 @@ export default function StockPage() {
                   <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     <span style={lblStyle}>Unidad</span>
                     <select value={form.unidad} onChange={e => setForm(f => ({ ...f, unidad: e.target.value }))} style={{ ...inputStyle, cursor: 'pointer', appearance: 'auto' }}>
+                      {/* form.unidad puede traer una variante vieja fuera de la lista ('u', 'l', 'paq'…) — sin esto el select muestra "kg" aunque el valor real sea otro */}
+                      {!UNIDADES.includes(form.unidad) && form.unidad && <option value={form.unidad}>{form.unidad}</option>}
                       {UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
                     </select>
                   </label>
@@ -2304,6 +2205,29 @@ export default function StockPage() {
           saving={newProvSaving}
           error={newProvError}
           inputStyle={inputStyle}
+        />
+      )}
+      {newSectorModal && (
+        <NuevoRegistroModal
+          titulo="Nuevo sector físico"
+          placeholder="Ej: Cámara frigorífica, Cava…"
+          value={newSectorNombre}
+          onChange={setNewSectorNombre}
+          onCancel={() => { setNewSectorModal(false); setInlineNewTarget(null) }}
+          onConfirm={handleNewSector}
+          saving={newSectorSaving}
+          inputStyle={inputStyle}
+          extra={
+            <div style={{ display: 'flex', gap: 6 }}>
+              {SECTOR_ICONOS.map(ic => (
+                <button key={ic} type="button" onClick={() => setNewSectorIcono(ic)}
+                  style={{ width: 36, height: 36, borderRadius: 8, background: newSectorIcono === ic ? 'var(--accent)' : 'var(--surface)', border: `1px solid ${newSectorIcono === ic ? 'var(--accent)' : 'var(--border)'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 18, color: newSectorIcono === ic ? '#fff' : 'var(--text-2)' }}>{ic}</span>
+                </button>
+              ))}
+            </div>
+          }
         />
       )}
 
