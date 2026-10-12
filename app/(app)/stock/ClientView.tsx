@@ -654,6 +654,38 @@ export default function StockPage() {
   const [marcandoProduccion, setMarcandoProduccion] = useState(false)
   const [marcProdSaving, setMarcProdSaving] = useState(false)
 
+  // ── Asignación masiva de proveedor — mismo patrón, también comparte `seleccionados`
+  const [asignandoProveedor, setAsignandoProveedor] = useState(false)
+  const [proveedorParaAsignar, setProveedorParaAsignar] = useState('')
+  const [asignProvSaving, setAsignProvSaving] = useState(false)
+
+  function cerrarAsignacionProveedor() {
+    setAsignandoProveedor(false)
+    setSeleccionados(new Set())
+    setProveedorParaAsignar('')
+  }
+
+  async function aplicarAsignacionProveedor() {
+    if (!seleccionados.size || !proveedorParaAsignar) return
+    setAsignProvSaving(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('productos')
+        .update({ proveedor_id: proveedorParaAsignar === '__sin__' ? null : proveedorParaAsignar })
+        .in('id', Array.from(seleccionados))
+      if (error) throw error
+      setSugToast(`${seleccionados.size} producto${seleccionados.size !== 1 ? 's' : ''} asignado${seleccionados.size !== 1 ? 's' : ''} a proveedor`)
+      setTimeout(() => setSugToast(null), 3000)
+      cerrarAsignacionProveedor()
+      refetch()
+    } catch (e) {
+      setSugToast('Error al asignar proveedor: ' + (e instanceof Error ? e.message : 'desconocido'))
+      setTimeout(() => setSugToast(null), 3500)
+    }
+    setAsignProvSaving(false)
+  }
+
   function toggleSeleccionado(id: string) {
     setSeleccionados(prev => {
       const next = new Set(prev)
@@ -2352,6 +2384,7 @@ export default function StockPage() {
                 ...(isAdmin ? [{ icon: 'tune', label: 'Sugerir mínimos', onClick: abrirSugerir }] : []),
                 ...(isAdmin ? [{ icon: 'price_change', label: 'Actualizar precios', onClick: abrirSyncPrecios }] : []),
                 ...(canEdit && sectores.length > 0 ? [{ icon: 'shelves', label: 'Asignar sector', onClick: () => setAsignandoSector(true) }] : []),
+                ...(canEdit && proveedores.length > 0 ? [{ icon: 'local_shipping', label: 'Asignar proveedor', onClick: () => setAsignandoProveedor(true) }] : []),
                 ...(canEdit ? [{ icon: 'soup_kitchen', label: 'Marcar producción', onClick: abrirMarcarProduccion }] : []),
               ].map(fn => (
                 <button
@@ -2558,6 +2591,66 @@ export default function StockPage() {
                 style={{ padding: '0 18px', borderRadius: 10, background: (!seleccionados.size || !sectorParaAsignar) ? 'var(--border)' : 'var(--navy)', border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: (!seleccionados.size || !sectorParaAsignar) ? 'default' : 'pointer', fontFamily: 'inherit' }}
               >
                 {asignSaving ? 'Guardando…' : 'Asignar'}
+              </button>
+            </div>
+          </div>
+        </div>
+        </SheetChrome>
+      )}
+
+      {/* ── Asignación masiva de proveedor ── */}
+      {asignandoProveedor && (
+        <SheetChrome>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>Asignar proveedor</div>
+              <div style={{ color: 'rgba(255,255,255,.5)', fontSize: 11 }}>Tocá los productos para seleccionarlos</div>
+            </div>
+            <button onClick={cerrarAsignacionProveedor} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+              <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>close</span>
+            </button>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+            {filtered.filter(p => !p.fuera_de_uso).map(p => {
+              const sel = seleccionados.has(p.id)
+              const provActual = proveedores.find(pr => pr.id === p.proveedor_id)
+              const yaAsignado = !!provActual
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => toggleSeleccionado(p.id)}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: sel ? 'rgba(67,97,160,.1)' : 'transparent', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', opacity: yaAsignado && !sel ? 0.5 : 1 }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 20, color: sel ? 'var(--accent)' : 'var(--text-3)' }}>
+                    {sel ? 'check_box' : 'check_box_outline_blank'}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', textDecoration: yaAsignado && !sel ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</div>
+                    <div style={{ fontSize: 10, color: yaAsignado ? 'var(--accent)' : 'var(--text-3)', fontWeight: yaAsignado ? 700 : 400 }}>{provActual ? provActual.nombre : 'Sin proveedor'}</div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+          <div style={{ padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0, borderTop: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>{seleccionados.size} seleccionado{seleccionados.size !== 1 ? 's' : ''}</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <select
+                value={proveedorParaAsignar}
+                onChange={e => setProveedorParaAsignar(e.target.value)}
+                style={{ ...inputStyle, flex: 1, appearance: 'auto', cursor: 'pointer' }}
+              >
+                <option value="">Elegir proveedor…</option>
+                <option value="__sin__">Sin proveedor</option>
+                {proveedores.map(pr => <option key={pr.id} value={pr.id}>{pr.nombre}</option>)}
+              </select>
+              <button
+                onClick={aplicarAsignacionProveedor}
+                disabled={!seleccionados.size || !proveedorParaAsignar || asignProvSaving}
+                style={{ padding: '0 18px', borderRadius: 10, background: (!seleccionados.size || !proveedorParaAsignar) ? 'var(--border)' : 'var(--navy)', border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: (!seleccionados.size || !proveedorParaAsignar) ? 'default' : 'pointer', fontFamily: 'inherit' }}
+              >
+                {asignProvSaving ? 'Guardando…' : 'Asignar'}
               </button>
             </div>
           </div>
