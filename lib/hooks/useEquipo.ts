@@ -1,13 +1,11 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useCallback, useMemo } from 'react'
 import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
 import { AREA_CATALOGO, areaCatalogoItem, type AreaKey, type Capa } from '@/lib/constants'
 import { getObjetivosEfectivos, type ObjetivosVenta } from '@/lib/reportes/ventasPorPersona'
-import { useAuth } from '@/lib/auth/context'
-import { crearNotificacion } from '@/lib/notificaciones/crear'
 
 export type { ObjetivosVenta }
 
@@ -43,18 +41,6 @@ export interface Miembro {
   uniforme: Record<string, number> | null
   /** Notas libres de un encargado sobre la persona (ausentismo, llamados de atención). */
   observaciones: string | null
-  restaurante_id: string
-  created_at: string
-}
-
-export interface Turno {
-  id: string
-  miembro_id: string
-  fecha: string
-  turno_tipo: string
-  hora_entrada: string | null
-  hora_salida: string | null
-  notas: string | null
   restaurante_id: string
   created_at: string
 }
@@ -164,17 +150,9 @@ export interface AreaCapaRow {
   created_at: string
 }
 
-export type TurnoTipo = 'mañana' | 'tarde' | 'noche' | 'franco' | 'vacaciones'
-
-// defaultHoras: horario por defecto al asignar el tipo — precarga el picker,
-// no ata nada (se puede pisar por persona/día). franco/vacaciones no tienen.
-export const TURNO_CONFIG: Record<TurnoTipo, { label: string; fullLabel: string; color: string; bg: string; defaultHoras?: [string, string] }> = {
-  mañana:     { label: 'M', fullLabel: 'Mañana',     color: '#f59e0b', bg: '#fef3c7', defaultHoras: ['09:00', '17:00'] },
-  tarde:      { label: 'T', fullLabel: 'Tarde',      color: '#3b82f6', bg: 'var(--blue-bg)', defaultHoras: ['13:00', '21:00'] },
-  noche:      { label: 'N', fullLabel: 'Noche',      color: '#4361a0', bg: 'var(--blue-bg)', defaultHoras: ['20:00', '02:00'] },
-  franco:     { label: 'F', fullLabel: 'Franco',     color: '#6b7280', bg: '#f3f4f6' },
-  vacaciones: { label: 'V', fullLabel: 'Vacaciones', color: '#10b981', bg: 'var(--green-bg)' },
-}
+// La grilla de turnos vive en lib/hooks/useTurnos.ts; los tipos, en lib/turnos/tipos.ts.
+// Re-export para los callers que ya los importaban desde acá.
+export { TURNO_CONFIG, type TurnoTipo } from '@/lib/turnos/tipos'
 
 // ── Niveles de acceso ──
 
@@ -517,9 +495,6 @@ async function fetchAreaCapasData(key: string): Promise<AreaCapaRow[]> {
 export function useEquipo() {
   const RESTAURANTE_ID = useRestauranteId()
   const supabase = useMemo(() => createClient(), [])
-  const { user } = useAuth()
-  const [turnos, setTurnos] = useState<Turno[]>([])
-  const [error, setError] = useState<string | null>(null)
 
   // ── Miembros (SWR) ──
   const { data: miembros = [], isLoading: loading, mutate: mutateMiembros } = useSWR(
@@ -710,136 +685,6 @@ export function useEquipo() {
     }
   }
 
-  // ── Turnos ──
-
-  const fetchTurnos = useCallback(async (weekStart: string, weekEnd: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('turnos')
-        .select('*')
-        .eq('restaurante_id', RESTAURANTE_ID)
-        .gte('fecha', weekStart)
-        .lte('fecha', weekEnd)
-      if (error) throw error
-      setTurnos(data ?? [])
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al cargar turnos'
-      console.error('[useEquipo] fetchTurnos Error:', msg)
-      setError(msg)
-    }
-  }, [RESTAURANTE_ID, supabase])
-
-  const fetchTurnosMes = useCallback(async (mes: number, anio: number): Promise<Turno[]> => {
-    if (!RESTAURANTE_ID) return []
-    const desde = `${anio}-${String(mes).padStart(2, '0')}-01`
-    const lastDay = new Date(anio, mes, 0).getDate()
-    const hasta = `${anio}-${String(mes).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-    try {
-      const { data, error } = await supabase
-        .from('turnos')
-        .select('*')
-        .eq('restaurante_id', RESTAURANTE_ID)
-        .gte('fecha', desde)
-        .lte('fecha', hasta)
-      if (error) throw error
-      return (data ?? []) as Turno[]
-    } catch {
-      return []
-    }
-  }, [RESTAURANTE_ID, supabase])
-
-  async function asignarTurno(
-    miembro_id: string, fecha: string, turno_tipo: TurnoTipo,
-    horas?: { hora_entrada: string | null; hora_salida: string | null },
-  ) {
-    try {
-      const { error } = await supabase
-        .from('turnos')
-        .upsert(
-          {
-            miembro_id, fecha, turno_tipo, restaurante_id: RESTAURANTE_ID,
-            hora_entrada: horas?.hora_entrada ?? TURNO_CONFIG[turno_tipo].defaultHoras?.[0] ?? null,
-            hora_salida: horas?.hora_salida ?? TURNO_CONFIG[turno_tipo].defaultHoras?.[1] ?? null,
-          },
-          { onConflict: 'miembro_id,fecha' }
-        )
-      if (error) throw error
-
-      // Avisar a la persona asignada — no a quien se asigna a sí mismo, y
-      // solo si su cuenta ya está vinculada (auth_user_id null = invitación
-      // sin aceptar todavía). Best-effort, no bloquea el flujo de arriba.
-      const destino = miembros.find(m => m.id === miembro_id)
-      if (RESTAURANTE_ID && destino?.auth_user_id && destino.auth_user_id !== user?.id) {
-        const fechaLabel = new Date(fecha + 'T12:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'short' })
-        crearNotificacion(supabase, {
-          restauranteId: RESTAURANTE_ID,
-          usuarioId: destino.auth_user_id,
-          tipo: 'turno_asignado',
-          titulo: `Turno ${TURNO_CONFIG[turno_tipo].fullLabel.toLowerCase()} asignado`,
-          cuerpo: `Para el ${fechaLabel}`,
-          link: '/turnos',
-        })
-      }
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al asignar turno'
-      console.error('[useEquipo] asignarTurno Error:', msg)
-      throw new Error(msg)
-    }
-  }
-
-  async function limpiarTurno(miembro_id: string, fecha: string) {
-    try {
-      const { error } = await supabase
-        .from('turnos')
-        .delete()
-        .eq('miembro_id', miembro_id)
-        .eq('fecha', fecha)
-      if (error) throw error
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al limpiar turno'
-      console.error('[useEquipo] limpiarTurno Error:', msg)
-    }
-  }
-
-  // Copia los turnos de una semana (fecha ya corrida al destino, ej. la
-  // semana anterior a la que se está viendo) 7 días adelante. onConflict
-  // pisa lo que ya hubiera en el destino para esa persona+día a propósito:
-  // es "rellenar la semana con la anterior", no un merge.
-  async function copiarSemanaAnterior(semanaAnteriorStart: string, semanaAnteriorEnd: string): Promise<number> {
-    try {
-      const { data: prevTurnos, error: fetchErr } = await supabase
-        .from('turnos')
-        .select('*')
-        .eq('restaurante_id', RESTAURANTE_ID)
-        .gte('fecha', semanaAnteriorStart)
-        .lte('fecha', semanaAnteriorEnd)
-      if (fetchErr) throw fetchErr
-      if (!prevTurnos || prevTurnos.length === 0) return 0
-
-      const inserts = prevTurnos.map((t: Turno) => {
-        const d = new Date(t.fecha + 'T12:00:00')
-        d.setDate(d.getDate() + 7)
-        return {
-          miembro_id: t.miembro_id,
-          fecha: d.toISOString().slice(0, 10),
-          turno_tipo: t.turno_tipo,
-          hora_entrada: t.hora_entrada,
-          hora_salida: t.hora_salida,
-          restaurante_id: RESTAURANTE_ID,
-        }
-      })
-      const { error: upsertErr } = await supabase
-        .from('turnos')
-        .upsert(inserts, { onConflict: 'miembro_id,fecha' })
-      if (upsertErr) throw upsertErr
-      return inserts.length
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al copiar la semana'
-      console.error('[useEquipo] copiarSemanaAnterior Error:', msg)
-      throw new Error(msg)
-    }
-  }
-
   // ── Puestos ──
 
   const fetchPuestos = useCallback(async () => { await mutatePuestos() }, [mutatePuestos])
@@ -923,20 +768,13 @@ export function useEquipo() {
 
   return {
     miembros,
-    turnos,
     puestos,
     loading,
-    error,
     fetchMiembros,
     crearMiembro,
     actualizarMiembro,
     actualizarOverridesMiembro,
     desactivarMiembro,
-    fetchTurnos,
-    fetchTurnosMes,
-    asignarTurno,
-    limpiarTurno,
-    copiarSemanaAnterior,
     fetchPuestos,
     crearPuesto,
     actualizarPuesto,

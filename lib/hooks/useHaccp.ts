@@ -476,7 +476,7 @@ export function useHaccp(opts?: { soloEscritura?: boolean }) {
 
   // Registros de una semana (o cualquier rango) puntual — la grilla Semana
   // necesita ver exactamente esos días, no "los últimos 200" (mismo patrón
-  // que fetchTurnosMes en useEquipo.ts).
+  // que fetchSuelto en useTurnos.ts).
   async function fetchRegistrosRango(desde: string, hasta: string): Promise<HaccpLimpiezaRegistro[]> {
     try {
       const limpiezaIds = limpieza.map(l => l.id)

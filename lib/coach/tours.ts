@@ -307,8 +307,8 @@ export const TOURS: Record<string, TourStep[]> = {
   turnos: [
     {
       targetId: null,
-      title: 'Equipo y Turnos',
-      description: 'Equipo: los miembros del restaurante con su puesto y rol. Turnos: la planilla semanal de quién trabaja cada día. Puestos: los roles definidos con sus módulos habilitados. Todo desde acá.',
+      title: 'La planilla de la semana',
+      description: 'Quién trabaja cada día. Elegí un turno en «Pintar» y tocá los casilleros para cargarlo; sin pincel, el toque abre el turno para cambiarle el horario o dejarle una nota. La banda Agenda muestra lo que hay en el Calendario esa semana, y al tocar un día ves quién trabaja, qué hay agendado y sus notas. Cuando la semana está lista, «Avisar al equipo» le manda a cada persona sus turnos.',
     },
   ],
 
