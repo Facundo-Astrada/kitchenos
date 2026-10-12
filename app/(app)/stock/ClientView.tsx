@@ -2520,6 +2520,8 @@ export default function StockPage() {
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 24px 0', gap: 12 }}>
               {esBajoOCritico(p) && <span style={{ fontSize: 10, fontWeight: 700, color: '#f59e0b', background: 'rgba(245,158,11,.1)', padding: '3px 10px', borderRadius: 99 }}>BAJO</span>}
               {p.estado === 'alto' && <span style={{ fontSize: 10, fontWeight: 700, color: '#38bdf8', background: 'rgba(56,189,248,.1)', padding: '3px 10px', borderRadius: 99 }}>ALTO</span>}
+              {/* Se hace en esta cocina, no se compra — contexto útil al contar (no tiene proveedor, el costo sale de la receta) */}
+              {p.es_produccion && <span style={{ fontSize: 10, fontWeight: 700, color: '#10b981', background: 'rgba(16,185,129,.12)', padding: '3px 10px', borderRadius: 99 }}>PRODUCCIÓN</span>}
               <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-1)', textAlign: 'center', lineHeight: 1.2 }}>{p.nombre}</div>
               <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{p.categoria}</div>
               <div style={{ fontSize: 13, color: 'var(--text-2)' }}>

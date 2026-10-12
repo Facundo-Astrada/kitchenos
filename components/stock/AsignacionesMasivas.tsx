@@ -63,7 +63,9 @@ export default function AsignacionesMasivas({ mode, onClose, filtered, sectores,
   if (!mode) return null
 
   const isProduccion = mode === 'produccion'
-  const pool = isProduccion
+  // Producción interna no tiene proveedor: se hace en la misma cocina. Si ya
+  // está marcada como producción no tiene sentido ofrecerla acá.
+  const pool = isProduccion || mode === 'proveedor'
     ? filtered.filter(p => !p.fuera_de_uso && !p.es_produccion)
     : filtered.filter(p => !p.fuera_de_uso)
 
