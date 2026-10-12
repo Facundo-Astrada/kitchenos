@@ -34,6 +34,7 @@ import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
 import { parsePrecio } from '@/lib/unidades'
 import { UnidadesProductoFields } from '@/components/stock/UnidadesProducto'
 import { FiltroChip } from '@/components/stock/FiltroChip'
+import AsignacionesMasivas, { type BulkMode } from '@/components/stock/AsignacionesMasivas'
 import { esSinPrecio, usoEnRecetas, ordenarPorUso } from '@/lib/stock/sinPrecio'
 
 const UNIDADES = ['kg', 'g', 'L', 'ml', 'unidad', 'docena', 'caja', 'bolsa', 'lata', 'botella']
@@ -643,83 +644,10 @@ export default function StockPage() {
     setCreandoSector(false)
   }
 
-  // ── Asignación masiva de sector ──
-  const [asignandoSector, setAsignandoSector] = useState(false)
-  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
-  const [sectorParaAsignar, setSectorParaAsignar] = useState('')
-  const [asignSaving, setAsignSaving] = useState(false)
-
-  // ── Marcar producción masiva — comparte `seleccionados` con Asignar sector
-  // (sheets mutuamente excluyentes, cada uno resetea el set al abrir/cerrar)
-  const [marcandoProduccion, setMarcandoProduccion] = useState(false)
-  const [marcProdSaving, setMarcProdSaving] = useState(false)
-
-  // ── Asignación masiva de proveedor — mismo patrón, también comparte `seleccionados`
-  const [asignandoProveedor, setAsignandoProveedor] = useState(false)
-  const [proveedorParaAsignar, setProveedorParaAsignar] = useState('')
-  const [asignProvSaving, setAsignProvSaving] = useState(false)
-
-  function cerrarAsignacionProveedor() {
-    setAsignandoProveedor(false)
-    setSeleccionados(new Set())
-    setProveedorParaAsignar('')
-  }
-
-  async function aplicarAsignacionProveedor() {
-    if (!seleccionados.size || !proveedorParaAsignar) return
-    setAsignProvSaving(true)
-    try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('productos')
-        .update({ proveedor_id: proveedorParaAsignar === '__sin__' ? null : proveedorParaAsignar })
-        .in('id', Array.from(seleccionados))
-      if (error) throw error
-      setSugToast(`${seleccionados.size} producto${seleccionados.size !== 1 ? 's' : ''} asignado${seleccionados.size !== 1 ? 's' : ''} a proveedor`)
-      setTimeout(() => setSugToast(null), 3000)
-      cerrarAsignacionProveedor()
-      refetch()
-    } catch (e) {
-      setSugToast('Error al asignar proveedor: ' + (e instanceof Error ? e.message : 'desconocido'))
-      setTimeout(() => setSugToast(null), 3500)
-    }
-    setAsignProvSaving(false)
-  }
-
-  function toggleSeleccionado(id: string) {
-    setSeleccionados(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id); else next.add(id)
-      return next
-    })
-  }
-
-  function cerrarAsignacion() {
-    setAsignandoSector(false)
-    setSeleccionados(new Set())
-    setSectorParaAsignar('')
-  }
-
-  async function aplicarAsignacionSector() {
-    if (!seleccionados.size || !sectorParaAsignar) return
-    setAsignSaving(true)
-    try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('productos')
-        .update({ sector_id: sectorParaAsignar })
-        .in('id', Array.from(seleccionados))
-      if (error) throw error
-      setSugToast(`${seleccionados.size} producto${seleccionados.size !== 1 ? 's' : ''} asignado${seleccionados.size !== 1 ? 's' : ''} a sector`)
-      setTimeout(() => setSugToast(null), 3000)
-      cerrarAsignacion()
-      refetch()
-    } catch (e) {
-      setSugToast('Error al asignar sector: ' + (e instanceof Error ? e.message : 'desconocido'))
-      setTimeout(() => setSugToast(null), 3500)
-    }
-    setAsignSaving(false)
-  }
+  // ── Acciones masivas (Asignar sector / Asignar proveedor / Marcar producción) ──
+  // UI y lógica en components/stock/AsignacionesMasivas.tsx — un solo sheet
+  // parametrizado por `bulkMode`, no tres casi idénticos (techo de líneas, refactor-kos.md §4).
+  const [bulkMode, setBulkMode] = useState<BulkMode>(null)
 
   // ── Sugerir mínimos (Feature 2) ──
   type Sugerencia = { id: string; nombre: string; unidad: string; entregas: number; sugerido_minimo: number }
@@ -995,42 +923,6 @@ export default function StockPage() {
   const filteredInsumos = useMemo(() => filtered.filter(p => !p.es_produccion), [filtered])
   const productosProduccion = useMemo(() => productos.filter(p => p.es_produccion), [productos])
 
-  function abrirMarcarProduccion() {
-    // Candidatos pre-tildados: categoría "Otros" y sin precio — el patrón típico
-    // de un fondo/salsa/puré cargado a mano sin categorizar ni costear por factura.
-    // Respeta los filtros activos (ej. Sector = freezer) para que el recorte sea manejable.
-    const candidatos = filtered.filter(p =>
-      !p.fuera_de_uso && !p.es_produccion && p.categoria === 'Otros' && !((p.precio_unitario ?? 0) > 0)
-    )
-    setSeleccionados(new Set(candidatos.map(p => p.id)))
-    setMarcandoProduccion(true)
-  }
-
-  function cerrarMarcarProduccion() {
-    setMarcandoProduccion(false)
-    setSeleccionados(new Set())
-  }
-
-  async function aplicarMarcarProduccion() {
-    if (!seleccionados.size) return
-    setMarcProdSaving(true)
-    try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('productos')
-        .update({ es_produccion: true })
-        .in('id', Array.from(seleccionados))
-      if (error) throw error
-      setSugToast(`${seleccionados.size} producto${seleccionados.size !== 1 ? 's' : ''} marcado${seleccionados.size !== 1 ? 's' : ''} como producción`)
-      setTimeout(() => setSugToast(null), 3000)
-      cerrarMarcarProduccion()
-      refetch()
-    } catch (e) {
-      setSugToast('Error al marcar producción: ' + (e instanceof Error ? e.message : 'desconocido'))
-      setTimeout(() => setSugToast(null), 3500)
-    }
-    setMarcProdSaving(false)
-  }
 
   // Cantidad de columnas visibles (para colSpan de estados vacíos)
   const colCount = 3 + (isDesktop ? 2 : 0) + (verCostos ? 2 : 0)
@@ -2383,9 +2275,9 @@ export default function StockPage() {
                 { icon: 'table_chart', label: 'Importar planilla', onClick: () => planillaFileRef.current?.click() },
                 ...(isAdmin ? [{ icon: 'tune', label: 'Sugerir mínimos', onClick: abrirSugerir }] : []),
                 ...(isAdmin ? [{ icon: 'price_change', label: 'Actualizar precios', onClick: abrirSyncPrecios }] : []),
-                ...(canEdit && sectores.length > 0 ? [{ icon: 'shelves', label: 'Asignar sector', onClick: () => setAsignandoSector(true) }] : []),
-                ...(canEdit && proveedores.length > 0 ? [{ icon: 'local_shipping', label: 'Asignar proveedor', onClick: () => setAsignandoProveedor(true) }] : []),
-                ...(canEdit ? [{ icon: 'soup_kitchen', label: 'Marcar producción', onClick: abrirMarcarProduccion }] : []),
+                ...(canEdit && sectores.length > 0 ? [{ icon: 'shelves', label: 'Asignar sector', onClick: () => setBulkMode('sector') }] : []),
+                ...(canEdit && proveedores.length > 0 ? [{ icon: 'local_shipping', label: 'Asignar proveedor', onClick: () => setBulkMode('proveedor') }] : []),
+                ...(canEdit ? [{ icon: 'soup_kitchen', label: 'Marcar producción', onClick: () => setBulkMode('produccion') }] : []),
               ].map(fn => (
                 <button
                   key={fn.label}
@@ -2539,180 +2431,16 @@ export default function StockPage() {
         )
       })()}
 
-      {/* ── Asignación masiva de sector ── */}
-      {asignandoSector && (
-        <SheetChrome>
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>Asignar sector</div>
-              <div style={{ color: 'rgba(255,255,255,.5)', fontSize: 11 }}>Tocá los productos para seleccionarlos</div>
-            </div>
-            <button onClick={cerrarAsignacion} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-              <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>close</span>
-            </button>
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
-            {filtered.filter(p => !p.fuera_de_uso).map(p => {
-              const sel = seleccionados.has(p.id)
-              const secActual = sectores.find(s => s.id === p.sector_id)
-              const yaUbicado = !!secActual
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => toggleSeleccionado(p.id)}
-                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: sel ? 'rgba(67,97,160,.1)' : 'transparent', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', opacity: yaUbicado && !sel ? 0.5 : 1 }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: 20, color: sel ? 'var(--accent)' : 'var(--text-3)' }}>
-                    {sel ? 'check_box' : 'check_box_outline_blank'}
-                  </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', textDecoration: yaUbicado && !sel ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</div>
-                    <div style={{ fontSize: 10, color: yaUbicado ? 'var(--accent)' : 'var(--text-3)', fontWeight: yaUbicado ? 700 : 400 }}>{secActual ? secActual.nombre : 'Sin sector'}</div>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-          <div style={{ padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0, borderTop: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>{seleccionados.size} seleccionado{seleccionados.size !== 1 ? 's' : ''}</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <select
-                value={sectorParaAsignar}
-                onChange={e => setSectorParaAsignar(e.target.value)}
-                style={{ ...inputStyle, flex: 1, appearance: 'auto', cursor: 'pointer' }}
-              >
-                <option value="">Elegir sector…</option>
-                {sectores.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-              </select>
-              <button
-                onClick={aplicarAsignacionSector}
-                disabled={!seleccionados.size || !sectorParaAsignar || asignSaving}
-                style={{ padding: '0 18px', borderRadius: 10, background: (!seleccionados.size || !sectorParaAsignar) ? 'var(--border)' : 'var(--navy)', border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: (!seleccionados.size || !sectorParaAsignar) ? 'default' : 'pointer', fontFamily: 'inherit' }}
-              >
-                {asignSaving ? 'Guardando…' : 'Asignar'}
-              </button>
-            </div>
-          </div>
-        </div>
-        </SheetChrome>
-      )}
-
-      {/* ── Asignación masiva de proveedor ── */}
-      {asignandoProveedor && (
-        <SheetChrome>
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>Asignar proveedor</div>
-              <div style={{ color: 'rgba(255,255,255,.5)', fontSize: 11 }}>Tocá los productos para seleccionarlos</div>
-            </div>
-            <button onClick={cerrarAsignacionProveedor} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-              <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>close</span>
-            </button>
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
-            {filtered.filter(p => !p.fuera_de_uso).map(p => {
-              const sel = seleccionados.has(p.id)
-              const provActual = proveedores.find(pr => pr.id === p.proveedor_id)
-              const yaAsignado = !!provActual
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => toggleSeleccionado(p.id)}
-                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: sel ? 'rgba(67,97,160,.1)' : 'transparent', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', opacity: yaAsignado && !sel ? 0.5 : 1 }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: 20, color: sel ? 'var(--accent)' : 'var(--text-3)' }}>
-                    {sel ? 'check_box' : 'check_box_outline_blank'}
-                  </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', textDecoration: yaAsignado && !sel ? 'line-through' : 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</div>
-                    <div style={{ fontSize: 10, color: yaAsignado ? 'var(--accent)' : 'var(--text-3)', fontWeight: yaAsignado ? 700 : 400 }}>{provActual ? provActual.nombre : 'Sin proveedor'}</div>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-          <div style={{ padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0, borderTop: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>{seleccionados.size} seleccionado{seleccionados.size !== 1 ? 's' : ''}</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <select
-                value={proveedorParaAsignar}
-                onChange={e => setProveedorParaAsignar(e.target.value)}
-                style={{ ...inputStyle, flex: 1, appearance: 'auto', cursor: 'pointer' }}
-              >
-                <option value="">Elegir proveedor…</option>
-                <option value="__sin__">Sin proveedor</option>
-                {proveedores.map(pr => <option key={pr.id} value={pr.id}>{pr.nombre}</option>)}
-              </select>
-              <button
-                onClick={aplicarAsignacionProveedor}
-                disabled={!seleccionados.size || !proveedorParaAsignar || asignProvSaving}
-                style={{ padding: '0 18px', borderRadius: 10, background: (!seleccionados.size || !proveedorParaAsignar) ? 'var(--border)' : 'var(--navy)', border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: (!seleccionados.size || !proveedorParaAsignar) ? 'default' : 'pointer', fontFamily: 'inherit' }}
-              >
-                {asignProvSaving ? 'Guardando…' : 'Asignar'}
-              </button>
-            </div>
-          </div>
-        </div>
-        </SheetChrome>
-      )}
-
-      {/* ── Marcar producción masiva ── */}
-      {marcandoProduccion && (
-        <SheetChrome>
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>Marcar producción</div>
-              <div style={{ color: 'rgba(255,255,255,.5)', fontSize: 11 }}>
-                Pasan a la pestaña Producciones — pre-tildados los sin categoría/precio (Otros, $0)
-              </div>
-            </div>
-            <button onClick={cerrarMarcarProduccion} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-              <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>close</span>
-            </button>
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
-            {filtered.filter(p => !p.fuera_de_uso && !p.es_produccion).map(p => {
-              const sel = seleccionados.has(p.id)
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => toggleSeleccionado(p.id)}
-                  style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', background: sel ? 'rgba(16,185,129,.08)' : 'transparent', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: 20, color: sel ? '#10b981' : 'var(--text-3)' }}>
-                    {sel ? 'check_box' : 'check_box_outline_blank'}
-                  </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</div>
-                    <div style={{ fontSize: 10, color: 'var(--text-3)' }}>
-                      {p.categoria || 'Sin categoría'}{p.precio_unitario ? ` · ${fmtPrecio(p.precio_unitario)}` : ' · sin precio'}
-                    </div>
-                  </div>
-                </button>
-              )
-            })}
-            {filtered.filter(p => !p.fuera_de_uso && !p.es_produccion).length === 0 && (
-              <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 12 }}>
-                No hay productos para marcar con los filtros actuales
-              </div>
-            )}
-          </div>
-          <div style={{ padding: '12px 16px', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)', flexShrink: 0, borderTop: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>{seleccionados.size} seleccionado{seleccionados.size !== 1 ? 's' : ''}</div>
-            <button
-              onClick={aplicarMarcarProduccion}
-              disabled={!seleccionados.size || marcProdSaving}
-              style={{ width: '100%', padding: '12px 18px', borderRadius: 10, background: !seleccionados.size ? 'var(--border)' : '#10b981', border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: !seleccionados.size ? 'default' : 'pointer', fontFamily: 'inherit' }}
-            >
-              {marcProdSaving ? 'Guardando…' : `Marcar ${seleccionados.size || ''} como producción`}
-            </button>
-          </div>
-        </div>
-        </SheetChrome>
-      )}
+      {/* ── Acciones masivas: Asignar sector / Asignar proveedor / Marcar producción ── */}
+      <AsignacionesMasivas
+        mode={bulkMode}
+        onClose={() => setBulkMode(null)}
+        filtered={filtered}
+        sectores={sectores}
+        proveedores={proveedores}
+        refetch={refetch}
+        setToast={setSugToast}
+      />
 
       {/* ── Quick stock mode ── */}
       {quickMode && quickItems.length > 0 && (() => {
