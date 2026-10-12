@@ -37,6 +37,7 @@ import { FiltroChip } from '@/components/stock/FiltroChip'
 import AsignacionesMasivas, { type BulkMode } from '@/components/stock/AsignacionesMasivas'
 import NuevoRegistroModal from '@/components/stock/NuevoRegistroModal'
 import NivelRing from '@/components/stock/NivelRing'
+import { CeldaCategoria, CeldaProveedor, CeldaPrecio } from '@/components/stock/CeldasInlineTabla'
 import { esSinPrecio, usoEnRecetas, ordenarPorUso } from '@/lib/stock/sinPrecio'
 
 const UNIDADES = ['kg', 'g', 'L', 'ml', 'unidad', 'docena', 'caja', 'bolsa', 'lata', 'botella']
@@ -326,6 +327,22 @@ export default function StockPage() {
     } catch { /* noop */ }
     setEditThr(null)
   }, [editThr, actualizarProducto])
+
+  // Categoría/proveedor inline (un click en la tabla) — "+ Nueva/o…" (manejado
+  // adentro de CeldaCategoria/CeldaProveedor) abre el mismo modal que el form
+  // grande, pero recuerda a qué fila aplicarlo en vez de volcarlo a `form`
+  // (que solo existe si el modal grande está abierto).
+  const [inlineNewTarget, setInlineNewTarget] = useState<{ id: string; field: 'categoria' | 'proveedor' } | null>(null)
+
+  async function handleInlineCategoria(p: ProductoConEstado, value: string) {
+    if (value === (p.categoria || '')) return
+    try { await actualizarProducto(p.id, { categoria: value }) } catch { /* noop */ }
+  }
+
+  async function handleInlineProveedor(p: ProductoConEstado, value: string | null) {
+    if (value === (p.proveedor_id ?? null)) return
+    try { await actualizarProducto(p.id, { proveedor_id: value }) } catch { /* noop */ }
+  }
 
   // Add/edit modal
   const [modalOpen, setModalOpen] = useState(false)
@@ -848,9 +865,8 @@ export default function StockPage() {
     return categoriasFiltro.map(c => ({ value: c, label: c, count: cnt.get(c) ?? 0 }))
   }, [productos, categoriasFiltro])
 
-  // Lookup id→nombre compartido por el filtro de proveedor y la columna Proveedor de la tabla (desktop).
+  // Lookup id→nombre para el filtro de proveedor (con conteo, más abajo).
   const proveedorNombrePorId = useMemo(() => new Map(proveedores.map(pr => [pr.id, pr.nombre])), [proveedores])
-  const proveedorNombre = useCallback((id: string | null | undefined) => id ? proveedorNombrePorId.get(id) ?? null : null, [proveedorNombrePorId])
 
   const provOpciones = useMemo(() => {
     const cnt = new Map<string, number>()
@@ -1141,9 +1157,14 @@ export default function StockPage() {
     setNewCatSaving(true)
     try {
       await agregarCategoria(newCatNombre.trim(), newCatColor)
-      setForm(f => ({ ...f, categoria: newCatNombre.trim() }))
+      if (inlineNewTarget?.field === 'categoria') {
+        await actualizarProducto(inlineNewTarget.id, { categoria: newCatNombre.trim() })
+      } else {
+        setForm(f => ({ ...f, categoria: newCatNombre.trim() }))
+      }
       setNewCatModal(false)
       setNewCatNombre('')
+      setInlineNewTarget(null)
     } catch {
       // ignore duplicate
     } finally {
@@ -1157,9 +1178,14 @@ export default function StockPage() {
     setNewProvError(null)
     try {
       const nuevo = await agregarProveedor({ nombre: newProvNombre.trim(), created_at: new Date().toISOString() })
-      setForm(f => ({ ...f, proveedor_id: nuevo.id }))
+      if (inlineNewTarget?.field === 'proveedor') {
+        await actualizarProducto(inlineNewTarget.id, { proveedor_id: nuevo.id })
+      } else {
+        setForm(f => ({ ...f, proveedor_id: nuevo.id }))
+      }
       setNewProvModal(false)
       setNewProvNombre('')
+      setInlineNewTarget(null)
     } catch (e) {
       setNewProvError(e instanceof Error ? e.message : 'Error al crear el proveedor')
     } finally {
@@ -1755,21 +1781,30 @@ export default function StockPage() {
                         )}
                       </div>
                     </td>
-                    {/* Categoría — solo desktop */}
+                    {/* Categoría/Proveedor/Precio — un click edita in situ, sin pasar por el modal (components/stock/CeldasInlineTabla.tsx) */}
                     {isDesktop && (
-                      <td style={{ padding: '11px 8px' }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{p.categoria || '—'}</span>
+                      <td style={{ padding: '11px 8px' }} onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+                        <CeldaCategoria
+                          categoria={p.categoria}
+                          opciones={categoriasNombres}
+                          canEdit={canEdit}
+                          onChange={v => handleInlineCategoria(p, v)}
+                          onNueva={() => { setInlineNewTarget({ id: p.id, field: 'categoria' }); setNewCatNombre(''); setNewCatModal(true) }}
+                        />
                         {val > 0 && verCostos && (
                           <div style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700, marginTop: 1, fontFamily: "'DM Mono', monospace" }}>{fmtValor(val)}</div>
                         )}
                       </td>
                     )}
-                    {/* Proveedor — solo desktop */}
                     {isDesktop && (
-                      <td style={{ padding: '11px 8px', maxWidth: 0 }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-2)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={proveedorNombre(p.proveedor_id) ?? undefined}>
-                          {proveedorNombre(p.proveedor_id) ?? '—'}
-                        </span>
+                      <td style={{ padding: '11px 8px', maxWidth: 0 }} onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+                        <CeldaProveedor
+                          proveedorId={p.proveedor_id}
+                          opciones={proveedores}
+                          canEdit={canEdit}
+                          onChange={v => handleInlineProveedor(p, v)}
+                          onNuevo={() => { setInlineNewTarget({ id: p.id, field: 'proveedor' }); setNewProvNombre(''); setNewProvError(null); setNewProvModal(true) }}
+                        />
                       </td>
                     )}
                     {/* Nivel — anillo compacto stock vs mínimo (solo desktop): mismo dato que la barra vieja, menos ancho */}
@@ -1778,12 +1813,9 @@ export default function StockPage() {
                         <NivelRing stockActual={p.stock_actual} stockMinimo={p.stock_minimo} bajo={esBajoOCritico(p)} />
                       </td>
                     )}
-                    {/* Precio */}
                     {verCostos && (
-                    <td style={{ padding: '11px 8px 11px 4px', textAlign: 'right' }}>
-                      <span style={{ fontSize: 12, fontWeight: 500, fontFamily: "'DM Mono', monospace", color: 'var(--text-2)' }}>
-                        {fmtPrecio(p.precio_unitario)}
-                      </span>
+                    <td style={{ padding: '11px 8px 11px 4px', textAlign: 'right' }} onClick={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+                      <CeldaPrecio precio={p.precio_unitario} canEdit={canEdit} onGuardar={precio => actualizarProducto(p.id, { precio_unitario: precio })} />
                     </td>
                     )}
                     {/* Stock + umbrales editables — HORIZONTAL alineado */}
@@ -2249,7 +2281,7 @@ export default function StockPage() {
           placeholder="Ej: Congelados, Especias…"
           value={newCatNombre}
           onChange={setNewCatNombre}
-          onCancel={() => setNewCatModal(false)}
+          onCancel={() => { setNewCatModal(false); setInlineNewTarget(null) }}
           onConfirm={handleNewCat}
           saving={newCatSaving}
           inputStyle={inputStyle}
@@ -2267,7 +2299,7 @@ export default function StockPage() {
           placeholder="Ej: Bodega Los Toneles, Carnes del Sur…"
           value={newProvNombre}
           onChange={setNewProvNombre}
-          onCancel={() => setNewProvModal(false)}
+          onCancel={() => { setNewProvModal(false); setInlineNewTarget(null) }}
           onConfirm={handleNewProv}
           saving={newProvSaving}
           error={newProvError}
