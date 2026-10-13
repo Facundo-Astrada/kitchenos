@@ -2711,6 +2711,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         <CopiarPaseBoton sinBoton
           plaza={paseSnap.plaza} fecha={paseSnap.fecha} jornadaProxima={paseSnap.jornadaProxima} tareas={tareas}
           notasHoy={paseSnap.notas} plazasCustom={plazasCustom} turnoNombre={paseSnap.turnoNombre}
+          notasItems={items.filter(i => i.nota && (i.plaza === paseSnap.plaza || i.plaza === 'general'))
+            .map(i => ({ nombre: i.nombre, nota: i.nota as string }))}
           autor={paseSnap.autor} entregadoAt={paseSnap.entregadoAt}
           open={showPaseSheet} onOpenChange={setShowPaseSheet}
         />

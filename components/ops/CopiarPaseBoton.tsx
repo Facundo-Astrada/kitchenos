@@ -21,6 +21,8 @@ interface CopiarPaseBotonProps {
   jornadaProxima: string
   tareas: Tarea[]
   notasHoy: PaseMensaje[]
+  /** Notas de los ítems del mise de la plaza — van al mensaje final. */
+  notasItems?: { nombre: string; nota: string }[]
   plazasCustom: PlazaCustom[]
   turnoNombre: string | null
   autor: string | null
@@ -32,7 +34,7 @@ interface CopiarPaseBotonProps {
 }
 
 export function CopiarPaseBoton({
-  plaza, fecha, jornadaProxima, tareas, notasHoy, plazasCustom, turnoNombre, autor, entregadoAt,
+  plaza, fecha, jornadaProxima, tareas, notasHoy, notasItems, plazasCustom, turnoNombre, autor, entregadoAt,
   open: openProp, onOpenChange, sinBoton = false,
 }: CopiarPaseBotonProps) {
   const [openState, setOpenState] = useState(false)
@@ -45,9 +47,9 @@ export function CopiarPaseBoton({
       plazaNombre: plazaLabel(plaza, plazasCustom),
       turnoNombre, jornada: fecha,
       ...datosPaseDeTareas(tareas, plaza, jornadaProxima),
-      notas: notasHoy, autor, entregadoAt,
+      notas: notasHoy, notasItems, autor, entregadoAt,
     })
-  }, [open, plaza, fecha, jornadaProxima, tareas, notasHoy, plazasCustom, turnoNombre, autor, entregadoAt])
+  }, [open, plaza, fecha, jornadaProxima, tareas, notasHoy, notasItems, plazasCustom, turnoNombre, autor, entregadoAt])
 
   return (
     <>

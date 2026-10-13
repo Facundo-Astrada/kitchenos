@@ -16,8 +16,8 @@ import { puedeEditarNotaTarea } from '@/lib/permisos/notasTarea'
 import type { Tarea, OpsEstado, OpsModo, TareaPrioridad } from '@/types'
 
 const accionStyle: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 12px', borderRadius: 10,
-  fontSize: 12, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', touchAction: 'manipulation',
+  display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 8,
+  fontSize: 11, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', touchAction: 'manipulation',
   background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-2)',
 }
 
@@ -367,12 +367,12 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
             onClick={(e) => { e.stopPropagation(); setDrawerOpen(true) }}
             title="Ver la receta"
             style={{
-              flexShrink: 0, width: 36, height: 36, borderRadius: 10, cursor: 'pointer',
+              flexShrink: 0, width: 30, height: 30, borderRadius: 8, cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: 'rgba(67,97,160,.1)', border: 'none', touchAction: 'manipulation',
             }}
           >
-            <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--accent)' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'var(--accent)' }}>
               menu_book
             </span>
           </button>
@@ -408,14 +408,8 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
                 onClick={() => setNotaOpen(true)}
                 style={accionStyle}
               >
-                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>sticky_note_2</span>
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>sticky_note_2</span>
                 {item.nota ? (puedeEditarNota ? 'Editar nota' : 'Ver nota') : 'Agregar nota'}
-              </button>
-            )}
-            {item.receta_id && onCrearTareaDesdeItem && (
-              <button onClick={() => setCrearTareaSheetOpen(true)} style={accionStyle}>
-                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add_task</span>
-                Crear tarea
               </button>
             )}
           </div>

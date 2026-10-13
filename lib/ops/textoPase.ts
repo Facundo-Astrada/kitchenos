@@ -46,6 +46,8 @@ export interface DatosPase {
   pendientes: Tarea[]
   /** Notas libres de la plaza (pase_mensajes), más nuevas primero. */
   notas: PaseMensaje[]
+  /** Notas pegadas a los ítems del mise de la plaza (checklist_items.nota). */
+  notasItems?: { nombre: string; nota: string }[]
   /** Quién entrega. */
   autor?: string | null
   /** Hora de la entrega en ISO; si falta, el pie no lleva hora. */
@@ -124,6 +126,16 @@ export function construirTextoPase(d: DatosPase): string {
     .reverse()
   if (notas.length > 0) bloques.push(['Ojo', ...notas.map(t => `- ${t}`)].join('\n'))
 
+  // Notas de los ítems del mise: lo que el que cocinó dejó dicho sobre cada
+  // producción ("quedó la mitad, falta porcionar"). Van antes de las notas
+  // libres de la plaza porque son lo más puntual.
+  const notasItems = (d.notasItems ?? [])
+    .map(n => ({ nombre: limpiar(n.nombre), nota: limpiar(n.nota) }))
+    .filter(n => n.nombre && n.nota)
+  if (notasItems.length > 0) {
+    bloques.push(['Notas', ...notasItems.map(n => `- ${n.nombre}: ${n.nota}`)].join('\n'))
+  }
+
   // Sin nada más que el encabezado el mensaje no vale la pena mandarse.
   if (bloques.length === 1) bloques.push('Sin pendientes.')
 
@@ -140,6 +152,7 @@ export function construirTextoPase(d: DatosPase): string {
 export function paseTieneContenido(d: DatosPase): boolean {
   return (
     d.pendientes.some(t => limpiar(t.titulo ?? '')) ||
+    (d.notasItems ?? []).some(n => limpiar(n.nota)) ||
     d.notas.some(n => limpiar(n.texto ?? ''))
   )
 }

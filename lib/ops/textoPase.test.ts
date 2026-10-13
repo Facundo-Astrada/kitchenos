@@ -131,3 +131,21 @@ describe('paseTieneContenido', () => {
     expect(paseTieneContenido(base({ pendientes: [tarea({ titulo: '' })] }))).toBe(false)
   })
 })
+
+describe('construirTextoPase — notas de los ítems del mise', () => {
+  it('las lista en su propio bloque, antes de las notas de plaza', () => {
+    const texto = construirTextoPase({
+      plazaNombre: 'Parrilla', jornada: '2026-10-13', pendientes: [], notas: [],
+      notasItems: [{ nombre: 'Trucha curada', nota: 'quedó la mitad, falta porcionar.' }],
+    })
+    expect(texto).toContain('Notas\n- Trucha curada: quedó la mitad, falta porcionar')
+    expect(texto).not.toContain('Sin pendientes')
+  })
+
+  it('una nota sin texto no cuenta como contenido', () => {
+    expect(paseTieneContenido({
+      plazaNombre: 'Parrilla', jornada: '2026-10-13', pendientes: [], notas: [],
+      notasItems: [{ nombre: 'x', nota: '  ' }],
+    })).toBe(false)
+  })
+})
