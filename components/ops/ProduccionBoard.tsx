@@ -101,6 +101,7 @@ interface ProduccionBoardProps {
   onAddSubtarea: (parentId: string, titulo: string) => Promise<void>
   onPrioridadChange: (id: string, prioridad: TareaPrioridad) => void
   onCrearTareaDesdeItem: (item: Tarea, data: CrearTareaSheetConfirmData) => Promise<void>
+  onGuardarNota?: (id: string, texto: string | null) => Promise<void>
   recetas: { id: string; nombre: string }[]
   /** Recuadros de Pedidos y Limpieza — los arma la pantalla, van en la banda "Otros". */
   otros?: ReactNode
@@ -123,7 +124,7 @@ function capitalizar(s: string) {
 
 export function ProduccionBoard({
   tareas, subtareasByParent, onAddItem, onEstadoChange, onAddSubtarea,
-  onPrioridadChange, onCrearTareaDesdeItem, recetas, otros, restauranteId,
+  onPrioridadChange, onCrearTareaDesdeItem, onGuardarNota, recetas, otros, restauranteId,
   vista = 'todo', densidad,
 }: ProduccionBoardProps) {
   const mostrarBandas = vista === 'todo'
@@ -371,6 +372,7 @@ export function ProduccionBoard({
           onAddSubtarea={onAddSubtarea}
           onPrioridadChange={onPrioridadChange}
           onCrearTareaDesdeItem={onCrearTareaDesdeItem}
+          onGuardarNota={onGuardarNota}
           recetas={recetas}
           densidad={densidad}
           notasDe={notasDe}
@@ -431,6 +433,7 @@ export function ProduccionBoard({
                       onAddSubtarea={onAddSubtarea}
                       onPrioridadChange={onPrioridadChange}
                       onCrearTareaDesdeItem={onCrearTareaDesdeItem}
+                      onGuardarNota={onGuardarNota}
                       recetas={recetas}
                       densidad={densidad}
                       notasDe={notasDe}
@@ -590,7 +593,7 @@ function BandaHeader({
 // ── Columna (una plaza, o un paso del menú) ─────────────────────────────────
 function ColumnaOps({
   columna, subtareasByParent, onAddItem, onEstadoChange, onAddSubtarea,
-  onPrioridadChange, onCrearTareaDesdeItem, recetas, onFocus, enfocada, coachTarget, densidad,
+  onPrioridadChange, onCrearTareaDesdeItem, onGuardarNota, recetas, onFocus, enfocada, coachTarget, densidad,
   notasDe, onAgregarNota, onEliminarNota, corte, bandasPorNombre,
 }: {
   columna: ColumnaBoard
@@ -600,6 +603,7 @@ function ColumnaOps({
   onAddSubtarea: (parentId: string, titulo: string) => Promise<void>
   onPrioridadChange: (id: string, prioridad: TareaPrioridad) => void
   onCrearTareaDesdeItem: (item: Tarea, data: CrearTareaSheetConfirmData) => Promise<void>
+  onGuardarNota?: (id: string, texto: string | null) => Promise<void>
   recetas: { id: string; nombre: string }[]
   onFocus: () => void
   enfocada?: boolean
@@ -746,6 +750,7 @@ function ColumnaOps({
             onAddSubtarea={onAddSubtarea}
             onPrioridadChange={onPrioridadChange}
             onCrearTareaDesdeItem={onCrearTareaDesdeItem}
+            onGuardarNota={onGuardarNota}
             modo={destino.modo}
             densidad={densidad}
             // Con todo entregado la columna no está vacía, está terminada —
@@ -776,6 +781,7 @@ function ColumnaOps({
                     onAddSubtarea={onAddSubtarea}
                     onPrioridadChange={onPrioridadChange}
                     onCrearTareaDesdeItem={onCrearTareaDesdeItem}
+                    onGuardarNota={onGuardarNota}
                     modo={destino.modo}
                     showSeccionChip={false}
                     showPrioChip
@@ -797,7 +803,7 @@ function ColumnaOps({
 
 // ── Ítems ordenados por prioridad, con REF/Check plegados ───────────────────
 function ItemsPorPrioridad({
-  items, subtareasByParent, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, modo, densidad,
+  items, subtareasByParent, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, onGuardarNota, modo, densidad,
   silenciarVacio, bandasPorNombre,
 }: {
   items: Tarea[]
@@ -806,6 +812,7 @@ function ItemsPorPrioridad({
   onAddSubtarea: (parentId: string, titulo: string) => Promise<void>
   onPrioridadChange: (id: string, prioridad: TareaPrioridad) => void
   onCrearTareaDesdeItem: (item: Tarea, data: CrearTareaSheetConfirmData) => Promise<void>
+  onGuardarNota?: (id: string, texto: string | null) => Promise<void>
   modo: OpsModo
   densidad?: Densidad
   /** No mostrar el vacío: la columna está plegada, no sin trabajo. */
@@ -853,6 +860,7 @@ function ItemsPorPrioridad({
               onAddSubtarea={onAddSubtarea}
               onPrioridadChange={onPrioridadChange}
               onCrearTareaDesdeItem={onCrearTareaDesdeItem}
+              onGuardarNota={onGuardarNota}
               modo={modo}
               // La columna ya es la plaza (o el paso): el chip de sección sería
               // repetir el encabezado. El de prioridad, en cambio, es necesario

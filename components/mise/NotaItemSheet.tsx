@@ -32,9 +32,12 @@ interface NotaItemSheetProps {
   onGuardar: (texto: string) => Promise<void>
   onBorrar: () => Promise<void>
   onDismiss: () => void
+  /** Sin permiso para editar: se lee y nada más. */
+  soloLectura?: boolean
+  placeholder?: string
 }
 
-export function NotaItemSheet({ nombreItem, nota, notaPor, notaAt, onGuardar, onBorrar, onDismiss }: NotaItemSheetProps) {
+export function NotaItemSheet({ nombreItem, nota, notaPor, notaAt, onGuardar, onBorrar, onDismiss, soloLectura, placeholder }: NotaItemSheetProps) {
   const [texto, setTexto] = useState(nota ?? '')
   const [saving, setSaving] = useState(false)
   const [borrando, setBorrando] = useState(false)
@@ -77,7 +80,8 @@ export function NotaItemSheet({ nombreItem, nota, notaPor, notaAt, onGuardar, on
             <textarea
               value={texto}
               onChange={e => setTexto(e.target.value)}
-              placeholder="Ej: está lista pero falta porcionarla, no llegamos"
+              readOnly={soloLectura}
+              placeholder={placeholder ?? 'Ej: está lista pero falta porcionarla, no llegamos'}
               rows={3}
               style={{
                 width: '100%', padding: '10px', borderRadius: 10, boxSizing: 'border-box',
@@ -92,7 +96,7 @@ export function NotaItemSheet({ nombreItem, nota, notaPor, notaAt, onGuardar, on
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            {!soloLectura && <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               <button
                 onClick={handleGuardar}
                 disabled={saving || !texto.trim()}
@@ -120,7 +124,7 @@ export function NotaItemSheet({ nombreItem, nota, notaPor, notaAt, onGuardar, on
                   {borrando ? 'Borrando…' : 'Borrar nota'}
                 </button>
               )}
-            </div>
+            </div>}
           </div>
     </Modal>
   )

@@ -384,6 +384,18 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     void (async () => { for (const i of ids) await actualizarTarea(i, { prioridad }) })()
   }, [actualizarTarea])
 
+  // ── Nota de la tarea — una por tarea, como la del mise ─────────────────
+  // Va a todas las gemelas de la fila (ver handlePrioridadChange): si la fila que
+  // representa al grupo cambia mañana, la nota no se pierde con ella.
+  const handleGuardarNota = useCallback(async (id: string, texto: string | null) => {
+    const ids = gemelosRef.current.get(id) ?? [id]
+    const autor = perfil ? `${perfil.nombre} ${perfil.apellido}`.trim() : null
+    const datos = texto
+      ? { nota: texto, nota_por: autor, nota_por_id: perfil?.miembro_id ?? null, nota_at: new Date().toISOString() }
+      : { nota: null, nota_por: null, nota_por_id: null, nota_at: null }
+    for (const i of ids) await actualizarTarea(i, datos)
+  }, [actualizarTarea, perfil])
+
   // ── Crear tarea desde un componente de OPS — hoy (duplicado ad hoc) o
   // mañana ("pase de turno"), vinculada al mismo componente (receta_id/
   // plaza/sección). Para mañana, el próximo turno la ve directo en su
@@ -400,6 +412,10 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     await agregarTarea({
       titulo: item.titulo,
       descripcion: data.nota,
+      nota: data.nota,
+      nota_por: data.nota && perfil ? `${perfil.nombre} ${perfil.apellido}`.trim() : null,
+      nota_por_id: data.nota ? (perfil?.miembro_id ?? null) : null,
+      nota_at: data.nota ? new Date().toISOString() : null,
       status: 'pendiente',
       prioridad: data.prioridad,
       categoria: data.dia === 'manana' ? 'pase_turno' : 'produccion',
@@ -676,6 +692,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
             onAddSubtarea={handleAddSubtarea}
             onPrioridadChange={handlePrioridadChange}
             onCrearTareaDesdeItem={handleCrearTareaDesdeItem}
+            onGuardarNota={handleGuardarNota}
             recetas={recetasSimple}
             restauranteId={restauranteId}
             vista={modo === 'todo' ? 'todo' : 'carta'}
@@ -747,6 +764,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
                       onAddSubtarea={handleAddSubtarea}
                       onPrioridadChange={handlePrioridadChange}
                       onCrearTareaDesdeItem={handleCrearTareaDesdeItem}
+                      onGuardarNota={handleGuardarNota}
                       modo={modoStorage}
                       // La columna ya es el paso del menú: el chip que hace falta
                       // acá es el de prioridad, que es como se re-prioriza.

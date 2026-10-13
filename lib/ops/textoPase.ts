@@ -93,7 +93,11 @@ function lineasDeTareas(tareas: Tarea[], conCodigo: boolean): string[] {
       const d = ordenDe(a.prioridad) - ordenDe(b.prioridad)
       return d !== 0 ? d : a.titulo.localeCompare(b.titulo, 'es')
     })
-    .map(t => (conCodigo ? `- ${t.titulo} ${codigoDe(t.prioridad)}` : `- ${t.titulo}`))
+    .flatMap(t => {
+      const linea = conCodigo ? `- ${t.titulo} ${codigoDe(t.prioridad)}` : `- ${t.titulo}`
+      const nota = limpiar(t.nota ?? '')
+      return nota ? [linea, `  ↳ ${nota}`] : [linea]
+    })
 }
 
 /**

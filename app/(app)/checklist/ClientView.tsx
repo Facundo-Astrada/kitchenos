@@ -1446,9 +1446,17 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
         return
       }
 
+      // La nota que se escribió al despachar, o la que ya tenía el ítem del mise:
+      // viaja a la tarea para que el que cocina la lea en Producción.
+      const nota = params.nota ?? origenItem?.nota ?? null
+      const notaDelItem = !params.nota && !!origenItem?.nota
       await agregarTarea({
         titulo: params.titulo,
         descripcion,
+        nota,
+        nota_por: nota ? (notaDelItem ? origenItem?.nota_por ?? null : (authPerfil ? `${authPerfil.nombre} ${authPerfil.apellido}`.trim() : null)) : null,
+        nota_por_id: nota && !notaDelItem ? (authPerfil?.miembro_id ?? null) : null,
+        nota_at: nota ? (notaDelItem ? origenItem?.nota_at ?? new Date().toISOString() : new Date().toISOString()) : null,
         status: 'pendiente',
         prioridad: params.prioridad,
         categoria,

@@ -10,7 +10,16 @@ import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
 import { hoyOperativo } from '@/lib/ops/turnos'
 import { PRIORIDADES } from '@/lib/ops/prioridades'
+import { NotaItemSheet } from '@/components/mise/NotaItemSheet'
+import { useAuth } from '@/lib/auth/context'
+import { puedeEditarNotaTarea } from '@/lib/permisos/notasTarea'
 import type { Tarea, OpsEstado, OpsModo, TareaPrioridad } from '@/types'
+
+const accionStyle: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '8px 12px', borderRadius: 10,
+  fontSize: 12, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', touchAction: 'manipulation',
+  background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-2)',
+}
 
 const MODO_LABEL: Record<OpsModo, string> = { carta: 'Carta', menu: 'Menú', evento: 'Evento' }
 
@@ -57,6 +66,8 @@ interface ItemOpsProps {
   onAddSubtarea: (parentId: string, titulo: string) => Promise<void>
   onPrioridadChange?: (id: string, prioridad: TareaPrioridad) => void
   onCrearTareaDesdeItem?: (item: Tarea, data: CrearTareaSheetConfirmData) => Promise<void>
+  /** Guarda (texto) o borra (null) la nota de la tarea. Sin esto la nota se ve pero no se edita. */
+  onGuardarNota?: (id: string, texto: string | null) => Promise<void>
   depth?: number
   modo?: OpsModo
   showSeccionChip?: boolean
@@ -74,11 +85,16 @@ interface ItemOpsProps {
   bandasDuplicadas?: Set<OpsModo>
 }
 
-function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, depth = 0, modo, showSeccionChip, showPrioChip, densidad = 'comoda', bandasDuplicadas }: ItemOpsProps) {
+function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, onGuardarNota, depth = 0, modo, showSeccionChip, showPrioChip, densidad = 'comoda', bandasDuplicadas }: ItemOpsProps) {
   const [expanded, setExpanded] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [prodSheetOpen, setProdSheetOpen] = useState(false)
   const [crearTareaSheetOpen, setCrearTareaSheetOpen] = useState(false)
+  const [notaOpen, setNotaOpen] = useState(false)
+  const { perfil } = useAuth()
+  const puedeEditarNota = !!onGuardarNota && puedeEditarNotaTarea({
+    rol: perfil?.rol, miembroId: perfil?.miembro_id, nota: item.nota, notaPorId: item.nota_por_id,
+  })
 
   // Stock alerts (lazy, loaded once on first expand)
   const [stockAlerts, setStockAlerts] = useState<StockAlert[]>([])
@@ -219,6 +235,10 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
               <span style={{ ...nameSpanStyle, display: 'block', flex: 1, minWidth: 0 }}>
                 {item.titulo}
               </span>
+              {item.nota && (
+                <span className="material-symbols-outlined" title={item.nota}
+                  style={{ flexShrink: 0, fontSize: 14, color: '#d97706' }}>sticky_note_2</span>
+              )}
               {item.cantidad != null && (
                 <span style={{
                   flexShrink: 0, fontSize: 10, fontWeight: 700, padding: '1px 6px',
@@ -318,6 +338,23 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
                   ×{item.cantidad}
                 </span>
               )}
+              {depth === 0 && item.nota && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setNotaOpen(true) }}
+                  title={item.nota_por ? `${item.nota_por}` : 'Nota'}
+                  style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 4, width: '100%', marginTop: 4,
+                    padding: '4px 7px', borderRadius: 8, textAlign: 'left', cursor: 'pointer',
+                    background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.25)',
+                    color: 'var(--text-2)', fontSize: 11, lineHeight: 1.35, fontFamily: 'inherit',
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 13, color: '#d97706', flexShrink: 0, marginTop: 1 }}>sticky_note_2</span>
+                  <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    {item.nota}
+                  </span>
+                </button>
+              )}
             </>
           )}
         </div>
@@ -326,23 +363,15 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
         {depth === 0 && item.receta_id && mostrarDetalle && (
           <button
             onClick={(e) => { e.stopPropagation(); setDrawerOpen(true) }}
-            style={{ flexShrink: 0, padding: 4, background: 'none', border: 'none', cursor: 'pointer' }}
+            title="Ver la receta"
+            style={{
+              flexShrink: 0, width: 36, height: 36, borderRadius: 10, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(67,97,160,.1)', border: 'none', touchAction: 'manipulation',
+            }}
           >
-            <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 20, color: 'var(--accent)' }}>
               menu_book
-            </span>
-          </button>
-        )}
-
-        {/* Crear tarea desde este componente — hoy o para el próximo turno */}
-        {depth === 0 && item.receta_id && onCrearTareaDesdeItem && mostrarDetalle && (
-          <button
-            onClick={(e) => { e.stopPropagation(); setCrearTareaSheetOpen(true) }}
-            title="Crear tarea (hoy o mañana)"
-            style={{ flexShrink: 0, padding: 4, background: 'none', border: 'none', cursor: 'pointer' }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)' }}>
-              add_task
             </span>
           </button>
         )}
@@ -368,6 +397,26 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
       {/* Subtareas + add sub */}
       {expanded && depth === 0 && (
         <div style={{ padding: '0 10px 8px' }}>
+          {/* Acciones secundarias: viven acá y no en la fila — en el celular la
+              fila no tiene ancho para cuatro blancos de 24px y el pulgar
+              pegaba en el vecino. */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+            {onGuardarNota && (
+              <button
+                onClick={() => setNotaOpen(true)}
+                style={accionStyle}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>sticky_note_2</span>
+                {item.nota ? (puedeEditarNota ? 'Editar nota' : 'Ver nota') : 'Agregar nota'}
+              </button>
+            )}
+            {item.receta_id && onCrearTareaDesdeItem && (
+              <button onClick={() => setCrearTareaSheetOpen(true)} style={accionStyle}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>add_task</span>
+                Crear tarea
+              </button>
+            )}
+          </div>
           {/* Feature 1 — Stock alerts */}
           {stockAlerts.length > 0 && (
             <div style={{ marginBottom: 6 }}>
@@ -429,6 +478,20 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
           recetaNombre={item.titulo}
           cantidadPlanificada={item.cantidad ?? null}
           onClose={() => setProdSheetOpen(false)}
+        />
+      )}
+
+      {notaOpen && (
+        <NotaItemSheet
+          nombreItem={item.titulo}
+          nota={item.nota ?? null}
+          notaPor={item.nota_por ?? null}
+          notaAt={item.nota_at ?? null}
+          soloLectura={!puedeEditarNota}
+          placeholder="Ej: quedó la mitad en el tupper chico, falta porcionar"
+          onGuardar={(texto) => onGuardarNota!(item.id, texto)}
+          onBorrar={() => onGuardarNota!(item.id, null)}
+          onDismiss={() => setNotaOpen(false)}
         />
       )}
 

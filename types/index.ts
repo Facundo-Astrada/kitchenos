@@ -618,6 +618,12 @@ export interface Tarea {
   orden?: number | null
   menu_id?: string | null
   checklist_item_id?: string | null
+  // Nota única de la tarea (como la del mise): quién la escribió y cuándo.
+  // Chef/admin editan cualquiera — ver lib/permisos/notasTarea.ts.
+  nota?: string | null
+  nota_por?: string | null
+  nota_por_id?: string | null
+  nota_at?: string | null
 }
 
 // ── Pase de turno ───────────────────────────────────────────

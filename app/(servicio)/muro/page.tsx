@@ -541,8 +541,15 @@ function FilaMuro({
           textDecoration: estado === 'listo' ? 'line-through' : 'none',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
+          {item.prioridad === 'cargar' && <span style={{ color: '#2dd4bf', marginRight: 6, fontSize: 12, fontWeight: 800 }}>CARGAR</span>}
+          {item.prioridad === 'descongelar' && <span style={{ color: '#a78bfa', marginRight: 6, fontSize: 12, fontWeight: 800 }}>DESCONGELAR</span>}
           {item.titulo}
         </div>
+        {item.nota && estado !== 'listo' && (
+          <div style={{ fontSize: 12.5, color: '#fbbf24', marginTop: 2, lineHeight: 1.3 }}>
+            ↳ {item.nota}
+          </div>
+        )}
         {(quien || mins !== null) && (
           <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.45)', marginTop: 1 }}>
             {quien ?? ''}{quien && mins !== null ? ' · ' : ''}{mins !== null ? fmtHace(mins) : ''}
