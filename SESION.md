@@ -8,7 +8,7 @@
 
 ## Qué quedó a medias
 - Verificado en el navegador contra el dev server (cuenta demo y Bros en lectura). **No se probó en un celular real**: que el teclado suba al tocar el botón de nota depende de `flushSync` + foco en el mismo toque, y eso solo lo confirma iOS/Android de verdad.
-- No se confirmó que el deploy de Vercel haya salido (ayer el webhook falló dos veces en silencio).
+- El deploy automático de Vercel salió solo esta vez (commit `f7bbdd5`, estado success) — el webhook que ayer falló dos veces hoy anduvo.
 - Lo que se encontró y no se tocó está en `PENDIENTES.md` → "Recetario — lo que queda".
 
 ## Probar primero mañana
