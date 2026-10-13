@@ -10,7 +10,7 @@
 
 ## Qué quedó a medias
 - **OPS conserva el vistazo corto por decisión** (`DECISIONES.md` §28): el drawer se queda, con "Ver ficha completa" como segundo paso. Lo único aparte que sigue vivo es `RecetaQuickEditModal` (aviso del Mise).
-- Probado en navegador (demo, desktop y celular emulado). **Falta un celular/tablet real**: teclado al tocar el ícono de nota y el "atrás" de Android cerrando el visor.
+- Probado en navegador (demo, desktop y celular emulado) y **Facundo lo probó en su celular el 13/10: funciona bien**. Sin probar todavía en la tablet fija de cocina.
 - En Carta se probó detalle de plato y editor de menú (buscador e ítem); el editor de **evento** y "crear receta acá mismo" comparten el código pero no se recorrieron a mano.
 - Editar ingredientes desde la ficha sigue abierto a cualquiera con el módulo (Facundo: "de momento dejalo así").
 
@@ -20,4 +20,4 @@
 - En la tablet de cocina: OPS → receta → "Ver ficha completa" → convertir → cerrar → botón flotante.
 
 ## Próximo paso concreto
-- Probar el visor y la nota en la tablet de cocina y un celular real; con eso confirmado, decidir si el editor rápido del Mise pasa a la ficha.
+- Decidir si el editor rápido del Mise (`RecetaQuickEditModal`) pasa a la ficha; es lo único de recetas que sigue aparte.
