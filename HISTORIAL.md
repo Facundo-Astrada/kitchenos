@@ -6,6 +6,13 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+### 13/10/2026 — OPS: bug de tildes rápidos, CARGAR/DESCONGELAR, notas, receta
+- Tildes rápidos en Producción: `cambiarEstado`/`actualizarTarea` parchean por tarea sobre lo vigente y escriben por cola por id (`lib/ops/colaEscrituras.ts`); el refetch de realtime espera las escrituras en vuelo.
+- `lib/ops/prioridades.ts`: catálogo único SP/P/CARGAR/DESCONGELAR/REF/Check (tarea↔mise). DESCONGELAR listo no tilda el mise y desde el cierre cae en el turno actual; ninguno abre el registro de producción.
+- `tareas.nota/nota_por/nota_por_id/nota_at` (migración `20261013b`): una nota por tarea; chef/admin editan cualquiera (`lib/permisos/notasTarea.ts`). Visible en fila, Muro y Copiar pase.
+- Mise: botón Receta con el vistazo de OPS; el vistazo suma Empezar/Listo y anterior/siguiente; Producción pliega el header al scrollear.
+
+
 **Sesión 2026-10-13 — Recetario: nota por ingrediente, visor global y ficha única.** Commits `f7bbdd5`, `ea0fe60`, `c1a6359`.
 
 - Pedido en tres tandas: (1) anotar ingredientes ("2 naranjas, maduras y dulces", "tostada"), auditar velocidad del Recetario y mejorarle la UI mirando Calendario/Turnos; (2) que la receta se abra en una ventana al centro y pueda quedar en segundo plano; (3) que en Carta se vea y se edite igual que en Recetario.
