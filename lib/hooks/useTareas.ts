@@ -8,6 +8,7 @@ import { useRestauranteId } from './useRestauranteId'
 import { useAuth } from '@/lib/auth/context'
 import { claveTarea, tareaExistentePara, esProduccionDelDia } from '@/lib/ops/dedupeTareas'
 import { esViolacionDeUnicidad } from '@/lib/ops/insertarTareas'
+import { encolarEscritura, escriturasEnVuelo } from '@/lib/ops/colaEscrituras'
 
 function parseTarea(t: Record<string, unknown>): Tarea {
   return {
@@ -49,6 +50,14 @@ function desdeISO(dias: number): string {
 // recibe la misma tarea en vez de crear otra o quedarse sin id.
 const despachosEnVuelo = new Map<string, Promise<string>>()
 
+// ── Escrituras de una misma tarea, en orden y sin pisarse ───────────────────
+// Antes cada tilde hacía `mutate(async () => ..., { optimisticData })`. SWR calcula
+// el resultado final de esa mutación sobre la última versión CONFIRMADA de la
+// lista, no sobre lo que ya está en pantalla: tocar B mientras A viajaba pintaba
+// B sobre una foto sin A, y al volver A (o B) la cache quedaba sin uno de los dos
+// — "queda azul solo el segundo", o se desmarcan los dos. Ahora el cambio se
+// aplica al toque como un parche por tarea sobre lo vigente, y la escritura a la
+// base sale por una cola por id (dos toques seguidos llegan en orden).
 // Las tareas del día directo de la base. Solo se usa cuando la cache de SWR no
 // puede responder — el Pase y el Calendario abren `useTareas` en modo
 // soloEscritura y no bajan la lista, así que sin esto crearían a ciegas.
@@ -143,7 +152,13 @@ export function useTareas(opts?: { soloEscritura?: boolean }) {
           }
           // Debounce: activar un menú inserta 20+ filas de una → un solo refetch.
           if (timer) clearTimeout(timer)
-          timer = setTimeout(() => mutate(), 400)
+          const refrescar = () => {
+            // Con una escritura propia viajando, el refetch trae la foto vieja
+            // y pisa el parche local: se espera a que termine.
+            if (escriturasEnVuelo.n > 0) { timer = setTimeout(refrescar, 400); return }
+            mutate()
+          }
+          timer = setTimeout(refrescar, 400)
         },
       )
       .subscribe()
@@ -202,40 +217,49 @@ export function useTareas(opts?: { soloEscritura?: boolean }) {
     try { return await trabajo } finally { despachosEnVuelo.delete(clave) }
   }, [RESTAURANTE_ID, insertarTarea, cache, supabase])
 
-  const actualizarTarea = useCallback(async (id: string, datos: Partial<Omit<Tarea, 'id' | 'restaurante_id'>>) => {
-    const optimistic = (prev: Tarea[] | undefined) =>
-      (prev ?? []).map(t => t.id === id ? { ...t, ...datos } : t)
+  // Parche de una tarea sobre lo que hay en la cache AHORA (no sobre la última
+  // versión confirmada). Devuelve cómo estaban esos campos, para revertir.
+  const parchear = useCallback((id: string, datos: Partial<Tarea>): Partial<Tarea> => {
+    const key = `tareas-${RESTAURANTE_ID}`
+    const actual = (cache.get(key) as { data?: Tarea[] } | undefined)?.data?.find(t => t.id === id)
+    const previos: Record<string, unknown> = {}
+    if (actual) for (const k of Object.keys(datos)) previos[k] = (actual as unknown as Record<string, unknown>)[k]
+    mutateGlobal(
+      key,
+      (prev: Tarea[] | undefined) => (prev ?? []).map(t => t.id === id ? { ...t, ...datos } : t),
+      { revalidate: false },
+    )
+    return previos as Partial<Tarea>
+  }, [RESTAURANTE_ID, cache, mutateGlobal])
 
+  const actualizarTarea = useCallback(async (id: string, datos: Partial<Omit<Tarea, 'id' | 'restaurante_id'>>) => {
     marcarEscrituraPropia(id)
-    await mutate(
-      async (current) => {
+    const previos = parchear(id, datos)
+    try {
+      await encolarEscritura(id, async () => {
         const updateData: Record<string, unknown> = { ...datos }
         if (datos.checklist) updateData.checklist = JSON.stringify(datos.checklist)
         const { error } = await supabase.from('tareas').update(updateData).eq('id', id)
         // El candado de "una preparación, una fila" (dedupeTareas.ts): renombrar
         // una tarea puede hacerla chocar contra otra que ya ocupa esa fila del
-        // board. El 23505 crudo de Postgres no le dice nada a un cocinero, y sin
-        // esto la pantalla mostraría un error ilegible en vez del motivo real.
+        // board. El 23505 crudo de Postgres no le dice nada a un cocinero.
         if (esViolacionDeUnicidad(error)) {
           throw new Error('Ya hay una tarea con ese nombre en esa columna, para ese día.')
         }
         if (error) throw error
-        return optimistic(current)
-      },
-      { optimisticData: optimistic, revalidate: false, rollbackOnError: true }
-    )
-  }, [supabase, mutate, marcarEscrituraPropia])
+      })
+    } catch (e) {
+      parchear(id, previos)
+      throw e
+    }
+  }, [supabase, marcarEscrituraPropia, parchear])
 
   // `estado` (OpsEstado) es la única fuente de verdad del avance de la tarea.
   // `status` (legacy) y `completed_at` se derivan acá para que cualquier lector
-  // legacy (Reportes) quede consistente sin una segunda forma de escribir status.
-  // `completado_por`/`estado_por` salen de acá y no de un parámetro: es el
-  // único punto de escritura de `estado` en todo el proyecto (ver MURO-PLAN.md
-  // F1/F3), así que resolverlo adentro es la única forma de que ningún caller
-  // nuevo se lo olvide. `estado_por/at` cubre en_curso y duda (mismo par para
-  // las dos — "quién puso la tarea en el estado actual y desde cuándo"; listo
-  // tiene su propio par por separado). No es acumulativo: se limpia al salir
-  // del estado y se recalcula la próxima vez que vuelve a entrar.
+  // legacy (Reportes) quede consistente. `completado_por`/`estado_por` salen de
+  // acá y no de un parámetro: es el único punto de escritura de `estado` en todo
+  // el proyecto (ver MURO-PLAN.md F1/F3). `estado_por/at` cubre en_curso y duda;
+  // no es acumulativo: se limpia al salir del estado.
   const cambiarEstado = useCallback(async (id: string, estado: OpsEstado) => {
     const status = estado === 'listo' ? 'completada' : 'pendiente'
     const completed_at = estado === 'listo' ? new Date().toISOString() : null
@@ -243,19 +267,20 @@ export function useTareas(opts?: { soloEscritura?: boolean }) {
     const conAtribucion = estado === 'en_curso' || estado === 'duda'
     const estado_por = conAtribucion ? (perfil?.miembro_id ?? null) : null
     const estado_at = conAtribucion ? new Date().toISOString() : null
-    const optimistic = (prev: Tarea[] | undefined) =>
-      (prev ?? []).map(t => t.id === id ? { ...t, estado, status, completed_at, completado_por, estado_por, estado_at } : t)
+    const campos = { estado, status, completed_at, completado_por, estado_por, estado_at }
 
     marcarEscrituraPropia(id)
-    await mutate(
-      async (current) => {
-        const { error } = await supabase.from('tareas').update({ estado, status, completed_at, completado_por, estado_por, estado_at }).eq('id', id)
+    const previos = parchear(id, campos)
+    try {
+      await encolarEscritura(id, async () => {
+        const { error } = await supabase.from('tareas').update(campos).eq('id', id)
         if (error) throw error
-        return optimistic(current)
-      },
-      { optimisticData: optimistic, revalidate: false, rollbackOnError: true }
-    )
-  }, [supabase, mutate, marcarEscrituraPropia, perfil])
+      })
+    } catch (e) {
+      parchear(id, previos)
+      throw e
+    }
+  }, [supabase, marcarEscrituraPropia, perfil, parchear])
 
   const toggleChecklistItem = useCallback(async (id: string, checklist: ChecklistItemTarea[], itemIdx: number) => {
     const updated = checklist.map((c, i) => i === itemIdx ? { ...c, completado: !c.completado } : c)
