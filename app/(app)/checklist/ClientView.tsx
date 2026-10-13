@@ -1322,30 +1322,10 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
   }, [])
 
-  // Nota por ítem (Modo Control): mantener apretada la fila abre el sheet de
-  // anotación. Mismo patrón que startLongPress de arriba — un solo timer
-  // compartido, no uno por ítem (esto corre dentro de un .map(), un useRef
-  // por ítem rompería las reglas de hooks). notaHoldFired distingue el tap
-  // normal (tilde) del long-press (nota).
-  const notaHoldTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const notaHoldFired = useRef(false)
+  // Nota por ítem (Modo Control): se abre con el lápiz de la fila. Antes era
+  // mantener apretada la fila, pero compite con el scroll y con el tilde y
+  // abría una de cada cinco veces.
   const [notaSheetItem, setNotaSheetItem] = useState<MisePlaceItem | null>(null)
-
-  const startNotaHold = useCallback((item: MisePlaceItem) => {
-    notaHoldFired.current = false
-    notaHoldTimer.current = setTimeout(() => {
-      notaHoldFired.current = true
-      tap(30)
-      setNotaSheetItem(item)
-    }, 550)
-  }, [])
-  const cancelNotaHold = useCallback(() => {
-    if (notaHoldTimer.current) { clearTimeout(notaHoldTimer.current); notaHoldTimer.current = null }
-  }, [])
-  const handleNotaTouchEnd = useCallback((e: React.TouchEvent) => {
-    cancelNotaHold()
-    if (notaHoldFired.current) { e.preventDefault(); notaHoldFired.current = false }
-  }, [cancelNotaHold])
 
   // Alias de la jornada resuelta (ver `fecha` arriba) para todo lo que compara
   // contra "hoy": tareas del día, creación de tareas. Sigue al pase, no al
@@ -2028,23 +2008,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                     transition: 'background .15s',
                   }}>
                     <button
-                      onClick={() => {
-                        if (notaHoldFired.current) { notaHoldFired.current = false; return }
-                        handleMiseUpsert(item.id, fecha, turno, { completado: !tildado })
-                      }}
-                      onMouseDown={() => startNotaHold(item)}
-                      onMouseUp={cancelNotaHold}
-                      onMouseLeave={cancelNotaHold}
-                      onTouchStart={() => startNotaHold(item)}
-                      // Sin esto, deslizar la lista tocando esta fila no cancelaba
-                      // el timer: un scroll que tardaba más de 550ms en soltar el
-                      // dedo abría la nota igual, aunque la intención fuera solo
-                      // scrollear. Mantenerse quieto y apretar sigue abriéndola.
-                      onTouchMove={cancelNotaHold}
-                      onTouchEnd={handleNotaTouchEnd}
-                      onTouchCancel={cancelNotaHold}
-                      onContextMenu={(e) => e.preventDefault()}
-                      title="Mantené apretado para anotar algo sobre este ítem"
+                      onClick={() => handleMiseUpsert(item.id, fecha, turno, { completado: !tildado })}
                       style={{
                         flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10,
                         padding: '10px 4px', background: 'none', border: 'none', cursor: 'pointer',
@@ -2085,18 +2049,20 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                         </span>
                       )}
                     </button>
-                    {item.nota && (
-                      <button
-                        onClick={() => setNotaSheetItem(item)}
-                        title={`Nota: ${item.nota}`}
-                        style={{
-                          ...btnReset, width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
-                          color: 'var(--accent)',
-                        }}
-                      >
-                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>sticky_note_2</span>
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setNotaSheetItem(item)}
+                      className="hit-slop"
+                      title={item.nota ? `Nota: ${item.nota}` : 'Anotar algo sobre este ítem'}
+                      aria-label={item.nota ? 'Ver o editar la nota' : 'Agregar una nota'}
+                      style={{
+                        ...btnReset, width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                        color: item.nota ? '#d97706' : 'var(--text-3)',
+                        background: item.nota ? 'rgba(245,158,11,.14)' : 'transparent',
+                        touchAction: 'manipulation',
+                      }}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: 15 }}>{item.nota ? 'sticky_note_2' : 'edit'}</span>
+                    </button>
                     <PrioridadPicker
                       variant="circle"
                       value={item.prioridad as MisePrioridad}

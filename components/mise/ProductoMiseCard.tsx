@@ -533,15 +533,15 @@ function ProductoMiseCardBase({
               {!item.nota && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onAbrirNota(item) }}
+                  className="hit-slop"
                   title="Agregar una nota"
+                  aria-label="Agregar una nota"
                   style={{
-                    ...btnReset, gap: 3, fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 99,
-                    background: 'var(--bg)', border: '1px dashed var(--border)', color: 'var(--text-3)',
-                    touchAction: 'manipulation',
+                    ...btnReset, width: 22, height: 22, borderRadius: 6,
+                    background: 'transparent', color: 'var(--text-3)', touchAction: 'manipulation',
                   }}
                 >
-                  <span className="material-symbols-outlined" style={{ fontSize: 13 }}>sticky_note_2</span>
-                  Nota
+                  <span className="material-symbols-outlined" style={{ fontSize: 15 }}>edit</span>
                 </button>
               )}
               {/* Ítem de un menú/evento activado (PLAN-MENUS-MISE) — distingue
