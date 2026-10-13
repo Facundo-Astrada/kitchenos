@@ -10,6 +10,7 @@ import { PLAZAS_OPS, parseRecipienteNombre } from '@/lib/ops/mise'
 import { useTareas } from '@/lib/hooks/useTareas'
 import OpsPanel, { type OpsInitial, type OpsResult } from '@/components/ops/OpsPanel'
 import { RecetaEditSheet } from '@/components/recetas/RecetaEditSheet'
+import { useRecetaVisor } from '@/components/recetas/visorContexto'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import { fmtMoney, fcBadge, marginBadge } from './cards'
 import { NivelBadge } from './EstandarizacionView'
@@ -275,6 +276,8 @@ export function DetailView({
   }
 
   const linkedReceta = item.receta_id ? recetas.find(r => r.id === item.receta_id) : null
+  // La ficha de la receta, la misma del Recetario, encima de Carta.
+  const visor = useRecetaVisor()
   const hasFc = item.food_cost_pct != null && item.food_cost_pct > 0
   const hasMrg = item.margen_pct_computed != null
   // Nivel de estandarización — el mínimo de sus componentes manda. Ver lib/recetas/estandarizacion.ts.
@@ -576,9 +579,14 @@ export function DetailView({
                   </button>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => visor?.abrir(pr.receta_id, item.plato_recetas.map(x => x.receta_id))}
+                        title="Ver la ficha de la receta"
+                        style={{ background: 'none', border: 'none', padding: 0, minWidth: 0, cursor: visor ? 'pointer' : 'default', fontFamily: 'inherit', textAlign: 'left', fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      >
                         {pr.receta?.nombre ?? pr.receta_id}
-                      </span>
+                      </button>
                       {(() => {
                         const diagComp = nivelDeComponente(pr, recetasPorId)
                         return <NivelBadge nivel={diagComp.nivel} title={diagComp.faltantes.join(' · ') || undefined} />
@@ -699,7 +707,7 @@ export function DetailView({
 
           {/* Legacy single receta (if no plato_recetas) */}
           {item.plato_recetas.length === 0 && linkedReceta && (
-            <a href={`/recetario/${linkedReceta.id}`} style={{
+            <a href={`/recetario/${linkedReceta.id}`} onClick={e => { if (visor && !e.metaKey && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); visor.abrir(linkedReceta.id) } }} style={{
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '12px 14px', borderRadius: 12,
               border: '1px solid var(--accent)', background: 'var(--blue-bg)',

@@ -459,13 +459,15 @@ El prototipo fue un **laboratorio, no producto**, y ya **no está en el árbol**
 
 La regla de "Input editable inline" (arriba) prohíbe `button → setState → autoFocus` porque el input recién existe en el render siguiente, fuera del gesto. Cuando el campo NO puede estar siempre montado (una línea opcional por fila en una lista de 40 — la nota del chef de un ingrediente), la salida es forzar ese render adentro del handler: `flushSync(() => setAbierta(true)); ref.current?.focus()`. El DOM ya está actualizado cuando corre el `focus()`, que sigue dentro del toque, y el teclado del celular abre. Referencia: `abrirNota()` en `recetario/[id]/page.tsx`, `recetario/IngRow.tsx` y `components/recetas/CargaRapidaIngredientes.tsx`. No sirve con `setTimeout` ni con `await` de por medio.
 
-## Lista larga → detalle → volver: la lista tiene que quedar como estaba (oct 2026)
+## Detalle que se consulta desde varias pantallas — visor encima, no una ruta (oct 2026)
 
-Abrir una receta y volver dejaba el Recetario en cero (sin búsqueda, sin categoría, arriba de todo): con 600 recetas, cada consulta costaba volver a buscar. Piezas del arreglo, en `recetario/navLista.ts` + `recetario/page.tsx`:
-- Al tocar una tarjeta se guarda en `sessionStorage` búsqueda, filtro, pestaña, `scrollTop` del panel y cuántas tarjetas había renderizadas, más el orden de ids de la lista filtrada (la ficha lo usa para anterior/siguiente con `router.replace`, así "volver" sigue siendo un solo paso).
-- El `scrollTop` se repone recién cuando la lista volvió a ser la misma (misma búsqueda ya aplicada — ojo con `useDeferredValue` —, mismas tandas renderizadas); antes el alto del panel es otro.
-- **La lectura del estado no puede consumirlo.** Al volver, la pantalla se monta más de una vez (transición de pantalla del layout + modo estricto en dev crean instancias que se descartan): un "leer y borrar" lo gastaba una instancia que nunca se ve. Se marca como leído y sigue valiendo unos segundos.
-- El botón "volver" de la ficha hace `router.back()` solo si esa receta se abrió desde la lista; llegando por un link (Coach, OPS) hace `push('/recetario')`.
+La ficha de una receta se abría navegando a `/recetario/[id]`: perdía la lista de abajo (búsqueda, filtro, scroll), cada módulo terminó con su propia versión recortada (drawer en OPS, sheet en Carta) y la conversión hecha en la ficha se perdía al salir. Ahora hay **un visor global** (`components/recetas/RecetaVisor.tsx`, montado en `app/(app)/layout.tsx`) que muestra la MISMA `RecetaFicha` encima de la pantalla en la que se esté; la ruta queda solo para links directos. Se abre con `useRecetaVisor()?.abrir(id, recorrido?)` (`components/recetas/visorContexto.ts`; `null` fuera de `app/(app)`). Reglas que salieron de armarlo:
+- **La pantalla de abajo no se desmonta** — no hay nada que guardar ni reponer. Antes de escribir un "restaurar el scroll al volver", preguntarse si el detalle no debería ser un overlay.
+- **`backdrop-filter` y `transform` en un ancestro de la ficha rompen sus sheets internos** (`position:fixed` pasa a medirse contra ese ancestro): el blur va en un hermano y la tarjeta solo anima opacidad.
+- **"Atrás" cierra el overlay**: al abrir, `history.pushState({kcVisor:true}, '')` con la misma URL (Next lo integra); al cerrar a mano, `history.back()` diferido y cancelable — sin eso, el doble efecto del modo estricto cerraba la receta sola.
+- **Teclado en captura con `stopPropagation`**: los atajos de la pantalla de abajo no corren con el visor encima; si hay otro sheet arriba del visor (`sheetCount > 1`) el visor no se mete.
+- **El estado que el usuario armó se guarda por entidad, desde los controles** (`lib/recetas/escalaSesion.ts`, sessionStorage), no desde un efecto: la pantalla se monta más de una vez (transición del layout + modo estricto) y un efecto de una instancia descartada pisaba lo guardado con el estado inicial. Mismo motivo por el que una lectura no debe consumir lo que lee.
+- **Segundo plano**: cerrar una receta convertida la deja en un botón flotante (abajo a la izquierda del `<main>` real, medido — no del viewport, que es la sidebar) que acompaña por toda la app. Un solo lugar: abrir otra la reemplaza.
 
 ## Lista de cientos de tarjetas — tandas + memo + sin `motion` por ítem (oct 2026)
 

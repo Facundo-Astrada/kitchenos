@@ -19,6 +19,7 @@ import BienvenidaPuesto from '@/components/onboarding/BienvenidaPuesto'
 import { useOnboardingPersonal } from '@/lib/hooks/useOnboardingPersonal'
 import { useTourAutomatico } from '@/lib/hooks/useTourAutomatico'
 import { UiChromeProvider } from '@/lib/ui/chrome'
+import { RecetaVisorProvider } from '@/components/recetas/RecetaVisor'
 import { hoyOperativo } from '@/lib/ops/turnos'
 import { bajoMinimo } from '@/lib/stock/alerta'
 import { DURATION, EASE_OUT, useReducedMotion } from '@/lib/ui/motion'
@@ -130,19 +131,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (isDesktop) {
     return (
       <UiChromeProvider>
-        <DesktopShell
-          sidePanel={pathname !== '/coach' && pathname !== '/centro' ? <CoachPanelContent variant="dock" /> : null}
-        >
-          {pageContent}
-        </DesktopShell>
-        <AvisosPopup />
-        {bienvenida}
+        <RecetaVisorProvider>
+          <DesktopShell
+            sidePanel={pathname !== '/coach' && pathname !== '/centro' ? <CoachPanelContent variant="dock" /> : null}
+          >
+            {pageContent}
+          </DesktopShell>
+          <AvisosPopup />
+          {bienvenida}
+        </RecetaVisorProvider>
       </UiChromeProvider>
     )
   }
 
   return (
     <UiChromeProvider>
+      <RecetaVisorProvider>
       <div className="relative flex flex-col h-full">
         <DemoBanner />
         <main className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
@@ -168,6 +172,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <AvisosPopup />
         {bienvenida}
       </div>
+      </RecetaVisorProvider>
     </UiChromeProvider>
   )
 }

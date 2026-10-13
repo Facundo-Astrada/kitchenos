@@ -1,19 +1,20 @@
 # Sesión — 13/10/2026
 
 ## Qué se cerró
-- Recetario: **nota del chef por ingrediente** (`ingredientes.nota`, migración aplicada). Botón de nota en cada fila de la ficha, del alta, de la carga rápida y del editor rápido de OPS; se ve debajo del ingrediente en la ficha, el drawer de receta de OPS, el PDF y el Coach. El import por IA la separa sola ("naranja" + "2 unidades, maduras y dulces").
-- Velocidad: lista por tandas de 60 con tarjeta memoizada (Bros tiene 635 recetas y se montaban todas), búsqueda sin acentos, volver de una ficha deja la lista como estaba, anterior/siguiente entre recetas (← →), la ficha ya no espera el recetario entero para abrir.
-- UI con los patrones de Calendario/Turnos: header de una fila por ancho real, tabs canónicos, KPIs en tiles, 1 a 4 columnas, ficha en dos columnas desde 900px, modales centrados.
-- Arreglos de paso: costo/margen/FC de la tarjeta ahora respetan `verCostos`; "Para revisar" contaba recetas repetidas; Duplicar perdía las etapas; un id de receta inexistente refetcheaba sin fin; error de guardado de la receta se tragaba en silencio.
+- Recetario: **nota del chef por ingrediente** (`ingredientes.nota`). Se carga desde la ficha, el alta, la carga rápida y el editor rápido de OPS; la ve quien cocina (ficha, drawer de OPS, PDF, Coach) y el import por IA la separa sola.
+- **Visor global de recetas**: la ficha se abre encima de la pantalla en la que estés (fondo translúcido en desktop, pantalla completa en el celular) y es la misma en Recetario, Carta, OPS ("Ver ficha completa") y los links del Coach. La lista de abajo no se desmonta.
+- **Receta en segundo plano**: la conversión se conserva por receta y queda un botón flotante ("Salsa Putanesca · 777 g de Alcaparras") que acompaña por toda la app; cerrar una receta convertida la manda ahí sola. Sobrevive a un F5.
+- Lista pensada para 600+ recetas (tandas, búsqueda sin acentos, header/KPIs/columnas con los patrones de Calendario y Turnos), ficha en dos columnas.
+- Arreglos de paso: "Receta ajustada a…" mostraba la cantidad base y no la convertida; costos de la tarjeta sin gate `verCostos`; "Para revisar" contaba repetidas; Duplicar perdía etapas; refetch sin fin con un id inexistente.
 
 ## Qué quedó a medias
-- Verificado en el navegador contra el dev server (cuenta demo y Bros en lectura). **No se probó en un celular real**: que el teclado suba al tocar el botón de nota depende de `flushSync` + foco en el mismo toque, y eso solo lo confirma iOS/Android de verdad.
-- El deploy automático de Vercel salió solo esta vez (commit `f7bbdd5`, estado success) — el webhook que ayer falló dos veces hoy anduvo.
-- Lo que se encontró y no se tocó está en `PENDIENTES.md` → "Recetario — lo que queda".
+- Probado en navegador (demo, desktop y celular emulado). **Falta un celular real**: teclado al tocar el ícono de nota y el "atrás" de Android cerrando el visor.
+- OPS conserva su drawer de vistazo; `RecetaQuickEditModal` y `RecetaEditSheet` siguen siendo editores aparte — ver `PENDIENTES.md` → "Recetario — lo que queda".
+- Editar ingredientes desde la ficha sigue abierto a cualquiera con el módulo (Facundo: "de momento dejalo así").
 
 ## Probar primero mañana
-- En el celular: abrir una receta, tocar el ícono de nota de un ingrediente → tiene que subir el teclado; escribir, Enter, y verla en OPS → drawer de la receta.
-- En Bros: buscar algo, abrir una receta del medio de la lista, volver → misma búsqueda y mismo lugar.
+- En la tablet de cocina: desde OPS abrir una receta → "Ver ficha completa" → doble tap en un peso, convertir, cerrar → tiene que quedar el botón flotante; moverse a Stock y volver a abrirla.
+- En el celular: "atrás" con la receta abierta la cierra sin sacarte de la pantalla.
 
 ## Próximo paso concreto
-- Decidir si editar ingredientes desde la ficha se cierra a quien tiene `puedeEditar('recetas')` (hoy lo puede hacer cualquiera con el módulo).
+- Decidir si la ficha absorbe los dos editores que quedan (crear receta desde OPS, edición rápida desde Carta) para que haya una sola forma de editar.

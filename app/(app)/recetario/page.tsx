@@ -33,7 +33,7 @@ import { sugerenciaDeProducto, sugerenciaDeReceta, type SugerenciaIngrediente } 
 import type { ResultadoVinculoIA } from '@/lib/recetas/vinculoIA'
 import { apiToForm, parseNum, fcColor, normalizeCategoria, type IAApiResult } from './shared'
 import { RecetaCard, RecetaCardSkeleton, KpiTile } from './RecetaCard'
-import { recordarLista, tomarEstadoLista } from './navLista'
+import { useRecetaVisor } from '@/components/recetas/visorContexto'
 
 
 // Categorías canónicas de recetas
@@ -162,24 +162,6 @@ export default function RecetarioPage() {
 
   const searchRef = useRef<HTMLInputElement>(null)
   const listaRef = useRef<HTMLDivElement>(null)
-  const ideasRef = useRef<HTMLDivElement>(null)
-
-  // Volver de una ficha: la lista queda como estaba (búsqueda, categoría,
-  // pestaña y scroll). Ver navLista.ts. Va antes del efecto de `?tab=` para
-  // que un deep-link explícito gane.
-  const restaurar = useRef<{ search: string; limite: number; scroll: number; tab: Tab } | null>(null)
-  useEffect(() => {
-    const e = tomarEstadoLista()
-    if (!e) return
-    const t: Tab = esTab(e.tab) ? e.tab : 'recetas'
-    const lim = Math.max(TANDA, e.limite)
-    restaurar.current = { search: e.search, limite: lim, scroll: e.scroll, tab: t }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSearch(e.search)
-    setCatFilterRecetas(e.cat)
-    setLimite(lim)
-    setTab(t)
-  }, [])
 
   // Tab inicial desde la URL (?tab=) — deep-link, mismo patrón que operaciones/page.tsx
   useEffect(() => {
@@ -322,40 +304,24 @@ export default function RecetarioPage() {
     return recetasDraft.filter(r => (nombreBuscable.get(r.id) ?? '').includes(q))
   }, [recetasDraft, busqueda, nombreBuscable])
 
-  // ── Continuidad lista ↔ ficha ──
-  // Lo que la tarjeta necesita guardar al tocarla, por ref: así `abrirReceta`
-  // no cambia de identidad y no rompe el memo de 600 tarjetas.
-  const estadoLista = useRef({ search, cat: catFilterRecetas, limite, idsRecetas: [] as string[], idsIdeas: [] as string[] })
+  // ── La receta se abre en el visor, encima de la lista ──
+  // La lista no se desmonta: búsqueda, categoría y scroll quedan como estaban
+  // sin tener que guardarlos ni reponerlos. El orden filtrado viaja al visor
+  // para anterior/siguiente; va por ref para que `abrirReceta` no cambie de
+  // identidad y no rompa el memo de las tarjetas.
+  const visor = useRecetaVisor()
+  const estadoLista = useRef({ idsRecetas: [] as string[], idsIdeas: [] as string[] })
   useEffect(() => {
-    estadoLista.current = {
-      search, cat: catFilterRecetas, limite,
-      idsRecetas: filteredRecetas.map(r => r.id), idsIdeas: filteredIdeas.map(r => r.id),
-    }
-  }, [search, catFilterRecetas, limite, filteredRecetas, filteredIdeas])
+    estadoLista.current = { idsRecetas: filteredRecetas.map(r => r.id), idsIdeas: filteredIdeas.map(r => r.id) }
+  }, [filteredRecetas, filteredIdeas])
 
-  const abrirReceta = useCallback((recetaId: string) => {
-    const e = estadoLista.current
-    const t = tabRef.current
-    const panel = t === 'ideas' ? ideasRef.current : listaRef.current
-    recordarLista(
-      { search: e.search, cat: e.cat, tab: t, scroll: panel?.scrollTop ?? 0, limite: e.limite },
-      t === 'ideas' ? e.idsIdeas : e.idsRecetas,
-      recetaId,
-    )
-  }, [])
-
-  // El scroll se repone recién cuando la lista ya está como se dejó (misma
-  // búsqueda aplicada, mismas tandas renderizadas) — antes de eso el alto del
-  // panel es otro y el número no significa nada.
-  useEffect(() => {
-    const r = restaurar.current
-    if (!r || loading) return
-    if (search !== r.search || busqueda !== r.search || limite < r.limite) return
-    const panel = r.tab === 'ideas' ? ideasRef.current : listaRef.current
-    if (!panel) return
-    panel.scrollTop = r.scroll
-    restaurar.current = null
-  }, [loading, search, busqueda, limite, filteredRecetas, filteredIdeas])
+  const abrirReceta = useCallback((recetaId: string, e?: React.MouseEvent) => {
+    // Ctrl/⌘/Shift + clic o botón del medio: que el link abra su pestaña.
+    if (!visor || (e && (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0))) return
+    e?.preventDefault()
+    const ids = tabRef.current === 'ideas' ? estadoLista.current.idsIdeas : estadoLista.current.idsRecetas
+    visor.abrir(recetaId, ids.includes(recetaId) ? ids : undefined)
+  }, [visor])
 
   const cambiarBusqueda = useCallback((v: string) => { setSearch(v); setLimite(TANDA) }, [])
   const cambiarCategoria = useCallback((c: string) => {
@@ -481,7 +447,8 @@ export default function RecetarioPage() {
           setEnrichingDraft(null)
           setImportarConIA(true)
           if (asDraft) { setTab('ideas') }
-          else { router.push(`/recetario/${id}`) }
+          else if (visor) visor.abrir(id)
+          else router.push(`/recetario/${id}`)
         }}
       />
   ) : null
@@ -499,7 +466,8 @@ export default function RecetarioPage() {
         onCreated={(id, asDraft) => {
           setCargaRapida(false)
           if (asDraft) { setTab('ideas') }
-          else { router.push(`/recetario/${id}`) }
+          else if (visor) visor.abrir(id)
+          else router.push(`/recetario/${id}`)
         }}
       />
     )
@@ -687,7 +655,7 @@ export default function RecetarioPage() {
                     <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 8 }}>{g.hint}</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {g.items.slice(0, 12).map(r => (
-                        <button key={r.id} onClick={() => { abrirReceta(r.id); router.push(`/recetario/${r.id}`) }} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 999, padding: '5px 11px', fontSize: 12, fontWeight: 600, color: 'var(--text-1)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        <button key={r.id} onClick={() => { if (visor) visor.abrir(r.id); else router.push(`/recetario/${r.id}`) }} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 999, padding: '5px 11px', fontSize: 12, fontWeight: 600, color: 'var(--text-1)', cursor: 'pointer', fontFamily: 'inherit' }}>
                           {r.nombre}
                           {g.key === 'fcCritico' && <span style={{ fontSize: 10.5, fontWeight: 800, color: '#ef4444', fontFamily: "'DM Mono', monospace" }}>{r.food_cost.food_cost_pct.toFixed(0)}%</span>}
                         </button>
@@ -745,7 +713,7 @@ export default function RecetarioPage() {
 
         {/* ── Panel: Ideas ── */}
         <div style={slotStyle}>
-          <div ref={ideasRef} data-coach-target="recetario-lista-ideas" style={{ flex: 1, overflowY: 'auto', padding: ancha ? '14px 20px 28px' : '12px 14px 24px' }}>
+          <div data-coach-target="recetario-lista-ideas" style={{ flex: 1, overflowY: 'auto', padding: ancha ? '14px 20px 28px' : '12px 14px 24px' }}>
             {loading ? (
               <div style={grilla}>
                 {Array.from({ length: columnas * 3 }, (_, i) => <RecetaCardSkeleton key={i} />)}

@@ -2,6 +2,9 @@
 
 import Link from 'next/link'
 import type { CoachLink } from '@/lib/coach/types'
+import { useRecetaVisor } from '@/components/recetas/visorContexto'
+
+const RUTA_RECETA = /^\/recetario\/([0-9a-f-]{36})$/i
 
 const NARANJA = '#f97316'
 
@@ -14,6 +17,7 @@ const NARANJA = '#f97316'
  * — el texto del chat se pinta plano, así que un link no podría viajar adentro.
  */
 export function CoachLinks({ links, onNavigate, marginLeft = 36 }: { links: CoachLink[]; onNavigate?: () => void; marginLeft?: number }) {
+  const visor = useRecetaVisor()
   if (!links.length) return null
   return (
     <div style={{ marginLeft, marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -21,7 +25,16 @@ export function CoachLinks({ links, onNavigate, marginLeft = 36 }: { links: Coac
         <Link
           key={l.href}
           href={l.href}
-          onClick={onNavigate}
+          onClick={e => {
+            // Una receta se abre encima de la pantalla en la que estás (visor
+            // global), no te lleva al Recetario.
+            const receta = l.href.match(RUTA_RECETA)
+            if (receta && visor && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+              e.preventDefault()
+              visor.abrir(receta[1])
+            }
+            onNavigate?.()
+          }}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             background: NARANJA, border: `1px solid ${NARANJA}`, borderRadius: 20,

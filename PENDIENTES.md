@@ -260,6 +260,8 @@ con stock (botón sin explicar qué hace).
 - **Tope de 1000 filas de PostgREST**: Bros tiene 635 recetas activas y `useRecetas` las pide en un solo select — al pasar las 1000 la lista se corta en silencio. Paginar con `fetchAllRows` antes de llegar.
 - La ficha en celular sigue abriendo con "Convertir a plato" + "Escalar" ocupando media pantalla antes del primer ingrediente.
 - `components/ui/Kbd` y `lib/hooks/useAncho` son nuevos; Calendario y Turnos siguen con su copia local (migrar al tocarlos).
+- **Visor de recetas — unificar lo que queda.** La ficha ya es una sola, pero siguen vivos dos editores paralelos: `RecetaQuickEditModal` (OPS/Mise, crea y publica una receta vacía) y `RecetaEditSheet` (Carta, edición rápida + IA). En OPS el toque sobre la receta sigue abriendo el drawer de vistazo, con "Ver ficha completa" como segundo paso. Decidir si la ficha absorbe esos dos flujos (le faltan: carga rápida de varias filas, completar con IA, publicar el borrador al cerrar).
+- Visor: una sola receta en segundo plano (abrir otra la reemplaza); el botón "Ver ficha completa" del drawer de OPS no se probó con una tarea real.
 
 ### Shell — `<a>` dentro de `<a>` en todas las pantallas de desktop
 El link de avisos vive dentro del link de perfil de la sidebar: React lo reporta como error de hidratación en cada carga. Sin síntoma visible; sacar uno del otro.

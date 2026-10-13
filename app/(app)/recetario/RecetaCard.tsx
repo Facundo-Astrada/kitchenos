@@ -21,8 +21,8 @@ interface RecetaCardProps {
   /** Costo, venta, margen y food cost: solo para quien tiene `verCostos`. */
   verCostos?: boolean
   recetasPorId?: Map<string, RecetaConCosto>
-  /** Se llama antes de navegar: la lista guarda dónde estaba (navLista.ts). */
-  onAbrir?: (id: string) => void
+  /** Clic en la tarjeta. Si llama a `e.preventDefault()` el link no navega (la lista abre el visor). */
+  onAbrir?: (id: string, e: React.MouseEvent) => void
   onPublish?: (r: RecetaConCosto) => void
   onCompleteIA?: (r: RecetaConCosto) => void
 }
@@ -52,7 +52,7 @@ export const RecetaCard = memo(function RecetaCard({ receta: r, isDraft, verCost
     <div style={{ position: 'relative', height: '100%' }}>
       <Link
         href={`/recetario/${r.id}`}
-        onClick={() => onAbrir?.(r.id)}
+        onClick={e => onAbrir?.(r.id, e)}
         style={{
           textDecoration: 'none', display: 'block', height: '100%', cursor: 'pointer',
           background: esPlato ? 'rgba(67,97,160,.035)' : 'var(--surface)',

@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { RecetaQuickEditModal } from './RecetaQuickEditModal'
 import { NotaIngredienteTexto } from '@/components/recetas/NotaIngrediente'
+import { useRecetaVisor } from '@/components/recetas/visorContexto'
 
 interface Ing { nombre: string; cantidad: number | null; unidad: string; nota: string | null }
 interface UltimaProduccion { fecha: string; cantidad_planificada: number | null; usuario_nombre: string | null }
@@ -19,6 +20,8 @@ export function RecetaDrawer({ recetaId, recetaNombre, onClose }: RecetaDrawerPr
   const [loading, setLoading] = useState(true)
   const [ultimaProd, setUltimaProd] = useState<UltimaProduccion | null>(null)
   const [showEditor, setShowEditor] = useState(false)
+  // null en Muro/KDS (app/(servicio) no monta el visor): ahí queda solo el vistazo.
+  const visor = useRecetaVisor()
   const touchY0 = useRef(0)
   const sheetRef = useRef<HTMLDivElement>(null)
 
@@ -141,16 +144,34 @@ export function RecetaDrawer({ recetaId, recetaNombre, onClose }: RecetaDrawerPr
             </div>
           </div>
         )}
-        <button
-          onClick={onClose}
-          style={{
-            margin: '8px 16px 0', padding: 12, borderRadius: 12,
-            border: 'none', cursor: 'pointer', background: 'var(--bg)',
-            color: 'var(--text-2)', fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
-          }}
-        >
-          Cerrar
-        </button>
+        <div style={{ display: 'flex', gap: 8, margin: '8px 16px 0' }}>
+          <button
+            onClick={onClose}
+            style={{
+              flex: 1, padding: 12, borderRadius: 12,
+              border: 'none', cursor: 'pointer', background: 'var(--bg)',
+              color: 'var(--text-2)', fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
+            }}
+          >
+            Cerrar
+          </button>
+          {/* La ficha entera — procedimiento, escalar, convertir por un
+              ingrediente — es la misma del Recetario y se abre acá encima,
+              sin salir de OPS. */}
+          {visor && ings.length > 0 && (
+            <button
+              onClick={() => { visor.abrir(recetaId); onClose() }}
+              style={{
+                flex: 1.4, padding: 12, borderRadius: 12, border: 'none', cursor: 'pointer',
+                background: 'var(--navy)', color: '#fff', fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 17 }}>menu_book</span>
+              Ver ficha completa
+            </button>
+          )}
+        </div>
       </div>
 
       {showEditor && (
