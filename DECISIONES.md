@@ -368,3 +368,15 @@ Registro de decisiones tomadas con Facundo durante el diseño y construcción de
 - Varias recetas a la vez (un PDF con N fichas) siguen pasando por `IAMultiResultScreen` — ahí sí hace falta elegir cuáles importar.
 - La acción `adjust` de `/api/recetas/import` quedó sin uso desde el cliente.
 - **Vínculo por IA de lo que el nombre exacto no resuelve** (`/api/recetas/vincular-ia`, `lib/recetas/vinculoIA.ts`): Haiku recibe el catálogo de Stock + recetas con refs cortas (cacheado) y por ingrediente devuelve hasta 3 candidatos y si está segura. Segura → se vincula sola ("Salsa worcestershire" → Salsa inglesa, "Aceite de girasol" → Aceite natura); dudosa → chips "¿Cuál usás?" en la fila ("Leche" → entera / en polvo / condensada). Nunca vincula a un producto que solo comparte una palabra (dulce de leche ≠ leche). Una receta como ingrediente en "u" o litros nunca se vincula sola (cambiaría el sentido de la cantidad). ~1 centavo de USD por importación, ~4 s, en paralelo a la edición: si el cocinero tocó la fila mientras tanto, gana él.
+
+---
+
+## 28. Una sola ficha de receta en toda la app — salvo el vistazo de OPS (oct 2026)
+
+**Decisión:** Ver o editar una receta es abrir SU ficha (`RecetaFicha`), la misma en todos lados, en un visor global encima de la pantalla en la que se esté. Ningún módulo arma su propia vista o editor de receta. **Excepción deliberada: en OPS el toque sobre una receta sigue abriendo el drawer de vistazo corto** (ingredientes + nota + última producción), con "Ver ficha completa" como segundo paso.
+**Por qué:** Facundo, viendo Carta con tres vistas distintas de la misma receta: "manejemos un mismo lenguaje y diseño para simplificar". Y sobre OPS, consultado: "dejemos el vistazo corto" — en servicio se mira la receta de reojo y un drawer de 65% de pantalla no es lo mismo que la ficha entera a pantalla completa en un celular.
+**Cómo se aplica:**
+- Código nuevo que muestre una receta llama a `useRecetaVisor()?.abrir(id, { recorrido, alCerrar, cargar })` (`components/recetas/visorContexto.ts`). No se escribe otro modal de receta.
+- La carga masiva (filas de corrido, IA por foto/texto) es la «Carga rápida» de adentro de la ficha (`RecetaEditSheet`), no una entrada paralela.
+- `components/ops/RecetaDrawer.tsx` se queda. No "unificarlo" por prolijidad: es la excepción, no una deuda.
+- `RecetaQuickEditModal` (aviso del Mise, "Crear receta" del drawer) sigue por ahora; es candidato a pasar al visor, pero no entra en esta decisión.

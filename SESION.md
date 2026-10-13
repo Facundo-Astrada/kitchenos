@@ -9,7 +9,7 @@
 - Arreglos de paso: "Receta ajustada a…" mostraba la cantidad base; costos de la tarjeta sin gate `verCostos`; "Para revisar" contaba repetidas; Duplicar perdía etapas; refetch sin fin con un id inexistente.
 
 ## Qué quedó a medias
-- **OPS/Mise** todavía tiene su drawer de vistazo y `RecetaQuickEditModal` — ver `PENDIENTES.md` → "Recetario — lo que queda".
+- **OPS conserva el vistazo corto por decisión** (`DECISIONES.md` §28): el drawer se queda, con "Ver ficha completa" como segundo paso. Lo único aparte que sigue vivo es `RecetaQuickEditModal` (aviso del Mise).
 - Probado en navegador (demo, desktop y celular emulado). **Falta un celular/tablet real**: teclado al tocar el ícono de nota y el "atrás" de Android cerrando el visor.
 - En Carta se probó detalle de plato y editor de menú (buscador e ítem); el editor de **evento** y "crear receta acá mismo" comparten el código pero no se recorrieron a mano.
 - Editar ingredientes desde la ficha sigue abierto a cualquiera con el módulo (Facundo: "de momento dejalo así").
@@ -20,4 +20,4 @@
 - En la tablet de cocina: OPS → receta → "Ver ficha completa" → convertir → cerrar → botón flotante.
 
 ## Próximo paso concreto
-- Pasar OPS/Mise al visor (drawer y editor rápido), si el vistazo corto en servicio no se extraña.
+- Probar el visor y la nota en la tablet de cocina y un celular real; con eso confirmado, decidir si el editor rápido del Mise pasa a la ficha.

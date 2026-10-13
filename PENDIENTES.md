@@ -260,7 +260,7 @@ con stock (botón sin explicar qué hace).
 - **Tope de 1000 filas de PostgREST**: Bros tiene 635 recetas activas y `useRecetas` las pide en un solo select — al pasar las 1000 la lista se corta en silencio. Paginar con `fetchAllRows` antes de llegar.
 - La ficha en celular sigue abriendo con "Convertir a plato" + "Escalar" ocupando media pantalla antes del primer ingrediente.
 - `components/ui/Kbd` y `lib/hooks/useAncho` son nuevos; Calendario y Turnos siguen con su copia local (migrar al tocarlos).
-- **Visor de recetas — falta OPS.** Carta ya usa solo la ficha (plato, menú, evento) y `RecetaEditSheet` quedó como la «Carga rápida» de adentro. En OPS/Mise siguen el drawer de vistazo (con "Ver ficha completa" como segundo paso) y `RecetaQuickEditModal` (chip de aviso del Mise y "Crear receta" del drawer). La ficha ya tiene lo que ese editor hacía salvo publicar sola al cerrar (hoy es un botón). Pasarlos al visor es mecánico; se dejó porque OPS se usa en servicio y un vistazo de 65% de pantalla no es lo mismo que la ficha entera en un celular.
+- **`RecetaQuickEditModal` es el último editor de receta aparte** (chip de aviso del Mise y "Crear receta" del drawer de OPS). La ficha ya hace lo mismo salvo publicar sola al cerrar (hoy es un botón). El drawer de vistazo de OPS NO es pendiente: se queda por decisión (`DECISIONES.md` §28).
 - Visor: una sola receta en segundo plano (abrir otra la reemplaza); el botón "Ver ficha completa" del drawer de OPS no se probó con una tarea real.
 
 ### Shell — `<a>` dentro de `<a>` en todas las pantallas de desktop
