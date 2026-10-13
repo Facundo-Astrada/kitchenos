@@ -254,14 +254,14 @@ paleta de comandos (Ctrl/K sin indicación), swipe entre tabs de OPS (sin
 affordance), guía del Mise (dos niveles de profundidad), vincular ingredientes
 con stock (botón sin explicar qué hace).
 
-### Recetario — lo que queda (nota por ingrediente + lista/ficha rediseñadas 13/10)
+### Recetario — lo que queda (nota por ingrediente, visor de recetas y ficha única 13/10)
 - **Editar un ingrediente desde la ficha no está gateado por permiso**: tocar el nombre abre el modal de edición (y "Agregar ingrediente") para cualquiera con el módulo, no solo `puedeEditar('recetas')`. El botón de nota nuevo sí respeta `canEdit`; el resto quedó como estaba — decidir si un cocinero debe poder cambiar cantidades.
 - **El importador masivo de fichas** (`/api/importador/fichas-tecnicas`) no extrae la nota del ingrediente; el import de Nueva receta sí.
 - **Tope de 1000 filas de PostgREST**: Bros tiene 635 recetas activas y `useRecetas` las pide en un solo select — al pasar las 1000 la lista se corta en silencio. Paginar con `fetchAllRows` antes de llegar.
 - La ficha en celular sigue abriendo con "Convertir a plato" + "Escalar" ocupando media pantalla antes del primer ingrediente.
 - `components/ui/Kbd` y `lib/hooks/useAncho` son nuevos; Calendario y Turnos siguen con su copia local (migrar al tocarlos).
 - **`RecetaQuickEditModal` es el último editor de receta aparte** (chip de aviso del Mise y "Crear receta" del drawer de OPS). La ficha ya hace lo mismo salvo publicar sola al cerrar (hoy es un botón). El drawer de vistazo de OPS NO es pendiente: se queda por decisión (`DECISIONES.md` §28).
-- Visor: una sola receta en segundo plano (abrir otra la reemplaza); el botón "Ver ficha completa" del drawer de OPS no se probó con una tarea real.
+- Visor: una sola receta en segundo plano (abrir otra reemplaza el botón flotante; la conversión de la anterior queda guardada igual).
 
 ### Shell — `<a>` dentro de `<a>` en todas las pantallas de desktop
 El link de avisos vive dentro del link de perfil de la sidebar: React lo reporta como error de hidratación en cada carga. Sin síntoma visible; sacar uno del otro.

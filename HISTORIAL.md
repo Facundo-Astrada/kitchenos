@@ -6,6 +6,15 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+**Sesión 2026-10-13 — Recetario: nota por ingrediente, visor global y ficha única.** Commits `f7bbdd5`, `ea0fe60`, `c1a6359`.
+
+- Pedido en tres tandas: (1) anotar ingredientes ("2 naranjas, maduras y dulces", "tostada"), auditar velocidad del Recetario y mejorarle la UI mirando Calendario/Turnos; (2) que la receta se abra en una ventana al centro y pueda quedar en segundo plano; (3) que en Carta se vea y se edite igual que en Recetario.
+- Nota: columna `ingredientes.nota`, piezas compartidas en `components/recetas/NotaIngrediente.tsx`. El import por IA la separa del nombre (esquema + prompt de `/api/recetas/import`).
+- Visor: `recetario/[id]/page.tsx` pasó a ser `RecetaFicha.tsx`, montada por `components/recetas/RecetaVisor.tsx` desde el layout. La conversión vive en sessionStorage por receta (`lib/recetas/escalaSesion.ts`). Carta perdió `RecetaPreviewModal` y sus dos montajes de `RecetaEditSheet`, que quedó como «Carga rápida» de la ficha. OPS conserva su drawer (`DECISIONES.md` §28).
+- Se probó y se descartó en el camino: restaurar búsqueda/scroll de la lista al volver de la ficha (se shippeó a la mañana, `navLista.ts`) — con el visor la lista no se desmonta y dejó de hacer falta; se borró a la tarde. `content-visibility:auto` para la lista larga: corre el scroll.
+- Bugs sin ítem en el backlog, arreglados de paso: lista montando las 635 recetas de Bros de entrada; "Receta ajustada a…" mostraba la cantidad base; costo/margen/FC de la tarjeta sin gate `verCostos`; "Para revisar" sumaba recetas repetidas (649 sobre 364); Duplicar perdía etapas y vínculo a Stock; un id de receta inexistente refetcheaba sin fin; error al guardar la receta tragado en silencio; receta corta abría con "Food Cost" marcado.
+- Verificación: Playwright contra dev (demo; Bros solo lectura) y Facundo en su celular.
+
 **Sesión 2026-10-12 — Turnos: planilla rediseñada.** Commit `653c3e3`.
 
 - Pedido: repasar Turnos como se repasó Calendario — recuadros más marcados, mejor UX/UI, transiciones, ver eventos para planificar horarios, notas por día, y mejorar el sistema de horarios.
