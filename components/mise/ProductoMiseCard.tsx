@@ -8,6 +8,7 @@ import { fetchEscPosBytes, printViaUSB, printViaBluetooth, downloadEscPosBytes, 
 import { CrearTareaSheet, type CrearTareaSheetConfirmData } from '@/components/ops/CrearTareaSheet'
 import { PrioridadPicker, type PrioOpcion } from '@/components/ops/PrioridadPicker'
 import { RecetaQuickEditModal } from '@/components/ops/RecetaQuickEditModal'
+import { RecetaDrawer } from '@/components/ops/RecetaDrawer'
 import { parseTurnoFase } from '@/lib/ops/turnos'
 import { PRIORIDADES } from '@/lib/ops/prioridades'
 import type { MisePlaceItem, MisePrioridad, TareaPrioridad } from '@/types'
@@ -210,6 +211,7 @@ function ProductoMiseCardBase({
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [showDelete, setShowDelete] = useState(false)
   const [showRecetaEdit, setShowRecetaEdit] = useState(false)
+  const [recetaDrawerOpen, setRecetaDrawerOpen] = useState(false)
 
   const checked = reg?.completado ?? false
 
@@ -537,8 +539,20 @@ function ProductoMiseCardBase({
                   {item.peso_porcion}{item.peso_porcion_unidad ?? 'g'}/porc
                 </span>
               )}
-              {!checked && item.receta_id && (
-                <span style={{ fontSize: 9, color: '#4361a0', fontWeight: 600 }}>receta</span>
+              {/* El mismo vistazo corto que tiene Producción (DECISIONES §28):
+                  antes era la palabra "receta" de 9px, sin acción. */}
+              {item.receta_id && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setRecetaDrawerOpen(true) }}
+                  title="Ver la receta"
+                  style={{
+                    ...btnReset, gap: 3, fontSize: 11, fontWeight: 700, padding: '4px 9px', borderRadius: 99,
+                    background: 'rgba(67,97,160,.1)', color: '#4361a0', touchAction: 'manipulation',
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>menu_book</span>
+                  Receta
+                </button>
               )}
               {/* Aviso muy chico a propósito (ya hay demasiados chips en esta
                   fila): solo un ícono, sin texto. Abre el editor rápido para
@@ -859,6 +873,10 @@ function ProductoMiseCardBase({
             </button>
           )}
         </div>
+      )}
+
+      {recetaDrawerOpen && item.receta_id && (
+        <RecetaDrawer recetaId={item.receta_id} recetaNombre={item.nombre} onClose={() => setRecetaDrawerOpen(false)} />
       )}
 
       {showRecetaEdit && item.receta_id && (

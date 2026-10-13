@@ -68,6 +68,8 @@ interface ItemOpsProps {
   onCrearTareaDesdeItem?: (item: Tarea, data: CrearTareaSheetConfirmData) => Promise<void>
   /** Guarda (texto) o borra (null) la nota de la tarea. Sin esto la nota se ve pero no se edita. */
   onGuardarNota?: (id: string, texto: string | null) => Promise<void>
+  /** Recetas de la columna, para anterior/siguiente en la ficha. */
+  recorridoRecetas?: string[]
   depth?: number
   modo?: OpsModo
   showSeccionChip?: boolean
@@ -85,7 +87,7 @@ interface ItemOpsProps {
   bandasDuplicadas?: Set<OpsModo>
 }
 
-function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, onGuardarNota, depth = 0, modo, showSeccionChip, showPrioChip, densidad = 'comoda', bandasDuplicadas }: ItemOpsProps) {
+function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPrioridadChange, onCrearTareaDesdeItem, onGuardarNota, recorridoRecetas, depth = 0, modo, showSeccionChip, showPrioChip, densidad = 'comoda', bandasDuplicadas }: ItemOpsProps) {
   const [expanded, setExpanded] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [prodSheetOpen, setProdSheetOpen] = useState(false)
@@ -468,6 +470,15 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
           recetaId={item.receta_id}
           recetaNombre={item.titulo}
           onClose={() => setDrawerOpen(false)}
+          recorrido={recorridoRecetas}
+          accion={depth === 0 ? {
+            estado: estado,
+            onEmpezar: () => onEstadoChange(item.id, 'en_curso'),
+            onListo: () => {
+              onEstadoChange(item.id, 'listo')
+              if (item.prioridad !== 'cargar' && item.prioridad !== 'descongelar') setProdSheetOpen(true)
+            },
+          } : undefined}
         />
       )}
 

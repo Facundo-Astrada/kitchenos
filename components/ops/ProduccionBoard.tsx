@@ -826,6 +826,14 @@ function ItemsPorPrioridad({
     items: items.filter(i => (i.prioridad ?? 'baja') === prio),
   })), [items])
 
+  // Recetas de la columna en el orden en que se leen: la ficha pasa de una a la
+  // siguiente sin volver a la lista. Memoizado para no romper el memo de ItemOps.
+  const recorridoRecetas = useMemo(() => {
+    const ids: string[] = []
+    for (const g of grupos) for (const t of g.items) if (t.receta_id && !ids.includes(t.receta_id)) ids.push(t.receta_id)
+    return ids
+  }, [grupos])
+
   const principales = grupos.filter(g => PRIO_PRINCIPALES.includes(g.prio) && g.items.length > 0)
   const secundarias = grupos.filter(g => !PRIO_PRINCIPALES.includes(g.prio) && g.items.length > 0)
   const nSecundarias = secundarias.reduce((s, g) => s + g.items.length, 0)
@@ -861,6 +869,7 @@ function ItemsPorPrioridad({
               onPrioridadChange={onPrioridadChange}
               onCrearTareaDesdeItem={onCrearTareaDesdeItem}
               onGuardarNota={onGuardarNota}
+              recorridoRecetas={recorridoRecetas}
               modo={modo}
               // La columna ya es la plaza (o el paso): el chip de sección sería
               // repetir el encabezado. El de prioridad, en cambio, es necesario

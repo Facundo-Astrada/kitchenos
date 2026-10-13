@@ -13,9 +13,17 @@ interface RecetaDrawerProps {
   recetaId: string
   recetaNombre: string
   onClose: () => void
+  /** Ids de las recetas de la columna, en orden: la ficha abre con anterior/siguiente entre ellas. */
+  recorrido?: string[]
+  /**
+   * La tarea que se está mirando. Mirar la receta es el momento de arrancar:
+   * con esto se empieza o se termina desde acá, sin volver a la lista a buscar
+   * el círculo.
+   */
+  accion?: { estado: 'pendiente' | 'en_curso' | 'listo' | 'duda'; onEmpezar: () => void; onListo: () => void }
 }
 
-export function RecetaDrawer({ recetaId, recetaNombre, onClose }: RecetaDrawerProps) {
+export function RecetaDrawer({ recetaId, recetaNombre, onClose, recorrido, accion }: RecetaDrawerProps) {
   const [ings, setIngs] = useState<Ing[]>([])
   const [loading, setLoading] = useState(true)
   const [ultimaProd, setUltimaProd] = useState<UltimaProduccion | null>(null)
@@ -144,6 +152,34 @@ export function RecetaDrawer({ recetaId, recetaNombre, onClose }: RecetaDrawerPr
             </div>
           </div>
         )}
+        {accion && accion.estado !== 'listo' && (
+          <div style={{ display: 'flex', gap: 8, margin: '8px 16px 0' }}>
+            {accion.estado !== 'en_curso' && (
+              <button
+                onClick={() => { accion.onEmpezar(); onClose() }}
+                style={{
+                  flex: 1, padding: 13, borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                  background: '#3b82f6', color: '#fff', fontSize: 14, fontWeight: 800,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>play_arrow</span>
+                Empezar
+              </button>
+            )}
+            <button
+              onClick={() => { accion.onListo(); onClose() }}
+              style={{
+                flex: 1, padding: 13, borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                background: '#22c55e', color: '#fff', fontSize: 14, fontWeight: 800,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>check</span>
+              Listo
+            </button>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, margin: '8px 16px 0' }}>
           <button
             onClick={onClose}
@@ -160,7 +196,7 @@ export function RecetaDrawer({ recetaId, recetaNombre, onClose }: RecetaDrawerPr
               sin salir de OPS. */}
           {visor && ings.length > 0 && (
             <button
-              onClick={() => { visor.abrir(recetaId); onClose() }}
+              onClick={() => { visor.abrir(recetaId, recorrido && recorrido.length > 1 ? { recorrido } : undefined); onClose() }}
               style={{
                 flex: 1.4, padding: 12, borderRadius: 12, border: 'none', cursor: 'pointer',
                 background: 'var(--navy)', color: '#fff', fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
