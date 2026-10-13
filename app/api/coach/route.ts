@@ -664,7 +664,7 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
       const duplicadas = homonimas.length
       const r = duplicadas > 1 ? await recetaMasCompleta(supabase, homonimas) : ganador
       const { data: ingsData, error: errIngs } = await supabase.from('ingredientes')
-        .select('id, receta_id, nombre, cantidad, unidad, costo_unitario, unidad_costo')
+        .select('id, receta_id, nombre, cantidad, unidad, costo_unitario, unidad_costo, nota')
         .eq('receta_id', r.id)
         .limit(60)
       if (errIngs) console.error('[/api/coach] buscar_receta ingredientes:', errIngs.message)
@@ -672,6 +672,7 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
         id: i.id ?? '', receta_id: i.receta_id ?? '', nombre: i.nombre ?? '',
         cantidad: Number(i.cantidad) || 0, unidad: i.unidad ?? '',
         costo_unitario: i.costo_unitario ?? null, unidad_costo: i.unidad_costo ?? null,
+        nota: i.nota ?? null,
       }))
 
       const precio = Number(r.precio_venta) || 0
@@ -700,7 +701,8 @@ async function executeTool(name: string, input: ToolInput, supabase: SupabaseCli
       if (ings.length > 0) {
         result += `\nIngredientes (${ings.length}):\n`
         for (const ing of ings) {
-          result += `- ${ing.nombre}: ${ing.cantidad} ${ing.unidad ?? ''}\n`
+          // La nota del chef ("maduras", "tostado") es parte de la ficha.
+          result += `- ${ing.nombre}: ${ing.cantidad} ${ing.unidad ?? ''}${ing.nota ? ` (nota del chef: ${ing.nota})` : ''}\n`
         }
         if (verCostos && sinCosto > 0) {
           result += `\nCosto: NO calculable. ${sinCosto} de ${ings.length} ingredientes no tienen precio vinculado al stock. NO informes un costo ni un food cost de esta receta — decí que falta vincular esos ingredientes en el Recetario.\n`

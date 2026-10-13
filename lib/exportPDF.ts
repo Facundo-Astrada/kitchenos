@@ -5,7 +5,7 @@ interface PDFReceta {
   tiempo_min: number
   precio_venta: number
   procedimiento: string
-  ingredientes: { nombre: string; cantidad: number; unidad: string }[]
+  ingredientes: { nombre: string; cantidad: number; unidad: string; nota?: string | null }[]
 }
 
 export async function exportRecetaPDF(receta: PDFReceta) {
@@ -81,7 +81,10 @@ export async function exportRecetaPDF(receta: PDFReceta) {
   if (ings.length > 0) {
     const tableBody = ings.map(i => {
       const qty = i.cantidad % 1 === 0 ? String(i.cantidad) : i.cantidad.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
-      return [i.nombre, qty, i.unidad]
+      // La nota del chef va debajo del nombre, en la misma celda: quien
+      // imprime la ficha la necesita tanto como la cantidad.
+      const nota = i.nota?.trim()
+      return [nota ? `${i.nombre}\n(${nota})` : i.nombre, qty, i.unidad]
     })
 
     autoTable(doc, {

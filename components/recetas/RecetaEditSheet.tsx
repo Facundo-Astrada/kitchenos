@@ -43,6 +43,7 @@ function iaIngredientesAFilas(ingredientes: RecetaIAResult['ingredientes'], stoc
       costoUnitario: match?.precio_unitario ?? 0,
       unidadCosto: match?.unidad ?? null,
       productoId: match?.id ?? null,
+      nota: i.nota?.trim() ?? '',
     }
   })
 }
@@ -139,6 +140,7 @@ export function RecetaEditSheet({
         costoUnitario: (i.costo_unitario as number) ?? 0,
         subrecetaId: i.subreceta_id as string | null,
         productoId: (i.producto_id ?? null) as string | null,
+        nota: (i.nota ?? '') as string,
         // Guardar reemplaza todos los ingredientes: lo que esta UI no edita
         // (merma, etapa, datos de OPS) se lleva tal cual.
         extra: {

@@ -60,21 +60,24 @@ function conFoodCostRecalculado(r: RecetaConCosto): RecetaConCosto {
 async function fetchRecetasData(key: string): Promise<RecetaConCosto[]> {
   const rid = key.slice('recetas-'.length)
   const supabase = createClient()
-  const { data, error } = await supabase
-    .from('recetas')
-    .select('*, ingredientes!ingredientes_receta_id_fkey(*)')
-    .eq('restaurante_id', rid)
-    .eq('activa', true)
-    .order('created_at', { ascending: false })
+  // Las dos consultas a la vez: la segunda no depende de la primera, y en
+  // serie era un round-trip entero de más cada vez que se abría el recetario.
+  const [{ data, error }, { data: cartaLinks }] = await Promise.all([
+    supabase
+      .from('recetas')
+      .select('*, ingredientes!ingredientes_receta_id_fkey(*)')
+      .eq('restaurante_id', rid)
+      .eq('activa', true)
+      .order('created_at', { ascending: false }),
+    // Recetas que son platos: existe un carta_item vinculado por receta_id.
+    // Derivado (no columna) → si se borra el plato en Carta, el flag desaparece solo.
+    supabase
+      .from('carta_items')
+      .select('receta_id')
+      .eq('restaurante_id', rid)
+      .not('receta_id', 'is', null),
+  ])
   if (error) throw error
-
-  // Recetas que son platos: existe un carta_item vinculado por receta_id.
-  // Derivado (no columna) → si se borra el plato en Carta, el flag desaparece solo.
-  const { data: cartaLinks } = await supabase
-    .from('carta_items')
-    .select('receta_id')
-    .eq('restaurante_id', rid)
-    .not('receta_id', 'is', null)
   const platoIds = new Set((cartaLinks ?? []).map(c => (c as { receta_id: string }).receta_id))
 
   return (data ?? []).map(r => {

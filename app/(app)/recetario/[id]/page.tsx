@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useMemo, useRef, useEffect, use } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback, use } from 'react'
+import { flushSync } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { useRecetas, calcFoodCost, unitConversionFactor, type RecetaConCosto } from '@/lib/hooks/useRecetas'
 import { useStock } from '@/lib/hooks/useStock'
@@ -21,6 +22,14 @@ import { toGramos, calcPesoPorcion, calcPesoNetos, formatPeso, formatCantidad } 
 import { parseNumero, parsePrecio } from '@/lib/unidades'
 import { buscarProductoExacto } from '@/lib/recetas/vinculo'
 import type { OpsResult } from '@/components/ops/OpsPanel'
+import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
+import { useAncho } from '@/lib/hooks/useAncho'
+import { SheetChrome } from '@/lib/ui/chrome'
+import {
+  NotaIngredienteBoton, NotaIngredienteTexto, NotaIngredienteEditor,
+  NOTA_INGREDIENTE_MAX, NOTA_INGREDIENTE_PLACEHOLDER,
+} from '@/components/recetas/NotaIngrediente'
+import { leerRecorrido, marcarDesdeLista } from '../navLista'
 
 const UNIDADES = ['kg', 'g', 'L', 'ml', 'unidad', 'docena', 'caja']
 
@@ -81,8 +90,10 @@ interface FormIng {
   // si se cambia el nombre a mano; antes no existía y el vínculo se perdía
   // al guardar (había que volver a tocar el ingrediente).
   producto_id: string | null
+  // Nota del chef ("2 unidades, maduras", "tostado") — ingredientes.nota.
+  nota: string
 }
-const ING_EMPTY: FormIng = { nombre: '', cantidad: '0', unidad: 'kg', costo_unitario: '0', unidad_costo: 'kg', merma_pct: '0', grupo: '', producto_id: null }
+const ING_EMPTY: FormIng = { nombre: '', cantidad: '0', unidad: 'kg', costo_unitario: '0', unidad_costo: 'kg', merma_pct: '0', grupo: '', producto_id: null, nota: '' }
 
 // ── PDF Export (lazy-loaded to avoid SSR issues with jsPDF) ──
 async function handleExportPDF(receta: RecetaConCosto) {
@@ -98,12 +109,19 @@ async function handleExportPDF(receta: RecetaConCosto) {
       nombre: i.nombre,
       cantidad: i.cantidad,
       unidad: i.unidad,
+      nota: i.nota ?? null,
     })),
   })
 }
 
+// `key={id}`: pasar a la receta anterior/siguiente monta la ficha de cero —
+// la escala, el modal abierto y el historial son de UNA receta.
 export default function RecetaDetallePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  return <RecetaDetalle key={id} id={id} />
+}
+
+function RecetaDetalle({ id }: { id: string }) {
   const router = useRouter()
   const { recetas, loading, agregarReceta, actualizarReceta, eliminarReceta, agregarIngrediente, actualizarIngrediente, eliminarIngrediente } = useRecetas()
   const { productos: stockProductos } = useStock()
@@ -134,7 +152,8 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
   // Receta buscada en la lista paginada — o fetcheada directo si no está aún
   const recetaEnLista = useMemo(() => recetas.find(r => r.id === id) ?? null, [recetas, id])
   const [recetaDirecta, setRecetaDirecta] = useState<RecetaConCosto | null>(null)
-  const [fetchingDirect, setFetchingDirect] = useState(false)
+  // true hasta que la consulta directa de esta receta termina (ver más abajo).
+  const [fetchingDirect, setFetchingDirect] = useState(true)
   const receta = recetaEnLista ?? recetaDirecta
 
   // Plato de carta vinculado a esta receta (link 1:1 por receta_id)
@@ -174,30 +193,65 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
     setToast('Precio de la receta actualizado')
   }
 
+  // Ficha directa: se pide esta sola receta en paralelo con el recetario
+  // entero, sin esperarlo. Entrando por un link (Coach, OPS, Carta, o F5) la
+  // ficha aparece con una consulta chica en vez de esperar la descarga de
+  // todas las recetas con sus ingredientes; cuando esa lista llega, toma su
+  // lugar (`receta` de más arriba). Se pide una sola vez por ficha: antes el
+  // efecto dependía de su propio estado y, con una receta borrada o un id
+  // inexistente, se volvía a disparar sin fin.
+  const directoPedido = useRef(false)
   useEffect(() => {
-    if (!loading && !recetaEnLista && !recetaDirecta && !fetchingDirect) {
-      // La receta no está en la página paginada — puede ser nueva o estar en otra página
-      setFetchingDirect(true)
-      import('@/lib/supabase/client').then(({ createClient }) => {
-        const supabase = createClient()
-        Promise.all([
-          supabase.from('recetas').select('*').eq('id', id).single(),
-          supabase.from('ingredientes').select('*').eq('receta_id', id),
-        ]).then(([{ data: r }, { data: ings }]) => {
-          if (r) {
-            const ingredientesData = ings ?? []
-            setRecetaDirecta({
-              ...r,
-              status: r.status || 'published',
-              ingredientes: ingredientesData,
-              food_cost: calcFoodCost(ingredientesData, r.porciones ?? 0, r.precio_venta ?? 0),
-            })
-          }
-          setFetchingDirect(false)
+    if (recetaEnLista || directoPedido.current || !RESTAURANTE_ID) return
+    directoPedido.current = true
+    const supabase = createClient()
+    Promise.all([
+      supabase.from('recetas').select('*').eq('id', id).maybeSingle(),
+      supabase.from('ingredientes').select('*').eq('receta_id', id),
+    ]).then(([{ data: r }, { data: ings }]) => {
+      if (r) {
+        const ingredientesData = ings ?? []
+        setRecetaDirecta({
+          ...r,
+          status: r.status || 'published',
+          ingredientes: ingredientesData,
+          food_cost: calcFoodCost(ingredientesData, r.porciones ?? 0, r.precio_venta ?? 0),
         })
-      })
-    }
-  }, [loading, recetaEnLista, recetaDirecta, fetchingDirect, id])
+      }
+      setFetchingDirect(false)
+    })
+  }, [recetaEnLista, RESTAURANTE_ID, id])
+
+  // ── Recorrido: anterior / siguiente en el orden en que quedó la lista ──
+  const isDesktop = useIsDesktop()
+  const [recorrido, setRecorrido] = useState<{ ids: string[]; desdeLista: boolean }>({ ids: [], desdeLista: false })
+  // sessionStorage después de montar (hidratación) — mismo criterio que las
+  // preferencias de Calendario.
+  useEffect(() => { setRecorrido(leerRecorrido(id)) }, [id])
+  const posRecorrido = recorrido.ids.indexOf(id)
+  const anteriorId = posRecorrido > 0 ? recorrido.ids[posRecorrido - 1] : null
+  const siguienteId = posRecorrido >= 0 && posRecorrido < recorrido.ids.length - 1 ? recorrido.ids[posRecorrido + 1] : null
+  // `replace`, no `push`: recorrer diez recetas no apila diez entradas — el
+  // "volver" sigue siendo un solo paso hasta la lista.
+  const irAReceta = useCallback((destino: string | null) => {
+    if (!destino) return
+    if (recorrido.desdeLista) marcarDesdeLista(destino)
+    router.replace(`/recetario/${destino}`)
+  }, [recorrido.desdeLista, router])
+  const volver = useCallback(() => {
+    // Desde la lista, `back()` la devuelve con su búsqueda y su scroll.
+    if (recorrido.desdeLista && window.history.length > 1) router.back()
+    else router.push('/recetario')
+  }, [recorrido.desdeLista, router])
+
+  // Dos columnas por ancho real del contenido, no por viewport (ui.md).
+  const [raiz, setRaiz] = useState<HTMLDivElement | null>(null)
+  const ancho = useAncho(raiz)
+  const dosColumnas = ancho >= 900
+
+  // Nota del chef: se edita en la misma fila.
+  const [notaEditId, setNotaEditId] = useState<string | null>(null)
+  const notaInputRef = useRef<HTMLInputElement>(null)
 
   // ── Historial de producción ──
   useEffect(() => {
@@ -386,7 +440,42 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
     container.scrollTo({ top: container.scrollTop + delta - 8, behavior: 'smooth' })
   }
 
-  if (loading || fetchingDirect) return <RecetaDetailSkeleton />
+  // flushSync: el campo tiene que existir y recibir el foco dentro del mismo
+  // toque, o el teclado del celular no se abre (ui.md § Input editable inline).
+  function abrirNota(ingId: string) {
+    flushSync(() => setNotaEditId(ingId))
+    notaInputRef.current?.focus()
+  }
+  async function guardarNota(ingId: string, texto: string) {
+    setNotaEditId(null)
+    const nota = texto.trim() || null
+    const actual = receta?.ingredientes?.find(i => i.id === ingId)?.nota?.trim() || null
+    if (nota === actual) return
+    try {
+      await actualizarIngrediente(ingId, { nota })
+    } catch {
+      setToast('No se pudo guardar la nota — revisá la conexión')
+    }
+  }
+
+  // ← → pasan de receta (desktop), igual que las flechas del Calendario.
+  const hayCapaAbierta = ingModal || editModal || !!deleteTarget || opsOpen || !!opsIngId
+  useEffect(() => {
+    if (!isDesktop || hayCapaAbierta) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if ((e.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) return
+      if (e.key === 'ArrowLeft' && anteriorId) irAReceta(anteriorId)
+      else if (e.key === 'ArrowRight' && siguienteId) irAReceta(siguienteId)
+      else return
+      e.preventDefault()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isDesktop, hayCapaAbierta, anteriorId, siguienteId, irAReceta])
+
+  // Skeleton solo mientras no haya NADA que mostrar: ni la lista ni la consulta directa.
+  if (!receta && (!RESTAURANTE_ID || loading || fetchingDirect)) return <RecetaDetailSkeleton />
 
   if (!receta) return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 12 }}>
@@ -484,10 +573,10 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
     if (tipo === 'subreceta') {
       // Recalcular desde datos live para corregir costo_unitario mal guardado
       const corr = corregirSubreceta(i)
-      setIngForm({ nombre: i.nombre, cantidad: String(corr.cantidad), unidad: corr.unidad, costo_unitario: String(corr.costo_unitario?.toFixed(6) ?? 0), unidad_costo: corr.unidad_costo ?? corr.unidad, merma_pct: '0', grupo: i.grupo ?? '', producto_id: null })
+      setIngForm({ nombre: i.nombre, cantidad: String(corr.cantidad), unidad: corr.unidad, costo_unitario: String(corr.costo_unitario?.toFixed(6) ?? 0), unidad_costo: corr.unidad_costo ?? corr.unidad, merma_pct: '0', grupo: i.grupo ?? '', producto_id: null, nota: i.nota ?? '' })
       setMermaPesoInput('0')
     } else {
-      setIngForm({ nombre: i.nombre, cantidad: String(i.cantidad), unidad: i.unidad, costo_unitario: String(i.costo_unitario ?? 0).replace('.', ','), unidad_costo: i.unidad_costo ?? '', merma_pct: String(i.merma_pct ?? 0), grupo: i.grupo ?? '', producto_id: i.producto_id ?? null })
+      setIngForm({ nombre: i.nombre, cantidad: String(i.cantidad), unidad: i.unidad, costo_unitario: String(i.costo_unitario ?? 0).replace('.', ','), unidad_costo: i.unidad_costo ?? '', merma_pct: String(i.merma_pct ?? 0), grupo: i.grupo ?? '', producto_id: i.producto_id ?? null, nota: i.nota ?? '' })
       const pct = i.merma_pct ?? 0
       if (pct > 0 && i.cantidad > 0) {
         const peso = i.cantidad * (pct / 100)
@@ -526,6 +615,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
         subreceta_id: ingTipo === 'subreceta' ? ingSubrecetaId : null,
         merma_pct: parseNumero(ingForm.merma_pct),
         grupo: ingForm.grupo.trim() || null,
+        nota: ingForm.nota.trim() || null,
       }
       if (editIng) {
         await actualizarIngrediente(editIng.id, datos)
@@ -553,13 +643,18 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
         created_at: new Date().toISOString(),
         updated_at: null,
       },
-      (receta.ingredientes ?? []).map(({ nombre, cantidad, unidad, costo_unitario, unidad_costo, subreceta_id, tipo, merma_pct }) => ({
+      // Etapa, nota y vínculo a Stock también se copian: antes la copia perdía
+      // las etapas y quedaba con los ingredientes sueltos del stock.
+      (receta.ingredientes ?? []).map(({ nombre, cantidad, unidad, costo_unitario, unidad_costo, subreceta_id, tipo, merma_pct, producto_id, grupo, nota }) => ({
         nombre, cantidad, unidad,
         costo_unitario: costo_unitario ?? null,
         unidad_costo: unidad_costo ?? null,
         subreceta_id: subreceta_id ?? null,
         tipo: tipo ?? null,
         merma_pct: merma_pct ?? null,
+        producto_id: producto_id ?? null,
+        grupo: grupo ?? null,
+        nota: nota ?? null,
       }))
     )
     router.push(`/recetario/${newId}`)
@@ -597,7 +692,10 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
         es_plato: editForm.es_plato,
       })
       setEditModal(false)
-    } catch { /* ignore */ }
+    } catch (e: unknown) {
+      // Antes se tragaba el error: el modal quedaba abierto sin decir nada.
+      setToast('No se pudo guardar: ' + (e instanceof Error ? e.message : 'revisá la conexión'))
+    }
     finally { setEditSaving(false) }
   }
 
@@ -673,13 +771,13 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
   })()
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div ref={setRaiz} style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
       {/* ── Header compacto ── */}
       <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-            <button onClick={() => router.push('/recetario')} aria-label="Volver al recetario" className="hit-slop" style={btnClear}>
+            <button onClick={volver} aria-label="Volver al recetario" className="hit-slop" style={btnClear}>
               <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>arrow_back</span>
             </button>
             <div style={{ minWidth: 0 }}>
@@ -708,17 +806,35 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
       </div>
 
       {/* ── Nav de secciones — salto directo, no hay que bajar todo a mano ── */}
-      <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '8px 14px', flexShrink: 0 }}>
-        <FilterChips
-          chips={[
-            { value: 'ingredientes', label: 'Ingredientes' },
-            { value: 'procedimiento', label: 'Procedimiento' },
-            { value: 'historial', label: 'Historial' },
-            ...(verCostos ? [{ value: 'foodcost', label: 'Food Cost' } as const] : []),
-          ]}
-          active={seccionActiva}
-          onChange={irASeccion}
-        />
+      <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '8px 14px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <FilterChips
+            chips={[
+              { value: 'ingredientes', label: 'Ingredientes' },
+              { value: 'procedimiento', label: 'Procedimiento' },
+              { value: 'historial', label: 'Historial' },
+              ...(verCostos ? [{ value: 'foodcost', label: 'Food Cost' } as const] : []),
+            ]}
+            active={seccionActiva}
+            onChange={irASeccion}
+          />
+        </div>
+        {/* Anterior / siguiente en el orden en que quedó la lista (búsqueda y
+            categoría incluidas): comparar tres salsas no obliga a volver a la
+            lista entre una y otra. */}
+        {posRecorrido >= 0 && recorrido.ids.length > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+            <button type="button" onClick={() => irAReceta(anteriorId)} disabled={!anteriorId} aria-label="Receta anterior" title="Receta anterior (←)" style={navRecetaBtn(!anteriorId)}>
+              <span className="material-symbols-outlined" style={{ fontSize: 20 }}>chevron_left</span>
+            </button>
+            <span aria-live="polite" style={{ minWidth: 46, textAlign: 'center', fontSize: 11.5, fontWeight: 700, color: 'var(--text-3)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+              {posRecorrido + 1} / {recorrido.ids.length}
+            </span>
+            <button type="button" onClick={() => irAReceta(siguienteId)} disabled={!siguienteId} aria-label="Receta siguiente" title="Receta siguiente (→)" style={navRecetaBtn(!siguienteId)}>
+              <span className="material-symbols-outlined" style={{ fontSize: 20 }}>chevron_right</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Body: scroll continuo ── */}
@@ -731,6 +847,16 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
             <img src={receta.foto_url} alt={receta.nombre} style={{ width: '100%', height: 220, objectFit: 'cover', display: 'block' }} />
           </div>
         )}
+
+        {/* Con ancho real ≥ 900px la ficha se lee como una receta impresa:
+            ingredientes a la izquierda, procedimiento (y lo demás) a la
+            derecha, las dos a la vista sin scrollear de una a la otra. En el
+            celular los wrappers son `display:contents` y el flujo de una sola
+            columna queda igual (ui.md § Pantalla mobile-first estirada). */}
+        <div style={dosColumnas
+          ? { display: 'grid', gridTemplateColumns: 'minmax(0, 5fr) minmax(0, 6fr)', gap: 6, alignItems: 'start', maxWidth: 1500, margin: '0 auto' }
+          : { display: 'contents' }}>
+        <div style={dosColumnas ? { minWidth: 0 } : { display: 'contents' }}>
 
         {/* ── Convertir a plato (solo admin) + OPS ── */}
         {canEdit && (
@@ -900,7 +1026,6 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                   <div
                     key={i.id}
                     style={{
-                      display: 'flex', alignItems: 'center',
                       padding: '10px 12px',
                       borderBottom: !isLastOverall ? '1px solid var(--border)' : 'none',
                       borderLeft: i.cantidad === 0 ? '3px solid #ef4444' : '3px solid transparent',
@@ -908,6 +1033,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                       background: isHighlighted ? 'rgba(245,158,11,.06)' : (i.cantidad === 0 ? 'var(--red-bg)' : 'transparent'),
                     }}
                   >
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
                     {/* Nombre — toca para editar ingrediente */}
                     <button
                       onClick={() => openEditIng(i)}
@@ -917,7 +1043,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                         display: 'flex', alignItems: 'center', gap: 4,
                       }}
                     >
-                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>{i.nombre}</span>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{i.nombre}</span>
                       {i.tipo === 'subreceta' && (
                         <span className="material-symbols-outlined" style={{ fontSize: 12, color: 'var(--accent)', flexShrink: 0 }}>settings</span>
                       )}
@@ -973,20 +1099,27 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                           }}
                         >
                           <span style={{
-                            fontSize: 13, fontWeight: 700,
+                            fontSize: 15, fontWeight: 700,
                             fontFamily: "'DM Mono', monospace",
                             color: isHighlighted ? '#d97706' : 'var(--text-1)',
                             transition: 'color .5s',
                           }}>
                             {displayQty}
                           </span>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)' }}>{displayUnit}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)' }}>{displayUnit}</span>
                           {(i.merma_pct ?? 0) > 0 && (
                             <span style={{ fontSize: 9, color: 'var(--text-3)', opacity: .7 }}>↑{i.merma_pct}%</span>
                           )}
                         </div>
                       )
                     })()}
+
+                    {/* Nota del chef — quien puede editar la receta la carga desde acá */}
+                    {canEdit && (
+                      <span style={{ marginLeft: 6, display: 'flex' }}>
+                        <NotaIngredienteBoton activa={!!i.nota} onClick={() => abrirNota(i.id)} />
+                      </span>
+                    )}
 
                     {/* Botón OPS por ingrediente — solo cuando la receta se trabaja como plato */}
                     {receta.es_plato && (
@@ -1005,6 +1138,24 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                         <span style={{ fontSize: 8, fontWeight: 800, lineHeight: 1 }}>{i.plaza ? (plazaOpsCfg?.label ?? 'OPS') : 'OPS'}</span>
                       </button>
                     )}
+                  </div>
+                  {/* La nota va debajo del nombre y entera: es lo que la
+                      cantidad sola no dice (cuáles, en qué punto, cómo). */}
+                  {notaEditId === i.id ? (
+                    <NotaIngredienteEditor
+                      inicial={i.nota ?? ''}
+                      onGuardar={texto => guardarNota(i.id, texto)}
+                      onCancelar={() => setNotaEditId(null)}
+                      inputRef={notaInputRef}
+                      style={{ marginTop: 7 }}
+                    />
+                  ) : i.nota ? (
+                    <NotaIngredienteTexto
+                      nota={i.nota}
+                      onClick={canEdit ? () => abrirNota(i.id) : undefined}
+                      style={{ marginTop: 6 }}
+                    />
+                  ) : null}
                   </div>
                 )
                   })}
@@ -1028,8 +1179,11 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
           </button>
         </div>
 
+        </div>
+        <div style={dosColumnas ? { minWidth: 0 } : { display: 'contents' }}>
+
         {/* ═══ PROCEDIMIENTO ═══ */}
-        <div ref={procedimientoRef} style={{ padding: '18px 14px 0' }}>
+        <div ref={procedimientoRef} style={{ padding: dosColumnas ? '14px 14px 0' : '18px 14px 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--text-3)' }}>format_list_numbered</span>
             <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Procedimiento</span>
@@ -1055,7 +1209,7 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                       fontSize: 11, fontWeight: 700, color: 'var(--text-3)',
                       width: 22, textAlign: 'center', flexShrink: 0, paddingTop: 1,
                     }}>{idx + 1}.</span>
-                    <span style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.6 }}>{text}</span>
+                    <span style={{ fontSize: 14, color: 'var(--text-1)', lineHeight: 1.6 }}>{text}</span>
                   </div>
                 )
               })}
@@ -1289,13 +1443,17 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
             </div>
           )}
         </div>)}
+
+        </div>
+        </div>
       </div>
 
       {/* ── Ingrediente modal ── */}
       {ingModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 150, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+        <SheetChrome>
+        <div style={capaModal(dosColumnas)}>
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)' }} onClick={() => setIngModal(false)} />
-          <div style={{ position: 'relative', background: 'var(--surface)', borderRadius: '16px 16px 0 0', boxShadow: '0 -8px 40px rgba(0,0,0,.3)', maxHeight: '88dvh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+          <div style={{ ...cajaModal(dosColumnas), maxHeight: '88dvh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
             {/* Handle + header fijo */}
             <div style={{ padding: '14px 16px 12px', flexShrink: 0, borderBottom: '1px solid var(--border)' }}>
               <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 12px' }} />
@@ -1485,6 +1643,18 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
                   </select>
                 )}
               </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={lbl}>Nota del chef</span>
+                <input
+                  value={ingForm.nota}
+                  maxLength={NOTA_INGREDIENTE_MAX}
+                  onChange={e => setIngForm(f => ({ ...f, nota: e.target.value }))}
+                  placeholder={NOTA_INGREDIENTE_PLACEHOLDER}
+                  autoComplete="off"
+                  style={inp}
+                />
+                <span style={{ fontSize: 10, color: 'var(--text-3)' }}>Lo que la cantidad no dice: cuáles, en qué punto, cómo. La ve quien cocina.</span>
+              </label>
               {ingTipo === 'producto' && (
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <span style={lbl}>Merma ({ingForm.unidad || 'unidad'})</span>
@@ -1588,13 +1758,15 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
             </div>
           </div>
         </div>
+        </SheetChrome>
       )}
 
       {/* ── Edit receta modal ── */}
       {editModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 150, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+        <SheetChrome>
+        <div style={capaModal(dosColumnas)}>
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)' }} onClick={() => setEditModal(false)} />
-          <div style={{ position: 'relative', background: 'var(--surface)', borderRadius: '16px 16px 0 0', padding: '20px 16px 100px', maxHeight: '90%', overflowY: 'auto', boxShadow: '0 -8px 40px rgba(0,0,0,.3)' }} onClick={e => e.stopPropagation()}>
+          <div style={{ ...cajaModal(dosColumnas), padding: dosColumnas ? '20px 18px 22px' : '20px 16px 100px', maxHeight: '90%', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 16px' }} />
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
               <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', margin: 0 }}>Editar receta</h2>
@@ -1698,13 +1870,14 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
             </button>
           </div>
         </div>
+        </SheetChrome>
       )}
 
       {/* ── Delete confirm ── */}
       {deleteTarget && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.6)' }} onClick={() => { setDeleteTarget(null); setDeleteIngId(null) }} />
-          <div style={{ position: 'relative', background: 'var(--surface)', borderRadius: 16, padding: 24, width: '100%', boxShadow: '0 8px 40px rgba(0,0,0,.4)' }}>
+          <div style={{ position: 'relative', background: 'var(--surface)', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400, boxShadow: '0 8px 40px rgba(0,0,0,.4)' }}>
             <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)', margin: '0 0 8px' }}>
               {deleteTarget === 'receta' ? 'Eliminar receta' : 'Eliminar ingrediente'}
             </h3>
@@ -1759,6 +1932,25 @@ export default function RecetaDetallePage({ params }: { params: Promise<{ id: st
 
 const syncBtn: React.CSSProperties = { background: 'rgba(245,158,11,.2)', border: 'none', borderRadius: 7, padding: '5px 9px', fontSize: 10, fontWeight: 700, color: 'var(--amber-fg)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }
 const btnClear: React.CSSProperties = { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }
+const navRecetaBtn = (apagado: boolean): React.CSSProperties => ({
+  width: 34, height: 34, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-2)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0,
+  cursor: apagado ? 'default' : 'pointer', opacity: apagado ? 0.35 : 1,
+})
+// Sheets de la ficha: desde abajo y a todo el ancho en el celular; centrados y
+// con ancho de formulario cuando hay lugar — a 1400px un sheet de borde a
+// borde dejaba cada input estirado de punta a punta.
+const capaModal = (centrado: boolean): React.CSSProperties => ({
+  position: 'fixed', inset: 0, zIndex: 150, display: 'flex', flexDirection: 'column',
+  justifyContent: centrado ? 'center' : 'flex-end', alignItems: centrado ? 'center' : 'stretch',
+  padding: centrado ? 24 : 0,
+})
+const cajaModal = (centrado: boolean): React.CSSProperties => ({
+  position: 'relative', background: 'var(--surface)',
+  borderRadius: centrado ? 16 : '16px 16px 0 0',
+  width: centrado ? 'min(520px, 100%)' : undefined,
+  boxShadow: centrado ? '0 20px 60px rgba(0,0,0,.35)' : '0 -8px 40px rgba(0,0,0,.3)',
+})
 const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '.06em' }
 const inp: React.CSSProperties = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 10px', fontSize: 13, fontFamily: 'inherit', color: 'var(--text-1)', outline: 'none', width: '100%', boxSizing: 'border-box' }
 

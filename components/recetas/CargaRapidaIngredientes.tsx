@@ -6,7 +6,9 @@
 // rápida de Recetario. Es controlado — el padre es dueño del array de filas
 // — para que ambos lugares puedan reusar la misma UI/lógica sin duplicarla.
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import type { Ingrediente } from '@/types'
+import { NotaIngredienteBoton, NotaIngredienteCampo } from './NotaIngrediente'
 import type { RecetaConCosto } from '@/lib/hooks/useRecetas'
 import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
 import { unitConversionFactor, parseNumero, parsePrecio } from '@/lib/unidades'
@@ -32,6 +34,8 @@ export interface FilaIngredienteRapido {
   // se interpreta en la unidad de la fila.
   productoId?: string | null
   unidadCosto?: string | null
+  // Nota del chef ("2 unidades, maduras", "tostado") — ingredientes.nota.
+  nota?: string
   // Columnas del ingrediente que esta UI no edita (merma, etapa, OPS) — se
   // preservan al guardar, porque guardar reemplaza todos los ingredientes.
   extra?: Partial<Omit<Ingrediente, 'id' | 'receta_id'>>
@@ -63,6 +67,7 @@ export function filasToIngredientesData(filas: FilaIngredienteRapido[], stockPro
         tipo: f.tipo,
         subreceta_id: f.tipo === 'subreceta' ? (f.subrecetaId ?? null) : null,
         producto_id: productoId,
+        nota: f.nota?.trim() || null,
       }
     })
 }
@@ -237,6 +242,15 @@ function FilaRapidaRow({ fila, idx, stockProductos, recetasDisponibles, autoFocu
   const [showUnitPicker, setShowUnitPicker] = useState(false)
   const [sugerencias, setSugerencias] = useState<Sugerencia[]>([])
   const [showSug, setShowSug] = useState(false)
+  // Nota del chef: segunda línea que se abre con el botón de la fila (mismo
+  // criterio que recetario/IngRow.tsx).
+  const [notaAbierta, setNotaAbierta] = useState(false)
+  const notaRef = useRef<HTMLInputElement>(null)
+  const mostrarNota = notaAbierta || !!fila.nota
+  function abrirNota() {
+    flushSync(() => setNotaAbierta(true))
+    notaRef.current?.focus()
+  }
 
   const nomRef = useCallback((el: HTMLInputElement | null) => {
     if (el) nombreRefs.current.set(fila.id, el)
@@ -286,7 +300,7 @@ function FilaRapidaRow({ fila, idx, stockProductos, recetasDisponibles, autoFocu
     <div style={{ position: 'relative' }}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 0,
-        borderBottom: isLast ? 'none' : '1px solid var(--border)',
+        borderBottom: isLast || mostrarNota ? 'none' : '1px solid var(--border)',
       }}>
         <span className="material-symbols-outlined" style={{ fontSize: 14, color: esSubreceta ? 'var(--accent)' : 'var(--text-3)', flexShrink: 0, marginLeft: 8 }}>
           {esSubreceta ? 'menu_book' : 'inventory_2'}
@@ -325,10 +339,22 @@ function FilaRapidaRow({ fila, idx, stockProductos, recetasDisponibles, autoFocu
           title={`Costo por ${fila.unidadCosto || fila.unidad}`}
           style={{ width: 44, border: 'none', background: 'transparent', outline: 'none', padding: '9px 2px', fontSize: 11, fontWeight: 600, fontFamily: "'DM Mono', monospace", color: 'var(--text-3)', textAlign: 'right' }}
         />
+        <NotaIngredienteBoton activa={!!fila.nota} onClick={abrirNota} size={28} />
         <button onClick={() => onRemove(fila.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px 8px 8px 2px', opacity: .3, flexShrink: 0, display: 'flex' }}>
           <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#ef4444' }}>close</span>
         </button>
       </div>
+
+      {mostrarNota && (
+        <NotaIngredienteCampo
+          value={fila.nota ?? ''}
+          onChange={v => onUpdate(fila.id, { nota: v })}
+          onBlur={() => { if (!fila.nota?.trim()) setNotaAbierta(false) }}
+          onEnter={() => onConfirm(fila.id)}
+          inputRef={notaRef}
+          style={{ padding: '0 10px 8px', borderBottom: isLast ? 'none' : '1px solid var(--border)' }}
+        />
+      )}
 
       {showUnitPicker && (
         <div style={{ position: 'absolute', right: 0, top: '100%', zIndex: 30, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,.15)', display: 'flex', overflow: 'hidden' }}>

@@ -63,6 +63,11 @@ EXTRACCIÓN:
   "3 cucharadas" o "1 taza", convertí a la unidad de peso o volumen más cercana
   únicamente si la equivalencia es estándar; si no, usá "u" y dejá la medida
   original en el nombre del ingrediente.
+- "nota" del ingrediente: la aclaración que la fuente escribe junto a ese
+  ingrediente y que no es ni el nombre ni la cantidad — el estado o punto
+  ("maduras", "tostado", "a temperatura ambiente"), el corte ("en brunoise"),
+  o la equivalencia en unidades ("2 unidades"). Copiala corta y tal cual, y
+  sacala del nombre. Si la fuente no aclara nada, va null: no la inventes.
 - Categoría: elegí de esta lista, que son las categorías reales de este restaurante:
   ${categorias.join(', ')}.`
 }
@@ -105,8 +110,9 @@ function esquemaReceta(categorias: string[]): Record<string, unknown> {
             nombre: { type: 'string' },
             cantidad: { type: 'string', description: 'Coma decimal: "0,5"' },
             unidad: { type: 'string', enum: UNIDADES },
+            nota: opcional({ type: 'string', description: 'Aclaración del ingrediente tal como está en la fuente ("maduras", "tostado", "2 unidades"). null si no hay.' }),
           },
-          required: ['nombre', 'cantidad', 'unidad'],
+          required: ['nombre', 'cantidad', 'unidad', 'nota'],
           additionalProperties: false,
         },
       },
@@ -146,7 +152,7 @@ interface RecetaExtraida {
   rinde: number | null
   rinde_unidad: string | null
   tiempo_minutos: number | null
-  ingredientes: { nombre: string; cantidad: string; unidad: string }[]
+  ingredientes: { nombre: string; cantidad: string; unidad: string; nota: string | null }[]
   procedimiento: string[]
 }
 

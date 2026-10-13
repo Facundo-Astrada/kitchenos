@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { createPortal, flushSync } from 'react-dom'
 import { SheetChrome } from '@/lib/ui/chrome'
+import { NotaIngredienteBoton, NotaIngredienteAutoguardado } from '@/components/recetas/NotaIngrediente'
 import { useRecetas, unitConversionFactor } from '@/lib/hooks/useRecetas'
 import { useProduccionRegistros, type ProduccionRegistro } from '@/lib/hooks/useProduccionRegistros'
 import { useStock } from '@/lib/hooks/useStock'
@@ -96,6 +97,15 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
   // volver a abrir la receta más tarde. Ahora cualquier falla de guardado se
   // ve acá.
   const [guardadoError, setGuardadoError] = useState<string | null>(null)
+  // Nota del chef por ingrediente: la línea se abre con el botón de la fila (o
+  // sola si ya hay una cargada). flushSync para que el foco caiga dentro del
+  // mismo toque — si no, el teclado del celular no se abre.
+  const [notaAbiertaId, setNotaAbiertaId] = useState<string | null>(null)
+  const notaRef = useRef<HTMLInputElement>(null)
+  function abrirNota(ingId: string) {
+    flushSync(() => setNotaAbiertaId(ingId))
+    notaRef.current?.focus()
+  }
   function conAviso(promesa: Promise<unknown>) {
     promesa.catch(e => setGuardadoError(e instanceof Error ? e.message : 'No se pudo guardar — revisá la conexión'))
   }
@@ -310,6 +320,7 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
       await agregarIngrediente(receta.id, {
         nombre: ing.nombre, cantidad, unidad: ing.unidad,
         costo_unitario: 0, unidad_costo: ing.unidad,
+        nota: ing.nota?.trim() || null,
       })
     }
     // Una sola pasada al final (no por ingrediente): el matching es sobre TODO
@@ -535,7 +546,8 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
                       // (el auto-link de costo tras completar con IA, por ejemplo) no
                       // se veía reflejado — React no vuelve a leer `defaultValue` en
                       // un nodo que ya montó, así que forzar el remount es la señal.
-                      <div key={`${ing.id}:${ing.nombre}:${ing.cantidad}:${ing.unidad}:${ing.costo_unitario}`} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
+                      <div key={`${ing.id}:${ing.nombre}:${ing.cantidad}:${ing.unidad}:${ing.costo_unitario}`} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 0' }}>
                         <input
                           defaultValue={ing.nombre}
                           onBlur={e => { const v = e.target.value.trim(); if (v && v !== ing.nombre) conAviso(actualizarIngrediente(ing.id, { nombre: v })) }}
@@ -569,9 +581,21 @@ export function RecetaQuickEditModal({ recetaId, onClose }: Props) {
                             </span>
                           </>
                         )}
+                        <NotaIngredienteBoton activa={!!ing.nota} onClick={() => abrirNota(ing.id)} size={28} />
                         <button onClick={() => conAviso(eliminarIngrediente(ing.id))} style={{ ...btnReset, flexShrink: 0 }}>
                           <span className="material-symbols-outlined" style={{ fontSize: 15, color: '#ef4444' }}>close</span>
                         </button>
+                      </div>
+                      {(ing.nota || notaAbiertaId === ing.id) && (
+                        <NotaIngredienteAutoguardado
+                          key={ing.nota ?? ''}
+                          nota={ing.nota ?? ''}
+                          onGuardar={texto => conAviso(actualizarIngrediente(ing.id, { nota: texto || null }))}
+                          onSalirVacio={() => setNotaAbiertaId(null)}
+                          inputRef={notaAbiertaId === ing.id ? notaRef : undefined}
+                          style={{ padding: '0 2px 7px' }}
+                        />
+                      )}
                       </div>
                     )
                   })}

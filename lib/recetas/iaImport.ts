@@ -56,7 +56,8 @@ export interface RecetaIAResult {
   rinde?: number | null
   rinde_unidad?: string | null
   tiempo_minutos?: number
-  ingredientes: { nombre: string; cantidad: string; unidad: string }[]
+  /** `nota`: aclaración del ingrediente que traía la fuente ("maduras", "tostado"). */
+  ingredientes: { nombre: string; cantidad: string; unidad: string; nota?: string | null }[]
   procedimiento: string[]
 }
 

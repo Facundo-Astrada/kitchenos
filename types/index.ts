@@ -70,6 +70,8 @@ export interface Ingrediente {
   peso_porcion_unidad?: string | null
   // Etapa/sección editable dentro de la receta (ej. "Etapa 1 — marinada"). NULL = sin etapa.
   grupo?: string | null
+  // Nota del chef sobre este ingrediente ("2 unidades, maduras", "tostado"). No afecta el costeo.
+  nota?: string | null
 }
 
 // DB: plato_recetas (id, plato_id, receta_id, porciones, orden, created_at)

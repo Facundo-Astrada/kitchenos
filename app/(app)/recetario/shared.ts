@@ -1,5 +1,30 @@
 import { parseNumero } from '@/lib/unidades'
 import { toGramos } from '@/lib/recetas/peso'
+import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
+
+// Normaliza nombres de categoría con variantes históricas
+export function normalizeCategoria(cat: string | null | undefined): string {
+  if (!cat) return ''
+  const lower = cat.toLowerCase().trim()
+  const MAP: Record<string, string> = {
+    entrantes: 'Entradas',
+    garnishes: 'Guarniciones',
+    guarniciones: 'Guarniciones',
+    'carnes rojas': 'Carnes',
+    otros: 'Otros',
+    otras: 'Otros',
+    other: 'Otros',
+    'bases y salsas': 'Salsas',
+    salsa: 'Salsas',
+  }
+  return MAP[lower] ?? (cat.charAt(0).toUpperCase() + cat.slice(1))
+}
+
+export function fcColor(pct: number) {
+  if (pct >= FC_ALERT_HIGH) return '#ef4444'
+  if (pct >= FC_ALERT_OK) return '#f59e0b'
+  return '#4ade80'
+}
 
 // Tipos y helpers de importación IA compartidos entre recetario/page.tsx y
 // recetario/IAResultScreens.tsx. Viven acá (y no en cualquiera de esos dos
@@ -20,7 +45,8 @@ export interface IAApiResult {
   rinde?: number | null
   rinde_unidad?: string | null
   tiempo_minutos?: number
-  ingredientes: { nombre: string; cantidad: string; unidad: string }[]
+  /** `nota`: aclaración del ingrediente que traía la fuente ("maduras", "tostado"). */
+  ingredientes: { nombre: string; cantidad: string; unidad: string; nota?: string | null }[]
   procedimiento: string[]
 }
 
@@ -30,7 +56,7 @@ export interface IAResult {
   categoria?: string
   porciones?: number
   tiempo_min?: number
-  ingredientes: { nombre: string; cantidad: string; unidad: string }[]
+  ingredientes: { nombre: string; cantidad: string; unidad: string; nota?: string | null }[]
   pasos: string[]
 }
 

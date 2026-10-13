@@ -1,11 +1,9 @@
 'use client'
 
 import PageTransition from '@/components/PageTransition'
-import { motion } from 'motion/react'
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback, useDeferredValue } from 'react'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { useRecetas, calcFoodCost, type RecetaConCosto } from '@/lib/hooks/useRecetas'
 import { vincularIngredientesConStock, buscarProductoExacto } from '@/lib/recetas/vinculo'
 import { useStock } from '@/lib/hooks/useStock'
@@ -13,7 +11,7 @@ import { useCategoriasProducto } from '@/lib/hooks/useCategoriasProducto'
 import { usePermisos } from '@/lib/hooks/usePermisos'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
-import { FC_ALERT_HIGH, FC_ALERT_OK } from '@/lib/constants'
+import { FC_ALERT_HIGH } from '@/lib/constants'
 import ImageCropModal from '@/components/ui/ImageCropModal'
 import { createPortal } from 'react-dom'
 import { SheetChrome, useSheetOpen } from '@/lib/ui/chrome'
@@ -21,19 +19,21 @@ import { unitConversionFactor, canonUnit } from '@/lib/unidades'
 import { exportarExcel, fechaArchivo } from '@/lib/exportar'
 import ImportadorFichasTecnicas from '@/components/importador/ImportadorFichasTecnicas'
 import { clasificarArchivo } from '@/lib/recetas/iaImport'
-import { nivelDeReceta } from '@/lib/recetas/estandarizacion'
-import { NivelBadge } from '@/app/(app)/carta/EstandarizacionView'
-import { HeaderAction, Skeleton, FilterChips, EmptyState, IAButton, IAPanel } from '@/components/ui'
+import { HeaderAction, FilterChips, EmptyState, IAButton, IAPanel, SegmentedTabs, Kbd } from '@/components/ui'
 import { useIsDesktop } from '@/lib/hooks/useIsDesktop'
+import { useAncho } from '@/lib/hooks/useAncho'
+import { normalizarBusqueda } from '@/lib/texto'
 import {
-  CargaRapidaIngredientes, TotalesRapidosBar, nuevaFilaRapida, filasToIngredientesData,
+  CargaRapidaIngredientes, TotalesRapidosBar, nuevaFilaRapida, filasToIngredientesData, fcColorRapido,
   type FilaIngredienteRapido,
 } from '@/components/recetas/CargaRapidaIngredientes'
 import { IAMultiResultScreen } from './IAResultScreens'
 import { IngRow, UNIDADES_SUBRECETA, patchVinculo, type FormIng } from './IngRow'
 import { sugerenciaDeProducto, sugerenciaDeReceta, type SugerenciaIngrediente } from '@/lib/recetas/sugerencias'
 import type { ResultadoVinculoIA } from '@/lib/recetas/vinculoIA'
-import { apiToForm, parseNum, calcPesoPorcion, formatPeso, type IAApiResult } from './shared'
+import { apiToForm, parseNum, fcColor, normalizeCategoria, type IAApiResult } from './shared'
+import { RecetaCard, RecetaCardSkeleton, KpiTile } from './RecetaCard'
+import { recordarLista, tomarEstadoLista } from './navLista'
 
 
 // Categorías canónicas de recetas
@@ -42,24 +42,6 @@ const CATEGORIAS_RECETA = [
   'Carnes', 'Aves', 'Pescados', 'Vegetariano', 'Postres', 'Repostería',
   'Panificados', 'Bebidas', 'Otros',
 ]
-
-// Normaliza nombres de categoría con variantes históricas
-function normalizeCategoria(cat: string | null | undefined): string {
-  if (!cat) return ''
-  const lower = cat.toLowerCase().trim()
-  const MAP: Record<string, string> = {
-    entrantes: 'Entradas',
-    garnishes: 'Guarniciones',
-    guarniciones: 'Guarniciones',
-    'carnes rojas': 'Carnes',
-    otros: 'Otros',
-    otras: 'Otros',
-    other: 'Otros',
-    'bases y salsas': 'Salsas',
-    salsa: 'Salsas',
-  }
-  return MAP[lower] ?? (cat.charAt(0).toUpperCase() + cat.slice(1))
-}
 
 // ── Tipos para importación IA ──
 type ImportMode = 'camera' | 'gallery' | 'file' | 'audio' | 'text' | 'glink' | null
@@ -122,12 +104,6 @@ async function callRecetaImportMulti(mode: ImportApiMode, payload: ImportPayload
   return postImport('import_multi', mode, payload)
 }
 
-function fcColor(pct: number) {
-  if (pct >= FC_ALERT_HIGH) return '#ef4444'
-  if (pct >= FC_ALERT_OK) return '#f59e0b'
-  return '#4ade80'
-}
-
 // ── Form types ── (FormIng vive en ./IngRow)
 
 interface FormPaso {
@@ -138,19 +114,13 @@ interface FormPaso {
 let _id = 0
 function uid() { return ++_id }
 
-// Sin stagger ni y-translate: la animación de entrada con `y: 12` por ítem hacía
-// que las cards se movieran bajo el dedo durante >1s (stagger 0.05 × N recetas),
-// y el primer tap caía sobre un target en movimiento → "hay que apretar dos veces"
-// (tanto en una receta como en el buscador, por el main thread ocupado componiendo).
-// Fade rápido en su posición final → tappable de inmediato.
-const containerVariants = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0 } },
-}
-const itemVariants = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { duration: 0.12 } },
-}
+// La lista crece de a tandas a medida que se scrollea: la cuenta más grande
+// tiene 600+ recetas, y montarlas todas de entrada (cada una calculando su
+// nivel de estandarización) era el costo más grande de abrir la pantalla.
+// Tampoco hay animación de entrada por tarjeta: eran 600 componentes `motion`
+// para un fade de 120ms (y antes, con stagger, el primer tap caía sobre una
+// tarjeta en movimiento).
+const TANDA = 60
 
 type Tab = 'recetas' | 'ideas'
 const TAB_IDS: Tab[] = ['recetas', 'ideas']
@@ -173,11 +143,43 @@ export default function RecetarioPage() {
   const recetasPorId = useMemo(() => new Map(recetas.map(r => [r.id, r])), [recetas])
 
   const [search, setSearch] = useState('')
+  // El filtro corre sobre el valor diferido: tipear nunca espera a la lista.
+  const busqueda = useDeferredValue(search)
   // Ideas no tiene chips de categoría propios, no necesita filtro.
   const [catFilterRecetas, setCatFilterRecetas] = useState('')
+  const [limite, setLimite] = useState(TANDA)
   const [creando, setCreando] = useState(false)
   const [cargaRapida, setCargaRapida] = useState(false)
   const [tab, setTab] = useState<Tab>('recetas')
+
+  // Layout por ancho real del contenido, no por viewport: con la sidebar y el
+  // panel del Coach abiertos "desktop" puede ser 600px (ui.md).
+  const [raiz, setRaiz] = useState<HTMLDivElement | null>(null)
+  const ancho = useAncho(raiz) || (isDesktop ? 1100 : 390)
+  const columnas = ancho >= 1480 ? 4 : ancho >= 1040 ? 3 : ancho >= 680 ? 2 : 1
+  const headerUnaFila = ancho >= 1000
+  const grilla: React.CSSProperties = { display: 'grid', gridTemplateColumns: `repeat(${columnas}, minmax(0, 1fr))`, gap: 10 }
+
+  const searchRef = useRef<HTMLInputElement>(null)
+  const listaRef = useRef<HTMLDivElement>(null)
+  const ideasRef = useRef<HTMLDivElement>(null)
+
+  // Volver de una ficha: la lista queda como estaba (búsqueda, categoría,
+  // pestaña y scroll). Ver navLista.ts. Va antes del efecto de `?tab=` para
+  // que un deep-link explícito gane.
+  const restaurar = useRef<{ search: string; limite: number; scroll: number; tab: Tab } | null>(null)
+  useEffect(() => {
+    const e = tomarEstadoLista()
+    if (!e) return
+    const t: Tab = esTab(e.tab) ? e.tab : 'recetas'
+    const lim = Math.max(TANDA, e.limite)
+    restaurar.current = { search: e.search, limite: lim, scroll: e.scroll, tab: t }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSearch(e.search)
+    setCatFilterRecetas(e.cat)
+    setLimite(lim)
+    setTab(t)
+  }, [])
 
   // Tab inicial desde la URL (?tab=) — deep-link, mismo patrón que operaciones/page.tsx
   useEffect(() => {
@@ -302,21 +304,95 @@ export default function RecetarioPage() {
   // Recetas e Ideas se filtran por separado — las dos pestañas están montadas a
   // la vez (swipe), cada una con su propia búsqueda por nombre (search es
   // compartido a propósito: encontrar "milanesa" tiene que valer para las 3).
+  // Nombre normalizado una vez por receta (sin acentos, minúsculas): antes
+  // "mbeju" no encontraba "Mbejú" y cada tecla recalculaba 600 toLowerCase().
+  const nombreBuscable = useMemo(() => new Map(recetas.map(r => [r.id, normalizarBusqueda(r.nombre)])), [recetas])
+
   const filteredRecetas = useMemo(() => {
     let list = recetasPublicadas
     if (catFilterRecetas) list = list.filter(r => normalizeCategoria(r.categoria) === catFilterRecetas)
-    if (search.trim()) {
-      const q = search.trim().toLowerCase()
-      list = list.filter(r => r.nombre.toLowerCase().includes(q))
-    }
+    const q = normalizarBusqueda(busqueda)
+    if (q) list = list.filter(r => (nombreBuscable.get(r.id) ?? '').includes(q))
     return list
-  }, [recetasPublicadas, catFilterRecetas, search])
+  }, [recetasPublicadas, catFilterRecetas, busqueda, nombreBuscable])
 
   const filteredIdeas = useMemo(() => {
-    if (!search.trim()) return recetasDraft
-    const q = search.trim().toLowerCase()
-    return recetasDraft.filter(r => r.nombre.toLowerCase().includes(q))
-  }, [recetasDraft, search])
+    const q = normalizarBusqueda(busqueda)
+    if (!q) return recetasDraft
+    return recetasDraft.filter(r => (nombreBuscable.get(r.id) ?? '').includes(q))
+  }, [recetasDraft, busqueda, nombreBuscable])
+
+  // ── Continuidad lista ↔ ficha ──
+  // Lo que la tarjeta necesita guardar al tocarla, por ref: así `abrirReceta`
+  // no cambia de identidad y no rompe el memo de 600 tarjetas.
+  const estadoLista = useRef({ search, cat: catFilterRecetas, limite, idsRecetas: [] as string[], idsIdeas: [] as string[] })
+  useEffect(() => {
+    estadoLista.current = {
+      search, cat: catFilterRecetas, limite,
+      idsRecetas: filteredRecetas.map(r => r.id), idsIdeas: filteredIdeas.map(r => r.id),
+    }
+  }, [search, catFilterRecetas, limite, filteredRecetas, filteredIdeas])
+
+  const abrirReceta = useCallback((recetaId: string) => {
+    const e = estadoLista.current
+    const t = tabRef.current
+    const panel = t === 'ideas' ? ideasRef.current : listaRef.current
+    recordarLista(
+      { search: e.search, cat: e.cat, tab: t, scroll: panel?.scrollTop ?? 0, limite: e.limite },
+      t === 'ideas' ? e.idsIdeas : e.idsRecetas,
+      recetaId,
+    )
+  }, [])
+
+  // El scroll se repone recién cuando la lista ya está como se dejó (misma
+  // búsqueda aplicada, mismas tandas renderizadas) — antes de eso el alto del
+  // panel es otro y el número no significa nada.
+  useEffect(() => {
+    const r = restaurar.current
+    if (!r || loading) return
+    if (search !== r.search || busqueda !== r.search || limite < r.limite) return
+    const panel = r.tab === 'ideas' ? ideasRef.current : listaRef.current
+    if (!panel) return
+    panel.scrollTop = r.scroll
+    restaurar.current = null
+  }, [loading, search, busqueda, limite, filteredRecetas, filteredIdeas])
+
+  const cambiarBusqueda = useCallback((v: string) => { setSearch(v); setLimite(TANDA) }, [])
+  const cambiarCategoria = useCallback((c: string) => {
+    setCatFilterRecetas(c)
+    setLimite(TANDA)
+    listaRef.current?.scrollTo({ top: 0 })
+  }, [])
+
+  // Siguiente tanda cuando falta poco para el final del panel.
+  const alScrollearLista = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget
+    if (el.scrollTop + el.clientHeight < el.scrollHeight - 900) return
+    setLimite(l => (l < estadoLista.current.idsRecetas.length ? l + TANDA : l))
+  }, [])
+
+  // Las tarjetas de Ideas reciben callbacks estables (la función del hook
+  // cambia de identidad en cada render).
+  const publicarRef = useRef(publicarReceta)
+  useEffect(() => { publicarRef.current = publicarReceta })
+  const publicarIdea = useCallback((r: RecetaConCosto) => { publicarRef.current(r.id) }, [])
+  const completarIdeaConIA = useCallback((r: RecetaConCosto) => { setEnrichingDraft(r); setCreando(true) }, [])
+
+  // Atajos (desktop): "/" busca, "N" receta nueva — mismos reflejos que Calendario.
+  const hayCapaLista = creando || cargaRapida || showFichas || showLink
+  useEffect(() => {
+    if (!isDesktop || hayCapaLista) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if ((e.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) return
+      if (e.key === '/') { searchRef.current?.focus(); searchRef.current?.select() }
+      else if (e.key.toLowerCase() === 'n') setCreando(true)
+      else return
+      e.preventDefault()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isDesktop, hayCapaLista])
 
   const fcPromedio = useMemo(() => {
     const conPrecio = recetasPublicadas.filter(r => (r.precio_venta ?? 0) > 0)
@@ -336,7 +412,11 @@ export default function RecetarioPage() {
     })
     const fcCritico = recetasPublicadas.filter(r => (r.precio_venta ?? 0) > 0 && r.food_cost.food_cost_pct >= FC_ALERT_HIGH)
     const sinPrecio = recetasPublicadas.filter(r => (r.precio_venta ?? 0) === 0)
-    return { costeoIncompleto, fcCritico, sinPrecio, total: costeoIncompleto.length + fcCritico.length + sinPrecio.length }
+    // Recetas distintas, no la suma de los tres grupos: una misma receta puede
+    // estar en dos (sin precio Y con costeo incompleto) y el total salía más
+    // grande que el recetario entero.
+    const total = new Set([...costeoIncompleto, ...fcCritico, ...sinPrecio].map(r => r.id)).size
+    return { costeoIncompleto, fcCritico, sinPrecio, total }
   }, [recetasPublicadas])
 
   useEffect(() => {
@@ -431,104 +511,102 @@ export default function RecetarioPage() {
     scrollSnapAlign: 'start',
   }
 
+  const ancha = ancho >= 700
+  const tabs = [
+    { id: 'recetas' as const, label: 'Recetas', icon: 'menu_book' },
+    { id: 'ideas' as const, label: recetasDraft.length > 0 ? `Ideas · ${recetasDraft.length}` : 'Ideas', icon: 'lightbulb' },
+  ]
+
+  // Acciones secundarias. Con lugar van al header como íconos con tooltip; en
+  // el celular no hay tooltip que explique un ícono suelto, así que bajan a
+  // una fila con su texto (mismo criterio que Turnos).
+  const acciones: { label: string; corto: string; icon: string; onClick: () => void; coach?: string }[] = [
+    ...(canEdit ? [{ label: 'Carga rápida — ingredientes y subrecetas al toque', corto: 'Carga rápida', icon: 'bolt', onClick: () => setCargaRapida(true) }] : []),
+    { label: 'Vincular ingredientes con stock', corto: 'Vincular stock', icon: 'link', onClick: () => setShowLink(true), coach: 'recetario-vincular' },
+    ...(isAdmin ? [{ label: 'Importar fichas técnicas', corto: 'Importar fichas', icon: 'upload_file', onClick: () => setShowFichas(true), coach: 'recetario-importar' }] : []),
+    // El XLSX lleva precio, costo total, costo/porcion, FC% y margen.
+    ...(verCostos ? [{ label: 'Exportar a Excel', corto: 'Excel', icon: 'table_view', onClick: exportXLSX }] : []),
+  ]
+
+  const buscador = (estilo: React.CSSProperties) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 10, padding: '0 10px', height: 36, minWidth: 0, ...estilo }}>
+      <span className="material-symbols-outlined" style={{ fontSize: 17, color: 'rgba(255,255,255,.45)' }}>search</span>
+      <input
+        ref={searchRef}
+        value={search}
+        onChange={e => cambiarBusqueda(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Escape') { cambiarBusqueda(''); e.currentTarget.blur() } }}
+        placeholder="Buscar receta…"
+        aria-label="Buscar receta"
+        style={{ border: 'none', background: 'none', outline: 'none', fontSize: 13, fontFamily: 'inherit', color: '#fff', width: '100%', minWidth: 0 }}
+      />
+      {search && (
+        <button onClick={() => cambiarBusqueda('')} aria-label="Limpiar búsqueda" className="hit-slop" style={{ ...btnClear, color: 'rgba(255,255,255,.6)' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 17 }}>close</span>
+        </button>
+      )}
+    </div>
+  )
+
+  // KPIs de la pestaña Recetas, fuera del header navy (ahí le comían alto a la
+  // lista en el celular) y con la forma de los de Turnos. Los de food cost
+  // solo si ya hay alguna receta con precio: "0.0%" se leería como food cost
+  // perfecto en vez de "sin datos".
+  const nConPrecio = recetasPublicadas.filter(r => (r.precio_venta ?? 0) > 0).length
+  const filtrando = !!catFilterRecetas || !!normalizarBusqueda(busqueda)
+  const kpis: React.ComponentProps<typeof KpiTile>[] = [
+    {
+      label: 'Recetas',
+      valor: String(filtrando ? filteredRecetas.length : recetasPublicadas.length),
+      sub: filtrando
+        ? `de ${recetasPublicadas.length} en total`
+        : `${categoriasFiltro.length} categorías${recetasDraft.length > 0 ? ` · ${recetasDraft.length} ideas` : ''}`,
+    },
+    ...(verCostos && nConPrecio > 0 ? [
+      { label: 'Food cost promedio', valor: `${fcPromedio.toFixed(1)}%`, color: fcColorRapido(fcPromedio), sub: `Sobre ${nConPrecio} con precio de venta` },
+      { label: 'Food cost crítico', valor: String(nAlertas), color: nAlertas > 0 ? 'var(--red-fg)' : undefined, sub: nAlertas > 0 ? `Arriba del ${FC_ALERT_HIGH}% — poco margen` : `Ninguna arriba del ${FC_ALERT_HIGH}%` },
+    ] : []),
+    // Lista costeo incompleto y food cost crítico: es plata. Solo aparece si hay algo que arreglar.
+    ...(verCostos && salud.total > 0 ? [
+      { label: 'Para revisar', valor: String(salud.total), sub: 'Costeo, food cost y precio', atencion: true, onClick: () => setSaludOpen(v => !v), abierto: saludOpen },
+    ] : []),
+  ]
+
   return (
     <PageTransition>
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      {/* Header */}
-      <div style={{ background: 'var(--navy)', padding: 'var(--header-top) 16px 14px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <div ref={setRaiz} style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {/* ── Header: una fila si entra, dos o tres si no (celular o Coach abierto) ── */}
+      <div style={{ background: 'var(--navy)', padding: `var(--header-top) 16px ${headerUnaFila ? 14 : 12}px`, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36 }}>
+          {!isDesktop && (
             <button onClick={() => router.back()} aria-label="Volver" className="hit-slop" style={btnClear}><span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,.7)', fontSize: 22 }}>arrow_back</span></button>
-            <div>
-              <div style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>Recetario</div>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,.45)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.07em' }}>Fichas técnicas{verCostos && ' · Food cost'}</div>
+          )}
+          {/* En el celular las pestañas ocupan el lugar del título (como la
+              semana en Turnos): la barra de abajo ya dice dónde estás, y así
+              el header queda en dos filas en vez de tres. */}
+          {ancha && <h1 style={{ color: '#fff', fontSize: 20, fontWeight: 700, margin: '0 10px 0 0' }}>Recetario</h1>}
+          {headerUnaFila && buscador({ flex: '1 1 220px', maxWidth: 380 })}
+          {ancha && <div style={{ flex: 1 }} />}
+          {(headerUnaFila || !ancha) && (
+            <div data-coach-target="recetario-tabs" style={ancha ? { width: 250, flexShrink: 0 } : { flex: 1, minWidth: 0 }}>
+              {!ancha && <h1 style={srOnly}>Recetario</h1>}
+              <SegmentedTabs tabs={ancha ? tabs : tabs.map(({ id, label }) => ({ id, label }))} active={tab} onChange={setTab} />
             </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {/* El XLSX lleva precio, costo total, costo/porcion, FC% y margen. */}
-            {verCostos && (
-              <button onClick={exportXLSX} title="Exportar Excel" aria-label="Exportar Excel"
-                style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 10, width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 17, color: '#fff' }}>table_view</span>
-              </button>
-            )}
-            {isAdmin && (
-              <button data-coach-target="recetario-importar" onClick={() => setShowFichas(true)} title="Importar fichas técnicas" aria-label="Importar fichas técnicas"
-                style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 10, width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 17, color: '#fff' }}>upload_file</span>
-              </button>
-            )}
-            <button data-coach-target="recetario-vincular" onClick={() => setShowLink(true)} title="Vincular ingredientes con stock" aria-label="Vincular ingredientes con stock"
-              style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 10, width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 17, color: '#10b981' }}>link</span>
+          )}
+          {ancha && acciones.map(a => (
+            <button key={a.icon} type="button" data-coach-target={a.coach} onClick={a.onClick} title={a.label} aria-label={a.label} style={btnGhost}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{a.icon}</span>
+              {ancho >= 1320 && a.corto}
             </button>
-            {canEdit && (
-              <button onClick={() => setCargaRapida(true)} title="Carga rápida — ingredientes/subrecetas al toque" aria-label="Carga rápida"
-                style={{ background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', borderRadius: 10, width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 17, color: '#f97316' }}>bolt</span>
-              </button>
-            )}
-            <HeaderAction label="Nueva" icon="add" onClick={() => setCreando(true)} />
-          </div>
+          ))}
+          <HeaderAction label={ancha ? 'Nueva receta' : 'Nueva'} icon="add" onClick={() => setCreando(true)} style={{ height: 36 }} />
         </div>
-        {/* Tira de KPIs — food cost promedio y cuántas recetas están en zona
-            crítica. Solo en la pestaña Recetas (son datos de recetas
-            publicadas) y solo si ya hay al menos una con precio cargado, si
-            no "0.0%" se lee como food cost perfecto en vez de "sin datos". */}
-        {verCostos && tab === 'recetas' && recetasPublicadas.some(r => (r.precio_venta ?? 0) > 0) && (
-          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-            <div style={{ flex: 1 }}>
-              <KpiBox value={`${fcPromedio.toFixed(1)}%`} label="FC promedio" color={fcColor(fcPromedio)} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <KpiBox value={String(nAlertas)} label="FC crítico" color={nAlertas > 0 ? '#ef4444' : '#4ade80'} />
-            </div>
+        {!headerUnaFila && buscador({ marginTop: 10 })}
+        {!headerUnaFila && ancha && (
+          <div data-coach-target="recetario-tabs" style={{ marginTop: 10 }}>
+            <SegmentedTabs tabs={tabs} active={tab} onChange={setTab} />
           </div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 8, padding: '0 10px', height: 34 }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'rgba(255,255,255,.4)' }}>search</span>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar receta…" style={{ border: 'none', background: 'none', outline: 'none', fontSize: 12, fontFamily: 'inherit', color: '#fff', width: '100%' }} />
-          {search && <button onClick={() => setSearch('')} aria-label="Limpiar búsqueda" className="hit-slop" style={{ ...btnClear, color: 'rgba(255,255,255,.5)', fontSize: 16 }}>×</button>}
-        </div>
-      </div>
-
-      {/* ── Tabs: Recetas | Ideas | Platos ── */}
-      <div data-coach-target="recetario-tabs" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0 14px', display: 'flex', gap: 0, flexShrink: 0 }}>
-        <button
-          onClick={() => setTab('recetas')}
-          style={{
-            flex: 1, padding: '10px 0', border: 'none', background: 'none', cursor: 'pointer',
-            fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
-            color: tab === 'recetas' ? 'var(--text-1)' : 'var(--text-3)',
-            borderBottom: tab === 'recetas' ? '2px solid var(--navy)' : '2px solid transparent',
-            transition: 'all .15s',
-          }}
-        >
-          Recetas
-        </button>
-        <button
-          onClick={() => setTab('ideas')}
-          style={{
-            flex: 1, padding: '10px 0', border: 'none', background: 'none', cursor: 'pointer',
-            fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
-            color: tab === 'ideas' ? 'var(--text-1)' : 'var(--text-3)',
-            borderBottom: tab === 'ideas' ? '2px solid #f59e0b' : '2px solid transparent',
-            transition: 'all .15s',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-          }}
-        >
-          Ideas
-          {recetasDraft.length > 0 && (
-            <span style={{
-              fontSize: 10, fontWeight: 700, color: '#fff', background: '#f59e0b',
-              borderRadius: 99, padding: '1px 7px', minWidth: 18, textAlign: 'center',
-            }}>{recetasDraft.length}</span>
-          )}
-        </button>
       </div>
 
       {/* ── Swipe track: Recetas / Ideas — scroll-snap nativo, mismo
@@ -549,59 +627,81 @@ export default function RecetarioPage() {
         {/* ── Panel: Recetas ── */}
         <div style={slotStyle}>
           {categoriasFiltro.length > 0 && (
-            <div data-coach-target="recetario-categorias" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '8px 14px', flexShrink: 0 }}>
-              <FilterChips
-                chips={[{ value: '', label: 'Todas' }, ...categoriasFiltro.map(c => ({ value: c, label: c }))]}
-                active={catFilterRecetas}
-                onChange={setCatFilterRecetas}
-              />
+            <div data-coach-target="recetario-categorias" style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: ancha ? '8px 20px' : '8px 14px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <FilterChips
+                  chips={[{ value: '', label: 'Todas' }, ...categoriasFiltro.map(c => ({ value: c, label: c }))]}
+                  active={catFilterRecetas}
+                  onChange={cambiarCategoria}
+                />
+              </div>
+              {isDesktop && ancho >= 900 && (
+                <div style={{ flexShrink: 0, fontSize: 11.5, color: 'var(--text-3)', display: 'flex', gap: 12, whiteSpace: 'nowrap' }}>
+                  <span><Kbd>/</Kbd> buscar</span>
+                  <span><Kbd>N</Kbd> nueva receta</span>
+                </div>
+              )}
             </div>
           )}
-          <div data-coach-target="recetario-lista" style={{ flex: 1, overflowY: 'auto', padding: '12px 14px 24px' }}>
-            {/* Salud del recetario — lista costeo incompleto y food cost critico: es plata. */}
-            {verCostos && !loading && salud.total > 0 && (
-              <div style={{ marginBottom: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
-                <button onClick={() => setSaludOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '11px 12px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#f59e0b' }}>health_and_safety</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Salud del recetario</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: '#f59e0b', borderRadius: 99, padding: '1px 7px' }}>{salud.total}</span>
-                  <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--text-3)', marginLeft: 'auto', transform: saludOpen ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform .2s' }}>expand_more</span>
-                </button>
-                {saludOpen && (
-                  <div style={{ borderTop: '1px solid var(--border)' }}>
-                    {([
-                      { key: 'costeoIncompleto', label: 'Costeo incompleto', hint: 'ingredientes sin vincular o sin costo — subvalúan el food cost', color: '#f59e0b', items: salud.costeoIncompleto },
-                      { key: 'fcCritico', label: 'Food cost crítico (>35%)', hint: 'poco margen — revisá precio o receta', color: '#ef4444', items: salud.fcCritico },
-                      { key: 'sinPrecio', label: 'Sin precio de venta', hint: 'no se puede calcular el food cost', color: 'var(--text-3)', items: salud.sinPrecio },
-                    ] as const).filter(g => g.items.length > 0).map(g => (
-                      <div key={g.key} style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: g.color, flexShrink: 0 }} />
-                          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>{g.label}</span>
-                          <span style={{ fontSize: 11, color: 'var(--text-3)' }}>({g.items.length})</span>
-                        </div>
-                        <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 8 }}>{g.hint}</div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                          {g.items.slice(0, 12).map(r => (
-                            <button key={r.id} onClick={() => router.push(`/recetario/${r.id}`)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 999, padding: '4px 10px', fontSize: 11, fontWeight: 600, color: 'var(--text-1)', cursor: 'pointer', fontFamily: 'inherit' }}>
-                              {r.nombre}
-                              {g.key === 'fcCritico' && <span style={{ fontSize: 10, fontWeight: 800, color: '#ef4444', fontFamily: "'DM Mono', monospace" }}>{r.food_cost.food_cost_pct.toFixed(0)}%</span>}
-                            </button>
-                          ))}
-                          {g.items.length > 12 && <span style={{ fontSize: 10, color: 'var(--text-3)', alignSelf: 'center' }}>+{g.items.length - 12} más</span>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+          <div ref={listaRef} onScroll={alScrollearLista} data-coach-target="recetario-lista" style={{ flex: 1, overflowY: 'auto', padding: ancha ? '14px 20px 28px' : '12px 14px 24px' }}>
+            {ancha && !loading && kpis.length >= 2 && (
+              <div className="hide-scrollbar" style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: 3, margin: '-3px -3px 9px' }}>
+                {kpis.map(k => <KpiTile key={k.label} grande {...k} />)}
               </div>
             )}
+
+            {/* Celular: KPIs y acciones en UNA fila de píldoras que scrollea
+                de costado — apiladas en dos filas dejaban la primera receta
+                a media pantalla. El conteo de recetas no va: es el único
+                número sin nada para hacer. */}
+            {!ancha && (acciones.length > 0 || kpis.length > 1) && (
+              <div className="hide-scrollbar" style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 12 }}>
+                {!loading && kpis.slice(1).map(k => <KpiTile key={k.label} compacto {...k} />)}
+                {acciones.map(a => (
+                  <button key={a.icon} type="button" data-coach-target={a.coach} onClick={a.onClick} style={{
+                    display: 'flex', alignItems: 'center', gap: 6, minHeight: 40, padding: '0 13px', borderRadius: 10, border: '1px solid var(--border)',
+                    background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                    flexShrink: 0, whiteSpace: 'nowrap',
+                  }}>
+                    <span className="material-symbols-outlined" aria-hidden style={{ fontSize: 17 }}>{a.icon}</span>
+                    {a.corto}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Salud del recetario — se abre desde el KPI «Para revisar». */}
+            {verCostos && !loading && salud.total > 0 && saludOpen && (
+              <div style={{ marginBottom: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+                {([
+                  { key: 'costeoIncompleto', label: 'Costeo incompleto', hint: 'ingredientes sin vincular o sin costo — subvalúan el food cost', color: '#f59e0b', items: salud.costeoIncompleto },
+                  { key: 'fcCritico', label: `Food cost crítico (>${FC_ALERT_HIGH}%)`, hint: 'poco margen — revisá precio o receta', color: '#ef4444', items: salud.fcCritico },
+                  { key: 'sinPrecio', label: 'Sin precio de venta', hint: 'no se puede calcular el food cost', color: 'var(--text-3)', items: salud.sinPrecio },
+                ] as const).filter(g => g.items.length > 0).map((g, gi, grupos) => (
+                  <div key={g.key} style={{ padding: '10px 12px', borderBottom: gi < grupos.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: g.color, flexShrink: 0 }} />
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-1)' }}>{g.label}</span>
+                      <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>({g.items.length})</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 8 }}>{g.hint}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {g.items.slice(0, 12).map(r => (
+                        <button key={r.id} onClick={() => { abrirReceta(r.id); router.push(`/recetario/${r.id}`) }} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 999, padding: '5px 11px', fontSize: 12, fontWeight: 600, color: 'var(--text-1)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                          {r.nombre}
+                          {g.key === 'fcCritico' && <span style={{ fontSize: 10.5, fontWeight: 800, color: '#ef4444', fontFamily: "'DM Mono', monospace" }}>{r.food_cost.food_cost_pct.toFixed(0)}%</span>}
+                        </button>
+                      ))}
+                      {g.items.length > 12 && <span style={{ fontSize: 11, color: 'var(--text-3)', alignSelf: 'center' }}>+{g.items.length - 12} más</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {loading ? (
-              <div style={isDesktop
-                ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }
-                : { display: 'flex', flexDirection: 'column', gap: 8 }
-              }>
-                {Array.from({ length: 6 }, (_, i) => <RecetaCardSkeleton key={i} />)}
+              <div style={grilla}>
+                {Array.from({ length: columnas * 3 }, (_, i) => <RecetaCardSkeleton key={i} />)}
               </div>
             ) : error ? (
               <div style={{ textAlign: 'center', padding: '48px 24px' }}><p style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>{error}</p></div>
@@ -615,37 +715,40 @@ export default function RecetarioPage() {
                   ctaIA={{ label: 'Importar con IA', onClick: () => { setImportarConIA(true); setCreando(true) } }}
                 />
               ) : (
-                <EmptyState icon="menu_book" title="Sin resultados" />
+                <EmptyState
+                  icon="search_off"
+                  title="Sin resultados"
+                  subtitle="Ninguna receta coincide con la búsqueda y la categoría elegidas."
+                  cta={{ label: 'Ver todas', onClick: () => { cambiarBusqueda(''); cambiarCategoria('') } }}
+                />
               )
             ) : (
-              <motion.div
-                variants={containerVariants}
-                initial="hidden"
-                animate="show"
-                style={isDesktop
-                  ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }
-                  : { display: 'flex', flexDirection: 'column', gap: 8 }
-                }
-              >
-                {filteredRecetas.map(r => (
-                  <motion.div key={r.id} variants={itemVariants}>
-                    <RecetaCard receta={r} recetasPorId={recetasPorId} />
-                  </motion.div>
-                ))}
-              </motion.div>
+              <>
+                <div style={grilla}>
+                  {filteredRecetas.slice(0, limite).map(r => (
+                    <RecetaCard key={r.id} receta={r} recetasPorId={recetasPorId} verCostos={verCostos} onAbrir={abrirReceta} />
+                  ))}
+                </div>
+                {/* El scroll trae la tanda siguiente solo; el botón es la vía explícita. */}
+                {filteredRecetas.length > limite && (
+                  <button type="button" onClick={() => setLimite(l => l + TANDA)} style={{
+                    display: 'block', margin: '14px auto 0', minHeight: 40, padding: '0 16px', borderRadius: 10, border: '1px solid var(--border)',
+                    background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                  }}>
+                    Mostrar más · quedan {filteredRecetas.length - limite}
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
 
         {/* ── Panel: Ideas ── */}
         <div style={slotStyle}>
-          <div data-coach-target="recetario-lista-ideas" style={{ flex: 1, overflowY: 'auto', padding: '12px 14px 24px' }}>
+          <div ref={ideasRef} data-coach-target="recetario-lista-ideas" style={{ flex: 1, overflowY: 'auto', padding: ancha ? '14px 20px 28px' : '12px 14px 24px' }}>
             {loading ? (
-              <div style={isDesktop
-                ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }
-                : { display: 'flex', flexDirection: 'column', gap: 8 }
-              }>
-                {Array.from({ length: 6 }, (_, i) => <RecetaCardSkeleton key={i} />)}
+              <div style={grilla}>
+                {Array.from({ length: columnas * 3 }, (_, i) => <RecetaCardSkeleton key={i} />)}
               </div>
             ) : error ? (
               <div style={{ textAlign: 'center', padding: '48px 24px' }}><p style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>{error}</p></div>
@@ -657,29 +760,21 @@ export default function RecetarioPage() {
                   subtitle="Podés guardar recetas como borrador mientras las desarrollás"
                 />
               ) : (
-                <EmptyState icon="lightbulb" title="Sin resultados" />
+                <EmptyState icon="search_off" title="Sin resultados" cta={{ label: 'Ver todas', onClick: () => cambiarBusqueda('') }} />
               )
             ) : (
-              <motion.div
-                variants={containerVariants}
-                initial="hidden"
-                animate="show"
-                style={isDesktop
-                  ? { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }
-                  : { display: 'flex', flexDirection: 'column', gap: 8 }
-                }
-              >
+              <div style={grilla}>
                 {filteredIdeas.map(r => (
-                  <motion.div key={r.id} variants={itemVariants}>
-                    <RecetaCard
-                      receta={r}
-                      isDraft
-                      onPublish={() => publicarReceta(r.id)}
-                      onCompleteIA={() => { setEnrichingDraft(r); setCreando(true) }}
-                    />
-                  </motion.div>
+                  <RecetaCard
+                    key={r.id}
+                    receta={r}
+                    isDraft
+                    onAbrir={abrirReceta}
+                    onPublish={publicarIdea}
+                    onCompleteIA={completarIdeaConIA}
+                  />
                 ))}
-              </motion.div>
+              </div>
             )}
           </div>
         </div>
@@ -1340,7 +1435,7 @@ function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas
     if (form.ingredientes.length > 0) {
       const filas = form.ingredientes.map((i): FormIng => {
         const unidad = canonUnit(i.unidad) || 'u'
-        const base: FormIng = { id: uid(), nombre: i.nombre, cantidad: String(i.cantidad ?? ''), unidad, costo_unitario: 0, grupo: '' }
+        const base: FormIng = { id: uid(), nombre: i.nombre, cantidad: String(i.cantidad ?? ''), unidad, costo_unitario: 0, grupo: '', nota: i.nota?.trim() || undefined }
         const prod = buscarProductoExacto(i.nombre, stockProductos)
         if (prod) {
           return { ...base, nombre: prod.nombre, tipo: 'producto', producto_id: prod.id, unidad_costo: prod.unidad, costo_unitario: prod.precio_unitario || 0 }
@@ -1483,6 +1578,7 @@ function NuevaFichaScreen({ enModal = false, categorias, stockProductos, recetas
         producto_id: ing.tipo === 'subreceta' ? null : (ing.producto_id ?? null),
         subreceta_id: ing.tipo === 'subreceta' ? (ing.subreceta_id ?? null) : null,
         grupo: ing.grupo?.trim() || null,
+        nota: ing.nota?.trim() || null,
       })), stockProductos, agregarProducto)
       let savedId: string
       if (initialDraft?.id) {
@@ -2153,131 +2249,6 @@ function PasoRow({ paso, idx, total, pasoRefs, onUpdate, onRemove, onConfirm }: 
   )
 }
 
-function KpiBox({ value, label, color }: { value: string; label: string; color: string }) {
-  return (
-    <div style={{ background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.12)', borderRadius: 10, padding: '8px 10px', textAlign: 'center' }}>
-      <div style={{ fontSize: 18, fontWeight: 700, color, fontFamily: "'DM Mono', monospace" }}>{value}</div>
-      <div style={{ fontSize: 9, color: 'rgba(255,255,255,.45)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 2 }}>{label}</div>
-    </div>
-  )
-}
-
-// Forma de RecetaCard sin datos (S5.3) — reemplaza el "Cargando recetas…"
-// centrado, que saltaba a la lista completa de golpe.
-function RecetaCardSkeleton() {
-  return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 14 }}>
-      <Skeleton width="55%" height={14} style={{ marginBottom: 8 }} />
-      <Skeleton width="35%" height={11} style={{ marginBottom: 12 }} />
-      <div style={{ display: 'flex', gap: 12 }}>
-        <Skeleton width={50} height={11} />
-        <Skeleton width={50} height={11} />
-        <Skeleton width={50} height={11} />
-      </div>
-    </div>
-  )
-}
-
-function RecetaCard({ receta: r, isDraft, onPublish, onCompleteIA, recetasPorId }: { receta: RecetaConCosto; isDraft?: boolean; onPublish?: () => void; onCompleteIA?: () => void; recetasPorId?: Map<string, RecetaConCosto> }) {
-  const fc = r.food_cost
-  const sinIngredientes = (r.ingredientes?.length ?? 0) === 0
-  // Escala N0-N3 (lib/recetas/estandarizacion.ts) — reemplaza el binario
-  // "SIN PESO NETO" (sep 2026): una receta puede tener peso_total_g cargado
-  // y aun así no estar verificada si le faltan costos de ingredientes.
-  // No se muestra en drafts (ya tienen su propio badge BORRADOR, y siempre
-  // topean en N1 — mostrar N1 ahí sería redundante).
-  const diagReceta = useMemo(() => isDraft ? null : nivelDeReceta(r, recetasPorId), [r, recetasPorId, isDraft])
-  return (
-    <div style={{ position: 'relative' }}>
-      <Link href={`/recetario/${r.id}`} style={{ textDecoration: 'none', display: 'block', background: r.es_plato && !isDraft ? 'rgba(67,97,160,.035)' : 'var(--surface)', border: isDraft ? '1px solid rgba(245,158,11,.3)' : r.es_plato ? '1px solid rgba(67,97,160,.35)' : '1px solid var(--border)', borderRadius: 14, padding: isDraft && onCompleteIA ? '14px 14px 44px' : '14px', cursor: 'pointer' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{r.nombre}</span>
-              {isDraft && (
-                <span style={{
-                  fontSize: 9, fontWeight: 700, color: 'var(--amber-fg)', background: 'rgba(245,158,11,.15)',
-                  border: '1px solid rgba(245,158,11,.3)', borderRadius: 4, padding: '1px 6px',
-                }}>BORRADOR</span>
-              )}
-              {r.es_plato && !isDraft && (
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 3,
-                  fontSize: 9, fontWeight: 700, color: 'var(--accent)', background: 'rgba(67,97,160,.1)',
-                  border: '1px solid rgba(67,97,160,.28)', borderRadius: 4, padding: '1px 6px',
-                }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 11 }}>restaurant</span>
-                  PLATO
-                </span>
-              )}
-              {diagReceta && (
-                <NivelBadge nivel={diagReceta.nivel} title={diagReceta.faltantes.join(' · ') || 'Peso pesado y costo de factura verificados'} />
-              )}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2 }}>
-              {normalizeCategoria(r.categoria)}
-              {(r.porciones ?? 0) > 1 && ` · ${r.porciones} porc.${(() => { const p = calcPesoPorcion(r.ingredientes || [], r.porciones ?? 0); return p ? ` · ${formatPeso(p)}` : '' })()}`}
-              {(r.tiempo_min ?? 0) > 0 && ` · ${r.tiempo_min} min`}
-            </div>
-          </div>
-          {(r.precio_venta ?? 0) > 0 && !isDraft && (
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: fcColor(fc.food_cost_pct), fontFamily: "'DM Mono', monospace" }}>{fc.food_cost_pct.toFixed(1)}%</div>
-              <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>FC</div>
-            </div>
-          )}
-        </div>
-        {(r.precio_venta ?? 0) > 0 && !isDraft && (
-          <div style={{ display: 'flex', gap: 12, fontSize: 11 }}>
-            <span style={{ color: 'var(--text-3)' }}>Costo: <b style={{ color: 'var(--text-2)', fontFamily: "'DM Mono', monospace" }}>${fc.costo_porcion.toFixed(0)}</b></span>
-            <span style={{ color: 'var(--text-3)' }}>Venta: <b style={{ color: 'var(--text-2)', fontFamily: "'DM Mono', monospace" }}>${(r.precio_venta ?? 0).toLocaleString('es-AR')}</b></span>
-            <span style={{ color: 'var(--text-3)' }}>Margen: <b style={{ color: fc.margen_bruto > 0 ? '#4ade80' : '#ef4444', fontFamily: "'DM Mono', monospace" }}>${fc.margen_bruto.toFixed(0)}</b></span>
-          </div>
-        )}
-        {sinIngredientes && (
-          <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#f59e0b', fontWeight: 600 }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 13 }}>warning</span>Sin ingredientes cargados
-          </div>
-        )}
-      </Link>
-
-      {/* Botones de acción para borradores */}
-      {isDraft && (
-        <div style={{ position: 'absolute', bottom: 8, left: 10, right: 10, display: 'flex', gap: 6 }}>
-          {onCompleteIA && (
-            <button
-              onClick={e => { e.stopPropagation(); e.preventDefault(); onCompleteIA() }}
-              style={{
-                flex: 1, background: 'rgba(245,158,11,.12)', border: '1px solid rgba(245,158,11,.3)',
-                borderRadius: 8, padding: '5px 10px', fontSize: 10, fontWeight: 700,
-                color: 'var(--amber-fg)', cursor: 'pointer', fontFamily: 'inherit',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>auto_awesome</span>
-              {sinIngredientes ? 'Cargar con IA' : 'Actualizar con IA'}
-            </button>
-          )}
-          {onPublish && (
-            <button
-              onClick={e => { e.stopPropagation(); e.preventDefault(); onPublish() }}
-              style={{
-                background: 'var(--navy)', border: 'none', borderRadius: 8,
-                padding: '5px 10px', fontSize: 10, fontWeight: 700, color: '#fff',
-                cursor: 'pointer', fontFamily: 'inherit',
-                display: 'flex', alignItems: 'center', gap: 4,
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>publish</span>
-              Publicar
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ════════════════════════════════════════════════════════════════════
 // CARGA RÁPIDA — crear una receta tipeando ingredientes/subrecetas al toque,
 // sin pasar por el wizard completo (foto, IA, pasos). Food cost en vivo.
@@ -2387,6 +2358,10 @@ function CargaRapidaScreen({ categorias, stockProductos, recetasDisponibles, agr
 }
 
 const btnClear: React.CSSProperties = { background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0 }
+// Título solo para lectores de pantalla (en el celular las pestañas ocupan su lugar).
+const srOnly: React.CSSProperties = { position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', border: 0 }
+// Botón secundario del header navy — misma forma que los de Calendario/Turnos.
+const btnGhost: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 5, height: 36, padding: '0 10px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap' }
 const lbl: React.CSSProperties = { fontSize: 9, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.06em' }
 const inp: React.CSSProperties = { background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 10px', fontSize: 12, fontFamily: 'inherit', color: 'var(--text-1)', outline: 'none', width: '100%', boxSizing: 'border-box' as const }
 const iaCardBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: 'rgba(28,45,74,.06)', border: 'none', borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' as const, transition: 'background .15s' }

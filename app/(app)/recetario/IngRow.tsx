@@ -5,8 +5,10 @@
 // Nombre con sugerencias de Stock + recetas al tipear, cantidad que acepta la
 // unidad escrita ("500 g"), y chip de unidad.
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import type { RecetaConCosto } from '@/lib/hooks/useRecetas'
+import { NotaIngredienteBoton, NotaIngredienteCampo } from '@/components/recetas/NotaIngrediente'
 import { buscarSugerenciasIngrediente, type SugerenciaIngrediente } from '@/lib/recetas/sugerencias'
 import { SugerenciasIngrediente, ofrecerNuevo } from '@/components/recetas/SugerenciasIngrediente'
 import { normalizarBusqueda } from '@/lib/texto'
@@ -23,6 +25,8 @@ export interface FormIng {
   nombre: string
   costo_unitario: number
   grupo: string
+  // Nota del chef ("2 unidades, maduras", "tostado") — ingredientes.nota.
+  nota?: string
   // Producto de Stock elegido de la lista (y la unidad en que está su precio).
   // Antes solo se copiaban nombre/unidad/precio y el vínculo se perdía.
   producto_id?: string | null
@@ -88,6 +92,17 @@ export function IngRow({ ing, idx, isLast, isActive, stockProductos, recetas, ca
   // Opción resaltada con ↑/↓ (suggestions.length = "insumo nuevo"), -1 = ninguna.
   const [activa, setActiva] = useState(-1)
   const [nombreFocused, setNombreFocused] = useState(false)
+  // La nota va en una segunda línea que se abre con el botón de la fila (o
+  // sola, si ya hay una cargada — por ejemplo la que trajo la IA).
+  const [notaAbierta, setNotaAbierta] = useState(false)
+  const notaRef = useRef<HTMLInputElement>(null)
+  const mostrarNota = notaAbierta || !!ing.nota
+  // flushSync: el campo tiene que existir y recibir el foco dentro del mismo
+  // toque, o el teclado del celular no se abre (ui.md § Input editable inline).
+  function abrirNota() {
+    flushSync(() => setNotaAbierta(true))
+    notaRef.current?.focus()
+  }
   const esSubreceta = ing.tipo === 'subreceta'
   const vinculado = esSubreceta ? !!ing.subreceta_id : !!ing.producto_id
 
@@ -191,7 +206,7 @@ export function IngRow({ ing, idx, isLast, isActive, stockProductos, recetas, ca
       <div style={{
         display: 'flex', alignItems: 'center', gap: 0,
         background: isActive ? 'rgba(28,45,74,.04)' : 'transparent',
-        borderBottom: isLast ? 'none' : '1px solid var(--border)',
+        borderBottom: isLast || mostrarNota ? 'none' : '1px solid var(--border)',
         transition: 'background .15s',
       }}>
 
@@ -283,6 +298,8 @@ export function IngRow({ ing, idx, isLast, isActive, stockProductos, recetas, ca
           }}>expand_more</span>
         </label>
 
+        <NotaIngredienteBoton activa={!!ing.nota} onClick={abrirNota} size={28} />
+
         {/* ✓ (activa) o × (inactiva) — mismo lugar */}
         {isActive ? (
           <button
@@ -307,6 +324,21 @@ export function IngRow({ ing, idx, isLast, isActive, stockProductos, recetas, ca
           </button>
         )}
       </div>
+
+      {mostrarNota && (
+        <NotaIngredienteCampo
+          value={ing.nota ?? ''}
+          onChange={v => onUpdate(ing.id, { nota: v })}
+          onFocus={() => onFocusRow(ing.id)}
+          onBlur={() => { if (!ing.nota?.trim()) setNotaAbierta(false) }}
+          onEnter={() => onConfirm(ing.id)}
+          inputRef={notaRef}
+          style={{
+            padding: '0 10px 8px', background: isActive ? 'rgba(28,45,74,.04)' : 'transparent',
+            borderBottom: isLast ? 'none' : '1px solid var(--border)',
+          }}
+        />
+      )}
 
       {/* La IA dudó entre varios insumos: se elige con un toque. Va en el
           flujo (no flotante) para que no tape la fila de abajo. */}

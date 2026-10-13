@@ -80,6 +80,7 @@ export function IAMultiResultScreen({ results, previewUrl, inputText, agregarRec
           unidad: ing.unidad || 'u',
           costo_unitario: 0,
           unidad_costo: ing.unidad || 'u',
+          nota: ing.nota?.trim() || null,
         }))
         const ingredientesData = agregarProducto
           ? await vincularIngredientesConStock(base, catalogo, async (datos) => {
@@ -264,7 +265,7 @@ export function IAMultiResultScreen({ results, previewUrl, inputText, agregarRec
                       <p style={{ margin: '0 0 4px', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>Ingredientes</p>
                       {(r.ingredientes || []).map((ing, i) => (
                         <p key={i} style={{ margin: '1px 0', fontSize: 11, color: 'var(--text-2)', lineHeight: 1.4 }}>
-                          • {ing.nombre} — {ing.cantidad} {ing.unidad}
+                          • {ing.nombre} — {ing.cantidad} {ing.unidad}{ing.nota?.trim() ? ` · ${ing.nota.trim()}` : ''}
                         </p>
                       ))}
                     </div>

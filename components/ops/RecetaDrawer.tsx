@@ -3,8 +3,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { RecetaQuickEditModal } from './RecetaQuickEditModal'
+import { NotaIngredienteTexto } from '@/components/recetas/NotaIngrediente'
 
-interface Ing { nombre: string; cantidad: number | null; unidad: string }
+interface Ing { nombre: string; cantidad: number | null; unidad: string; nota: string | null }
 interface UltimaProduccion { fecha: string; cantidad_planificada: number | null; usuario_nombre: string | null }
 
 interface RecetaDrawerProps {
@@ -24,7 +25,7 @@ export function RecetaDrawer({ recetaId, recetaNombre, onClose }: RecetaDrawerPr
   const cargar = useCallback(() => {
     const sb = createClient()
     return Promise.all([
-      sb.from('ingredientes').select('nombre, cantidad, unidad').eq('receta_id', recetaId),
+      sb.from('ingredientes').select('nombre, cantidad, unidad, nota').eq('receta_id', recetaId),
       sb.from('produccion_registros')
         .select('fecha, cantidad_planificada, usuario_nombre')
         .eq('receta_id', recetaId)
@@ -116,15 +117,15 @@ export function RecetaDrawer({ recetaId, recetaNombre, onClose }: RecetaDrawerPr
           ) : ings.map((ing, i) => (
             <div
               key={i}
-              style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '9px 0', borderBottom: '1px solid var(--border)',
-              }}
+              style={{ padding: '9px 0', borderBottom: '1px solid var(--border)' }}
             >
-              <span style={{ fontSize: 13, color: 'var(--text-1)' }}>{ing.nombre}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)', fontFamily: "'DM Mono', monospace" }}>
-                {ing.cantidad ?? ''} {ing.unidad}
-              </span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 13, color: 'var(--text-1)' }}>{ing.nombre}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>
+                  {ing.cantidad ?? ''} {ing.unidad}
+                </span>
+              </div>
+              {ing.nota && <NotaIngredienteTexto nota={ing.nota} style={{ marginTop: 5 }} />}
             </div>
           ))}
         </div>

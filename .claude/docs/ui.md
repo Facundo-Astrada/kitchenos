@@ -454,3 +454,19 @@ El prototipo fue un **laboratorio, no producto**, y ya **no está en el árbol**
 **Lo que NO transfiere:**
 - **El registro Servicio no se toca.** KDS/Muro son dial 2 y cero animación de entrada (§2/§6). El mise es Preparación (dial 7) y por eso admite juice — la mitad arcade de la app tiene un límite de ruta, no de gusto.
 - **La segunda familia tipográfica es la decisión cara.** Es lo que más hace el efecto "tablero" (más que el color: un número ancho y pesado, tipo marcador de cancha — `Archivo` con eje `wdth` al 125%), pero §4 la cierra y adoptarla es un compromiso permanente de toda la app. En el prototipo se carga con un `<link>` **solo en esa ruta**, para no sumarle una fuente a las otras 28 pantallas mientras se decide.
+
+## Abrir un campo con un botón y que el teclado suba — `flushSync` + `focus()` en el mismo toque (oct 2026)
+
+La regla de "Input editable inline" (arriba) prohíbe `button → setState → autoFocus` porque el input recién existe en el render siguiente, fuera del gesto. Cuando el campo NO puede estar siempre montado (una línea opcional por fila en una lista de 40 — la nota del chef de un ingrediente), la salida es forzar ese render adentro del handler: `flushSync(() => setAbierta(true)); ref.current?.focus()`. El DOM ya está actualizado cuando corre el `focus()`, que sigue dentro del toque, y el teclado del celular abre. Referencia: `abrirNota()` en `recetario/[id]/page.tsx`, `recetario/IngRow.tsx` y `components/recetas/CargaRapidaIngredientes.tsx`. No sirve con `setTimeout` ni con `await` de por medio.
+
+## Lista larga → detalle → volver: la lista tiene que quedar como estaba (oct 2026)
+
+Abrir una receta y volver dejaba el Recetario en cero (sin búsqueda, sin categoría, arriba de todo): con 600 recetas, cada consulta costaba volver a buscar. Piezas del arreglo, en `recetario/navLista.ts` + `recetario/page.tsx`:
+- Al tocar una tarjeta se guarda en `sessionStorage` búsqueda, filtro, pestaña, `scrollTop` del panel y cuántas tarjetas había renderizadas, más el orden de ids de la lista filtrada (la ficha lo usa para anterior/siguiente con `router.replace`, así "volver" sigue siendo un solo paso).
+- El `scrollTop` se repone recién cuando la lista volvió a ser la misma (misma búsqueda ya aplicada — ojo con `useDeferredValue` —, mismas tandas renderizadas); antes el alto del panel es otro.
+- **La lectura del estado no puede consumirlo.** Al volver, la pantalla se monta más de una vez (transición de pantalla del layout + modo estricto en dev crean instancias que se descartan): un "leer y borrar" lo gastaba una instancia que nunca se ve. Se marca como leído y sigue valiendo unos segundos.
+- El botón "volver" de la ficha hace `router.back()` solo si esa receta se abrió desde la lista; llegando por un link (Coach, OPS) hace `push('/recetario')`.
+
+## Lista de cientos de tarjetas — tandas + memo + sin `motion` por ítem (oct 2026)
+
+Recetario con 635 recetas montaba todas de entrada, cada una en un `motion.div` y calculando su nivel de estandarización, y cada tecla del buscador las re-renderizaba. Lo que se cambió: render por tandas de 60 que crecen con el scroll del panel (más un botón "Mostrar más" — el gesto nunca es la única vía), tarjeta en `memo` con callbacks estables (los datos que el callback necesita viajan por `ref`), filtro sobre `useDeferredValue(search)` con el nombre normalizado una sola vez por receta (`normalizarBusqueda`: sin acentos), y nada de animación de entrada por tarjeta. `content-visibility:auto` se descartó a propósito: estima el alto de lo no renderizado y corre el `scrollTop` que hay que reponer al volver.
