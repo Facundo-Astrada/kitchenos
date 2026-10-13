@@ -30,6 +30,8 @@ export interface PrioMeta {
   /** Descripción de una línea, para el selector. */
   detalle: string
   icono: string | null
+  /** Se muestra solo el ícono, sin la sigla (CARGAR: las flechas en círculo bastan). */
+  soloIcono: boolean
   color: string
   bg: string
   /** Menor = más arriba. */
@@ -42,17 +44,17 @@ export interface PrioMeta {
 
 export const PRIORIDADES: PrioMeta[] = [
   { tarea: 'critica', mise: 'sp', sigla: 'SP', siglaMise: 'SP', nombre: 'SP', detalle: 'Súper prioridad — urgente',
-    icono: null, color: '#ef4444', bg: 'rgba(239,68,68,.13)', orden: 0, principal: true, urgente: true },
+    icono: null, soloIcono: false, color: '#ef4444', bg: 'rgba(239,68,68,.13)', orden: 0, principal: true, urgente: true },
   { tarea: 'alta', mise: 'p', sigla: 'P', siglaMise: 'P', nombre: 'P', detalle: 'Prioridad',
-    icono: null, color: '#f97316', bg: 'rgba(249,115,22,.13)', orden: 1, principal: true, urgente: true },
+    icono: null, soloIcono: false, color: '#f97316', bg: 'rgba(249,115,22,.13)', orden: 1, principal: true, urgente: true },
   { tarea: 'cargar', mise: 'cargar', sigla: 'CARGAR', siglaMise: 'CARGAR', nombre: 'CARGAR', detalle: 'Recargar un tupper que quedó a la mitad',
-    icono: 'takeout_dining', color: '#0d9488', bg: 'rgba(13,148,136,.13)', orden: 2, principal: true, urgente: false },
-  { tarea: 'descongelar', mise: 'descongelar', sigla: 'DESCONG.', siglaMise: 'DESCONG.', nombre: 'DESCONGELAR', detalle: 'Dejar descongelando de un día al otro',
-    icono: 'ac_unit', color: '#7c3aed', bg: 'rgba(124,58,237,.13)', orden: 3, principal: true, urgente: false },
+    icono: 'autorenew', soloIcono: true, color: '#0d9488', bg: 'rgba(13,148,136,.13)', orden: 2, principal: true, urgente: false },
+  { tarea: 'descongelar', mise: 'descongelar', sigla: 'DESC.', siglaMise: 'DESC.', nombre: 'DESCONGELAR', detalle: 'Dejar descongelando de un día al otro',
+    icono: 'ac_unit', soloIcono: false, color: '#7c3aed', bg: 'rgba(124,58,237,.13)', orden: 3, principal: true, urgente: false },
   { tarea: 'media', mise: 'ref', sigla: 'REF', siglaMise: 'REF', nombre: 'REF', detalle: 'Refuerzo — controlar',
-    icono: null, color: '#3b82f6', bg: 'rgba(59,130,246,.13)', orden: 4, principal: false, urgente: false },
+    icono: null, soloIcono: false, color: '#3b82f6', bg: 'rgba(59,130,246,.13)', orden: 4, principal: false, urgente: false },
   { tarea: 'baja', mise: 'chk', sigla: 'Check', siglaMise: 'OK', nombre: 'CHK', detalle: 'Check — sin acción requerida',
-    icono: null, color: '#64748b', bg: 'rgba(100,116,139,.1)', orden: 5, principal: false, urgente: false },
+    icono: null, soloIcono: false, color: '#64748b', bg: 'rgba(100,116,139,.1)', orden: 5, principal: false, urgente: false },
 ]
 
 const POR_TAREA = new Map<string, PrioMeta>(PRIORIDADES.map(p => [p.tarea, p]))

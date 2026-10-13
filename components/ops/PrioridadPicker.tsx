@@ -28,6 +28,8 @@ export interface PrioOpcion<T extends string> {
   bg: string
   /** Material Symbol que acompaña a la sigla (CARGAR, DESCONGELAR). */
   icono?: string
+  /** Se muestra solo el ícono (CARGAR). La sigla queda en `title` para lectores. */
+  soloIcono?: boolean
 }
 
 interface PrioridadPickerProps<T extends string> {
@@ -35,7 +37,7 @@ interface PrioridadPickerProps<T extends string> {
   /** Cómo se pinta el trigger para `value` — separado de `opciones` porque el
    *  valor actual puede no ser elegible (ej. Modo Control: un ítem 'chk' se
    *  ve verde/OK pero el picker solo ofrece sp/p/ref). */
-  display: { label: string; color: string; bg: string; icono?: string }
+  display: { label: string; color: string; bg: string; icono?: string; soloIcono?: boolean }
   opciones: PrioOpcion<T>[]
   onChange: (v: T) => void
   disabled?: boolean
@@ -61,7 +63,7 @@ export function PrioridadPicker<T extends string>({
   const startYRef = useRef(0)
   const movedRef = useRef(false)
 
-  const anchoPopover = variant === 'circle' ? 56 : 100
+  const anchoPopover = variant === 'circle' ? 56 : 84
   const altoPopover = opciones.length * OPTION_H + Math.max(0, opciones.length - 1) * OPTION_GAP + PAD * 2
 
   const popoverPos = anchor && typeof window !== 'undefined'
@@ -200,11 +202,14 @@ export function PrioridadPicker<T extends string>({
       >
         {variant === 'chip' ? (
           <>
-            {display.icono && <span className="material-symbols-outlined" style={{ fontSize: 12 }}>{display.icono}</span>}
-            {display.label}
+            {display.soloIcono && display.icono
+              ? <span className="material-symbols-outlined" aria-label={display.label} style={{ fontSize: 14 }}>{display.icono}</span>
+              : display.label}
             <span className="material-symbols-outlined" style={{ fontSize: 11, opacity: .7 }}>sync_alt</span>
           </>
-        ) : display.label}
+        ) : display.icono
+          ? <span className="material-symbols-outlined" aria-label={display.label} style={{ fontSize: 16 }}>{display.icono}</span>
+          : display.label}
       </button>
 
       {open && popoverPos && typeof document !== 'undefined' && createPortal(
@@ -234,8 +239,9 @@ export function PrioridadPicker<T extends string>({
                   transition: mode === 'dragging' ? 'none' : 'background .1s, border-color .1s',
                 }}
               >
-                {opt.icono && <span className="material-symbols-outlined" style={{ fontSize: 14, marginRight: 4 }}>{opt.icono}</span>}
-                {opt.label}
+                {opt.soloIcono && opt.icono
+                  ? <span className="material-symbols-outlined" aria-label={opt.label} style={{ fontSize: 22 }}>{opt.icono}</span>
+                  : opt.label}
               </div>
             )
           })}

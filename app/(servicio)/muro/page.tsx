@@ -541,8 +541,8 @@ function FilaMuro({
           textDecoration: estado === 'listo' ? 'line-through' : 'none',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
-          {item.prioridad === 'cargar' && <span style={{ color: '#2dd4bf', marginRight: 6, fontSize: 12, fontWeight: 800 }}>CARGAR</span>}
-          {item.prioridad === 'descongelar' && <span style={{ color: '#a78bfa', marginRight: 6, fontSize: 12, fontWeight: 800 }}>DESCONGELAR</span>}
+          {item.prioridad === 'cargar' && <span className="material-symbols-outlined" title="Cargar" style={{ color: '#2dd4bf', marginRight: 6, fontSize: 16, verticalAlign: '-3px' }}>autorenew</span>}
+          {item.prioridad === 'descongelar' && <span style={{ color: '#a78bfa', marginRight: 6, fontSize: 12, fontWeight: 800 }}>DESC.</span>}
           {item.titulo}
         </div>
         {item.nota && estado !== 'listo' && (

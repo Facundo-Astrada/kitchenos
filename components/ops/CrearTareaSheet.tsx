@@ -7,7 +7,7 @@ import { PRIORIDADES } from '@/lib/ops/prioridades'
 
 export type CrearTareaDia = 'hoy' | 'manana'
 
-const PRIORIDADES_SHEET = PRIORIDADES.map(x => ({ id: x.tarea, label: x.sigla, color: x.color, icono: x.icono, detalle: x.detalle }))
+const PRIORIDADES_SHEET = PRIORIDADES.map(x => ({ id: x.tarea, label: x.sigla, color: x.color, icono: x.icono, soloIcono: x.soloIcono, detalle: x.detalle }))
 
 interface PlazaChip { id: string; plaza: string; instruccion: string | null }
 
@@ -124,8 +124,9 @@ export function CrearTareaSheet({
                       outline: active ? `2px solid ${p.color}66` : '1px solid var(--border)',
                       transition: 'all .15s',
                     }}>
-                      {p.icono && <span className="material-symbols-outlined" style={{ fontSize: 13, verticalAlign: '-2px', marginRight: 2 }}>{p.icono}</span>}
-                      {p.label}
+                      {p.soloIcono && p.icono
+                        ? <span className="material-symbols-outlined" aria-label={p.label} style={{ fontSize: 16, verticalAlign: '-3px' }}>{p.icono}</span>
+                        : p.label}
                     </button>
                   )
                 })}

@@ -55,8 +55,8 @@ const SECCION_LABELS: Record<string, string> = {
 
 // Chip de prioridad para modo menú (agrupado por sección) — mantener apretado
 // abre el picker vertical (PrioridadPicker), un tap solo lo deja abierto.
-const PRIO_CHIP: Record<string, { label: string; color: string; bg: string; icono?: string }> =
-  Object.fromEntries(PRIORIDADES.map(x => [x.tarea, { label: x.sigla, color: x.color, bg: x.bg, icono: x.icono ?? undefined }]))
+const PRIO_CHIP: Record<string, { label: string; color: string; bg: string; icono?: string; soloIcono?: boolean }> =
+  Object.fromEntries(PRIORIDADES.map(x => [x.tarea, { label: x.sigla, color: x.color, bg: x.bg, icono: x.icono ?? undefined, soloIcono: x.soloIcono }]))
 const PRIO_OPCIONES: PrioOpcion<TareaPrioridad>[] = PRIORIDADES.map(x => ({ value: x.tarea, ...PRIO_CHIP[x.tarea] }))
 
 interface ItemOpsProps {
@@ -311,8 +311,9 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
                       borderRadius: 6, marginTop: 3, marginLeft: 3,
                       background: chip.bg, color: chip.color,
                     }}>
-                      {chip.icono && <span className="material-symbols-outlined" style={{ fontSize: 12, verticalAlign: '-2px', marginRight: 2 }}>{chip.icono}</span>}
-                      {chip.label}
+                      {chip.soloIcono && chip.icono
+                        ? <span className="material-symbols-outlined" aria-label={chip.label} style={{ fontSize: 14, verticalAlign: '-3px' }}>{chip.icono}</span>
+                        : chip.label}
                     </span>
                   )
                 }

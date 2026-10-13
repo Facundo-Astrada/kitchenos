@@ -13,10 +13,10 @@ import { PRIORIDADES } from '@/lib/ops/prioridades'
 import type { MisePlaceItem } from '@/types'
 
 // El OK del mise es verde (no el gris de Check de Producción): ahí "OK" es "está como tiene que estar".
-const PRIO_CFG: Record<string, { label: string; color: string; bg: string }> =
+const PRIO_CFG: Record<string, { label: string; color: string; bg: string; icono?: string; soloIcono?: boolean }> =
   Object.fromEntries(PRIORIDADES.map(p => p.mise === 'chk'
     ? [p.mise, { label: p.siglaMise, color: '#22c55e', bg: 'rgba(34,197,94,.13)' }]
-    : [p.mise, { label: p.siglaMise, color: p.color, bg: p.bg }]))
+    : [p.mise, { label: p.siglaMise, color: p.color, bg: p.bg, icono: p.icono ?? undefined, soloIcono: p.soloIcono }]))
 
 const btnReset: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer', padding: 0,

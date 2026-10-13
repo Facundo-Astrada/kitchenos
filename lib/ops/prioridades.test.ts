@@ -22,7 +22,7 @@ describe('catálogo de prioridades', () => {
 
   it('ordena SP · P · CARGAR · DESCONGELAR · REF · Check', () => {
     const orden = [...PRIORIDADES].sort((a, b) => ordenPrioridad(a.tarea) - ordenPrioridad(b.tarea)).map(p => p.sigla)
-    expect(orden).toEqual(['SP', 'P', 'CARGAR', 'DESCONG.', 'REF', 'Check'])
+    expect(orden).toEqual(['SP', 'P', 'CARGAR', 'DESC.', 'REF', 'Check'])
   })
 
   it('CARGAR y DESCONGELAR quedan a la vista; REF y Check plegados', () => {
