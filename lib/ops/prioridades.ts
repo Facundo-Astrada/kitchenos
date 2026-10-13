@@ -50,7 +50,7 @@ export const PRIORIDADES: PrioMeta[] = [
   { tarea: 'cargar', mise: 'cargar', sigla: 'CARGAR', siglaMise: 'CARGAR', nombre: 'CARGAR', detalle: 'Recargar un tupper que quedó a la mitad',
     icono: 'autorenew', soloIcono: true, color: '#0d9488', bg: 'rgba(13,148,136,.13)', orden: 2, principal: true, urgente: false },
   { tarea: 'descongelar', mise: 'descongelar', sigla: 'DESC.', siglaMise: 'DESC.', nombre: 'DESCONGELAR', detalle: 'Dejar descongelando de un día al otro',
-    icono: 'ac_unit', soloIcono: false, color: '#7c3aed', bg: 'rgba(124,58,237,.13)', orden: 3, principal: true, urgente: false },
+    icono: 'ac_unit', soloIcono: false, color: '#0ea5e9', bg: 'rgba(14,165,233,.14)', orden: 3, principal: true, urgente: false },
   { tarea: 'media', mise: 'ref', sigla: 'REF', siglaMise: 'REF', nombre: 'REF', detalle: 'Refuerzo — controlar',
     icono: null, soloIcono: false, color: '#3b82f6', bg: 'rgba(59,130,246,.13)', orden: 4, principal: false, urgente: false },
   { tarea: 'baja', mise: 'chk', sigla: 'Check', siglaMise: 'OK', nombre: 'CHK', detalle: 'Check — sin acción requerida',
