@@ -320,7 +320,7 @@ export default function RecetarioPage() {
     if (!visor || (e && (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0))) return
     e?.preventDefault()
     const ids = tabRef.current === 'ideas' ? estadoLista.current.idsIdeas : estadoLista.current.idsRecetas
-    visor.abrir(recetaId, ids.includes(recetaId) ? ids : undefined)
+    visor.abrir(recetaId, { recorrido: ids.includes(recetaId) ? ids : undefined })
   }, [visor])
 
   const cambiarBusqueda = useCallback((v: string) => { setSearch(v); setLimite(TANDA) }, [])

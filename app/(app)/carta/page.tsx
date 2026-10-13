@@ -810,8 +810,6 @@ export default function CartaPage() {
           recipientesUsados={recipientesUsados}
           onSave={handleComposicionSave}
           onCancel={() => setComposing(null)}
-          recetasFull={recetas}
-          productosStock={productos}
           onRecetaActualizada={refetchRecetas}
           draftId={composing.menuEditId}
         />

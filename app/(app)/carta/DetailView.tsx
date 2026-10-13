@@ -9,7 +9,6 @@ import { createClient } from '@/lib/supabase/client'
 import { PLAZAS_OPS, parseRecipienteNombre } from '@/lib/ops/mise'
 import { useTareas } from '@/lib/hooks/useTareas'
 import OpsPanel, { type OpsInitial, type OpsResult } from '@/components/ops/OpsPanel'
-import { RecetaEditSheet } from '@/components/recetas/RecetaEditSheet'
 import { useRecetaVisor } from '@/components/recetas/visorContexto'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import { fmtMoney, fcBadge, marginBadge } from './cards'
@@ -90,7 +89,6 @@ export function DetailView({
   const [editingGramajeVal, setEditingGramajeVal] = useState('')
   const [savingTags, setSavingTags] = useState(false)
   // Sheet de edición de ingredientes de una receta vinculada, sin salir de Carta
-  const [editRecetaSheet, setEditRecetaSheet] = useState<{ id: string; nombre: string } | null>(null)
   // Draft recipe creation
   const [creatingDraft, setCreatingDraft] = useState(false)
   const [creatingTarea, setCreatingTarea] = useState(false)
@@ -276,8 +274,12 @@ export function DetailView({
   }
 
   const linkedReceta = item.receta_id ? recetas.find(r => r.id === item.receta_id) : null
-  // La ficha de la receta, la misma del Recetario, encima de Carta.
+  // Ver o editar una receta = su ficha, la misma del Recetario, encima de
+  // Carta (visor global). Al cerrarla se refrescan los costos del plato.
   const visor = useRecetaVisor()
+  function verReceta(id: string) {
+    visor?.abrir(id, { recorrido: item.plato_recetas.map(x => x.receta_id), alCerrar: onRecetaActualizada })
+  }
   const hasFc = item.food_cost_pct != null && item.food_cost_pct > 0
   const hasMrg = item.margen_pct_computed != null
   // Nivel de estandarización — el mínimo de sus componentes manda. Ver lib/recetas/estandarizacion.ts.
@@ -571,8 +573,8 @@ export function DetailView({
                   display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
                 }}>
                   <button
-                    onClick={() => setEditRecetaSheet({ id: pr.receta_id, nombre: pr.receta?.nombre ?? 'Receta' })}
-                    title="Ver y editar receta"
+                    onClick={() => verReceta(pr.receta_id)}
+                    title="Ver la receta"
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', flexShrink: 0 }}
                   >
                     <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'var(--accent)' }}>menu_book</span>
@@ -581,7 +583,7 @@ export function DetailView({
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                       <button
                         type="button"
-                        onClick={() => visor?.abrir(pr.receta_id, item.plato_recetas.map(x => x.receta_id))}
+                        onClick={() => verReceta(pr.receta_id)}
                         title="Ver la ficha de la receta"
                         style={{ background: 'none', border: 'none', padding: 0, minWidth: 0, cursor: visor ? 'pointer' : 'default', fontFamily: 'inherit', textAlign: 'left', fontSize: 13, fontWeight: 600, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                       >
@@ -707,7 +709,7 @@ export function DetailView({
 
           {/* Legacy single receta (if no plato_recetas) */}
           {item.plato_recetas.length === 0 && linkedReceta && (
-            <a href={`/recetario/${linkedReceta.id}`} onClick={e => { if (visor && !e.metaKey && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); visor.abrir(linkedReceta.id) } }} style={{
+            <a href={`/recetario/${linkedReceta.id}`} onClick={e => { if (visor && !e.metaKey && !e.ctrlKey && !e.shiftKey) { e.preventDefault(); verReceta(linkedReceta.id) } }} style={{
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '12px 14px', borderRadius: 12,
               border: '1px solid var(--accent)', background: 'var(--blue-bg)',
@@ -1019,16 +1021,6 @@ export function DetailView({
       </div>
       )}
 
-      {editRecetaSheet && (
-        <RecetaEditSheet
-          recetaId={editRecetaSheet.id}
-          recetaNombre={editRecetaSheet.nombre}
-          stockProductos={productos}
-          recetasDisponibles={recetas}
-          onClose={() => setEditRecetaSheet(null)}
-          onSaved={onRecetaActualizada}
-        />
-      )}
     </div>
   )
 }

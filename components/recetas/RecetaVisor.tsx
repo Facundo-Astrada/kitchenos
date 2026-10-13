@@ -38,6 +38,7 @@ interface Estado {
   id: string
   recorrido: string[]
   minimizada: boolean
+  cargar?: boolean
   nombre: string | null
   detalle: string | null
 }
@@ -85,11 +86,17 @@ export function RecetaVisorProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, [estado, montado])
 
-  const abrir = useCallback((id: string, recorrido?: string[]) => {
+  // Quien abrió la receta puede pedir aviso al cerrarla (Carta refresca los
+  // costos del plato). Vale para esa apertura: reabrirla desde el botón
+  // flotante, quizás ya en otra pantalla, no lo arrastra.
+  const alCerrar = useRef<(() => void) | null>(null)
+  const abrir = useCallback<RecetaVisorApi['abrir']>((id, opciones) => {
+    alCerrar.current = opciones?.alCerrar ?? null
     setEstado(prev => ({
       id,
-      recorrido: recorrido ?? (prev?.id === id ? prev.recorrido : SIN_RECORRIDO),
+      recorrido: opciones?.recorrido ?? (prev?.id === id ? prev.recorrido : SIN_RECORRIDO),
       minimizada: false,
+      cargar: opciones?.cargar,
       ...datosDe(info.current, id, prev),
     }))
   }, [])
@@ -112,7 +119,7 @@ export function RecetaVisorProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const irA = useCallback((id: string) => {
-    setEstado(prev => prev && { ...prev, id, nombre: null, detalle: null })
+    setEstado(prev => prev && { ...prev, id, cargar: false, nombre: null, detalle: null })
   }, [])
 
   const informar = useCallback<RecetaVisorApi['informar']>((i) => { info.current = i }, [])
@@ -128,12 +135,23 @@ export function RecetaVisorProvider({ children }: { children: ReactNode }) {
 
   const abierta = !!estado && !estado.minimizada
   useSheetOpenWhen(abierta)   // oculta el FAB del Coach, como cualquier sheet
+  useEffect(() => {
+    if (!abierta) return
+    return () => { alCerrar.current?.(); alCerrar.current = null }
+  }, [abierta])
 
   // Refs para los listeners (no se reinstalan con cada cambio de estado).
   const cerrarRef = useRef(cerrar)
   const estadoRef = useRef(estado)
   const sheetCountRef = useRef(sheetCount)
   useEffect(() => { cerrarRef.current = cerrar; estadoRef.current = estado; sheetCountRef.current = sheetCount })
+  // Cuántos sheets hay con el visor recién abierto (él incluido). El visor
+  // puede abrirse encima de otro sheet — el editor de un menú en Carta — así
+  // que "hay algo arriba mío" es "hay más que cuando abrí", no "hay más de uno".
+  const sheetsAlAbrir = useRef(1)
+  useEffect(() => {
+    if (abierta) sheetsAlAbrir.current = sheetCountRef.current + 1
+  }, [abierta])
 
   // ── "Atrás" del navegador/celular cierra la receta, no cambia de pantalla ──
   // Al abrir se apila una entrada de historial con la misma URL; al cerrar a
@@ -167,7 +185,7 @@ export function RecetaVisorProvider({ children }: { children: ReactNode }) {
       if (e.metaKey || e.ctrlKey || e.altKey) return
       const t = e.target as HTMLElement | null
       if (t?.closest?.('input, textarea, select, [contenteditable="true"]')) return
-      if (sheetCountRef.current > 1) return
+      if (sheetCountRef.current > sheetsAlAbrir.current) return
       const est = estadoRef.current
       if (e.key === 'Escape') cerrarRef.current()
       else if (est && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
@@ -184,8 +202,9 @@ export function RecetaVisorProvider({ children }: { children: ReactNode }) {
 
   const fichaVisor = useMemo<FichaEnVisor>(() => ({
     recorrido: estado?.recorrido ?? SIN_RECORRIDO,
+    cargarAlAbrir: !!estado?.cargar,
     onCerrar: cerrar, onMinimizar: minimizar, onDescartar: descartar, onIrA: irA,
-  }), [estado?.recorrido, cerrar, minimizar, descartar, irA])
+  }), [estado?.recorrido, estado?.cargar, cerrar, minimizar, descartar, irA])
 
   // El botón flotante no compite con un sheet abierto ni con la propia ficha
   // de esa receta abierta como página.

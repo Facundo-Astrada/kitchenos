@@ -25,6 +25,7 @@ import type { OpsResult } from '@/components/ops/OpsPanel'
 import { useAncho } from '@/lib/hooks/useAncho'
 import { useRecetaVisor, type FichaEnVisor } from '@/components/recetas/visorContexto'
 import { leerEscala, guardarEscala, type EscalaReceta } from '@/lib/recetas/escalaSesion'
+import { RecetaEditSheet } from '@/components/recetas/RecetaEditSheet'
 import { SheetChrome } from '@/lib/ui/chrome'
 import {
   NotaIngredienteBoton, NotaIngredienteTexto, NotaIngredienteEditor,
@@ -124,7 +125,7 @@ const SIN_RECORRIDO: string[] = []
 export function RecetaFicha({ id, visor }: { id: string; visor?: FichaEnVisor }) {
   const router = useRouter()
   const visorApi = useRecetaVisor()
-  const { recetas, loading, agregarReceta, actualizarReceta, eliminarReceta, agregarIngrediente, actualizarIngrediente, eliminarIngrediente } = useRecetas()
+  const { recetas, loading, refetch, agregarReceta, actualizarReceta, eliminarReceta, publicarReceta, agregarIngrediente, actualizarIngrediente, eliminarIngrediente } = useRecetas()
   const { productos: stockProductos } = useStock()
   const { getHistorial } = useProduccionRegistros()
   const { items: cartaItems, crearItem, actualizarItem, eliminarItem, categorias: cartaCategorias } = useCarta()
@@ -363,6 +364,21 @@ export function RecetaFicha({ id, visor }: { id: string; visor?: FichaEnVisor })
   useEffect(() => {
     if (nombreReceta) visorApi?.informar({ id, nombre: nombreReceta, detalle: detalleEscala })
   }, [visorApi, id, nombreReceta, detalleEscala])
+  // Carga rápida: todos los ingredientes de corrido, o con IA (foto / texto
+  // pegado). Es la única herramienta de carga masiva — vive acá adentro para
+  // que una receta se edite igual desde el Recetario, Carta u OPS.
+  const [cargaRapidaOpen, setCargaRapidaOpen] = useState(false)
+  const otrasRecetas = useMemo(() => recetas.filter(r => r.id !== id), [recetas, id])
+  // Receta recién creada desde otra pantalla (un componente nuevo de un menú):
+  // llega vacía y pidiendo que se la cargue — se abre sola, una vez.
+  const cargaAutoHecha = useRef(false)
+  const sinIngredientes = !!receta && (receta.ingredientes?.length ?? 0) === 0
+  useEffect(() => {
+    if (!visor?.cargarAlAbrir || cargaAutoHecha.current || !sinIngredientes) return
+    cargaAutoHecha.current = true
+    setCargaRapidaOpen(true)
+  }, [visor?.cargarAlAbrir, sinIngredientes])
+
   // Abierta como página (link directo): al salir con una conversión hecha
   // queda el botón flotante para retomarla, igual que al cerrar el visor.
   const convertida = useRef(false)
@@ -441,6 +457,12 @@ export function RecetaFicha({ id, visor }: { id: string; visor?: FichaEnVisor })
     let raf: number | null = null
     function calcular() {
       raf = null
+      // Si todo entra sin scrollear no hay "fondo": manda la primera (antes
+      // una receta corta abría con «Food Cost» marcado).
+      if (container!.scrollHeight <= container!.clientHeight + 4) {
+        setSeccionActiva(entradas[0][0])
+        return
+      }
       // Al fondo del scroll gana la última sección, aunque sea corta y su
       // título nunca haya cruzado la línea por sí solo.
       if (container!.scrollTop + container!.clientHeight >= container!.scrollHeight - 4) {
@@ -877,6 +899,26 @@ export function RecetaFicha({ id, visor }: { id: string; visor?: FichaEnVisor })
       {/* ── Body: scroll continuo ── */}
       <div ref={bodyRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 0 80px' }}>
 
+        {/* Borrador ("a realizar" en Carta, "Ideas" en el Recetario): se ve y
+            se edita igual, pero no figura entre las recetas hasta publicarla. */}
+        {receta.status === 'draft' && (
+          <div style={{ margin: '12px 14px 0', padding: '9px 12px', borderRadius: 10, background: 'var(--amber-bg)', border: '1px solid rgba(245,158,11,.3)', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--amber-fg)', flexShrink: 0 }}>edit_document</span>
+            <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--amber-fg)', lineHeight: 1.4 }}>
+              <b>Borrador.</b> {sinIngredientes ? 'Todavía no tiene ingredientes cargados.' : 'Cuando esté lista, publicala para que figure en el Recetario.'}
+            </div>
+            {canEdit && !sinIngredientes && (
+              <button
+                onClick={() => publicarReceta(receta.id).then(() => setToast('Receta publicada')).catch(() => setToast('No se pudo publicar'))}
+                style={{ flexShrink: 0, background: 'var(--navy)', border: 'none', borderRadius: 8, padding: '7px 12px', fontSize: 12, fontWeight: 700, color: '#fff', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 15 }}>publish</span>
+                Publicar
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Foto de la receta */}
         {receta.foto_url && (
           <div style={{ position: 'relative', width: '100%', maxHeight: 220, overflow: 'hidden' }}>
@@ -1014,6 +1056,20 @@ export function RecetaFicha({ id, visor }: { id: string; visor?: FichaEnVisor })
             <span style={{ fontSize: 10, fontWeight: 800, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '.08em' }}>Ingredientes</span>
             <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-3)' }}>({ings.length})</span>
             <div style={{ flex: 1, height: 1, background: 'var(--border)', marginLeft: 6 }} />
+            {canEdit && ings.length > 0 && (
+              <button
+                onClick={() => setCargaRapidaOpen(true)}
+                title="Editar todos los ingredientes de corrido, o cargarlos con IA (foto o texto)"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0, cursor: 'pointer', fontFamily: 'inherit',
+                  fontSize: 10, fontWeight: 800, letterSpacing: '0.04em', lineHeight: 1.4, textTransform: 'uppercase',
+                  background: 'transparent', color: 'var(--accent)', border: '1.5px solid rgba(67,97,160,.35)', borderRadius: 6, padding: '3px 7px',
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 13 }}>bolt</span>
+                Carga rápida
+              </button>
+            )}
             <button
               onClick={alternarUnidades}
               style={{
@@ -1039,9 +1095,21 @@ export function RecetaFicha({ id, visor }: { id: string; visor?: FichaEnVisor })
           )}
 
           {ings.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--text-3)' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 24, marginBottom: 6 }}>restaurant</span>
-              <div style={{ fontSize: 12, fontWeight: 600 }}>Sin ingredientes</div>
+            <div style={{ textAlign: 'center', padding: '22px 16px', color: 'var(--text-3)', background: 'var(--surface)', borderRadius: 12, border: '1px dashed var(--border)' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 26, marginBottom: 6 }}>restaurant</span>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-2)' }}>Sin ingredientes</div>
+              {canEdit && (
+                <>
+                  <div style={{ fontSize: 12, margin: '4px 0 12px', lineHeight: 1.4 }}>Tipealos de corrido, o sacale una foto a la receta y los carga la IA.</div>
+                  <button
+                    onClick={() => setCargaRapidaOpen(true)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--navy)', border: 'none', borderRadius: 10, padding: '10px 16px', fontSize: 13, fontWeight: 700, color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 17 }}>bolt</span>
+                    Cargar ingredientes
+                  </button>
+                </>
+              )}
             </div>
           ) : (
             <div style={{ background: 'var(--surface)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
@@ -1931,6 +1999,18 @@ export function RecetaFicha({ id, visor }: { id: string; visor?: FichaEnVisor })
           </div>
         </div>
         </SheetChrome>
+      )}
+
+      {/* ── Carga rápida de ingredientes y procedimiento (con IA) ── */}
+      {cargaRapidaOpen && (
+        <RecetaEditSheet
+          recetaId={receta.id}
+          recetaNombre={receta.nombre}
+          stockProductos={stockProductos}
+          recetasDisponibles={otrasRecetas}
+          onClose={() => setCargaRapidaOpen(false)}
+          onSaved={refetch}
+        />
       )}
 
       {/* ── Sheet OPS / Mise ── */}

@@ -14,9 +14,7 @@ import PhotoPicker from '@/components/ui/PhotoPicker'
 import { fileToBase64, callRecetaImport, matchPorNombre, formatProcedimiento, type RecetaIAResult } from '@/lib/recetas/iaImport'
 import { moverItemSobreItem, moverItemASeccion } from '@/lib/carta/reordenarItems'
 import { fechaProduccion } from '@/lib/menus/activarMenu'
-import { RecetaEditSheet } from '@/components/recetas/RecetaEditSheet'
-import type { RecetaConCosto } from '@/lib/hooks/useRecetas'
-import type { ProductoConEstado } from '@/lib/hooks/useStock'
+import { useRecetaVisor } from '@/components/recetas/visorContexto'
 
 // ── Tipos públicos ──────────────────────────────────────────
 export type CompModo = 'plato' | 'menu' | 'evento'
@@ -153,55 +151,6 @@ function fmtDiaCorto(iso: string): string {
 }
 let _u = 0
 const uid = () => ++_u
-
-// ── Vista rápida de receta — modal centrado al tocar el ícono de recetario
-// en un ítem vinculado (producto + cantidad, sin salir del editor). ──
-function RecetaPreviewModal({ nombre, ingredientes, onClose, onCrear }: {
-  nombre: string
-  ingredientes: { nombre: string; cantidad: number; unidad: string }[]
-  onClose: () => void
-  /** Si se pasa, ofrece crear/editar los ingredientes al toque — mismo editor
-      (RecetaEditSheet) que usa Carta en un plato específico. Antes solo se
-      ofrecía cuando la receta estaba vacía ("Crear receta"); con ingredientes
-      ya cargados este preview era un callejón sin salida — había que ir a
-      Recetario para corregir un detalle rápido. */
-  onCrear?: () => void
-}) {
-  const vacia = ingredientes.length === 0
-  return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: 16, maxWidth: 420, width: '100%', maxHeight: '75vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 12px 32px rgba(0,0,0,.25)' }}>
-        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          <span className="material-symbols-outlined" style={{ color: TIPO_CFG.receta.color, fontSize: 20 }}>menu_book</span>
-          <div style={{ flex: 1, fontSize: 15, fontWeight: 800, color: 'var(--text-1)' }}>{nombre}</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', padding: 2 }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>close</span>
-          </button>
-        </div>
-        <div style={{ overflowY: 'auto' }}>
-          {vacia ? (
-            <div style={{ padding: '20px 16px', textAlign: 'center' }}>
-              <div style={{ fontSize: 13, color: 'var(--text-3)' }}>Esta receta todavía no tiene ingredientes cargados en el recetario.</div>
-            </div>
-          ) : ingredientes.map((ing, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '9px 16px', borderBottom: i < ingredientes.length - 1 ? '1px solid var(--border)' : 'none' }}>
-              <span style={{ fontSize: 13, color: 'var(--text-1)' }}>{ing.nombre}</span>
-              <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'monospace', flexShrink: 0 }}>{ing.cantidad}{ing.unidad}</span>
-            </div>
-          ))}
-        </div>
-        {onCrear && (
-          <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
-            <button onClick={onCrear} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', borderRadius: 10, border: 'none', background: 'var(--navy)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{vacia ? 'add_circle' : 'edit'}</span>
-              {vacia ? 'Crear receta' : 'Editar receta'}
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
 
 // ── Estilos compartidos del modal de captura IA ──
 const iaBtn: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-1)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', width: '100%', textAlign: 'left' }
@@ -537,7 +486,7 @@ function RecetaIAModal({ prefillNombre, productos, restauranteId, categoriasCart
 // ════════════════════════════════════════════════════════════
 export default function ComposicionEditor({
   inicial: inicialProp, recetas, productos, cartaItems, categoriasCarta, draftRecetaIds = new Set(), recipientesUsados = [], onSave, onCancel,
-  recetasFull, productosStock, onRecetaActualizada, draftId,
+  onRecetaActualizada, draftId,
 }: {
   inicial?: CompInicial
   recetas: RefConCosto[]
@@ -548,11 +497,8 @@ export default function ComposicionEditor({
   recipientesUsados?: string[]
   onSave: (payload: CompPayload) => Promise<void>
   onCancel: () => void
-  // Datos completos (no el RefConCosto liviano de arriba) para poder abrir el
-  // editor de ingredientes de una receta (RecetaEditSheet) al vuelo — el mismo
-  // que usa Carta en un plato específico — sin salir de este editor.
-  recetasFull?: RecetaConCosto[]
-  productosStock?: ProductoConEstado[]
+  // Se llama al cerrar la ficha de una receta abierta desde acá (visor
+  // global): quien monta el editor refresca lo que dependa de ella.
   onRecetaActualizada?: () => void
   // Identidad estable de "qué se está editando" — el id real del menú/evento
   // cuando ya existe. Sin esto (plato nuevo, menú nuevo) el borrador queda
@@ -598,10 +544,15 @@ export default function ComposicionEditor({
     return json.id as string
   }
 
-  // Editor de ingredientes de una receta ya vinculada (RecetaEditSheet) — se
-  // abre desde el botón "Crear receta" del preview cuando todavía no tiene
-  // ingredientes cargados, sin salir de este editor.
-  const [editRecetaSheet, setEditRecetaSheet] = useState<{ id: string; nombre: string } | null>(null)
+  // Ver o editar una receta desde acá es abrir SU ficha — la misma del
+  // Recetario — encima de este editor (visor global). Antes había dos piezas
+  // propias: una lista chica de ingredientes y un editor aparte, con otros
+  // datos y otra forma de editar que la ficha. `cargar`: receta recién
+  // creada, entra directo a la carga rápida de ingredientes.
+  const visor = useRecetaVisor()
+  function abrirReceta(id: string, cargar = false) {
+    visor?.abrir(id, { cargar, alCerrar: onRecetaActualizada })
+  }
 
   // Recetas-idea creadas en esta sesión del editor (draft) → se pintan en rojo
   // al instante, sin esperar el revalidate de useRecetas.
@@ -621,8 +572,8 @@ export default function ComposicionEditor({
   const [iaImport, setIaImport] = useState<{ prefillNombre: string; onCreated: (id: string, nombre: string) => void } | null>(null)
   // "Crear receta acá mismo" — a diferencia de "crear idea" (nombre solo) y
   // del import IA (extrae de una foto/texto), esta arranca vacía pero abre
-  // directo el editor de ingredientes+procedimiento (RecetaEditSheet, con food
-  // cost en vivo) sin pasar por Recetario ni por una foto.
+  // directo su ficha en la carga rápida de ingredientes, sin pasar por
+  // Recetario ni por una foto.
   async function crearManualParaPlato(nombreCrudo: string) {
     const nombre = nombreCrudo.trim()
     if (!nombre) return
@@ -630,7 +581,7 @@ export default function ComposicionEditor({
     setLocalDraftIds(prev => new Set(prev).add(id))
     const nuevoUid = uid()
     setPlatoRecetas(prev => [...prev, { _uid: nuevoUid, ref_id: id, nombre, porciones: 1, tipo: 'receta' }])
-    setEditRecetaSheet({ id, nombre })
+    abrirReceta(id, true)
   }
   function openIaImportForPlato(prefillNombre: string) {
     setIaImport({
@@ -739,7 +690,6 @@ export default function ComposicionEditor({
   const [autoFocusCantidadUid, setAutoFocusCantidadUid] = useState<number | null>(null)
   // Vistazo rápido de ingredientes de un resultado de búsqueda (todavía sin
   // elegir) — separado del preview de un ítem ya vinculado.
-  const [previewResult, setPreviewResult] = useState<{ nombre: string; ingredientes: { nombre: string; cantidad: number; unidad: string }[] } | null>(null)
 
   // ── Drag & drop de secciones (reordenar arrastrando el handle) ──
   const seccionRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -1504,7 +1454,7 @@ export default function ComposicionEditor({
             onCrearIdea={async (n) => { const idNueva = await crearIdeaReceta(n); setLocalDraftIds(prev => new Set(prev).add(idNueva)); return idNueva }}
             onCrearIdeaIA={openIaImportForPlato}
             onCrearManual={crearManualParaPlato}
-            onEditReceta={(recetaId, recNombre) => setEditRecetaSheet({ id: recetaId, nombre: recNombre })}
+            onEditReceta={recetaId => abrirReceta(recetaId)}
           />
         ) : (
           <>
@@ -1604,7 +1554,7 @@ export default function ComposicionEditor({
                           plazaControl={plazaControl || undefined}
                           esEvento={modo === 'evento'}
                           fechaEvento={fechaEvento || undefined}
-                          onEditReceta={(id, nombre) => setEditRecetaSheet({ id, nombre })}
+                          onEditReceta={id => abrirReceta(id)}
                         />
                       </div>
                     </div>
@@ -1662,7 +1612,7 @@ export default function ComposicionEditor({
                                 const idNueva = await crearIdeaReceta(nombreManual)
                                 setLocalDraftIds(prev => new Set(prev).add(idNueva))
                                 addItemFromSearch(sec, 'receta', idNueva, nombreManual)
-                                setEditRecetaSheet({ id: idNueva, nombre: nombreManual })
+                                abrirReceta(idNueva, true)
                               } finally { setCreandoIdeaSec(false) }
                             }}
                             disabled={creandoIdeaSec}
@@ -1689,8 +1639,8 @@ export default function ComposicionEditor({
                               <span style={{ fontSize: 13, color: 'var(--text-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.nombre}</span>
                             </button>
                             {r.tipo === 'receta' && (
-                              <button onClick={e => { e.stopPropagation(); setPreviewResult({ nombre: r.nombre, ingredientes: r.ingredientes ?? [] }) }}
-                                title="Ver ingredientes" aria-label="Ver ingredientes"
+                              <button onClick={e => { e.stopPropagation(); abrirReceta(r.id) }}
+                                title="Ver la receta" aria-label="Ver la receta"
                                 style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 5, color: 'var(--text-3)', display: 'flex', flexShrink: 0 }}>
                                 <span className="material-symbols-outlined" style={{ fontSize: 16 }}>visibility</span>
                               </button>
@@ -1740,19 +1690,6 @@ export default function ComposicionEditor({
           categoriasCarta={categoriasCarta}
           onClose={() => setIaImport(null)}
           onCreated={(id, nombreCreado) => { setIaImport(null); iaImport.onCreated(id, nombreCreado) }}
-        />
-      )}
-      {previewResult && (
-        <RecetaPreviewModal nombre={previewResult.nombre} ingredientes={previewResult.ingredientes} onClose={() => setPreviewResult(null)} />
-      )}
-      {editRecetaSheet && (
-        <RecetaEditSheet
-          recetaId={editRecetaSheet.id}
-          recetaNombre={editRecetaSheet.nombre}
-          stockProductos={productosStock ?? []}
-          recetasDisponibles={recetasFull ?? []}
-          onClose={() => setEditRecetaSheet(null)}
-          onSaved={() => onRecetaActualizada?.()}
         />
       )}
       {/* Preview flotante del ítem arrastrado — sigue al cursor/dedo para que
@@ -1844,10 +1781,6 @@ function PlatoRecetasEditor({
   const [opsPanelUid, setOpsPanelUid] = useState<number | null>(null)
   // Nota libre por componente — abre/cierra por _uid, mismo patrón que OPS.
   const [notaEditUid, setNotaEditUid] = useState<number | null>(null)
-  // Vista rápida de receta — abre/cierra por _uid de la fila
-  const [previewUid, setPreviewUid] = useState<number | null>(null)
-  // Vistazo rápido de un resultado de búsqueda todavía sin elegir
-  const [previewSearchId, setPreviewSearchId] = useState<string | null>(null)
   const platoSearchRef = useRef<HTMLInputElement>(null)
 
   function openOps(pr: PlatoItem) {
@@ -2003,7 +1936,7 @@ function PlatoRecetasEditor({
                 {/* Fila principal */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px', borderBottom: (idx < platoRecetas.length - 1 || opsActiva || notaActiva) ? '1px solid var(--border)' : 'none', background: idx % 2 === 1 ? 'rgba(0,0,0,.01)' : 'transparent' }}>
                   {pr.tipo === 'receta' ? (
-                    <button onClick={() => setPreviewUid(prev => prev === pr._uid ? null : pr._uid)} title="Ver receta" aria-label="Ver receta"
+                    <button onClick={() => onEditReceta(pr.ref_id, pr.nombre)} title="Ver la receta" aria-label="Ver la receta"
                       style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', flexShrink: 0 }}>
                       <span className="material-symbols-outlined" style={{ fontSize: 17, color: cfg.color }}>{cfg.icon}</span>
                     </button>
@@ -2179,8 +2112,8 @@ function PlatoRecetasEditor({
                     <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: cfg.bg, color: cfg.color, flexShrink: 0 }}>{cfg.label}</span>
                     {r.costo > 0 && <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 4, flexShrink: 0 }}>{fmtMoney(r.costo)}</span>}
                   </button>
-                  <button onMouseDown={e => { e.preventDefault(); setPreviewSearchId(r.id) }}
-                    title="Ver ingredientes" aria-label="Ver ingredientes"
+                  <button onMouseDown={e => { e.preventDefault(); onEditReceta(r.id, r.nombre) }}
+                    title="Ver la receta" aria-label="Ver la receta"
                     style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '10px 12px', color: 'var(--text-3)', display: 'flex', flexShrink: 0 }}>
                     <span className="material-symbols-outlined" style={{ fontSize: 16 }}>visibility</span>
                   </button>
@@ -2230,24 +2163,6 @@ function PlatoRecetasEditor({
           </div>
         )}
       </div>
-      {previewUid != null && (() => {
-        const pr = platoRecetas.find(x => x._uid === previewUid)
-        if (!pr || pr.tipo !== 'receta') return null
-        const receta = recetas.find(r => r.id === pr.ref_id)
-        return (
-          <RecetaPreviewModal
-            nombre={pr.nombre}
-            ingredientes={receta?.ingredientes ?? []}
-            onClose={() => setPreviewUid(null)}
-            onCrear={() => { setPreviewUid(null); onEditReceta(pr.ref_id, pr.nombre) }}
-          />
-        )
-      })()}
-      {previewSearchId && (() => {
-        const receta = recetas.find(r => r.id === previewSearchId)
-        if (!receta) return null
-        return <RecetaPreviewModal nombre={receta.nombre} ingredientes={receta.ingredientes ?? []} onClose={() => setPreviewSearchId(null)} />
-      })()}
     </div>
   )
 }
@@ -2301,8 +2216,6 @@ function ItemRowInline({
   // al que solo se le puso la anticipación reabría con el bloque colapsado y
   // parecía vacío.
   const [prodOpen, setProdOpen] = useState(() => !!(item.plaza || item.prioridad !== 'media' || item.cantidad != null || item.variante || item.dias_antes))
-  const [showPreview, setShowPreview] = useState(false)
-  const [previewSearchResult, setPreviewSearchResult] = useState<{ nombre: string; ingredientes: { nombre: string; cantidad: number; unidad: string }[] } | null>(null)
   // Solo hace falta para el selector de plaza reducido en evento (ver esEvento).
   const { plazasCustom: plazasCustomLocal } = usePlazasCustom()
   // Texto crudo del input de cantidad — desacoplado de item.cantidad (number)
@@ -2374,7 +2287,7 @@ function ItemRowInline({
       <div onClick={onToggle} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', cursor: 'pointer' }}>
         {tcfg && (
           recetaVinculada ? (
-            <button onClick={e => { e.stopPropagation(); setShowPreview(true) }} title="Ver receta" aria-label="Ver receta"
+            <button onClick={e => { e.stopPropagation(); onEditReceta?.(recetaVinculada.id, recetaVinculada.nombre) }} title="Ver la receta" aria-label="Ver la receta"
               style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', flexShrink: 0 }}>
               <span className="material-symbols-outlined" style={{ fontSize: 18, color: tcfg.color }}>{tcfg.icon}</span>
             </button>
@@ -2485,8 +2398,8 @@ function ItemRowInline({
                           <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 7px', borderRadius: 99, background: cfg.bg, color: cfg.color, flexShrink: 0 }}>{cfg.label}</span>
                         </button>
                         {r.tipo === 'receta' && (
-                          <button onMouseDown={e => { e.preventDefault(); setPreviewSearchResult({ nombre: r.nombre, ingredientes: recetas.find(x => x.id === r.id)?.ingredientes ?? [] }) }}
-                            title="Ver ingredientes" aria-label="Ver ingredientes"
+                          <button onMouseDown={e => { e.preventDefault(); onEditReceta?.(r.id, r.nombre) }}
+                            title="Ver la receta" aria-label="Ver la receta"
                             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '9px 10px', color: 'var(--text-3)', display: 'flex', flexShrink: 0 }}>
                             <span className="material-symbols-outlined" style={{ fontSize: 16 }}>visibility</span>
                           </button>
@@ -2701,17 +2614,6 @@ function ItemRowInline({
           </>
           )}
         </div>
-      )}
-      {showPreview && recetaVinculada && (
-        <RecetaPreviewModal
-          nombre={recetaVinculada.nombre}
-          ingredientes={recetaVinculada.ingredientes ?? []}
-          onClose={() => setShowPreview(false)}
-          onCrear={onEditReceta ? () => { setShowPreview(false); onEditReceta(recetaVinculada.id, recetaVinculada.nombre) } : undefined}
-        />
-      )}
-      {previewSearchResult && (
-        <RecetaPreviewModal nombre={previewSearchResult.nombre} ingredientes={previewSearchResult.ingredientes} onClose={() => setPreviewSearchResult(null)} />
       )}
     </div>
   )
