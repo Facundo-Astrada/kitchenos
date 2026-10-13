@@ -474,3 +474,6 @@ La ficha de una receta se abría navegando a `/recetario/[id]`: perdía la lista
 ## Lista de cientos de tarjetas — tandas + memo + sin `motion` por ítem (oct 2026)
 
 Recetario con 635 recetas montaba todas de entrada, cada una en un `motion.div` y calculando su nivel de estandarización, y cada tecla del buscador las re-renderizaba. Lo que se cambió: render por tandas de 60 que crecen con el scroll del panel (más un botón "Mostrar más" — el gesto nunca es la única vía), tarjeta en `memo` con callbacks estables (los datos que el callback necesita viajan por `ref`), filtro sobre `useDeferredValue(search)` con el nombre normalizado una sola vez por receta (`normalizarBusqueda`: sin acentos), y nada de animación de entrada por tarjeta. `content-visibility:auto` se descartó a propósito: estima el alto de lo no renderizado y corre el `scrollTop` que hay que reponer al volver.
+
+## Mantener apretado no es la única vía — ni la primaria
+En una fila con scroll y tilde, un long-press abre bien una de cada cinco veces. Una acción que se usa seguido (anotar, editar) va con un botón visible: ícono de 15-20px con `.hit-slop` para el área táctil, sin agrandar la fila. El mantener-apretado queda para el atajo de quien ya lo conoce (ej. el picker de prioridad, que además abre con un tap).

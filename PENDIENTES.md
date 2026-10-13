@@ -309,9 +309,10 @@ Lista completa con el detalle de cada uno en `HISTORIAL.md`. En una línea:
 
 ### OPS — tanda 13/10 (prioridades, notas, receta)
 - El optimistic con `mutate(async…)` de SWR calcula sobre la última versión confirmada y pisa toques rápidos: está en `useRecetas`, `useHaccp` y otros hooks. `useTareas` ya usa parche por tarea + `lib/ops/colaEscrituras.ts`; migrar el resto.
-- Prioridades CARGAR/DESCONGELAR no están en el editor de Carta/Menú (`CompPrioridad`) ni en el Coach (`enum` de tools). Colores teal/violeta sin cruzar con `DESIGN.md`.
+- Prioridades CARGAR/DESCONGELAR no están en el editor de Carta/Menú (`CompPrioridad`) ni en el Coach (`enum` de tools). Colores teal (CARGAR) y celeste (DESCONGELAR, cerca del azul de REF) sin cruzar con `DESIGN.md`.
 - Ratchet `checklist/ClientView.tsx` (3145) ya fallaba antes de hoy (3196 → 3200).
-- Nota de tarea: la del mise viaja solo al crear la tarea, no se sincroniza después.
+- Nota de tarea: la del mise viaja solo al crear la tarea, no se sincroniza después; en el pase final sí entran las notas vivas de los ítems del mise.
+- Mise: el mantener-apretado ya no abre la nota (lápiz de 15px con `hit-slop`); la guía/tour no lo mencionaba, pero avisar al equipo.
 - Falta el vistazo escalado a la cantidad de la tarea y la franja "hoy en Producción" dentro de la ficha.
 
 ### Mise / pase de turno — flecos de la tanda de agosto

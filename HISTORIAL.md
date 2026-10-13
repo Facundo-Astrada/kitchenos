@@ -11,6 +11,7 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 - `lib/ops/prioridades.ts`: catálogo único SP/P/CARGAR/DESCONGELAR/REF/Check (tarea↔mise). DESCONGELAR listo no tilda el mise y desde el cierre cae en el turno actual; ninguno abre el registro de producción.
 - `tareas.nota/nota_por/nota_por_id/nota_at` (migración `20261013b`): una nota por tarea; chef/admin editan cualquiera (`lib/permisos/notasTarea.ts`). Visible en fila, Muro y Copiar pase.
 - Mise: botón Receta con el vistazo de OPS; el vistazo suma Empezar/Listo y anterior/siguiente; Producción pliega el header al scrollear.
+- Seguimiento del mismo día: se saca "Crear tarea" del panel expandido y los botones se achican; en el Mise la nota se lee en la tarjeta y se abre con un lápiz (no más long-press); "Copiar pase" suma el bloque Notas con las de los ítems del mise; CARGAR = ícono `autorenew` solo, DESCONGELAR = "DESC." en celeste.
 
 
 **Sesión 2026-10-13 — Recetario: nota por ingrediente, visor global y ficha única.** Commits `f7bbdd5`, `ea0fe60`, `c1a6359`.
