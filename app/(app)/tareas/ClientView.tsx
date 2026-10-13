@@ -19,6 +19,7 @@ import { useHaccp, type HaccpLimpieza } from '@/lib/hooks/useHaccp'
 import { limpiezaTocaFecha } from '@/lib/haccp/recurrencia'
 import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
 import { fusionarDuplicados } from '@/lib/ops/dedupeTareas'
+import { ordenPrioridad } from '@/lib/ops/prioridades'
 import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
 import { useCierresTurno } from '@/lib/hooks/useCierresTurno'
 import type { Tarea, OpsModo, OpsEstado, TareaPrioridad } from '@/types'
@@ -26,7 +27,6 @@ import type { Tarea, OpsModo, OpsEstado, TareaPrioridad } from '@/types'
 const PEDIDOS_COL_ID = '__pedidos__'
 const LIMPIEZA_COL_ID = '__limpieza__'
 
-const PRIO_SORT: Record<string, number> = { critica: 0, alta: 1, media: 2, baja: 3 }
 
 type ColumnaDef = { id: string; label: string; sublabel?: string; color: string }
 
@@ -359,7 +359,9 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     // Un solo sync por ítem del mise, aunque el grupo traiga tres tareas
     // apuntando al mismo: son tres inserts del mismo trabajo, no tres ítems.
     const porItemMise = new Map<string, Tarea>()
-    for (const t of delGrupo) if (t.checklist_item_id) porItemMise.set(t.checklist_item_id, t)
+    // DESCONGELAR listo es "ya está en la heladera": el ítem del mise (el tupper
+    // que se va a usar) sigue sin estar, así que no se tilda por esto.
+    for (const t of delGrupo) if (t.checklist_item_id && t.prioridad !== 'descongelar') porItemMise.set(t.checklist_item_id, t)
     await Promise.all([
       cambiarEstado(id, estado),
       ...[...porItemMise].map(([itemId, t]) => syncMiseDesdeTarea(
@@ -480,7 +482,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
   function itemsDeColumna(col: ColumnaDef): Tarea[] {
     return topLevel
       .filter((t) => (t.seccion ?? '') === col.id)
-      .sort((a, b) => (PRIO_SORT[a.prioridad ?? 'baja'] ?? 3) - (PRIO_SORT[b.prioridad ?? 'baja'] ?? 3))
+      .sort((a, b) => ordenPrioridad(a.prioridad) - ordenPrioridad(b.prioridad))
   }
 
   // ── Recuadro Pedidos: notas libres, no accionan nada — se anotan y se

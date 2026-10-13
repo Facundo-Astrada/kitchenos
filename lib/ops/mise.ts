@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { PRIORIDADES } from '@/lib/ops/prioridades'
 import type { MisePlaceItem } from '@/types'
 import { PLAZAS_FIJAS, PLAZA_LABELS, PLAZA_COLORS } from '@/lib/constants'
 
@@ -23,9 +24,8 @@ export const PLAZAS_OPS = ORDEN_PLAZAS_OPS.map(id => ({
 // escala de tareas/composición (critica/alta/media/baja, ver CompPrioridad en
 // ComposicionEditor y TareaPrioridad). MISE_PRIO_TO_TAREA (ProductoMiseCard.tsx)
 // tiene el sentido inverso — ambos mapas deben mantenerse en espejo.
-export const TAREA_PRIO_TO_MISE: Record<string, string> = {
-  critica: 'sp', alta: 'p', media: 'ref', baja: 'chk',
-}
+export const TAREA_PRIO_TO_MISE: Record<string, string> =
+  Object.fromEntries(PRIORIDADES.map(p => [p.tarea, p.mise]))
 
 export const SECCIONES_OPS = [
   { id: 'heladera',   label: 'Heladera',        icono: 'kitchen' },

@@ -16,6 +16,7 @@ import { plazaColor, plazaIcon, plazaLabel, todasLasPlazas } from '@/lib/constan
 import { hoyOperativo, resolverTurnoDePlaza } from '@/lib/ops/turnos'
 import { diasParaEvento, etiquetaCuentaRegresiva } from '@/lib/menus/activarMenu'
 import { normalizarTitulo } from '@/lib/ops/dedupeTareas'
+import { PRIORIDADES } from '@/lib/ops/prioridades'
 import type { OpsEstado, OpsModo, PaseMensaje, Plaza, Tarea, TareaPrioridad } from '@/types'
 
 // ── Board de OPS Producción, vista "Todo" ────────────────────────────────────
@@ -33,15 +34,11 @@ import type { OpsEstado, OpsModo, PaseMensaje, Plaza, Tarea, TareaPrioridad } fr
 
 const SIN_PLAZA = '__sin_plaza__'
 
-const PRIO_META: Record<TareaPrioridad, { label: string; color: string }> = {
-  critica: { label: 'SP',    color: '#ef4444' },
-  alta:    { label: 'P',     color: '#f97316' },
-  media:   { label: 'REF',   color: '#3b82f6' },
-  baja:    { label: 'Check', color: '#64748b' },
-}
-const PRIO_ORDEN: TareaPrioridad[] = ['critica', 'alta', 'media', 'baja']
-// Las dos primeras siempre visibles; las otras dos, plegadas por defecto.
-const PRIO_PRINCIPALES: TareaPrioridad[] = ['critica', 'alta']
+const PRIO_META: Record<string, { label: string; color: string; icono: string | null }> =
+  Object.fromEntries(PRIORIDADES.map(x => [x.tarea, { label: x.sigla, color: x.color, icono: x.icono }]))
+const PRIO_ORDEN: TareaPrioridad[] = [...PRIORIDADES].sort((x, y) => x.orden - y.orden).map(x => x.tarea)
+// Las principales siempre visibles; REF y Check, plegadas por defecto.
+const PRIO_PRINCIPALES: TareaPrioridad[] = PRIORIDADES.filter(x => x.principal).map(x => x.tarea)
 
 // Pasos canónicos de un menú/evento. Las tareas viejas traen la sección con
 // mayúsculas mezcladas ('Apetizer' vs 'proteina'), así que la key se normaliza
@@ -845,6 +842,7 @@ function ItemsPorPrioridad({
           }}>
             {meta.label}
           </span>
+          {meta.icono && <span className="material-symbols-outlined" style={{ fontSize: 11, color: meta.color }}>{meta.icono}</span>}
         </div>
         {grupoItems.map(item => (
           <div key={item.id} style={{ borderLeft: `3px solid ${meta.color}`, borderRadius: 6, paddingLeft: 2 }}>

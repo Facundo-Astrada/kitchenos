@@ -9,6 +9,7 @@ import { PrioridadPicker, type PrioOpcion } from './PrioridadPicker'
 import { useRestauranteId } from '@/lib/hooks/useRestauranteId'
 import { createClient } from '@/lib/supabase/client'
 import { hoyOperativo } from '@/lib/ops/turnos'
+import { PRIORIDADES } from '@/lib/ops/prioridades'
 import type { Tarea, OpsEstado, OpsModo, TareaPrioridad } from '@/types'
 
 const MODO_LABEL: Record<OpsModo, string> = { carta: 'Carta', menu: 'Menú', evento: 'Evento' }
@@ -45,14 +46,9 @@ const SECCION_LABELS: Record<string, string> = {
 
 // Chip de prioridad para modo menú (agrupado por sección) — mantener apretado
 // abre el picker vertical (PrioridadPicker), un tap solo lo deja abierto.
-const PRIO_CHIP: Record<string, { label: string; color: string; bg: string }> = {
-  critica: { label: 'SP',  color: '#ef4444', bg: 'rgba(239,68,68,.13)' },
-  alta:    { label: 'P',   color: '#f97316', bg: 'rgba(249,115,22,.13)' },
-  media:   { label: 'REF', color: '#3b82f6', bg: 'rgba(59,130,246,.13)' },
-  baja:    { label: 'Baja',color: '#64748b', bg: 'rgba(100,116,139,.1)' },
-}
-const PRIO_OPCIONES: PrioOpcion<TareaPrioridad>[] = (['critica', 'alta', 'media', 'baja'] as TareaPrioridad[])
-  .map(v => ({ value: v, ...PRIO_CHIP[v] }))
+const PRIO_CHIP: Record<string, { label: string; color: string; bg: string; icono?: string }> =
+  Object.fromEntries(PRIORIDADES.map(x => [x.tarea, { label: x.sigla, color: x.color, bg: x.bg, icono: x.icono ?? undefined }]))
+const PRIO_OPCIONES: PrioOpcion<TareaPrioridad>[] = PRIORIDADES.map(x => ({ value: x.tarea, ...PRIO_CHIP[x.tarea] }))
 
 interface ItemOpsProps {
   item: Tarea
@@ -160,7 +156,7 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
     const next = nextEstado(estado)
     onEstadoChange(item.id, next)
     // Show production sheet when completing a recipe task
-    if (next === 'listo' && depth === 0 && item.receta_id) {
+    if (next === 'listo' && depth === 0 && item.receta_id && item.prioridad !== 'cargar' && item.prioridad !== 'descongelar') {
       setProdSheetOpen(true)
     }
   }
@@ -293,6 +289,7 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
                       borderRadius: 6, marginTop: 3, marginLeft: 3,
                       background: chip.bg, color: chip.color,
                     }}>
+                      {chip.icono && <span className="material-symbols-outlined" style={{ fontSize: 12, verticalAlign: '-2px', marginRight: 2 }}>{chip.icono}</span>}
                       {chip.label}
                     </span>
                   )

@@ -1,5 +1,6 @@
 'use client'
 
+import { PRIORIDADES } from '@/lib/ops/prioridades'
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useSheetOpenWhen } from '@/lib/ui/chrome'
@@ -867,12 +868,8 @@ function MesCalendar({
 // MENU ACTIVO VIEW — vista del menú activo del día (Planificación)
 // La ejecución (tildar) se hace en el tab Producción.
 // ══════════════════════════════════════════════════════════════
-const PRIO_BADGE: Record<string, { label: string; color: string; bg: string }> = {
-  critica: { label: 'SP', color: '#ef4444', bg: 'var(--red-bg)' },
-  alta: { label: 'P', color: '#f97316', bg: '#fff7ed' },
-  media: { label: 'REF', color: '#3b82f6', bg: '#eff6ff' },
-  baja: { label: 'Check', color: '#64748b', bg: '#f8fafc' },
-}
+const PRIO_BADGE: Record<string, { label: string; color: string; bg: string }> =
+  Object.fromEntries(PRIORIDADES.map(x => [x.tarea, { label: x.sigla, color: x.color, bg: x.bg }]))
 
 type SeccionGrupo = [string, Tarea[]]
 

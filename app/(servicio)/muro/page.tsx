@@ -11,6 +11,7 @@ import { nextEstado } from '@/components/ops/ItemOps'
 import { todasLasPlazas, plazaLabel, plazaIcon, plazaColor } from '@/lib/constants'
 import { hoyOperativo, sumarDias, turnoActivo } from '@/lib/ops/turnos'
 import type { Tarea, OpsEstado, PaseMensaje, Plaza } from '@/types'
+import { ordenPrioridad } from '@/lib/ops/prioridades'
 
 // ══════════════════════════════════════════════════════════════
 // EL MURO — MURO-PLAN.md F3. Tablet colgada en la cocina, para toda la
@@ -31,7 +32,6 @@ import type { Tarea, OpsEstado, PaseMensaje, Plaza } from '@/types'
 // ══════════════════════════════════════════════════════════════
 
 const SIN_PLAZA = '__sin_plaza__'
-const PRIO_ORDEN: Record<string, number> = { critica: 0, alta: 1, media: 2, baja: 3 }
 const AMBAR = '#f59e0b'
 const AZUL = '#3b82f6'
 const VERDE = '#22c55e'
@@ -167,7 +167,7 @@ export default function MuroPage() {
       const items = porPlaza.get(key) ?? []
       const pendientes = items
         .filter(i => i.estado !== 'listo')
-        .sort((a, b) => (PRIO_ORDEN[a.prioridad ?? 'baja'] ?? 3) - (PRIO_ORDEN[b.prioridad ?? 'baja'] ?? 3))
+        .sort((a, b) => ordenPrioridad(a.prioridad) - ordenPrioridad(b.prioridad))
       const esSinPlaza = key === SIN_PLAZA
       return {
         key,
@@ -207,7 +207,7 @@ export default function MuroPage() {
       .sort((a, b) => {
         if (a.estado === 'listo' && b.estado !== 'listo') return 1
         if (a.estado !== 'listo' && b.estado === 'listo') return -1
-        return (PRIO_ORDEN[a.prioridad ?? 'baja'] ?? 3) - (PRIO_ORDEN[b.prioridad ?? 'baja'] ?? 3)
+        return ordenPrioridad(a.prioridad) - ordenPrioridad(b.prioridad)
       })
   }, [columnaFoco, topLevel])
 

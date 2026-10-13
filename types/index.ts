@@ -524,7 +524,8 @@ export interface ControlCartaRegistro {
 }
 
 // ── Tareas ──────────────────────────────────────────────────
-export type TareaPrioridad = 'critica' | 'alta' | 'media' | 'baja'
+// 'cargar' y 'descongelar' son tipos de trabajo, no niveles de urgencia — ver lib/ops/prioridades.ts
+export type TareaPrioridad = 'critica' | 'alta' | 'media' | 'baja' | 'cargar' | 'descongelar'
 export type TareaStatus = 'pendiente' | 'en_proceso' | 'completada'
 export type TareaCategoria = 'general' | 'plaza' | 'rutina' | 'evento' | 'produccion'
 // Plaza: las 6 fijas de PLAZAS_FIJAS (lib/constants.ts) + custom por restaurante
@@ -706,7 +707,7 @@ export interface BitacoraItem {
 
 // ── Checklist Mise en Place ─────────────────────────────────
 export type ChecklistSeccion = string
-export type MisePrioridad = 'sp' | 'p' | 'ref' | 'chk'
+export type MisePrioridad = 'sp' | 'p' | 'ref' | 'chk' | 'cargar' | 'descongelar'
 
 // DB: checklist_secciones (id, nombre, icono, plaza, orden, restaurante_id, created_at)
 // tipo: 'produccion' (default, mise diario) | 'almacen' (con producto_ids + Stockear

@@ -39,18 +39,18 @@ import PhotoPicker from '@/components/ui/PhotoPicker'
 import SectionEditor from '@/components/checklist/SectionEditor'
 import { CopiarPaseBoton } from '@/components/ops/CopiarPaseBoton'
 import { FlipCard, ConfirmSheet, Modal } from '@/components/ui'
+import { PRIORIDADES, metaMise, generaTarea } from '@/lib/ops/prioridades'
 import type { Plaza, PlazaCustom, MisePlaceItem, MisePrioridad, ChecklistSeccionConfig, RutinaFrecuencia, ChecklistRutina, ChecklistRutinaRegistro, RutinaCondicion, CierreTurno, PaseMensaje } from '@/types'
 
 // ── Constants ──
 const PLAZAS: Plaza[] = ['parrilla', 'frios', 'calientes', 'pase', 'pasteleria', 'panaderia', 'general']
 const UNIDADES = ['u', 'kg', 'g', 'l', 'ml', 'pax', 'porc', 'bandeja', 'gastro', 'tupper']
 
-const PRIO_CFG: Record<string, { label: string; color: string; bg: string }> = {
-  sp:  { label: 'SP',  color: '#ef4444', bg: 'rgba(239,68,68,.13)' },
-  p:   { label: 'P',   color: '#f97316', bg: 'rgba(249,115,22,.13)' },
-  ref: { label: 'REF', color: '#3b82f6', bg: 'rgba(59,130,246,.13)' },
-  chk: { label: 'OK',  color: '#22c55e', bg: 'rgba(34,197,94,.13)' },
-}
+// El OK del mise es verde (no el gris de Check de Producción): ahí "OK" es "está como tiene que estar".
+const PRIO_CFG: Record<string, { label: string; color: string; bg: string }> =
+  Object.fromEntries(PRIORIDADES.map(p => p.mise === 'chk'
+    ? [p.mise, { label: p.siglaMise, color: '#22c55e', bg: 'rgba(34,197,94,.13)' }]
+    : [p.mise, { label: p.siglaMise, color: p.color, bg: p.bg }]))
 const FREQ_LABELS: Record<RutinaFrecuencia, string> = {
   diaria: 'Diaria', semanal: 'Semanal', quincenal: 'Quincenal', mensual: 'Mensual',
 }
@@ -80,8 +80,8 @@ function daysAgo(isoStr: string | null) {
 // se leería como un segundo tilde. Un ítem que venía en 'chk' se ve con el
 // color de PRIO_CFG.ref (ver `prioCfg` más abajo) hasta que se elige una de
 // estas tres.
-const PRIO_CONTROL_OPCIONES: PrioOpcion<MisePrioridad>[] = (['sp', 'p', 'ref'] as MisePrioridad[])
-  .map(v => ({ value: v, ...PRIO_CFG[v] }))
+const PRIO_CONTROL_OPCIONES: PrioOpcion<MisePrioridad>[] = PRIORIDADES.filter(x => x.mise !== 'chk')
+  .map(x => ({ value: x.mise, ...PRIO_CFG[x.mise], icono: x.icono ?? undefined }))
 
 const btnReset: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer', padding: 0,
@@ -2486,7 +2486,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
           recetas={recetas.map(r => ({ ...r, porciones: r.porciones ?? undefined }))}
           onSave={async d => {
             const nuevoItemId = await agregarItem(d)
-            if (d.prioridad === 'sp' || d.prioridad === 'p') {
+            if (generaTarea(d.prioridad)) {
               const plazoPlazas = d.receta_id ? (platoPlazoMap[d.receta_id] ?? []) : []
               const primaryPlaza = plazoPlazas.length > 0 ? plazoPlazas[0].plaza : d.plaza
               await handleCrearTarea({
@@ -2905,7 +2905,7 @@ function AddItemSheet({ seccionId, seccionNombre, plaza, recetas, onSave, onClos
           <div style={{ marginBottom: 14 }}>
             <label style={lbl}>Prioridad</label>
             <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-              {(['sp', 'p', 'ref', 'chk'] as MisePrioridad[]).map(pr => {
+              {PRIORIDADES.map(x => x.mise).map(pr => {
                 const cfg = PRIO_CFG[pr]
                 return (
                   <button key={pr} onClick={() => setPrioridad(pr)} style={{
@@ -2920,7 +2920,7 @@ function AddItemSheet({ seccionId, seccionNombre, plaza, recetas, onSave, onClos
               })}
             </div>
             <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 5 }}>
-              {prioridad === 'sp' ? 'Súper prioridad — urgente, irá a tareas' : prioridad === 'p' ? 'Prioridad — irá a tareas' : prioridad === 'ref' ? 'Refuerzo — controlar' : 'OK — sin acción requerida'}
+              {metaMise(prioridad).detalle}{generaTarea(prioridad) ? ', irá a tareas' : ''}
             </div>
           </div>
 

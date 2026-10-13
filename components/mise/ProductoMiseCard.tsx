@@ -9,6 +9,7 @@ import { CrearTareaSheet, type CrearTareaSheetConfirmData } from '@/components/o
 import { PrioridadPicker, type PrioOpcion } from '@/components/ops/PrioridadPicker'
 import { RecetaQuickEditModal } from '@/components/ops/RecetaQuickEditModal'
 import { parseTurnoFase } from '@/lib/ops/turnos'
+import { PRIORIDADES } from '@/lib/ops/prioridades'
 import type { MisePlaceItem, MisePrioridad, TareaPrioridad } from '@/types'
 import { tieneRecipienteMise, targetStockMise, deficitMise } from '@/lib/ops/mise'
 
@@ -44,9 +45,8 @@ export interface CrearTareaParams {
 // Prioridad del ítem del mise (badge propio, sp/p/ref/chk) → dominio real
 // TareaPrioridad. Usado como default al abrir el sheet de crear tarea, y
 // para traducir la prioridad elegida al agregar un ítem nuevo al mise.
-export const MISE_PRIO_TO_TAREA: Record<string, TareaPrioridad> = {
-  sp: 'critica', p: 'alta', ref: 'media', chk: 'baja',
-}
+export const MISE_PRIO_TO_TAREA: Record<string, TareaPrioridad> =
+  Object.fromEntries(PRIORIDADES.map(x => [x.mise, x.tarea]))
 
 // ── Internal config ───────────────────────────────────────────
 export const PLAZA_TO_SECCION: Record<string, string> = {
@@ -54,14 +54,12 @@ export const PLAZA_TO_SECCION: Record<string, string> = {
   pasteleria: 'pasteleria', panaderia: 'pasteleria', pase: 'salon',
 }
 
-const PRIO_CFG: Record<string, { label: string; color: string; bg: string }> = {
-  sp:  { label: 'SP',  color: '#ef4444', bg: 'rgba(239,68,68,.13)' },
-  p:   { label: 'P',   color: '#f97316', bg: 'rgba(249,115,22,.13)' },
-  ref: { label: 'REF', color: '#3b82f6', bg: 'rgba(59,130,246,.13)' },
-  chk: { label: 'OK',  color: '#22c55e', bg: 'rgba(34,197,94,.13)' },
-}
-const PRIO_OPCIONES: PrioOpcion<MisePrioridad>[] = (['sp', 'p', 'ref', 'chk'] as MisePrioridad[])
-  .map(v => ({ value: v, ...PRIO_CFG[v] }))
+// El OK del mise es verde (no el gris de Check de Producción): ahí "OK" es "está como tiene que estar".
+const PRIO_CFG: Record<string, { label: string; color: string; bg: string }> =
+  Object.fromEntries(PRIORIDADES.map(p => p.mise === 'chk'
+    ? [p.mise, { label: p.siglaMise, color: '#22c55e', bg: 'rgba(34,197,94,.13)' }]
+    : [p.mise, { label: p.siglaMise, color: p.color, bg: p.bg }]))
+const PRIO_OPCIONES: PrioOpcion<MisePrioridad>[] = PRIORIDADES.map(x => ({ value: x.mise, ...PRIO_CFG[x.mise], icono: x.icono ?? undefined }))
 
 const btnReset: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer', padding: 0,
@@ -423,7 +421,9 @@ function ProductoMiseCardBase({
   const [cierreDespachado, setCierreDespachado] = useState(false)
 
   async function handleProducirManana(cantidad: number) {
-    await crearTarea(cantidad, prioTarea, 'manana', null)
+    // Descongelar se saca esta noche para tenerlo mañana: va al turno actual,
+    // no al de mañana (que ya sería tarde).
+    await crearTarea(cantidad, prioTarea, prioTarea === 'descongelar' ? 'hoy' : 'manana', null)
     setCierreDespachado(true)
   }
 

@@ -176,8 +176,8 @@ describe('resolverSeccionMise — no deja un checklist_item apuntando a una secc
 })
 
 describe('TAREA_PRIO_TO_MISE — debe ser exactamente el inverso de MISE_PRIO_TO_TAREA (ProductoMiseCard.tsx)', () => {
-  it('mapea las 4 prioridades sin huecos', () => {
-    expect(TAREA_PRIO_TO_MISE).toEqual({ critica: 'sp', alta: 'p', media: 'ref', baja: 'chk' })
+  it('mapea las 6 prioridades sin huecos', () => {
+    expect(TAREA_PRIO_TO_MISE).toEqual({ critica: 'sp', alta: 'p', media: 'ref', baja: 'chk', cargar: 'cargar', descongelar: 'descongelar' })
   })
 })
 

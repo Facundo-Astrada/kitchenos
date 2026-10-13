@@ -20,6 +20,7 @@ import { useTurnosServicio } from './useTurnosServicio'
 import { usePlazasCustom } from './usePlazasCustom'
 import { turnoActivo } from '@/lib/ops/turnos'
 import { PRIO_A_CODIGO } from '@/lib/ops/textoPase'
+import { ordenPrioridad } from '@/lib/ops/prioridades'
 import { plazaLabel } from '@/lib/constants'
 import type { DatosLineUp, ItemPendiente, NotaLineUp, EventoLineUp } from '@/lib/ops/lineup'
 import type { TareaPrioridad } from '@/types'
@@ -49,7 +50,6 @@ function sumarDias(iso: string, n: number): string {
 }
 
 // El orden en el que se leen los pendientes: primero lo que hay que marchar ya.
-const PRIO_ORDEN: TareaPrioridad[] = ['critica', 'alta', 'media', 'baja']
 
 async function fetchLineUp(key: string): Promise<CrudoLineUp> {
   const [, rid, jornada] = key.split('|')
@@ -106,8 +106,7 @@ async function fetchLineUp(key: string): Promise<CrudoLineUp> {
     pendientes: filasTareas
       .slice()
       .sort((a, b) =>
-        PRIO_ORDEN.indexOf((a.prioridad ?? 'baja') as TareaPrioridad) -
-        PRIO_ORDEN.indexOf((b.prioridad ?? 'baja') as TareaPrioridad))
+        ordenPrioridad(a.prioridad) - ordenPrioridad(b.prioridad))
       .map(t => ({
         plaza: t.plaza ?? 'general',
         texto: t.titulo,

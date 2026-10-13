@@ -1,4 +1,5 @@
 import type { PaseMensaje, Tarea, TareaPrioridad } from '@/types'
+import { PRIORIDADES, ordenPrioridad } from '@/lib/ops/prioridades'
 
 // ── El pase de turno como texto ─────────────────────────────────────────────
 //
@@ -25,20 +26,10 @@ import type { PaseMensaje, Tarea, TareaPrioridad } from '@/types'
 // mismo cocinero que escribe "SP" en la tarjeta, y "critica" no significa nada
 // para él.
 
-export const PRIO_A_CODIGO: Record<TareaPrioridad, string> = {
-  critica: 'SP',
-  alta: 'P',
-  media: 'REF',
-  baja: 'CHK',
-}
+export const PRIO_A_CODIGO: Record<TareaPrioridad, string> =
+  Object.fromEntries(PRIORIDADES.map(x => [x.tarea, x.nombre])) as Record<TareaPrioridad, string>
 
-// El orden en el que se leen: primero lo que hay que marchar sin parar.
-const PRIO_ORDEN: TareaPrioridad[] = ['critica', 'alta', 'media', 'baja']
-
-function ordenDe(p: string | null | undefined): number {
-  const idx = PRIO_ORDEN.indexOf((p ?? 'baja') as TareaPrioridad)
-  return idx === -1 ? PRIO_ORDEN.length : idx
-}
+const ordenDe = ordenPrioridad
 
 function codigoDe(p: string | null | undefined): string {
   return PRIO_A_CODIGO[(p ?? 'baja') as TareaPrioridad] ?? 'CHK'

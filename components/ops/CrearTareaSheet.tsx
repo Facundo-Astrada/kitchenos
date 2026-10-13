@@ -3,15 +3,11 @@
 import { useState } from 'react'
 import { Modal } from '@/components/ui'
 import type { TareaPrioridad } from '@/types'
+import { PRIORIDADES } from '@/lib/ops/prioridades'
 
 export type CrearTareaDia = 'hoy' | 'manana'
 
-const PRIORIDADES: { id: TareaPrioridad; label: string; color: string }[] = [
-  { id: 'critica', label: 'SP',    color: '#ef4444' },
-  { id: 'alta',    label: 'P',     color: '#f97316' },
-  { id: 'media',   label: 'REF',   color: '#3b82f6' },
-  { id: 'baja',    label: 'Check', color: '#64748b' },
-]
+const PRIORIDADES_SHEET = PRIORIDADES.map(x => ({ id: x.tarea, label: x.sigla, color: x.color, icono: x.icono, detalle: x.detalle }))
 
 interface PlazaChip { id: string; plaza: string; instruccion: string | null }
 
@@ -116,21 +112,29 @@ export function CrearTareaSheet({
               <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 6 }}>
                 Prioridad
               </div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {PRIORIDADES.map(p => {
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {PRIORIDADES_SHEET.map(p => {
                   const active = prioridad === p.id
                   return (
                     <button key={p.id} onClick={() => setPrioridad(p.id)} style={{
-                      flex: 1, padding: '7px 0', borderRadius: 9, border: 'none', cursor: 'pointer',
+                      flex: 1, minWidth: 0, padding: '7px 2px', borderRadius: 9, border: 'none', cursor: 'pointer',
                       fontFamily: 'inherit', fontSize: 11, fontWeight: 800,
                       background: active ? p.color : 'var(--bg)',
                       color: active ? '#fff' : 'var(--text-3)',
                       outline: active ? `2px solid ${p.color}66` : '1px solid var(--border)',
                       transition: 'all .15s',
-                    }}>{p.label}</button>
+                    }}>
+                      {p.icono && <span className="material-symbols-outlined" style={{ fontSize: 13, verticalAlign: '-2px', marginRight: 2 }}>{p.icono}</span>}
+                      {p.label}
+                    </button>
                   )
                 })}
               </div>
+              {PRIORIDADES.find(x => x.tarea === prioridad)?.principal === true && (prioridad === 'cargar' || prioridad === 'descongelar') && (
+                <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 5 }}>
+                  {PRIORIDADES.find(x => x.tarea === prioridad)?.detalle}
+                </div>
+              )}
             </div>
 
             {/* Multiplier / free qty */}
