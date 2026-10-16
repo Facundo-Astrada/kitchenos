@@ -26,6 +26,7 @@ import { useNotasPlaza } from '@/lib/hooks/useNotasPlaza'
 import { NotasPlaza } from '@/components/ops/NotasPlaza'
 import { PrioridadPicker, type PrioOpcion } from '@/components/ops/PrioridadPicker'
 import { todasLasPlazas, plazaLabel, plazaIcon, plazaColor } from '@/lib/constants'
+import AvisoRelevo from '@/components/mise/AvisoRelevo'
 import { hoyOperativo, sumarDias, turnoVigente, turnoAnterior, turnoSiguiente, encodeTurnoFase, cierreIncompleto, fechaEnTz } from '@/lib/ops/turnos'
 import { menuItemVisible } from '@/lib/ops/mise'
 import { hitTestSeccion, hitTestItem, calcularReordenSeccion } from '@/lib/ops/miseReorder'
@@ -366,6 +367,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     agregarItem, actualizarItem, eliminarItem, upsertRegistro,
     agregarRutina, actualizarRutina, eliminarRutina, toggleRutina,
     registrarAuditoriaRutina, guardarAuditoriaPasada, resetDemandaViva,
+    pendientesGuardado, vaciarGuardado,
   } = useChecklist()
   const { recetas } = useRecetasLite()
   const { tareas, agregarTarea, actualizarTarea, cambiarEstado: cambiarEstadoTarea } = useTareas()
@@ -564,9 +566,15 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // desde otro dispositivo se ve acá al momento (realtime de useCierresTurno).
   // Antes se auto-seleccionaba una sola vez y quedaba congelado.
   const [turnoManual, setTurnoManual] = useState<string | null>(null)
+  // El reloj entra como dependencia: sin esto el turno se calculaba una vez y
+  // una tablet abierta desde la mañana seguía en el turno de la mañana. Se
+  // refresca cada minuto y, sobre todo, al volver a la app o recuperar la red
+  // (donde además se vuelven a leer los registros — ver más abajo).
+  const [reloj, setReloj] = useState(0)
   const vigente = useMemo(
     () => turnoVigente({ turnos: turnosActivos, entregados, plaza }),
-    [turnosActivos, entregados, plaza],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [turnosActivos, entregados, plaza, reloj],
   )
   const turnoServicioId = turnoManual ?? vigente?.turnoId ?? null
   // El turno que se está mirando, para leerlo en el título ("Parrilla · Cena").
@@ -585,6 +593,23 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
 
   // Cuando plaza está seleccionada carga su turno; cuando muestra el grid carga apertura para mostrar progreso
   useEffect(() => { fetchAll(fecha, plaza ? turno : 'apertura') }, [plaza, tab, fecha, fetchAll, turno])
+
+  // Volver a la app (celular en el bolsillo, tablet que se durmió) o recuperar la
+  // red: recalcular el turno y traer lo que hicieron los demás mientras tanto.
+  const refrescarRef = useRef<() => void>(() => {})
+  useEffect(() => { refrescarRef.current = () => { setReloj(n => n + 1); fetchAll(fecha, plaza ? turno : 'apertura') } })
+  useEffect(() => {
+    const alVolver = () => { if (document.visibilityState === 'visible') refrescarRef.current() }
+    const alConectar = () => refrescarRef.current()
+    document.addEventListener('visibilitychange', alVolver)
+    window.addEventListener('online', alConectar)
+    const t = setInterval(() => setReloj(n => n + 1), 60_000)
+    return () => {
+      document.removeEventListener('visibilitychange', alVolver)
+      window.removeEventListener('online', alConectar)
+      clearInterval(t)
+    }
+  }, [])
 
   // Fetch del cierre del turno anterior — se usa para tres cosas a la vez:
   // (1) stock de referencia por ítem (regCierreAnteriorMap, read-only en apertura),
@@ -1074,6 +1099,19 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     return turnosActivos.find(t => t.id === sig.turnoId) ?? null
   }, [fecha, turnoServicioId, turnosActivos])
 
+  // ── De dónde viene lo que estás viendo ──────────────────────────────────
+  // Tres avisos de un renglón sobre el relevo (ver <AvisoRelevo> abajo): la
+  // plaza retenida en su turno, el cierre que se está recibiendo, y la vista
+  // movida a mano a un turno que no es el de la plaza.
+  const nombreTurno = useCallback((id: string) => turnosActivos.find(t => t.id === id)?.nombre ?? id, [turnosActivos])
+  const retenida = !!vigente?.retenido && !turnoManual
+  const desvioManual = !!turnoManual && !!vigente && turnoManual !== vigente.turnoId
+  const turnoPrevio = useMemo(
+    () => (turnoServicioId ? turnoAnterior(fecha, turnoServicioId, turnosActivos) : null),
+    [fecha, turnoServicioId, turnosActivos],
+  )
+  const entregaPrevia = plaza && turnoPrevio ? entregaDe(turnoPrevio.jornada, turnoPrevio.turnoId, plaza) : undefined
+
   // notasDe() trae hoy+ayer (ventana del board); acá se recorta a hoy.
   const notasHoyPlaza = useMemo(() => (plaza ? notasDe(plaza).filter(n => n.turno_fecha === fecha) : []), [plaza, notasDe, fecha])
 
@@ -1088,6 +1126,13 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
     setConfirmAccion(null)
     setEntregando(true)
     try {
+      // Antes de entregar, todo lo tildado tiene que estar en la base: el que
+      // recibe lee de ahí. Sin señal NO se entrega — avisar es mejor que pasar
+      // una plaza que, para el otro, está a medias.
+      const sinSubir = await vaciarGuardado()
+      if (sinSubir > 0) {
+        throw new Error(`hay ${sinSubir} ${sinSubir === 1 ? 'cambio' : 'cambios'} sin subir (sin conexión). Probá de nuevo cuando vuelva la señal`)
+      }
       // Quedarse parado en el turno recién entregado: para el resto de la
       // cocina el resolutor ya apunta al siguiente, pero al que entregó no se
       // le puede vaciar la pantalla en la cara.
@@ -1812,6 +1857,19 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
               <span style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', fontFamily: "'DM Mono', monospace", flexShrink: 0 }}>{done}/{total}</span>
             </div>
           )}
+          {pendientesGuardado > 0 && (
+            <span
+              title="Estos cambios están guardados en el celular y suben solos cuando vuelve la señal"
+              style={{
+                flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontSize: 10, fontWeight: 700, color: '#facc15',
+                background: 'rgba(250,204,21,.15)', borderRadius: 99, padding: '3px 8px',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 12 }}>cloud_off</span>
+              {pendientesGuardado} sin subir
+            </span>
+          )}
         </div>
 
 
@@ -1880,6 +1938,16 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
             Dejar una nota de plaza
           </button>
         ))}
+
+        {!loading && plaza && tab !== 'rutina' && (
+          <AvisoRelevo
+            tab={tab} retenida={retenida} desvioManual={desvioManual}
+            turnoActual={turnoActual} proximoTurno={proximoTurno} turnoPrevio={turnoPrevio}
+            turnoVigenteId={vigente?.turnoId ?? null} turnoManual={turnoManual}
+            nombreTurno={nombreTurno} entregaPreviaAt={entregaPrevia?.cerrado_at ?? null}
+            onSetTurno={setTurnoManual}
+          />
+        )}
 
         {!loading && (
           <AvisosTurno

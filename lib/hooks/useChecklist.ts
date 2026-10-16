@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
 import useSWR from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import type {
@@ -11,6 +11,9 @@ import type {
 import { useRestauranteId } from './useRestauranteId'
 import { parseTurnoFase } from '@/lib/ops/turnos'
 import { onMiseRegistroPatch, type MiseRegistroPatch } from '@/lib/ops/miseBus'
+import {
+  guardarRegistro, vaciarPendientes, cantidadPendientes, suscribirPendientes, escritorRegistros,
+} from '@/lib/ops/guardadoMise'
 
 /** Identidad de un registro: la misma tupla que su índice único en la DB. */
 function claveRegistro(itemId: string, fecha: string, turno: string): string {
@@ -473,10 +476,10 @@ export function useChecklist() {
       return next
     })
     try {
-      const { error } = await supabase.from('checklist_registros').upsert({
-        checklist_item_id: itemId, fecha, turno, ...datos,
-      }, { onConflict: 'checklist_item_id,fecha,turno' })
-      if (error) throw error
+      // Bandeja con reintento: sin señal el cambio queda guardado en el celular
+      // y sube solo (ver lib/ops/guardadoMise.ts). Solo un error que reintentar
+      // no arregla (permisos) llega al catch y vuelve a leer del servidor.
+      await guardarRegistro(itemId, fecha, turno, datos, escritorRegistros(supabase))
     } catch (e: unknown) {
       await fetchRegistros(fecha, turno)   // rollback contra el servidor
       const msg = e instanceof Error ? e.message : 'Error al guardar registro'
@@ -484,6 +487,30 @@ export function useChecklist() {
       throw new Error(msg)
     }
   }, [supabase, fetchRegistros, marcarEscrituraPropia])
+
+  // ── Reintentos de lo que no subió ───────────────────────────────────────
+  // Al montar (la bandeja sobrevive a cerrar la app), al recuperar la red, al
+  // volver a la app y cada 15s mientras haya algo pendiente.
+  const pendientesGuardado = useSyncExternalStore(suscribirPendientes, cantidadPendientes, () => 0)
+  useEffect(() => {
+    const reintentar = () => { if (cantidadPendientes() > 0) void vaciarPendientes(escritorRegistros(supabase)) }
+    reintentar()
+    const alVolver = () => { if (document.visibilityState === 'visible') reintentar() }
+    window.addEventListener('online', reintentar)
+    document.addEventListener('visibilitychange', alVolver)
+    const t = setInterval(reintentar, 15_000)
+    return () => {
+      window.removeEventListener('online', reintentar)
+      document.removeEventListener('visibilitychange', alVolver)
+      clearInterval(t)
+    }
+  }, [supabase])
+
+  /** Sube todo lo pendiente y dice cuánto quedó afuera. Lo usa "Entregar plaza". */
+  const vaciarGuardado = useCallback(
+    () => vaciarPendientes(escritorRegistros(supabase)),
+    [supabase],
+  )
 
   // ── Rutinas CRUD ──
   async function agregarRutina(datos: {
@@ -688,7 +715,7 @@ export function useChecklist() {
     secciones, items, registros, rutinas, rutinaRegistros, loading, error,
     fetchAll, fetchRegistros, fetchRegistrosDelDia, fetchRutinaRegistros,
     agregarSeccion, actualizarSeccion, eliminarSeccion, reordenarSecciones,
-    agregarItem, actualizarItem, eliminarItem, upsertRegistro, resetDemandaViva,
+    agregarItem, actualizarItem, eliminarItem, upsertRegistro, resetDemandaViva, pendientesGuardado, vaciarGuardado,
     agregarRutina, actualizarRutina, eliminarRutina, toggleRutina,
     registrarAuditoriaRutina, guardarAuditoriaPasada, fetchAuditorias, fetchAuditoriaPaseTurno,
     // Refresco explícito tras una escritura externa a secciones/items (ej.

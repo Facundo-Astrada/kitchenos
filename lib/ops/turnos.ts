@@ -152,6 +152,9 @@ export function turnoSiguiente(
 // sean las 01:20 o las 16:00. El horario pasa a ser la red de contención de la
 // plaza que no entrega nunca, no la fuente de verdad.
 
+/** Margen (min) tras el arranque de un turno en que una plaza que no entregó el anterior sigue en él. */
+export const GRACIA_ENTREGA_MIN = 120
+
 /** Clave de una entrega. Misma forma acá y en useCierresTurno — no reimplementar. */
 export function claveCierre(jornada: string, turnoId: string, plaza: string): string {
   return `${jornada}|${turnoId}|${plaza}`
@@ -196,18 +199,41 @@ export function turnoVigente(opts: {
   plaza?: string | null
   tz?: string
   corte?: number
-}): { jornada: string; turnoId: string } | null {
+  /** Minutos que el reloj puede adelantarse a una plaza que no entregó. Default 120. */
+  gracia?: number
+}): { jornada: string; turnoId: string; retenido?: true } | null {
   const {
     now = new Date(), turnos, entregados, plaza,
-    tz = TZ_DEFAULT, corte = CORTE_JORNADA_DEFAULT,
+    tz = TZ_DEFAULT, corte = CORTE_JORNADA_DEFAULT, gracia = GRACIA_ENTREGA_MIN,
   } = opts
   const activos = turnos.filter(t => t.activo)
   if (activos.length === 0) return null
   const ordenados = ordenarPorHorario(activos)
 
   let jornada = hoyOperativo(now, corte, tz)
-  let turnoId = turnoPorReloj(now, ordenados, tz, corte).id
+  const delReloj = turnoPorReloj(now, ordenados, tz, corte)
+  let turnoId = delReloj.id
   if (!plaza || !entregados || entregados.size === 0) return { jornada, turnoId }
+
+  // Gracia: el reloj no se adelanta a una plaza que ENTREGA y todavía no
+  // entregó el turno anterior. Sin esto, Valentino cerraba el almuerzo a las
+  // 17:09, la app ya lo había pasado a Cena, y el cierre quedaba guardado (y
+  // entregado) como "Cena" — y de ahí cada turno quedaba corrido uno. Solo
+  // dentro de la misma jornada (el primer turno del día no retiene al de anoche)
+  // y solo para plazas que ya entregaron alguna vez: la que nunca entrega sigue
+  // al reloj, que es su red de contención.
+  const idx = ordenados.findIndex(t => t.id === turnoId)
+  // Se pregunta por clave (no se recorre el Set): la ventana de useCierresTurno
+  // es de 2 días y así alcanza con cualquier ReadonlySet.
+  const entregaAlgo = [0, -1, -2].some(d =>
+    ordenados.some(t => entregados.has(claveCierre(sumarDias(jornada, d), t.id, plaza))))
+  if (idx > 0 && entregaAlgo) {
+    const previo = ordenados[idx - 1]
+    const desdeMin = (minutosDelDiaEnTz(now, tz) - minutosDeHHMM(delReloj.desde) + 1440) % 1440
+    if (desdeMin < gracia && !entregados.has(claveCierre(jornada, previo.id, plaza))) {
+      return { jornada, turnoId: previo.id, retenido: true }
+    }
+  }
 
   // Mientras esta plaza ya haya entregado el turno en el que está parada,
   // avanzar. El loop cubre dos entregas seguidas (cerró almuerzo y cena

@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useState, useRef, useEffect } from 'react'
+import { memo, useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useAuth } from '@/lib/auth/context'
 import { useImpresionConfig } from '@/lib/hooks/useImpresionConfig'
@@ -402,9 +402,12 @@ function ProductoMiseCardBase({
   // El tilde se toca SOLO cuando el número cruza entre vacío y cargado: entrar
   // al campo y salir sin escribir no puede destildar lo que alguien tildó a
   // mano, y corregir un 5 por un 3 no lo destilda tampoco.
-  function persistirCierre() {
-    const parsed = cantInput === '' ? null : parseFloat(cantInput)
+  function persistirCierre(texto: string = cantInput) {
+    const parsed = texto === '' ? null : parseFloat(texto)
     const vFinal = parsed === null || isNaN(parsed) ? null : parsed
+    // Sin cambio no hay nada que escribir (entrar al campo y salir, o el blur que
+    // sigue a un guardado ya hecho por el temporizador de abajo).
+    if (vFinal === cantActual) return
     const tenia = cantActual !== null
     const tiene = vFinal !== null
     return onUpsert(item.id, fecha, turno, {
@@ -413,6 +416,38 @@ function ProductoMiseCardBase({
       ...(!tiene && tenia && checked ? { completado: false } : {}),
     })
   }
+
+  // Guardado mientras se escribe: 600ms después de la última tecla, y de
+  // inmediato si la app se oculta o la tarjeta se desmonta. Antes el número
+  // vivía solo en el campo hasta el blur: bajar el teclado con "atrás" en
+  // Android o cambiar de pestaña lo dejaba en pantalla pero fuera de la base,
+  // y el que recibía la plaza leía otra cosa.
+  const temporizadorCierre = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const textoCierrePendiente = useRef<string | null>(null)
+  const persistirCierreRef = useRef(persistirCierre)
+  useEffect(() => { persistirCierreRef.current = persistirCierre })
+  const volcarCierre = useCallback(() => {
+    if (temporizadorCierre.current) { clearTimeout(temporizadorCierre.current); temporizadorCierre.current = null }
+    const t = textoCierrePendiente.current
+    textoCierrePendiente.current = null
+    if (t !== null) void persistirCierreRef.current(t)
+  }, [])
+  function alEscribirCierre(texto: string) {
+    setCantInput(texto)
+    textoCierrePendiente.current = texto
+    if (temporizadorCierre.current) clearTimeout(temporizadorCierre.current)
+    temporizadorCierre.current = setTimeout(volcarCierre, 600)
+  }
+  useEffect(() => {
+    const alOcultar = () => { if (document.visibilityState === 'hidden') volcarCierre() }
+    document.addEventListener('visibilitychange', alOcultar)
+    window.addEventListener('pagehide', volcarCierre)
+    return () => {
+      document.removeEventListener('visibilitychange', alOcultar)
+      window.removeEventListener('pagehide', volcarCierre)
+      volcarCierre()
+    }
+  }, [volcarCierre])
 
   // Lo que faltó para llegar al estándar, ya contado. Es el espejo del déficit
   // de la apertura, pero mirando al turno siguiente: lo que se descubre al
@@ -612,8 +647,8 @@ function ProductoMiseCardBase({
               ref={cierreInputRef}
               type="number"
               value={cantInput}
-              onChange={e => setCantInput(e.target.value)}
-              onBlur={persistirCierre}
+              onChange={e => alEscribirCierre(e.target.value)}
+              onBlur={volcarCierre}
               // Select-all al enfocar, igual que el campo de apertura: llega
               // precargado con lo contado antes y sin esto el primer dígito se
               // APPENDEA (corregir un 10 a 2 daba 102).

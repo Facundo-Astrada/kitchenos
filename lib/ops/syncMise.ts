@@ -1,7 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { TurnoServicio } from '@/types'
-import { turnoVigente, encodeTurnoFase, horaEnTz } from './turnos'
+import { turnoVigente, encodeTurnoFase } from './turnos'
 import { emitMiseRegistroPatch } from './miseBus'
+import { guardarRegistro, escritorRegistros } from './guardadoMise'
 
 /** Lo mínimo que necesita `tareasAfectadasPorTilde` — no la `Tarea` entera. */
 export interface TareaSincronizable {
@@ -50,8 +51,7 @@ export function tareasAfectadasPorTilde<T extends TareaSincronizable>(
 // Refleja el estado de una tarea de producción en el registro del mise que la originó.
 // Vínculo por FK (tareas.checklist_item_id), no por título. Reemplaza el viejo
 // syncMiseCompletado que hacía ilike por nombre, marcaba siempre 'apertura' e ignoraba la plaza.
-// La fase (apertura/cierre) se determina por la hora de pared: antes de las 16h =
-// apertura, si no cierre. El turno de servicio (almuerzo/cena/...) se resuelve
+// La fase es siempre apertura (ver abajo). El turno de servicio (almuerzo/cena/...) se resuelve
 // con turnoVigente() sobre los turnos configurados del restaurante — mismo
 // criterio que usa el mise (checklist/ClientView.tsx) para no escribir bajo
 // una key distinta a la que la UI está leyendo. Por eso `ctx`: sin la plaza y
@@ -65,9 +65,11 @@ export async function syncMiseDesdeTarea(
   turnosServicio: TurnoServicio[],
   ctx?: { plaza?: string | null; entregados?: ReadonlySet<string>; usuarioId?: string | null },
 ): Promise<void> {
-  // horaEnTz y no getHours(): getHours() es la hora del proceso, que en el
-  // server es UTC — a las 22:00 ART daría 01:00 y escribiría 'apertura'.
-  const fase = horaEnTz(new Date()) < 16 ? 'apertura' : 'cierre'
+  // Siempre 'apertura': completar una tarea de Producción significa "ya está
+  // hecho para este turno", que es lo que mide la apertura. Antes decidía por la
+  // hora (desde las 16:00, 'cierre') y tildaba ítems del cierre como "contados"
+  // sin que nadie los hubiera contado — y eso es lo que recibe el turno siguiente.
+  const fase = 'apertura'
   const vigente = turnoVigente({ turnos: turnosServicio, plaza: ctx?.plaza, entregados: ctx?.entregados })
   const turno = vigente ? encodeTurnoFase(vigente.turnoId, fase) : fase
 
@@ -82,15 +84,18 @@ export async function syncMiseDesdeTarea(
   // handleMiseUpsert), no "quién lo completó": se manda tal cual venga, tanto
   // al tildar como al destildar. Sin esto, completar una tarea desde
   // Producción dejaba el registro del mise sin autor.
-  const { error } = await supabase.from('checklist_registros').upsert(
-    { checklist_item_id: checklistItemId, fecha, turno, completado, usuario_id: ctx?.usuarioId ?? null },
-    { onConflict: 'checklist_item_id,fecha,turno' },
-  )
-  if (error) {
+  try {
+    await guardarRegistro(
+      checklistItemId, fecha, turno,
+      { completado, usuario_id: ctx?.usuarioId ?? null },
+      escritorRegistros(supabase),
+    )
+  } catch (e) {
     // Rollback aproximado: revierte el toggle. No restaura "no había registro"
     // (para eso haría falta leer el estado previo, otro round-trip en el camino
-    // crítico); el próximo fetchAll trae la verdad del servidor igual.
+    // crítico); el próximo fetchAll trae la verdad del servidor igual. Sin red
+    // no se llega acá: el cambio queda en la bandeja y se reintenta solo.
     emitMiseRegistroPatch({ ...patch, completado: !completado })
-    console.error('[syncMiseDesdeTarea] upsert Error:', error.message)
+    console.error('[syncMiseDesdeTarea] upsert Error:', e instanceof Error ? e.message : e)
   }
 }

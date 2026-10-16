@@ -138,6 +138,41 @@ describe('turnoSiguiente — espejo de turnoAnterior', () => {
   })
 })
 
+describe('turnoVigente — gracia: el reloj no se adelanta a quien no entregó', () => {
+  const previo = new Set([claveCierre('2026-10-14', 'cena', 'parrilla')])
+
+  it('17:09 con el almuerzo sin entregar → sigue en el almuerzo (caso parrilla 15/10)', () => {
+    const d = new Date('2026-10-15T20:09:00Z') // 17:09 ART
+    expect(turnoVigente({ now: d, turnos: TURNOS, entregados: previo, plaza: 'parrilla' }))
+      .toEqual({ jornada: '2026-10-15', turnoId: 'almuerzo', retenido: true })
+  })
+
+  it('18:59 todavía retiene; 19:01 ya pasa a la cena', () => {
+    const e = (iso: string) => turnoVigente({ now: new Date(iso), turnos: TURNOS, entregados: previo, plaza: 'parrilla' })
+    expect(e('2026-10-15T21:59:00Z')?.turnoId).toBe('almuerzo')
+    expect(e('2026-10-15T22:01:00Z')?.turnoId).toBe('cena')
+  })
+
+  it('si ya entregó el almuerzo, avanza a la cena sin esperar', () => {
+    const d = new Date('2026-10-15T20:09:00Z')
+    const entregados = new Set([...previo, claveCierre('2026-10-15', 'almuerzo', 'parrilla')])
+    expect(turnoVigente({ now: d, turnos: TURNOS, entregados, plaza: 'parrilla' }))
+      .toEqual({ jornada: '2026-10-15', turnoId: 'cena' })
+  })
+
+  it('una plaza que nunca entregó sigue al reloj', () => {
+    const d = new Date('2026-10-15T20:09:00Z')
+    expect(turnoVigente({ now: d, turnos: TURNOS, entregados: previo, plaza: 'frios' }))
+      .toEqual({ jornada: '2026-10-15', turnoId: 'cena' })
+  })
+
+  it('el primer turno del día no retiene la cena de anoche', () => {
+    const d = new Date('2026-10-15T12:30:00Z') // 09:30 ART
+    expect(turnoVigente({ now: d, turnos: TURNOS, entregados: previo, plaza: 'parrilla' }))
+      .toEqual({ jornada: '2026-10-15', turnoId: 'almuerzo' })
+  })
+})
+
 describe('turnoVigente — manda el pase, el reloj es la red de contención', () => {
   // ── Sin entregas: el reloj, pero coherente con hoyOperativo ──
   it('11:00 ART → almuerzo del día', () => {
