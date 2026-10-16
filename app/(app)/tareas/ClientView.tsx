@@ -21,6 +21,7 @@ import { hoyOperativo, sumarDias } from '@/lib/ops/turnos'
 import { fusionarDuplicados } from '@/lib/ops/dedupeTareas'
 import { ordenPrioridad } from '@/lib/ops/prioridades'
 import { setOpsChromeCompact } from '@/lib/ops/chromeBus'
+import { useChromePlegable, transicionChrome } from '@/lib/ui/useChromePlegable'
 import { useTurnosServicio } from '@/lib/hooks/useTurnosServicio'
 import { useCierresTurno } from '@/lib/hooks/useCierresTurno'
 import type { Tarea, OpsModo, OpsEstado, TareaPrioridad } from '@/types'
@@ -106,28 +107,13 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
     })
   }
 
-  // ── Chrome que se pliega al recorrer la lista (mismo criterio que el Mise) ──
-  // En el celular el título, la fecha, el avance y los tabs de OPS se comían unos
-  // 170px: bajando se pliegan y queda el selector de vista; al primer gesto hacia
-  // arriba vuelve todo. 12px de zona muerta y 8px de desplazamiento mínimo para
-  // que el rebote del scroll táctil no lo haga parpadear.
-  const [chromeCompacto, setChromeCompacto] = useState(false)
-  const chromeRef = useRef(false)
-  const ultimoScrollY = useRef(0)
-  const aplicarChrome = useCallback((c: boolean) => {
-    if (chromeRef.current === c) return
-    chromeRef.current = c
-    setChromeCompacto(c)
-    if (embedded) setOpsChromeCompact(c)
-  }, [embedded])
-  const handleListScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const y = e.currentTarget.scrollTop
-    const delta = y - ultimoScrollY.current
-    ultimoScrollY.current = y
-    if (y < 12) { aplicarChrome(false); return }
-    if (delta > 8) aplicarChrome(true)
-    else if (delta < -8) aplicarChrome(false)
-  }, [aplicarChrome])
+  // ── Chrome que se pliega al recorrer la lista (mismo hook que el Mise) ──
+  // En el celular el título, la fecha y los tabs de OPS se comían unos 170px:
+  // bajando se pliegan y queda el selector de vista con el avance; al primer
+  // gesto hacia arriba vuelve todo.
+  const onChromeCambio = useCallback((c: boolean) => { if (embedded) setOpsChromeCompact(c) }, [embedded])
+  const { compacto: chromeCompacto, onScroll: handleListScroll, reducido: reducirMovimiento } = useChromePlegable(onChromeCambio)
+  const pliegue = transicionChrome(reducirMovimiento, 'max-height', 'opacity', 'margin')
   // Al salir de Producción el chrome tiene que volver, o el otro panel se abre sin tabs.
   useEffect(() => () => { if (embedded) setOpsChromeCompact(false) }, [embedded])
 
@@ -639,8 +625,11 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
         padding: `${embedded ? 0 : 46}px 16px 12px`,
         flexShrink: 0,
       }}>
-        <div className="ops-header-row" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: chromeCompacto ? 0 : 10 }}>
-          <div style={{ display: chromeCompacto ? 'none' : undefined }}>
+        <div className="ops-header-row" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+          <div style={{
+            maxHeight: chromeCompacto ? 0 : 48, opacity: chromeCompacto ? 0 : 1,
+            marginBottom: chromeCompacto ? -10 : 0, overflow: 'hidden', transition: pliegue,
+          }}>
             <div style={{ fontSize: 17, fontWeight: 700, color: '#fff' }}>Producción</div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', marginTop: 1 }}>
               {fmtFecha(today)}
@@ -675,7 +664,7 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
         </div>
 
         {/* Stats turno */}
-        {statsHoy.total > 0 && !chromeCompacto && (
+        {statsHoy.total > 0 && (
           <div style={{
             display: 'flex', alignItems: 'center', gap: 8,
             background: 'rgba(255,255,255,.08)', borderRadius: 10, padding: '6px 10px',

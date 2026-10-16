@@ -12,6 +12,8 @@ import { cubiertosVivos } from '@/lib/reservas/helpers'
 import { hoyOperativo, fechaEnTz } from '@/lib/ops/turnos'
 import { fusionarDuplicados } from '@/lib/ops/dedupeTareas'
 import { onOpsChromeCompact } from '@/lib/ops/chromeBus'
+import { transicionChrome } from '@/lib/ui/useChromePlegable'
+import { useReducedMotion } from '@/lib/ui/motion'
 
 type Tab = 'produccion' | 'mise' | 'planificacion' | 'turno'
 
@@ -106,6 +108,7 @@ export default function OperacionesPage() {
   // de plaza/fase manda `false`, así que los otros paneles nunca se quedan sin
   // su navegación. El cambio de tab lo restaura por las dudas.
   const [chromeCompacto, setChromeCompacto] = useState(false)
+  const reducirMovimiento = useReducedMotion()
   useEffect(() => onOpsChromeCompact(setChromeCompacto), [])
   useEffect(() => { setChromeCompacto(false) }, [tab])
 
@@ -222,7 +225,7 @@ export default function OperacionesPage() {
           display: 'flex', gap: 6,
           maxHeight: chromeCompacto ? 0 : 44, paddingBottom: chromeCompacto ? 0 : 10,
           opacity: chromeCompacto ? 0 : 1, overflow: 'hidden',
-          transition: 'max-height .18s ease, opacity .14s ease, padding .18s ease',
+          transition: transicionChrome(reducirMovimiento, 'max-height', 'opacity', 'padding'),
         }}>
           {TABS.map(t => (
             <button

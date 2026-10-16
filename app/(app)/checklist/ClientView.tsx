@@ -26,6 +26,7 @@ import { useNotasPlaza } from '@/lib/hooks/useNotasPlaza'
 import { NotasPlaza } from '@/components/ops/NotasPlaza'
 import { PrioridadPicker, type PrioOpcion } from '@/components/ops/PrioridadPicker'
 import { todasLasPlazas, plazaLabel, plazaIcon, plazaColor } from '@/lib/constants'
+import { useChromePlegable, transicionChrome } from '@/lib/ui/useChromePlegable'
 import AvisoRelevo from '@/components/mise/AvisoRelevo'
 import { hoyOperativo, sumarDias, turnoVigente, turnoAnterior, turnoSiguiente, encodeTurnoFase, cierreIncompleto, fechaEnTz } from '@/lib/ops/turnos'
 import { menuItemVisible } from '@/lib/ops/mise'
@@ -1241,29 +1242,15 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
 
   // ── Chrome que se pliega al recorrer la lista ───────────────────────────
   // Bajando, el título y los tabs de OPS se pliegan y queda solo la fila de
-  // fases; al primer gesto hacia arriba vuelve todo. Los umbrales (12px de
-  // zona muerta arriba, 8px de desplazamiento mínimo) están para que el
-  // rebote del scroll táctil no lo haga parpadear.
-  const [chromeCompacto, setChromeCompacto] = useState(false)
-  const chromeCompactoRef = useRef(false)
-  const ultimoScrollY = useRef(0)
-  const aplicarChrome = useCallback((compacto: boolean) => {
-    if (chromeCompactoRef.current === compacto) return
-    chromeCompactoRef.current = compacto
-    setChromeCompacto(compacto)
+  // fases; al primer gesto hacia arriba vuelve todo. Toda la lógica (umbrales,
+  // bloqueo durante la transición, listas cortas) vive en useChromePlegable.
+  const onChromeCambio = useCallback((compacto: boolean) => {
     setOpsChromeCompact(compacto)
     // El botón que ancla el menú se pliega con el header: dejarlo abierto lo
     // dejaría flotando sobre la lista, apuntando a nada.
     if (compacto) setMenuPos(null)
   }, [])
-  const handleListScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const y = e.currentTarget.scrollTop
-    const delta = y - ultimoScrollY.current
-    ultimoScrollY.current = y
-    if (y < 12) { aplicarChrome(false); return }
-    if (delta > 8) aplicarChrome(true)
-    else if (delta < -8) aplicarChrome(false)
-  }, [aplicarChrome])
+  const { compacto: chromeCompacto, onScroll: handleListScroll, reiniciar: reiniciarChrome, reducido: reducirMovimiento } = useChromePlegable(onChromeCambio)
 
   // Cambiar de plaza o de fase es empezar una vuelta nueva: el header vuelve
   // entero aunque el scroll haya quedado a mitad de camino. Y al desmontarse
@@ -1271,9 +1258,8 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // abriría sin su propia navegación.
   useEffect(() => {
     scrollContainerRef.current?.scrollTo({ top: 0 })
-    ultimoScrollY.current = 0
-    aplicarChrome(false)
-  }, [plaza, tab, aplicarChrome])
+    reiniciarChrome()
+  }, [plaza, tab, reiniciarChrome])
   useEffect(() => () => { setOpsChromeCompact(false) }, [])
 
   useEffect(() => {
@@ -1736,7 +1722,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
             a la 1am la jornada sigue siendo "ayer" y ahí sí vale la pena avisar. */}
         <div style={{
           maxHeight: chromeCompacto ? 0 : 60, opacity: chromeCompacto ? 0 : 1,
-          overflow: 'hidden', transition: 'max-height .18s ease, opacity .14s ease',
+          overflow: 'hidden', transition: transicionChrome(reducirMovimiento, 'max-height', 'opacity'),
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 10 }}>
             {/* Título-selector: plaza y turno en un solo control. Reemplaza a la
@@ -1882,7 +1868,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
             maxHeight: chromeCompacto ? 0 : 40, marginBottom: chromeCompacto ? 0 : 6,
             padding: chromeCompacto ? '0 10px' : '5px 10px',
             opacity: chromeCompacto ? 0 : 1, overflow: 'hidden',
-            transition: 'max-height .18s ease, opacity .14s ease, padding .18s ease, margin .18s ease',
+            transition: transicionChrome(reducirMovimiento, 'max-height', 'opacity', 'padding', 'margin'),
           }}>
             <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'rgba(255,255,255,.7)' }}>fact_check</span>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.7)', letterSpacing: '.06em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
