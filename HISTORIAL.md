@@ -6,6 +6,13 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+### 17/10/2026 — OPS: cierre mal guardado, header, pase
+- Causa de "recibo la plaza con el cierre mal": parrilla corrida un turno desde el 15/10 — a las 17:00 el reloj pasaba la plaza a Cena sin que hubiera entregado el almuerzo. `turnoVigente` retiene 2 h (`retenido`), con aviso y "Pasar a …" (`components/mise/AvisoRelevo.tsx`).
+- Bandeja de guardado con reintento (`lib/ops/guardadoMise.ts`), indicador "N sin subir", "Entregar plaza" espera el guardado; número del cierre se guarda al escribir; al volver a la app se recalcula turno y se relee. `syncMise` siempre escribe apertura.
+- Parrilla reparada en prod (4 entregas + registros 15–17/10 un turno atrás, en transacción, con respaldo).
+- `useChromePlegable`: un solo movimiento y sin bucle plegar/desplegar en Producción/Mise/OPS.
+- Pase de texto: la nota del ítem va en su línea al lado de la prioridad; sin "↳" ni "Notas" repetido.
+
 ### 13/10/2026 — OPS: bug de tildes rápidos, CARGAR/DESCONGELAR, notas, receta
 - Tildes rápidos en Producción: `cambiarEstado`/`actualizarTarea` parchean por tarea sobre lo vigente y escriben por cola por id (`lib/ops/colaEscrituras.ts`); el refetch de realtime espera las escrituras en vuelo.
 - `lib/ops/prioridades.ts`: catálogo único SP/P/CARGAR/DESCONGELAR/REF/Check (tarea↔mise). DESCONGELAR listo no tilda el mise y desde el cierre cae en el turno actual; ninguno abre el registro de producción.

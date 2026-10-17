@@ -73,6 +73,8 @@
 
 33. **`mutate(async fn, { optimisticData })` de SWR no compone dos escrituras seguidas sobre la misma lista.** El resultado se calcula sobre la última versión *confirmada*, no sobre lo que ya está en pantalla: tocar B mientras A viaja deja la cache sin uno de los dos ("queda azul solo el segundo", o se desmarcan ambos). Patrón en `useTareas`: parche inmediato por fila con `mutate(key, prev => …, { revalidate:false })`, escritura por una cola por id (`lib/ops/colaEscrituras.ts`), revertir solo esa fila si falla, y el refetch de realtime espera mientras haya escrituras en vuelo.
 
+34. **Lo que el cocinero tilda en el mise no puede perderse sin señal ni guardarse en el turno equivocado.** Toda escritura a `checklist_registros` pasa por `guardarRegistro` (`lib/ops/guardadoMise.ts`): bandeja en localStorage que fusiona cambios por (ítem, fecha, turno), reintenta sola (online, volver a la app, 15 s) y solo rechaza ante errores que reintentar no arregla (permisos). `useChecklist` expone `pendientesGuardado` (indicador "N sin subir") y `vaciarGuardado()`: "Entregar plaza" lo espera y no entrega si queda algo. Escribir con `supabase.from('checklist_registros').upsert` directo reintroduce el bug de "el que recibe lee otra cosa". Y `turnoVigente` retiene (`retenido: true`, 2 h de gracia) a la plaza que entrega y todavía no entregó su turno: el reloj solo no la adelanta — sin eso cada entrega tardía corre un turno todo lo que sigue. Producción → Mise (`syncMiseDesdeTarea`) escribe siempre en la apertura.
+
 ## Anti-patrón: funciones internas usadas como JSX en React
 
 **Síntoma:** el teclado se cierra al primer carácter, se pierde el focus, un form "se resetea" solo.

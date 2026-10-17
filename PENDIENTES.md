@@ -315,6 +315,13 @@ Lista completa con el detalle de cada uno en `HISTORIAL.md`. En una línea:
 - Mise: el mantener-apretado ya no abre la nota (lápiz de 15px con `hit-slop`); la guía/tour no lo mencionaba, pero avisar al equipo.
 - Falta el vistazo escalado a la cantidad de la tarea y la franja "hoy en Producción" dentro de la ficha.
 
+### OPS — tanda 17/10 (cierre guardado, header, pase)
+- **Probar en celular con Bros:** guardado sin señal (modo avión → tildar → volver), aviso "sin entregar / Pasar a Cena" a las 17:00, header al final de la lista y con rebote.
+- "Recibís el cierre de…" muestra la hora pero no el nombre de quien entregó (hace falta un lookup liviano de miembros).
+- Aperturas de parrilla del 15–16/10 reparadas con la misma regla de corrimiento, pero estaban mezcladas (sin horas): pueden quedar ítems sueltos. Respaldo en el scratchpad de la sesión (efímero).
+- Sin números de cierre en Bros: `cantidad_actual` no se guarda desde el 10/09 (solo tildan; decisión de uso, no bug).
+- El bloque "Notas" del pase sigue saliendo para ítems con nota sin tarea pendiente; evaluar si sobra.
+
 ### Mise / pase de turno — flecos de la tanda de agosto
 Detalle completo en `HISTORIAL.md`. Lo que quedó afuera:
 - **El plegado del pase no aplica a Menú/Evento** (sus columnas son pasos, y no
