@@ -149,3 +149,25 @@ describe('construirTextoPase — notas de los ítems del mise', () => {
     })).toBe(false)
   })
 })
+
+describe('construirTextoPase — la nota va al lado de la prioridad', () => {
+  const tarea = { id: 't', titulo: 'Ajíes encurtidos', prioridad: 'critica', nota: 'CORTAR Y GUARDAR AL VACÍO' } as unknown as Tarea
+
+  it('en la misma línea, después del código, sin línea aparte ni bloque Notas', () => {
+    const texto = construirTextoPase({
+      plazaNombre: 'Fríos', jornada: '2026-10-16', pendientes: [tarea], notas: [],
+      notasItems: [{ nombre: 'Ajíes encurtidos', nota: 'CORTAR Y GUARDAR AL VACÍO' }],
+    })
+    expect(texto).toContain('- Ajíes encurtidos SP — CORTAR Y GUARDAR AL VACÍO')
+    expect(texto).not.toContain('↳')
+    expect(texto).not.toContain('Notas')
+  })
+
+  it('la nota de un ítem que no está en la lista sigue saliendo', () => {
+    const texto = construirTextoPase({
+      plazaNombre: 'Fríos', jornada: '2026-10-16', pendientes: [], notas: [],
+      notasItems: [{ nombre: 'Salsa', nota: 'quedó la mitad' }],
+    })
+    expect(texto).toContain('Notas\n- Salsa: quedó la mitad')
+  })
+})

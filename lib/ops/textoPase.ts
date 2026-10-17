@@ -97,8 +97,10 @@ function lineasDeTareas(tareas: Tarea[], conCodigo: boolean): string[] {
     })
     .flatMap(t => {
       const linea = conCodigo ? `- ${t.titulo} ${codigoDe(t.prioridad)}` : `- ${t.titulo}`
+      // La nota va pegada a la prioridad, en la misma línea: así se lee de un
+      // vistazo qué hay que hacer con ESA preparación, sin buscarla abajo.
       const nota = limpiar(t.nota ?? '')
-      return nota ? [linea, `  ↳ ${nota}`] : [linea]
+      return [nota ? `${linea} — ${nota}` : linea]
     })
 }
 
@@ -129,9 +131,13 @@ export function construirTextoPase(d: DatosPase): string {
   // Notas de los ítems del mise: lo que el que cocinó dejó dicho sobre cada
   // producción ("quedó la mitad, falta porcionar"). Van antes de las notas
   // libres de la plaza porque son lo más puntual.
+  // Los que ya salen en la lista de pendientes no se repiten acá: su nota
+  // ya está en su línea (ver lineasDeTareas). Queda solo lo de ítems que no
+  // tienen una tarea pendiente.
+  const enLista = new Set(d.pendientes.map(t => limpiar(t.titulo ?? '').toLowerCase()).filter(Boolean))
   const notasItems = (d.notasItems ?? [])
     .map(n => ({ nombre: limpiar(n.nombre), nota: limpiar(n.nota) }))
-    .filter(n => n.nombre && n.nota)
+    .filter(n => n.nombre && n.nota && !enLista.has(n.nombre.toLowerCase()))
   if (notasItems.length > 0) {
     bloques.push(['Notas', ...notasItems.map(n => `- ${n.nombre}: ${n.nota}`)].join('\n'))
   }
