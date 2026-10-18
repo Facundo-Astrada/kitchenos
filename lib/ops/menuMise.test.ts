@@ -133,6 +133,28 @@ describe('sincronizarMiseDeMenu — plazaControl (una sola persona controla el m
     expect(store.checklist_items).toHaveLength(1)
   })
 
+  it('el mismo componente en dos pasos distintos aparece en los dos — igual que en el menú', async () => {
+    const { supabase, store } = fakeSupabase()
+    // Caso real (Bros, Día de la Madre): "Alcauciles pickle" en Entrada
+    // c/carne y en Entrada veggie — el mise mostraba solo el primero.
+    const enCarne: PrepInput = { ...PREP_SIN_OPS, paso: 'Entrada c/carne', nombre: 'Alcauciles pickle' }
+    const enVeggie: PrepInput = { ...enCarne, paso: 'Entrada veggie' }
+    const menu = { id: MENU_ID, plazaControl: 'menu', preparaciones: [enCarne, enVeggie] }
+    const res = await sincronizarMiseDeMenu({ supabase, restauranteId: RID, menu })
+    expect(res.creados).toBe(2)
+    expect(store.checklist_items.map(r => r.seccion).sort()).toEqual(['Entrada c/carne', 'Entrada veggie'])
+    // Re-sincronizar no duplica ni borra ninguno de los dos.
+    await sincronizarMiseDeMenu({ supabase, restauranteId: RID, menu })
+    expect(store.checklist_items).toHaveLength(2)
+  })
+
+  it('sin cantidad_ops, usa la cantidad del menú con SU unidad (250 g, no 250 u)', async () => {
+    const { supabase, store } = fakeSupabase()
+    const trucha: PrepInput = { ...PREP_SIN_OPS, nombre: 'Trucha', cantidad: 250, unidad: 'g' }
+    await sincronizarMiseDeMenu({ supabase, restauranteId: RID, menu: { id: MENU_ID, plazaControl: 'menu', preparaciones: [trucha] } })
+    expect(store.checklist_items[0]).toMatchObject({ cantidad: 250, unidad: 'g' })
+  })
+
   it('reactivar sin plazaControl después de haber usado uno saca los ítems de la plaza vieja', async () => {
     const { supabase, store } = fakeSupabase()
     await sincronizarMiseDeMenu({ supabase, restauranteId: RID, menu: { id: MENU_ID, plazaControl: 'control', preparaciones: [PREP_PARRILLA] } })

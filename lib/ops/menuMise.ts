@@ -55,23 +55,20 @@ export async function sincronizarMiseDeMenu(params: {
   const sinOps = preparaciones.length - candidatas.length
 
   const { data: existentesData } = await supabase.from('checklist_items')
-    .select('id, nombre, plaza')
+    .select('id, nombre, plaza, seccion_id')
     .eq('restaurante_id', restauranteId).eq('menu_id', menu.id)
-  const existentes = (existentesData ?? []) as { id: string; nombre: string; plaza: string }[]
-  const existenteIdPorClave = new Map(existentes.map(e => [`${e.plaza}::${e.nombre}`, e.id]))
+  const existentes = (existentesData ?? []) as { id: string; nombre: string; plaza: string; seccion_id: string | null }[]
+  // La clave incluye la sección: el mismo componente puede ir en dos pasos
+  // del menú (ej. "Alcauciles pickle" en Entrada c/carne Y en Entrada
+  // veggie) y el mise tiene que mostrarlo en los dos, igual que el menú.
+  const claveDe = (plaza: string, seccionId: string | null, nombre: string) => `${plaza}::${seccionId ?? ''}::${nombre}`
+  const existenteIdPorClave = new Map(existentes.map(e => [claveDe(e.plaza, e.seccion_id, e.nombre), e.id]))
   const claveVivas = new Set<string>()
   // Secciones-paso en el orden en que aparecen en el menú, para que el mise
   // muestre Entradas → Principal → Postres igual que Carta → Menús.
   const seccionesPasoEnOrden: string[] = []
 
   for (const [idx, p] of candidatas.entries()) {
-    const clave = `${p.plaza}::${p.nombre}`
-    // Dos preparaciones con el mismo nombre pueden caer en la misma clave
-    // cuando plazaControl las junta a todas en una plaza — sin esto, la
-    // segunda insertaría un checklist_item duplicado en vez de actualizar
-    // el que acaba de crear la primera en esta misma pasada.
-    if (claveVivas.has(clave)) continue
-    claveVivas.add(clave)
     // Con seccion_mise propia (configurada a mano en OPS) se respeta esa
     // sección. Sin ella (plaza_control), se agrupa por el paso del menú
     // (Entradas/Proteína/Pasta/...) en vez de todo en un balde único — es
@@ -79,18 +76,29 @@ export async function sincronizarMiseDeMenu(params: {
     const { seccionId, secNombre } = p.seccion_mise
       ? await resolverSeccionMise(supabase, restauranteId, p.plaza!, p.seccion_mise)
       : await resolverSeccionPorNombre(supabase, restauranteId, p.plaza!, p.paso || SECCION_CONTROL_DEFAULT, 'countertops')
+    const clave = claveDe(p.plaza!, seccionId, p.nombre)
+    // Dos preparaciones con el mismo nombre en la misma sección (ej.
+    // plazaControl las junta a todas en una plaza) — sin esto, la segunda
+    // insertaría un checklist_item duplicado en vez de actualizar el que
+    // acaba de crear la primera en esta misma pasada.
+    if (claveVivas.has(clave)) continue
+    claveVivas.add(clave)
     if (!p.seccion_mise && seccionId && !seccionesPasoEnOrden.includes(seccionId)) seccionesPasoEnOrden.push(seccionId)
     // menu_preparaciones no tiene recipiente_cantidad (solo la rama plato) —
     // se asume 1 recipiente; si hiciera falta más, se codifica con el mismo
     // sufijo " ×N" que ya usa encodeRecipienteNombre/parseRecipienteNombre.
     const recipienteNombre = encodeRecipienteNombre(p.recipiente_nombre ?? null, 1)
-    const cantidad = p.cantidad_ops ?? p.cantidad ?? 1
+    // Cantidad y unidad van de a pares: si no hay cantidad_ops se usa la del
+    // menú CON su unidad (antes "Trucha 250 g" llegaba como "250 u").
+    const usaOps = p.cantidad_ops != null
+    const cantidad = usaOps ? p.cantidad_ops! : (p.cantidad ?? 1)
+    const unidad = (usaOps ? p.unidad_ops : p.cantidad != null ? p.unidad : p.unidad_ops) || 'u'
     const recipCapacidad = recipienteNombre ? cantidad : null
     const payload = {
       // Orden del menú (menu_preparaciones.orden) — sin esto todos quedaban
       // en 0 y dentro de cada paso salían en cualquier orden.
       orden: idx,
-      cantidad, unidad: p.unidad_ops ?? 'u', seccion_id: seccionId, seccion: secNombre,
+      cantidad, unidad, seccion_id: seccionId, seccion: secNombre,
       prioridad: TAREA_PRIO_TO_MISE[p.prioridad] ?? 'ref',
       recipiente_nombre: recipienteNombre, recipiente_capacidad: recipCapacidad,
       peso_porcion: p.peso_porcion ?? null, peso_porcion_unidad: p.peso_porcion_unidad ?? null,
@@ -117,7 +125,7 @@ export async function sincronizarMiseDeMenu(params: {
     await supabase.from('checklist_secciones').update({ orden: i }).eq('id', secId)
   }
 
-  const idsABorrar = existentes.filter(e => !claveVivas.has(`${e.plaza}::${e.nombre}`)).map(e => e.id)
+  const idsABorrar = existentes.filter(e => !claveVivas.has(claveDe(e.plaza, e.seccion_id, e.nombre))).map(e => e.id)
   if (idsABorrar.length > 0) {
     await supabase.from('checklist_items').delete().in('id', idsABorrar)
   }
