@@ -328,7 +328,8 @@ export const PUESTO_TEMPLATES: PuestoTemplate[] = [
     tareas_funciones: [
       'Cargar las facturas de la semana', 'Pedir a proveedores',
       'Recibir y controlar la mercadería', 'Hacer el conteo de depósito',
-      'Registrar la merma',
+      'Registrar la merma', 'Hacer el seguimiento de los pedidos pendientes',
+      'Pagar a proveedores según vencimiento',
     ],
   },
   {
@@ -385,6 +386,19 @@ export const PUESTO_TEMPLATES: PuestoTemplate[] = [
     tareas_funciones: [
       'Controlar cuentas por pagar', 'Conciliar facturas con remitos',
       'Liquidar horas del equipo', 'Cerrar el mes con el contador',
+    ],
+  },
+  {
+    nombre: 'Mantenimiento',
+    descripcion: 'Equipos, instalaciones del local y técnicos externos',
+    nivel: 'cocinero',
+    plaza_default: null,
+    area_key: 'infraestructura',
+    icon: 'build',
+    permisos_app: ['home', 'bitacora', 'calendario'],
+    tareas_funciones: [
+      'Revisar el estado de los equipos', 'Coordinar a los técnicos',
+      'Registrar los arreglos hechos',
     ],
   },
 ]

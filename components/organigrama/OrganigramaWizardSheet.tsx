@@ -3,7 +3,7 @@
 // Wizard de 3 preguntas para arrancar el organigrama: activa las áreas del
 // catálogo que corresponden al tamaño y al tipo de negocio, y asegura un
 // puesto "Dueño / Dirección" con vos como responsable. No crea puestos de
-// cocina — esos siguen saliendo de los templates en Equipo → Puestos, porque
+// cocina — esos siguen saliendo de los templates de la pestaña Puestos, porque
 // ahí sí depende de la carta real de cada casa, no de un tamaño genérico.
 
 import { useState, useMemo } from 'react'

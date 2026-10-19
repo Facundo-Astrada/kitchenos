@@ -489,7 +489,7 @@ export function PuestosEditorPanel({
 
   // ── LISTA ──
   return (
-    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }} data-coach-target="organigrama-puestos">
       {puestos.length === 0 && (
         <div style={{ textAlign: 'center', padding: 32, color: 'var(--text-3)', fontSize: 13 }}>
           Sin puestos creados todavía.<br />Empezá desde un template o creá uno propio.

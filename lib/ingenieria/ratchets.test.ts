@@ -33,7 +33,7 @@ const TECHOS_LINEAS: Record<string, number> = {
   // siempre aterrizaba en Gastos. Le faltaba el mismo efecto que ya tiene
   // operaciones/page.tsx (URLSearchParams sobre window.location.search).
   'app/(app)/stock/ClientView.tsx': 3300, // oct 2026: la fila de la tabla de Insumos (todo el <tr> del .map, con su estadoBadge) → components/stock/FilaProductoInsumo.tsx — venía subiendo este techo 3 veces en la misma sesión cada vez que se sumaba un campo editable inline (Categoría/Proveedor/Sector/Unidad/Precio, cada uno ya en su propia celda en CeldasInlineTabla.tsx). Con la fila afuera, 3445 → 3295: por primera vez en el día el techo BAJA, incluso por debajo de donde arrancó (3330). Historial: 3576 → 3304 (3 sheets de acción masiva → AsignacionesMasivas.tsx) → 3340 ("Nuevo proveedor" sin salir del form → NuevoRegistroModal.tsx) → 3375 (columna Proveedor + celdas inline) → 3295 (esta extracción). Antes de todo eso: "Unidades y envase" → components/stock/UnidadesProducto.tsx — 3355 → 3308
-  'app/(app)/checklist/ClientView.tsx': 3145, // sesión 15/09: selector de plaza+turno migrado a components/ui/Modal.tsx — 3159 → 3139
+  'app/(app)/checklist/ClientView.tsx': 3227, // 19/10: el techo estaba en 3145 pero HEAD ya tenía 3227 (commit a6aa4bc, header de Producción/Mise que se pliega) — se alinea acá, sin cambio de código. Antes, sesión 15/09: selector de plaza+turno migrado a components/ui/Modal.tsx — 3159 → 3139
 }
 
 describe('Ratchets — techos de líneas (refactor-kos.md §4)', () => {

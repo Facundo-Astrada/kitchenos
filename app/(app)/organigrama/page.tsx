@@ -628,7 +628,7 @@ function AreaBlock({
         </div>
       ) : (
         <div style={{ fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic', marginTop: 10 }}>
-          Sin puestos en esta área todavía — creá uno en Equipo → Puestos.
+          Sin puestos en esta área todavía — creá uno en la pestaña Puestos.
         </div>
       )}
     </div>

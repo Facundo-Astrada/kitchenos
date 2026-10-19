@@ -580,12 +580,12 @@ export const TOURS: Record<string, TourStep[]> = {
     {
       targetId: null,
       title: 'El organigrama de tu negocio',
-      description: 'Quién es quién, a qué área pertenece cada puesto y quién responde por cada etapa del día a día. Tocá Siguiente y te muestro las tres vistas.',
+      description: 'Quién es quién, a qué área pertenece cada puesto y quién responde por cada etapa del día a día. Tocá Siguiente y te muestro las cinco pestañas.',
     },
     {
       targetId: 'organigrama-tabs',
-      title: 'Plantel, Estructura y Cobertura',
-      description: 'Plantel muestra a la gente. Estructura muestra las áreas del negocio y los puestos de cada una. Cobertura cruza esas áreas con las etapas del día a día para detectar huecos.',
+      title: 'Cinco pestañas',
+      description: 'Plantel muestra a la gente. Puestos es donde se arman los puestos y sus tareas. Estructura muestra las áreas del negocio y los puestos de cada una. Cobertura cruza esas áreas con las etapas del día a día para detectar huecos. Polivalencia muestra quién sabe cubrir cada plaza.',
     },
     {
       targetId: 'organigrama-plantel',
@@ -600,6 +600,12 @@ export const TOURS: Record<string, TourStep[]> = {
       description: 'Mostrás solo la gente de un área puntual — útil cuando el equipo es grande y querés enfocarte en Cocina, Salón o RRHH.',
     },
     {
+      targetId: 'organigrama-puestos',
+      requireTab: 'puestos',
+      title: 'Los puestos',
+      description: 'Un puesto es un trabajo con sus tareas escritas: sigue existiendo aunque la persona se vaya. Podés arrancar desde una plantilla (cocina, salón, compras, calidad, administración, mantenimiento) y ajustarla. Tocá un puesto para abrir su ficha: tareas, a quién reporta, módulos que habilita y quién lo ocupa.',
+    },
+    {
       targetId: 'organigrama-estructura',
       requireTab: 'estructura',
       title: 'Las 12 áreas del negocio',
@@ -610,6 +616,17 @@ export const TOURS: Record<string, TourStep[]> = {
       requireTab: 'cobertura',
       title: 'Quién responde en cada etapa',
       description: 'Cada área pasa por cuatro etapas: Definir el estándar, Preparar antes de abrir, Ejecutar durante el servicio y Controlar el resultado. En rojo, lo que no tiene nadie a cargo en Definir, Preparar o Controlar — Ejecutar es distinto, ahí "todo el equipo" es la respuesta normal, no una alerta.',
+    },
+    {
+      targetId: 'organigrama-polivalencia',
+      requireTab: 'polivalencia',
+      title: 'Polivalencia',
+      description: 'Una matriz de quién sabe cubrir cada plaza y en qué nivel. Sirve para ver qué pasa si alguien falta y a quién entrenar para tener reemplazo.',
+    },
+    {
+      targetId: 'organigrama-carta-casa',
+      title: 'Carta de la casa',
+      description: 'Las reglas de tu casa escritas una sola vez: cómo se trabaja, qué se espera de cada uno. Es el estándar al que remiten los puestos. Solo la edita el admin.',
     },
     {
       targetId: 'organigrama-configurar',
