@@ -1,16 +1,15 @@
-# Sesión — 17/10/2026 (OPS)
+# Sesión — 19/10/2026 (Organigrama, diseño)
 
 ## Qué se cerró
-- Cierre mal guardado: causa (parrilla corrida un turno por el reloj de las 17:00) corregida con retención + aviso de relevo; parrilla reparada en prod.
-- Guardado a prueba de wifi (bandeja con reintento, "N sin subir", Entregar espera), número del cierre al escribir, refresco al volver a la app.
-- Header de Producción/Mise/OPS con un solo movimiento (`useChromePlegable`), sin titilar.
-- Pase de texto: la nota del ítem junto a la prioridad, sin bloque "Notas" repetido.
+- Auditoría de Organigrama con datos reales de Bros: 16/24 casillas rojas en Cobertura, Salón sin responsable, León mal ubicado, el tour del Coach desactualizado, 0 descripciones de puesto.
+- Decisión de modelo: **puesto principal + puestos que también cubre** (multitasking = varios trabajos con tareas escritas, no solo varias decisiones).
+- Plan escrito: `PLAN-ORGANIGRAMA-REUNION-2026-10.md` (Fases 0-3). Sin código.
 
 ## Qué quedó a medias
-- Nada a medias. Flecos en `PENDIENTES.md` → "OPS — tanda 17/10". El header y el aviso de relevo no se probaron en celular real.
+- Decisiones de negocio: 017 (moratoria, antes de la Fase 3) y qué hacer con la 014 (en condición de reversión). Agustín y Tefa sin cargar, a pedido.
 
 ## Probar primero mañana
-- Bros: modo avión → tildar → volver (debe subir solo); a las 17:00 una plaza sin entregar debe quedar en Almuerzo con "Pasar a Cena"; scrollear Producción/Mise hasta el fondo y con rebote.
+- Nada en producción cambió hoy.
 
 ## Próximo paso concreto
-- Migrar el optimistic de `useRecetas`/`useHaccp` al patrón de `useTareas`; después, CARGAR/DESCONGELAR en el editor de Carta/Menú.
+- Sesión nueva con Sonnet: "Leé PLAN-ORGANIGRAMA-REUNION-2026-10.md, hacemos Fase 0 y 1" (el prompt completo está en el chat del 19/10).

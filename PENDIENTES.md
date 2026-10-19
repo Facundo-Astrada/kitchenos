@@ -134,10 +134,17 @@ las bajas en LatAm son involuntarias).
 
 ## 🟢 Bajo — Roadmap abierto
 
-### Organigrama Bros — socios sin cargar (18/10)
-- **Agustín y Tefa** (socios de Bros junto con Franco) no existen en `equipo_miembros`.
-  Facundo pidió dejarlo para más adelante: ni alta ni invitación todavía. Sin ellos, la
-  reunión de socios (rediseño de Organigrama en curso) no puede asignarles áreas.
+### Organigrama — varios puestos por persona + reunión de organización (plan 19/10)
+`PLAN-ORGANIGRAMA-REUNION-2026-10.md`, sin código todavía. Fases 0 (limpieza), 1
+(`puestos_extra` + permisos unidos), 2 (pestaña "Quién responde"), 3 (reunión + acta PDF).
+- **Decisión 017 sin escribir** (excepción a la moratoria, antes de la Fase 3) en
+  `~/Desktop/START UP KOS/00-decisiones/DECISIONES.md`.
+- **Decisión 014 en condición de reversión:** 0 descripciones vigentes en Bros desde el 02/10.
+- **Agustín y Tefa** (socios de Bros con Franco) no están en `equipo_miembros`. Facundo pidió
+  dejarlo para más adelante: ni alta ni invitación.
+- Datos de Bros que se corrigen **en la reunión, no antes**: León (hoy en "Dueño / Dirección")
+  pasa a Cocinero + Encargado de compras + Mantenimiento; los niveles de León y de Zoe no
+  coinciden con los de sus puestos; Cocina tiene 4 responsables sin titular.
 
 ### Descripción de puesto (Organigrama) — Fases 0/1/2/4 + Ficha del puesto shippeadas, falta el acuse
 `PLAN-DESCRIPCION-PUESTO-2026-09.md`. Decisión 014 (18/09) sacó el resto del plan de la
