@@ -134,6 +134,11 @@ las bajas en LatAm son involuntarias).
 
 ## 🟢 Bajo — Roadmap abierto
 
+### Organigrama Bros — socios sin cargar (18/10)
+- **Agustín y Tefa** (socios de Bros junto con Franco) no existen en `equipo_miembros`.
+  Facundo pidió dejarlo para más adelante: ni alta ni invitación todavía. Sin ellos, la
+  reunión de socios (rediseño de Organigrama en curso) no puede asignarles áreas.
+
 ### Descripción de puesto (Organigrama) — Fases 0/1/2/4 + Ficha del puesto shippeadas, falta el acuse
 `PLAN-DESCRIPCION-PUESTO-2026-09.md`. Decisión 014 (18/09) sacó el resto del plan de la
 moratoria; detalle de lo shippeado en `HISTORIAL.md` sesiones 2026-09-18 y 2026-09-19. Queda:
