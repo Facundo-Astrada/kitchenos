@@ -5,6 +5,8 @@ import {
   listaIncluyeModulo,
   puedeVerModulo,
   puedeVerCostos,
+  unirVerCostosPuestos,
+  resolverPermisosDePuestos,
 } from './resolver'
 
 describe('resolverModulosEfectivos', () => {
@@ -42,6 +44,96 @@ describe('resolverModulosEfectivos', () => {
 
   it('un puesto vacío con módulos extra sigue siendo null — el extra no lo configura', () => {
     expect(resolverModulosEfectivos({ permisosApp: [], modulosExtra: ['stock'] })).toBeNull()
+  })
+})
+
+describe('resolverModulosEfectivos — puestos que también cubre', () => {
+  it('une los permisos del principal con los de los puestos extra', () => {
+    expect(resolverModulosEfectivos({
+      permisosApp: ['home', 'operaciones'],
+      permisosExtra: [['home', 'pedidos', 'proveedores'], ['bitacora']],
+    })).toEqual(['home', 'operaciones', 'pedidos', 'proveedores', 'bitacora'])
+  })
+
+  it('principal sin permisos_app + extra con permisos: ve lo del extra', () => {
+    expect(resolverModulosEfectivos({
+      permisosApp: [],
+      permisosExtra: [['pedidos', 'facturas']],
+    })).toEqual(['pedidos', 'facturas'])
+  })
+
+  it('principal y extras sin permisos: sigue siendo null (fallback por rol)', () => {
+    expect(resolverModulosEfectivos({ permisosApp: [], permisosExtra: [[], null, undefined] })).toBeNull()
+  })
+
+  it('los restringidos de la persona ganan, también sobre lo que aporta un extra', () => {
+    expect(resolverModulosEfectivos({
+      permisosApp: ['home'],
+      permisosExtra: [['facturas', 'pedidos']],
+      modulosRestringidos: ['facturas'],
+    })).toEqual(['home', 'pedidos'])
+  })
+
+  it('los módulos extra de la persona se suman igual', () => {
+    expect(resolverModulosEfectivos({
+      permisosApp: ['home'],
+      permisosExtra: [['pedidos']],
+      modulosExtra: ['stock'],
+    })).toEqual(['home', 'pedidos', 'stock'])
+  })
+})
+
+describe('unirVerCostosPuestos — true gana, después false, después null', () => {
+  it('true si cualquiera de los puestos lo tiene en true', () => {
+    expect(unirVerCostosPuestos([false, true, null])).toBe(true)
+  })
+
+  it('false si ninguno es true y alguno es false', () => {
+    expect(unirVerCostosPuestos([null, false])).toBe(false)
+  })
+
+  it('null si ninguno lo decidió', () => {
+    expect(unirVerCostosPuestos([null, undefined])).toBeNull()
+    expect(unirVerCostosPuestos([])).toBeNull()
+  })
+})
+
+describe('resolverPermisosDePuestos', () => {
+  it('sin puestos: todo null', () => {
+    expect(resolverPermisosDePuestos({ principal: null, extras: [] }))
+      .toEqual({ modulosEfectivos: null, verCostosPuesto: null })
+  })
+
+  it('cocinero (no ve costos) + compras (sí ve) → ve pedidos y costos', () => {
+    const r = resolverPermisosDePuestos({
+      principal: { permisos_app: ['home', 'operaciones'], ver_costos: false },
+      extras: [{ permisos_app: ['pedidos', 'proveedores', 'facturas'], ver_costos: true }],
+    })
+    expect(r.modulosEfectivos).toEqual(['home', 'operaciones', 'pedidos', 'proveedores', 'facturas'])
+    expect(r.verCostosPuesto).toBe(true)
+  })
+
+  it('un extra que no existe (id colgado) no rompe nada', () => {
+    const r = resolverPermisosDePuestos({
+      principal: { permisos_app: ['home'], ver_costos: null },
+      extras: [null, undefined],
+    })
+    expect(r).toEqual({ modulosEfectivos: ['home'], verCostosPuesto: null })
+  })
+
+  it('ver_costos del principal vale aunque no tenga permisos_app', () => {
+    const r = resolverPermisosDePuestos({ principal: { permisos_app: [], ver_costos: true }, extras: [] })
+    expect(r).toEqual({ modulosEfectivos: null, verCostosPuesto: true })
+  })
+
+  it('restringidos y módulos extra de la persona se aplican sobre la unión', () => {
+    const r = resolverPermisosDePuestos({
+      principal: { permisos_app: ['home'], ver_costos: null },
+      extras: [{ permisos_app: ['facturas', 'pedidos'], ver_costos: null }],
+      modulosRestringidos: ['facturas'],
+      modulosExtra: ['stock'],
+    })
+    expect(r.modulosEfectivos).toEqual(['home', 'pedidos', 'stock'])
   })
 })
 

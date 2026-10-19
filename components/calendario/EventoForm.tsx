@@ -415,7 +415,7 @@ function AvisarSelector({ valor, onChange, equipo, puestos, yoId }: {
   puestos: { id: string; nombre: string }[]
   yoId: string | null
 }) {
-  const miembros = equipo.map(m => ({ auth_user_id: m.authUserId, nombre: m.nombre, puesto_id: m.puestoId }))
+  const miembros = equipo.map(m => ({ auth_user_id: m.authUserId, nombre: m.nombre, puesto_id: m.puestoId, puestos_extra: m.puestosExtra }))
   const n = valor ? destinatarios(valor, miembros, yoId).length : 0
   const ids = valor && valor.modo !== 'todos' ? valor.ids : []
   const toggle = (id: string) => {

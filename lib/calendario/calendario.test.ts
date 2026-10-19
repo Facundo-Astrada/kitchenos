@@ -127,6 +127,10 @@ describe('avisar al equipo', () => {
   it('por puesto', () => {
     expect(destinatarios({ modo: 'puestos', ids: ['p-cocina'] }, equipo, 'yo')).toEqual(['leon', 'zoe'])
   })
+  it('por puesto incluye a quien lo cubre además de su puesto principal', () => {
+    const conExtra = [...equipo, { auth_user_id: 'tefa', nombre: 'Tefa', puesto_id: 'p-salon', puestos_extra: ['p-cocina'] }]
+    expect(destinatarios({ modo: 'puestos', ids: ['p-cocina'] }, conExtra, 'yo')).toEqual(['leon', 'zoe', 'tefa'])
+  })
   it('personas, sin repetir y sin el autor aunque se elija', () => {
     expect(destinatarios({ modo: 'personas', ids: ['ana', 'ana', 'yo'] }, equipo, 'yo')).toEqual(['ana'])
   })

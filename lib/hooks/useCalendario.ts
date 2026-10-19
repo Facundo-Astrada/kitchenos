@@ -9,6 +9,7 @@ import { feriadosEnRango } from '@/lib/calendario/feriados'
 import { CAPA_POR_ID, type CapaId } from '@/lib/calendario/capas'
 import { TIPO_CONFIG, TODO_EL_DIA, type TipoEvento } from '@/lib/calendario/tipos'
 import type { DestinoAviso } from '@/lib/calendario/aviso-destino'
+import { puestosDeMiembro } from '@/lib/organigrama/ocupantes'
 
 // Re-export: la pantalla y el Dashboard los importan desde acá.
 export { TIPO_CONFIG, TODO_EL_DIA, type TipoEvento }
@@ -69,7 +70,7 @@ export interface ItemCalendario extends EventoCalendario {
   meta?: string
 }
 
-export interface MiembroEquipo { authUserId: string; nombre: string; puestoId: string | null }
+export interface MiembroEquipo { authUserId: string; nombre: string; puestoId: string | null; puestosExtra: string[] }
 
 export interface Proveedor {
   id: string
@@ -480,22 +481,22 @@ export function useCalendario({ verPagos = false }: { verPagos?: boolean } = {})
     if (!restIdRef.current) return
     const [{ data }, { data: ps }] = await Promise.all([
       supabase.from('equipo_miembros')
-        .select('auth_user_id, nombre, apellido, puesto_id, activo')
+        .select('auth_user_id, nombre, apellido, puesto_id, puestos_extra, activo')
         .eq('restaurante_id', restIdRef.current)
         .not('auth_user_id', 'is', null),
       supabase.from('puestos').select('id, nombre').eq('restaurante_id', restIdRef.current).order('nombre'),
     ])
     const map: Record<string, string> = {}
     const lista: MiembroEquipo[] = []
-    for (const m of (data ?? []) as { auth_user_id: string; nombre: string | null; apellido: string | null; puesto_id: string | null; activo: boolean | null }[]) {
+    for (const m of (data ?? []) as { auth_user_id: string; nombre: string | null; apellido: string | null; puesto_id: string | null; puestos_extra: string[] | null; activo: boolean | null }[]) {
       const n = [m.nombre, m.apellido].filter(Boolean).join(' ').trim()
       if (n) map[m.auth_user_id] = n
-      if (m.activo !== false) lista.push({ authUserId: m.auth_user_id, nombre: n || 'Sin nombre', puestoId: m.puesto_id })
+      if (m.activo !== false) lista.push({ authUserId: m.auth_user_id, nombre: n || 'Sin nombre', puestoId: m.puesto_id, puestosExtra: m.puestos_extra ?? [] })
     }
     setAutores(map)
     setEquipo(lista.sort((a, b) => a.nombre.localeCompare(b.nombre)))
     // Solo puestos con alguien con usuario: avisar a un puesto vacío no le llega a nadie.
-    const conGente = new Set(lista.map(m => m.puestoId).filter(Boolean))
+    const conGente = new Set(lista.flatMap(m => puestosDeMiembro({ puesto_id: m.puestoId, puestos_extra: m.puestosExtra })))
     setPuestos(((ps ?? []) as { id: string; nombre: string }[]).filter(p => conGente.has(p.id)))
   }, [supabase])
 

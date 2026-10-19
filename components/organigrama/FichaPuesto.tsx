@@ -26,6 +26,7 @@ import { usePuestoDescripcion } from '@/lib/hooks/usePuestoDescripcion'
 import { useCompetencias } from '@/lib/hooks/useCompetencias'
 import { useCartaDeLaCasa } from '@/lib/hooks/useCartaDeLaCasa'
 import { usePlazasCustom } from '@/lib/hooks/usePlazasCustom'
+import { ocupantesDePuesto } from '@/lib/organigrama/ocupantes'
 import type { Tanda } from './DescripcionPuestoWizard'
 import {
   MODULO_CONFIG, NIVEL_AUTONOMO, ESTADO_RIESGO_PLAZA,
@@ -282,7 +283,11 @@ export function FichaPuesto({
   const desc = descripcionDe(puesto.id)
   const mision = desc?.mision ?? null
 
-  const ocupantes = useMemo(() => miembros.filter(m => m.puesto_id === puesto.id), [miembros, puesto.id])
+  // Principales primero; los que lo cubren además de su puesto principal van después, marcados "(también)".
+  const { ocupantes, tambienIds } = useMemo(() => {
+    const { principales, tambien } = ocupantesDePuesto(puesto.id, miembros)
+    return { ocupantes: [...principales, ...tambien], tambienIds: new Set(tambien.map(m => m.id)) }
+  }, [miembros, puesto.id])
   const area = useMemo(() => areas.find(a => a.key === puesto.area_key), [areas, puesto.area_key])
   const padre = useMemo(() => puestos.find(p => p.id === puesto.reporta_a_puesto_id), [puestos, puesto.reporta_a_puesto_id])
   const nivelAccesoLabel = NIVELES_ACCESO.find(n => n.value === puesto.nivel)?.label ?? puesto.nivel
@@ -370,7 +375,7 @@ export function FichaPuesto({
         <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 4px' }}>
           <Avatar name={nombre} size={34} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{nombre}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{nombre}{tambienIds.has(m.id) ? ' (también)' : ''}</div>
             {propias.length === 0 ? (
               <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Sin niveles cargados</div>
             ) : (
@@ -404,7 +409,7 @@ export function FichaPuesto({
         <Avatar name={nombre} size={34} style={{ marginTop: 1 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{nombre}</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>{nombre}{tambienIds.has(m.id) ? ' (también)' : ''}</span>
             <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: cfg.color + '22', color: cfg.color }}>
               {cfg.label}
             </span>
@@ -546,7 +551,10 @@ export function FichaPuesto({
                   </div>
                 ))}
               </div>
-              <span>{ocupantes.length} {ocupantes.length === 1 ? 'persona en este puesto' : 'personas en este puesto'}</span>
+              <span>
+                {ocupantes.length} {ocupantes.length === 1 ? 'persona en este puesto' : 'personas en este puesto'}
+                {tambienIds.size > 0 ? ` (${tambienIds.size} también)` : ''}
+              </span>
             </div>
           ) : (
             <span style={{ fontSize: 12, color: 'rgba(255,255,255,.66)' }}>Vacante</span>

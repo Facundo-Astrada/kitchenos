@@ -17,6 +17,7 @@ import {
 import { PermisosPorRolPanel } from './PermisosPorRolPanel'
 import { DescripcionPuestoWizard, type Tanda } from './DescripcionPuestoWizard'
 import { FichaPuesto } from './FichaPuesto'
+import { puestosDeMiembro } from '@/lib/organigrama/ocupantes'
 
 // ══════════════════════════════════════════════════════════════
 // FORM — fuera del panel para identidad estable
@@ -277,7 +278,7 @@ export function PuestosEditorPanel({
 
   const miembroCountByPuesto: Record<string, number> = {}
   for (const mi of miembros) {
-    if (mi.puesto_id) miembroCountByPuesto[mi.puesto_id] = (miembroCountByPuesto[mi.puesto_id] ?? 0) + 1
+    for (const id of puestosDeMiembro(mi)) miembroCountByPuesto[id] = (miembroCountByPuesto[id] ?? 0) + 1
   }
 
   function openPuestoDetalle(p: Puesto) {
@@ -379,7 +380,8 @@ export function PuestosEditorPanel({
       )
     }
     const p = selectedPuesto
-    const miembrosDelPuesto = miembros.filter(m => m.puesto_id === p.id)
+    // Un puesto que alguien cubre como extra tampoco se puede borrar sin avisar.
+    const miembrosDelPuesto = miembros.filter(m => puestosDeMiembro(m).includes(p.id))
     return (
       <div style={{ padding: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Rol } from '@/types'
 import { COACH_TOOL_REGISTRY } from '@/lib/coach/tools/registry'
-import { puedeVerCostos, puedeVerModulo, resolverModulosEfectivos } from '@/lib/permisos/resolver'
+import { puedeVerCostos, puedeVerModulo, resolverPermisosDePuestos } from '@/lib/permisos/resolver'
 import { mapRol } from '@/lib/permisos/roles'
 
 // Replica server-side, sin cambiar semántica, la cascada de dos pasos que hoy es client-only:
@@ -51,7 +51,7 @@ export async function getPermisosServer(
   }
 
   const { data: miembro } = await supabase.from('equipo_miembros')
-    .select('puesto_id, plaza_asignada, modulos_extra, modulos_restringidos, ver_costos')
+    .select('puesto_id, puestos_extra, plaza_asignada, modulos_extra, modulos_restringidos, ver_costos')
     .eq('restaurante_id', restauranteId).eq('auth_user_id', userId).eq('activo', true)
     .maybeSingle()
 
@@ -65,14 +65,17 @@ export async function getPermisosServer(
   let modulosEfectivos: string[] | null = null
   let verCostosPuesto: boolean | null = null
   if (miembro?.puesto_id) {
-    const { data: puesto } = await supabase.from('puestos')
-      .select('permisos_app, ver_costos').eq('id', miembro.puesto_id).maybeSingle()
-    verCostosPuesto = (puesto?.ver_costos as boolean | null | undefined) ?? null
-    modulosEfectivos = resolverModulosEfectivos({
-      permisosApp: puesto?.permisos_app as string[] | null | undefined,
+    // Principal + puestos que también cubre (misma unión que usePermisos).
+    const extraIds = ((miembro.puestos_extra as string[] | null) ?? []).filter(id => id !== miembro.puesto_id)
+    const { data: puestosData } = await supabase.from('puestos')
+      .select('id, permisos_app, ver_costos').in('id', [miembro.puesto_id, ...extraIds])
+    const filas = (puestosData ?? []) as Array<{ id: string; permisos_app: string[] | null; ver_costos: boolean | null }>
+    ;({ modulosEfectivos, verCostosPuesto } = resolverPermisosDePuestos({
+      principal: filas.find(p => p.id === miembro.puesto_id),
+      extras: extraIds.map(id => filas.find(p => p.id === id)),
       modulosExtra: miembro.modulos_extra as string[] | null,
       modulosRestringidos: miembro.modulos_restringidos as string[] | null,
-    })
+    }))
   }
 
   let permisos: { modulos_visibles: string[]; puede_editar_stock: boolean; puede_editar_carta: boolean; puede_ver_costos: boolean } | null = null

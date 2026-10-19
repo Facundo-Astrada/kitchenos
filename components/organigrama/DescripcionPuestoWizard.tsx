@@ -17,6 +17,7 @@
 //   8 bloques temáticos del ejemplo real — el plan mismo (§ 5.2) describe
 //   esto como el punto de partida, no el resultado final.
 
+import { ocupantesDePuesto } from '@/lib/organigrama/ocupantes'
 import { useState, useCallback, useMemo } from 'react'
 import { Modal } from '@/components/ui'
 import { useAuth } from '@/lib/auth/context'
@@ -284,7 +285,13 @@ function WizardBody({ puesto, onClose, onToast, tandaInicial }: { puesto: Puesto
   )
   const areaDelPuesto = useMemo(() => areas.find(a => a.key === puesto.area_key), [areas, puesto.area_key])
   const padre = useMemo(() => puestos.find(p => p.id === puesto.reporta_a_puesto_id), [puestos, puesto.reporta_a_puesto_id])
-  const ocupantes = useMemo(() => miembros.filter(m => m.puesto_id === puesto.id), [miembros, puesto.id])
+  const ocupantes = useMemo(() => {
+    const { principales, tambien } = ocupantesDePuesto(puesto.id, miembros)
+    return [
+      ...principales.map(m => `${m.nombre} ${m.apellido}`),
+      ...tambien.map(m => `${m.nombre} ${m.apellido} (también)`),
+    ]
+  }, [miembros, puesto.id])
   const referentesNombres = useMemo(() => {
     if (!puesto.plaza_default) return []
     return referentesDePlaza(puesto.plaza_default)
@@ -383,7 +390,7 @@ function WizardBody({ puesto, onClose, onToast, tandaInicial }: { puesto: Puesto
             <Renglon label="Área" valor={areaDelPuesto?.nombre ?? 'Sin área asignada'} />
             <Renglon label="Reporta a" valor={padre?.nombre ?? 'Nadie — raíz del organigrama'} />
             <Renglon label="Plaza" valor={puesto.plaza_default ?? 'Rota entre plazas'} />
-            <Renglon label="Lo ocupan hoy" valor={ocupantes.length ? ocupantes.map(m => `${m.nombre} ${m.apellido}`).join(', ') : 'Vacante'} />
+            <Renglon label="Lo ocupan hoy" valor={ocupantes.length ? ocupantes.join(', ') : 'Vacante'} />
             <Renglon label="A quién le preguntan" valor={referentesNombres.length ? referentesNombres.join(', ') : 'Nadie es referente todavía (matriz de polivalencia)'} />
           </div>
           {modoRapido && (

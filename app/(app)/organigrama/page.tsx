@@ -29,6 +29,7 @@ import { ResponsablesPicker } from '@/components/organigrama/ResponsablesPicker'
 import { exportOrganigramaPDF } from '@/lib/exportPDF'
 import PolivalenciaPanel from '@/components/organigrama/PolivalenciaPanel'
 import { CartaDeLaCasaModal } from '@/components/organigrama/CartaDeLaCasaModal'
+import { ocupantesDePuesto, puestoEstaCubierto } from '@/lib/organigrama/ocupantes'
 
 type Tab = 'plantel' | 'puestos' | 'estructura' | 'cobertura' | 'polivalencia'
 const TAB_IDS: Tab[] = ['plantel', 'puestos', 'estructura', 'cobertura', 'polivalencia']
@@ -111,7 +112,7 @@ export default function OrganigramaPage() {
   // pueda señalarlo sin tener que recorrer toda la pantalla.
   useEffect(() => {
     const areasSinResponsable = areasActivas.filter(a => a.responsables.length === 0).map(a => a.nombre)
-    const puestosVacantes = puestos.filter(p => !miembros.some(m => m.puesto_id === p.id)).map(p => p.nombre)
+    const puestosVacantes = puestos.filter(p => !puestoEstaCubierto(p.id, miembros)).map(p => p.nombre)
     const capasCriticas: Capa[] = ['definir', 'preparar', 'controlar']
     const huecosCobertura = areasActivas.reduce(
       (acc, a) => acc + capasCriticas.filter(c => capaResponsables(a.key, c).length === 0).length,
@@ -645,7 +646,7 @@ function PuestoTreeRow({
   isAdmin: boolean
   onReasignarReportaA: (puestoId: string, reportaA: string | null) => void
 }) {
-  const ocupantes = miembros.filter(m => m.puesto_id === node.id)
+  const { principales, tambien } = ocupantesDePuesto(node.id, miembros)
   const excluidos = useMemo(() => new Set([node.id, ...idsDescendientes(node.id, todosPuestos)]), [node.id, todosPuestos])
 
   return (
@@ -657,7 +658,12 @@ function PuestoTreeRow({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>{node.nombre}</div>
           <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
-            {ocupantes.length === 0 ? 'Vacante' : ocupantes.map(o => `${o.nombre} ${o.apellido}`).join(', ')}
+            {principales.length + tambien.length === 0
+              ? 'Vacante'
+              : [
+                  ...principales.map(o => `${o.nombre} ${o.apellido}`),
+                  ...tambien.map(o => `${o.nombre} ${o.apellido} (también)`),
+                ].join(', ')}
           </div>
         </div>
         {isAdmin && (

@@ -204,6 +204,7 @@ import {
 } from '@/lib/hooks/useEquipo'
 import { MODULO_CONFIG, NIVEL_REFERENTE, type ModuloId } from '@/lib/constants'
 import { createClient } from '@/lib/supabase/client'
+import { ocupantesDePuesto } from '@/lib/organigrama/ocupantes'
 
 function nivelLabelPDF(nivel: string): string {
   return NIVELES_ACCESO.find(n => n.value === nivel)?.label ?? nivel
@@ -426,7 +427,11 @@ export async function exportOrganigramaPDF(areas: AreaEstado[], puestos: Puesto[
     }
 
     const printNode = (node: PuestoNode, depth: number) => {
-      const ocupantes = miembros.filter(m => m.puesto_id === node.id).map(m => `${m.nombre} ${m.apellido}`)
+      const { principales, tambien } = ocupantesDePuesto(node.id, miembros)
+      const ocupantes = [
+        ...principales.map(m => `${m.nombre} ${m.apellido}`),
+        ...tambien.map(m => `${m.nombre} ${m.apellido} (también)`),
+      ]
       const ocupantesTxt = ocupantes.length ? ocupantes.join(', ') : 'Vacante'
       const bullet = depth === 0 ? '•' : '–'
       const line = `${'   '.repeat(depth)}${bullet} ${node.nombre} — ${ocupantesTxt}`
@@ -519,8 +524,12 @@ export async function exportOrganigramaPDF(areas: AreaEstado[], puestos: Puesto[
     doc.text(padre ? padre.nombre : 'Nadie — raíz del organigrama', margin, y)
     y += 10
 
-    const ocupantesMiembros = miembros.filter(m => m.puesto_id === puesto.id)
-    const ocupantes = ocupantesMiembros.map(m => `${m.nombre} ${m.apellido}`)
+    // `ocupantesMiembros` (uniforme) queda con los principales: la ropa es del trabajo de base.
+    const { principales: ocupantesMiembros, tambien } = ocupantesDePuesto(puesto.id, miembros)
+    const ocupantes = [
+      ...ocupantesMiembros.map(m => `${m.nombre} ${m.apellido}`),
+      ...tambien.map(m => `${m.nombre} ${m.apellido} (también)`),
+    ]
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(9)
     doc.setTextColor(...accent)

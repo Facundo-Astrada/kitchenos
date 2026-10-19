@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
 import { AREA_CATALOGO, areaCatalogoItem, type AreaKey, type Capa } from '@/lib/constants'
 import { getObjetivosEfectivos, type ObjetivosVenta } from '@/lib/reportes/ventasPorPersona'
+import { resolverModulosEfectivos } from '@/lib/permisos/resolver'
 
 export type { ObjetivosVenta }
 
@@ -25,6 +26,8 @@ export interface Miembro {
   apellido: string
   rol: string
   puesto_id: string | null
+  /** Puestos que además del principal cubre (`equipo_miembros.puestos_extra`): suman permisos y avisos, no definen la carta ni el costo. */
+  puestos_extra: string[]
   plaza_asignada: string | null
   telefono: string | null
   email: string | null
@@ -417,6 +420,7 @@ async function fetchMiembrosData(key: string): Promise<Miembro[]> {
   if (error) throw error
   return (data ?? []).map(m => ({
     ...m,
+    puestos_extra: m.puestos_extra ?? [],
     modulos_extra: m.modulos_extra ?? [],
     modulos_restringidos: m.modulos_restringidos ?? [],
     ver_costos: m.ver_costos ?? null,
@@ -436,6 +440,7 @@ async function fetchMiembrosInactivosData(key: string): Promise<Miembro[]> {
   if (error) throw error
   return (data ?? []).map(m => ({
     ...m,
+    puestos_extra: m.puestos_extra ?? [],
     modulos_extra: m.modulos_extra ?? [],
     modulos_restringidos: m.modulos_restringidos ?? [],
     ver_costos: m.ver_costos ?? null,
@@ -631,12 +636,13 @@ export function useEquipo() {
   const fetchMiembros = useCallback(async () => { await mutateMiembros() }, [mutateMiembros])
 
   async function crearMiembro(
-    datos: Omit<Miembro, 'id' | 'restaurante_id' | 'created_at' | 'activo' | 'modulos_extra' | 'modulos_restringidos' | 'ver_costos' | 'objetivos'>
+    datos: Omit<Miembro, 'id' | 'restaurante_id' | 'created_at' | 'activo' | 'puestos_extra' | 'modulos_extra' | 'modulos_restringidos' | 'ver_costos' | 'objetivos'> & { puestos_extra?: string[] }
   ): Promise<string> {
     try {
       const { data, error } = await supabase.from('equipo_miembros').insert({
         ...datos,
         activo: true,
+        puestos_extra: datos.puestos_extra ?? [],
         modulos_extra: [],
         modulos_restringidos: [],
         objetivos: {},
@@ -744,6 +750,8 @@ export function useEquipo() {
         .eq('id', id)
       if (error) throw error
       mutatePuestos(prev => (prev ?? []).filter(p => p.id !== id), { revalidate: false })
+      // El trigger de la base saca el puesto de `puestos_extra` de los miembros.
+      mutateMiembros(prev => (prev ?? []).map(m => m.puestos_extra.includes(id) ? { ...m, puestos_extra: m.puestos_extra.filter(x => x !== id) } : m), { revalidate: false })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al eliminar puesto'
       console.error('[useEquipo] eliminarPuesto Error:', msg)
@@ -753,10 +761,18 @@ export function useEquipo() {
 
   // Calcula los módulos efectivos de un miembro combinando puesto + overrides
   function getModulosMiembro(miembro: Miembro): string[] {
-    const puesto = puestos.find(p => p.id === miembro.puesto_id)
-    const base = puesto?.permisos_app ?? []
-    const conExtras = [...new Set([...base, ...miembro.modulos_extra])]
-    return conExtras.filter(m => !miembro.modulos_restringidos.includes(m))
+    const principal = puestos.find(p => p.id === miembro.puesto_id)
+    const extras = (miembro.puestos_extra ?? [])
+      .filter(id => id !== miembro.puesto_id)
+      .map(id => puestos.find(p => p.id === id)?.permisos_app)
+    const resuelto = resolverModulosEfectivos({
+      permisosApp: principal?.permisos_app,
+      permisosExtra: extras,
+      modulosExtra: miembro.modulos_extra,
+      modulosRestringidos: miembro.modulos_restringidos,
+    })
+    // Sin permisos en ningún puesto, la ficha muestra igual los módulos sueltos de la persona.
+    return resuelto ?? miembro.modulos_extra.filter(m => !miembro.modulos_restringidos.includes(m))
   }
 
   // Objetivos de venta efectivos de un miembro: los del puesto, pisados clave

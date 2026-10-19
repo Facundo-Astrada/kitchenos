@@ -12,6 +12,7 @@ import { ganadorClaro } from '@/lib/coach/busqueda'
 import { TIPO_CONFIG, TODO_EL_DIA, TIPOS_CARGABLES, type TipoEvento } from '@/lib/calendario/tipos'
 import { avisarEvento } from '@/lib/calendario/avisar'
 import type { DestinoAviso } from '@/lib/calendario/aviso-destino'
+import { puestosDeMiembro } from '@/lib/organigrama/ocupantes'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 const fmtARS = (n: number) => '$' + Math.round(n).toLocaleString('es-AR')
@@ -146,17 +147,17 @@ async function resolverAvisarA(supabase: SupabaseClient, restauranteId: string, 
   if (!t) return { destino: null, etiqueta: '', sinMatch: [] }
   if (/^(todos|todo el equipo|el equipo|equipo|todo el mundo)$/.test(t)) return { destino: { modo: 'todos' }, etiqueta: 'todo el equipo', sinMatch: [] }
   const [{ data: miembros }, { data: puestos }] = await Promise.all([
-    supabase.from('equipo_miembros').select('auth_user_id, nombre, apellido, puesto_id').eq('restaurante_id', restauranteId).not('auth_user_id', 'is', null),
+    supabase.from('equipo_miembros').select('auth_user_id, nombre, apellido, puesto_id, puestos_extra').eq('restaurante_id', restauranteId).not('auth_user_id', 'is', null),
     supabase.from('puestos').select('id, nombre').eq('restaurante_id', restauranteId),
   ])
-  const ms = (miembros ?? []) as { auth_user_id: string; nombre: string | null; apellido: string | null; puesto_id: string | null }[]
+  const ms = (miembros ?? []) as { auth_user_id: string; nombre: string | null; apellido: string | null; puesto_id: string | null; puestos_extra: string[] | null }[]
   const ps = (puestos ?? []) as { id: string; nombre: string }[]
   const ids = new Set<string>(); const nombres: string[] = []; const sinMatch: string[] = []
   for (const termino of t.split(/,| y | e |\//).map(x => x.trim()).filter(Boolean)) {
     const pMatch = ps.filter(p => { const n = normalizar(p.nombre); return n.includes(termino) || termino.includes(n) })
     const mMatch = ms.filter(m => normalizar([m.nombre, m.apellido].filter(Boolean).join(' ')).split(' ').includes(termino) || normalizar(m.nombre ?? '') === termino)
     if (pMatch.length === 0 && mMatch.length === 0) { sinMatch.push(termino); continue }
-    for (const p of pMatch) { nombres.push(p.nombre); for (const m of ms) if (m.puesto_id === p.id) ids.add(m.auth_user_id) }
+    for (const p of pMatch) { nombres.push(p.nombre); for (const m of ms) if (puestosDeMiembro(m).includes(p.id)) ids.add(m.auth_user_id) }
     for (const m of mMatch) { nombres.push(m.nombre ?? termino); ids.add(m.auth_user_id) }
   }
   return {

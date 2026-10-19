@@ -58,7 +58,7 @@ describe('usePermisos', () => {
       data: { puesto_id: 'puesto-1', modulos_extra: [], modulos_restringidos: [], ver_costos: null },
       error: null,
     })
-    mock.setResponse('puestos', { data: { permisos_app: ['stock', 'recetario'], ver_costos: true }, error: null })
+    mock.setResponse('puestos', { data: [{ id: 'puesto-1', permisos_app: ['stock', 'recetario'], ver_costos: true }], error: null })
 
     const { result } = renderHook(() => usePermisos(), { wrapper })
     await waitFor(() => expect(result.current.loading).toBe(false))
@@ -67,6 +67,32 @@ describe('usePermisos', () => {
     expect(result.current.puedeVer('stock')).toBe(true)
     expect(result.current.puedeVer('operaciones')).toBe(false) // está en rol_permisos pero NO en el puesto — el puesto manda
     expect(result.current.verCostos).toBe(true) // puestos.ver_costos, no puede_ver_costos del rol (que es false)
+  })
+
+// León en Bros: cocinero (no ve costos) que además hace las compras.
+  it('con puestos extra: une los módulos y ver_costos sale de cualquiera de los puestos', async () => {
+    mockPerfil = { rol: 'parrilla' }
+    mock.setResponse('rol_permisos', { data: [ROL_PERMISO_COCINERO], error: null })
+    mock.setResponse('equipo_miembros', {
+      data: { puesto_id: 'puesto-1', puestos_extra: ['puesto-2', 'puesto-fantasma'], modulos_extra: [], modulos_restringidos: ['merma'], ver_costos: null },
+      error: null,
+    })
+    mock.setResponse('puestos', {
+      data: [
+        { id: 'puesto-1', permisos_app: ['home', 'operaciones'], ver_costos: false },
+        { id: 'puesto-2', permisos_app: ['pedidos', 'proveedores', 'facturas', 'merma'], ver_costos: true },
+      ],
+      error: null,
+    })
+
+    const { result } = renderHook(() => usePermisos(), { wrapper })
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    expect(result.current.puedeVer('operaciones')).toBe(true)
+    expect(result.current.puedeVer('pedidos')).toBe(true)
+    expect(result.current.puedeVer('facturas')).toBe(true)
+    expect(result.current.puedeVer('merma')).toBe(false) // modulos_restringidos le gana a todo
+    expect(result.current.verCostos).toBe(true)
   })
 
   it('sin puesto asignado: cae al fallback de rol_permisos.modulos_visibles', async () => {

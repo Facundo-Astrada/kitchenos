@@ -10,6 +10,8 @@
 import { useState } from 'react'
 import PhotoPicker from '@/components/ui/PhotoPicker'
 import { MODULO_CONFIG } from '@/lib/constants'
+import { puestosDeMiembro } from '@/lib/organigrama/ocupantes'
+import { unirVerCostosPuestos } from '@/lib/permisos/resolver'
 import type { Miembro, Puesto } from '@/lib/hooks/useEquipo'
 import {
   PLAZAS_OPS, MODULOS_ASIGNABLES, PRENDAS_UNIFORME, getInitials, nivelLabel, nivelColor,
@@ -141,6 +143,8 @@ function MiembroFormPuesto({
                   return {
                     ...f,
                     puesto_id: deselecting ? '' : p.id,
+                    // El principal no puede estar también en "también cubre"; sin principal no hay extras.
+                    puestos_extra: deselecting ? [] : f.puestos_extra.filter(id => id !== p.id),
                     // Al seleccionar: mantener plazas existentes o usar default del puesto
                     // Al deseleccionar: limpiar plazas
                     plaza_asignada: deselecting ? '' : (f.plaza_asignada || p.plaza_default || ''),
@@ -174,6 +178,43 @@ function MiembroFormPuesto({
           </div>
         )}
       </div>
+
+      {/* Puestos que también cubre — suman permisos y avisos, no definen la carta ni el costo */}
+      {puestos.length > 1 && (
+        <div>
+          <label style={labelStyle}>Puestos que también cubre</label>
+          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 8px' }}>
+            {miembroForm.puesto_id
+              ? 'Trabajos que además hace: suman sus módulos y sus avisos. El puesto de arriba sigue siendo el principal.'
+              : 'Elegí primero el puesto principal.'}
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, opacity: miembroForm.puesto_id ? 1 : 0.5 }}>
+            {puestos.filter(p => p.id !== miembroForm.puesto_id).map(p => {
+              const activo = miembroForm.puestos_extra.includes(p.id)
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  disabled={!miembroForm.puesto_id}
+                  onClick={() => setMiembroForm(f => ({
+                    ...f,
+                    puestos_extra: activo ? f.puestos_extra.filter(id => id !== p.id) : [...f.puestos_extra, p.id],
+                  }))}
+                  style={{
+                    padding: '8px 14px', borderRadius: 10, cursor: miembroForm.puesto_id ? 'pointer' : 'default',
+                    background: activo ? 'var(--navy)' : 'var(--bg)',
+                    color: activo ? '#fff' : 'var(--text-2)',
+                    fontSize: 13, fontWeight: 600,
+                    border: `1px solid ${activo ? 'var(--navy)' : 'var(--border)'}`,
+                  }}
+                >
+                  {p.nombre}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Vista previa de módulos del puesto */}
       {puestoSelected && (
@@ -254,7 +295,7 @@ export interface FichaMiembroPanelProps {
   /** Abre directo en "Personalizar" — reemplaza el deep-link viejo a /turnos */
   initialOverrideMode?: boolean
   getModulosMiembro: (m: Miembro) => string[]
-  crearMiembro: (datos: Omit<Miembro, 'id' | 'restaurante_id' | 'created_at' | 'activo' | 'modulos_extra' | 'modulos_restringidos' | 'ver_costos' | 'objetivos'>) => Promise<unknown>
+  crearMiembro: (datos: Omit<Miembro, 'id' | 'restaurante_id' | 'created_at' | 'activo' | 'puestos_extra' | 'modulos_extra' | 'modulos_restringidos' | 'ver_costos' | 'objetivos'> & { puestos_extra?: string[] }) => Promise<unknown>
   actualizarMiembro: (id: string, datos: Partial<Omit<Miembro, 'id' | 'restaurante_id' | 'created_at'>>) => Promise<unknown>
   actualizarOverridesMiembro: (id: string, modulosExtra: string[], modulosRestringidos: string[], verCostos: boolean | null) => Promise<unknown>
   desactivarMiembro: (id: string) => Promise<unknown>
@@ -294,6 +335,7 @@ export function FichaMiembroPanel({
     setMiembroForm({
       nombre: miembro.nombre, apellido: miembro.apellido,
       rol: miembro.rol ?? '', puesto_id: miembro.puesto_id ?? '',
+      puestos_extra: miembro.puestos_extra ?? [],
       plaza_asignada: miembro.plaza_asignada ?? '',
       telefono: miembro.telefono ?? '', email: miembro.email ?? '',
       fecha_ingreso: miembro.fecha_ingreso ?? '',
@@ -315,6 +357,7 @@ export function FichaMiembroPanel({
         nombre: miembroForm.nombre, apellido: miembroForm.apellido,
         rol: miembroForm.rol || undefined,
         puesto_id: miembroForm.puesto_id || null,
+        puestos_extra: miembroForm.puesto_id ? miembroForm.puestos_extra.filter(id => id !== miembroForm.puesto_id) : [],
         plaza_asignada: plaza,
         telefono: miembroForm.telefono || null,
         email: miembroForm.email || null,
@@ -348,10 +391,14 @@ export function FichaMiembroPanel({
     } catch (e: unknown) { alert(e instanceof Error ? e.message : 'Error al reactivar') }
   }
 
+  // Módulos que aportan el puesto principal y los que también cubre.
+  function modulosDeSusPuestos(mi: Miembro): string[] {
+    return puestosDeMiembro(mi).flatMap(id => puestos.find(p => p.id === id)?.permisos_app ?? [])
+  }
+
   function toggleExtra(modulo: string) {
     if (!miembro) return
-    const puesto = puestos.find(p => p.id === miembro.puesto_id)
-    const baseModulos = puesto?.permisos_app ?? []
+    const baseModulos = modulosDeSusPuestos(miembro)
     if (baseModulos.includes(modulo)) {
       setLocalRestringidos(prev =>
         prev.includes(modulo) ? prev.filter(x => x !== modulo) : [...prev, modulo]
@@ -365,8 +412,7 @@ export function FichaMiembroPanel({
 
   function moduloState(modulo: string): 'puesto' | 'extra' | 'restringido' | 'off' {
     if (!miembro) return 'off'
-    const puesto = puestos.find(p => p.id === miembro.puesto_id)
-    const enPuesto = (puesto?.permisos_app ?? []).includes(modulo)
+    const enPuesto = modulosDeSusPuestos(miembro).includes(modulo)
     if (localRestringidos.includes(modulo)) return 'restringido'
     if (enPuesto) return 'puesto'
     if (localExtra.includes(modulo)) return 'extra'
@@ -398,6 +444,7 @@ export function FichaMiembroPanel({
         nombre: miembroForm.nombre.trim(), apellido: miembroForm.apellido.trim(),
         rol: nivel,
         puesto_id: miembroForm.puesto_id || null,
+        puestos_extra: miembroForm.puesto_id ? miembroForm.puestos_extra.filter(id => id !== miembroForm.puesto_id) : [],
         plaza_asignada: plaza, telefono: miembroForm.telefono || null,
         email: miembroForm.email || null,
         fecha_ingreso: miembroForm.fecha_ingreso || null, foto_url: miembroForm.foto_url,
@@ -462,6 +509,8 @@ export function FichaMiembroPanel({
   const m = miembro
   const puesto = puestos.find(p => p.id === m.puesto_id)
   const modulos = getModulosMiembro(m)
+  const nombresExtra = (m.puestos_extra ?? []).filter(id => id !== m.puesto_id)
+    .map(id => puestos.find(p => p.id === id)?.nombre).filter((n): n is string => !!n)
 
   // ── EDITAR DATOS ──
   if (editingMiembro) {
@@ -512,6 +561,11 @@ export function FichaMiembroPanel({
         {puesto && (
           <span style={{ fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 20, background: nivelColor(puesto.nivel) + '22', color: nivelColor(puesto.nivel) }}>
             {puesto.nombre}
+          </span>
+        )}
+        {nombresExtra.length > 0 && (
+          <span style={{ fontSize: 12, color: 'var(--text-2)' }}>
+            También: {nombresExtra.join(' · ')}
           </span>
         )}
       </div>
@@ -611,8 +665,7 @@ export function FichaMiembroPanel({
             {/* Override de costos: cicla hereda -> si -> no. Aparte de la
                 grilla de modulos porque no es una pantalla, es la plata. */}
             {(() => {
-              const puestoDe = puestos.find(pu => pu.id === m.puesto_id)
-              const heredado = puestoDe?.ver_costos ?? false
+              const heredado = unirVerCostosPuestos(puestosDeMiembro(m).map(id => puestos.find(pu => pu.id === id)?.ver_costos)) ?? false
               const efectivo = localVerCostos ?? heredado
               const etiqueta = localVerCostos === null
                 ? `Hereda del puesto (${heredado ? 've costos' : 'no ve'})`

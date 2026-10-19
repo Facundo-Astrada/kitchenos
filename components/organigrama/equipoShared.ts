@@ -94,13 +94,15 @@ export function uniformeRecordFromForm(f: Record<string, string>): Record<string
 
 export interface MiembroForm {
   nombre: string; apellido: string; rol: string; puesto_id: string
+  /** Puestos que además del principal cubre (ids). */
+  puestos_extra: string[]
   plaza_asignada: string; telefono: string; email: string; fecha_ingreso: string
   costo_hora: string; foto_url: string | null
   observaciones: string
   uniforme: Record<string, string>
 }
 export const EMPTY_MIEMBRO_FORM: MiembroForm = {
-  nombre: '', apellido: '', rol: '', puesto_id: '',
+  nombre: '', apellido: '', rol: '', puesto_id: '', puestos_extra: [],
   plaza_asignada: '', telefono: '', email: '', fecha_ingreso: '',
   costo_hora: '', foto_url: null,
   observaciones: '', uniforme: uniformeFormFromRecord(null),

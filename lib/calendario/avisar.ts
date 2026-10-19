@@ -67,13 +67,13 @@ export async function avisarEvento(
     if (e.avisado_at) return { avisados: 0, push: 0, motivo: 'ya avisado' }
 
     const { data: miembros } = await sb.from('equipo_miembros')
-      .select('auth_user_id, nombre, apellido, puesto_id, activo')
+      .select('auth_user_id, nombre, apellido, puesto_id, puestos_extra, activo')
       .eq('restaurante_id', restauranteId)
       .not('auth_user_id', 'is', null)
-    type Fila = { auth_user_id: string; nombre: string | null; apellido: string | null; puesto_id: string | null; activo: boolean | null }
+    type Fila = { auth_user_id: string; nombre: string | null; apellido: string | null; puesto_id: string | null; puestos_extra: string[] | null; activo: boolean | null }
     const equipo: MiembroAviso[] = ((miembros ?? []) as Fila[])
       .filter(m => m.activo !== false)
-      .map(m => ({ auth_user_id: m.auth_user_id, nombre: [m.nombre, m.apellido].filter(Boolean).join(' '), puesto_id: m.puesto_id }))
+      .map(m => ({ auth_user_id: m.auth_user_id, nombre: [m.nombre, m.apellido].filter(Boolean).join(' '), puesto_id: m.puesto_id, puestos_extra: m.puestos_extra ?? [] }))
     const autor = equipo.find(m => m.auth_user_id === autorId)?.nombre || null
     const para = destinatarios(e.avisar, equipo, autorId)
 

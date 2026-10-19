@@ -43,7 +43,7 @@ interface OrganigramaWizardSheetProps {
   puestos: Puesto[]
   onSetAreaActiva: (key: AreaKey, activa: boolean) => Promise<void>
   onToggleAreaResponsable: (key: AreaKey, miembroId: string) => Promise<void>
-  onCrearMiembro: (datos: Omit<Miembro, 'id' | 'restaurante_id' | 'created_at' | 'activo' | 'modulos_extra' | 'modulos_restringidos' | 'ver_costos'>) => Promise<string>
+  onCrearMiembro: (datos: Omit<Miembro, 'id' | 'restaurante_id' | 'created_at' | 'activo' | 'puestos_extra' | 'modulos_extra' | 'modulos_restringidos' | 'ver_costos'>) => Promise<string>
   onActualizarMiembro: (id: string, datos: Partial<Omit<Miembro, 'id' | 'restaurante_id' | 'created_at'>>) => Promise<void>
   onCrearPuesto: (datos: Omit<Puesto, 'id' | 'restaurante_id' | 'created_at'>) => Promise<string>
 }

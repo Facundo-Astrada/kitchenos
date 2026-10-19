@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth/context'
 import { useRestauranteId } from './useRestauranteId'
 import { useRestauranteConfig } from './useRestauranteConfig'
 import { MODULOS_EMPRENDIMIENTO } from '@/lib/constants'
-import { puedeVerCostos, puedeVerModulo, resolverModulosEfectivos } from '@/lib/permisos/resolver'
+import { puedeVerCostos, puedeVerModulo, resolverPermisosDePuestos } from '@/lib/permisos/resolver'
 import type { RolPermiso } from '@/types'
 
 const SWR_OPTS = {
@@ -51,6 +51,7 @@ interface PermisosData {
 
 interface MiembroPuestoRow {
   puesto_id: string | null
+  puestos_extra: string[] | null
   modulos_extra: string[] | null
   modulos_restringidos: string[] | null
   ver_costos: boolean | null
@@ -75,7 +76,7 @@ async function fetchPermisosData(key: string): Promise<PermisosData> {
   const allPromise = supabase.from('rol_permisos').select('*').eq('restaurante_id', restauranteId).order('rol')
   const miembroPromise = dbRol === 'admin'
     ? null
-    : supabase.from('equipo_miembros').select('puesto_id, modulos_extra, modulos_restringidos, ver_costos')
+    : supabase.from('equipo_miembros').select('puesto_id, puestos_extra, modulos_extra, modulos_restringidos, ver_costos')
         .eq('restaurante_id', restauranteId).eq('auth_user_id', userId).eq('activo', true).maybeSingle()
 
   const [allRes, miembroRes] = await Promise.all([allPromise, miembroPromise])
@@ -87,16 +88,18 @@ async function fetchPermisosData(key: string): Promise<PermisosData> {
   let verCostosPuesto: boolean | null = null
   const miembro = miembroRes?.data as MiembroPuestoRow | null | undefined
   if (miembro?.puesto_id) {
-    const { data: puesto } = await supabase.from('puestos').select('permisos_app, ver_costos').eq('id', miembro.puesto_id).maybeSingle()
-    modulosEfectivos = resolverModulosEfectivos({
-      permisosApp: puesto?.permisos_app as string[] | null | undefined,
+    // Principal + los que también cubre, en una sola query. Un id colgado (puesto
+    // borrado) simplemente no vuelve; el trigger de la base igual lo limpia.
+    const extraIds = (miembro.puestos_extra ?? []).filter(id => id !== miembro.puesto_id)
+    const { data: puestosData } = await supabase.from('puestos')
+      .select('id, permisos_app, ver_costos').in('id', [miembro.puesto_id, ...extraIds])
+    const filas = (puestosData ?? []) as Array<{ id: string; permisos_app: string[] | null; ver_costos: boolean | null }>
+    ;({ modulosEfectivos, verCostosPuesto } = resolverPermisosDePuestos({
+      principal: filas.find(p => p.id === miembro.puesto_id),
+      extras: extraIds.map(id => filas.find(p => p.id === id)),
       modulosExtra: miembro.modulos_extra,
       modulosRestringidos: miembro.modulos_restringidos,
-    })
-    // Independiente de modulosEfectivos a propósito: un puesto sin permisos_app
-    // cargados degrada al fallback por rol para los MÓDULOS, pero su ver_costos
-    // sigue siendo una decisión explícita del admin y vale igual.
-    verCostosPuesto = (puesto?.ver_costos as boolean | null | undefined) ?? null
+    }))
   }
 
   return {

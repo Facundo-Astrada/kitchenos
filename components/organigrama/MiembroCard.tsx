@@ -49,6 +49,9 @@ export function MiembroCard({ miembro, puestos, miembros, isAdmin = false, onEdi
   const reportaAPuesto = puesto?.reporta_a_puesto_id ? puestos.find(p => p.id === puesto.reporta_a_puesto_id) : undefined
   const reportaAMiembro = reportaAPuesto ? miembros.find(m => m.puesto_id === reportaAPuesto.id) : undefined
 
+  const nombresTambien = (miembro.puestos_extra ?? []).filter(id => id !== miembro.puesto_id)
+    .map(id => puestos.find(p => p.id === id)?.nombre).filter((n): n is string => !!n)
+
   const nivel = puesto?.nivel ?? 'cocinero'
   const nivelInfo = NIVELES_ACCESO.find(n => n.value === nivel)
   const gradiente = NIVEL_GRADIENTE[nivel] ?? NIVEL_GRADIENTE.cocinero
@@ -102,6 +105,18 @@ export function MiembroCard({ miembro, puestos, miembros, isAdmin = false, onEdi
       }}>
         {puesto?.nombre ?? 'Sin puesto asignado'}
       </div>
+      {nombresTambien.length > 0 && (
+        <div
+          title={nombresTambien.join(' · ')}
+          style={{
+            textAlign: 'center', fontSize: 10, color: 'rgba(255,255,255,.9)', fontWeight: 600, marginTop: 3,
+            background: 'rgba(0,0,0,.18)', borderRadius: 20, padding: '2px 8px',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}
+        >
+          También: {nombresTambien.join(' · ')}
+        </div>
+      )}
 
       <div style={{ height: 1, background: 'rgba(255,255,255,.22)', margin: '8px 0' }} />
 

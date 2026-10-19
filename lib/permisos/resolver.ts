@@ -39,15 +39,56 @@ export const MODULO_HOME = 'home'
  */
 export function resolverModulosEfectivos(opts: {
   permisosApp: string[] | null | undefined
+  /** `permisos_app` de los puestos que la persona también cubre (`puestos_extra`). Se unen al principal. */
+  permisosExtra?: ReadonlyArray<string[] | null | undefined>
   modulosExtra?: string[] | null
   modulosRestringidos?: string[] | null
 }): string[] | null {
-  const base = opts.permisosApp ?? []
-  if (base.length === 0) return null
+  const deLosPuestos = [opts.permisosApp ?? [], ...(opts.permisosExtra ?? []).map(p => p ?? [])].flat()
+  if (deLosPuestos.length === 0) return null
 
   const extra = opts.modulosExtra ?? []
   const restringidos = opts.modulosRestringidos ?? []
-  return [...new Set([...base, ...extra])].filter(m => !restringidos.includes(m))
+  return [...new Set([...deLosPuestos, ...extra])].filter(m => !restringidos.includes(m))
+}
+
+/**
+ * `ver_costos` de varios puestos: `true` si cualquiera lo tiene en true (cubrir un
+ * puesto es hacer su trabajo, y el que paga facturas necesita ver precios); si no,
+ * `false` si alguno lo tiene en false; si no, `null` (nadie lo decidió).
+ */
+export function unirVerCostosPuestos(valores: ReadonlyArray<boolean | null | undefined>): boolean | null {
+  if (valores.some(v => v === true)) return true
+  if (valores.some(v => v === false)) return false
+  return null
+}
+
+interface PuestoPermisos {
+  permisos_app?: string[] | null
+  ver_costos?: boolean | null
+}
+
+/**
+ * Módulos efectivos y `ver_costos` de un miembro con puesto principal + puestos
+ * extra. Una sola función para el hook (cliente), `getPermisosServer` (Coach) y
+ * `getModulosMiembro` (ficha), así no se vuelven a desincronizar.
+ */
+export function resolverPermisosDePuestos(opts: {
+  principal: PuestoPermisos | null | undefined
+  extras: ReadonlyArray<PuestoPermisos | null | undefined>
+  modulosExtra?: string[] | null
+  modulosRestringidos?: string[] | null
+}): { modulosEfectivos: string[] | null; verCostosPuesto: boolean | null } {
+  const modulosEfectivos = resolverModulosEfectivos({
+    permisosApp: opts.principal?.permisos_app,
+    permisosExtra: opts.extras.map(e => e?.permisos_app),
+    modulosExtra: opts.modulosExtra,
+    modulosRestringidos: opts.modulosRestringidos,
+  })
+  // Independiente de modulosEfectivos a propósito (ver usePermisos): un puesto sin
+  // permisos_app degrada al rol para los MÓDULOS, pero su ver_costos sigue valiendo.
+  const verCostosPuesto = unirVerCostosPuestos([opts.principal?.ver_costos, ...opts.extras.map(e => e?.ver_costos)])
+  return { modulosEfectivos, verCostosPuesto }
 }
 
 /** `true` si la lista habilita el módulo, contemplando el alias legacy de home. */
