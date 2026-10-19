@@ -47,5 +47,5 @@ export const COACH_HIGHLIGHT_IDS = [
   'organigrama-tabs', 'organigrama-plantel', 'organigrama-filtros',
   'organigrama-estructura', 'organigrama-cobertura',
   'organigrama-configurar', 'organigrama-exportar',
-  'organigrama-puestos', 'organigrama-polivalencia', 'organigrama-carta-casa',
+  'organigrama-quien-responde', 'organigrama-puestos', 'organigrama-polivalencia', 'organigrama-carta-casa',
 ] as const

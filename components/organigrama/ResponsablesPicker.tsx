@@ -15,12 +15,14 @@ interface ResponsablesPickerProps {
   miembros: Miembro[]
   selected: string[]
   onToggle: (miembroId: string) => void
+  /** Mueve a alguien al primer lugar: el titular es quien recibe los avisos. */
+  onHacerTitular?: (miembroId: string) => void
   isAdmin: boolean
   emptyLabel: string
   alert?: boolean
 }
 
-export function ResponsablesPicker({ miembros, selected, onToggle, isAdmin, emptyLabel, alert = false }: ResponsablesPickerProps) {
+export function ResponsablesPicker({ miembros, selected, onToggle, onHacerTitular, isAdmin, emptyLabel, alert = false }: ResponsablesPickerProps) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
@@ -83,7 +85,7 @@ export function ResponsablesPicker({ miembros, selected, onToggle, isAdmin, empt
         <div
           ref={panelRef}
           style={{
-            position: 'fixed', top: pos.top, left: pos.left, minWidth: pos.width, maxWidth: 260, maxHeight: 280,
+            position: 'fixed', top: pos.top, left: pos.left, minWidth: pos.width, maxWidth: 320, maxHeight: 280,
             overflowY: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12,
             boxShadow: '0 8px 24px rgba(0,0,0,.18)', zIndex: 2000, padding: 5,
           }}
@@ -93,12 +95,17 @@ export function ResponsablesPicker({ miembros, selected, onToggle, isAdmin, empt
           )}
           {miembros.map(m => {
             const active = selected.includes(m.id)
+            const lugar = selected.indexOf(m.id)
             return (
+              <div
+                key={m.id}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, borderRadius: 8, background: active ? 'rgba(67,97,160,.1)' : 'transparent' }}
+              >
               <button
-                key={m.id} type="button" onClick={() => onToggle(m.id)}
+                type="button" onClick={() => onToggle(m.id)}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '7px 8px', borderRadius: 8,
-                  border: 'none', background: active ? 'rgba(67,97,160,.1)' : 'transparent', cursor: 'pointer', textAlign: 'left',
+                  display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, padding: '7px 8px', borderRadius: 8,
+                  border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left',
                 }}
               >
                 <div style={{
@@ -109,8 +116,25 @@ export function ResponsablesPicker({ miembros, selected, onToggle, isAdmin, empt
                 }}>
                   {active && <span className="material-symbols-outlined" style={{ fontSize: 11, color: '#fff' }}>check</span>}
                 </div>
-                <span style={{ fontSize: 12.5, color: 'var(--text-1)' }}>{m.nombre} {m.apellido}</span>
+                <span style={{ fontSize: 12.5, color: 'var(--text-1)', flex: 1, minWidth: 0 }}>{m.nombre} {m.apellido}</span>
+                {active && (
+                  <span style={{
+                    fontSize: 9, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', padding: '2px 6px', borderRadius: 20,
+                    background: lugar === 0 ? 'var(--accent)' : 'rgba(100,116,139,.18)', color: lugar === 0 ? '#fff' : 'var(--text-2)',
+                  }}>
+                    {lugar === 0 ? 'Titular' : 'Suplente'}
+                  </span>
+                )}
               </button>
+              {active && lugar > 0 && onHacerTitular && (
+                <button
+                  type="button" onClick={() => onHacerTitular(m.id)} title="Pasar a titular"
+                  style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px', whiteSpace: 'nowrap' }}
+                >
+                  Hacer titular
+                </button>
+              )}
+              </div>
             )
           })}
         </div>,

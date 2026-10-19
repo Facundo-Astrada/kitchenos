@@ -30,9 +30,11 @@ import { exportOrganigramaPDF } from '@/lib/exportPDF'
 import PolivalenciaPanel from '@/components/organigrama/PolivalenciaPanel'
 import { CartaDeLaCasaModal } from '@/components/organigrama/CartaDeLaCasaModal'
 import { ocupantesDePuesto, puestoEstaCubierto } from '@/lib/organigrama/ocupantes'
+import { QuienRespondePanel } from '@/components/organigrama/QuienRespondePanel'
+import { armarTarjetas, mapaParaCoach } from '@/lib/organigrama/quienResponde'
 
-type Tab = 'plantel' | 'puestos' | 'estructura' | 'cobertura' | 'polivalencia'
-const TAB_IDS: Tab[] = ['plantel', 'puestos', 'estructura', 'cobertura', 'polivalencia']
+type Tab = 'quien' | 'plantel' | 'puestos' | 'estructura' | 'cobertura' | 'polivalencia'
+const TAB_IDS: Tab[] = ['quien', 'plantel', 'puestos', 'estructura', 'cobertura', 'polivalencia']
 function esTab(v: string | null): v is Tab {
   return v != null && (TAB_IDS as string[]).includes(v)
 }
@@ -41,11 +43,11 @@ export default function OrganigramaPage() {
   const {
     miembros, puestos, loading,
     areas, toggleAreaActiva, setAreaActiva, toggleAreaResponsable, actualizarPuesto,
-    capaResponsables, toggleCapaResponsable,
+    capaResponsables, toggleCapaResponsable, hacerTitularArea, hacerTitularCapa,
     crearMiembro, actualizarMiembro, actualizarOverridesMiembro, desactivarMiembro, getModulosMiembro,
     crearPuesto, eliminarPuesto,
   } = useEquipo()
-  const { isAdmin } = usePermisos()
+  const { isAdmin, loading: permisosLoading } = usePermisos()
   const { perfil } = useAuth()
   const puedeInvitarAca = perfil ? puedeInvitar(perfil.rol) : false
   const nivelesInvitables = useMemo(
@@ -53,7 +55,9 @@ export default function OrganigramaPage() {
     [perfil]
   )
 
-  const [tab, setTab] = useState<Tab>('plantel')
+  // "Quién responde" es la pestaña de consulta: abre por defecto para quien no administra.
+  const [tabElegida, setTab] = useState<Tab | null>(null)
+  const tab: Tab = tabElegida ?? (isAdmin ? 'plantel' : 'quien')
   const [areaFiltro, setAreaFiltro] = useState<string>('todas')
   const mostrarInactivos = areaFiltro === 'inactivos'
   const { inactivos, mutateInactivos } = useMiembrosInactivos(mostrarInactivos)
@@ -127,6 +131,8 @@ export default function OrganigramaPage() {
       areasSinResponsable: areasSinResponsable.slice(0, 5),
       puestosVacantes: puestosVacantes.slice(0, 5),
       huecosCobertura,
+      // Quién decide / lleva / revisa en cada área activa: para contestar "¿a quién le pregunto por X?".
+      quienResponde: mapaParaCoach(armarTarjetas({ areas: areasActivas, puestos, miembros, capaResponsables })),
     }))
     return () => localStorage.removeItem('kc_screen_context')
   }, [tab, miembros, puestos, areasActivas, capaResponsables])
@@ -183,6 +189,14 @@ export default function OrganigramaPage() {
     }
   }
 
+  async function hacerTitular(accion: () => Promise<void>) {
+    try {
+      await accion()
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : 'Error al cambiar el titular')
+    }
+  }
+
   async function cambiarResponsableCapa(areaKey: AreaKey, capa: Capa, miembroId: string) {
     try {
       await toggleCapaResponsable(areaKey, capa, miembroId)
@@ -191,7 +205,7 @@ export default function OrganigramaPage() {
     }
   }
 
-  if (loading) {
+  if (loading || permisosLoading) {
     return (
       <div style={{ minHeight: '100dvh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span className="material-symbols-outlined" style={{ fontSize: 28, color: 'var(--text-3)' }}>progress_activity</span>
@@ -253,6 +267,7 @@ export default function OrganigramaPage() {
           <div style={{ marginTop: 14 }} data-coach-target="organigrama-tabs">
             <SegmentedTabs
               tabs={[
+                { id: 'quien', label: 'Quién responde', icon: 'help_center' },
                 { id: 'plantel', label: 'Plantel', icon: 'grid_view' },
                 { id: 'puestos', label: 'Puestos', icon: 'badge' },
                 { id: 'estructura', label: 'Estructura', icon: 'account_tree' },
@@ -270,6 +285,14 @@ export default function OrganigramaPage() {
             </div>
           )}
         </div>
+
+        {/* ── Vista Quién responde (consulta) ── */}
+        {tab === 'quien' && (
+          <QuienRespondePanel
+            areas={areas} puestos={puestos} miembros={miembros}
+            isAdmin={isAdmin} capaResponsables={capaResponsables}
+          />
+        )}
 
         {/* ── Vista Plantel ── */}
         {tab === 'plantel' && (
@@ -376,6 +399,7 @@ export default function OrganigramaPage() {
                 isAdmin={isAdmin}
                 onToggleActiva={() => toggleAreaActiva(estado.key)}
                 onToggleResponsable={(id) => cambiarResponsable(estado.key, id)}
+                onHacerTitular={(id) => hacerTitular(() => hacerTitularArea(estado.key, id))}
                 onReasignarReportaA={reasignarReportaA}
               />
             ))}
@@ -436,6 +460,7 @@ export default function OrganigramaPage() {
                   isAdmin={isAdmin}
                   capaResponsables={capaResponsables}
                   onToggleCapaResponsable={cambiarResponsableCapa}
+                  onHacerTitularCapa={(areaKey, capa, id) => hacerTitular(() => hacerTitularCapa(areaKey, capa, id))}
                 />
               </>
             )}
@@ -521,7 +546,7 @@ export default function OrganigramaPage() {
 
 function AreaBlock({
   estado, puestosDelArea, todosPuestos, miembros, isAdmin,
-  onToggleActiva, onToggleResponsable, onReasignarReportaA,
+  onToggleActiva, onToggleResponsable, onHacerTitular, onReasignarReportaA,
 }: {
   estado: AreaEstado
   puestosDelArea: Puesto[]
@@ -530,6 +555,7 @@ function AreaBlock({
   isAdmin: boolean
   onToggleActiva: () => void
   onToggleResponsable: (id: string) => void
+  onHacerTitular: (id: string) => void
   onReasignarReportaA: (puestoId: string, reportaA: string | null) => void
 }) {
   const arbol = construirArbolPuestos(puestosDelArea)
@@ -584,6 +610,7 @@ function AreaBlock({
           isAdmin={isAdmin}
           selected={estado.responsables}
           onToggle={onToggleResponsable}
+          onHacerTitular={onHacerTitular}
           emptyLabel="Sin responsable"
           alert
         />

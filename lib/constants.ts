@@ -323,6 +323,8 @@ export interface AreaCatalogoItem {
   icon: string
   color: string
   explicacion: string
+  /** Palabras de la cocina para encontrar el área en "Quién responde" ("pagos" → Compras y almacén). */
+  ejemplos: string
   /**
    * Módulos que esta área **posee**: es la única que responde por ellos y la
    * única a la que se le avisa cuando algo falta (ver `responsableDeModulo()`).
@@ -351,6 +353,7 @@ export const AREA_CATALOGO: AreaCatalogoItem[] = [
   {
     key: 'direccion', nombre: 'Dirección', icon: 'explore', color: '#4361a0',
     explicacion: 'Toma de decisiones final, filosofía del negocio, finanzas y presupuesto.',
+    ejemplos: 'decisiones · precios · presupuesto · números del mes · socios',
     // `presupuesto` estaba huérfano (sep 2026): es el estándar declarado del
     // negocio, lo fija Dirección. `configuracion` y `reportes` son suyos aunque
     // Sistemas y Administración también los usen.
@@ -359,6 +362,7 @@ export const AREA_CATALOGO: AreaCatalogoItem[] = [
   {
     key: 'cocina', nombre: 'Cocina', icon: 'local_fire_department', color: '#ef4444',
     explicacion: 'Producción, mise en place, escandallos, plazas y pase — el corazón operativo.',
+    ejemplos: 'producción · mise en place · pase · plazas · heladera · fuegos',
     modulos: ['operaciones', 'tareas', 'produccion', 'pase', 'checklist', 'espacios', 'muro'], activaPorDefecto: true,
     // La ficha técnica la define I+D; la cocina la ejecuta todos los días.
     modulosUsa: ['recetario', 'carta'],
@@ -366,22 +370,26 @@ export const AREA_CATALOGO: AreaCatalogoItem[] = [
   {
     key: 'salon', nombre: 'Salón', icon: 'table_restaurant', color: '#8b5cf6',
     explicacion: 'Servicio, rangos, relación con el cliente, cierre de caja.',
+    ejemplos: 'mozos · mesas · servicio · caja · rangos · quejas del cliente',
     modulos: ['salon', 'kds'], activaPorDefecto: false,
     modulosUsa: ['clientes', 'reservas', 'carta'],
   },
   {
     key: 'compras_almacen', nombre: 'Compras y almacén', icon: 'local_shipping', color: '#f97316',
     explicacion: 'Proveedores, recepción, inventario — evita la fuga que puede quebrar el negocio.',
+    ejemplos: 'proveedores · pedidos · recepción · pagos · facturas · depósito',
     modulos: ['stock', 'pedidos', 'proveedores', 'facturas', 'merma'], activaPorDefecto: true,
   },
   {
     key: 'calidad_seguridad', nombre: 'Calidad y seguridad alimentaria', icon: 'health_and_safety', color: '#10b981',
     explicacion: 'BPM/HACCP, trazabilidad. Institución constitutiva: sin esto, no operás.',
+    ejemplos: 'temperaturas · limpieza · vencimientos · bromatología · trazabilidad',
     modulos: ['haccp', 'bitacora'], activaPorDefecto: true,
   },
   {
     key: 'administracion', nombre: 'Administración', icon: 'account_balance', color: '#0ea5e9',
     explicacion: 'Contabilidad, impuestos, nóminas, pólizas. En equipos chicos la cubre Dirección.',
+    ejemplos: 'contador · impuestos · sueldos · cuentas por pagar · cobranzas',
     // Ninguno propio a propósito: en un restaurante chico esta área no existe y
     // Dirección la cubre. Lee facturas y reportes, pero el aviso va a su dueño.
     modulos: [], activaPorDefecto: false,
@@ -390,11 +398,13 @@ export const AREA_CATALOGO: AreaCatalogoItem[] = [
   {
     key: 'comercial_reservas', nombre: 'Comercial y reservas', icon: 'calendar_month', color: '#ec4899',
     explicacion: 'Reservas, eventos, no-shows, cartera de clientes.',
+    ejemplos: 'reservas · eventos · cumpleaños · clientes · no-shows',
     modulos: ['calendario', 'clientes', 'reservas'], activaPorDefecto: false,
   },
   {
     key: 'rrhh', nombre: 'RRHH', icon: 'groups', color: '#1e3a6e',
     explicacion: 'Selección, capacitación, turnos y permisos de acceso por usuario.',
+    ejemplos: 'turnos · altas y bajas · capacitación · uniformes · permisos',
     // `organigrama` y `turnos` estaban huérfanos: son literalmente el trabajo de
     // esta área. `equipo` es el id de permiso real de /turnos (ver MODULO_CONFIG).
     modulos: ['equipo', 'organigrama', 'turnos'], activaPorDefecto: true,
@@ -402,11 +412,13 @@ export const AREA_CATALOGO: AreaCatalogoItem[] = [
   {
     key: 'id_producto', nombre: 'I+D · desarrollo de producto', icon: 'science', color: '#d97706',
     explicacion: 'Cambios de carta, platos nuevos — el juego de autoría, fuera del servicio.',
+    ejemplos: 'platos nuevos · cambios de carta · pruebas · fichas técnicas',
     modulos: ['recetario', 'carta'], activaPorDefecto: true,
   },
   {
     key: 'sistemas', nombre: 'Sistemas', icon: 'settings', color: '#64748b',
     explicacion: 'POS, mantenimiento de la app, gestión de datos.',
+    ejemplos: 'la app · POS · impresoras · internet · datos',
     // `configuracion` queda en Dirección: Sistemas está apagada por defecto y un
     // módulo cuyo dueño no existe en la mayoría de las cuentas no tiene a quién avisarle.
     modulos: ['coach'], activaPorDefecto: false,
@@ -415,11 +427,13 @@ export const AREA_CATALOGO: AreaCatalogoItem[] = [
   {
     key: 'marketing', nombre: 'Marketing y comunicación', icon: 'campaign', color: '#94a3b8',
     explicacion: 'Redes, prensa, publicidad. Existe como función aunque hoy no tenga módulo propio.',
+    ejemplos: 'redes · fotos · publicidad · prensa · promociones',
     modulos: [], activaPorDefecto: false,
   },
   {
     key: 'infraestructura', nombre: 'Infraestructura', icon: 'build', color: '#78716c',
     explicacion: 'Mantenimiento del local, maquinaria e instalaciones. Sin módulo propio todavía.',
+    ejemplos: 'mantenimiento · arreglos · técnicos · equipos rotos · instalaciones',
     modulos: [], activaPorDefecto: false,
   },
 ]

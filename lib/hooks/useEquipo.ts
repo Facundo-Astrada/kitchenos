@@ -7,6 +7,7 @@ import { useRestauranteId } from './useRestauranteId'
 import { AREA_CATALOGO, areaCatalogoItem, type AreaKey, type Capa } from '@/lib/constants'
 import { getObjetivosEfectivos, type ObjetivosVenta } from '@/lib/reportes/ventasPorPersona'
 import { resolverModulosEfectivos } from '@/lib/permisos/resolver'
+import { moverAlPrimerLugar } from '@/lib/organigrama/quienResponde'
 
 export type { ObjetivosVenta }
 
@@ -131,6 +132,8 @@ export interface AreaEstado {
   icon: string
   color: string
   explicacion: string
+  /** Palabras de cocina para encontrar el área en "Quién responde". */
+  ejemplos: string
   /** Módulos propios: esta área responde por ellos y recibe sus avisos. */
   modulos: string[]
   /** Módulos que usa sin poseer. Informativo — el aviso va al área dueña. */
@@ -544,6 +547,7 @@ export function useEquipo() {
       icon: cat.icon,
       color: cat.color,
       explicacion: cat.explicacion,
+      ejemplos: cat.ejemplos,
       modulos: cat.modulos,
       modulosUsa: cat.modulosUsa ?? [],
       activa: row?.activa ?? cat.activaPorDefecto,
@@ -595,6 +599,12 @@ export function useEquipo() {
     await upsertAreaEstado(area_key, { responsables: siguientes })
   }
 
+  // El primero de la lista es el titular (recibe los avisos, ver `responsableDeModulo`).
+  async function hacerTitularArea(area_key: AreaKey, miembroId: string) {
+    const actuales = areas.find(a => a.key === area_key)?.responsables ?? []
+    await upsertAreaEstado(area_key, { responsables: moverAlPrimerLugar(actuales, miembroId) })
+  }
+
   async function setAreaActiva(area_key: AreaKey, activa: boolean) {
     await upsertAreaEstado(area_key, { activa })
   }
@@ -629,6 +639,24 @@ export function useEquipo() {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al guardar el responsable'
       console.error('[useEquipo] toggleCapaResponsable Error:', msg)
+      throw new Error(msg)
+    }
+  }
+
+  async function hacerTitularCapa(area_key: AreaKey, capa: Capa, miembroId: string) {
+    const siguientes = moverAlPrimerLugar(capaResponsables(area_key, capa), miembroId)
+    try {
+      const { error } = await supabase.from('area_capas').upsert({
+        restaurante_id: RESTAURANTE_ID,
+        area_key,
+        capa,
+        responsables: siguientes,
+      }, { onConflict: 'restaurante_id,area_key,capa' })
+      if (error) throw error
+      await fetchAreaCapas()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Error al cambiar el titular'
+      console.error('[useEquipo] hacerTitularCapa Error:', msg)
       throw new Error(msg)
     }
   }
@@ -818,6 +846,8 @@ export function useEquipo() {
     toggleAreaResponsable,
     capaResponsables,
     toggleCapaResponsable,
+    hacerTitularArea,
+    hacerTitularCapa,
     /** Filas crudas de `area_capas` — las necesita `responsableDeModulo()` para
      *  resolver a quién avisarle por cada módulo (ver lib/organigrama/responsable.ts). */
     cobertura: areaCapasRaw,

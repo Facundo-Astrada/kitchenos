@@ -580,12 +580,18 @@ export const TOURS: Record<string, TourStep[]> = {
     {
       targetId: null,
       title: 'El organigrama de tu negocio',
-      description: 'Quién es quién, a qué área pertenece cada puesto y quién responde por cada etapa del día a día. Tocá Siguiente y te muestro las cinco pestañas.',
+      description: 'Quién es quién, a qué área pertenece cada puesto y quién responde por cada etapa del día a día. Tocá Siguiente y te muestro las seis pestañas.',
     },
     {
       targetId: 'organigrama-tabs',
-      title: 'Cinco pestañas',
-      description: 'Plantel muestra a la gente. Puestos es donde se arman los puestos y sus tareas. Estructura muestra las áreas del negocio y los puestos de cada una. Cobertura cruza esas áreas con las etapas del día a día para detectar huecos. Polivalencia muestra quién sabe cubrir cada plaza.',
+      title: 'Seis pestañas',
+      description: 'Quién responde es para consultar: a quién le preguntás por cada cosa. Plantel muestra a la gente. Puestos es donde se arman los puestos y sus tareas. Estructura muestra las áreas del negocio y los puestos de cada una. Cobertura cruza esas áreas con las etapas del día a día para detectar huecos. Polivalencia muestra quién sabe cubrir cada plaza.',
+    },
+    {
+      targetId: 'organigrama-quien-responde',
+      requireTab: 'quien',
+      title: 'Quién responde',
+      description: 'Buscá una palabra — pagos, heladera, reservas — y te muestra el área, quién decide cómo se hace, quién lo lleva día a día y quién revisa que salga bien. Si algo no tiene dueño, te dice a quién preguntarle.',
     },
     {
       targetId: 'organigrama-plantel',
