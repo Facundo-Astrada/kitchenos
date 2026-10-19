@@ -6,6 +6,7 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+- 19/10/2026 — Organigrama Fase 2: pestaña «Quién responde» (consulta, abre por defecto para no-admin), titular/suplente explícito con «Hacer titular», `ejemplos` en `AREA_CATALOGO`, mapa `quienResponde` para el Coach.
 - 19/10/2026 — Organigrama Fases 0 y 1 (`PLAN-ORGANIGRAMA-REUNION-2026-10.md`): tour al día, templates Compras/Mantenimiento, Pasteleria con área en Bros; `equipo_miembros.puestos_extra` con permisos unidos. Ratchet de `checklist/ClientView.tsx` alineado a 3227.
 
 ### 17/10/2026 — OPS: cierre mal guardado, header, pase
