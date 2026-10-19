@@ -135,8 +135,9 @@ las bajas en LatAm son involuntarias).
 ## 🟢 Bajo — Roadmap abierto
 
 ### Organigrama — varios puestos por persona + reunión de organización (plan 19/10)
-`PLAN-ORGANIGRAMA-REUNION-2026-10.md`, sin código todavía. Fases 0 (limpieza), 1
-(`puestos_extra` + permisos unidos), 2 (pestaña "Quién responde"), 3 (reunión + acta PDF).
+`PLAN-ORGANIGRAMA-REUNION-2026-10.md`. Fases 0 y 1 hechas (19/10). Quedan la 2 (pestaña
+"Quién responde" + titular explícito), la 3 (reunión + acta PDF) y la prueba real de la Fase 1
+en Bros (León con extras, en la reunión).
 - **Decisión 017 sin escribir** (excepción a la moratoria, antes de la Fase 3) en
   `~/Desktop/START UP KOS/00-decisiones/DECISIONES.md`.
 - **Decisión 014 en condición de reversión:** 0 descripciones vigentes en Bros desde el 02/10.

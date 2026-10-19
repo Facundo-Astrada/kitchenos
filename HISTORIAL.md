@@ -6,6 +6,8 @@ Este archivo guarda el detalle histórico/changelog que antes vivía en `ESTADO-
 
 ## Pendientes resueltos (histórico)
 
+- 19/10/2026 — Organigrama Fases 0 y 1 (`PLAN-ORGANIGRAMA-REUNION-2026-10.md`): tour al día, templates Compras/Mantenimiento, Pasteleria con área en Bros; `equipo_miembros.puestos_extra` con permisos unidos. Ratchet de `checklist/ClientView.tsx` alineado a 3227.
+
 ### 17/10/2026 — OPS: cierre mal guardado, header, pase
 - Causa de "recibo la plaza con el cierre mal": parrilla corrida un turno desde el 15/10 — a las 17:00 el reloj pasaba la plaza a Cena sin que hubiera entregado el almuerzo. `turnoVigente` retiene 2 h (`retenido`), con aviso y "Pasar a …" (`components/mise/AvisoRelevo.tsx`).
 - Bandeja de guardado con reintento (`lib/ops/guardadoMise.ts`), indicador "N sin subir", "Entregar plaza" espera el guardado; número del cierre se guarda al escribir; al volver a la app se recalcula turno y se relee. `syncMise` siempre escribe apertura.
