@@ -4,8 +4,9 @@
  * Una tarjeta por área activa, con las tres etapas que se le preguntan a alguien
  * (Definir → "Decide cómo se hace", Preparar → "Lo lleva día a día", Controlar →
  * "Revisa que salga bien") y los puestos del área con sus ocupantes. Ejecutar no
- * se muestra: es de todo el equipo. El primero de cada lista es el titular
- * (misma regla que `responsableDeModulo`); el resto son suplentes.
+ * se muestra: es de todo el equipo. Cada etapa tiene titulares (todos llevan lo
+ * mismo, sin jerarquía: dos jefes de cocina que comparten el turno) y suplentes
+ * (cubren si falta un titular; salen de Polivalencia y el admin confirma).
  *
  * Todo sale de datos que la pantalla ya carga: `areas`, `area_capas`, `puestos`
  * y `equipo_miembros`. Sin query nueva.
@@ -36,7 +37,7 @@ interface AreaLite {
 }
 
 export interface Etapa<M> {
-  titular: M | null
+  titulares: M[]
   suplentes: M[]
 }
 
@@ -46,9 +47,12 @@ export interface TarjetaQuienResponde<M extends MiembroLite, P extends PuestoLit
   puestos: { puesto: P; principales: M[]; tambien: M[] }[]
 }
 
-function etapaDe<M extends MiembroLite>(ids: string[], miembros: readonly M[]): Etapa<M> {
-  const personas = ids.map(id => miembros.find(m => m.id === id)).filter((m): m is M => !!m)
-  return { titular: personas[0] ?? null, suplentes: personas.slice(1) }
+function personas<M extends MiembroLite>(ids: string[], miembros: readonly M[]): M[] {
+  return ids.map(id => miembros.find(m => m.id === id)).filter((m): m is M => !!m)
+}
+
+function etapaDe<M extends MiembroLite>(titulares: string[], suplentes: string[], miembros: readonly M[]): Etapa<M> {
+  return { titulares: personas(titulares, miembros), suplentes: personas(suplentes, miembros) }
 }
 
 export function armarTarjetas<M extends MiembroLite, P extends PuestoLite, A extends AreaLite>(opts: {
@@ -56,14 +60,13 @@ export function armarTarjetas<M extends MiembroLite, P extends PuestoLite, A ext
   puestos: readonly P[]
   miembros: readonly M[]
   capaResponsables: (areaKey: string, capa: Capa) => string[]
+  capaSuplentes: (areaKey: string, capa: Capa) => string[]
 }): TarjetaQuienResponde<M, P, A>[] {
+  const etapa = (areaKey: string, e: EtapaConsulta) =>
+    etapaDe(opts.capaResponsables(areaKey, CAPA_DE_ETAPA[e]), opts.capaSuplentes(areaKey, CAPA_DE_ETAPA[e]), opts.miembros)
   return opts.areas.filter(a => a.activa).map(area => ({
     area,
-    etapas: {
-      decide: etapaDe(opts.capaResponsables(area.key, CAPA_DE_ETAPA.decide), opts.miembros),
-      lleva: etapaDe(opts.capaResponsables(area.key, CAPA_DE_ETAPA.lleva), opts.miembros),
-      revisa: etapaDe(opts.capaResponsables(area.key, CAPA_DE_ETAPA.revisa), opts.miembros),
-    },
+    etapas: { decide: etapa(area.key, 'decide'), lleva: etapa(area.key, 'lleva'), revisa: etapa(area.key, 'revisa') },
     puestos: opts.puestos.filter(p => p.area_key === area.key).map(puesto => ({
       puesto, ...ocupantesDePuesto(puesto.id, opts.miembros),
     })),
@@ -94,7 +97,7 @@ export function filtrarTarjetas<T extends TarjetaQuienResponde<MiembroLite, Pues
 }
 
 /**
- * A quién mandar a quien ve un hueco que no puede resolver: el titular de
+ * A quién mandar a quien ve un hueco que no puede resolver: el primer titular de
  * Dirección (quien decide), o el responsable del área si Dirección no cargó etapas.
  */
 export function titularDeDireccion<M extends MiembroLite>(opts: {
@@ -106,21 +109,16 @@ export function titularDeDireccion<M extends MiembroLite>(opts: {
   return opts.miembros.find(m => m.id === id) ?? null
 }
 
-/** La lista con `id` en el primer lugar (el titular), sin tocar el orden del resto. */
-export function moverAlPrimerLugar(ids: readonly string[], id: string): string[] {
-  if (!ids.includes(id)) return [...ids]
-  return [id, ...ids.filter(x => x !== id)]
-}
-
-/** Resumen para el Coach: quién decide / lleva / revisa en cada área activa, con nombre de pila y apellido. */
+/** Resumen para el Coach: quién decide / lleva / revisa en cada área activa (todos los titulares) y quién suplanta. */
 export function mapaParaCoach<M extends MiembroLite, P extends PuestoLite, A extends AreaLite>(
   tarjetas: readonly TarjetaQuienResponde<M, P, A>[],
-): { area: string; decide: string | null; lleva: string | null; revisa: string | null }[] {
-  const nombre = (e: Etapa<M>) => e.titular ? `${e.titular.nombre} ${e.titular.apellido}`.trim() : null
+): { area: string; decide: string[]; lleva: string[]; revisa: string[]; suplentes: string[] }[] {
+  const nombres = (ms: M[]) => ms.map(m => `${m.nombre} ${m.apellido}`.trim())
   return tarjetas.map(t => ({
     area: t.area.nombre,
-    decide: nombre(t.etapas.decide),
-    lleva: nombre(t.etapas.lleva),
-    revisa: nombre(t.etapas.revisa),
+    decide: nombres(t.etapas.decide.titulares),
+    lleva: nombres(t.etapas.lleva.titulares),
+    revisa: nombres(t.etapas.revisa.titulares),
+    suplentes: [...new Set(nombres([...t.etapas.decide.suplentes, ...t.etapas.lleva.suplentes, ...t.etapas.revisa.suplentes]))],
   }))
 }

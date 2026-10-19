@@ -17,7 +17,10 @@ interface CoberturaTableProps {
   isAdmin: boolean
   capaResponsables: (areaKey: string, capa: Capa) => string[]
   onToggleCapaResponsable: (areaKey: AreaKey, capa: Capa, miembroId: string) => void
-  onHacerTitularCapa?: (areaKey: AreaKey, capa: Capa, miembroId: string) => void
+  capaSuplentes: (areaKey: string, capa: Capa) => string[]
+  onToggleCapaSuplente: (areaKey: AreaKey, capa: Capa, miembroId: string) => void
+  /** Suplentes que Polivalencia sugiere para un área (autónomos en sus plazas). */
+  sugeridosDelArea: (areaKey: string, titulares: string[], suplentes: string[]) => string[]
 }
 
 const th: React.CSSProperties = {
@@ -29,7 +32,7 @@ const td: React.CSSProperties = {
   padding: '8px 12px', borderBottom: '1px solid var(--border)', fontSize: 12.5, verticalAlign: 'middle',
 }
 
-export function CoberturaTable({ areas, miembros, isAdmin, capaResponsables, onToggleCapaResponsable, onHacerTitularCapa }: CoberturaTableProps) {
+export function CoberturaTable({ areas, miembros, isAdmin, capaResponsables, onToggleCapaResponsable, capaSuplentes, onToggleCapaSuplente, sugeridosDelArea }: CoberturaTableProps) {
   return (
     <div data-coach-target="organigrama-cobertura" style={{ overflowX: 'auto', borderRadius: 14, border: '1px solid var(--border)' }}>
       <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 580, background: 'var(--surface)' }}>
@@ -57,7 +60,9 @@ export function CoberturaTable({ areas, miembros, isAdmin, capaResponsables, onT
                     isAdmin={isAdmin}
                     selected={capaResponsables(area.key, c.key)}
                     onToggle={id => onToggleCapaResponsable(area.key, c.key, id)}
-                    onHacerTitular={onHacerTitularCapa ? id => onHacerTitularCapa(area.key, c.key, id) : undefined}
+                    suplentes={capaSuplentes(area.key, c.key)}
+                    onToggleSuplente={id => onToggleCapaSuplente(area.key, c.key, id)}
+                    sugeridos={sugeridosDelArea(area.key, capaResponsables(area.key, c.key), capaSuplentes(area.key, c.key))}
                     emptyLabel={c.key === 'ejecutar' ? 'Todo el equipo' : 'Sin responsable'}
                     alert={c.key !== 'ejecutar'}
                   />

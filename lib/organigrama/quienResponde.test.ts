@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  armarTarjetas, filtrarTarjetas, titularDeDireccion, moverAlPrimerLugar, mapaParaCoach, normalizarBusqueda,
+  armarTarjetas, filtrarTarjetas, titularDeDireccion, mapaParaCoach, normalizarBusqueda,
 } from './quienResponde'
 import type { Capa } from '@/lib/constants'
 
@@ -37,32 +37,37 @@ const capas: Record<string, string[]> = {
 }
 const capaResponsables = (a: string, c: Capa) => capas[`${a}:${c}`] ?? []
 
-const tarjetas = armarTarjetas({ areas, puestos, miembros, capaResponsables })
+const suplentes: Record<string, string[]> = { 'compras_almacen:preparar': ['franco'] }
+const capaSuplentes = (a: string, c: Capa) => suplentes[`${a}:${c}`] ?? []
+
+const tarjetas = armarTarjetas({ areas, puestos, miembros, capaResponsables, capaSuplentes })
 
 describe('armarTarjetas', () => {
   it('una tarjeta por área activa, las inactivas no aparecen', () => {
     expect(tarjetas.map(t => t.area.key)).toEqual(['direccion', 'compras_almacen', 'cocina'])
   })
 
-  it('titular = el primero de la lista; el resto son suplentes', () => {
+  it('varios titulares llevan lo mismo; los suplentes son una lista aparte', () => {
     const compras = tarjetas.find(t => t.area.key === 'compras_almacen')!
-    expect(compras.etapas.lleva.titular?.id).toBe('leon')
-    expect(compras.etapas.lleva.suplentes.map(s => s.id)).toEqual(['zoe'])
-    expect(compras.etapas.decide.titular?.id).toBe('franco')
+    expect(compras.etapas.lleva.titulares.map(s => s.id)).toEqual(['leon', 'zoe'])
+    expect(compras.etapas.lleva.suplentes.map(s => s.id)).toEqual(['franco'])
+    expect(compras.etapas.decide.titulares.map(s => s.id)).toEqual(['franco'])
     expect(compras.etapas.revisa.suplentes).toEqual([])
   })
 
-  it('una etapa sin nadie queda con titular null', () => {
+  it('una etapa sin nadie queda sin titulares', () => {
     const cocina = tarjetas.find(t => t.area.key === 'cocina')!
-    expect(cocina.etapas.decide.titular).toBeNull()
+    expect(cocina.etapas.decide.titulares).toEqual([])
   })
 
   it('un id de miembro que ya no existe (desactivado) se ignora', () => {
     const t = armarTarjetas({
       areas, puestos, miembros,
       capaResponsables: (a, c) => (a === 'cocina' && c === 'definir' ? ['fantasma', 'zoe'] : []),
+      capaSuplentes: () => ['otro-fantasma'],
     }).find(x => x.area.key === 'cocina')!
-    expect(t.etapas.decide.titular?.id).toBe('zoe')
+    expect(t.etapas.decide.titulares.map(x => x.id)).toEqual(['zoe'])
+    expect(t.etapas.decide.suplentes).toEqual([])
   })
 
   it('los puestos del área traen principales y "también"', () => {
@@ -110,22 +115,10 @@ describe('titularDeDireccion', () => {
   })
 })
 
-describe('moverAlPrimerLugar', () => {
-  it('pone al elegido primero y mantiene el orden del resto', () => {
-    expect(moverAlPrimerLugar(['a', 'b', 'c'], 'c')).toEqual(['c', 'a', 'b'])
-  })
-  it('si ya es el primero, no cambia nada', () => {
-    expect(moverAlPrimerLugar(['a', 'b'], 'a')).toEqual(['a', 'b'])
-  })
-  it('un id que no está no se agrega', () => {
-    expect(moverAlPrimerLugar(['a', 'b'], 'z')).toEqual(['a', 'b'])
-  })
-})
-
 describe('mapaParaCoach', () => {
-  it('area + quién decide / lleva / revisa', () => {
+  it('area + todos los que deciden / llevan / revisan, y los suplentes', () => {
     const compras = mapaParaCoach(tarjetas).find(x => x.area === 'Compras y almacén')
-    expect(compras).toEqual({ area: 'Compras y almacén', decide: 'Franco', lleva: 'León', revisa: 'León' })
+    expect(compras).toEqual({ area: 'Compras y almacén', decide: ['Franco'], lleva: ['León', 'Zoe'], revisa: ['León'], suplentes: ['Franco'] })
   })
 })
 

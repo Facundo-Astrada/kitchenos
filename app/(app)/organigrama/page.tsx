@@ -8,7 +8,7 @@
 // quién responde por ella.
 
 import PageTransition from '@/components/PageTransition'
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import {
   useEquipo, useMiembrosInactivos, construirArbolPuestos, idsDescendientes,
   type Miembro, type Puesto, type PuestoNode, type AreaEstado,
@@ -30,6 +30,8 @@ import { exportOrganigramaPDF } from '@/lib/exportPDF'
 import PolivalenciaPanel from '@/components/organigrama/PolivalenciaPanel'
 import { CartaDeLaCasaModal } from '@/components/organigrama/CartaDeLaCasaModal'
 import { ocupantesDePuesto, puestoEstaCubierto } from '@/lib/organigrama/ocupantes'
+import { sugeridosParaArea } from '@/lib/organigrama/suplentes'
+import { useCompetencias } from '@/lib/hooks/useCompetencias'
 import { QuienRespondePanel } from '@/components/organigrama/QuienRespondePanel'
 import { armarTarjetas, mapaParaCoach } from '@/lib/organigrama/quienResponde'
 
@@ -43,7 +45,7 @@ export default function OrganigramaPage() {
   const {
     miembros, puestos, loading,
     areas, toggleAreaActiva, setAreaActiva, toggleAreaResponsable, actualizarPuesto,
-    capaResponsables, toggleCapaResponsable, hacerTitularArea, hacerTitularCapa,
+    capaResponsables, toggleCapaResponsable, capaSuplentes, toggleCapaSuplente,
     crearMiembro, actualizarMiembro, actualizarOverridesMiembro, desactivarMiembro, getModulosMiembro,
     crearPuesto, eliminarPuesto,
   } = useEquipo()
@@ -132,10 +134,10 @@ export default function OrganigramaPage() {
       puestosVacantes: puestosVacantes.slice(0, 5),
       huecosCobertura,
       // Quién decide / lleva / revisa en cada área activa: para contestar "¿a quién le pregunto por X?".
-      quienResponde: mapaParaCoach(armarTarjetas({ areas: areasActivas, puestos, miembros, capaResponsables })),
+      quienResponde: mapaParaCoach(armarTarjetas({ areas: areasActivas, puestos, miembros, capaResponsables, capaSuplentes })),
     }))
     return () => localStorage.removeItem('kc_screen_context')
-  }, [tab, miembros, puestos, areasActivas, capaResponsables])
+  }, [tab, miembros, puestos, areasActivas, capaResponsables, capaSuplentes])
 
   // El tour del Coach cambia de tab solo cuando un paso lo necesita.
   useEffect(() => {
@@ -189,13 +191,19 @@ export default function OrganigramaPage() {
     }
   }
 
-  async function hacerTitular(accion: () => Promise<void>) {
+  async function cambiarSuplenteCapa(areaKey: AreaKey, capa: Capa, miembroId: string) {
     try {
-      await accion()
+      await toggleCapaSuplente(areaKey, capa, miembroId)
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Error al cambiar el titular')
+      alert(e instanceof Error ? e.message : 'Error al asignar suplente')
     }
   }
+
+  // Polivalencia ya mide quién puede cubrir una plaza solo: acá se usa para sugerir suplentes.
+  const { plazasQueCubre } = useCompetencias()
+  const sugeridosDelArea = useCallback((areaKey: string, titulares: string[], suplentes: string[]) => sugeridosParaArea({
+    areaKey, puestos, miembros, plazasQueCubre, excluir: [...titulares, ...suplentes],
+  }), [puestos, miembros, plazasQueCubre])
 
   async function cambiarResponsableCapa(areaKey: AreaKey, capa: Capa, miembroId: string) {
     try {
@@ -290,7 +298,7 @@ export default function OrganigramaPage() {
         {tab === 'quien' && (
           <QuienRespondePanel
             areas={areas} puestos={puestos} miembros={miembros}
-            isAdmin={isAdmin} capaResponsables={capaResponsables}
+            isAdmin={isAdmin} capaResponsables={capaResponsables} capaSuplentes={capaSuplentes}
           />
         )}
 
@@ -399,7 +407,6 @@ export default function OrganigramaPage() {
                 isAdmin={isAdmin}
                 onToggleActiva={() => toggleAreaActiva(estado.key)}
                 onToggleResponsable={(id) => cambiarResponsable(estado.key, id)}
-                onHacerTitular={(id) => hacerTitular(() => hacerTitularArea(estado.key, id))}
                 onReasignarReportaA={reasignarReportaA}
               />
             ))}
@@ -460,7 +467,9 @@ export default function OrganigramaPage() {
                   isAdmin={isAdmin}
                   capaResponsables={capaResponsables}
                   onToggleCapaResponsable={cambiarResponsableCapa}
-                  onHacerTitularCapa={(areaKey, capa, id) => hacerTitular(() => hacerTitularCapa(areaKey, capa, id))}
+                  capaSuplentes={capaSuplentes}
+                  onToggleCapaSuplente={cambiarSuplenteCapa}
+                  sugeridosDelArea={sugeridosDelArea}
                 />
               </>
             )}
@@ -546,7 +555,7 @@ export default function OrganigramaPage() {
 
 function AreaBlock({
   estado, puestosDelArea, todosPuestos, miembros, isAdmin,
-  onToggleActiva, onToggleResponsable, onHacerTitular, onReasignarReportaA,
+  onToggleActiva, onToggleResponsable, onReasignarReportaA,
 }: {
   estado: AreaEstado
   puestosDelArea: Puesto[]
@@ -555,7 +564,6 @@ function AreaBlock({
   isAdmin: boolean
   onToggleActiva: () => void
   onToggleResponsable: (id: string) => void
-  onHacerTitular: (id: string) => void
   onReasignarReportaA: (puestoId: string, reportaA: string | null) => void
 }) {
   const arbol = construirArbolPuestos(puestosDelArea)
@@ -610,7 +618,6 @@ function AreaBlock({
           isAdmin={isAdmin}
           selected={estado.responsables}
           onToggle={onToggleResponsable}
-          onHacerTitular={onHacerTitular}
           emptyLabel="Sin responsable"
           alert
         />

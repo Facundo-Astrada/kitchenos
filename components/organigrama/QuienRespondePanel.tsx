@@ -22,16 +22,17 @@ interface QuienRespondePanelProps {
   miembros: Miembro[]
   isAdmin: boolean
   capaResponsables: (areaKey: string, capa: Capa) => string[]
+  capaSuplentes: (areaKey: string, capa: Capa) => string[]
 }
 
 const nombreDe = (m: Miembro) => `${m.nombre} ${m.apellido}`.trim()
 
-export function QuienRespondePanel({ areas, puestos, miembros, isAdmin, capaResponsables }: QuienRespondePanelProps) {
+export function QuienRespondePanel({ areas, puestos, miembros, isAdmin, capaResponsables, capaSuplentes }: QuienRespondePanelProps) {
   const [busqueda, setBusqueda] = useState('')
 
   const tarjetas = useMemo(
-    () => armarTarjetas({ areas, puestos, miembros, capaResponsables }),
-    [areas, puestos, miembros, capaResponsables],
+    () => armarTarjetas({ areas, puestos, miembros, capaResponsables, capaSuplentes }),
+    [areas, puestos, miembros, capaResponsables, capaSuplentes],
   )
   const visibles = useMemo(() => filtrarTarjetas(tarjetas, busqueda), [tarjetas, busqueda])
   const direccion = useMemo(() => titularDeDireccion({
@@ -40,12 +41,14 @@ export function QuienRespondePanel({ areas, puestos, miembros, isAdmin, capaResp
   }), [miembros, capaResponsables, areas])
 
   function valorDeEtapa(etapa: Etapa<Miembro>) {
-    if (etapa.titular) {
+    if (etapa.titulares.length > 0) {
       return (
         <span style={{ fontSize: 13, color: 'var(--text-1)' }}>
-          <strong style={{ fontWeight: 700 }}>{nombreDe(etapa.titular)}</strong>
+          <strong style={{ fontWeight: 700 }}>{etapa.titulares.map(nombreDe).join(' y ')}</strong>
           {etapa.suplentes.length > 0 && (
-            <span style={{ color: 'var(--text-3)', fontSize: 11.5 }}> · suplente: {etapa.suplentes.map(nombreDe).join(', ')}</span>
+            <span style={{ display: 'block', color: 'var(--text-3)', fontSize: 11.5, marginTop: 1 }}>
+              Suplen: {etapa.suplentes.map(nombreDe).join(', ')}
+            </span>
           )}
         </span>
       )

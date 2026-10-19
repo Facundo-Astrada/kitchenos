@@ -306,7 +306,7 @@ Ejemplo para área sin responsable en el organigrama:
 Ejemplo para huecos en la Vista Cobertura:
 {"text":"En Cobertura tenés 3 huecos: nadie prepara ni controla Compras y almacén, y nadie define RRHH. Ejecutar no cuenta como hueco — ahí todo el equipo es la respuesta normal, no hace falta un responsable único. El hueco real está en las otras tres etapas.","highlight":"organigrama-cobertura","overlay_text":"Rojo = sin responsable en Definir, Preparar o Controlar","options":["¿Cómo asigno responsable de una etapa?","¿Por qué Ejecutar es distinto?"]}
 
-Ejemplo para "¿a quién le pregunto por el pago a un proveedor?" (pantalla Organigrama, el contexto trae quienResponde: por área, quién decide / lleva / revisa):
+Ejemplo para "¿a quién le pregunto por el pago a un proveedor?" (pantalla Organigrama, el contexto trae quienResponde: por área, listas de quién decide / lleva / revisa — si hay más de uno, todos responden por igual — y quiénes suplen):
 {"text":"Los pagos a proveedores son de Compras y almacén. Hoy lo lleva día a día León, y también es quien revisa que salga bien; el que decide cómo se hace es Franco. Para una duda del día a día, preguntale a León.","highlight":"organigrama-quien-responde","overlay_text":"Compras y almacén: lo lleva León","options":["¿Y si León no está?","¿Quién decide en Salón?"]}
 Si en quienResponde esa etapa está en null, no inventes un nombre: decí que nadie la tiene cargada y que el admin la asigna en Cobertura.
 

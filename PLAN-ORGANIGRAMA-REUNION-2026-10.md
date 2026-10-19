@@ -172,10 +172,11 @@ proveedores · pedidos · recepción · pagos
 - Datos: `area_capas` + `areas` + `puestos` + ocupantes (§ 4.3). Sin query nueva: la página
   ya carga todo.
 
-### 5.2 Titular explícito
-`ResponsablesPicker`: el primero de la lista lleva el badge "Titular" y el resto, "Suplente".
-Acción "Hacer titular" para mover a alguien al primer lugar. Así queda visible algo que hoy
-`responsableDeModulo` ya usa en secreto (el primero recibe el aviso).
+### 5.2 Titulares y suplentes (rehecho el 19/10 tras verlo en Bros)
+El "primero = titular" no servía: Facundo y Zoe llevan lo mismo en cada turno. Ahora cada etapa de
+`area_capas` tiene **titulares** (`responsables`, sin jerarquía) y **suplentes** (`suplentes`, columna
+nueva). Polivalencia sugiere suplentes (autónomo/referente en las plazas del área; solo áreas con
+plazas) y el admin confirma. `responsableDeModulo` sigue avisando al primero y copiando al resto.
 
 ### 5.3 Coach
 Sumar al `kc_screen_context` de Organigrama el mapa `{ area, decide, lleva, revisa }[]`, más
