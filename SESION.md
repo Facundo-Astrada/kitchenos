@@ -1,15 +1,17 @@
-# Sesión — 19/10/2026 (Organigrama, diseño)
+# Sesión — 19/10/2026 (Organigrama, Fases 0 y 1)
 
 ## Qué se cerró
-- Auditoría de Organigrama con datos reales de Bros: 16/24 casillas rojas en Cobertura, Salón sin responsable, León mal ubicado, el tour del Coach desactualizado, 0 descripciones de puesto.
-- Decisión de modelo: **puesto principal + puestos que también cubre** (multitasking = varios trabajos con tareas escritas, no solo varias decisiones).
-- Plan escrito: `PLAN-ORGANIGRAMA-REUNION-2026-10.md` (Fases 0-3). Sin código.
+- Fase 0: tour del Coach (5 pestañas, Puestos, Polivalencia, Carta de la casa), texto "Equipo → Puestos", templates Compras (+2 tareas) y Mantenimiento; Bros: Pasteleria → área cocina.
+- Fase 1: `equipo_miembros.puestos_extra` + trigger de limpieza (verificado bajo RLS), permisos y `ver_costos` unidos, `lib/organigrama/ocupantes.ts`, y todos los lugares de la tabla § 4.3 (ficha, carta, árbol, PDF, avisos, Coach, Perfil).
+- Ratchet de ClientView alineado a 3227 (estaba roto en HEAD).
+- 793 tests y build en verde; pusheado (72a01a5, 44d6bca).
 
 ## Qué quedó a medias
-- Decisiones de negocio: 017 (moratoria, antes de la Fase 3) y qué hacer con la 014 (en condición de reversión). Agustín y Tefa sin cargar, a pedido.
+- Nada de Bros tocado salvo Pasteleria: León sigue en "Dueño / Dirección" (se cambia en la reunión).
+- Decisión 017 sin escribir; 014 en condición de reversión. Agustín y Tefa sin cargar.
 
 ## Probar primero mañana
-- Nada en producción cambió hoy.
+- En Bros, ficha de León → "Puestos que también cubre" (Compras, Mantenimiento): ¿entra a Pedidos/Proveedores/Facturas sin override? ¿Se ven los dos chips en su carta? (Cambiarle el principal le saca módulos de Dirección: hacerlo con Facundo.)
 
 ## Próximo paso concreto
-- Sesión nueva con Sonnet: "Leé PLAN-ORGANIGRAMA-REUNION-2026-10.md, hacemos Fase 0 y 1" (el prompt completo está en el chat del 19/10).
+- Fase 2: pestaña "Quién responde" + titular explícito en `ResponsablesPicker` + mapa en `kc_screen_context` (§ 5 del plan).
