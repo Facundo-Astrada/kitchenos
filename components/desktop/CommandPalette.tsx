@@ -44,7 +44,7 @@ export default function CommandPalette() {
   const { perfil } = useAuth()
   const { puedeVer, isAdmin, moduloEnPerfil, loading: loadingPermisos } = usePermisos()
   const { agregarTarea } = useTareas({ soloEscritura: true })
-  const { registrarMerma } = useMerma()
+  const { registrarMerma } = useMerma({ soloEscritura: true })
 
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')

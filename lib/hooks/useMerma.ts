@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useMemo } from 'react'
-import useSWR from 'swr'
+import useSWR, { useSWRConfig } from 'swr'
 import { createClient } from '@/lib/supabase/client'
 import { useRestauranteId } from './useRestauranteId'
 import { useAuth } from '@/lib/auth/context'
@@ -20,12 +20,21 @@ async function fetchMermaData(key: string): Promise<Merma[]> {
   return data ?? []
 }
 
-export function useMerma() {
+/**
+ * @param opts.soloEscritura — no descarga la lista; deja solo registrar/eliminar.
+ * Para el botón del Coach y la paleta de comandos, que viven montados en TODAS
+ * las pantallas y solo necesitan registrar: sin esto cada pantalla bajaba el
+ * historial entero de merma del restaurante. Mismo patrón que useTareas.
+ */
+export function useMerma(opts?: { soloEscritura?: boolean }) {
   const RESTAURANTE_ID = useRestauranteId()
   const { perfil } = useAuth()
   const supabase = useMemo(() => createClient(), [])
 
-  const swrKey = RESTAURANTE_ID ? `merma-${RESTAURANTE_ID}` : null
+  const swrKey = RESTAURANTE_ID && !opts?.soloEscritura ? `merma-${RESTAURANTE_ID}` : null
+  // Con soloEscritura el `mutate` local no apunta a ninguna key: se invalida
+  // por la key real para que la pantalla de Merma (si está abierta) se entere.
+  const { mutate: mutateGlobal } = useSWRConfig()
 
   const { data: registros = [], isLoading: loading, error: swrError, mutate } = useSWR(
     swrKey,
@@ -107,13 +116,14 @@ export function useMerma() {
           if (updErr) throw updErr
         }
       }
-      await mutate()
+      if (swrKey) await mutate()
+      else mutateGlobal(`merma-${RESTAURANTE_ID}`)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al registrar merma'
       console.error('[useMerma] registrarMerma Error:', msg)
       throw new Error(msg)
     }
-  }, [RESTAURANTE_ID, supabase, perfil, mutate])
+  }, [RESTAURANTE_ID, supabase, perfil, mutate, mutateGlobal, swrKey])
 
   const eliminarMerma = useCallback(async (id: string) => {
     try {

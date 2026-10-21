@@ -3,6 +3,12 @@ import { createClient } from '@/lib/supabase/server'
 import { SWRFallback } from '@/components/SWRFallback'
 import DashboardClientView from './DashboardClientView'
 
+// Fecha UTC de hace N días. Con 3 días de margen cubre el "ayer" de la jornada
+// operativa aunque UTC ya haya pasado al día siguiente (Argentina, de noche).
+function haceDiasISO(dias: number): string {
+  return new Date(Date.now() - dias * 86_400_000).toISOString().slice(0, 10)
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient()
   // getClaims() en vez de getUser(): verificación local del JWT (JWT signing
@@ -42,22 +48,21 @@ export default async function DashboardPage() {
     redirect('/onboarding')
   }
 
+  // Lo que viaja acá se incrusta entero en el HTML. Antes iban TODAS las tareas
+  // del restaurante (2.174 en Bros, sin filtro de fecha) y el catálogo completo
+  // de productos: la página pesaba 1,7 MB y el celular tardaba varios segundos
+  // solo en leerla, antes de mostrar nada. El Dashboard usa las tareas de hoy y
+  // el arrastre de ayer, así que alcanza con los últimos días; la lista completa
+  // (y el stock) la trae igual el cliente al montar.
+  const desde = haceDiasISO(3)
+
   try {
-    const [stockRes, tareasRes, secRes, itemRes, rutRes] = await Promise.all([
-      supabase.from('productos').select('*').eq('restaurante_id', rid).eq('activo', true).order('categoria').order('nombre'),
-      supabase.from('tareas').select('*').eq('restaurante_id', rid).order('created_at', { ascending: false }),
+    const [tareasRes, secRes, itemRes, rutRes] = await Promise.all([
+      supabase.from('tareas').select('*').eq('restaurante_id', rid).gte('turno_fecha', desde).order('created_at', { ascending: false }),
       supabase.from('checklist_secciones').select('*').eq('restaurante_id', rid).order('orden', { ascending: true }),
       supabase.from('checklist_items').select('*').eq('restaurante_id', rid).order('orden', { ascending: true }),
       supabase.from('checklist_rutina').select('*').eq('restaurante_id', rid).order('orden', { ascending: true }),
     ])
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const productos = (stockRes.data ?? []).map((p: any) => ({
-      ...p,
-      estado: p.stock_actual <= p.stock_critico ? 'critico'
-            : p.stock_actual <= p.stock_minimo  ? 'bajo'
-            : 'ok',
-    }))
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tareas = (tareasRes.data ?? []).map((t: any) => ({
@@ -73,7 +78,6 @@ export default async function DashboardPage() {
 
     return (
       <SWRFallback fallback={{
-        [`stock-${rid}`]: productos,
         [`tareas-${rid}`]: tareas,
         [`checklist-config-${rid}`]: checklistConfig,
       }}>

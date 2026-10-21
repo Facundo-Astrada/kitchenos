@@ -513,7 +513,7 @@ export default function KitchenCoachFAB({ stockCritico, tareasPendientes }: Kitc
   const [tourStep, setTourStep] = useState(-1)
   const [activeTourSteps, setActiveTourSteps] = useState<TourStep[]>([])
   const [mermaOpen, setMermaOpen] = useState(false)
-  const { registrarMerma } = useMerma()
+  const { registrarMerma } = useMerma({ soloEscritura: true })
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const hasUnread = messages.length > 0 && !isOpen

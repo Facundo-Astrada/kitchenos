@@ -40,16 +40,20 @@ export default function MermaBottomSheet({ open, onClose, onRegistrar, prefill }
   const [saving, setSaving] = useState(false)
   const [showSearch, setShowSearch] = useState(!prefill?.producto_nombre)
 
-  // Load productos for search
+  // Productos para el buscador: recién al abrir la hoja, una sola vez. La hoja
+  // vive montada (cerrada) dentro del botón del Coach en todas las pantallas;
+  // si cargaba al montar, cada pantalla bajaba el catálogo entero de productos
+  // aunque nadie fuera a registrar una merma.
+  const productosCargados = productos.length > 0
   useEffect(() => {
-    if (!RESTAURANTE_ID) return
+    if (!RESTAURANTE_ID || !open || productosCargados) return
     supabase
       .from('productos')
       .select('id, nombre, unidad, precio_unitario')
       .eq('restaurante_id', RESTAURANTE_ID)
       .order('nombre')
       .then(({ data }) => setProductos(data ?? []))
-  }, [RESTAURANTE_ID, supabase])
+  }, [RESTAURANTE_ID, supabase, open, productosCargados])
 
   // Reset on prefill change
   useEffect(() => {

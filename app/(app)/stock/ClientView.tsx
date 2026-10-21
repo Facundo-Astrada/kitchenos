@@ -859,7 +859,7 @@ export default function StockPage() {
   const [showQuickSummary, setShowQuickSummary] = useState(false)
 
   // Merma
-  const { registrarMerma } = useMerma()
+  const { registrarMerma } = useMerma({ soloEscritura: true })
   const [mermaOpen, setMermaOpen] = useState(false)
   const [mermaPrefill, setMermaPrefill] = useState<{ producto_nombre?: string; producto_id?: string; unidad?: string } | undefined>()
 

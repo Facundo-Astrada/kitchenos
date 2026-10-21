@@ -65,6 +65,17 @@ interface AuthContextType {
   restauranteId: string | null
 }
 
+// onAuthStateChange (INITIAL_SESSION, TOKEN_REFRESHED) y getSession entregan
+// cada uno un objeto `user` nuevo para la misma persona. Como el efecto que
+// resuelve el perfil depende de `user`, cada objeto nuevo lo re-disparaba: al
+// abrir la app se pedían user_restaurantes + equipo_miembros 3 veces y se
+// descartaban las 2 primeras, y toda la app esperaba a la última (~400 ms más).
+// Se conserva la referencia mientras sea la misma sesión del mismo usuario.
+function mismoUsuario(prev: User | null, next: User | null): User | null {
+  if (prev && next && prev.id === next.id && prev.updated_at === next.updated_at) return prev
+  return next
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 // ── Provider ──────────────────────────────────────────────────
@@ -182,7 +193,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         if (cancelled) return
-        setUser(session?.user ?? null)
+        setUser(prev => mismoUsuario(prev, session?.user ?? null))
         if (!session?.user) setLoading(false)
       },
     )
@@ -191,7 +202,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabase.auth.getSession()
       .then(({ data: { session } }) => {
         if (cancelled) return
-        setUser(session?.user ?? null)
+        setUser(prev => mismoUsuario(prev, session?.user ?? null))
         if (!session?.user) setLoading(false)
       })
       .catch(() => { if (!cancelled) setLoading(false) })

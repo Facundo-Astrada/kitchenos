@@ -1029,14 +1029,13 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // `esCierre` en ProductoMiseCard) no muestran la quest: se degrada a
   // invisible, no a un cálculo incorrecto.
   const [questDia, setQuestDia] = useState<{ done: number; total: number } | null>(null)
+  // Ids desde la config ya cargada: antes se pedían a la base en cada tilde.
+  const questItemIds = useMemo(() => items.map(i => i.id), [items])
   useEffect(() => {
     if (!RESTAURANTE_ID || turnosActivos.length === 0) { setQuestDia(null); return }
     let cancelled = false
     ;(async () => {
-      const supabase = createClient()
-      const { data: itemsData } = await supabase.from('checklist_items').select('id')
-        .eq('restaurante_id', RESTAURANTE_ID)
-      const itemIds = (itemsData ?? []).map((i: { id: string }) => i.id)
+      const supabase = createClient(), itemIds = questItemIds
       if (itemIds.length === 0) { if (!cancelled) setQuestDia(null); return }
       const { data: regsData } = await supabase.from('checklist_registros').select('checklist_item_id, turno')
         .eq('fecha', fecha).eq('completado', true).in('checklist_item_id', itemIds)
@@ -1050,7 +1049,7 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
       setQuestDia({ done, total: itemIds.length * combos.length })
     })()
     return () => { cancelled = true }
-  }, [RESTAURANTE_ID, fecha, turnosActivos, registros])
+  }, [RESTAURANTE_ID, fecha, turnosActivos, registros, questItemIds])
 
   // Se celebra UNA vez por jornada, no cada vez que se vuelve a esta pantalla
   // ya completa — mismo patrón de "visto" por clave que avisoAperturaOculto.

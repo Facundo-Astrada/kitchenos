@@ -803,7 +803,7 @@ export default function HaccpPage() {
     crearTareaLimpieza, actualizarTareaLimpieza, registrarLimpieza, quitarRegistroLimpieza,
     eliminarTareaLimpieza, fetchRegistrosRango,
   } = useHaccp()
-  const { registrarMerma } = useMerma()
+  const { registrarMerma } = useMerma({ soloEscritura: true })
   const { isAdmin } = usePermisos()
   const isDesktop = useIsDesktop()
 
