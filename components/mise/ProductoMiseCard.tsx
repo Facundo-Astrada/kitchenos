@@ -548,20 +548,30 @@ function ProductoMiseCardBase({
               {/* Anotación libre del cocinero — se ve hasta que alguien la
                   borra, sin importar si el ítem ya está tildado: es un
                   mensaje, no un chip de estado. */}
+              {/* Prioridad siempre a la vista: si el ítem ya está en
+                  Producción, cambiarla acá la cambia también en la tarea. */}
+              <PrioridadPicker
+                variant="chip"
+                value={item.prioridad as MisePrioridad}
+                display={prio}
+                opciones={PRIO_OPCIONES}
+                onChange={(v) => onPrioChange(item, v)}
+                title="Mantené apretado para elegir la prioridad"
+              />
+              {/* Nota: una sola línea a la derecha de la prioridad, cortada con
+                  "…". Tocarla abre la nota completa. */}
               {item.nota && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onAbrirNota(item) }}
-                  title={item.nota_por ? `Anotó ${item.nota_por}` : 'Nota'}
+                  title={item.nota_por ? `Anotó ${item.nota_por}: ${item.nota}` : item.nota}
                   style={{
-                    ...btnReset, justifyContent: 'flex-start', alignItems: 'flex-start', gap: 4, width: '100%',
-                    padding: '4px 7px', borderRadius: 8, textAlign: 'left', touchAction: 'manipulation',
-                    background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.25)',
-                    color: 'var(--text-2)', fontSize: 11, lineHeight: 1.35,
+                    ...btnReset, flex: '1 1 80px', minWidth: 0, justifyContent: 'flex-start',
+                    textAlign: 'left', touchAction: 'manipulation',
+                    color: '#d97706', fontSize: 11, fontWeight: 600,
                   }}
                 >
-                  <span className="material-symbols-outlined" style={{ fontSize: 13, color: '#d97706', flexShrink: 0, marginTop: 1 }}>sticky_note_2</span>
-                  <span style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                    {item.nota}
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                    – {item.nota}
                   </span>
                 </button>
               )}
@@ -1009,17 +1019,6 @@ function ProductoMiseCardBase({
                 <span style={{ fontSize: 11, color: 'var(--text-3)' }}>· {item.ubicacion}</span>
               )}
               <div style={{ flex: 1 }} />
-              {/* Prioridad del ítem — default para la próxima tarea que se cree
-                  desde acá. Vive en el panel expandido (no en la fila principal)
-                  porque se toca poco: casi siempre se elige al crear la tarea. */}
-              <PrioridadPicker
-                variant="chip"
-                value={item.prioridad as MisePrioridad}
-                display={prio}
-                opciones={PRIO_OPCIONES}
-                onChange={(v) => onPrioChange(item, v)}
-                title="Mantené apretado para elegir la prioridad"
-              />
               <button
                 onClick={() => onAbrirNota(item)}
                 style={{

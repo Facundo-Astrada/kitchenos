@@ -1524,12 +1524,27 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   const eliminarItemRef = useRef(eliminarItem)
   eliminarItemRef.current = eliminarItem
 
+  // Tareas abiertas que este ítem tiene en Producción en la fase actual: la de
+  // hoy en apertura, el pase al turno siguiente en cierre (mismo criterio que
+  // tareasHoySet / tareasPaseDespachadasSet). Prioridad y nota se reflejan en
+  // ellas para no tener que ir a Producción a corregirlas.
+  const tareasAbiertasDe = useCallback((itemId: string) => tareasRef.current.filter(t =>
+    t.checklist_item_id === itemId && t.estado !== 'listo' && (
+      tab === 'cierre'
+        ? t.categoria === 'pase_turno' && t.turno_fecha === jornadaProxima
+        : t.turno_fecha === fecha
+    )), [tab, jornadaProxima, fecha])
+
   const handlePrioChange = useCallback(async (i: MisePlaceItem, prio: MisePrioridad) => {
-    // Solo cambia la prioridad. La creación de tarea es explícita (panel de
-    // producción de la card / AddItemSheet), no un efecto del ciclo del badge
-    // — evita tareas fantasma por un tap de más.
+    // La creación de tarea es explícita (panel de producción de la card /
+    // AddItemSheet), no un efecto del ciclo del badge — evita tareas fantasma
+    // por un tap de más. Si ya hay una tarea abierta, sí se le cambia la
+    // prioridad: de a una, son optimistic mutations sobre la misma key de SWR.
     await actualizarItemRef.current(i.id, { prioridad: prio })
-  }, [])
+    const prioTarea = MISE_PRIO_TO_TAREA[prio]
+    if (!prioTarea) return
+    for (const t of tareasAbiertasDe(i.id)) await actualizarTarea(t.id, { prioridad: prioTarea })
+  }, [tareasAbiertasDe, actualizarTarea])
 
   const handleDeleteItem = useCallback(async (id: string) => {
     await eliminarItemRef.current(id)
@@ -1538,11 +1553,19 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
   // Nota pegada al ítem — vive hasta que alguien la borra, no por turno.
   const handleGuardarNota = useCallback(async (item: MisePlaceItem, texto: string) => {
     const autor = authPerfil ? `${authPerfil.nombre} ${authPerfil.apellido}`.trim() : null
-    await actualizarItemRef.current(item.id, { nota: texto, nota_por: autor, nota_at: new Date().toISOString() })
-  }, [authPerfil])
+    const nota_at = new Date().toISOString()
+    await actualizarItemRef.current(item.id, { nota: texto, nota_por: autor, nota_at })
+    // También la lee quien cocina en Producción.
+    for (const t of tareasAbiertasDe(item.id)) {
+      await actualizarTarea(t.id, { nota: texto, nota_por: autor, nota_por_id: authPerfil?.miembro_id ?? null, nota_at })
+    }
+  }, [authPerfil, tareasAbiertasDe, actualizarTarea])
   const handleBorrarNota = useCallback(async (item: MisePlaceItem) => {
     await actualizarItemRef.current(item.id, { nota: null, nota_por: null, nota_at: null })
-  }, [])
+    for (const t of tareasAbiertasDe(item.id)) {
+      await actualizarTarea(t.id, { nota: null, nota_por: null, nota_por_id: null, nota_at: null })
+    }
+  }, [tareasAbiertasDe, actualizarTarea])
 
   // ── Modo Control: producir de un tap ────────────────────────────────────
   // El control es un recorrido de ojo: se mira la heladera y se decide en el
@@ -2102,30 +2125,49 @@ export default function ChecklistPage({ embedded }: { embedded?: boolean } = {})
                         </span>
                       )}
                     </button>
-                    <button
-                      onClick={() => setNotaSheetItem(item)}
-                      className="hit-slop"
-                      title={item.nota ? `Nota: ${item.nota}` : 'Anotar algo sobre este ítem'}
-                      aria-label={item.nota ? 'Ver o editar la nota' : 'Agregar una nota'}
-                      style={{
-                        ...btnReset, width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                        color: item.nota ? '#d97706' : 'var(--text-3)',
-                        background: item.nota ? 'rgba(245,158,11,.14)' : 'transparent',
-                        touchAction: 'manipulation',
-                      }}
-                    >
-                      <span className="material-symbols-outlined" style={{ fontSize: 15 }}>{item.nota ? 'sticky_note_2' : 'edit'}</span>
-                    </button>
+                    {/* La nota va en la misma línea que el nombre, en una sola
+                        fila cortada con "…" — sin recuadro debajo. Tocarla abre
+                        la nota completa. */}
+                    {item.nota ? (
+                      <button
+                        onClick={() => setNotaSheetItem(item)}
+                        title={`Nota: ${item.nota}`}
+                        aria-label="Ver o editar la nota"
+                        style={{
+                          ...btnReset, flex: '0 1 38%', minWidth: 0, justifyContent: 'flex-start',
+                          fontSize: 11, fontWeight: 600, color: '#d97706', textAlign: 'left',
+                          touchAction: 'manipulation',
+                        }}
+                      >
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                          – {item.nota}
+                        </span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setNotaSheetItem(item)}
+                        className="hit-slop"
+                        title="Anotar algo sobre este ítem"
+                        aria-label="Agregar una nota"
+                        style={{
+                          ...btnReset, width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                          color: 'var(--text-3)', background: 'transparent',
+                          touchAction: 'manipulation',
+                        }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 15 }}>edit</span>
+                      </button>
+                    )}
                     <PrioridadPicker
                       variant="circle"
                       value={item.prioridad as MisePrioridad}
                       display={prioCfg}
                       opciones={PRIO_CONTROL_OPCIONES}
                       onChange={(v) => handlePrioChange(item, v)}
-                      disabled={resuelto}
+                      disabled={tildado}
                       title={
                         tildado ? 'Tildado — no hay prioridad que definir'
-                          : enProd ? `Despachado con prioridad ${prioCfg.label}`
+                          : enProd ? `En Producción con prioridad ${prioCfg.label} — mantené apretado para cambiarla`
                           : 'Mantené apretado para elegir la prioridad'
                       }
                     />

@@ -406,7 +406,15 @@ export default function TareasPage({ embedded }: { embedded?: boolean } = {}) {
       ? { nota: texto, nota_por: autor, nota_por_id: perfil?.miembro_id ?? null, nota_at: new Date().toISOString() }
       : { nota: null, nota_por: null, nota_por_id: null, nota_at: null }
     for (const i of ids) await actualizarTarea(i, datos)
-  }, [actualizarTarea, perfil])
+    // La misma nota se ve en el mise: es una sola nota por ítem, no una por
+    // pantalla. checklist_items no guarda nota_por_id.
+    const itemIds = new Set(ids.map(i => tareas.find(t => t.id === i)?.checklist_item_id).filter((x): x is string => !!x))
+    if (itemIds.size > 0) {
+      const { nota, nota_por, nota_at } = datos
+      const { error } = await createClient().from('checklist_items').update({ nota, nota_por, nota_at }).in('id', [...itemIds])
+      if (error) console.error('[tareas] nota → mise:', error.message)
+    }
+  }, [actualizarTarea, perfil, tareas])
 
   // ── Crear tarea desde un componente de OPS — hoy (duplicado ad hoc) o
   // mañana ("pase de turno"), vinculada al mismo componente (receta_id/

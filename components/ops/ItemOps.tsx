@@ -256,6 +256,7 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
               <span style={{ ...nameSpanStyle, display: 'block' }}>
                 {item.titulo}
               </span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
               {depth === 0 && mostrarDetalle && esDeTurnoAnterior && (
                 <span style={{
                   display: 'inline-block', fontSize: 9, fontWeight: 700, padding: '1px 5px',
@@ -341,23 +342,23 @@ function ItemOpsBase({ item, subtareas, onEstadoChange, onAddSubtarea, onPriorid
                   ×{item.cantidad}
                 </span>
               )}
+              {/* Nota: una sola línea a la derecha de la prioridad, cortada con
+                  "…" — sin recuadro debajo. Tocarla abre la nota completa. */}
               {depth === 0 && item.nota && (
                 <button
                   onClick={(e) => { e.stopPropagation(); setNotaOpen(true) }}
-                  title={item.nota_por ? `${item.nota_por}` : 'Nota'}
+                  title={item.nota_por ? `${item.nota_por}: ${item.nota}` : item.nota}
                   style={{
-                    display: 'flex', alignItems: 'flex-start', gap: 4, width: '100%', marginTop: 4,
-                    padding: '4px 7px', borderRadius: 8, textAlign: 'left', cursor: 'pointer',
-                    background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.25)',
-                    color: 'var(--text-2)', fontSize: 11, lineHeight: 1.35, fontFamily: 'inherit',
+                    flex: '1 1 80px', minWidth: 0, marginTop: 3, marginLeft: 6, padding: 0,
+                    textAlign: 'left', cursor: 'pointer', background: 'none', border: 'none',
+                    color: '#d97706', fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}
                 >
-                  <span className="material-symbols-outlined" style={{ fontSize: 13, color: '#d97706', flexShrink: 0, marginTop: 1 }}>sticky_note_2</span>
-                  <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                    {item.nota}
-                  </span>
+                  – {item.nota}
                 </button>
               )}
+              </div>
             </>
           )}
         </div>
